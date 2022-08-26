@@ -24,7 +24,6 @@ package com.starrocks.server;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
@@ -49,6 +48,7 @@ import com.starrocks.persist.StorageInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
@@ -668,9 +668,9 @@ public class NodeMgr {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            Frontend fe = checkFeExist(host, editLogPort);
-            if (fe != null) {
-                throw new DdlException("frontend already exists " + fe);
+            Frontend fe = getFeByHost(host);
+            if (null != fe) {
+                throw new DdlException("frontend use host [" + host + "] already exists ");
             }
 
             String nodeName = GlobalStateMgr.genFeNodeName(host, editLogPort, false /* new name style */);

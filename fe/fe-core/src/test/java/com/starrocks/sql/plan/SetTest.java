@@ -1,9 +1,13 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SetExecutor;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -218,8 +222,8 @@ public class SetTest extends PlanTestBase {
                         "  |  20 <-> [20: k8, DOUBLE, true]\n" +
                         "  |  22 <-> cast([11: k1, TINYINT, true] as BIGINT)"));
 
-        sql =
-                "select * from t0 union all (select cast(v4 as int), v5,v6 from t1 except select cast(v7 as int), v8, v9 from t2)";
+        sql = "select * from t0 union all (select cast(v4 as int), v5,v6 " +
+                "from t1 except select cast(v7 as int), v8, v9 from t2)";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  0:UNION\n" +
                 "  |  child exprs:\n" +
@@ -269,16 +273,16 @@ public class SetTest extends PlanTestBase {
                 "  |      [2, TINYINT, false]\n" +
                 "  |      [5, TINYINT, true]"));
 
-        sql =
-                "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
+        sql = "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all " +
+                "select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("0:UNION\n" +
                 "  |  child exprs:\n" +
                 "  |      [3, DECIMAL64(12,2), true]\n" +
                 "  |      [6, DECIMAL64(12,2), true]"));
 
-        sql =
-                "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
+        sql = "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all " +
+                "select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("0:UNION\n" +
                 "  |  child exprs:\n" +
@@ -332,8 +336,8 @@ public class SetTest extends PlanTestBase {
                 "  |    \n" +
                 "  2:EXCHANGE\n"));
 
-        sql =
-                "select * from (select * from (select * from t0 limit 0) t except select * from t1 except select * from t2) as xx";
+        sql = "select * from (select * from (select * from t0 limit 0) t except " +
+                "select * from t1 except select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
@@ -367,8 +371,8 @@ public class SetTest extends PlanTestBase {
                 "  |    \n" +
                 "  2:EXCHANGE\n"));
 
-        sql =
-                "select * from (select * from (select * from t0 limit 0) t union all select * from t1 union all select * from t2) as xx";
+        sql = "select * from (select * from (select * from t0 limit 0) t union all " +
+                "select * from t1 union all select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  0:UNION\n" +
                 "  |  \n" +
@@ -407,8 +411,8 @@ public class SetTest extends PlanTestBase {
                 "  |    \n" +
                 "  2:EXCHANGE"));
 
-        sql =
-                "select * from (select * from (select * from t0 limit 0) t intersect select * from t1 intersect select * from t2) as xx";
+        sql = "select * from (select * from (select * from t0 limit 0) t intersect " +
+                "select * from t1 intersect select * from t2) as xx";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:10: v1 | 11: v2 | 12: v3\n" +
@@ -517,5 +521,14 @@ public class SetTest extends PlanTestBase {
                 "  |  order by: <slot 8> 8: expr ASC"));
         Assert.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 4> : 1: v1 + 2: v2"));
+    }
+
+    @Test
+    public void testUserVariable() {
+        String sql = "set @var = (select v1,v2 from test.t0)";
+        StatementBase statementBase =
+                com.starrocks.sql.parser.SqlParser.parseFirstStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        SetExecutor setExecutor = new SetExecutor(connectContext, (SetStmt) statementBase);
+        Assert.assertThrows("Scalar subquery should output one column", SemanticException.class, () -> setExecutor.execute());
     }
 }

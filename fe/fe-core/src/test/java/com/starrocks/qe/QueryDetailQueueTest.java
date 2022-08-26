@@ -32,7 +32,7 @@ public class QueryDetailQueueTest {
     public void testQueryDetailQueue() {
         QueryDetail startQueryDetail = new QueryDetail("219a2d5443c542d4-8fc938db37c892e3", false, 1, "127.0.0.1",
                 System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
-                "default_cluster:testDb", "select * from table1 limit 1",
+                "testDb", "select * from table1 limit 1",
                 "root", "");
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(startQueryDetail);
 
@@ -40,8 +40,8 @@ public class QueryDetailQueueTest {
         Assert.assertEquals(1, queryDetails.size());
 
         Gson gson = new Gson();
-        String json_string = gson.toJson(queryDetails);
-        String query_detail_string = "[{\"eventTime\":" + startQueryDetail.getEventTime() + ","
+        String jsonString = gson.toJson(queryDetails);
+        String queryDetailString = "[{\"eventTime\":" + startQueryDetail.getEventTime() + ","
                 + "\"queryId\":\"219a2d5443c542d4-8fc938db37c892e3\","
                 + "\"isQuery\":false,"
                 + "\"remoteIP\":\"127.0.0.1\","
@@ -50,7 +50,7 @@ public class QueryDetailQueueTest {
                 + "\"state\":\"RUNNING\",\"database\":\"testDb\","
                 + "\"sql\":\"select * from table1 limit 1\","
                 + "\"user\":\"root\"}]";
-        Assert.assertEquals(json_string, query_detail_string);
+        Assert.assertEquals(jsonString, queryDetailString);
 
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime());
         Assert.assertEquals(0, queryDetails.size());

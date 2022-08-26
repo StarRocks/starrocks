@@ -52,6 +52,7 @@ import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
@@ -172,7 +173,7 @@ public class StreamLoadPlanner {
         // whether update.
         fragment.setLoadGlobalDicts(globalDicts);
 
-        fragment.finalize(null, false);
+        fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
 
         TExecPlanFragmentParams params = new TExecPlanFragmentParams();
         params.setProtocol_version(InternalServiceVersion.V1);
@@ -200,7 +201,7 @@ public class StreamLoadPlanner {
         TQueryOptions queryOptions = new TQueryOptions();
         queryOptions.setQuery_type(TQueryType.LOAD);
         queryOptions.setQuery_timeout(streamLoadTask.getTimeout());
-        queryOptions.setTransmission_compression_type(streamLoadTask.getTransmisionCompressionType());
+        queryOptions.setLoad_transmission_compression_type(streamLoadTask.getTransmisionCompressionType());
         // Disable load_dop for LakeTable temporary, because BE's `LakeTabletsChannel` does not support
         // parallel send from a single sender.
         if (streamLoadTask.getLoadParallelRequestNum() != 0 && !destTable.isLakeTable()) {
@@ -223,7 +224,7 @@ public class StreamLoadPlanner {
 
         LOG.info("load job id: {} tx id {} parallel {} compress {}", loadId, streamLoadTask.getTxnId(),
                 queryOptions.getLoad_dop(),
-                queryOptions.getTransmission_compression_type());
+                queryOptions.getLoad_transmission_compression_type());
         return params;
     }
 

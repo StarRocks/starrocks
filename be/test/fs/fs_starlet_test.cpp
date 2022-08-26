@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "fs/fs_starlet.h"
 
@@ -32,10 +32,16 @@ public:
         shard_info.obj_store_info.s3_obj_store.access_key_secret = "EhniJDQcMAFQwpulH1jLomfu1b+VaJboCJO+Cytb";
         shard_info.obj_store_info.s3_obj_store.endpoint = "172.26.92.205:39000";
         shard_info.obj_store_info.s3_obj_store.region = "us-east-1";
+
+        // cache settings
+        shard_info.cache_setting.enable_cache = false;
+        shard_info.cache_setting.cache_entry_ttl_sec = 10;
+        shard_info.cache_setting.allow_async_write_back = false;
+
         shard_info.properties["storageGroup"] = "10010";
 
         if (test_type == "cachefs") {
-            shard_info.properties["cache_enabled"] = "true";
+            shard_info.cache_setting.enable_cache = true;
             std::string tmpl("/tmp/sr_starlet_ut_XXXXXX");
             EXPECT_TRUE(::mkdtemp(tmpl.data()) != NULL);
             config::starlet_cache_dir = tmpl;

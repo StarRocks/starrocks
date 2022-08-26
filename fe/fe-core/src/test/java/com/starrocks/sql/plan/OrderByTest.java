@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -136,5 +136,44 @@ public class OrderByTest extends PlanTestBase {
                 "  |  offset: 0\n" +
                 "  |  limit: 10");
         connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+    }
+
+    @Test
+    public void testOrderByWithSubquery() throws Exception {
+        String sql = "select t0.*, " +
+                "(select sum(v5) from t1) as x1, " +
+                "(select sum(v7) from t2) as x2 from t0 order by t0.v3";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  11:SORT\n" +
+                "  |  order by: <slot 3> 3: v3 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  10:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 8> : 8: expr\n" +
+                "  |  <slot 13> : 12: sum\n" +
+                "  |  \n" +
+                "  9:NESTLOOP JOIN");
+    }
+
+    @Test
+    public void testOrderByGroupByWithSubquery() throws Exception {
+        String sql = "select t0.v2, sum(v3) as x3, " +
+                "(select sum(v5) from t1) as x1, " +
+                "(select sum(v7) from t2) as x2 from t0 group by v2 order by x3";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  12:SORT\n" +
+                "  |  order by: <slot 4> 4: sum ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  11:Project\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 4> : 4: sum\n" +
+                "  |  <slot 9> : 9: expr\n" +
+                "  |  <slot 14> : 13: sum\n" +
+                "  |  \n" +
+                "  10:NESTLOOP JOIN");
     }
 }

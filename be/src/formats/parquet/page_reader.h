@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -38,6 +38,7 @@ public:
 
     // seek to read position, this position must be a start of a page header.
     void seek_to_offset(uint64_t offset) {
+        _stream->seek_to(offset);
         _offset = offset;
         _next_header_pos = offset;
     }

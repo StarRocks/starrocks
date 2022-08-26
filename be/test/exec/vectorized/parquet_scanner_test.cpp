@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/parquet_scanner.h"
 
@@ -215,6 +215,7 @@ class ParquetScannerTest : public ::testing::Test {
                 {"col_json_uint16", TypeDescriptor::create_json_type()},
                 {"col_json_uint32", TypeDescriptor::create_json_type()},
                 {"col_json_uint64", TypeDescriptor::create_json_type()},
+                {"col_json_timestamp", TypeDescriptor::create_json_type()},
 
                 {"col_json_float32", TypeDescriptor::create_json_type()},
                 {"col_json_float64", TypeDescriptor::create_json_type()},
@@ -224,6 +225,7 @@ class ParquetScannerTest : public ::testing::Test {
 
                 {"col_json_list", TypeDescriptor::create_json_type()},
                 {"col_json_map", TypeDescriptor::create_json_type()},
+                {"col_json_map_timestamp", TypeDescriptor::create_json_type()},
                 {"col_json_struct", TypeDescriptor::create_json_type()},
                 {"col_json_list_list", TypeDescriptor::create_json_type()},
                 {"col_json_list_struct", TypeDescriptor::create_json_type()},
@@ -472,6 +474,7 @@ TEST_F(ParquetScannerTest, test_to_json) {
             {"col_json_uint16", {"1", "2", "3"}},
             {"col_json_int32", {"1", "2", "3"}},
             {"col_json_uint64", {"1", "2", "3"}},
+            {"col_json_timestamp", {"1659962123000", "1659962124000", "1659962125000"}},
 
             {"col_json_float32", {"1.100000023841858", "2.0999999046325684", "3.0999999046325684"}},
             {"col_json_float64", {"1.1", "2.1", "3.1"}},
@@ -480,6 +483,7 @@ TEST_F(ParquetScannerTest, test_to_json) {
             {"col_json_string", {"\"s1\"", "\"s2\"", "\"s3\""}},
             {"col_json_list", {"[1, 2]", "[3, 4]", "[5, 6]"}},
             {"col_json_map", {"{\"s1\": 1, \"s2\": 3}", "{\"s2\": 2}", "{\"s3\": 3}"}},
+            {"col_json_map_timestamp", {"{\"1659962123000\": 1}", "{\"1659962124000\": 2}", "{\"1659962125000\": 3}"}},
             {"col_json_struct",
              {R"({ "s0": 1, "s1": "string1" }                                                    )",
               R"( {"s0": 2, "s1": "string2"}                                                     )",

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -11,7 +11,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -33,10 +32,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         FeConstants.default_scheduler_interval_millisecond = 1;
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table2 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
+        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
         setTableStatistics(table2, 10000);
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10000);
 
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -78,7 +77,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Before
     public void before() {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
-        connectContext.getSessionVariable().setCboCteReuse(false);
     }
 
     private static final String V1 = "v1";
@@ -89,9 +87,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testCrossJoinBroadCast() throws Exception {
         // check cross join generate plan without exception
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table2 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
+        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
         setTableStatistics(table2, 20000000);
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 20000000);
 
         String sql = "select t1a,v1 from test_all_type, t0";
@@ -332,9 +330,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
+        OlapTable table1 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(table1, 10000);
-        OlapTable table2 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
+        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
         setTableStatistics(table2, 5000);
         String sql = "SELECT v2,t1d from t0 join test_all_type on t0.v2 = test_all_type.t1d ;";
         String planFragment = getFragmentPlan(sql);
@@ -377,7 +375,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testBroadcastInnerJoinWithCommutativity() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
+        OlapTable table = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(table, 1000);
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d ;";
         String planFragment = getFragmentPlan(sql);
@@ -487,8 +485,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select s_name, s_address from supplier, nation where s_suppkey in " +
-                "( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'forest%' ) and ps_availqty > " +
-                "( select 0.5 * sum(l_quantity) from lineitem where l_partkey = ps_partkey and l_suppkey = ps_suppkey and " +
+                "( select ps_suppkey from partsupp where ps_partkey " +
+                "in ( select p_partkey from part where p_name like 'forest%' ) and ps_availqty > " +
+                "( select 0.5 * sum(l_quantity) from lineitem " +
+                "where l_partkey = ps_partkey and l_suppkey = ps_suppkey and " +
                 "l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year ) ) " +
                 "and s_nationkey = n_nationkey and n_name = 'CANADA' order by s_name;";
         String plan = getFragmentPlan(sql);
@@ -591,8 +591,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
         sql = "select count(distinct O_ORDERKEY) from orders group by O_CUSTKEY, O_ORDERDATE";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (merge serialize)\n" +
-                "  |  group by: 1: O_ORDERKEY, 2: O_CUSTKEY, 5: O_ORDERDATE"));
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 2: O_CUSTKEY, 5: O_ORDERDATE, 1: O_ORDERKEY\n");
     }
 
     @Test
@@ -603,8 +603,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
         sql = "select count(distinct v1) from t0 group by v2";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (merge serialize)\n" +
-                "  |  group by: 1: v1, 2: v2"));
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 2: v2, 1: v1");
     }
 
     @Test
@@ -636,9 +636,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testThriftWaitingNodeIds() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10000000);
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         setTableStatistics(t1, 10000);
 
         String sql = "select * from t0 inner join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
@@ -651,11 +651,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testIntersectReorder() throws Exception {
         // check cross join generate plan without exception
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 1000);
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         setTableStatistics(t1, 100);
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t2");
+        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
         setTableStatistics(t2, 1);
 
         String sql = "select v1 from t0 intersect select v7 from t2 intersect select v4 from t1";
@@ -679,14 +679,14 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testNotPushDownRuntimeFilterToSortNode() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10);
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         setTableStatistics(t1, 1000000000L);
 
-        String sql =
-                "select t0.v1 from (select v4 from t1 order by v4 limit 1000000000) as t1x join [broadcast] t0 where t0.v1 = t1x.v4";
+        String sql = "select t0.v1 from (select v4 from t1 order by v4 limit 1000000000) as t1x " +
+                "join [broadcast] t0 where t0.v1 = t1x.v4";
         String planFragment = getVerboseExplain(sql);
 
         Assert.assertTrue(planFragment.contains("  1:TOP-N\n" +
@@ -718,11 +718,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testPushDownRuntimeFilterAcrossSetOperationNode() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 1000);
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         setTableStatistics(t1, 100);
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t2");
+        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
 
         ArrayList<String> plans = new ArrayList<>();
         /// ===== union =====
@@ -730,8 +730,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t0, 400000);
         setTableStatistics(t1, 400000);
 
-        String sql =
-                "select * from (select v1+1 as v1 ,v2,v3 from t0 union select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        String sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 union " +
+                "select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
         String plan = getVerboseExplain(sql);
         plans.add(plan);
 
@@ -739,8 +739,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t2, 200000);
         setTableStatistics(t0, 800000);
         setTableStatistics(t1, 400000);
-        sql =
-                "select * from (select v1+1 as v1 ,v2,v3 from t0 except select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 except " +
+                "select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
         plan = getVerboseExplain(sql);
         plans.add(plan);
 
@@ -749,8 +749,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t0, 400000);
         setTableStatistics(t1, 400000);
 
-        sql =
-                "select * from (select v1+1 as v1 ,v2,v3 from t0 intersect select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 intersect " +
+                "select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
         plan = getVerboseExplain(sql);
         plans.add(plan);
 
@@ -877,12 +877,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testNotPushDownRuntimeFilterAcrossCTE() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        connectContext.getSessionVariable().setCboCteReuse(true);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t2");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
 
         setTableStatistics(t1, 400000);
         setTableStatistics(t2, 100);
@@ -892,14 +891,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "    select * from cte union all\n" +
                 "    select cte.v4, cte.v5, cte.v6 from t2 join cte on cte.v4 = t2.v7 and t2.v8 < 10) as t\n";
         String plan = getVerboseExplain(sql);
-
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+        assertContains(plan, "  0:OlapScanNode\n" +
                 "     table: t1, rollup: t1\n" +
                 "     preAggregation: on\n" +
                 "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                 "     tabletList=10015,10017,10019\n" +
                 "     actualRows=0, avgRowSize=1.0\n" +
-                "     cardinality: 400000"));
+                "     cardinality: 400000");
 
         Assert.assertTrue(plan.contains("5:EXCHANGE\n" +
                 "     cardinality: 400000\n" +
@@ -913,8 +911,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  - filter_id = 0, build_expr = (7: v7), remote = false\n" +
                 "  |  output columns: 10\n" +
                 "  |  cardinality: 360000");
-
-        connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(false);
     }
 
@@ -946,8 +942,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testOverflowFilterOnColocateJoin() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("colocate1");
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("colocate2");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("colocate1");
+        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("colocate2");
 
         StatisticStorage ss = globalStateMgr.getCurrentStatisticStorage();
         new Expectations(ss) {
@@ -977,8 +973,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testPruneShuffleColumns() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
 
         StatisticStorage ss = globalStateMgr.getCurrentStatisticStorage();
         new Expectations(ss) {
@@ -1031,10 +1027,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         sql = "with xx as (select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6) " +
                 "select x1.v1, x2.v2 from xx x1 join xx x2 on x1.v1 = x2.v1;";
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
-        connectContext.getSessionVariable().setCboCteReuse(true);
         plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setCboCTERuseRatio(1.2);
-        connectContext.getSessionVariable().setCboCteReuse(false);
 
         assertContains(plan, "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 03\n" +
@@ -1057,7 +1051,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testToDateToDays() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
         StatisticStorage ss = GlobalStateMgr.getCurrentStatisticStorage();
         new Expectations(ss) {
             {
@@ -1079,8 +1073,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testMultiJoinColumnPruneShuffleColumnsAndGRF() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
 
         StatisticStorage ss = GlobalStateMgr.getCurrentStatisticStorage();
         new Expectations(ss) {
@@ -1127,4 +1121,74 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     - filter_id = 0, probe_expr = (2: v2)");
     }
 
+    @Test
+    public void testGroupByDistinct1() throws Exception {
+        String sql = "select count(distinct v1), sum(v3), count(v3), max(v3), min(v3)" +
+                "from t0 group by v2;";
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1: v1), sum(9: sum), sum(10: count), max(11: max), min(12: min)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: v3), count(3: v3), max(3: v3), min(3: v3)\n" +
+                "  |  group by: 2: v2, 1: v1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
+
+    @Test
+    public void testGroupByDistinct2() throws Exception {
+        String sql = "select count(distinct v1), sum(distinct v1), sum(v3), count(v3), max(v3), min(v3)" +
+                "from t0 group by v2;";
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1: v1), sum(1: v1), sum(10: sum), sum(11: count), max(12: max), min(13: min)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: v3), count(3: v3), max(3: v3), min(3: v3)\n" +
+                "  |  group by: 2: v2, 1: v1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
+
+    @Test
+    public void testExpressionWithCTE() throws Exception {
+        String sql = "WITH x1 as (" +
+                "   select * from t0" +
+                ") " +
+                "select sum(k2) from (" +
+                "   SELECT * " +
+                "   from x1 join[bucket] " +
+                "   (SELECT v1 + 1 as k1, v2 + 2 as k2, v3 + 3 as k3 from x1) as y1 on x1.v1 = y1.k1" +
+                ") d group by v3, k3";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v1 = 10: expr\n" +
+                "  |  \n" +
+                "  |----3:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+        assertContains(plan, "    BUCKET_SHUFFLE_HASH_PARTITIONED: 10: expr\n" +
+                "\n" +
+                "  2:Project\n" +
+                "  |  <slot 10> : 7: v1 + 1\n" +
+                "  |  <slot 11> : 8: v2 + 2\n" +
+                "  |  <slot 12> : 9: v3 + 3\n" +
+                "  |  \n" +
+                "  1:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
 }

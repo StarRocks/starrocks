@@ -1,8 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.AlterUserStmt;
+import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
@@ -178,6 +179,12 @@ public class PrivilegeStmtAnalyzer {
                 }
                 stmt.setRole(analyseRoleName(stmt.getQualifiedRole(), session));
             }
+            return null;
+        }
+
+        @Override
+        public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
+            analyseUser(stmt.getUserIdent(), session, false);
             return null;
         }
     }

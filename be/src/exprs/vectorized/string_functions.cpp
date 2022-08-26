@@ -1,7 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/string_functions.h"
 
+#include <hs/hs.h>
 #include <re2/re2.h>
 
 #include <algorithm>
@@ -30,6 +31,8 @@
 #include "util/utf8.h"
 
 namespace starrocks::vectorized {
+// A regex to match any regex pattern is equivalent to a substring search.
+static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)(?:\.\*)*)", re2::RE2::Quiet);
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
     if (UNLIKELY(col->capacity_limit_reached())) {                                   \
@@ -2530,6 +2533,17 @@ struct StringFunctionsState {
     bool const_pattern{false};
     DriverMap driver_regex_map; // regex for each pipeline_driver, to make it driver-local
 
+    bool use_hyperscan = false;
+    int size_of_pattern = -1;
+
+    // a pointer to the generated database that responsible for parsed expression.
+    hs_database_t* database = nullptr;
+    // a type containing error details that is returned by the compile calls on failure.
+    hs_compile_error_t* compile_err = nullptr;
+    // A Hyperscan scratch space, Used to call hs_scan,
+    // one scratch space per thread, or concurrent caller, is required
+    hs_scratch_t* scratch = nullptr;
+
     StringFunctionsState() : regex(), options() {}
 
     // Implement a driver-local regex, to avoid lock contention on the RE2::cache_mutex
@@ -2551,10 +2565,42 @@ struct StringFunctionsState {
         DCHECK(!!res);
         return res;
     }
+
+    ~StringFunctionsState() {
+        if (scratch != nullptr) {
+            hs_free_scratch(scratch);
+        }
+
+        if (database != nullptr) {
+            hs_free_database(database);
+        }
+    }
 };
 
-Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
-                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status StringFunctions::hs_compile_and_alloc_scratch(const std::string& pattern, StringFunctionsState* state,
+                                                     starrocks_udf::FunctionContext* context, const Slice& slice) {
+    if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SOM_LEFTMOST,
+                   HS_MODE_BLOCK, nullptr, &state->database, &state->compile_err) != HS_SUCCESS) {
+        std::stringstream error;
+        error << "Invalid regex expression: " << slice.data << ": " << state->compile_err->message;
+        context->set_error(error.str().c_str());
+        hs_free_compile_error(state->compile_err);
+        return Status::InvalidArgument(error.str());
+    }
+
+    if (hs_alloc_scratch(state->database, &state->scratch) != HS_SUCCESS) {
+        std::stringstream error;
+        error << "ERROR: Unable to allocate scratch space.";
+        context->set_error(error.str().c_str());
+        hs_free_database(state->database);
+        return Status::InvalidArgument(error.str());
+    }
+
+    return Status::OK();
+}
+
+Status StringFunctions::regexp_extract_prepare(starrocks_udf::FunctionContext* context,
+                                               starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::THREAD_LOCAL) {
         return Status::OK();
     }
@@ -2583,6 +2629,52 @@ Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
         error << "Invalid regex expression: " << pattern.to_string();
         context->set_error(error.str().c_str());
         return Status::InvalidArgument(error.str());
+    }
+
+    return Status::OK();
+}
+
+Status StringFunctions::regexp_replace_prepare(starrocks_udf::FunctionContext* context,
+                                               starrocks_udf::FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::THREAD_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = new StringFunctionsState();
+    context->set_function_state(scope, state);
+
+    state->options = std::make_unique<re2::RE2::Options>();
+    state->options->set_log_errors(false);
+    state->options->set_longest_match(true);
+    state->options->set_dot_nl(true);
+
+    // go row regex
+    if (!context->is_notnull_constant_column(1)) {
+        return Status::OK();
+    }
+
+    state->const_pattern = true;
+    auto column = context->get_constant_column(1);
+    auto pattern = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+    std::string pattern_str = pattern.to_string();
+    state->pattern = pattern_str;
+
+    std::string search_string;
+    if (RE2::FullMatch(pattern_str, SUBSTRING_RE, &search_string)) {
+        state->use_hyperscan = true;
+        state->size_of_pattern = pattern.size;
+        std::string re_pattern(pattern.data, pattern.size);
+        RETURN_IF_ERROR(hs_compile_and_alloc_scratch(re_pattern, state, context, pattern));
+    } else {
+        state->use_hyperscan = false;
+        state->regex = std::make_unique<re2::RE2>(state->pattern, *(state->options));
+
+        if (!state->regex->ok()) {
+            std::stringstream error;
+            error << "Invalid regex expression: " << pattern.to_string();
+            context->set_error(error.str().c_str());
+            return Status::InvalidArgument(error.str());
+        }
     }
 
     return Status::OK();
@@ -2753,12 +2845,83 @@ static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+static ColumnPtr regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns) {
+    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
+
+    hs_scratch_t* scratch = nullptr;
+    hs_error_t status;
+    if ((status = hs_clone_scratch(state->scratch, &scratch)) != HS_SUCCESS) {
+        CHECK(false) << "ERROR: Unable to clone scratch space."
+                     << " status: " << status;
+    }
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+
+    MatchInfoChain match_info_chain;
+    match_info_chain.info_chain.reserve(64);
+
+    for (int row = 0; row < size; ++row) {
+        if (str_viewer.is_null(row) || rpl_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        match_info_chain.info_chain.clear();
+        match_info_chain.last_to = 0;
+
+        auto rpl_value = rpl_viewer.value(row);
+
+        auto value_size = str_viewer.value(row).size;
+        const char* data =
+                (value_size) ? str_viewer.value(row).data : &StringFunctions::_DUMMY_STRING_FOR_EMPTY_PATTERN;
+
+        auto status = hs_scan(
+                // Use &_DUMMY_STRING_FOR_EMPTY_PATTERN instead of nullptr to avoid crash.
+                state->database, data, value_size, 0, scratch,
+                [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
+                   void* ctx) -> int {
+                    MatchInfoChain* value = (MatchInfoChain*)ctx;
+                    if (from >= value->last_to) {
+                        MatchInfo info;
+                        info.from = from;
+                        info.to = to;
+                        value->info_chain.emplace_back(info);
+                        value->last_to = to;
+                    }
+                    return 0;
+                },
+                &match_info_chain);
+        DCHECK(status == HS_SUCCESS || status == HS_SCAN_TERMINATED) << " status: " << status;
+
+        std::string result_str;
+        result_str.reserve(value_size + match_info_chain.info_chain.size() * (rpl_value.size - state->size_of_pattern));
+
+        const char* start = str_viewer.value(row).data;
+        size_t last_to = 0;
+        for (const auto& info : match_info_chain.info_chain) {
+            result_str.append(start + last_to, info.from - last_to);
+            result_str.append(rpl_value.data, rpl_value.size);
+            last_to = info.to;
+        }
+        result_str.append(start + last_to, value_size - last_to);
+
+        result.append(Slice(result_str.data(), result_str.size()));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
 ColumnPtr StringFunctions::regexp_replace(FunctionContext* context, const Columns& columns) {
     auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     if (state->const_pattern) {
-        re2::RE2* const_re = state->get_or_prepare_regex();
-        return regexp_replace_const(const_re, columns);
+        if (state->use_hyperscan) {
+            return regexp_replace_use_hyperscan(state, columns);
+        } else {
+            re2::RE2* const_re = state->get_or_prepare_regex();
+            return regexp_replace_const(const_re, columns);
+        }
     }
 
     re2::RE2::Options* options = state->options.get();

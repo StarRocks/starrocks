@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
@@ -25,7 +25,7 @@ import static com.starrocks.common.util.Util.validateMetastoreUris;
  * PROPERTIES
  * (
  * "type" = "iceberg",
- * "starrocks.catalog-type"="hive"
+ * "iceberg.catalog.type"="hive"
  * );
  * <p>
  * DROP RESOURCE "iceberg0";
@@ -33,7 +33,9 @@ import static com.starrocks.common.util.Util.validateMetastoreUris;
 public class IcebergResource extends Resource {
     private static final Logger LOG = LogManager.getLogger(IcebergResource.class);
 
-    private static final String ICEBERG_CATALOG = "starrocks.catalog-type";
+    private static final String ICEBERG_CATALOG = "iceberg.catalog.type";
+    @Deprecated
+    private static final String ICEBERG_CATALOG_LEGACY = "starrocks.catalog-type";
     private static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
     private static final String ICEBERG_IMPL = "iceberg.catalog-impl";
 
@@ -60,7 +62,10 @@ public class IcebergResource extends Resource {
 
         catalogType = properties.get(ICEBERG_CATALOG);
         if (StringUtils.isBlank(catalogType)) {
-            throw new DdlException(ICEBERG_CATALOG + " must be set in properties");
+            catalogType = properties.get(ICEBERG_CATALOG_LEGACY);
+            if (StringUtils.isBlank(catalogType)) {
+                throw new DdlException(ICEBERG_CATALOG + " must be set in properties");
+            }
         }
 
         switch (IcebergCatalogType.fromString(catalogType)) {

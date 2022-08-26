@@ -40,7 +40,7 @@
 namespace starrocks {
 
 Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRequest& request,
-                                                         std::vector<int32_t>* partition_ids) {
+                                                         std::vector<int32_t>* partition_ids, int timeout_ms) {
     DCHECK(request.has_kafka_info());
 
     // This context is meaningless, just for unifing the interface
@@ -66,7 +66,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
     std::shared_ptr<DataConsumer> consumer;
     RETURN_IF_ERROR(_data_consumer_pool.get_consumer(&ctx, &consumer));
 
-    Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->get_partition_meta(partition_ids);
+    Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->get_partition_meta(partition_ids, timeout_ms);
     if (st.ok()) {
         _data_consumer_pool.return_consumer(consumer);
     }
@@ -75,7 +75,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
 
 Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetProxyRequest& request,
                                                            std::vector<int64_t>* beginning_offsets,
-                                                           std::vector<int64_t>* latest_offsets) {
+                                                           std::vector<int64_t>* latest_offsets, int timeout_ms) {
     DCHECK(request.has_kafka_info());
 
     // This context is meaningless, just for unifing the interface
@@ -109,7 +109,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetPro
     RETURN_IF_ERROR(_data_consumer_pool.get_consumer(&ctx, &consumer));
 
     Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->get_partition_offset(
-            &partition_ids, beginning_offsets, latest_offsets);
+            &partition_ids, beginning_offsets, latest_offsets, timeout_ms);
     if (st.ok()) {
         _data_consumer_pool.return_consumer(consumer);
     }

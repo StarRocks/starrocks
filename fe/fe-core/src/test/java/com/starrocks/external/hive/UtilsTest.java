@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive;
 
@@ -12,6 +12,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
+import org.apache.avro.Schema;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.junit.Assert;
 import org.junit.Test;
@@ -189,11 +190,11 @@ public class UtilsTest {
     public void testCharString() throws DdlException {
         Type charType = ScalarType.createCharType(100);
         String typeStr = "char(100)";
-        Type resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+        Type resType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         Assert.assertEquals(resType, charType);
 
         typeStr = "char(50)";
-        resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+        resType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         Assert.assertNotEquals(resType, charType);
     }
 
@@ -201,21 +202,52 @@ public class UtilsTest {
     public void testVarcharString() throws DdlException {
         Type varcharType = ScalarType.createVarcharType(100);
         String typeStr = "varchar(100)";
-        Type resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+        Type resType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         Assert.assertEquals(resType, varcharType);
 
         typeStr = "varchar(50)";
-        resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+        resType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         Assert.assertNotEquals(resType, varcharType);
 
         varcharType = ScalarType.createVarcharType();
         typeStr = "varchar(-1)";
-        resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+        resType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         Assert.assertEquals(resType, varcharType);
 
         Type stringType = ScalarType.createDefaultString();
         typeStr = "string";
-        resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+        resType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         Assert.assertEquals(resType, stringType);
+    }
+
+    @Test
+    public void testArraySchema() throws DdlException {
+        Schema unionSchema = null;
+        Schema arraySchema = null;
+
+        unionSchema = Schema.createUnion(Schema.create(Schema.Type.INT));
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(unionSchema),
+                ScalarType.createType(PrimitiveType.INT));
+
+        unionSchema = Schema.createUnion(Schema.create(Schema.Type.INT));
+        arraySchema = Schema.createArray(unionSchema);
+        Schema.createArray(unionSchema);
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(arraySchema),
+                new ArrayType(ScalarType.createType(PrimitiveType.INT)));
+
+        unionSchema = Schema.createUnion(Schema.create(Schema.Type.BOOLEAN));
+        arraySchema = Schema.createArray(unionSchema);
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(arraySchema),
+                new ArrayType(ScalarType.createType(PrimitiveType.BOOLEAN)));
+
+        unionSchema = Schema.createUnion(Schema.create(Schema.Type.STRING));
+        arraySchema = Schema.createArray(unionSchema);
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(arraySchema),
+                new ArrayType(ScalarType.createDefaultString()));
+
+        unionSchema = Schema.createUnion(Schema.create(Schema.Type.BYTES));
+        arraySchema = Schema.createArray(unionSchema);
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(arraySchema),
+                new ArrayType(ScalarType.createType(PrimitiveType.VARCHAR)));
     }
 }

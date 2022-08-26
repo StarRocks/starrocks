@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/lake/tablet_manager.h"
 
@@ -91,7 +91,7 @@ TEST_F(LakeTabletManagerTest, txnlog_write_and_read) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(LakeTabletManagerTest, create_and_drop_tablet) {
+TEST_F(LakeTabletManagerTest, create_and_delete_tablet) {
     TCreateTabletReq req;
     req.tablet_id = 65535;
     req.__set_version(1);
@@ -107,7 +107,7 @@ TEST_F(LakeTabletManagerTest, create_and_drop_tablet) {
     txnLog.set_txn_id(2);
     auto root = res.value().root_location();
     EXPECT_OK(_tablet_manager->put_txn_log(txnLog));
-    EXPECT_OK(_tablet_manager->drop_tablet(65535));
+    EXPECT_OK(_tablet_manager->delete_tablet(65535));
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(root));
     auto st = fs->path_exists(fmt::format("{}/tbl_{:016X}_{:016X}", root, 65535, 1));
@@ -326,6 +326,141 @@ TEST_F(LakeTabletManagerTest, tablet_schema_load) {
         EXPECT_EQ(st.value()->column(0).name(), "c0");
         EXPECT_EQ(st.value()->column(1).name(), "c1");
         EXPECT_EQ(ptr, st.value().get());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
+    // Create base tablet:
+    //  - c0 BIGINT KEY
+    //  - c1 INT
+    //  - c2 FLOAT
+    {
+        TCreateTabletReq req;
+        req.tablet_id = 65535;
+        req.__set_version(1);
+        req.__set_version_hash(0);
+        req.tablet_schema.__set_id(1);
+        req.tablet_schema.__set_schema_hash(0);
+        req.tablet_schema.__set_short_key_column_count(1);
+
+        auto& c0 = req.tablet_schema.columns.emplace_back();
+        c0.column_name = "c0";
+        c0.is_key = true;
+        c0.column_type.type = TPrimitiveType::BIGINT;
+        c0.is_allow_null = false;
+
+        auto& c1 = req.tablet_schema.columns.emplace_back();
+        c1.column_name = "c1";
+        c1.is_key = false;
+        c1.column_type.type = TPrimitiveType::INT;
+        c1.is_allow_null = false;
+        c1.default_value = "10";
+
+        auto& c2 = req.tablet_schema.columns.emplace_back();
+        c2.column_name = "c2";
+        c2.is_key = false;
+        c2.column_type.type = TPrimitiveType::FLOAT;
+        c2.is_allow_null = false;
+        EXPECT_OK(_tablet_manager->create_tablet(req));
+
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65535));
+        ASSIGN_OR_ABORT(auto schema, tablet.get_schema());
+        ASSERT_EQ(0, schema->column(0).unique_id());
+        ASSERT_EQ(1, schema->column(1).unique_id());
+        ASSERT_EQ(2, schema->column(2).unique_id());
+        ASSERT_EQ(3, schema->next_column_unique_id());
+    }
+    // Add a new column "c3" based on tablet 65535
+    {
+        TCreateTabletReq req;
+        req.tablet_id = 65536;
+        req.__set_version(1);
+        req.__set_version_hash(0);
+        req.__set_base_tablet_id(65535);
+        req.tablet_schema.__set_id(2);
+        req.tablet_schema.__set_schema_hash(0);
+        req.tablet_schema.__set_short_key_column_count(1);
+
+        auto& c0 = req.tablet_schema.columns.emplace_back();
+        c0.column_name = "c0";
+        c0.is_key = true;
+        c0.column_type.type = TPrimitiveType::BIGINT;
+        c0.is_allow_null = false;
+
+        auto& c3 = req.tablet_schema.columns.emplace_back();
+        c3.column_name = "c3";
+        c3.is_key = false;
+        c3.column_type.type = TPrimitiveType::DOUBLE;
+        c3.is_allow_null = false;
+
+        auto& c1 = req.tablet_schema.columns.emplace_back();
+        c1.column_name = "c1";
+        c1.is_key = false;
+        c1.column_type.type = TPrimitiveType::INT;
+        c1.is_allow_null = false;
+        c1.default_value = "10";
+
+        auto& c2 = req.tablet_schema.columns.emplace_back();
+        c2.column_name = "c2";
+        c2.is_key = false;
+        c2.column_type.type = TPrimitiveType::FLOAT;
+        c2.is_allow_null = false;
+        EXPECT_OK(_tablet_manager->create_tablet(req));
+
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65536));
+        ASSIGN_OR_ABORT(auto schema, tablet.get_schema());
+        ASSERT_EQ(0, schema->column(0).unique_id());
+        ASSERT_EQ(3, schema->column(1).unique_id());
+        ASSERT_EQ(1, schema->column(2).unique_id());
+        ASSERT_EQ(2, schema->column(3).unique_id());
+        ASSERT_EQ(4, schema->next_column_unique_id());
+
+        ASSERT_EQ("c0", schema->column(0).name());
+        ASSERT_EQ("c3", schema->column(1).name());
+        ASSERT_EQ("c1", schema->column(2).name());
+        ASSERT_EQ("c2", schema->column(3).name());
+    }
+    // Drop column "c1" based on tablet 65536
+    {
+        TCreateTabletReq req;
+        req.tablet_id = 65537;
+        req.__set_version(1);
+        req.__set_version_hash(0);
+        req.__set_base_tablet_id(65536);
+        req.tablet_schema.__set_id(3);
+        req.tablet_schema.__set_schema_hash(0);
+        req.tablet_schema.__set_short_key_column_count(1);
+
+        auto& c0 = req.tablet_schema.columns.emplace_back();
+        c0.column_name = "c0";
+        c0.is_key = true;
+        c0.column_type.type = TPrimitiveType::BIGINT;
+        c0.is_allow_null = false;
+
+        auto& c3 = req.tablet_schema.columns.emplace_back();
+        c3.column_name = "c3";
+        c3.is_key = false;
+        c3.column_type.type = TPrimitiveType::DOUBLE;
+        c3.is_allow_null = false;
+
+        auto& c2 = req.tablet_schema.columns.emplace_back();
+        c2.column_name = "c2";
+        c2.is_key = false;
+        c2.column_type.type = TPrimitiveType::FLOAT;
+        c2.is_allow_null = false;
+        EXPECT_OK(_tablet_manager->create_tablet(req));
+
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65537));
+        ASSIGN_OR_ABORT(auto schema, tablet.get_schema());
+        ASSERT_EQ(0, schema->column(0).unique_id());
+        ASSERT_EQ(3, schema->column(1).unique_id());
+        ASSERT_EQ(2, schema->column(2).unique_id());
+        ASSERT_EQ(4, schema->next_column_unique_id());
+
+        ASSERT_EQ("c0", schema->column(0).name());
+        ASSERT_EQ("c3", schema->column(1).name());
+        ASSERT_EQ("c2", schema->column(2).name());
     }
 }
 

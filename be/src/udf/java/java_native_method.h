@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include <jni.h>
 
@@ -15,5 +15,9 @@ struct JavaNativeMethods {
     // get native addrs
     // for nullable column [null_array_start, data_array_start]
     static jlongArray getAddrs(JNIEnv* env, jclass clazz, jlong columnAddr);
+
+    static jlong memory_malloc(JNIEnv* env, jclass clazz, jlong bytes);
+
+    static void memory_free(JNIEnv* env, jclass clazz, jlong address);
 };
 } // namespace starrocks::vectorized

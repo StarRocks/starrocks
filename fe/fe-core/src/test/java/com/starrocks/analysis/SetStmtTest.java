@@ -56,8 +56,7 @@ public class SetStmtTest {
         List<SetVar> vars = Lists.newArrayList(new SetVar("times", new IntLiteral(100L)),
                 new SetVar(SetType.GLOBAL, "names", new StringLiteral("utf-8")));
         SetStmt stmt = new SetStmt(vars);
-
-        stmt.analyze();
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         Assert.assertEquals("SET DEFAULT times = 100, GLOBAL names = 'utf-8'", stmt.toString());
         Assert.assertEquals(vars, stmt.getSetVars());
@@ -72,29 +71,13 @@ public class SetStmtTest {
         var.setType(SetType.GLOBAL);
         Assert.assertEquals(SetType.GLOBAL, var.getType());
         Assert.assertEquals("names", var.getVariable());
-        Assert.assertEquals("utf-8", var.getValue().getStringValue());
+        Assert.assertEquals("utf-8", var.getResolvedExpression().getStringValue());
 
         Assert.assertEquals("GLOBAL names = 'utf-8'", var.toString());
 
         var = new SetVar("times", new IntLiteral(100L));
         var.analyze();
         Assert.assertEquals("DEFAULT times = 100", var.toString());
-    }
-
-    @Test(expected = SemanticException.class)
-    public void testNoVar() {
-        SetStmt stmt = new SetStmt(Lists.<SetVar>newArrayList());
-
-        stmt.analyze();
-        Assert.fail("No exception throws.");
-    }
-
-    @Test(expected = SemanticException.class)
-    public void testNullVar() {
-        SetStmt stmt = new SetStmt(null);
-
-        stmt.analyze();
-        Assert.fail("No exception throws.");
     }
 
     @Test(expected = SemanticException.class)

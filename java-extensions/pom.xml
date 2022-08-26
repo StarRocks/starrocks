@@ -11,6 +11,9 @@
     <modules>
         <module>jdbc-bridge</module>
         <module>udf-extensions</module>
+        <module>java-utils</module>
+        <module>jni-connector</module>
+        <module>hudi-reader</module>
     </modules>
     <name>starrocks-java-extensions</name>
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/cumulative_compaction.h"
 
@@ -22,10 +22,15 @@
 
 namespace starrocks::vectorized {
 
-static StorageEngine* k_engine = nullptr;
-
 class CumulativeCompactionTest : public testing::Test {
 public:
+    ~CumulativeCompactionTest() {
+        if (_engine) {
+            _engine->stop();
+            delete _engine;
+            _engine = nullptr;
+        }
+    }
     void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context) {
         RowsetId rowset_id;
         rowset_id.init(10000);
@@ -117,10 +122,9 @@ public:
     }
 
     void do_compaction() {
-        config::storage_format_version = 2;
         create_tablet_schema(UNIQUE_KEYS);
 
-        RowsetWriterContext rowset_writer_context(kDataFormatUnknown, config::storage_format_version);
+        RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context);
         std::unique_ptr<RowsetWriter> _rowset_writer;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
@@ -160,9 +164,8 @@ public:
             tablet_meta->add_rs_meta(src_rowset->rowset_meta());
         }
 
-        TabletSharedPtr tablet =
-                Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta,
-                                                starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0]);
+        TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta,
+                                                                 starrocks::StorageEngine::instance()->get_stores()[0]);
         tablet->init();
 
         config::cumulative_compaction_skip_window_seconds = -2;
@@ -187,13 +190,11 @@ public:
         options.store_paths = paths;
         options.tablet_meta_mem_tracker = _tablet_meta_mem_tracker.get();
         options.compaction_mem_tracker = _compaction_mem_tracker.get();
-        if (k_engine == nullptr) {
-            Status s = starrocks::StorageEngine::open(options, &k_engine);
+        if (_engine == nullptr) {
+            _origin_engine = starrocks::StorageEngine::instance();
+            Status s = starrocks::StorageEngine::open(options, &_engine);
             ASSERT_TRUE(s.ok()) << s.to_string();
         }
-
-        ExecEnv* exec_env = starrocks::ExecEnv::GetInstance();
-        exec_env->set_storage_engine(k_engine);
 
         _schema_hash_path = fmt::format("{}/data/0/12345/1111", config::storage_root_path);
         ASSERT_OK(fs::create_directories(_schema_hash_path));
@@ -211,6 +212,8 @@ public:
     }
 
 protected:
+    StorageEngine* _engine = nullptr;
+    StorageEngine* _origin_engine = nullptr;
     std::unique_ptr<TabletSchema> _tablet_schema;
     std::string _schema_hash_path;
     std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;

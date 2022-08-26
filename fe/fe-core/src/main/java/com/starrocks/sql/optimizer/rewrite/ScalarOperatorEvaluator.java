@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rewrite;
 
@@ -8,6 +8,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -104,9 +105,11 @@ public enum ScalarOperatorEvaluator {
         // 1. Not UDF
         // 2. Not in isNotAlwaysNullResultWithNullParamFunctions
         // 3. Has null parameter
+        // 4. Not assert_true
         if (!GlobalStateMgr.getCurrentState()
                 .isNotAlwaysNullResultWithNullParamFunction(fn.getFunctionName().getFunction())
-                && !fn.isUdf()) {
+                && !fn.isUdf()
+                && !FunctionSet.ASSERT_TRUE.equals(fn.getFunctionName().getFunction())) {
             for (ScalarOperator op : root.getChildren()) {
                 if (((ConstantOperator) op).isNull()) {
                     // Should return ConstantOperator.createNull(fn.getReturnType()),

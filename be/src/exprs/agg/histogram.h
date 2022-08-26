@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -11,12 +11,6 @@
 #include "runtime/large_int_value.h"
 
 namespace starrocks::vectorized {
-
-template <PrimitiveType PT, typename = guard::Guard>
-inline constexpr PrimitiveType ImmediateHistogramResultPT = PT;
-
-template <PrimitiveType PT>
-inline constexpr PrimitiveType ImmediateHistogramResultPT<PT, BinaryPTGuard<PT>> = TYPE_DOUBLE;
 
 template <typename T>
 struct Bucket {
@@ -101,87 +95,10 @@ public:
                 1 / ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(2));
         int bucket_size = this->data(state).data.size() / bucket_num;
 
-        if (this->data(state).data.empty()) {
-            std::string histogram_json = "{ \"buckets\" : [], \"topn\" : [] }";
-            Slice slice(histogram_json);
-            to->append_datum(slice);
-            return;
-        }
-
-        //Calculate the frequency of each value in the data
-        std::vector<std::pair<T, int>> frequency_vec;
-        frequency_vec.reserve(this->data(state).data.size());
-        T last_value = this->data(state).data[0];
-        int count = 1;
-        for (int i = 1; i < this->data(state).data.size(); ++i) {
-            T v = this->data(state).data[i];
-            if (v == last_value) {
-                count++;
-            } else {
-                frequency_vec.emplace_back(std::make_pair(last_value, count));
-                count = 1;
-                last_value = v;
-            }
-        }
-        frequency_vec.emplace_back(std::make_pair(last_value, count));
-        //Sort by frequency
-        std::sort(frequency_vec.begin(), frequency_vec.end(),
-                  [](const std::pair<T, int>& lhs, const std::pair<T, int>& rhs) -> bool {
-                      return lhs.second > rhs.second;
-                  });
-
-        int top_n_size = std::min((int)ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(3)),
-                                  (int)frequency_vec.size());
-        //Build a top-n map so that values are excluded from subsequent buckets
-        std::unordered_map<T, int> topn;
-        for (int i = 0; i < top_n_size; ++i) {
-            topn.insert(frequency_vec[i]);
-        }
-
-        std::string topn_json;
-        if (top_n_size == 0) {
-            topn_json = "[]";
-        } else {
-            topn_json = "[";
-            if constexpr (pt_is_largeint<PT>) {
-                for (int i = 0; i < top_n_size; ++i) {
-                    topn_json += fmt::format("[\"{}\",\"{}\"]", LargeIntValue::to_string(frequency_vec[i].first),
-                                             (int64_t)(frequency_vec[i].second * sample_ratio)) +
-                                 ",";
-                }
-            } else if constexpr (pt_is_arithmetic<PT>) {
-                for (int i = 0; i < top_n_size; ++i) {
-                    topn_json += fmt::format("[\"{}\",\"{}\"]", frequency_vec[i].first,
-                                             (int64_t)(frequency_vec[i].second * sample_ratio)) +
-                                 ",";
-                }
-            } else if constexpr (pt_is_date_or_datetime<PT>) {
-                for (int i = 0; i < top_n_size; ++i) {
-                    topn_json += fmt::format("[\"{}\",\"{}\"]", frequency_vec[i].first.to_string(),
-                                             (int64_t)(frequency_vec[i].second * sample_ratio)) +
-                                 ",";
-                }
-            } else if constexpr (pt_is_decimal<PT>) {
-                for (int i = 0; i < top_n_size; ++i) {
-                    int scale = ctx->get_arg_type(0)->scale;
-                    int precision = ctx->get_arg_type(0)->precision;
-                    topn_json += fmt::format("[\"{}\",\"{}\"]",
-                                             DecimalV3Cast::to_string<T>(frequency_vec[i].first, scale, precision),
-                                             (int64_t)(frequency_vec[i].second * sample_ratio)) +
-                                 ",";
-                }
-            }
-            topn_json[topn_json.size() - 1] = ']';
-        }
-
         //Build bucket
         std::vector<Bucket<T>> buckets;
         for (int i = 0; i < this->data(state).data.size(); ++i) {
             T v = this->data(state).data[i];
-            if (topn.find(v) != topn.end()) {
-                continue;
-            }
-
             if (buckets.empty()) {
                 Bucket<T> bucket(v, v, 1, 1);
                 buckets.emplace_back(bucket);
@@ -234,8 +151,14 @@ public:
                 int scale = ctx->get_arg_type(0)->scale;
                 int precision = ctx->get_arg_type(0)->precision;
                 for (int i = 0; i < buckets.size(); ++i) {
-                    bucket_json += toBucketJson(DecimalV3Cast::to_string<T>(buckets[i].lower, scale, precision),
-                                                DecimalV3Cast::to_string<T>(buckets[i].upper, scale, precision),
+                    bucket_json += toBucketJson(DecimalV3Cast::to_string<T>(buckets[i].lower, precision, scale),
+                                                DecimalV3Cast::to_string<T>(buckets[i].upper, precision, scale),
+                                                buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
+                                   ",";
+                }
+            } else if constexpr (pt_is_binary<PT>) {
+                for (int i = 0; i < buckets.size(); ++i) {
+                    bucket_json += toBucketJson(buckets[i].lower.to_string(), buckets[i].upper.to_string(),
                                                 buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
                                    ",";
                 }
@@ -243,9 +166,7 @@ public:
             bucket_json[bucket_json.size() - 1] = ']';
         }
 
-        std::string histogram_json =
-                "{" + fmt::format(" \"buckets\" : {}, \"top-n\" : {} ", bucket_json, topn_json) + "}";
-        Slice slice(histogram_json);
+        Slice slice(bucket_json);
         to->append_datum(slice);
     }
 

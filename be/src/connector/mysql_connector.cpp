@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "connector/mysql_connector.h"
 
@@ -173,6 +173,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
             case TYPE_DOUBLE:
             case TYPE_FLOAT:
             case TYPE_JSON:
+            case TYPE_FUNCTION:
                 break;
             }
         }

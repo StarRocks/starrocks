@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.ast;
 
@@ -59,8 +59,7 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
 
         long totalCollectColumnsSize = table.getBaseSchema().stream().filter(column -> !column.isAggregated()).count();
 
-        if (null != columns && !columns.isEmpty()
-                && (columns.size() != totalCollectColumnsSize)) {
+        if (null != columns && !columns.isEmpty() && (columns.size() != totalCollectColumnsSize)) {
             String str = String.join(",", columns);
             row.set(3, str);
         }

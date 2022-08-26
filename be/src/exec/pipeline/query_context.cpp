@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 #include "exec/pipeline/query_context.h"
 
 #include <memory>
@@ -87,7 +87,6 @@ Status QueryContext::init_query(workgroup::WorkGroup* wg) {
     Status st = Status::OK();
     if (wg != nullptr) {
         std::call_once(_init_query_once, [this, &st, wg]() {
-            this->set_init_wg_cpu_cost(wg->total_cpu_cost());
             this->init_query_begin_time();
             st = wg->try_incr_num_queries();
         });

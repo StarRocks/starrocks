@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -229,6 +229,8 @@ public:
 #endif
 
     std::string debug_row(uint32_t index) const;
+
+    std::string debug_columns() const;
 
     bool capacity_limit_reached(std::string* msg = nullptr) const {
         for (const auto& column : _columns) {

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/hash_joiner.h"
 
@@ -225,7 +225,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
             _probe_input_chunk = nullptr;
         }
 
-        _filter_probe_output_chunk(chunk);
+        RETURN_IF_ERROR(_filter_probe_output_chunk(chunk));
 
         return chunk;
     }
@@ -241,7 +241,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
             enter_eos_phase();
         }
 
-        _filter_post_probe_output_chunk(chunk);
+        RETURN_IF_ERROR(_filter_post_probe_output_chunk(chunk));
 
         return chunk;
     }

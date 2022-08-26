@@ -34,6 +34,7 @@
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
 #include "runtime/statistic_result_writer.h"
+#include "runtime/variable_result_writer.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -89,6 +90,9 @@ Status ResultSink::prepare(RuntimeState* state) {
     case TResultSinkType::STATISTIC:
         _writer.reset(new (std::nothrow) vectorized::StatisticResultWriter(_sender.get(), _output_expr_ctxs, _profile));
         break;
+    case TResultSinkType::VARIABLE:
+        _writer.reset(new (std::nothrow) vectorized::VariableResultWriter(_sender.get(), _output_expr_ctxs, _profile));
+        break;
     default:
         return Status::InternalError("Unknown result sink type");
     }
@@ -98,6 +102,7 @@ Status ResultSink::prepare(RuntimeState* state) {
 }
 
 Status ResultSink::open(RuntimeState* state) {
+    RETURN_IF_ERROR(_writer->open(state));
     return Expr::open(_output_expr_ctxs, state);
 }
 

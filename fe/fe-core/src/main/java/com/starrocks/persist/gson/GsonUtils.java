@@ -55,6 +55,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -83,6 +84,7 @@ import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.optimizer.dump.HiveTableDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
@@ -185,6 +187,11 @@ public class GsonUtils {
             .registerSubtype(ListPartitionPersistInfo.class, ListPartitionPersistInfo.class.getSimpleName())
             .registerSubtype(RangePartitionPersistInfo.class, RangePartitionPersistInfo.class.getSimpleName());
 
+    private static final RuntimeTypeAdapterFactory<CatalogRecycleBin.RecyclePartitionInfoV2> recyclePartitionInfoV2AdapterFactory
+            = RuntimeTypeAdapterFactory.of(CatalogRecycleBin.RecyclePartitionInfoV2.class, "clazz")
+            .registerSubtype(CatalogRecycleBin.RecycleRangePartitionInfo.class,
+                    CatalogRecycleBin.RecycleRangePartitionInfo.class.getSimpleName());
+
     private static final JsonSerializer<LocalDateTime> localDateTimeTypeSerializer =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -195,6 +202,12 @@ public class GsonUtils {
     private static final JsonSerializer<QueryDumpInfo> dumpInfoSerializer = new QueryDumpSerializer();
 
     private static final JsonDeserializer<QueryDumpInfo> dumpInfoDeserializer = new QueryDumpDeserializer();
+
+    private static final JsonSerializer<HiveTableDumpInfo> hiveTableDumpInfoSerializer = new HiveTableDumpInfo.
+            HiveTableDumpInfoSerializer();
+
+    private static final JsonDeserializer<HiveTableDumpInfo> hiveTableDumpInfoDeserializer = new HiveTableDumpInfo.
+            HiveTableDumpInfoDeserializer();
 
     private static final JsonSerializer<Expr> expressionSerializer = new ExpressionSerializer();
 
@@ -219,10 +232,13 @@ public class GsonUtils {
             .registerTypeAdapterFactory(heartbeatResponseAdapterFactor)
             .registerTypeAdapterFactory(partitionInfoTypeAdapterFactory)
             .registerTypeAdapterFactory(partitionPersistInfoV2AdapterFactory)
+            .registerTypeAdapterFactory(recyclePartitionInfoV2AdapterFactory)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeSerializer)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeDeserializer)
             .registerTypeAdapter(QueryDumpInfo.class, dumpInfoSerializer)
             .registerTypeAdapter(QueryDumpInfo.class, dumpInfoDeserializer)
+            .registerTypeAdapter(HiveTableDumpInfo.class, hiveTableDumpInfoSerializer)
+            .registerTypeAdapter(HiveTableDumpInfo.class, hiveTableDumpInfoDeserializer)
             .registerTypeAdapter(PrimitiveType.class, primitiveTypeDeserializer)
             .registerTypeHierarchyAdapter(Expr.class, expressionSerializer)
             .registerTypeHierarchyAdapter(Expr.class, expressionDeserializer);

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 #include "exec/vectorized/parquet_scanner.h"
 
 #include "column/chunk.h"
@@ -110,6 +110,9 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
     _counter->num_rows_filtered += _chunk_start_idx - num_rows;
     ChunkPtr cast_chunk = std::make_shared<Chunk>();
     {
+        if (VLOG_ROW_IS_ON) {
+            VLOG_ROW << "before finalize chunk: " << (*chunk)->debug_columns();
+        }
         SCOPED_RAW_TIMER(&_counter->cast_chunk_ns);
         for (auto i = 0; i < _num_of_columns_from_file; ++i) {
             SlotDescriptor* slot_desc = _src_slot_descriptors[i];
@@ -125,6 +128,9 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
         if (range.__isset.num_of_columns_from_file) {
             fill_columns_from_path(cast_chunk, range.num_of_columns_from_file, range.columns_from_path,
                                    cast_chunk->num_rows());
+        }
+        if (VLOG_ROW_IS_ON) {
+            VLOG_ROW << "after finalize chunk: " << cast_chunk->debug_columns();
         }
     }
     ASSIGN_OR_RETURN(auto dest_chunk, materialize(*chunk, cast_chunk));

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "butil/file_util.h"
 #include "column/column_helper.h"
@@ -79,9 +79,7 @@ int main(int argc, char** argv) {
     (void)butil::DeleteFile(storage_root, true);
     starrocks::vectorized::TEST_clear_all_columns_this_thread();
     // delete engine
-    engine->stop();
-    delete engine;
-    exec_env->set_storage_engine(nullptr);
+    starrocks::StorageEngine::instance()->stop();
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     starrocks::ExecEnv::destroy(exec_env);

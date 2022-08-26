@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -35,7 +35,7 @@ public class MetricTypeTest extends PlanTestBase {
                 .analysisError(Type.OnlyMetricTypeErrorMsg);
 
         starRocksAssert.query("select count(*) from test.bitmap_table where id2 = 1;").analysisError(
-                "binary type bitmap with type double is invalid.");
+                "bitmap", "not support binary predicate");
     }
 
     @Test
@@ -66,19 +66,19 @@ public class MetricTypeTest extends PlanTestBase {
                 .analysisError(Type.OnlyMetricTypeErrorMsg);
 
         starRocksAssert.query("select count(*) from test.hll_table where id2 = 1").analysisError(
-                "binary type hll with type double is invalid.");
+                "hll", "not support binary predicate");
     }
 
     @Test
-    public void TestJoinOnBitmapColumn() {
+    public void testJoinOnBitmapColumn() {
         String sql = "select * from test.bitmap_table a join test.bitmap_table b on a.id2 = b.id2";
-        starRocksAssert.query(sql).analysisError("binary type bitmap with type varchar(-1) is invalid.");
+        starRocksAssert.query(sql).analysisError("bitmap", "not support binary predicate");
 
         sql = "select * from test.bitmap_table a join test.bitmap_table b on a.id2 = b.id";
-        starRocksAssert.query(sql).analysisError("binary type bitmap with type double is invalid.");
+        starRocksAssert.query(sql).analysisError("bitmap", "not support binary predicate");
 
         sql = "select * from test.bitmap_table a join test.hll_table b on a.id2 = b.id2";
-        starRocksAssert.query(sql).analysisError("binary type bitmap with type varchar(-1) is invalid.");
+        starRocksAssert.query(sql).analysisError("bitmap", "not support binary predicate");
 
         sql = "select * from test.bitmap_table a join test.hll_table b where a.id2 in (1, 2, 3)";
         starRocksAssert.query(sql).analysisError("HLL, BITMAP, PERCENTILE and ARRAY type couldn't as Predicate");

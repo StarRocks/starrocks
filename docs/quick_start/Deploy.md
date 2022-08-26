@@ -46,7 +46,7 @@ This section describes how to deploy Frontend (FE) nodes. FE is the front layer 
 
 #### Download and decompress the installer
 
-[Download](https://www.starrocks.com/zh-CN/download) and decompress StarRocks installer.
+[Download](https://download.starrocks.com/en-US/download/community) and decompress StarRocks installer.
 
 ```bash
 tar -xzvf StarRocks-x.x.x.tar.gz
@@ -198,7 +198,7 @@ This section describes how to deploy Backend (BE) nodes. BE is the executing lay
 
 #### Download and decompress the installer
 
-[Download](https://www.starrocks.com/zh-CN/download) and decompress StarRocks installer.
+[Download](https://download.starrocks.com/en-US/download/community) and decompress StarRocks installer.
 
 ```bash
 tar -xzvf StarRocks-x.x.x.tar.gz
@@ -334,7 +334,7 @@ This section describes how to deploy Broker. With broker, StarRocks can read dat
 
 #### Download and decompress the installer
 
-[Download](https://www.starrocks.com/zh-CN/download) and decompress StarRocks installer.
+[Download](https://download.starrocks.com/en-US/download/community) and decompress StarRocks installer.
 
 ```bash
 tar -xzvf StarRocks-x.x.x.tar.gz
@@ -454,7 +454,7 @@ CMD /data/deploy/run_script.sh
 ```
 
 > Caution
-> Replace `<url_to_download_specific_ver_of_starrocks>` with the real [download path](https://www.starrocks.com/zh-CN/download), and replace `StarRocks-x.x.x` with the real StarRocks version.
+> Replace `<url_to_download_specific_ver_of_starrocks>` with the real [download path](https://download.starrocks.com/en-US/download/community), and replace `StarRocks-x.x.x` with the real StarRocks version.
 
 ### Create script
 
@@ -562,5 +562,5 @@ If no error is returned, you have successfully deployed StarRocks in Docker.
 
 Having Deployed StarRocks, you can:
 
-* [Create a table](Create_table.md)
-* [Upgrade StarRocks](../administration/Cluster_administration.md#集群升级)
+* [Create a table](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)
+* [Upgrade StarRocks](../administration/Cluster_administration.md#Upgrade-a-cluster)

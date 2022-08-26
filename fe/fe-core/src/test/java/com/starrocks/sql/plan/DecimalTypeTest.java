@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -53,11 +53,16 @@ public class DecimalTypeTest extends PlanTestBase {
     public void testCastDecimal() throws Exception {
         String sql = "SELECT DISTINCT subt2.c_2_0 FROM tab0, " +
                 "(SELECT tab2.c_2_0 FROM tab2 " +
-                "WHERE ( ( tab2.c_2_0 ) = ( true ) ) < ( ((tab2.c_2_0) IN (false) ) BETWEEN (tab2.c_2_0) AND (tab2.c_2_0) ) ) subt2" +
-                " FULL OUTER JOIN (SELECT tab1.c_1_0, tab1.c_1_1, tab1.c_1_2, tab1.c_1_3, tab1.c_1_4, tab1.c_1_5, tab1.c_1_6 FROM tab1 " +
-                " ORDER BY tab1.c_1_4, tab1.c_1_2) subt1 ON subt2.c_2_0 = subt1.c_1_2 AND (6453) IN (4861, 4302) < subt1.c_1_2 " +
-                " AND subt2.c_2_0 != subt1.c_1_1 AND subt2.c_2_0 <= subt1.c_1_1 AND subt2.c_2_0 > subt1.c_1_0 AND subt2.c_2_0 = subt1.c_1_0 " +
-                " WHERE (((0.00) BETWEEN (CASE WHEN (subt1.c_1_5) BETWEEN (subt1.c_1_5) AND (subt1.c_1_5) THEN CAST(151971657 AS DECIMAL32 ) " +
+                "WHERE ( ( tab2.c_2_0 ) = ( true ) ) < " +
+                "( ((tab2.c_2_0) IN (false) ) BETWEEN (tab2.c_2_0) AND (tab2.c_2_0) ) ) subt2" +
+                " FULL OUTER JOIN " +
+                "(SELECT tab1.c_1_0, tab1.c_1_1, tab1.c_1_2, tab1.c_1_3, tab1.c_1_4, tab1.c_1_5, tab1.c_1_6 FROM tab1 " +
+                " ORDER BY tab1.c_1_4, tab1.c_1_2) subt1 " +
+                "ON subt2.c_2_0 = subt1.c_1_2 AND (6453) IN (4861, 4302) < subt1.c_1_2 " +
+                " AND subt2.c_2_0 != subt1.c_1_1 AND subt2.c_2_0 <= subt1.c_1_1 " +
+                "AND subt2.c_2_0 > subt1.c_1_0 AND subt2.c_2_0 = subt1.c_1_0 " +
+                " WHERE (((0.00) BETWEEN (CASE WHEN (subt1.c_1_5) BETWEEN (subt1.c_1_5) AND (subt1.c_1_5) " +
+                "THEN CAST(151971657 AS DECIMAL32 ) " +
                 " WHEN false THEN CASE WHEN NULL THEN 0.03 ELSE 0.02 END ELSE 0.04 END) AND (0.04) ) IS NULL)";
         String explain = getFragmentPlan(sql);
         String snippet = "  1:OlapScanNode\n" +
@@ -123,8 +128,8 @@ public class DecimalTypeTest extends PlanTestBase {
     public void testDecimalV3Distinct() throws Exception {
         String sql = "select avg(t1c), count(distinct id_decimal) from test_all_type;";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains(
-                "multi_distinct_count[([10: id_decimal, DECIMAL64(10,2), true]); args: DECIMAL64; result: BIGINT; args nullable: true; result nullable: false]"));
+        Assert.assertTrue(plan.contains("multi_distinct_count[([10: id_decimal, DECIMAL64(10,2), true]); " +
+                "args: DECIMAL64; result: BIGINT; args nullable: true; result nullable: false]"));
     }
 
     @Test
@@ -137,8 +142,8 @@ public class DecimalTypeTest extends PlanTestBase {
 
     @Test
     public void testDecimalV3LiteralCast() throws Exception {
-        String sql =
-                "select id_datetime from test_all_type WHERE CAST(IF(true, 0.38542880072101215, '-Inf')  AS BOOLEAN )";
+        String sql = "select id_datetime " +
+                "from test_all_type WHERE CAST(IF(true, 0.38542880072101215, '-Inf')  AS BOOLEAN )";
         String thrift = getThriftPlan(sql);
         Assert.assertTrue(thrift.contains("string_literal:TStringLiteral(value:0.38542880072101215)"));
     }

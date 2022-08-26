@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.StatementBase;
@@ -145,7 +145,8 @@ public class AnalyzeTestUtil {
         starRocksAssert.withTable("CREATE TABLE `tprimary` (\n" +
                 "  `pk` bigint NOT NULL COMMENT \"\",\n" +
                 "  `v1` string NOT NULL COMMENT \"\",\n" +
-                "  `v2` int NOT NULL\n" +
+                "  `v2` int NOT NULL,\n" +
+                "  `v3` array<int> not null" +
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`pk`)\n" +
                 "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +

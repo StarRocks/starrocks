@@ -1,7 +1,7 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -26,12 +26,12 @@ public class AnalyzeDropTest {
         analyzeSuccess("drop table test.table_to_drop");
         analyzeFail("drop table exists table_to_drop");
         DropTableStmt stmt = (DropTableStmt) analyzeSuccess("drop table if exists test.table_to_drop force");
-        Assert.assertEquals("default_cluster:test", stmt.getDbName());
+        Assert.assertEquals("test", stmt.getDbName());
         Assert.assertEquals("table_to_drop", stmt.getTableName());
         Assert.assertTrue(stmt.isSetIfExists());
         Assert.assertTrue(stmt.isForceDrop());
         stmt = (DropTableStmt) analyzeSuccess("drop table t0");
-        Assert.assertEquals("default_cluster:test", stmt.getDbName());
+        Assert.assertEquals("test", stmt.getDbName());
         Assert.assertEquals("t0", stmt.getTableName());
         Assert.assertFalse(stmt.isSetIfExists());
         Assert.assertFalse(stmt.isForceDrop());
@@ -45,7 +45,7 @@ public class AnalyzeDropTest {
         analyzeFail("drop view view_to_drop force");
         analyzeFail("drop view exists view_to_drop");
         DropTableStmt stmt = (DropTableStmt) analyzeSuccess("drop view if exists test.view_to_drop");
-        Assert.assertEquals("default_cluster:test", stmt.getDbName());
+        Assert.assertEquals("test", stmt.getDbName());
         Assert.assertEquals("view_to_drop", stmt.getTableName());
         Assert.assertTrue(stmt.isView());
         Assert.assertTrue(stmt.isSetIfExists());

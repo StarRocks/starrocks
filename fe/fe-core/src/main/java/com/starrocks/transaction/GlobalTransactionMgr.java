@@ -57,10 +57,12 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import javax.validation.constraints.NotNull;
 
 /**
  * Transaction Manager
@@ -320,14 +322,15 @@ public class GlobalTransactionMgr implements Writable {
     /**
      * @param transactionId
      * @param tabletCommitInfos
-     * @return
+     * @return a {@link VisibleStateWaiter} object used to wait for the transaction become visible.
      * @throws UserException
      * @throws TransactionCommitFailedException
      * @note it is necessary to optimize the `lock` mechanism and `lock` scope resulting from wait lock long time
      * @note callers should get db.write lock before call this api
      */
-    public void commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                  TxnCommitAttachment txnCommitAttachment)
+    @NotNull
+    public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
+                                                TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         if (Config.disable_load_job) {
             throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
@@ -335,11 +338,11 @@ public class GlobalTransactionMgr implements Writable {
 
         LOG.debug("try to commit transaction: {}", transactionId);
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.commitTransaction(transactionId, tabletCommitInfos, txnCommitAttachment);
+        return dbTransactionMgr.commitTransaction(transactionId, tabletCommitInfos, txnCommitAttachment);
     }
 
     public void prepareTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-            TxnCommitAttachment txnCommitAttachment)
+                                   TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         if (Config.disable_load_job) {
             throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
@@ -358,6 +361,7 @@ public class GlobalTransactionMgr implements Writable {
 
         LOG.debug("try to commit prepared transaction: {}", transactionId);
 
+        VisibleStateWaiter waiter;
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
         if (!db.tryWriteLock(timeoutMillis, TimeUnit.MILLISECONDS)) {
@@ -365,8 +369,7 @@ public class GlobalTransactionMgr implements Writable {
                     + db.getFullName() + ", timeoutMillis=" + timeoutMillis);
         }
         try {
-            DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(db.getId());
-            dbTransactionMgr.commitPreparedTransaction(transactionId);
+            waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
         } finally {
             db.writeUnlock();
         }
@@ -378,8 +381,7 @@ public class GlobalTransactionMgr implements Writable {
             // so we just return false to indicate publish timeout
             throw new UserException("publish timeout: " + timeoutMillis);
         }
-        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(db.getId());
-        dbTransactionMgr.waitTransactionVisible(db, transactionId, publishTimeoutMillis);
+        waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS);
     }
 
     public boolean commitAndPublishTransaction(Database db, long transactionId,
@@ -398,8 +400,9 @@ public class GlobalTransactionMgr implements Writable {
             throw new UserException("get database write lock timeout, database="
                     + db.getOriginName() + ", timeoutMillis=" + timeoutMillis);
         }
+        VisibleStateWaiter waiter;
         try {
-            commitTransaction(db.getId(), transactionId, tabletCommitInfos, txnCommitAttachment);
+            waiter = commitTransaction(db.getId(), transactionId, tabletCommitInfos, txnCommitAttachment);
         } finally {
             db.writeUnlock();
         }
@@ -410,8 +413,7 @@ public class GlobalTransactionMgr implements Writable {
             // so we just return false to indicate publish timeout
             return false;
         }
-        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(db.getId());
-        return dbTransactionMgr.waitTransactionVisible(db, transactionId, publishTimeoutMillis);
+        return waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS);
     }
 
     public void abortTransaction(long dbId, long transactionId, String reason) throws UserException {
@@ -641,6 +643,7 @@ public class GlobalTransactionMgr implements Writable {
     public void readFields(DataInput in) throws IOException {
         long now = System.currentTimeMillis();
         int numTransactions = in.readInt();
+        List<TransactionState> transactionStates = new ArrayList<>(numTransactions);
         for (int i = 0; i < numTransactions; ++i) {
             TransactionState transactionState = new TransactionState();
             transactionState.readFields(in);
@@ -651,12 +654,16 @@ public class GlobalTransactionMgr implements Writable {
                 LOG.info("discard unknown transaction state: {}", transactionState);
                 continue;
             }
+            transactionStates.add(transactionState);
+        }
+        transactionStates.sort(Comparator.comparingLong(TransactionState::getCommitTime));
+        for (TransactionState transactionState : transactionStates) {
             try {
                 DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
                 dbTransactionMgr.unprotectUpsertTransactionState(transactionState, true);
             } catch (AnalysisException e) {
                 LOG.warn("failed to get db transaction manager for {}", transactionState);
-                throw new IOException("Read transaction states failed", e);
+                throw new IOException("failed to get db transaction manager for txn " + transactionState.getTransactionId(), e);
             }
         }
         idGenerator.readFields(in);

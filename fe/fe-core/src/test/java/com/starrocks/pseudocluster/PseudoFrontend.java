@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
 import com.google.common.base.Strings;
@@ -18,6 +18,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.utframe.MockJournal;
 import mockit.Mock;
@@ -42,6 +43,9 @@ public class PseudoFrontend {
     // the running dir of this mocked frontend.
     // log/ starrocks-meta/ and conf/ dirs will be created under this dir.
     private String runningDir;
+
+    private boolean fakeJournal = true;
+
     // the min set of fe.conf.
     private static final Map<String, String> MIN_FE_CONF;
 
@@ -60,14 +64,6 @@ public class PseudoFrontend {
         context.start();
     }
 
-    private static class SingletonHolder {
-        private static final PseudoFrontend INSTANCE = new PseudoFrontend();
-    }
-
-    public static PseudoFrontend getInstance() {
-        return SingletonHolder.INSTANCE;
-    }
-
     private boolean isInit = false;
 
     private final Lock initLock = new ReentrantLock();
@@ -77,7 +73,8 @@ public class PseudoFrontend {
     // 2. clear and create 3 dirs: runningDir/log/, runningDir/starrocks-meta/, runningDir/conf/
     // 3. init fe.conf
     //      The content of "fe.conf" is a merge set of input `feConf` and MIN_FE_CONF
-    public void init(String runningDir, Map<String, String> feConf) throws EnvVarNotSetException, IOException {
+    public void init(boolean fakeJournal, String runningDir, Map<String, String> feConf)
+            throws EnvVarNotSetException, IOException {
         initLock.lock();
         if (isInit) {
             return;
@@ -89,12 +86,11 @@ public class PseudoFrontend {
         }
 
         this.runningDir = runningDir;
-        System.out.println("mocked frontend running in dir: " + this.runningDir);
+        this.fakeJournal = fakeJournal;
+        System.out.println("pseudo frontend running in dir: " + new File(this.runningDir).getAbsolutePath());
 
         // root running dir
         createAndClearDir(this.runningDir);
-        // clear and create log dir
-        createAndClearDir(runningDir + "/log/");
         // clear and create meta dir
         createAndClearDir(runningDir + "/starrocks-meta/");
         // clear and create conf dir
@@ -109,10 +105,10 @@ public class PseudoFrontend {
     private void initFeConf(String confDir, Map<String, String> feConf) throws IOException {
         Map<String, String> finalFeConf = Maps.newHashMap(MIN_FE_CONF);
         // these 2 configs depends on running dir, so set them here.
-        finalFeConf.put("LOG_DIR", this.runningDir + "/log");
+        finalFeConf.put("LOG_DIR", this.runningDir);
+        finalFeConf.put("sys_log_dir", this.runningDir);
+        finalFeConf.put("audit_log_dir", this.runningDir);
         finalFeConf.put("meta_dir", this.runningDir + "/starrocks-meta");
-        finalFeConf.put("sys_log_dir", this.runningDir + "/log");
-        finalFeConf.put("audit_log_dir", this.runningDir + "/log");
         finalFeConf.put("tmp_dir", this.runningDir + "/temp_dir");
         // use custom config to add or override default config
         finalFeConf.putAll(feConf);
@@ -181,15 +177,18 @@ public class PseudoFrontend {
                 FrontendOptions.init(new String[0]);
                 ExecuteEnv.setup();
 
-                new MockUp<JournalFactory>() {
-                    @Mock
-                    public Journal create(String name) throws JournalException {
-                        GlobalStateMgr.getCurrentState().setHaProtocol(new MockJournal.MockProtocol());
-                        return new MockJournal();
-                    }
-                };
+                if (frontend.fakeJournal) {
+                    new MockUp<JournalFactory>() {
+                        @Mock
+                        public Journal create(String name) throws JournalException {
+                            GlobalStateMgr.getCurrentState().setHaProtocol(new MockJournal.MockProtocol());
+                            return new MockJournal();
+                        }
+                    };
+                }
 
                 GlobalStateMgr.getCurrentState().initialize(args);
+                GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
                 StateChangeExecutor.getInstance().setMetaContext(
                         GlobalStateMgr.getCurrentState().getMetaContext());
                 StateChangeExecutor.getInstance().registerStateChangeExecution(

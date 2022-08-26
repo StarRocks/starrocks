@@ -1,4 +1,4 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 set(EXEC_FILES
         ./test_main.cpp
@@ -27,7 +27,6 @@ set(EXEC_FILES
         ./fs/fs_s3_test.cpp
         ./fs/fs_test.cpp
         ./fs/output_stream_wrapper_test.cpp
-        ./exec/es_query_builder_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/vectorized/agg_hash_map_test.cpp
         ./exec/vectorized/csv_scanner_test.cpp
@@ -40,17 +39,19 @@ set(EXEC_FILES
         ./exec/vectorized/file_scan_node_test.cpp
         ./exec/schema_columns_scanner_test.cpp
         ./exec/tablet_info_test.cpp
+        ./exec/vectorized/analytor_test.cpp
+        ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/sorting_test.cpp
         ./exec/vectorized/chunks_sorter_test.cpp
         ./exec/vectorized/parquet_scanner_test.cpp
-        ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/repeat_node_test.cpp
         ./exec/vectorized/analytor_test.cpp
-        ./exec/es_scan_reader_test.cpp
+        ./exec/es/es_query_builder_test.cpp
+        ./exec/es/es_scan_reader_test.cpp
+        ./exec/es/es_scroll_parser_test.cpp
         ./exec/vectorized/hdfs_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
-        ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
@@ -112,6 +113,7 @@ set(EXEC_FILES
         ./formats/csv/datetime_converter_test.cpp
         ./formats/csv/decimalv2_converter_test.cpp
         ./formats/csv/float_converter_test.cpp
+        ./formats/csv/json_converter_test.cpp
         ./formats/csv/nullable_converter_test.cpp
         ./formats/csv/numeric_converter_test.cpp
         ./formats/json/binary_column_test.cpp
@@ -160,6 +162,7 @@ set(EXEC_FILES
         ./storage/lake/gc_test.cpp
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/horizontal_compaction_task_test.cpp
+        ./storage/lake/schema_change_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp

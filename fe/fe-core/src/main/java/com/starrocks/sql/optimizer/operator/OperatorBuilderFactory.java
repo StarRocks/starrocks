@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator;
 
 import com.starrocks.sql.common.ErrorType;
@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
@@ -78,8 +79,11 @@ public class OperatorBuilderFactory {
             return new LogicalCTEConsumeOperator.Builder();
         } else if (operator instanceof LogicalCTEAnchorOperator) {
             return new LogicalCTEAnchorOperator.Builder();
+        } else if (operator instanceof LogicalProjectOperator) {
+            return new LogicalProjectOperator.Builder();
         } else {
-            throw new StarRocksPlannerException("not implement builder: " + operator.getOpType(), ErrorType.INTERNAL_ERROR);
+            throw new StarRocksPlannerException("not implement builder: " + operator.getOpType(),
+                    ErrorType.INTERNAL_ERROR);
         }
     }
 }

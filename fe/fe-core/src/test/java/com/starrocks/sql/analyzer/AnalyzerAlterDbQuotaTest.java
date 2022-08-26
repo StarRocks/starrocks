@@ -1,8 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AlterDatabaseQuotaStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -20,7 +20,7 @@ public class AnalyzerAlterDbQuotaTest {
 
     private void testAlterDatabaseDataQuotaStmt(String dbName, String quotaQuantity, long quotaSize) {
         String sql = "ALTER DATABASE " + dbName + " SET DATA QUOTA " + quotaQuantity;
-        AlterDatabaseQuotaStmt stmt = (AlterDatabaseQuotaStmt)analyzeSuccess(sql);
+        AlterDatabaseQuotaStmt stmt = (AlterDatabaseQuotaStmt) analyzeSuccess(sql);
         Assert.assertEquals(quotaSize, stmt.getQuota());
     }
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.clone;
 
@@ -163,7 +163,7 @@ public class DiskAndTabletLoadReBalancerTest {
         Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId2)));
 
         // set Config.balance_load_disk_safe_threshold to 0.9 to trigger tablet balance
-        Config.balance_load_disk_safe_threshold = 0.9;
+        Config.tablet_sched_balance_load_disk_safe_threshold = 0.9;
         Config.storage_flood_stage_left_capacity_bytes = 1;
         tablets = rebalancer.selectAlternativeTablets();
         Assert.assertEquals(2, tablets.size());
@@ -308,7 +308,7 @@ public class DiskAndTabletLoadReBalancerTest {
         Assert.assertEquals(0, tablets.size());
 
         // set Config.balance_load_disk_safe_threshold to 0.9 to trigger tablet balance
-        Config.balance_load_disk_safe_threshold = 0.9;
+        Config.tablet_sched_balance_load_disk_safe_threshold = 0.9;
         Config.storage_flood_stage_left_capacity_bytes = 1;
         tablets = rebalancer.selectAlternativeTablets();
         Assert.assertEquals(0, tablets.size());
@@ -485,7 +485,7 @@ public class DiskAndTabletLoadReBalancerTest {
         rebalancer.updateLoadStatistic(clusterLoadStatistic);
 
         // set Config.balance_load_disk_safe_threshold to 0.4 to trigger backend disk balance
-        Config.balance_load_disk_safe_threshold = 0.4;
+        Config.tablet_sched_balance_load_disk_safe_threshold = 0.4;
         Config.storage_flood_stage_left_capacity_bytes = 1;
         List<TabletSchedCtx> tablets = rebalancer.selectAlternativeTablets();
         Assert.assertEquals(2, tablets.size());
@@ -497,7 +497,7 @@ public class DiskAndTabletLoadReBalancerTest {
         Assert.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash13)));
 
         // set Config.balance_load_disk_safe_threshold to 0.9 to trigger backend tablet distribution balance
-        Config.balance_load_disk_safe_threshold = 0.9;
+        Config.tablet_sched_balance_load_disk_safe_threshold = 0.9;
         tablets = rebalancer.selectAlternativeTablets();
         Assert.assertEquals(2, tablets.size());
         Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId1)));

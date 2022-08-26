@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.common;
 
@@ -112,7 +112,7 @@ public class SqlWithIdUtilsTest {
             starRocksAssert.dropDatabase("test");
             SqlWithIdUtils.decode(encode, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals(e.getMessage(),"Can not find db id: 10002");
+            Assert.assertEquals(e.getMessage(), "Can not find db id: 10002");
         } finally {
             starRocksAssert.withDatabase("test").useDatabase("test")
                     .withTable("CREATE TABLE test.tbl1\n" +
@@ -145,7 +145,7 @@ public class SqlWithIdUtilsTest {
     }
 
     @Test
-    public void testDecodeAndEncodeNoTable() throws Exception{
+    public void testDecodeAndEncodeNoTable() throws Exception {
         String sql = "select tbl1.k1, tbl2.k2 from test.tbl1 join test.tbl2 on tbl1.k1 = tbl2.k1";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
@@ -153,7 +153,7 @@ public class SqlWithIdUtilsTest {
             starRocksAssert.dropTable("tbl1");
             SqlWithIdUtils.decode(encode, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals(e.getMessage(),"Can not find table id: 10005 in db: test");
+            Assert.assertEquals(e.getMessage(), "Can not find table id: 10005 in db: test");
         } finally {
             starRocksAssert.useDatabase("test")
                     .withTable("CREATE TABLE test.tbl1\n" +

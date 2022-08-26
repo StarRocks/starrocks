@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive;
 
@@ -158,7 +158,7 @@ public class Utils {
     public static int[] getPrecisionAndScale(String typeStr) throws DdlException {
         Matcher matcher = Pattern.compile(DECIMAL_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         if (matcher.find()) {
-            return new int[]{Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2))};
+            return new int[] {Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2))};
         }
         throw new DdlException("Failed to get precision and scale at " + typeStr);
     }
@@ -170,7 +170,7 @@ public class Utils {
         if (matcher.find()) {
             itemType = new ArrayType(convertToArrayType(matcher.group(1)));
         } else {
-            itemType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+            itemType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         }
         return itemType;
     }
@@ -192,4 +192,5 @@ public class Utils {
         }
         throw new DdlException("Failed to get varchar length at " + typeStr);
     }
+
 }

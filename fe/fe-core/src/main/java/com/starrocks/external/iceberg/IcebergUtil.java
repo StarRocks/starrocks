@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.iceberg;
 
@@ -258,7 +258,7 @@ public class IcebergUtil {
             case STRUCT:
             case MAP:
             default:
-                throw new RuntimeException("Unsupported type " + icebergType.typeId().toString());
+                primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
         return ScalarType.createType(primitiveType);
     }

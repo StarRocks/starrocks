@@ -1,10 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/column_helper.h"
 
 #include <runtime/types.h>
 
 #include "column/array_column.h"
+#include "column/chunk.h"
 #include "column/json_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
@@ -92,6 +93,16 @@ void ColumnHelper::merge_two_filters(Column::Filter* __restrict filter, const ui
     }
     if (all_zero != nullptr) {
         *all_zero = (memchr(filter->data(), 0x1, num_rows) == nullptr);
+    }
+}
+
+void ColumnHelper::or_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected) {
+    or_two_filters(filter->size(), filter->data(), selected);
+}
+
+void ColumnHelper::or_two_filters(size_t count, uint8_t* __restrict data, const uint8_t* __restrict selected) {
+    for (size_t i = 0; i < count; i++) {
+        data[i] |= selected[i];
     }
 }
 
@@ -314,4 +325,40 @@ ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& 
     return res;
 }
 
+bool ChunkSlice::empty() const {
+    return !chunk || offset == chunk->num_rows();
+}
+
+size_t ChunkSlice::rows() const {
+    return chunk->num_rows() - offset;
+}
+
+void ChunkSlice::reset(vectorized::ChunkUniquePtr input) {
+    chunk = std::move(input);
+}
+
+size_t ChunkSlice::skip(size_t skip_rows) {
+    size_t real_skipped = std::min(rows(), skip_rows);
+    offset += real_skipped;
+    if (empty()) {
+        chunk.reset();
+        offset = 0;
+    }
+
+    return real_skipped;
+}
+
+// Cutoff required rows from this chunk
+vectorized::ChunkPtr ChunkSlice::cutoff(size_t required_rows) {
+    DCHECK(!empty());
+    size_t cut_rows = std::min(rows(), required_rows);
+    auto res = chunk->clone_empty(cut_rows);
+    res->append(*chunk, offset, cut_rows);
+    offset += cut_rows;
+    if (empty()) {
+        chunk.reset();
+        offset = 0;
+    }
+    return res;
+}
 } // namespace starrocks::vectorized

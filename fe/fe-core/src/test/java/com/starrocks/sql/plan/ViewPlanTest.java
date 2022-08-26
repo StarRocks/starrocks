@@ -1,9 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -11,7 +11,7 @@ import org.junit.Test;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ViewPlanTest extends PlanTestBase {
-    private final static AtomicInteger INDEX = new AtomicInteger(0);
+    private static final AtomicInteger INDEX = new AtomicInteger(0);
 
     private void testView(String sql) throws Exception {
         String viewName = "view" + INDEX.getAndIncrement();
@@ -244,7 +244,8 @@ public class ViewPlanTest extends PlanTestBase {
     @Test
     public void testSql34() throws Exception {
         String sql =
-                "select case 'a' when 'b' then 'a' when substr(k7,2,1) then 2 when false then 3 else 0 end as col23 from test.baseall";
+                "select case 'a' when 'b' then 'a' when substr(k7,2,1) " +
+                        "then 2 when false then 3 else 0 end as col23 from test.baseall";
         testView(sql);
     }
 
@@ -257,21 +258,24 @@ public class ViewPlanTest extends PlanTestBase {
     @Test
     public void testSql36() throws Exception {
         String sql =
-                "select case 'a' when substr(k7,2,1) then 2 when 1 then 'a' when false then 3 else 0 end as col231 from test.baseall";
+                "select case 'a' when substr(k7,2,1) then 2 when 1 then 'a' " +
+                        "when false then 3 else 0 end as col231 from test.baseall";
         testView(sql);
     }
 
     @Test
     public void testSql38() throws Exception {
         String sql =
-                "select case k1 when substr(k7,2,1) then 2 when 1 then 'a' when false then 3 else 0 end as col232 from test.baseall";
+                "select case k1 when substr(k7,2,1) then 2 when 1 then 'a' " +
+                        "when false then 3 else 0 end as col232 from test.baseall";
         testView(sql);
     }
 
     @Test
     public void testSql41() throws Exception {
         String sql =
-                "select case when case when substr(k7,2,1) then true else false end then 2 when false then 3 else 0 end as col from test.baseall";
+                "select case when case when substr(k7,2,1) then true else false end " +
+                        "then 2 when false then 3 else 0 end as col from test.baseall";
         testView(sql);
     }
 
@@ -742,8 +746,8 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql151() throws Exception {
-        String sql =
-                "select * from t1 inner join t3 on t1.v4 = t3.v10 right semi join test_all_type as a on t3.v10 = a.t1a and 1 > 2;";
+        String sql = "select * from t1 inner join t3 on t1.v4 = t3.v10 right semi " +
+                "join test_all_type as a on t3.v10 = a.t1a and 1 > 2;";
         testView(sql);
     }
 
@@ -875,8 +879,8 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql196() throws Exception {
-        String sql =
-                "select k2 from baseall group by ((10800861)/(((NULL)%(((-1114980787)+(-1182952114)))))), ((10800861)*(-9223372036854775808)), k2";
+        String sql = "select k2 from baseall group by ((10800861)/(((NULL)%(((-1114980787)+(-1182952114)))))), " +
+                        "((10800861)*(-9223372036854775808)), k2";
         testView(sql);
     }
 
@@ -1129,8 +1133,8 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql245() throws Exception {
-        String sql =
-                "select t1.k2, sum(t1.k9) from baseall t1 join baseall t2 on t1.k1 = t2.k1 where t1.k9 + t2.k9 = 1 group by t1.k2";
+        String sql = "select t1.k2, sum(t1.k9) from baseall t1 " +
+                "join baseall t2 on t1.k1 = t2.k1 where t1.k9 + t2.k9 = 1 group by t1.k2";
         testView(sql);
     }
 
@@ -1142,8 +1146,8 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql247() throws Exception {
-        String sql =
-                "select t1.k2, sum(t1.k9) from baseall t1 join join2 t2 on t1.k1 = t2.id join baseall t3 on t1.k1 = t3.k1 group by t1.k2";
+        String sql = "select t1.k2, sum(t1.k9) from baseall t1 " +
+                "join join2 t2 on t1.k1 = t2.id join baseall t3 on t1.k1 = t3.k1 group by t1.k2";
         testView(sql);
     }
 
@@ -1174,8 +1178,9 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql254() throws Exception {
-        String sql =
-                "select t3.k2, sum(t3.k9) from baseall t1 join [broadcast] join2 t2 on t1.k1 = t2.id join [broadcast] baseall t3 on t1.k1 = t3.k1 group by t3.k2";
+        String sql = "select t3.k2, sum(t3.k9) from baseall t1 " +
+                "join [broadcast] join2 t2 on t1.k1 = t2.id " +
+                "join [broadcast] baseall t3 on t1.k1 = t3.k1 group by t3.k2";
         testView(sql);
     }
 
@@ -1687,8 +1692,8 @@ public class ViewPlanTest extends PlanTestBase {
         String viewPlan = getFragmentPlan("select * from " + viewName);
         Assert.assertEquals(sqlPlan, viewPlan);
 
-        String alterStmt =
-                "with testTbl_cte (w1, w2) as (select v1, v2 from t0) select w1 as c1, sum(w2) as c2 from testTbl_cte where w1 > 10 group by w1";
+        String alterStmt = "with testTbl_cte (w1, w2) as (select v1, v2 from t0) " +
+                "select w1 as c1, sum(w2) as c2 from testTbl_cte where w1 > 10 group by w1";
         String alterView = "alter view " + viewName + " as " + alterStmt;
 
         AlterViewStmt alterViewStmt =

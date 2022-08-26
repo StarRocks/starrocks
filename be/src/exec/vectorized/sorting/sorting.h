@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 - present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
 #include "column/chunk.h"
 #include "column/datum.h"
+#include "column/nullable_column.h"
 #include "common/status.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "runtime/chunk_cursor.h"
@@ -51,7 +52,7 @@ void compare_columns(const Columns columns, std::vector<int8_t>& cmp_result, con
 
 // Build tie by comparison of adjacent rows in column.
 // Tie(i) is set to 1 only if row(i-1) is equal to row(i), otherwise is set to 0.
-void build_tie_for_column(const ColumnPtr column, Tie* tie);
+void build_tie_for_column(const ColumnPtr column, Tie* tie, const NullColumnPtr null_column = nullptr);
 
 // Append rows from permutation
 void append_by_permutation(Column* dst, const Columns& columns, const Permutation& perm);

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/compaction_manager.h"
 
@@ -107,7 +107,7 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
         tasks.emplace_back(std::move(task));
     }
 
-    StorageEngine::instance()->compaction_manager()->init_max_task_num();
+    StorageEngine::instance()->compaction_manager()->init_max_task_num(config::max_compaction_concurrency);
 
     for (int i = 0; i < config::max_compaction_concurrency; i++) {
         bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());

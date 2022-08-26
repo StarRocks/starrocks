@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
@@ -31,11 +31,9 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 public class SubqueryTransformer {
@@ -46,7 +44,7 @@ public class SubqueryTransformer {
     }
 
     public OptExprBuilder handleSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt, Expr expression,
-                                           Map<Integer, ExpressionMapping> cteContext) {
+                                           CTETransformerContext cteContext) {
         if (subOpt.getExpressionMapping().hasExpression(expression)) {
             return subOpt;
         }
@@ -59,7 +57,7 @@ public class SubqueryTransformer {
 
     // Only support scalar-subquery in `SELECT` clause
     public OptExprBuilder handleScalarSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt,
-                                                 Expr expression, Map<Integer, ExpressionMapping> cteContext) {
+                                                 Expr expression, CTETransformerContext cteContext) {
         if (subOpt.getExpressionMapping().hasExpression(expression)) {
             return subOpt;
         }
@@ -75,9 +73,9 @@ public class SubqueryTransformer {
         ScalarOperator scalarPredicate =
                 SqlToScalarOperatorTranslator.translate(predicate, subOpt.getExpressionMapping(), correlation);
 
-        ArrayList<InPredicate> inPredicates = new ArrayList<>();
+        List<InPredicate> inPredicates = Lists.newArrayList();
         predicate.collect(InPredicate.class, inPredicates);
-        ArrayList<ExistsPredicate> existsSubquerys = new ArrayList<>();
+        List<ExistsPredicate> existsSubquerys = Lists.newArrayList();
         predicate.collect(ExistsPredicate.class, existsSubquerys);
 
         List<ScalarOperator> s = Utils.extractConjuncts(scalarPredicate);
@@ -105,14 +103,47 @@ public class SubqueryTransformer {
         return scalarPredicate;
     }
 
+    public Expr rewriteJoinOnPredicate(Expr predicate) {
+        List<Expr> conjuncts = Expr.extractConjuncts(predicate);
+        List<Expr> newConjuncts = Lists.newArrayListWithCapacity(conjuncts.size());
+        for (Expr conjunct : conjuncts) {
+            List<InPredicate> inPredicates = Lists.newArrayList();
+            conjunct.collect(InPredicate.class, inPredicates);
+            List<ExistsPredicate> existsSubquerys = Lists.newArrayList();
+            conjunct.collect(ExistsPredicate.class, existsSubquerys);
+
+            boolean skip = false;
+            for (InPredicate e : inPredicates) {
+                if (!(e.getChild(1) instanceof Subquery)) {
+                    continue;
+                }
+
+                if (((Subquery) e.getChild(1)).isUseSemiAnti()) {
+                    skip = true;
+                }
+            }
+            for (ExistsPredicate e : existsSubquerys) {
+                Preconditions.checkState(e.getChild(0) instanceof Subquery);
+                if (((Subquery) e.getChild(0)).isUseSemiAnti()) {
+                    skip = true;
+                }
+            }
+            if (!skip) {
+                newConjuncts.add(conjunct);
+            }
+        }
+
+        return Expr.compoundAnd(newConjuncts);
+    }
+
     private static class SubqueryContext {
         public OptExprBuilder builder;
         public boolean useSemiAnti;
-        public Map<Integer, ExpressionMapping> cteContext;
+        public CTETransformerContext cteContext;
         public List<Expr> outerExprs;
 
         public SubqueryContext(OptExprBuilder builder, boolean useSemiAnti,
-                               Map<Integer, ExpressionMapping> cteContext) {
+                               CTETransformerContext cteContext) {
             this.builder = builder;
             this.useSemiAnti = useSemiAnti;
             this.cteContext = cteContext;
@@ -120,7 +151,7 @@ public class SubqueryTransformer {
         }
 
         public SubqueryContext(OptExprBuilder builder, boolean useSemiAnti,
-                               Map<Integer, ExpressionMapping> cteContext, List<Expr> outerExprs) {
+                               CTETransformerContext cteContext, List<Expr> outerExprs) {
             this.builder = builder;
             this.useSemiAnti = useSemiAnti;
             this.cteContext = cteContext;
@@ -138,7 +169,7 @@ public class SubqueryTransformer {
         }
 
         private LogicalPlan getLogicalPlan(QueryRelation relation, ConnectContext session, ExpressionMapping outer,
-                                           Map<Integer, ExpressionMapping> cteContext) {
+                                           CTETransformerContext cteContext) {
             if (!(relation instanceof SelectRelation)) {
                 throw new SemanticException("Currently only subquery of the Select type are supported");
             }
@@ -287,11 +318,6 @@ public class SubqueryTransformer {
             LogicalPlan subqueryPlan =
                     getLogicalPlan(queryRelation, session, context.builder.getExpressionMapping(),
                             context.cteContext);
-            if (!subqueryPlan.getCorrelation().isEmpty() && queryRelation instanceof SelectRelation
-                    && !((SelectRelation) queryRelation).hasAggregation()) {
-                throw new SemanticException("Correlated scalar subquery should aggregation query");
-            }
-
             if (subqueryPlan.getOutputColumn().size() != 1) {
                 throw new SemanticException("Scalar subquery should output one column");
             }

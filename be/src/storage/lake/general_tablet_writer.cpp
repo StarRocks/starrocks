@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/lake/general_tablet_writer.h"
 
@@ -63,7 +63,6 @@ Status GeneralTabletWriter::reset_segment_writer() {
     auto name = fmt::format("{}.dat", generate_uuid_string());
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
     SegmentWriterOptions opts;
-    opts.storage_format_version = 2;
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema.get(), opts);
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);

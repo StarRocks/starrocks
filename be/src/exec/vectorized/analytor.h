@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -151,6 +151,8 @@ public:
     bool support_cumulative_algo() const { return _support_cumulative_algo; }
 
     std::string debug_string() const;
+
+    Status check_has_error();
 
 #ifdef NDEBUG
     static constexpr int32_t BUFFER_CHUNK_NUMBER = 1000;

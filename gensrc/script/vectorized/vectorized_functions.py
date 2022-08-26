@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 # The format is:
 #   <function id> <name>, <return_type>, [<args>], <backend fn>,
@@ -244,11 +244,11 @@ vectorized_functions = [
     [30311, 'split', 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::split', 'StringFunctions::split_prepare', 'StringFunctions::split_close'],
 
     [30320, 'regexp_extract', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'], 'StringFunctions::regexp_extract',
-     'StringFunctions::regexp_prepare', 'StringFunctions::regexp_close'],
+     'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
     [30330, 'regexp_replace', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_replace',
-     'StringFunctions::regexp_prepare', 'StringFunctions::regexp_close'],
+     'StringFunctions::regexp_replace_prepare', 'StringFunctions::regexp_close'],
     [30331, 'replace', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_replace',
-     'StringFunctions::regexp_prepare', 'StringFunctions::regexp_close'],
+     'StringFunctions::regexp_replace_prepare', 'StringFunctions::regexp_close'],
     [30400, "money_format", "VARCHAR", ["BIGINT"], "StringFunctions::money_format_bigint"],
     [30401, "money_format", "VARCHAR", ["LARGEINT"], "StringFunctions::money_format_largeint"],
     [30402, "money_format", "VARCHAR", ["DECIMALV2"], "StringFunctions::money_format_decimalv2val"],
@@ -489,6 +489,7 @@ vectorized_functions = [
     [100014, 'last_query_id', 'VARCHAR', [], "UtilityFunctions::last_query_id"],
     [100015, 'uuid', 'VARCHAR', [], "UtilityFunctions::uuid"],
     [100016, 'uuid_numeric', 'LARGEINT', [], "UtilityFunctions::uuid_numeric"],
+    [100017, 'assert_true', 'BOOLEAN', ['BOOLEAN'], 'UtilityFunctions::assert_true'],
 
     # json string function
     [110000, "get_json_int", "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",

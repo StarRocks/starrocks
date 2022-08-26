@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.analysis;
 
 import com.starrocks.common.Config;
@@ -47,7 +47,7 @@ public class RefreshMaterializedViewTest {
                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);
         String dbName = alterMvStmt.getMvName().getDb();
         String mvName = alterMvStmt.getMvName().getTbl();
-        Assert.assertEquals("default_cluster:test", dbName);
+        Assert.assertEquals("test", dbName);
         Assert.assertEquals("mv_to_refresh", mvName);
     }
 }

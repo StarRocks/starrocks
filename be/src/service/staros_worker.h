@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -31,7 +31,7 @@ public:
     using FileSystem = staros::starlet::fslib::FileSystem;
     using Configuration = staros::starlet::fslib::Configuration;
 
-    StarOSWorker() : _service_id(0), _worker_id(0) {}
+    StarOSWorker() : _service_id(), _worker_id(0) {}
 
     ~StarOSWorker() override = default;
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Predicate;
@@ -10,7 +10,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
@@ -28,6 +27,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -300,6 +300,12 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
+    public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
+        Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
+        new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
+        return subQueryRelations;
+    }
+
     private static class TableCollectorWithAlias extends TableCollector {
         public TableCollectorWithAlias(Map<TableName, Table> dbs) {
             super(dbs);
@@ -337,6 +343,26 @@ public class AnalyzerUtils {
         @Override
         public Void visitTable(TableRelation node, Void context) {
             tableRelations.put(node.getName().getTbl(), node);
+            return null;
+        }
+    }
+
+    private static class SubQueryRelationCollector extends TableCollector {
+        Map<TableName, SubqueryRelation> subQueryRelations;
+
+        public SubQueryRelationCollector(Map<TableName, SubqueryRelation> subQueryRelations) {
+            super(null);
+            this.subQueryRelations = subQueryRelations;
+        }
+
+        @Override
+        public Void visitSubquery(SubqueryRelation node, Void context) {
+            subQueryRelations.put(node.getResolveTableName(), node);
+            return visit(node.getQueryStatement());
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
             return null;
         }
     }

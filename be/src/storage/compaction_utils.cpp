@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/compaction_utils.h"
 
@@ -42,7 +42,7 @@ int32_t CompactionUtils::get_read_chunk_size(int64_t mem_limit, int32_t config_c
 Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t max_rows_per_segment,
                                                        CompactionAlgorithm algorithm, Version version,
                                                        std::unique_ptr<RowsetWriter>* output_rowset_writer) {
-    RowsetWriterContext context(kDataFormatV2, config::storage_format_version);
+    RowsetWriterContext context;
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.tablet_uid = tablet->tablet_uid();
     context.tablet_id = tablet->tablet_id();

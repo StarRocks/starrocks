@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.analyzer;
 
@@ -15,6 +15,7 @@ public class DDLTestBase {
 
     protected static Analyzer analyzer;
     protected static ConnectContext ctx;
+    protected static StarRocksAssert starRocksAssert;
 
     @Before
     public void setUp() throws Exception {
@@ -23,7 +24,7 @@ public class DDLTestBase {
         analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), ctx);
 
         FeConstants.runningUnitTest = true;
-        StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+        starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase(GlobalStateMgrTestUtil.testDb1)
                 .useDatabase(GlobalStateMgrTestUtil.testDb1);
 

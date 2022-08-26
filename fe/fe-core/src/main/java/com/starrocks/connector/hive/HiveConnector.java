@@ -1,31 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 
 public class HiveConnector implements Connector {
-    private static final Logger LOG = LogManager.getLogger(HiveConnector.class);
-
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private final Map<String, String> properties;
-    private final String catalogName;
     private String resourceName;
     private ConnectorMetadata metadata;
 
     public HiveConnector(ConnectorContext context) {
-        this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         validate();
         onCreate();
@@ -38,14 +31,9 @@ public class HiveConnector implements Connector {
     }
 
     @Override
-    public ConnectorMetadata getMetadata() throws DdlException {
+    public ConnectorMetadata getMetadata() {
         if (metadata == null) {
-            try {
-                metadata = new HiveMetadata(resourceName);
-            } catch (Exception e) {
-                LOG.error("Failed to create hive metadata on [catalog : {}]", catalogName, e);
-                throw e;
-            }
+            metadata = new HiveMetadata(resourceName);
         }
         return metadata;
     }

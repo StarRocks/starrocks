@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external;
 
@@ -10,6 +10,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -25,6 +26,9 @@ import com.starrocks.external.hive.HiveTableStats;
 import com.starrocks.external.hive.Utils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
+import org.apache.avro.LogicalType;
+import org.apache.avro.LogicalTypes;
+import org.apache.avro.Schema;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.logging.log4j.LogManager;
@@ -33,6 +37,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class HiveMetaStoreTableUtils {
     private static final Logger LOG = LogManager.getLogger(HiveMetaStoreTableUtils.class);
@@ -157,7 +162,7 @@ public class HiveMetaStoreTableUtils {
         }
     }
 
-    public static Type convertColumnType(String hiveType) throws DdlException {
+    public static Type convertHiveTableColumnType(String hiveType) throws DdlException {
         String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
         PrimitiveType primitiveType;
         switch (typeUpperCase) {
@@ -218,10 +223,101 @@ public class HiveMetaStoreTableUtils {
         }
     }
 
+    // this func targets at convert hudi column type(avroSchema) to starrocks column type(primitiveType)
+    public static Type convertHudiTableColumnType(Schema avroSchema) throws DdlException {
+        Schema.Type columnType = avroSchema.getType();
+        LogicalType logicalType = avroSchema.getLogicalType();
+        PrimitiveType primitiveType = null;
+        boolean isConvertedFailed = false;
+
+        switch (columnType) {
+            case BOOLEAN:
+                primitiveType = PrimitiveType.BOOLEAN;
+                break;
+            case INT:
+                if (logicalType instanceof LogicalTypes.Date) {
+                    primitiveType = PrimitiveType.DATE;
+                } else if (logicalType instanceof LogicalTypes.TimeMillis) {
+                    primitiveType = PrimitiveType.TIME;
+                } else {
+                    primitiveType = PrimitiveType.INT;
+                }
+                break;
+            case LONG:
+                if (logicalType instanceof LogicalTypes.TimeMicros) {
+                    primitiveType = PrimitiveType.TIME;
+                } else if (logicalType instanceof LogicalTypes.TimestampMillis
+                        || logicalType instanceof LogicalTypes.TimestampMicros) {
+                    primitiveType = PrimitiveType.DATETIME;
+                } else {
+                    primitiveType = PrimitiveType.BIGINT;
+                }
+                break;
+            case FLOAT:
+                primitiveType = PrimitiveType.FLOAT;
+                break;
+            case DOUBLE:
+                primitiveType = PrimitiveType.DOUBLE;
+                break;
+            case STRING:
+                return ScalarType.createDefaultString();
+            case ARRAY:
+                Type type = convertToArrayType(avroSchema);
+                if (type.isArrayType()) {
+                    return type;
+                } else {
+                    isConvertedFailed = false;
+                    break;
+                }
+            case FIXED:
+            case BYTES:
+                if (logicalType instanceof LogicalTypes.Decimal) {
+                    int precision = 0;
+                    int scale = 0;
+                    if (avroSchema.getObjectProp("precision") instanceof Integer) {
+                        precision = (int) avroSchema.getObjectProp("precision");
+                    }
+                    if (avroSchema.getObjectProp("scale") instanceof Integer) {
+                        scale = (int) avroSchema.getObjectProp("scale");
+                    }
+                    return ScalarType.createUnifiedDecimalType(precision, scale);
+                } else {
+                    primitiveType = PrimitiveType.VARCHAR;
+                    break;
+                }
+            case UNION:
+                List<Schema> nonNullMembers = avroSchema.getTypes().stream()
+                        .filter(schema -> !Schema.Type.NULL.equals(schema.getType()))
+                        .collect(Collectors.toList());
+
+                if (nonNullMembers.size() == 1) {
+                    return convertHudiTableColumnType(nonNullMembers.get(0));
+                } else {
+                    isConvertedFailed = true;
+                    break;
+                }
+            case ENUM:
+            case MAP:
+            default:
+                isConvertedFailed = true;
+                break;
+        }
+
+        if (isConvertedFailed) {
+            primitiveType = PrimitiveType.UNKNOWN_TYPE;
+        }
+
+        return ScalarType.createType(primitiveType);
+    }
+
+    private static ArrayType convertToArrayType(Schema typeSchema) throws DdlException {
+        return new ArrayType(convertHudiTableColumnType(typeSchema.getElementType()));
+    }
+
     // In the first phase of connector, in order to reduce changes, we use `hive.metastore.uris` as resource name
     // for table of external catalog. The table of external catalog will not create a real resource.
     // We will reconstruct this part later. The concept of resource will not be used for external catalog in the future.
-    public static HiveTable convertToSRTable(Table hiveTable, String resoureName) throws DdlException {
+    public static HiveTable convertHiveConnTableToSRTable(Table hiveTable, String resoureName) throws DdlException {
         if (hiveTable.getTableType().equals("VIRTUAL_VIEW")) {
             throw new DdlException("Hive view table is not supported.");
         }
@@ -229,12 +325,11 @@ public class HiveMetaStoreTableUtils {
         List<FieldSchema> allHiveColumns = getAllHiveColumns(hiveTable);
         List<Column> fullSchema = Lists.newArrayList();
         for (FieldSchema fieldSchema : allHiveColumns) {
-            Type srType = convertColumnType(fieldSchema.getType());
+            Type srType = convertHiveTableColumnType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
             fullSchema.add(column);
         }
 
-        // Adding some necessary properties to adapt initialization of HiveTable.
         Map<String, String> properties = Maps.newHashMap();
         properties.put(HiveTable.HIVE_DB, hiveTable.getDbName());
         properties.put(HiveTable.HIVE_TABLE, hiveTable.getTableName());
@@ -243,6 +338,30 @@ public class HiveMetaStoreTableUtils {
 
         return new HiveTable(connectorTableIdIdGenerator.getNextId().asInt(), hiveTable.getTableName(),
                 fullSchema, properties, hiveTable);
+    }
+
+    public static HudiTable convertHudiConnTableToSRTable(Table hmsTable, String resourceName)
+            throws DdlException {
+        Schema hudiSchema = HudiTable.loadHudiSchema(hmsTable);
+        List<Schema.Field> allHudiColumns = hudiSchema.getFields();
+        List<Column> fullSchema = Lists.newArrayList();
+        for (Schema.Field fieldSchema : allHudiColumns) {
+            Type srType = convertHudiTableColumnType(fieldSchema.schema());
+            if (srType == null) {
+                throw new DdlException("Can not convert hudi column type [" + fieldSchema.schema().toString() + "] " +
+                        "to starrocks type.");
+            }
+            Column column = new Column(fieldSchema.name(), srType, true);
+            fullSchema.add(column);
+        }
+
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(HudiTable.HUDI_DB, hmsTable.getDbName());
+        properties.put(HudiTable.HUDI_TABLE, hmsTable.getTableName());
+        properties.put(HudiTable.HUDI_RESOURCE, resourceName);
+
+        return new HudiTable(connectorTableIdIdGenerator.getNextId().asInt(), hudiSchema.getName(),
+                fullSchema, properties);
     }
 
     public static Database convertToSRDatabase(String dbName) {

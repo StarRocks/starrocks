@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include <gtest/gtest.h>
 
@@ -670,6 +670,83 @@ TEST(ColumnAggregator, testArrayReplace) {
     EXPECT_EQ(5, agg->size());
     EXPECT_EQ("['19']", agg->debug_item(3));
     EXPECT_EQ("['20', '21', '22', '23', '24', '25', '26', '27', '28', '29']", agg->debug_item(4));
+}
+
+// NOLINTNEXTLINE
+TEST(ColumnAggregator, testNullArrayReplaceIfNotNull2) {
+    auto array_type_info = get_array_type_info(get_type_info(FieldType::OLAP_FIELD_TYPE_INT));
+    FieldPtr field =
+            std::make_shared<Field>(1, "test_array", array_type_info,
+                                    FieldAggregationMethod::OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL, 1, false, true);
+    auto agg = NullableColumn::create(
+            ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                UInt32Column::create()),
+            NullColumn::create());
+    auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
+    aggregator->update_aggregate(agg.get());
+
+    // first chunk column
+    auto src = NullableColumn::create(
+            ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                UInt32Column::create()),
+            NullColumn::create());
+    DatumArray array_3{Datum((int32_t)(3))};
+    DatumArray array_4{Datum((int32_t)(4))};
+    DatumArray array_8{Datum((int32_t)(8))};
+    DatumArray array_11{Datum((int32_t)(11))};
+    DatumArray array_13{Datum((int32_t)(13))};
+    DatumArray array_14{Datum((int32_t)(14))};
+    DatumArray array_15{Datum((int32_t)(15))};
+
+    src->append_nulls(1);
+    src->append_datum(Datum(array_3));
+    src->append_datum(Datum(array_4));
+    src->append_datum(Datum(array_8));
+    src->append_nulls(1);
+
+    aggregator->update_source(src);
+
+    std::vector<uint32_t> loops{1, 1, 1, 2};
+
+    aggregator->aggregate_values(0, 4, loops.data(), false);
+
+    src->reset_column();
+
+    src->append_nulls(1);
+    src->append_datum(Datum(array_11));
+    src->append_datum(Datum(array_13));
+    src->append_datum(Datum(array_14));
+    src->append_datum(Datum(array_15));
+
+    aggregator->update_source(src);
+
+    loops.clear();
+    loops.emplace_back(1);
+    loops.emplace_back(1);
+    loops.emplace_back(1);
+    loops.emplace_back(1);
+    loops.emplace_back(1);
+
+    aggregator->aggregate_values(0, 1, loops.data(), false);
+    aggregator->finalize();
+
+    ASSERT_EQ(agg->size(), 4);
+    ASSERT_TRUE(agg->get(0).is_null());
+    ASSERT_EQ(agg->get(1).get_array()[0].get_int32(), 3);
+    ASSERT_EQ(agg->get(2).get_array()[0].get_int32(), 4);
+    ASSERT_EQ(agg->get(3).get_array()[0].get_int32(), 8);
+
+    agg->reset_column();
+    aggregator->update_aggregate(agg.get());
+
+    aggregator->aggregate_values(1, 4, loops.data(), false);
+    aggregator->finalize();
+
+    ASSERT_EQ(agg->size(), 4);
+    ASSERT_EQ(agg->get(0).get_array()[0].get_int32(), 11);
+    ASSERT_EQ(agg->get(1).get_array()[0].get_int32(), 13);
+    ASSERT_EQ(agg->get(2).get_array()[0].get_int32(), 14);
+    ASSERT_EQ(agg->get(3).get_array()[0].get_int32(), 15);
 }
 
 // insert into tbl values (key, null);

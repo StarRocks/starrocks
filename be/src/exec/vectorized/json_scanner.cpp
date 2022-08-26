@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/json_scanner.h"
 
@@ -617,8 +617,8 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
                 // it would get an error "Objects and arrays can only be iterated when they are first encountered",
                 // Hence, resetting the row object is necessary here.
                 row->reset();
-                RETURN_IF_ERROR(add_nullable_column(column, _slot_descs[i]->type(), _slot_descs[i]->col_name(), row,
-                                                    !_strict_mode));
+                RETURN_IF_ERROR(add_nullable_column_by_json_object(column, _slot_descs[i]->type(),
+                                                                   _slot_descs[i]->col_name(), row, !_strict_mode));
             } else if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], &val).ok()) {
                 if (strcmp(column_name, "__op") == 0) {
                     // special treatment for __op column, fill default value '0' rather than null

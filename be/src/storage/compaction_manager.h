@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -27,9 +27,9 @@ class CompactionManager {
 public:
     CompactionManager();
 
-    ~CompactionManager() = default;
+    ~CompactionManager();
 
-    void init_max_task_num();
+    void init_max_task_num(int32_t num);
 
     size_t candidates_size() {
         std::lock_guard lg(_candidates_mutex);

@@ -24,7 +24,6 @@ package com.starrocks.qe;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.KillStmt;
-import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
@@ -38,6 +37,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.external.iceberg.StarRocksIcebergException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -191,12 +191,7 @@ public class ConnectProcessor {
     }
 
     public String computeStatementDigest(StatementBase queryStmt) {
-        String digest;
-        if (queryStmt instanceof QueryStmt) {
-            digest = ((QueryStmt) queryStmt).toDigest();
-        } else {
-            digest = SqlDigestBuilder.build(queryStmt);
-        }
+        String digest = SqlDigestBuilder.build(queryStmt);
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.reset();
@@ -245,7 +240,7 @@ public class ConnectProcessor {
         } else {
             sql = parsedStmt.getOrigStmt().originStmt;
         }
-        boolean isQuery = parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement;
+        boolean isQuery = parsedStmt instanceof QueryStatement;
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(ctx.getQueryId()),
                 isQuery,
@@ -279,7 +274,8 @@ public class ConnectProcessor {
                 .setTimestamp(System.currentTimeMillis())
                 .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
                 .setUser(ctx.getQualifiedUser())
-                .setDb(ctx.getDatabase());
+                .setDb(ctx.getDatabase())
+                .setCatalog(ctx.getCurrentCatalog());
         ctx.getPlannerProfile().reset();
 
         // execute this query.
@@ -398,6 +394,8 @@ public class ConnectProcessor {
                 channel.sendOnePacket(serializer.toByteBuffer());
             }
 
+        } catch (StarRocksIcebergException e) {
+            LOG.warn("errors happened when getting Iceberg table {}", tableName, e);
         } finally {
             db.readUnlock();
         }

@@ -198,6 +198,7 @@ public class FunctionSet {
     public static final String UUID = "uuid";
     public static final String SLEEP = "sleep";
     public static final String ISNULL = "isnull";
+    public static final String ASSERT_TRUE = "assert_true";
 
     // Aggregate functions:
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
@@ -232,6 +233,7 @@ public class FunctionSet {
     public static final String WINDOW_FUNNEL = "window_funnel";
     public static final String DISTINCT_PC = "distinct_pc";
     public static final String DISTINCT_PCSA = "distinct_pcsa";
+    public static final String HISTOGRAM = "histogram";
 
     // Bitmap functions:
     public static final String BITMAP_AND = "bitmap_and";
@@ -419,6 +421,8 @@ public class FunctionSet {
                     .add(Type.DECIMAL32)
                     .add(Type.DECIMAL64)
                     .add(Type.DECIMAL128)
+                    .add(Type.CHAR)
+                    .add(Type.VARCHAR)
                     .build();
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
@@ -671,6 +675,9 @@ public class FunctionSet {
                 new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
 
         for (Type t : Type.getSupportedTypes()) {
+            if (t.isFunctionType()) {
+                continue;
+            }
             if (t.isNull()) {
                 continue; // NULL is handled through type promotion.
             }
@@ -1037,8 +1044,8 @@ public class FunctionSet {
         }
 
         for (Type t : HISTOGRAM_TYPE) {
-            addBuiltin(AggregateFunction.createBuiltin("histogram",
-                    Lists.newArrayList(t, Type.INT, Type.DOUBLE, Type.INT), Type.VARCHAR, Type.VARCHAR,
+            addBuiltin(AggregateFunction.createBuiltin(HISTOGRAM,
+                    Lists.newArrayList(t, Type.INT, Type.DOUBLE), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
         }
     }

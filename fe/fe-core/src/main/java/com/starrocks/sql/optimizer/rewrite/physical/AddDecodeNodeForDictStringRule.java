@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rewrite.physical;
 
@@ -36,7 +36,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -644,6 +644,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         if (fnName.equals(FunctionSet.MAX) || fnName.equals(FunctionSet.MIN)) {
                             ColumnRefOperator outputStringColumn = kv.getKey();
                             final ColumnRefOperator newDictColumn = createNewDictColumn(context, dictColumn);
+                            if (context.stringFunctions.containsKey(dictColumn)) {
+                                context.stringFunctions.put(newDictColumn, context.stringFunctions.get(dictColumn));
+                            }
                             newStringToDicts.put(outputStringColumn.getId(), newDictColumn.getId());
 
                             for (Pair<Integer, ColumnDict> globalDict : context.globalDicts) {
@@ -728,11 +731,16 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             return visitPhysicalJoin(optExpression, context);
         }
 
+        @Override
+        public OptExpression visitPhysicalNestLoopJoin(OptExpression optExpression, DecodeContext context) {
+            return visitPhysicalJoin(optExpression, context);
+        }
+
         public OptExpression visitPhysicalJoin(OptExpression optExpression, DecodeContext context) {
             visitProjectionBefore(optExpression, context);
             context.needEncode = true;
 
-            PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) optExpression.getOp();
+            PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) optExpression.getOp();
             joinOperator.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns);
 
             DecodeContext mergeContext = new DecodeContext(context.globalDictCache,

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.utframe.UtFrameUtils;
@@ -16,7 +16,7 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
-    public void TestAggregate() {
+    public void testAggregate() {
         analyzeFail("select v1 from t0 where abs(sum(v2)) = 2;",
                 "WHERE clause cannot contain aggregations");
         analyzeFail("select sum(v1) from t0 order by sum(max(v2) over ())",
@@ -50,7 +50,7 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
-    public void TestGrouping() {
+    public void testGrouping() {
         analyzeFail("select grouping(foo) from t0 group by grouping sets((v1), (v2))",
                 "cannot be resolved");
 
@@ -84,7 +84,7 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
-    public void TestAggInSort() {
+    public void testAggInSort() {
         analyzeSuccess("SELECT max(v1) FROM t0 WHERE true ORDER BY sum(1)");
         analyzeSuccess("SELECT v1 FROM t0 group by v1 ORDER BY sum(1)");
         analyzeFail("SELECT 1 FROM t0 WHERE true ORDER BY sum(1)",
@@ -94,7 +94,7 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
-    public void TestDistinct() {
+    public void testDistinct() {
         analyzeSuccess("select distinct v1, v2 from t0 order by v1");
         analyzeSuccess("select distinct v1, v2 as v from t0 order by v");
         analyzeSuccess("select distinct abs(v1) as v from t0 order by v");
@@ -131,10 +131,15 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
-    public void TestGroupByUseOutput() {
+    public void testGroupByUseOutput() {
         analyzeSuccess("select v1 + 1 as v from t0 group by v");
         analyzeSuccess("select v1 + 1 as v from t0 group by grouping sets((v))");
         analyzeSuccess("select v1 + 1 as v from t0 group by cube(v)");
         analyzeSuccess("select v1 + 1 as v from t0 group by rollup(v)");
+    }
+
+    @Test
+    public void testAnyValueFunction() {
+        analyzeSuccess("select v1, any_value(v2) from t0 group by v1");
     }
 }

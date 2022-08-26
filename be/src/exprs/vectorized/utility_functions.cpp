@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/utility_functions.h"
 
@@ -205,6 +205,34 @@ ColumnPtr UtilityFunctions::uuid_numeric(FunctionContext*, const Columns& column
     }
 
     return result;
+}
+
+ColumnPtr UtilityFunctions::assert_true(FunctionContext* context, const Columns& columns) {
+    auto column = columns[0];
+    const auto size = column->size();
+
+    if (column->has_null()) {
+        throw std::runtime_error("assert_true failed due to null value");
+    }
+
+    if (column->is_constant()) {
+        bool const_value = ColumnHelper::get_const_value<TYPE_BOOLEAN>(column);
+        if (!const_value) {
+            throw std::runtime_error("assert_true failed due to const false value");
+        }
+    } else {
+        if (column->is_nullable()) {
+            column = FunctionHelper::get_data_column_of_nullable(column);
+        }
+        auto bool_column = ColumnHelper::cast_to<TYPE_BOOLEAN>(column);
+        auto data = bool_column->get_data();
+        for (size_t i = 0; i < size; ++i) {
+            if (!data[i]) {
+                throw std::runtime_error("assert_true failed due to false value");
+            }
+        }
+    }
+    return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, size);
 }
 
 } // namespace starrocks::vectorized

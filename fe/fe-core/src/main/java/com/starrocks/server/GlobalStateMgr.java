@@ -29,46 +29,29 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.alter.Alter;
-import com.starrocks.alter.AlterJob;
-import com.starrocks.alter.AlterJob.JobType;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.AddPartitionClause;
-import com.starrocks.analysis.AdminCheckTabletsStmt;
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
-import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelAlterSystemStmt;
-import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.ColumnRenameClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.CreateTableLikeStmt;
-import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
-import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.PartitionRenameClause;
-import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
-import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
-import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.BrokerMgr;
@@ -95,7 +78,6 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MaterializedViewPartitionVersionInfo;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.MysqlTable;
@@ -120,7 +102,6 @@ import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.cluster.Cluster;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -215,9 +196,24 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
+import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.RecoverDbStmt;
+import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -230,6 +226,7 @@ import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.LeaderTaskExecutor;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
@@ -261,7 +258,6 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -690,6 +686,10 @@ public class GlobalStateMgr {
         return getCurrentState().getClusterInfo();
     }
 
+    public static StarOSAgent getCurrentStarOSAgent() {
+        return getCurrentState().getStarOSAgent();
+    }
+
     public static HeartbeatMgr getCurrentHeartbeatMgr() {
         return getCurrentState().getHeartbeatMgr();
     }
@@ -926,7 +926,6 @@ public class GlobalStateMgr {
 
         // set this after replay thread stopped. to avoid replay thread modify them.
         isReady.set(false);
-        canRead.set(false);
 
         // setup for journal
         try {
@@ -985,7 +984,6 @@ public class GlobalStateMgr {
 
             MetricRepo.init();
 
-            canRead.set(true);
             isReady.set(true);
 
             String msg = "leaer finished to replay journal, can write now.";
@@ -1255,8 +1253,8 @@ public class GlobalStateMgr {
 
     public long loadAlterJob(DataInputStream dis, long checksum) throws IOException {
         long newChecksum = checksum;
-        for (JobType type : JobType.values()) {
-            if (type == JobType.DECOMMISSION_BACKEND) {
+        for (AlterJobV2.JobType type : AlterJobV2.JobType.values()) {
+            if (type == AlterJobV2.JobType.DECOMMISSION_BACKEND) {
                 if (GlobalStateMgr.getCurrentStateJournalVersion() >= 5) {
                     newChecksum = loadAlterJob(dis, newChecksum, type);
                 }
@@ -1268,69 +1266,39 @@ public class GlobalStateMgr {
         return newChecksum;
     }
 
-    public long loadAlterJob(DataInputStream dis, long checksum, JobType type) throws IOException {
-        Map<Long, AlterJob> alterJobs = null;
-        ConcurrentLinkedQueue<AlterJob> finishedOrCancelledAlterJobs = null;
-        Map<Long, AlterJobV2> alterJobsV2 = Maps.newHashMap();
-        if (type == JobType.ROLLUP) {
-            alterJobs = this.getRollupHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getRollupHandler().unprotectedGetFinishedOrCancelledAlterJobs();
-        } else if (type == JobType.SCHEMA_CHANGE) {
-            alterJobs = this.getSchemaChangeHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getSchemaChangeHandler().unprotectedGetFinishedOrCancelledAlterJobs();
-            alterJobsV2 = this.getSchemaChangeHandler().getAlterJobsV2();
-        } else if (type == JobType.DECOMMISSION_BACKEND) {
-            alterJobs = this.getClusterHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getClusterHandler().unprotectedGetFinishedOrCancelledAlterJobs();
-        }
-
+    public long loadAlterJob(DataInputStream dis, long checksum, AlterJobV2.JobType type) throws IOException {
         // alter jobs
         int size = dis.readInt();
-        long newChecksum = checksum ^ size;
-        for (int i = 0; i < size; i++) {
-            long tableId = dis.readLong();
-            newChecksum ^= tableId;
-            AlterJob job = AlterJob.read(dis);
-            alterJobs.put(tableId, job);
-
-            // init job
-            Database db = getDb(job.getDbId());
-            // should check job state here because the job is finished but not removed from alter jobs list
-            if (db != null && (job.getState() == com.starrocks.alter.AlterJob.JobState.PENDING
-                    || job.getState() == com.starrocks.alter.AlterJob.JobState.RUNNING)) {
-                job.replayInitJob(db);
-            }
+        if (size > 0) {
+            // It may be upgraded from an earlier version, which is dangerous
+            throw new RuntimeException("Old metadata was found, please upgrade to version 2.4 first " +
+                    "and then from version 2.4 to the current version.");
         }
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= 2) {
             // finished or cancelled jobs
-            long currentTimeMs = System.currentTimeMillis();
             size = dis.readInt();
-            newChecksum ^= size;
-            for (int i = 0; i < size; i++) {
-                long tableId = dis.readLong();
-                newChecksum ^= tableId;
-                AlterJob job = AlterJob.read(dis);
-                if ((currentTimeMs - job.getCreateTimeMs()) / 1000 <= Config.history_job_keep_max_second) {
-                    // delete history jobs
-                    finishedOrCancelledAlterJobs.add(job);
-                }
+            if (size > 0) {
+                // It may be upgraded from an earlier version, which is dangerous
+                throw new RuntimeException("Old metadata was found, please upgrade to version 2.4 first " +
+                        "and then from version 2.4 to the current version.");
             }
         }
 
+        long newChecksum = checksum;
         // alter job v2
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_61) {
             size = dis.readInt();
             newChecksum ^= size;
             for (int i = 0; i < size; i++) {
                 AlterJobV2 alterJobV2 = AlterJobV2.read(dis);
-                if (type == JobType.ROLLUP || type == JobType.SCHEMA_CHANGE) {
-                    if (type == JobType.ROLLUP) {
+                if (type == AlterJobV2.JobType.ROLLUP || type == AlterJobV2.JobType.SCHEMA_CHANGE) {
+                    if (type == AlterJobV2.JobType.ROLLUP) {
                         this.getRollupHandler().addAlterJobV2(alterJobV2);
                     } else {
-                        alterJobsV2.put(alterJobV2.getJobId(), alterJobV2);
+                        this.getSchemaChangeHandler().addAlterJobV2(alterJobV2);
                     }
-                    // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpointed
+                    // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
                     // to prevent TabletInvertedIndex data loss,
                     // So just use AlterJob.replay() instead of AlterHandler.replay().
                     if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
@@ -1338,7 +1306,7 @@ public class GlobalStateMgr {
                         LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
                     }
                 } else {
-                    alterJobsV2.put(alterJobV2.getJobId(), alterJobV2);
+                    LOG.warn("Unknown job type:" + type.name());
                 }
             }
         }
@@ -1478,17 +1446,17 @@ public class GlobalStateMgr {
     }
 
     public long saveAlterJob(DataOutputStream dos, long checksum) throws IOException {
-        for (JobType type : JobType.values()) {
+        for (AlterJobV2.JobType type : AlterJobV2.JobType.values()) {
             checksum = saveAlterJob(dos, checksum, type);
         }
         return checksum;
     }
 
-    public long saveAlterJob(DataOutputStream dos, long checksum, JobType type) throws IOException {
+    public long saveAlterJob(DataOutputStream dos, long checksum, AlterJobV2.JobType type) throws IOException {
         Map<Long, AlterJobV2> alterJobsV2 = Maps.newHashMap();
-        if (type == JobType.ROLLUP) {
+        if (type == AlterJobV2.JobType.ROLLUP) {
             alterJobsV2 = this.getRollupHandler().getAlterJobsV2();
-        } else if (type == JobType.SCHEMA_CHANGE) {
+        } else if (type == AlterJobV2.JobType.SCHEMA_CHANGE) {
             alterJobsV2 = this.getSchemaChangeHandler().getAlterJobsV2();
         }
 
@@ -1847,6 +1815,70 @@ public class GlobalStateMgr {
         localMetastore.replayRecoverPartition(info);
     }
 
+    public static String getMaterializedViewDdlStmt(MaterializedView mv) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE MATERIALIZED VIEW `").append(mv.getName()).append("`");
+        if (!Strings.isNullOrEmpty(mv.getComment())) {
+            sb.append("\nCOMMENT \"").append(mv.getComment()).append("\"");
+        }
+
+        // partition
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (!(partitionInfo instanceof SinglePartitionInfo)) {
+            sb.append("\n").append(partitionInfo.toSql(mv, null));
+        }
+
+        // distribution
+        DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
+        sb.append("\n").append(distributionInfo.toSql());
+
+        // refresh schema
+        MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
+        sb.append("\nREFRESH ").append(refreshScheme.getType());
+        if (refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
+            MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
+            if (asyncRefreshContext.isDefineStartTime()) {
+                sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
+                                .format(DateUtils.DATE_TIME_FORMATTER))
+                        .append("\")");
+            }
+            if (asyncRefreshContext.getTimeUnit() != null) {
+                sb.append(" EVERY(INTERVAL ").append(asyncRefreshContext.getStep()).append(" ")
+                        .append(asyncRefreshContext.getTimeUnit()).append(")");
+            }
+        }
+
+        // properties
+        sb.append("\nPROPERTIES (\n");
+
+        // replicationNum
+        Short replicationNum = mv.getDefaultReplicationNum();
+        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
+        sb.append(replicationNum).append("\"");
+
+        // storageMedium
+        String storageMedium = mv.getStorageMedium();
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                .append("\" = \"");
+        sb.append(storageMedium).append("\"");
+
+        // storageCooldownTime
+        Map<String, String> properties = mv.getTableProperty().getProperties();
+        if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
+            sb.append("\n");
+        } else {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
+                    .append("\" = \"");
+            sb.append(TimeUtils.longToTimeString(
+                    Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)))).append("\"");
+            sb.append("\n");
+        }
+        sb.append(")");
+        sb.append("\nAS ").append(mv.getViewDefineSql());
+        sb.append(";");
+        return sb.toString();
+    }
+
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
                                   List<String> createRollupStmt, boolean separatePartition,
                                   boolean hidePassword) {
@@ -1856,74 +1888,15 @@ public class GlobalStateMgr {
     public static void getDdlStmt(String dbName, Table table, List<String> createTableStmt,
                                   List<String> addPartitionStmt,
                                   List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
-        StringBuilder sb = new StringBuilder();
-
         // 1. create table
         // 1.1 materialized view
         if (table.getType() == TableType.MATERIALIZED_VIEW) {
             MaterializedView mv = (MaterializedView) table;
-            sb.append("CREATE MATERIALIZED VIEW `").append(table.getName()).append("`");
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
-
-            // partition
-            PartitionInfo partitionInfo = mv.getPartitionInfo();
-            if (!(partitionInfo instanceof SinglePartitionInfo)) {
-                sb.append("\n").append(partitionInfo.toSql(mv, null));
-            }
-
-            // distribution
-            DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
-            sb.append("\n").append(distributionInfo.toSql());
-
-            // refresh schema
-            MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
-            sb.append("\nREFRESH ").append(refreshScheme.getType());
-            if (refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
-                MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-                if (asyncRefreshContext.isDefineStartTime()) {
-                    sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
-                                    .format(DateUtils.DATE_TIME_FORMATTER))
-                            .append("\")");
-                }
-                if (asyncRefreshContext.getTimeUnit() != null) {
-                    sb.append(" EVERY(INTERVAL ").append(asyncRefreshContext.getStep()).append(" ")
-                            .append(asyncRefreshContext.getTimeUnit()).append(")");
-                }
-            }
-
-            // properties
-            sb.append("\nPROPERTIES (\n");
-
-            // replicationNum
-            Short replicationNum = mv.getDefaultReplicationNum();
-            sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
-            sb.append(replicationNum).append("\"");
-
-            // storageMedium
-            String storageMedium = mv.getStorageMedium();
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
-                    .append("\" = \"");
-            sb.append(storageMedium).append("\"");
-
-            // storageCooldownTime
-            Map<String, String> properties = mv.getTableProperty().getProperties();
-            if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
-                sb.append("\n");
-            } else {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
-                        .append("\" = \"");
-                sb.append(TimeUtils.longToTimeString(
-                        Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)))).append("\"");
-                sb.append("\n");
-            }
-            sb.append(")");
-            sb.append("\nAS ").append(mv.getViewDefineSql());
-            sb.append(";");
-            createTableStmt.add(sb.toString());
+            createTableStmt.add(getMaterializedViewDdlStmt(mv));
             return;
         }
+
+        StringBuilder sb = new StringBuilder();
         // 1.2 view
         if (table.getType() == TableType.VIEW) {
             View view = (View) table;
@@ -2084,6 +2057,17 @@ public class GlobalStateMgr {
                     .append("\" = \"");
             sb.append(olapTable.enablePersistentIndex()).append("\"");
 
+            // compression type
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
+                    .append("\" = \"");
+            if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME) {
+                sb.append("LZ4").append("\"");
+            } else if (olapTable.getCompressionType() == TCompressionType.LZ4) {
+                sb.append("LZ4").append("\"");
+            } else {
+                sb.append(olapTable.getCompressionType()).append("\"");
+            }
+
             // storage media
             Map<String, String> properties = olapTable.getTableProperty().getProperties();
             if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
@@ -2184,9 +2168,12 @@ public class GlobalStateMgr {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hiveTable.getHiveDb()).append("\",\n");
+            sb.append("\"database\" = \"").append(hiveTable.getDbName()).append("\",\n");
             sb.append("\"table\" = \"").append(hiveTable.getTableName()).append("\",\n");
-            sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\",\n");
+            sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
+            if (!hiveTable.getHiveProperties().isEmpty()) {
+                sb.append(",\n");
+            }
             sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
@@ -2197,7 +2184,7 @@ public class GlobalStateMgr {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hudiTable.getDb()).append("\",\n");
+            sb.append("\"database\" = \"").append(hudiTable.getDbName()).append("\",\n");
             sb.append("\"table\" = \"").append(hudiTable.getTable()).append("\",\n");
             sb.append("\"resource\" = \"").append(hudiTable.getResourceName()).append("\"");
             sb.append("\n)");
@@ -2291,14 +2278,6 @@ public class GlobalStateMgr {
 
     public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
         localMetastore.replayCreateMaterializedView(dbName, materializedView);
-    }
-
-    public void replayAddMvPartitionVersionInfo(MaterializedViewPartitionVersionInfo info) {
-        localMetastore.replayAddMvPartitionVersionInfo(info);
-    }
-
-    public void replayRemoveMvPartitionVersionInfo(MaterializedViewPartitionVersionInfo info) {
-        localMetastore.replayRemoveMvPartitionVersionInfo(info);
     }
 
     // Drop table
@@ -2555,6 +2534,10 @@ public class GlobalStateMgr {
 
     public HiveRepository getHiveRepository() {
         return this.hiveRepository;
+    }
+
+    public void setHiveRepository(HiveRepository hiveRepository) {
+        this.hiveRepository = hiveRepository;
     }
 
     public IcebergRepository getIcebergRepository() {
@@ -2839,20 +2822,17 @@ public class GlobalStateMgr {
     // Change current catalog and database of this session.
     // We can support 'USE CATALOG.DB'
     public void changeCatalogDb(ConnectContext ctx, String identifier) throws DdlException {
-        String currentCatalogName = ctx.getCurrentCatalog();
         String dbName = ctx.getDatabase();
 
         String[] parts = identifier.split("\\.");
         if (parts.length != 1 && parts.length != 2) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
         } else if (parts.length == 1) {
-            dbName = CatalogMgr.isInternalCatalog(currentCatalogName) ?
-                    ClusterNamespace.getFullName(identifier) : identifier;
+            dbName = identifier;
         } else {
             String newCatalogName = parts[0];
             if (catalogMgr.catalogExists(newCatalogName)) {
-                dbName = CatalogMgr.isInternalCatalog(newCatalogName) ?
-                        ClusterNamespace.getFullName(parts[1]) : parts[1];
+                dbName = parts[1];
             } else {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }
@@ -3146,8 +3126,8 @@ public class GlobalStateMgr {
         localMetastore.onEraseDatabase(dbId);
     }
 
-    public void onErasePartition(Partition partition) {
-        localMetastore.onErasePartition(partition);
+    public Set<Long> onErasePartition(Partition partition) {
+        return localMetastore.onErasePartition(partition);
     }
 
     public long getImageJournalId() {
@@ -3183,6 +3163,11 @@ public class GlobalStateMgr {
             routineLoadManager.cleanOldRoutineLoadJobs();
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
+        }
+        try {
+            backupHandler.removeOldJobs();
+        } catch (Throwable t) {
+            LOG.warn("backup handler clean old jobs failed", t);
         }
     }
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.lake;
 
@@ -30,6 +30,10 @@ public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
 
     public long getStorageCacheTtlS() {
         return storageCacheInfo.getCacheTtlS();
+    }
+
+    public boolean isAllowAsyncWriteBack() {
+        return storageCacheInfo.isAllowAsyncWriteBack();
     }
 
     public ShardStorageInfo getShardStorageInfo() {

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/chunk_helper.h"
 
@@ -8,7 +8,9 @@
 #include "column/column_pool.h"
 #include "column/schema.h"
 #include "column/type_traits.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "simd/simd.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
@@ -386,6 +388,74 @@ void ChunkHelper::reorder_chunk(const std::vector<SlotDescriptor*>& slots, vecto
         reordered_chunk.append_column(original_chunk.get_column_by_slot_id(slot_id), slot_id);
     }
     original_chunk.swap_chunk(reordered_chunk);
+}
+
+void ChunkHelper::build_selective(const std::vector<uint8_t>& filter, std::vector<uint32_t>& selective) {
+    size_t n = SIMD::count_nonzero(filter);
+    if (n == 0) {
+        return;
+    }
+    selective.resize(0);
+    selective.reserve(n);
+    for (int i = 0; i < filter.size(); i++) {
+        if (filter[i]) {
+            selective.push_back(i);
+        }
+    }
+}
+
+ChunkAccumulator::ChunkAccumulator(size_t desired_size) : _desired_size(desired_size) {}
+
+void ChunkAccumulator::set_desired_size(size_t desired_size) {
+    _desired_size = desired_size;
+}
+
+void ChunkAccumulator::reset() {
+    _output.clear();
+    _tmp_chunk.reset();
+}
+
+Status ChunkAccumulator::push(vectorized::ChunkPtr&& chunk) {
+    size_t input_rows = chunk->num_rows();
+    // TODO: optimize for zero-copy scenario
+    // Cut the input chunk into pieces if larger than desired
+    for (size_t start = 0; start < input_rows;) {
+        size_t remain_rows = input_rows - start;
+        int need_rows = 0;
+        if (_tmp_chunk) {
+            need_rows = std::min(_desired_size - _tmp_chunk->num_rows(), remain_rows);
+            TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+        } else {
+            need_rows = std::min(_desired_size, remain_rows);
+            _tmp_chunk = chunk->clone_empty(_desired_size);
+            TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+        }
+
+        if (_tmp_chunk->num_rows() >= _desired_size) {
+            _output.emplace_back(std::move(_tmp_chunk));
+        }
+        start += need_rows;
+    }
+    return Status::OK();
+}
+
+bool ChunkAccumulator::empty() const {
+    return _output.empty();
+}
+
+vectorized::ChunkPtr ChunkAccumulator::pull() {
+    if (!_output.empty()) {
+        auto res = std::move(_output.front());
+        _output.pop_front();
+        return res;
+    }
+    return nullptr;
+}
+
+void ChunkAccumulator::finalize() {
+    if (_tmp_chunk) {
+        _output.emplace_back(std::move(_tmp_chunk));
+    }
 }
 
 } // namespace starrocks

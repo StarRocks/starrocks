@@ -143,7 +143,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     LOG(INFO) << "Creating tablet " << tablet_id;
 
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id), std::defer_lock);
-    std::unique_lock<std::shared_mutex> base_wlock;
+    std::shared_lock<std::shared_mutex> base_rlock;
 
     // If do schema change, both the shard where the source tablet is located and
     // the shard where the target tablet is located need to be locked.
@@ -155,14 +155,14 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
         if (shard_idx == base_shard_idx) {
             wlock.lock();
         } else {
-            std::unique_lock tmp_wlock(_get_tablets_shard_lock(request.base_tablet_id), std::defer_lock);
-            base_wlock = std::move(tmp_wlock);
+            std::shared_lock tmp_rlock(_get_tablets_shard_lock(request.base_tablet_id), std::defer_lock);
+            base_rlock = std::move(tmp_rlock);
 
             if (shard_idx < base_shard_idx) {
                 wlock.lock();
-                base_wlock.lock();
+                base_rlock.lock();
             } else {
-                base_wlock.lock();
+                base_rlock.lock();
                 wlock.lock();
             }
         }
@@ -234,9 +234,6 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(AlterTabletType 
     // should remove the tablet's pending_id no matter create-tablet success or not
     DataDir* data_dir = tablet->data_dir();
 
-    // TODO(yiguolei)
-    // the following code is very difficult to understand because it mixed alter tablet v2
-    // and alter tablet v1 should remove alter tablet v1 code after v0.12
     Status status;
     bool is_tablet_added = false;
     do {
@@ -266,15 +263,10 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(AlterTabletType 
         }
         if (is_schema_change) {
             if (request.__isset.base_tablet_id && request.base_tablet_id > 0) {
-                LOG(INFO) << "request for alter-tablet v2, do not add alter task to tablet";
                 // if this is a new alter tablet, has to set its state to not ready
                 // because schema change hanlder depends on it to check whether history data
                 // convert finished
                 tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
-            } else {
-                // add alter task to new tablet if it is a new tablet during schema change
-                tablet->add_alter_task(base_tablet->tablet_id(), base_tablet->schema_hash(), std::vector<Version>(),
-                                       alter_type);
             }
             // Possible cases:
             // 1. Because system time may rollback, creation_time of new table will be earlier
@@ -505,15 +497,6 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
             if (tablet_ptr->keys_type() == PRIMARY_KEYS) {
                 continue;
             }
-            AlterTabletTaskSharedPtr cur_alter_task = tablet_ptr->alter_task();
-            if (cur_alter_task != nullptr && cur_alter_task->alter_state() != ALTER_FINISHED &&
-                cur_alter_task->alter_state() != ALTER_FAILED) {
-                TabletSharedPtr related_tablet = _get_tablet_unlocked(cur_alter_task->related_tablet_id());
-                if (related_tablet != nullptr && tablet_ptr->creation_time() > related_tablet->creation_time()) {
-                    // Current tablet is newly created during schema-change or rollup, skip it
-                    continue;
-                }
-            }
             // A not-ready tablet maybe a newly created tablet under schema-change, skip it
             if (tablet_ptr->tablet_state() == TABLET_NOTREADY) {
                 continue;
@@ -524,13 +507,15 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
                 continue;
             }
 
-            int64_t last_failure_ms = tablet_ptr->last_cumu_compaction_failure_time();
+            int64_t last_failure_ts = tablet_ptr->last_cumu_compaction_failure_time();
             if (compaction_type == CompactionType::BASE_COMPACTION) {
-                last_failure_ms = tablet_ptr->last_base_compaction_failure_time();
+                last_failure_ts = tablet_ptr->last_base_compaction_failure_time();
             }
-            if (now_ms - last_failure_ms <= config::min_compaction_failure_interval_sec * 1000) {
-                VLOG(1) << "Too often to check compaction, skip it."
-                        << "compaction_type=" << compaction_type_str << ", last_failure_time_ms=" << last_failure_ms
+            if (now_ms - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
+                VLOG(1) << "Too often to schedule failure compaction, skip it."
+                        << "compaction_type=" << compaction_type_str
+                        << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
+                        << ", last_failure_timestamp=" << last_failure_ts / 1000
                         << ", tablet_id=" << tablet_ptr->tablet_id();
                 continue;
             }
@@ -586,15 +571,6 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
         for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
             if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
                 continue;
-            }
-            AlterTabletTaskSharedPtr cur_alter_task = tablet_ptr->alter_task();
-            if (cur_alter_task != nullptr && cur_alter_task->alter_state() != ALTER_FINISHED &&
-                cur_alter_task->alter_state() != ALTER_FAILED) {
-                TabletSharedPtr related_tablet = _get_tablet_unlocked(cur_alter_task->related_tablet_id());
-                if (related_tablet != nullptr && tablet_ptr->creation_time() > related_tablet->creation_time()) {
-                    // Current tablet is newly created during schema-change or rollup, skip it
-                    continue;
-                }
             }
             // A not-ready tablet maybe a newly created tablet under schema-change, skip it
             if (tablet_ptr->tablet_state() == TABLET_NOTREADY) {
@@ -1060,7 +1036,7 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
         VLOG(3) << "begin to create init version. version=" << version;
         RowsetSharedPtr new_rowset;
         do {
-            RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
+            RowsetWriterContext context;
             context.rowset_id = StorageEngine::instance()->next_rowset_id();
             context.tablet_uid = tablet->tablet_uid();
             context.tablet_id = tablet->tablet_id();
@@ -1177,7 +1153,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
     }
 
-    LOG(INFO) << "Start to drop tablet" << tablet_id;
+    LOG(INFO) << "Start to drop tablet " << tablet_id;
     TabletSharedPtr dropped_tablet = it->second;
     tablet_map.erase(it);
     _remove_tablet_from_partition(*dropped_tablet);
@@ -1210,9 +1186,8 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
             // See comments above
             std::unique_lock l(dropped_tablet->get_header_lock());
             dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+            dropped_tablet->save_meta();
         }
-
-        dropped_tablet->save_meta();
 
         std::unique_lock l(_shutdown_tablets_lock);
         _shutdown_tablets.emplace(tablet_id, std::move(drop_info));
@@ -1220,7 +1195,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         DCHECK_EQ(kKeepMetaAndFiles, flag);
     }
     dropped_tablet->deregister_tablet_from_dir();
-    LOG(INFO) << "Succeed to drop tablet" << tablet_id;
+    LOG(INFO) << "Succeed to drop tablet " << tablet_id;
     return Status::OK();
 }
 

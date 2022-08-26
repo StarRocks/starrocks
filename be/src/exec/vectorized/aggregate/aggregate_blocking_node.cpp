@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/aggregate/aggregate_blocking_node.h"
 
@@ -155,7 +155,7 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
     eval_join_runtime_filters(chunk->get());
 
     // For having
-    ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
+    RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
     _aggregator->update_num_rows_returned(-(old_size - (*chunk)->num_rows()));
 
     _aggregator->process_limit(chunk);
@@ -174,7 +174,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
     auto& agg_node = _tnode.agg_node;
     if (agg_node.need_finalize) {
-        // If finalize aggregate with group by clause, then it can be paralized
+        // If finalize aggregate with group by clause, then it can be parallelized
         if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
             if (context->need_local_shuffle(ops_with_sink)) {
                 std::vector<ExprContext*> group_by_expr_ctxs;

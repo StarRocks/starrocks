@@ -1,8 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
@@ -86,6 +87,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class OptimizerTraceUtil {
@@ -129,13 +131,13 @@ public class OptimizerTraceUtil {
         if (sessionVariable.isEnableOptimizerTraceLog()) {
             StringBuilder sb = new StringBuilder();
             sb.append(String.format("[TRACE QUERY %s] APPLY RULE %s\n", traceInfo.getQueryId(), rule));
-            sb.append("Original Expression:\n" + oldExpression.explain());
+            sb.append("Original Expression:\n").append(oldExpression.explain());
             sb.append("New Expression:\n");
             if (newExpressions.isEmpty()) {
                 sb.append("Empty\n");
             } else {
                 for (int i = 0; i < newExpressions.size(); i++) {
-                    sb.append(i + ":\n" + newExpressions.get(i).explain());
+                    sb.append(i).append(":\n").append(newExpressions.get(i).explain());
                 }
             }
             LOG.info(sb.toString());
@@ -164,25 +166,21 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitLogicalOlapScan(LogicalOlapScanOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("LogicalOlapScanOperator");
-            sb.append(" {").append("table=").append(node.getTable().getId())
-                    .append(", selectedParitionId=").append(node.getSelectedPartitionId())
-                    .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
-                    .append(", predicate=").append(node.getPredicate())
-                    .append(", limit=").append(node.getLimit())
-                    .append("}");
-            return sb.toString();
+            return "LogicalOlapScanOperator" + " {" + "table=" + node.getTable().getId() +
+                    ", selectedPartitionId=" + node.getSelectedPartitionId() +
+                    ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
+                    ", predicate=" + node.getPredicate() +
+                    ", limit=" + node.getLimit() +
+                    "}";
         }
 
         @Override
         public String visitLogicalHiveScan(LogicalHiveScanOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("LogicalHiveScanOperator");
-            sb.append(" {").append("table=").append(((HiveTable) node.getTable()).getTableName())
-                    .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
-                    .append(", predicates=").append(node.getScanOperatorPredicates())
-                    .append(", limit=").append(node.getLimit())
-                    .append("}");
-            return sb.toString();
+            return "LogicalHiveScanOperator" + " {" + "table=" + ((HiveTable) node.getTable()).getTableName() +
+                    ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
+                    ", predicates=" + node.getScanOperatorPredicates() +
+                    ", limit=" + node.getLimit() +
+                    "}";
         }
 
         @Override
@@ -190,32 +188,27 @@ public class OptimizerTraceUtil {
             StringBuilder sb = new StringBuilder("LogicalIcebergScanOperator");
             sb.append(" {").append("table=").append(((IcebergTable) node.getTable()).getTable())
                     .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
-                    .append(", conjuncts=").append(node.getConjuncts())
-                    .append(", minmaxConjuncts=").append(node.getMinMaxConjuncts())
+                    .append(", predicates=").append(node.getScanOperatorPredicates())
                     .append("}");
             return sb.toString();
         }
 
         @Override
         public String visitLogicalHudiScan(LogicalHudiScanOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("LogicalHudiScanOperator");
-            sb.append(" {").append("table=").append(((HudiTable) node.getTable()).getTable())
-                    .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
-                    .append(", predicates=").append(node.getScanOperatorPredicates())
-                    .append(", limit=").append(node.getLimit())
-                    .append("}");
-            return sb.toString();
+            return "LogicalHudiScanOperator" + " {" + "table=" + ((HudiTable) node.getTable()).getTable() +
+                    ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
+                    ", predicates=" + node.getScanOperatorPredicates() +
+                    ", limit=" + node.getLimit() +
+                    "}";
         }
 
         @Override
         public String visitLogicalMysqlScan(LogicalMysqlScanOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("LogicalMysqlScanOperator");
-            sb.append(" {").append("table=").append(((MysqlTable) node.getTable()).getMysqlTableName())
-                    .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
-                    .append(", predicate=").append(node.getPredicate())
-                    .append(", limit=").append(node.getLimit())
-                    .append("}");
-            return sb.toString();
+            return "LogicalMysqlScanOperator" + " {" + "table=" + ((MysqlTable) node.getTable()).getMysqlTableName() +
+                    ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
+                    ", predicate=" + node.getPredicate() +
+                    ", limit=" + node.getLimit() +
+                    "}";
         }
 
         @Override
@@ -225,24 +218,20 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitLogicalEsScan(LogicalEsScanOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("LogicalEsScanOperator");
-            sb.append(" {").append("selectedIndex=").append(node.getSelectedIndex())
-                    .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
-                    .append(", predicate=").append(node.getPredicate())
-                    .append(", limit=").append(node.getLimit())
-                    .append("}");
-            return sb.toString();
+            return "LogicalEsScanOperator" + " {" + "selectedIndex=" + node.getSelectedIndex() +
+                    ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
+                    ", predicate=" + node.getPredicate() +
+                    ", limit=" + node.getLimit() +
+                    "}";
         }
 
         @Override
         public String visitLogicalJDBCScan(LogicalJDBCScanOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("LogicalJDBCScanOperator");
-            sb.append(" {").append("table=").append(((JDBCTable) node.getTable()).getJdbcTable())
-                    .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
-                    .append(", predicate=").append(node.getPredicate())
-                    .append(", limit=").append(node.getLimit())
-                    .append("}");
-            return sb.toString();
+            return "LogicalJDBCScanOperator" + " {" + "table=" + ((JDBCTable) node.getTable()).getJdbcTable() +
+                    ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
+                    ", predicate=" + node.getPredicate() +
+                    ", limit=" + node.getLimit() +
+                    "}";
         }
 
         @Override
@@ -260,22 +249,18 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitLogicalAggregation(LogicalAggregationOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("LogicalAggregation");
-            sb.append(" {type=").append(node.getType());
-            sb.append(" ,aggregations=").append(node.getAggregations());
-            sb.append(" ,groupKeys=").append(node.getGroupingKeys()).append("}");
-            return sb.toString();
+            return "LogicalAggregation" + " {type=" + node.getType() +
+                    " ,aggregations=" + node.getAggregations() +
+                    " ,groupKeys=" + node.getGroupingKeys() + "}";
         }
 
         @Override
         public String visitLogicalTopN(LogicalTopNOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("LogicalTopNOperator");
-            sb.append(" {phase=").append(node.getSortPhase().toString())
-                    .append(", orderBy=").append(node.getOrderByElements())
-                    .append(", limit=").append(node.getLimit())
-                    .append(", offset=").append(node.getOffset());
-            sb.append("}");
-            return sb.toString();
+            return "LogicalTopNOperator" + " {phase=" + node.getSortPhase().toString() +
+                    ", orderBy=" + node.getOrderByElements() +
+                    ", limit=" + node.getLimit() +
+                    ", offset=" + node.getOffset() +
+                    "}";
         }
 
         @Override
@@ -318,9 +303,7 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitLogicalFilter(LogicalFilterOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("LogicalFilterOperator");
-            sb.append(" {").append("predicate=").append(node.getPredicate()).append("}");
-            return sb.toString();
+            return "LogicalFilterOperator" + " {" + "predicate=" + node.getPredicate() + "}";
         }
 
         @Override
@@ -330,11 +313,9 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitLogicalLimit(LogicalLimitOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("LogicalLimitOperator");
-            sb.append(" {limit=").append(node.getLimit())
-                    .append(", offset=").append(node.getOffset())
-                    .append("}");
-            return sb.toString();
+            return "LogicalLimitOperator" + " {limit=" + node.getLimit() +
+                    ", offset=" + node.getOffset() +
+                    "}";
         }
 
         @Override
@@ -359,11 +340,9 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitPhysicalDistribution(PhysicalDistributionOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("PhysicalDistributionOperator");
-            sb.append(" {distributionSpec=").append(node.getDistributionSpec())
-                    .append(" ,globalDict=").append(node.getGlobalDicts());
-            sb.append("}");
-            return sb.toString();
+            return "PhysicalDistributionOperator" + " {distributionSpec=" + node.getDistributionSpec() +
+                    " ,globalDict=" + node.getGlobalDicts() +
+                    "}";
         }
 
         @Override
@@ -376,13 +355,11 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("PhysicalHashAggregate");
-            sb.append(" {type=").append(node.getType())
-                    .append(", groupBy=").append(node.getGroupBys())
-                    .append(", partitionBy=").append(node.getPartitionByColumns())
-                    .append(" ,aggregations=").append(node.getAggregations());
-            sb.append("}");
-            return sb.toString();
+            return "PhysicalHashAggregate" + " {type=" + node.getType() +
+                    ", groupBy=" + node.getGroupBys() +
+                    ", partitionBy=" + node.getPartitionByColumns() +
+                    " ,aggregations=" + node.getAggregations() +
+                    "}";
         }
 
         @Override
@@ -397,26 +374,22 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitPhysicalOlapScan(PhysicalOlapScanOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("PhysicalOlapScanOperator");
-            sb.append(" {").append("table=").append(node.getTable().getId())
-                    .append(", selectedPartitionId=").append(node.getSelectedPartitionId())
-                    .append(", outputColumns=").append(node.getOutputColumns())
-                    .append(", projection=").append(node.getProjection())
-                    .append(", predicate=").append(node.getPredicate())
-                    .append(", limit=").append(node.getLimit())
-                    .append("}");
-            return sb.toString();
+            return "PhysicalOlapScanOperator" + " {" + "table=" + node.getTable().getId() +
+                    ", selectedPartitionId=" + node.getSelectedPartitionId() +
+                    ", outputColumns=" + node.getOutputColumns() +
+                    ", projection=" + node.getProjection() +
+                    ", predicate=" + node.getPredicate() +
+                    ", limit=" + node.getLimit() +
+                    "}";
         }
 
         @Override
         public String visitPhysicalHiveScan(PhysicalHiveScanOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("PhysicalHiveScanOperator");
-            sb.append(" {").append("table=").append(((HiveTable) node.getTable()).getTableName())
-                    .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
-                    .append(", predicates=").append(node.getScanOperatorPredicates())
-                    .append(", limit=").append(node.getLimit())
-                    .append("}");
-            return sb.toString();
+            return "PhysicalHiveScanOperator" + " {" + "table=" + ((HiveTable) node.getTable()).getTableName() +
+                    ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
+                    ", predicates=" + node.getScanOperatorPredicates() +
+                    ", limit=" + node.getLimit() +
+                    "}";
         }
 
         @Override
@@ -424,21 +397,18 @@ public class OptimizerTraceUtil {
             StringBuilder sb = new StringBuilder("PhysicalIcebergScanOperator");
             sb.append(" {").append("table=").append(((IcebergTable) node.getTable()).getTable())
                     .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
-                    .append(", conjuncts=").append(node.getConjuncts())
-                    .append(", minmaxConjuncts=").append(node.getMinMaxConjuncts())
+                    .append(", predicates=").append(node.getScanOperatorPredicates())
                     .append("}");
             return sb.toString();
         }
 
         @Override
         public String visitPhysicalHudiScan(PhysicalHudiScanOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("PhysicalHudiScanOperator");
-            sb.append(" {").append("table=").append(((HudiTable) node.getTable()).getTable())
-                    .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
-                    .append(", predicates=").append(node.getScanOperatorPredicates())
-                    .append(", limit=").append(node.getLimit())
-                    .append("}");
-            return sb.toString();
+            return "PhysicalHudiScanOperator" + " {" + "table=" + ((HudiTable) node.getTable()).getTable() +
+                    ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
+                    ", predicates=" + node.getScanOperatorPredicates() +
+                    ", limit=" + node.getLimit() +
+                    "}";
         }
 
         @Override
@@ -448,24 +418,20 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("PhysicalMysqlScanOperator");
-            sb.append(" {").append("table=").append(((MysqlTable) node.getTable()).getMysqlTableName())
-                    .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
-                    .append(", predicate=").append(node.getPredicate())
-                    .append(", limit=").append(node.getLimit())
-                    .append("}");
-            return sb.toString();
+            return "PhysicalMysqlScanOperator" + " {" + "table=" + ((MysqlTable) node.getTable()).getMysqlTableName() +
+                    ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
+                    ", predicate=" + node.getPredicate() +
+                    ", limit=" + node.getLimit() +
+                    "}";
         }
 
         @Override
         public String visitPhysicalEsScan(PhysicalEsScanOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("PhysicalEsScanOperator");
-            sb.append(" {").append("selectedIndex=").append(node.getSelectedIndex())
-                    .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
-                    .append(", predicate=").append(node.getPredicate())
-                    .append(", limit=").append(node.getLimit())
-                    .append("}");
-            return sb.toString();
+            return "PhysicalEsScanOperator" + " {" + "selectedIndex=" + node.getSelectedIndex() +
+                    ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
+                    ", predicate=" + node.getPredicate() +
+                    ", limit=" + node.getLimit() +
+                    "}";
         }
 
         @Override
@@ -475,24 +441,20 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("PhysicalJDBCScanOperator");
-            sb.append(" {").append("table=").append(((JDBCTable) node.getTable()).getJdbcTable())
-                    .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
-                    .append(", predicate=").append(node.getPredicate())
-                    .append(", limit=").append(node.getLimit())
-                    .append("}");
-            return sb.toString();
+            return "PhysicalJDBCScanOperator" + " {" + "table=" + ((JDBCTable) node.getTable()).getJdbcTable() +
+                    ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
+                    ", predicate=" + node.getPredicate() +
+                    ", limit=" + node.getLimit() +
+                    "}";
         }
 
         @Override
         public String visitPhysicalTopN(PhysicalTopNOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("PhysicalTopNOperator");
-            sb.append(" {phase=").append(node.getSortPhase())
-                    .append(", orderBy=").append(node.getOrderSpec())
-                    .append(", limit=").append(node.getLimit())
-                    .append(", offset=").append(node.getOffset());
-            sb.append("}");
-            return sb.toString();
+            return "PhysicalTopNOperator" + " {phase=" + node.getSortPhase() +
+                    ", orderBy=" + node.getOrderSpec() +
+                    ", limit=" + node.getLimit() +
+                    ", offset=" + node.getOffset() +
+                    "}";
         }
 
         @Override
@@ -534,7 +496,7 @@ public class OptimizerTraceUtil {
             String child = childOutputColumns.stream()
                     .map(l -> l.stream().map(ColumnRefOperator::toString).collect(Collectors.joining(", ")))
                     .collect(Collectors.joining(", "));
-            
+
             sb.append(child).append("}");
             return sb.toString();
         }
@@ -561,11 +523,9 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitPhysicalLimit(PhysicalLimitOperator node, Void context) {
-            StringBuilder sb = new StringBuilder("PhysicalLimitOperator");
-            sb.append(" {limit=").append(node.getLimit())
-                    .append(", offset=").append(node.getOffset())
-                    .append("}");
-            return sb.toString();
+            return "PhysicalLimitOperator" + " {limit=" + node.getLimit() +
+                    ", offset=" + node.getOffset() +
+                    "}";
         }
 
         @Override
@@ -602,54 +562,46 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitQueryStatement(QueryStatement statement, String indent) {
-            StringBuilder sb = new StringBuilder("QueryStatement{\n");
-            sb.append(indent).append("  queryRelation=")
-                    .append(visit(statement.getQueryRelation(), indent + "  "))
-                    .append("\n");
-            sb.append(indent).append("}");
-            return sb.toString();
+            return "QueryStatement{\n" + indent + "  queryRelation=" +
+                    visit(statement.getQueryRelation(), indent + "  ") +
+                    "\n" +
+                    indent + "}";
         }
 
         @Override
         public String visitSelect(SelectRelation node, String indent) {
-            StringBuilder sb = new StringBuilder("SelectRelation{\n");
-            sb.append(indent).append("  selectList=").append(node.getSelectList()).append("\n");
-            sb.append(indent).append("  fromRelation=")
-                    .append(visit(node.getRelation(), indent + "  ")).append("\n");
-            sb.append(indent).append("  predicate=")
-                    .append(visit(node.getPredicate())).append("\n");
-            sb.append(indent).append("  groupByClause=")
-                    .append(visit(node.getGroupByClause())).append("\n");
-            sb.append(indent).append("  having=")
-                    .append(visit(node.getHaving())).append("\n");
-            sb.append(indent).append("  sortClause=")
-                    .append(node.getSortClause()).append("\n");
-            sb.append(indent).append("  limit=")
-                    .append(visit(node.getLimit())).append("\n");
-            sb.append(indent).append("}");
-            return sb.toString();
+            return "SelectRelation{\n" + indent + "  selectList=" + node.getSelectList() + "\n" +
+                    indent + "  fromRelation=" +
+                    visit(node.getRelation(), indent + "  ") + "\n" +
+                    indent + "  predicate=" +
+                    visit(node.getPredicate()) + "\n" +
+                    indent + "  groupByClause=" +
+                    visit(node.getGroupByClause()) + "\n" +
+                    indent + "  having=" +
+                    visit(node.getHaving()) + "\n" +
+                    indent + "  sortClause=" +
+                    node.getSortClause() + "\n" +
+                    indent + "  limit=" +
+                    visit(node.getLimit()) + "\n" +
+                    indent + "}";
         }
 
         @Override
         public String visitJoin(JoinRelation node, String indent) {
-            StringBuilder sb = new StringBuilder("JoinRelation{");
-            sb.append("joinType=").append(node.getJoinOp());
-            sb.append(", left=").append(visit(node.getLeft(), indent));
-            sb.append(", right=").append(visit(node.getRight(), indent));
-            sb.append(", onPredicate=").append(node.getOnPredicate());
-            sb.append("}");
-            return sb.toString();
+            return "JoinRelation{" + "joinType=" + node.getJoinOp() +
+                    ", left=" + visit(node.getLeft(), indent) +
+                    ", right=" + visit(node.getRight(), indent) +
+                    ", onPredicate=" + node.getOnPredicate() +
+                    "}";
         }
 
         @Override
         public String visitSubquery(SubqueryRelation node, String indent) {
-            StringBuilder sb = new StringBuilder("SubqueryRelation{\n");
-            sb.append(indent).append("  alias=")
-                    .append(node.getAlias() == null ? "anonymous" : node.getAlias()).append("\n");
-            sb.append(indent).append("  query=")
-                    .append(visit(node.getQueryStatement(), indent + "  ")).append("\n");
-            sb.append(indent).append("}");
-            return sb.toString();
+            return "SubqueryRelation{\n" + indent + "  alias=" +
+                    (node.getAlias() == null ? "anonymous" : node.getAlias()) + "\n" +
+                    indent + "  query=" +
+                    visit(node.getQueryStatement(), indent + "  ") + "\n" +
+                    indent + "}";
         }
 
         @Override
@@ -657,7 +609,7 @@ public class OptimizerTraceUtil {
             StringBuilder sb = new StringBuilder("UnionRelation{\n");
             sb.append(indent).append("relations=\n");
             for (QueryRelation relation : node.getRelations()) {
-                sb.append(indent + "  ").append(visit(relation, indent + "  ")).append("\n");
+                sb.append(indent).append("  ").append(visit(relation, indent + "  ")).append("\n");
             }
             sb.append("}");
             return sb.toString();
@@ -666,6 +618,58 @@ public class OptimizerTraceUtil {
         @Override
         public String visitTable(TableRelation node, String indent) {
             return node.toString();
+        }
+    }
+
+    /*
+     * For test optimizer performance
+     */
+    public static class Timer {
+        private static final Logger LOG = LogManager.getLogger(Timer.class);
+        private static final ThreadLocal<Timer> ALL_TIMERS = ThreadLocal.withInitial(Timer::new);
+
+        private long stmtId = -1;
+        private long start = 0;
+        private long record = 0;
+        private long stop = 0;
+        private int phase = 0;
+        private Stopwatch watch = Stopwatch.createUnstarted();
+
+        public static void start() {
+            Timer t = ALL_TIMERS.get();
+            t.watch = Stopwatch.createStarted();
+            t.start = t.watch.elapsed(TimeUnit.MILLISECONDS);
+            t.record = t.start;
+            if (ConnectContext.get() != null) {
+                t.stmtId = ConnectContext.get().getStmtId();
+            }
+            t.phase = 1;
+            LOG.info("phase." + t.phase + ": start watch sql: " + t.stmtId);
+        }
+
+        public static void record() {
+            record("record phase");
+        }
+
+        public static void record(String str) {
+            Timer t = ALL_TIMERS.get();
+            long tmp = t.record;
+            t.record = t.watch.elapsed(TimeUnit.MILLISECONDS);
+            long cost = t.record - tmp;
+            long total = t.record - t.start;
+            t.phase++;
+            LOG.info("phase." + t.phase + ": " + str + ", cost: " + cost + "ms, " + "total: " + total + "ms");
+        }
+
+        public static void stop() {
+            Timer t = ALL_TIMERS.get();
+            t.watch.stop();
+            t.stop = t.watch.elapsed(TimeUnit.MILLISECONDS);
+            long cost = t.stop - t.record;
+            long total = t.stop - t.start;
+            t.phase++;
+            LOG.info("phase." + t.phase + ": stop watch sql: " + t.stmtId + ", cost: " + cost + "ms, " + "total: " +
+                    total + "ms");
         }
     }
 }

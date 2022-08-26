@@ -26,8 +26,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
@@ -37,6 +35,7 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
@@ -61,6 +60,8 @@ import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.SqlDigestBuilder;
@@ -78,10 +79,13 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.plan.ReplayHiveRepository;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.codec.binary.Hex;
 
 import java.io.ByteArrayInputStream;
@@ -111,8 +115,8 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
 
 public class UtFrameUtils {
-    private final static AtomicInteger INDEX = new AtomicInteger(0);
-    private final static AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
+    private static final AtomicInteger INDEX = new AtomicInteger(0);
+    private static final AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
 
     public static final String createStatisticsTableStmt = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -252,7 +256,7 @@ public class UtFrameUtils {
         frontend.start(startBDB, new String[0]);
     }
 
-    public synchronized static void createMinStarRocksCluster(boolean startBDB) {
+    public static synchronized void createMinStarRocksCluster(boolean startBDB) {
         // to avoid call createMinStarRocksCluster multiple times
         if (CREATED_MIN_CLUSTER.get()) {
             return;
@@ -280,7 +284,7 @@ public class UtFrameUtils {
         createMinStarRocksCluster(false);
     }
 
-    public static void addMockBackend(int backendId) throws Exception {
+    public static Backend addMockBackend(int backendId) throws Exception {
         // start be
         MockedBackend backend = new MockedBackend("127.0.0.1");
 
@@ -299,6 +303,8 @@ public class UtFrameUtils {
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
         GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
+
+        return be;
     }
 
     public static void dropMockBackend(int backendId) throws DdlException {
@@ -420,6 +426,16 @@ public class UtFrameUtils {
         String replaySql = replayDumpInfo.getOriginStmt();
         // session variable
         connectContext.setSessionVariable(replayDumpInfo.getSessionVariable());
+        // create resource
+        for (String createResourceStmt : replayDumpInfo.getCreateResourceStmtList()) {
+            starRocksAssert.withResource(createResourceStmt);
+        }
+        // mock replay external table info
+        if (!replayDumpInfo.getHmsTableMap().isEmpty()) {
+            ReplayHiveRepository replayHiveRepository = new ReplayHiveRepository(replayDumpInfo.getHmsTableMap());
+            connectContext.getGlobalStateMgr().setHiveRepository(replayHiveRepository);
+        }
+
         // create table
         int backendId = 10002;
         int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
@@ -448,6 +464,11 @@ public class UtFrameUtils {
         }
         // create view
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateViewStmtMap().entrySet()) {
+            String dbName = entry.getKey().split("\\.")[0];
+            if (!starRocksAssert.databaseExist(dbName)) {
+                starRocksAssert.withDatabase(dbName);
+            }
+            starRocksAssert.useDatabase(dbName);
             String createView = "create view " + entry.getKey() + " as " + entry.getValue();
             starRocksAssert.withView(createView);
         }
@@ -456,10 +477,16 @@ public class UtFrameUtils {
         for (int i = 1; i < replayDumpInfo.getBeNum(); ++i) {
             UtFrameUtils.addMockBackend(backendId++);
         }
+        // mock be core stat
+        for (Map.Entry<Long, Integer> entry : replayDumpInfo.getNumOfHardwareCoresPerBe().entrySet()) {
+            BackendCoreStat.setNumOfHardwareCoresOfBe(entry.getKey(), entry.getValue());
+        }
+        BackendCoreStat.setCachedAvgNumOfHardwareCores(replayDumpInfo.getCachedAvgNumOfHardwareCores());
+
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            OlapTable replayTable = (OlapTable) connectContext.getGlobalStateMgr().getDb("default_cluster:" + dbName)
+            OlapTable replayTable = (OlapTable) connectContext.getGlobalStateMgr().getDb("" + dbName)
                     .getTable(entry.getKey().split("\\.")[1]);
             for (Map.Entry<String, Long> partitionEntry : entry.getValue().entrySet()) {
                 setPartitionStatistics(replayTable, partitionEntry.getKey(), partitionEntry.getValue());
@@ -469,7 +496,7 @@ public class UtFrameUtils {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : replayDumpInfo.getTableStatisticsMap()
                 .entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            OlapTable replayTable = (OlapTable) connectContext.getGlobalStateMgr().getDb("default_cluster:" + dbName)
+            Table replayTable = connectContext.getGlobalStateMgr().getDb("" + dbName)
                     .getTable(entry.getKey().split("\\.")[1]);
             for (Map.Entry<String, ColumnStatistic> columnStatisticEntry : entry.getValue().entrySet()) {
                 GlobalStateMgr.getCurrentStatisticStorage()
@@ -507,7 +534,8 @@ public class UtFrameUtils {
 
         ExecPlan execPlan = new PlanFragmentBuilder()
                 .createPhysicalPlan(optimizedPlan, connectContext,
-                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>());
+                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
+                        TResultSinkType.MYSQL_PROTOCAL, true);
 
         OperatorStrings operatorPrinter = new OperatorStrings();
         return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);
@@ -606,7 +634,7 @@ public class UtFrameUtils {
         private DataOutputBuffer buffer;
         private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-        protected static void setUpImageVersion (){
+        protected static void setUpImageVersion() {
             MetaContext metaContext = new MetaContext();
             metaContext.setMetaVersion(FeMetaVersion.VERSION_CURRENT);
             metaContext.setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_CURRENT);
@@ -636,9 +664,11 @@ public class UtFrameUtils {
      */
     public static class PseudoJournalReplayer {
         // master journal queue
-        private static BlockingQueue<JournalTask> masterJournalQueue = new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+        private static BlockingQueue<JournalTask> masterJournalQueue =
+                new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
         // follower journal queue
-        private static BlockingQueue<JournalTask> followerJournalQueue = new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+        private static BlockingQueue<JournalTask> followerJournalQueue =
+                new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
         // constantly move master journal to follower and mark succeed
         private static Thread fakeJournalWriter = null;
 

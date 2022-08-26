@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -17,20 +17,20 @@ public class DistributedEnvTPCDSPlanTest extends TPCDSPlanTestBase {
     public static void beforeClass() throws Exception {
         TPCDSPlanTest.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable customer_address =
-                (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("customer_address");
-        setTableStatistics(customer_address, 1000000);
+        OlapTable customerAddress =
+                (OlapTable) globalStateMgr.getDb("test").getTable("customer_address");
+        setTableStatistics(customerAddress, 1000000);
 
-        OlapTable customer = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("customer");
+        OlapTable customer = (OlapTable) globalStateMgr.getDb("test").getTable("customer");
         setTableStatistics(customer, 2000000);
 
-        OlapTable store_sales = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("store_sales");
-        setTableStatistics(store_sales, 287997024);
+        OlapTable storeSales = (OlapTable) globalStateMgr.getDb("test").getTable("store_sales");
+        setTableStatistics(storeSales, 287997024);
 
-        OlapTable date_dim = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("date_dim");
-        setTableStatistics(date_dim, 73048);
+        OlapTable dateDim = (OlapTable) globalStateMgr.getDb("test").getTable("date_dim");
+        setTableStatistics(dateDim, 73048);
 
-        OlapTable item = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("item");
+        OlapTable item = (OlapTable) globalStateMgr.getDb("test").getTable("item");
         setTableStatistics(item, 203999);
 
         UtFrameUtils.addMockBackend(10002);

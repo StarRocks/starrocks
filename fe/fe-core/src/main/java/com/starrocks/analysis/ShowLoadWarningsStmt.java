@@ -17,19 +17,14 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.net.MalformedURLException;
 import java.net.URL;
 
 // SHOW LOAD WARNINGS statement used to get error detail of src data.
@@ -67,12 +62,32 @@ public class ShowLoadWarningsStmt extends ShowStmt {
         return dbName;
     }
 
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
+    public Expr getWhereClause() {
+        return whereClause;
+    }
+
+    public LimitElement getLimitElement() {
+        return limitElement;
+    }
+
     public String getLabel() {
         return label;
     }
 
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
     public long getJobId() {
         return jobId;
+    }
+
+    public void setJobId(long jobId) {
+        this.jobId = jobId;
     }
 
     public long getLimitNum() {
@@ -90,133 +105,30 @@ public class ShowLoadWarningsStmt extends ShowStmt {
         return jobId != 0;
     }
 
+    public String getRawUrl() {
+        return rawUrl;
+    }
+
     public URL getURL() {
         return url;
     }
 
+    public void setUrl(URL url) {
+        this.url = url;
+    }
+
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-
-        if (rawUrl != null) {
-            // get load error from url
-            if (rawUrl.isEmpty()) {
-                throw new AnalysisException("Error load url is missing");
-            }
-
-            if (dbName != null || whereClause != null || limitElement != null) {
-                throw new AnalysisException(
-                        "Can not set database, where or limit clause if getting error log from url");
-            }
-
-            // url should like:
-            // http://be_ip:be_http_port/api/_load_error_log?file=__shard_xxx/error_log_xxx
-            analyzeUrl();
-        } else {
-            if (Strings.isNullOrEmpty(dbName)) {
-                dbName = analyzer.getDefaultDb();
-                if (Strings.isNullOrEmpty(dbName)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-                }
-            }
-
-            // analyze where clause if not null
-            if (whereClause == null) {
-                throw new AnalysisException("should supply condition like: LABEL = \"your_load_label\","
-                        + " or LOAD_JOB_ID = $job_id");
-            }
-
-            if (whereClause != null) {
-                if (whereClause instanceof CompoundPredicate) {
-                    CompoundPredicate cp = (CompoundPredicate) whereClause;
-                    if (cp.getOp() != com.starrocks.analysis.CompoundPredicate.Operator.AND) {
-                        throw new AnalysisException("Only allow compound predicate with operator AND");
-                    }
-
-                    analyzeSubPredicate(cp.getChild(0));
-                    analyzeSubPredicate(cp.getChild(1));
-                } else {
-                    analyzeSubPredicate(whereClause);
-                }
-            }
-        }
+    public void analyze(Analyzer analyzer) throws UserException {
     }
 
-    private void analyzeUrl() throws AnalysisException {
-        try {
-            url = new URL(rawUrl);
-        } catch (MalformedURLException e) {
-            throw new AnalysisException("Invalid url: " + e.getMessage());
-        }
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowLoadWarningsStmt(this, context);
     }
 
-    private void analyzeSubPredicate(Expr subExpr) throws AnalysisException {
-        boolean valid = false;
-        boolean hasLabel = false;
-        boolean hasLoadJobId = false;
-        do {
-            if (subExpr == null) {
-                valid = false;
-                break;
-            }
-
-            if (subExpr instanceof BinaryPredicate) {
-                BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
-                if (binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
-                    valid = false;
-                    break;
-                }
-            } else {
-                valid = false;
-                break;
-            }
-
-            // left child
-            if (!(subExpr.getChild(0) instanceof SlotRef)) {
-                valid = false;
-                break;
-            }
-            String leftKey = ((SlotRef) subExpr.getChild(0)).getColumnName();
-            if (leftKey.equalsIgnoreCase("label")) {
-                hasLabel = true;
-            } else if (leftKey.equalsIgnoreCase("load_job_id")) {
-                hasLoadJobId = true;
-            } else {
-                valid = false;
-                break;
-            }
-
-            if (hasLabel) {
-                if (!(subExpr.getChild(1) instanceof StringLiteral)) {
-                    valid = false;
-                    break;
-                }
-
-                String value = ((StringLiteral) subExpr.getChild(1)).getStringValue();
-                if (Strings.isNullOrEmpty(value)) {
-                    valid = false;
-                    break;
-                }
-
-                label = value;
-            }
-
-            if (hasLoadJobId) {
-                if (!(subExpr.getChild(1) instanceof IntLiteral)) {
-                    LOG.warn("load_job_id is not IntLiteral. value: {}", subExpr.toSql());
-                    valid = false;
-                    break;
-                }
-                jobId = ((IntLiteral) subExpr.getChild(1)).getLongValue();
-            }
-
-            valid = true;
-        } while (false);
-
-        if (!valid) {
-            throw new AnalysisException("Where clause should looks like: LABEL = \"your_load_label\","
-                    + " or LOAD_JOB_ID = $job_id");
-        }
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     @Override

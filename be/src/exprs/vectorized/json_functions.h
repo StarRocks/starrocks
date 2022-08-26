@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -205,6 +205,9 @@ public:
     }
 
 private:
+    template <PrimitiveType ResultType>
+    static ColumnPtr _json_query_impl(starrocks_udf::FunctionContext* context, const Columns& columns);
+
     /**
      * Parse string column as json column
      * @param: 

@@ -43,7 +43,9 @@ export STARROCKS_HOME=`cd "$curdir/.."; pwd`
 export DORIS_HOME="$STARROCKS_HOME"
 source $STARROCKS_HOME/bin/common.sh
 
-# export env variables from be.conf
+# ===================================================================================
+# initialization of environment variables before exporting env variables from be.conf
+# For most cases, you should put default environment variables in this section.
 #
 # UDF_RUNTIME_DIR
 # LOG_DIR
@@ -51,6 +53,11 @@ source $STARROCKS_HOME/bin/common.sh
 export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
 export LOG_DIR=${STARROCKS_HOME}/log
 export PID_DIR=`cd "$curdir"; pwd`
+
+# https://github.com/aws/aws-cli/issues/5623
+# https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
+export AWS_EC2_METADATA_DISABLED=true
+# ===================================================================================
 
 export_env_from_conf $STARROCKS_HOME/conf/be.conf
 export_mem_limit_from_conf $STARROCKS_HOME/conf/be.conf
@@ -99,10 +106,7 @@ export LIBHDFS_OPTS=$final_java_opt
 
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
-export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
-# https://github.com/aws/aws-cli/issues/5623
-# https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
-export AWS_EC2_METADATA_DISABLED=true
+export CLASSPATH=$STARROCKS_HOME/conf:$STARROCKS_HOME/lib/jni-packages/*:$HADOOP_CLASSPATH:$CLASSPATH
 
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR

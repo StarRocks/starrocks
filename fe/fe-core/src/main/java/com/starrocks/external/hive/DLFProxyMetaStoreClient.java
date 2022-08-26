@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 // This file is based on code available under the Apache license here:
 //   https://github.com/aliyun/datalake-catalog-metastore-client/blob/master/metastore-client-hive/metastore-client-hive3/src/main/java/com/aliyun/datalake/metastore/hive2/ProxyMetaStoreClient.java
 

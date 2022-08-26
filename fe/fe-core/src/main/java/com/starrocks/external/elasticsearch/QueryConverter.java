@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.elasticsearch;
 
@@ -41,6 +41,7 @@ public class QueryConverter extends AstVisitor<QueryBuilders.QueryBuilder, Void>
         return remoteConjuncts;
     }
 
+    // used for test
     public QueryBuilders.QueryBuilder convert(Expr conjunct) {
         return visit(conjunct);
     }
@@ -59,6 +60,9 @@ public class QueryConverter extends AstVisitor<QueryBuilders.QueryBuilder, Void>
             } catch (Exception e) {
                 localConjuncts.add(conjunct.clone());
             }
+        }
+        if (remoteConjuncts.size() == 0) {
+            return QueryBuilders.matchAllQuery();
         }
         return boolQueryBuilder;
     }

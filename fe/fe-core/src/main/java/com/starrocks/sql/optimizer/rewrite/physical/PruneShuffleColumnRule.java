@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rewrite.physical;
 
@@ -148,6 +148,12 @@ public class PruneShuffleColumnRule implements PhysicalOperatorTreeRewriteRule {
                     d.getColumns().add(x);
                 }
             }
+        }
+
+        @Override
+        public OptExpression visitPhysicalNestLoopJoin(OptExpression optExpression, DistributionContext context) {
+            // NestLoopJoin right table does not support shuffle
+            return optExpression;
         }
 
         @Override

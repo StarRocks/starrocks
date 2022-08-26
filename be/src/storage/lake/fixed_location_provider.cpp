@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/lake/fixed_location_provider.h"
 
@@ -22,8 +22,17 @@ std::string FixedLocationProvider::txn_log_location(int64_t tablet_id, int64_t t
     return fmt::format("{}/{}", _root, txn_log_filename(tablet_id, txn_id));
 }
 
+std::string FixedLocationProvider::txn_vlog_location(int64_t tablet_id, int64_t version) const {
+    return fmt::format("{}/{}", _root, txn_vlog_filename(tablet_id, version));
+}
+
 std::string FixedLocationProvider::segment_location(int64_t /*tablet_id*/, std::string_view segment_name) const {
     return fmt::format("{}/{}", _root, segment_name);
+}
+
+std::string FixedLocationProvider::tablet_metadata_lock_location(int64_t tablet_id, int64_t version,
+                                                                 int64_t expire_time) const {
+    return fmt::format("{}/{}", _root, tablet_metadata_lock_filename(tablet_id, version, expire_time));
 }
 
 Status FixedLocationProvider::list_root_locations(std::set<std::string>* roots) const {

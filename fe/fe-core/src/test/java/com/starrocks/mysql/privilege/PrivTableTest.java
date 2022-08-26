@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.mysql.privilege;
 
@@ -31,15 +31,15 @@ public class PrivTableTest {
 
         // use ResourcePrivTable because PrivTable is a abstract class
         ResourcePrivTable table = new ResourcePrivTable();
-        PrivBitSet RESOURCE_USAGE = PrivBitSet.of(Privilege.USAGE_PRIV);
-        PrivPredicate ONLY_USAGE = PrivPredicate.of(PrivBitSet.of(Privilege.USAGE_PRIV), CompoundPredicate.Operator.AND);
+        PrivBitSet resourceUsage = PrivBitSet.of(Privilege.USAGE_PRIV);
+        PrivPredicate onlyUsage = PrivPredicate.of(PrivBitSet.of(Privilege.USAGE_PRIV), CompoundPredicate.Operator.AND);
         UserIdentity user1 = UserIdentity.createAnalyzedUserIdentWithIp("user1", "%");
         String resource1 = "resource1";
 
         // 1. only one entry
         // 1.1 grant
         ResourcePrivEntry entry1 = ResourcePrivEntry.create(
-                user1.getHost(), resource1, user1.getQualifiedUser(), false, RESOURCE_USAGE);
+                user1.getHost(), resource1, user1.getQualifiedUser(), false, resourceUsage);
         table.addEntry(entry1, true, false);
         LOG.info("current table: {}", table);
         // 1.2 dump to file
@@ -51,14 +51,14 @@ public class PrivTableTest {
 
         // 1.3 load from file
         DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
-        ResourcePrivTable loadTable = (ResourcePrivTable)ResourcePrivTable.read(dis);
+        ResourcePrivTable loadTable = (ResourcePrivTable) ResourcePrivTable.read(dis);
         LOG.info("load table: {}", loadTable);
 
         // 1.4 check & cleanup
         Assert.assertEquals(1, table.size());
         PrivBitSet privBitSet = new PrivBitSet();
         loadTable.getPrivs(user1, resource1, privBitSet);
-        Assert.assertTrue(privBitSet.satisfy(ONLY_USAGE));
+        Assert.assertTrue(privBitSet.satisfy(onlyUsage));
         tempFile.delete();
 
         // 2. add one entry, make it two
@@ -66,7 +66,7 @@ public class PrivTableTest {
         UserIdentity user2 = UserIdentity.createAnalyzedUserIdentWithIp("user2", "%");
         String resource2 = "resource2";
         ResourcePrivEntry entry2 = ResourcePrivEntry.create(
-                user2.getHost(), resource2, user2.getQualifiedUser(), false, RESOURCE_USAGE);
+                user2.getHost(), resource2, user2.getQualifiedUser(), false, resourceUsage);
         table.addEntry(entry2, true, false);
         LOG.info("current table: {}", table);
 
@@ -79,17 +79,17 @@ public class PrivTableTest {
 
         // 2.3 load from file
         dis = new DataInputStream(new FileInputStream(tempFile));
-        loadTable = (ResourcePrivTable)ResourcePrivTable.read(dis);
+        loadTable = (ResourcePrivTable) ResourcePrivTable.read(dis);
         LOG.info("load table: {}", loadTable);
 
         // 2.4 check & cleanup
         Assert.assertEquals(2, table.size());
         privBitSet = new PrivBitSet();
         loadTable.getPrivs(user1, resource1, privBitSet);
-        Assert.assertTrue(privBitSet.satisfy(ONLY_USAGE));
+        Assert.assertTrue(privBitSet.satisfy(onlyUsage));
         privBitSet = new PrivBitSet();
         loadTable.getPrivs(user2, resource2, privBitSet);
-        Assert.assertTrue(privBitSet.satisfy(ONLY_USAGE));
+        Assert.assertTrue(privBitSet.satisfy(onlyUsage));
         tempFile.delete();
     }
 }

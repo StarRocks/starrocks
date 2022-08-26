@@ -46,7 +46,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[22]
                             SCAN (columns[22: O_CUSTKEY] predicate[null])
                         EXCHANGE SHUFFLE[1]
-                            CROSS JOIN (join-predicate [null] post-join-predicate [6: C_ACCTBAL > 19: avg])
+                            CROSS JOIN (join-predicate [6: C_ACCTBAL > 19: avg] post-join-predicate [null])
                                 SCAN (columns[1: C_CUSTKEY, 5: C_PHONE, 6: C_ACCTBAL] predicate[substring(5: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
                                 EXCHANGE BROADCAST
                                     AGGREGATE ([GLOBAL] aggregate [{19: avg=avg(19: avg)}] group by [[]] having [null]

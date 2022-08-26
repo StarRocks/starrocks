@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -21,18 +21,29 @@ public:
      */
     DEFINE_VECTORIZED_FN(sleep);
 
+    /**
+     * return last query id 
+     */
     DEFINE_VECTORIZED_FN(last_query_id);
 
     /**
      * returns uuid.
      */
     DEFINE_VECTORIZED_FN(uuid);
+
     /**
      * Returns an approximate UUID.
      * timestamp(64bit) + backend_id(32bit: hash(ip) ^ port) + rand (16bit) +
      * tid(thread id 32 bit) + i (increment 16 bit)
      */
     DEFINE_VECTORIZED_FN(uuid_numeric);
+
+    /**
+     * assert whether input is true
+     * returns true if input is true
+     * report runtime error if input is false
+     */
+    DEFINE_VECTORIZED_FN(assert_true);
 };
 
 } // namespace vectorized

@@ -105,14 +105,24 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
     channel->open(cntl, request, response, done_guard.release());
 }
 
-void LoadChannelMgr::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
-                               PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) {
+void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
     VLOG(2) << "Current memory usage=" << _mem_tracker->consumption() << " limit=" << _mem_tracker->limit();
-    ClosureGuard done_guard(done);
     UniqueId load_id(request.id());
     auto channel = _find_load_channel(load_id);
     if (channel != nullptr) {
-        channel->add_chunk(cntl, request, response, done_guard.release());
+        channel->add_chunk(request, response);
+    } else {
+        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+        response->mutable_status()->add_error_msgs("no associated load channel");
+    }
+}
+
+void LoadChannelMgr::add_chunks(const PTabletWriterAddChunksRequest& request, PTabletWriterAddBatchResult* response) {
+    VLOG(2) << "Current memory usage=" << _mem_tracker->consumption() << " limit=" << _mem_tracker->limit();
+    UniqueId load_id(request.id());
+    auto channel = _find_load_channel(load_id);
+    if (channel != nullptr) {
+        channel->add_chunks(request, response);
     } else {
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
         response->mutable_status()->add_error_msgs("no associated load channel");

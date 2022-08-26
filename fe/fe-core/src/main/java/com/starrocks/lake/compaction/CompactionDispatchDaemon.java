@@ -1,10 +1,12 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.lake.compaction;
 
+import com.baidu.brpc.RpcContext;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
@@ -17,13 +19,13 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.proto.CompactRequest;
 import com.starrocks.lake.proto.CompactResponse;
-import com.starrocks.rpc.LakeServiceClient;
-import com.starrocks.rpc.RpcException;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.EmptyRpcCallback;
+import com.starrocks.rpc.LakeServiceAsync;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -74,6 +76,7 @@ public class CompactionDispatchDaemon extends LeaderDaemon {
             return;
         }
 
+        long txnId;
         long currentVersion;
         LakeTable table;
         Partition partition;
@@ -81,6 +84,12 @@ public class CompactionDispatchDaemon extends LeaderDaemon {
 
         try {
             table = (LakeTable) db.getTable(partitionIdentifier.getTableId());
+            // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
+            // will not be used after the schema change job finished.
+            if (table != null && table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
+                compactionManager.enableCompactionAfter(partitionIdentifier, 10L * 1000);
+                return;
+            }
             partition = (table != null) ? table.getPartition(partitionIdentifier.getPartitionId()) : null;
             if (partition == null) {
                 compactionManager.removePartition(partitionIdentifier);
@@ -92,6 +101,23 @@ public class CompactionDispatchDaemon extends LeaderDaemon {
                 compactionManager.enableCompactionAfter(partitionIdentifier, 10L * 1000);
                 return;
             }
+
+            // Note: call `beginTransaction()` in the scope of database reader lock to make sure no shadow index will
+            // be added to this table(i.e., no schema change) before calling `beginTransaction()`.
+            long currentTs = System.currentTimeMillis();
+            TransactionState.LoadJobSourceType loadJobSourceType = TransactionState.LoadJobSourceType.LAKE_COMPACTION;
+            TransactionState.TxnSourceType txnSourceType = TransactionState.TxnSourceType.FE;
+            TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
+            String label = String.format("COMPACTION_%d-%d-%d-%d", db.getId(), table.getId(), partition.getId(), currentTs);
+            txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+                    Lists.newArrayList(table.getId()), label, coordinator,
+                    loadJobSourceType, TXN_TIMEOUT_SECOND);
+        } catch (BeginTransactionException | AnalysisException | LabelAlreadyUsedException | DuplicatedRequestException e) {
+            LOG.error("Fail to create transaction for compaction job. {}", e.getMessage());
+            return;
+        } catch (Throwable e) {
+            LOG.error("Unknown error: {}", e.getMessage());
+            return;
         } finally {
             db.readUnlock();
         }
@@ -100,26 +126,10 @@ public class CompactionDispatchDaemon extends LeaderDaemon {
             LOG.debug("Compacting partition {}.{}.{}", db.getFullName(), table.getName(), partition.getName());
         }
 
-        long currentTs = System.currentTimeMillis();
-        String label = String.format("COMPACTION_%d-%d-%d-%d", db.getId(), table.getId(), partition.getId(), currentTs);
-        TransactionState.LoadJobSourceType loadJobSourceType = TransactionState.LoadJobSourceType.LAKE_COMPACTION;
-        TransactionState.TxnSourceType txnSourceType = TransactionState.TxnSourceType.FE;
-        TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
-
-        long txnId;
-        try {
-            txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
-                    Lists.newArrayList(table.getId()), label, coordinator,
-                    loadJobSourceType, TXN_TIMEOUT_SECOND);
-        } catch (BeginTransactionException | AnalysisException | LabelAlreadyUsedException | DuplicatedRequestException e) {
-            LOG.error(e);
-            return;
-        }
-
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
         try {
             compactTablets(db, currentVersion, beToTablets, txnId);
-        } catch (UserException | RpcException | ExecutionException | InterruptedException e) {
+        } catch (Throwable e) {
             nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
             LOG.error(e);
             try {
@@ -133,7 +143,7 @@ public class CompactionDispatchDaemon extends LeaderDaemon {
     }
 
     private void compactTablets(Database db, long currentVersion, Map<Long, List<Long>> beToTablets, long txnId)
-            throws UserException, RpcException, ExecutionException, InterruptedException {
+            throws UserException, ExecutionException, InterruptedException {
         List<Future<CompactResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
@@ -141,17 +151,15 @@ public class CompactionDispatchDaemon extends LeaderDaemon {
             if (backend == null) {
                 throw new UserException("Backend " + entry.getKey() + " has been dropped");
             }
-            TNetworkAddress address = new TNetworkAddress();
-            address.setHostname(backend.getHost());
-            address.setPort(backend.getBrpcPort());
-
-            LakeServiceClient client = new LakeServiceClient(address);
             CompactRequest request = new CompactRequest();
             request.tabletIds = entry.getValue();
             request.txnId = txnId;
             request.version = currentVersion;
 
-            Future<CompactResponse> responseFuture = client.compact(request);
+            RpcContext rpcContext = RpcContext.getContext();
+            rpcContext.setReadTimeoutMillis(1800000);
+            LakeServiceAsync service = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            Future<CompactResponse> responseFuture = service.compact(request, new EmptyRpcCallback<>());
             responseList.add(responseFuture);
         }
 

@@ -275,6 +275,10 @@ public class BinaryPredicate extends Predicate implements Writable {
         if (type1.isJsonType() || type2.isJsonType()) {
             return Type.JSON;
         }
+        if (type1.isArrayType() || type2.isArrayType()) {
+            // We don't support array type for binary predicate.
+            return Type.INVALID;
+        }
         if (t1 == PrimitiveType.VARCHAR && t2 == PrimitiveType.VARCHAR) {
             return Type.VARCHAR;
         }

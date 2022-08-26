@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "connector/jdbc_connector.h"
 
@@ -49,7 +49,13 @@ static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, 
         }
     }
     if (limit != -1) {
-        oss << " LIMIT " << limit;
+        if (jdbc_url.starts_with("jdbc:oracle")) {
+            // oracle doesn't support limit clause, we should generate a subquery to do this
+            // ref: https://stackoverflow.com/questions/470542/how-do-i-limit-the-number-of-rows-returned-by-an-oracle-query-after-ordering
+            return fmt::format("SELECT * FROM ({}) WHERE ROWNUM <= {}", oss.str(), limit);
+        } else {
+            oss << " LIMIT " << limit;
+        }
     }
     return oss.str();
 }
@@ -67,13 +73,11 @@ Status JDBCDataSource::open(RuntimeState* state) {
 
 void JDBCDataSource::close(RuntimeState* state) {
     if (_scanner != nullptr) {
-        _scanner->reset_jni_env();
         _scanner->close(state);
     }
 }
 
 Status JDBCDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
-    RETURN_IF_ERROR(_scanner->reset_jni_env());
     bool eos = false;
     _init_chunk(chunk, 0);
     do {

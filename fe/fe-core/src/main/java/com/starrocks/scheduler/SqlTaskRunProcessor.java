@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.scheduler;
 
@@ -21,7 +21,8 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
                     .setTimestamp(System.currentTimeMillis())
                     .setClientIp(context.getRemoteIp())
                     .setUser(ctx.getQualifiedUser())
-                    .setDb(ctx.getDatabase());
+                    .setDb(ctx.getDatabase())
+                    .setCatalog(ctx.getCurrentCatalog());
             ctx.getPlannerProfile().reset();
             String definition = context.getDefinition();
             StatementBase sqlStmt = SqlParser.parse(definition, ctx.getSessionVariable().getSqlMode()).get(0);

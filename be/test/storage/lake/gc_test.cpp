@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/lake/gc.h"
 
@@ -37,7 +37,12 @@ protected:
 TEST_F(GCTest, test_metadata_gc) {
     auto fs = FileSystem::Default();
     auto tablet_id = next_id();
-    auto version_count = config::lake_gc_metadata_max_versions + 3;
+    auto version_count = config::lake_gc_metadata_max_versions + 4;
+    int64_t txn_id = 1;
+    auto expire_time =
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count() +
+            100000;
     for (int i = 0; i < version_count; i++) {
         auto metadata = std::make_shared<TabletMetadata>();
         // leave scheme and rowset unsetted.
@@ -45,13 +50,19 @@ TEST_F(GCTest, test_metadata_gc) {
         metadata->set_version(i + 1);
         metadata->set_next_rowset_id(i + 1);
 
+        if (i == 0 || i == 1) {
+            ASSERT_OK(s_tablet_manager->put_tablet_metadata_lock(tablet_id, i + 1, expire_time));
+            ++txn_id;
+        }
+
         ASSERT_OK(s_tablet_manager->put_tablet_metadata(metadata));
         ASSERT_OK(metadata_gc(kTestDir, s_tablet_manager.get()));
     }
 
     // Ensure all metadata are still exist.
     for (int i = 0; i < version_count; i++) {
-        if (i < 3) {
+        // Version 1 and 2 will be kept because their metadata are locked.
+        if (i == 2 || i == 3) {
             auto location = s_tablet_manager->tablet_metadata_location(tablet_id, i + 1);
             auto st = fs->path_exists(location);
             ASSERT_TRUE(st.is_not_found()) << st;

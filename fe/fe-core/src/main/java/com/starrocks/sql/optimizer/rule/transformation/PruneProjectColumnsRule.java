@@ -1,15 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -36,6 +38,13 @@ public class PruneProjectColumnsRule extends TransformationRule {
             if (requiredOutputColumns.contains(columnRefOperator)) {
                 requiredInputColumns.union(operator.getUsedColumns());
                 newMap.put(columnRefOperator, operator);
+            }
+            if (operator instanceof CallOperator) {
+                CallOperator callOperator = operator.cast();
+                if (FunctionSet.ASSERT_TRUE.equals(callOperator.getFnName())) {
+                    requiredInputColumns.union(operator.getUsedColumns());
+                    newMap.put(columnRefOperator, operator);
+                }
             }
         }));
 

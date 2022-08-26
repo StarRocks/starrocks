@@ -155,14 +155,14 @@ public class PropertyAnalyzerTest {
         // Cooldown is disabled(with maximum cooldown timestamp) by default
         Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, dataProperty.getCooldownTimeMs());
 
-        Config.storage_cooldown_second = -2;
+        Config.tablet_sched_storage_cooldown_second = -2;
         Map<String, String> properties2 = Maps.newHashMap();
         properties2.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "SSD");
         dataProperty =
                 PropertyAnalyzer.analyzeDataProperty(properties2, new DataProperty(TStorageMedium.SSD));
         Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, dataProperty.getCooldownTimeMs());
 
-        Config.storage_cooldown_second = 253402271999L;
+        Config.tablet_sched_storage_cooldown_second = 253402271999L;
         Map<String, String> properties3 = Maps.newHashMap();
         properties3.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "SSD");
         dataProperty =
@@ -171,7 +171,7 @@ public class PropertyAnalyzerTest {
 
         Map<String, String> properties4 = Maps.newHashMap();
         properties4.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "SSD");
-        Config.storage_cooldown_second = 600;
+        Config.tablet_sched_storage_cooldown_second = 600;
         long start = System.currentTimeMillis();
         dataProperty =
                 PropertyAnalyzer.analyzeDataProperty(properties4, new DataProperty(TStorageMedium.SSD));

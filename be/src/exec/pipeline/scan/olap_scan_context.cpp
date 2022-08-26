@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/scan/olap_scan_context.h"
 
@@ -95,8 +95,8 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
 /// OlapScanContextFactory.
 OlapScanContextPtr OlapScanContextFactory::get_or_create(int32_t driver_sequence) {
     DCHECK_LT(driver_sequence, _dop);
-    // ScanOperators sharing one morsel and chunk buffer use the same context.
-    int32_t idx = _shared_scan ? 0 : driver_sequence;
+    // ScanOperators sharing one morsel use the same context.
+    int32_t idx = _shared_morsel_queue ? 0 : driver_sequence;
     DCHECK_LT(idx, _contexts.size());
 
     if (_contexts[idx] == nullptr) {

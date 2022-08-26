@@ -1,9 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.system;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.alter.DecommissionBackendJob;
+import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -88,7 +88,7 @@ public class ComputeNode implements IComputable, Writable {
         this.ownerClusterName = "";
         this.backendState = Backend.BackendState.free.ordinal();
 
-        this.decommissionType = DecommissionBackendJob.DecommissionType.SystemDecommission.ordinal();
+        this.decommissionType = DecommissionType.SystemDecommission.ordinal();
     }
 
     public ComputeNode(long id, String host, int heartbeatPort) {
@@ -107,7 +107,7 @@ public class ComputeNode implements IComputable, Writable {
 
         this.ownerClusterName = "";
         this.backendState = Backend.BackendState.free.ordinal();
-        this.decommissionType = DecommissionBackendJob.DecommissionType.SystemDecommission.ordinal();
+        this.decommissionType = DecommissionType.SystemDecommission.ordinal();
     }
 
     public int getStarletPort() {
@@ -256,6 +256,10 @@ public class ComputeNode implements IComputable, Writable {
         return this.isDecommissioned.get();
     }
 
+    public void setIsDecommissioned(boolean isDecommissioned) {
+        this.isDecommissioned.set(isDecommissioned);
+    }
+
     public boolean isAvailable() {
         return this.isAlive.get() && !this.isDecommissioned.get();
     }
@@ -315,7 +319,7 @@ public class ComputeNode implements IComputable, Writable {
         }
     }
 
-    public void setDecommissionType(DecommissionBackendJob.DecommissionType type) {
+    public void setDecommissionType(DecommissionType type) {
         decommissionType = type.ordinal();
     }
 
@@ -343,11 +347,19 @@ public class ComputeNode implements IComputable, Writable {
         this.backendState = backendState;
     }
 
-    public DecommissionBackendJob.DecommissionType getDecommissionType() {
-        if (decommissionType == DecommissionBackendJob.DecommissionType.ClusterDecommission.ordinal()) {
-            return DecommissionBackendJob.DecommissionType.ClusterDecommission;
+    public DecommissionType getDecommissionType() {
+        if (decommissionType == DecommissionType.ClusterDecommission.ordinal()) {
+            return DecommissionType.ClusterDecommission;
         }
-        return DecommissionBackendJob.DecommissionType.SystemDecommission;
+        return DecommissionType.SystemDecommission;
+    }
+
+    public int getCpuCores() {
+        return cpuCores;
+    }
+
+    public void setCpuCores(int cpuCores) {
+        this.cpuCores = cpuCores;
     }
 
     /**

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/base_and_cumulative_compaction_policy.h"
 
@@ -239,6 +239,38 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_with_mis
         compaction_context->rowset_levels[1].insert(rowset.get());
         rowsets.emplace_back(std::move(rowset));
     }
+    compaction_context->chosen_compaction_type = BASE_COMPACTION;
+    BaseAndCumulativeCompactionPolicy policy(compaction_context.get());
+    std::shared_ptr<CompactionTask> base_task = policy.create_compaction();
+    ASSERT_EQ(base_task, nullptr);
+}
+
+TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_without_base_rowset) {
+    TabletSharedPtr tablet = std::make_shared<Tablet>();
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    tablet_meta->set_tablet_id(100);
+    tablet->set_tablet_meta(tablet_meta);
+    std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
+    compaction_context->tablet = tablet;
+
+    std::vector<RowsetSharedPtr> rowsets;
+    TabletSchema tablet_schema;
+    create_tablet_schema(&tablet_schema);
+    int64_t base_time = UnixSeconds() - 100 * 60;
+
+    {
+        RowsetMetaSharedPtr rowset_meta = std::make_shared<RowsetMeta>();
+        rowset_meta->set_start_version(10);
+        rowset_meta->set_end_version(19);
+        rowset_meta->set_creation_time(base_time + 1);
+        rowset_meta->set_segments_overlap(NONOVERLAPPING);
+        rowset_meta->set_num_segments(1);
+        rowset_meta->set_total_disk_size(1024 * 1024);
+        RowsetSharedPtr rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset1", rowset_meta);
+        compaction_context->rowset_levels[1].insert(rowset.get());
+        rowsets.emplace_back(std::move(rowset));
+    }
+
     compaction_context->chosen_compaction_type = BASE_COMPACTION;
     BaseAndCumulativeCompactionPolicy policy(compaction_context.get());
     std::shared_ptr<CompactionTask> base_task = policy.create_compaction();

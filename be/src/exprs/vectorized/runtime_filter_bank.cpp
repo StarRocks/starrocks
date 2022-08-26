@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/runtime_filter_bank.h"
 
@@ -120,8 +120,9 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, P
     return Status::OK();
 }
 
-StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_as_runtime_filter(ObjectPool* pool, ExprContext* conjunct,
-                                                                      Chunk* chunk) {
+StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool,
+                                                                                      ExprContext* conjunct,
+                                                                                      Chunk* chunk) {
     auto left_child = conjunct->root()->get_child(0);
     auto right_child = conjunct->root()->get_child(1);
     // all of the child(1) in expr is in build chunk
@@ -148,6 +149,22 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_as_runtime_filter(ObjectPool
     new_expr->add_child(new_left);
     new_expr->add_child(literal);
     return pool->add(new ExprContext(new_expr));
+}
+
+struct FilterZoneMapWithMinMaxOp {
+    template <PrimitiveType ptype>
+    bool operator()(const JoinRuntimeFilter* expr, const Column* min_column, const Column* max_column) {
+        using CppType = RunTimeCppType<ptype>;
+        auto* filter = (RuntimeBloomFilter<ptype>*)(expr);
+        const CppType* min_value = ColumnHelper::unpack_cpp_data_one_value<ptype>(min_column);
+        const CppType* max_value = ColumnHelper::unpack_cpp_data_one_value<ptype>(max_column);
+        return filter->filter_zonemap_with_min_max(min_value, max_value);
+    }
+};
+
+bool RuntimeFilterHelper::filter_zonemap_with_min_max(PrimitiveType type, const JoinRuntimeFilter* filter,
+                                                      const Column* min_column, const Column* max_column) {
+    return type_dispatch_filter(type, false, FilterZoneMapWithMinMaxOp(), filter, min_column, max_column);
 }
 
 Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc) {
@@ -204,6 +221,12 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     if (not_found) {
         return Status::NotFound("plan node id not found. node_id = " + std::to_string(node_id));
     }
+    return Status::OK();
+}
+
+Status RuntimeFilterProbeDescriptor::init(int32_t filter_id, ExprContext* probe_expr_ctx) {
+    _filter_id = filter_id;
+    _probe_expr_ctx = probe_expr_ctx;
     return Status::OK();
 }
 
@@ -305,6 +328,8 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
     if (!eval_context.selectivity.empty()) {
         auto& selection = eval_context.running_context.selection;
         eval_context.running_context.use_merged_selection = false;
+        eval_context.running_context.compatibility =
+                _runtime_state->func_version() <= 3 || !_runtime_state->enable_pipeline_engine();
         for (auto& kv : eval_context.selectivity) {
             RuntimeFilterProbeDescriptor* rf_desc = kv.second;
             const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
@@ -369,6 +394,8 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
     size_t chunk_size = chunk->num_rows();
     auto& merged_selection = eval_context.running_context.merged_selection;
     auto& use_merged_selection = eval_context.running_context.use_merged_selection;
+    eval_context.running_context.compatibility =
+            _runtime_state->func_version() <= 3 || !_runtime_state->enable_pipeline_engine();
     use_merged_selection = true;
     for (auto& it : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = it.second;

@@ -1,11 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import org.apache.velocity.VelocityContext;
 
@@ -22,7 +22,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
     private final List<Long> partitionIdList;
 
-    public FullStatisticsCollectJob(Database db, OlapTable table, List<Long> partitionIdList, List<String> columns,
+    public FullStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columns,
                                     StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                     Map<String, String> properties) {
         super(db, table, columns, type, scheduleType, properties);
@@ -53,7 +53,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
-    public String buildCollectFullStatisticSQL(Database database, OlapTable table, Partition partition,
+    public String buildCollectFullStatisticSQL(Database database, Table table, Partition partition,
                                                List<String> columnNames) {
         StringBuilder builder = new StringBuilder("INSERT INTO column_statistics").append(" ");
 

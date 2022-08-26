@@ -25,14 +25,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
-import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TNetworkAddress;
@@ -181,45 +178,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      */
     private void setParallelExecNumIfExists() {
         if (ConnectContext.get() != null) {
-            int instanceNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
-
             if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
-                // In pipeline engine, we prefer inter-pipeline parallelism to inter-fragment parallelism
-                // So in default case, instanceNum should be 1, and DOP should be cores/2
-                int pipelineDop = ConnectContext.get().getSessionVariable().getPipelineDop();
-                if (pipelineDop > 0) {
-                    this.parallelExecNum = instanceNum;
-                    this.pipelineDop = pipelineDop;
-                } else {
-                    this.parallelExecNum = 1;
-                    this.pipelineDop = BackendCoreStat.getDefaultDOP();
-                }
+                this.parallelExecNum = 1;
+                this.pipelineDop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
             } else {
-                this.parallelExecNum = instanceNum;
+                this.parallelExecNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
                 this.pipelineDop = 1;
             }
         }
-    }
-
-    /**
-     * Several cases we could prefer the instance-parallel:
-     * 1. One-phase aggregation: avoid local exchange
-     * 2. Colocate join
-     * 3. Bucket join
-     */
-    public void preferInstanceParallel() {
-        this.parallelExecNum = BackendCoreStat.getDefaultDOP();
-        this.pipelineDop = 1;
-        this.dopEstimated = true;
-    }
-
-    /**
-     * In most cases we prefer the pipeline-parallel
-     */
-    public void preferPipelineParallel() {
-        this.parallelExecNum = 1;
-        this.pipelineDop = BackendCoreStat.getDefaultDOP();
-        this.dopEstimated = true;
     }
 
     public ExchangeNode getDestNode() {
@@ -290,8 +256,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     /**
      * Finalize plan tree and create stream sink, if needed.
      */
-    public void finalize(Analyzer analyzer, boolean validateFileFormats)
-            throws UserException {
+    public void createDataSink(TResultSinkType resultSinkType) {
         if (sink != null) {
             return;
         }
@@ -310,34 +275,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             }
             // add ResultSink
             // we're streaming to an result sink
-            sink = new ResultSink(planRoot.getId(), TResultSinkType.MYSQL_PROTOCAL);
-        }
-    }
-
-    public void finalizeForStatistic(boolean isStatistic) {
-        if (sink != null) {
-            return;
-        }
-        if (destNode != null) {
-            // we're streaming to an exchange node
-            DataStreamSink streamSink = new DataStreamSink(destNode.getId());
-            streamSink.setPartition(outputPartition);
-            streamSink.setMerge(destNode.isMerge());
-            streamSink.setFragment(this);
-            sink = streamSink;
-        } else {
-            if (planRoot == null) {
-                // only output expr, no FROM clause
-                // "select 1 + 2"
-                return;
-            }
-            // add ResultSink
-            // we're streaming to an result sink
-            if (isStatistic) {
-                sink = new ResultSink(planRoot.getId(), TResultSinkType.STATISTIC);
-            } else {
-                sink = new ResultSink(planRoot.getId(), TResultSinkType.MYSQL_PROTOCAL);
-            }
+            sink = new ResultSink(planRoot.getId(), resultSinkType);
         }
     }
 

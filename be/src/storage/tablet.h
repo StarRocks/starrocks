@@ -141,13 +141,6 @@ public:
     void add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version);
     bool version_for_delete_predicate(const Version& version);
 
-    // message for alter task
-    AlterTabletTaskSharedPtr alter_task();
-    void add_alter_task(int64_t related_tablet_id, int32_t related_schema_hash,
-                        const vector<Version>& versions_to_alter, const AlterTabletType alter_type);
-    void delete_alter_task();
-    Status set_alter_state(AlterTabletState state);
-
     // meta lock
     void obtain_header_rdlock() { _meta_lock.lock_shared(); }
     void obtain_header_wrlock() { _meta_lock.lock(); }

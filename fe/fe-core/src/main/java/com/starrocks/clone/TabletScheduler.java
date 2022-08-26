@@ -169,13 +169,13 @@ public class TabletScheduler extends LeaderDaemon {
         this.colocateTableIndex = globalStateMgr.getColocateTableIndex();
         this.stat = stat;
 
-        if (TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_balancer_strategy)) {
+        if (TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)) {
             this.rebalancer = new DiskAndTabletLoadReBalancer(infoService, invertedIndex);
-        } else if (TabletBalancerStrategy.isBELoadScoreStrategy(Config.tablet_balancer_strategy)) {
+        } else if (TabletBalancerStrategy.isBELoadScoreStrategy(Config.tablet_sched_balancer_strategy)) {
             this.rebalancer = new BeLoadRebalancer(infoService, invertedIndex);
         } else {
             LOG.warn("invalid value of Config.tablet_balancer_strategy {}, use be_load_score strategy",
-                    Config.tablet_balancer_strategy);
+                    Config.tablet_sched_balancer_strategy);
             this.rebalancer = new BeLoadRebalancer(infoService, invertedIndex);
         }
     }
@@ -194,9 +194,9 @@ public class TabletScheduler extends LeaderDaemon {
     private boolean updateWorkingSlots() {
         // Compute delta that will be checked to update slot number per storage path and
         // record new value of `Config.schedule_slot_num_per_path`.
-        int cappedVal = Config.schedule_slot_num_per_path < MIN_SLOT_PER_PATH ? MIN_SLOT_PER_PATH :
-                (Config.schedule_slot_num_per_path > MAX_SLOT_PER_PATH ? MAX_SLOT_PER_PATH :
-                        Config.schedule_slot_num_per_path);
+        int cappedVal = Config.tablet_sched_slot_num_per_path < MIN_SLOT_PER_PATH ? MIN_SLOT_PER_PATH :
+                (Config.tablet_sched_slot_num_per_path > MAX_SLOT_PER_PATH ? MAX_SLOT_PER_PATH :
+                        Config.tablet_sched_slot_num_per_path);
         int delta = 0;
         int oldSlotPerPathConfig = currentSlotPerPathConfig;
         if (currentSlotPerPathConfig != 0) {
@@ -280,8 +280,8 @@ public class TabletScheduler extends LeaderDaemon {
         // and number of scheduling tablets exceed the limit,
         // refuse to add.
         if (tablet.getType() != TabletSchedCtx.Type.BALANCE && !force
-                && (pendingTablets.size() > Config.max_scheduling_tablets
-                || runningTablets.size() > Config.max_scheduling_tablets)) {
+                && (pendingTablets.size() > Config.tablet_sched_max_scheduling_tablets
+                || runningTablets.size() > Config.tablet_sched_max_scheduling_tablets)) {
             return AddResult.LIMIT_EXCEED;
         }
 
@@ -340,7 +340,7 @@ public class TabletScheduler extends LeaderDaemon {
 
         handleRunningTablets();
 
-        if (TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_balancer_strategy)) {
+        if (TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)) {
             // selectTabletsForBalance should depend on latest load statistics
             // do not select others balance task when there is running or pending balance tasks
             // to avoid generating repeated task
@@ -354,11 +354,11 @@ public class TabletScheduler extends LeaderDaemon {
             }
         } else {
             long numOfBalancingTablets = getBalanceTabletsNumber();
-            if (numOfBalancingTablets < Config.max_balancing_tablets) {
+            if (numOfBalancingTablets < Config.tablet_sched_max_balancing_tablets) {
                 selectTabletsForBalance();
             } else {
                 LOG.info("number of balancing tablets {} exceed limit: {}, skip selecting tablets for balance",
-                        numOfBalancingTablets, Config.max_balancing_tablets);
+                        numOfBalancingTablets, Config.tablet_sched_max_balancing_tablets);
             }
         }
 
@@ -483,7 +483,7 @@ public class TabletScheduler extends LeaderDaemon {
                             tabletCtx.getTabletId(), tabletCtx.getType().name(), e.getMessage());
                     if (tabletCtx.getType() == Type.BALANCE) {
                         // if balance is disabled, remove this tablet
-                        if (Config.disable_balance) {
+                        if (Config.tablet_sched_disable_balance) {
                             finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.CANCELLED,
                                     "disable balance and " + e.getMessage());
                         } else {
@@ -1092,7 +1092,10 @@ public class TabletScheduler extends LeaderDaemon {
         String replicaInfos = tabletCtx.getTablet().getReplicaInfos();
         // delete this replica from globalStateMgr.
         // it will also delete replica from tablet inverted index.
-        tabletCtx.deleteReplica(replica);
+        if (!tabletCtx.deleteReplica(replica)) {
+            LOG.warn("delete replica for tablet: {} failed backend {} not found replicas:{}", tabletCtx.getTabletId(),
+                    replica.getBackendId(), replicaInfos);
+        }
 
         if (force) {
             // send the delete replica task.
@@ -1170,7 +1173,7 @@ public class TabletScheduler extends LeaderDaemon {
      * and waiting to be scheduled.
      */
     private void selectTabletsForBalance() {
-        if (Config.disable_balance) {
+        if (Config.tablet_sched_disable_balance) {
             LOG.info("balance is disabled. skip selecting tablets for balance");
             return;
         }

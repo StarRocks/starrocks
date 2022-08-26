@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -34,11 +34,18 @@ public class PruneHDFSScanColumnRuleTest {
 
     ColumnRefOperator intColumnOperator = new ColumnRefOperator(1, Type.INT, "id", true);
     ColumnRefOperator strColumnOperator = new ColumnRefOperator(2, Type.STRING, "name", true);
+    ColumnRefOperator unknownColumnOperator = new ColumnRefOperator(3, Type.UNKNOWN_TYPE, "unknown", true);
 
     Map<ColumnRefOperator, Column> scanColumnMap = new HashMap<ColumnRefOperator, Column>() {{
-        put(intColumnOperator, new Column("id", Type.INT));
-        put(strColumnOperator, new Column("name", Type.STRING));
-    }};
+            put(intColumnOperator, new Column("id", Type.INT));
+            put(strColumnOperator, new Column("name", Type.STRING));
+        }};
+
+    Map<ColumnRefOperator, Column> scanColumnMapWithUnknown = new HashMap<ColumnRefOperator, Column>() {{
+            put(intColumnOperator, new Column("id", Type.INT));
+            put(strColumnOperator, new Column("name", Type.STRING));
+            put(unknownColumnOperator, new Column("name", Type.UNKNOWN_TYPE));
+        }};
 
     @Test
     public void transformIcebergWithPredicate(@Mocked IcebergTable table,
@@ -126,6 +133,22 @@ public class PruneHDFSScanColumnRuleTest {
         OptExpression scan = new OptExpression(
                 new LogicalHudiScanOperator(table, Table.TableType.HUDI,
                         scanColumnMap, Maps.newHashMap(), -1, null));
+
+        List<TaskContext> taskContextList = new ArrayList<>();
+        taskContextList.add(taskContext);
+
+        ColumnRefSet requiredOutputColumns = new ColumnRefSet(new ArrayList<>());
+
+        doHudiTransform(scan, context, requiredOutputColumns, taskContextList, taskContext);
+    }
+
+    @Test
+    public void transformHudiWithUnknownScanColumn(@Mocked HudiTable table,
+                                              @Mocked OptimizerContext context,
+                                              @Mocked TaskContext taskContext) {
+        OptExpression scan = new OptExpression(
+                new LogicalHudiScanOperator(table, Table.TableType.HUDI,
+                        scanColumnMapWithUnknown, Maps.newHashMap(), -1, null));
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);

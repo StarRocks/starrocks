@@ -1,8 +1,7 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
@@ -110,11 +109,6 @@ public class ExpressionContext {
         } else {
             return groupExpression.getInputs().get(index).getFirstLogicalExpression().getOp();
         }
-    }
-
-    public GroupExpression getChildGroupExpression(int index) {
-        Preconditions.checkNotNull(groupExpression);
-        return groupExpression.getInputs().get(index).getFirstLogicalExpression();
     }
 
     public Statistics getStatistics() {

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.journal.bdbje;
 
@@ -16,7 +16,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
@@ -31,27 +30,15 @@ public class BDBEnvironmentTest {
     private static final Logger LOG = LogManager.getLogger(BDBEnvironmentTest.class);
     private List<File> tmpDirs = new ArrayList<>();
 
-    public File createTmpDir() throws Exception{
+    public File createTmpDir() throws Exception {
         File f = Files.createTempDirectory(Paths.get("."), "BDBEnvironmentTest").toFile();
         tmpDirs.add(f);
         return f;
     }
 
-    @Before
-    public void setup() throws Exception {
-        BDBEnvironment.RETRY_TIME = 3;
-        // give master time to update membership
-        // otherwise may get error Conflicting node types: uses: SECONDARY Replica is configured as type: ELECTABLE
-        BDBEnvironment.SLEEP_INTERVAL_SEC = 1;
-        // set timeout to a really long time so that ut can pass even when IO load is very high
-        Config.bdbje_heartbeat_timeout_second = 60;
-        Config.bdbje_replica_ack_timeout_second = 60;
-        Config.bdbje_lock_timeout_second = 60;
-    }
-
     @After
     public void cleanup() throws Exception {
-        for (File tmpDir: tmpDirs) {
+        for (File tmpDir : tmpDirs) {
             FileUtils.deleteDirectory(tmpDir);
         }
     }
@@ -94,7 +81,7 @@ public class BDBEnvironmentTest {
     @Test(expected = JournalException.class)
     public void testSetupStandaloneMultitimes() throws Exception {
         String selfNodeHostPort = findUnbindHostPort();
-        for (int i = 0; i < 2; i ++) {
+        for (int i = 0; i < 2; i++) {
             BDBEnvironment environment = new BDBEnvironment(
                     createTmpDir(),
                     "standalone",
@@ -127,14 +114,23 @@ public class BDBEnvironmentTest {
                 return;
             } catch (Exception e) {
                 // sleep 5 ~ 15 seconds
-                int sleepSeconds = ThreadLocalRandom.current().nextInt(5, 15);
-                LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds, e);
+                int sleepSeconds = new Random().nextInt() % 10 + 5;
+                LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds);
                 Thread.sleep(sleepSeconds * 1000L);
             }
         }
 
     }
     private void initClusterMasterFollowerNoRetry() throws Exception {
+        BDBEnvironment.RETRY_TIME = 3;
+        // give master time to update membership
+        // otherwise may get error Conflicting node types: uses: SECONDARY Replica is configured as type: ELECTABLE
+        BDBEnvironment.SLEEP_INTERVAL_SEC = ThreadLocalRandom.current().nextInt(5, 15);;
+        // set timeout to a really long time so that ut can pass even when IO load is very high
+        Config.bdbje_heartbeat_timeout_second = 60;
+        Config.bdbje_replica_ack_timeout_second = 60;
+        Config.bdbje_lock_timeout_second = 60;
+
         // setup master
         masterNodeHostPort = findUnbindHostPort();
         masterPath = createTmpDir();
@@ -163,6 +159,8 @@ public class BDBEnvironmentTest {
             followerEnvironment.setup();
             Assert.assertEquals(0, followerEnvironment.getDatabaseNames().size());
         }
+        BDBEnvironment.RETRY_TIME = 3;
+        BDBEnvironment.SLEEP_INTERVAL_SEC = 1;
     }
 
     @Test
@@ -170,11 +168,11 @@ public class BDBEnvironmentTest {
         initClusterMasterFollower();
 
         // master write
-        Long DB_INDEX_1 = 0L;
-        String DB_NAME_1 = String.valueOf(DB_INDEX_1);
-        CloseSafeDatabase masterDb = masterEnvironment.openDatabase(DB_NAME_1);
+        Long dbIndex1 = 0L;
+        String dbName1 = String.valueOf(dbIndex1);
+        CloseSafeDatabase masterDb = masterEnvironment.openDatabase(dbName1);
         Assert.assertEquals(1, masterEnvironment.getDatabaseNames().size());
-        Assert.assertEquals(DB_INDEX_1, masterEnvironment.getDatabaseNames().get(0));
+        Assert.assertEquals(dbIndex1, masterEnvironment.getDatabaseNames().get(0));
         DatabaseEntry key = randomEntry();
         DatabaseEntry value = randomEntry();
         masterDb.put(null, key, value);
@@ -183,11 +181,11 @@ public class BDBEnvironmentTest {
         Thread.sleep(1000);
 
         // follower read
-        for (BDBEnvironment followerEnvironment: followerEnvironments) {
+        for (BDBEnvironment followerEnvironment : followerEnvironments) {
             Assert.assertEquals(1, followerEnvironment.getDatabaseNames().size());
-            Assert.assertEquals(DB_INDEX_1, followerEnvironment.getDatabaseNames().get(0));
+            Assert.assertEquals(dbIndex1, followerEnvironment.getDatabaseNames().get(0));
 
-            CloseSafeDatabase followerDb = followerEnvironment.openDatabase(DB_NAME_1);
+            CloseSafeDatabase followerDb = followerEnvironment.openDatabase(dbName1);
             DatabaseEntry newvalue = new DatabaseEntry();
             followerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
             Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
@@ -205,9 +203,9 @@ public class BDBEnvironmentTest {
 
         // observer read
         Assert.assertEquals(1, observerEnvironment.getDatabaseNames().size());
-        Assert.assertEquals(DB_INDEX_1, observerEnvironment.getDatabaseNames().get(0));
+        Assert.assertEquals(dbIndex1, observerEnvironment.getDatabaseNames().get(0));
 
-        CloseSafeDatabase observerDb = observerEnvironment.openDatabase(DB_NAME_1);
+        CloseSafeDatabase observerDb = observerEnvironment.openDatabase(dbName1);
         DatabaseEntry newvalue = new DatabaseEntry();
         observerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
         Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
@@ -215,7 +213,7 @@ public class BDBEnvironmentTest {
 
         // close
         masterEnvironment.close();
-        for (BDBEnvironment followerEnvironment: followerEnvironments) {
+        for (BDBEnvironment followerEnvironment : followerEnvironments) {
             followerEnvironment.close();
         }
         observerEnvironment.close();
@@ -228,26 +226,26 @@ public class BDBEnvironmentTest {
         // open n dbs and each write 1 kv
         DatabaseEntry key = randomEntry();
         DatabaseEntry value = randomEntry();
-        Long [] DB_INDEX_ARR = {0L, 1L, 2L, 9L, 10L};
-        String [] DB_NAME_ARR = new String[DB_INDEX_ARR.length];
-        for (int i = 0; i < DB_NAME_ARR.length; ++ i) {
-            DB_NAME_ARR[i] = String.valueOf(DB_INDEX_ARR[i]);
+        Long [] dbIndexArr = {0L, 1L, 2L, 9L, 10L};
+        String [] dbNameArr = new String[dbIndexArr.length];
+        for (int i = 0; i < dbNameArr.length; ++ i) {
+            dbNameArr[i] = String.valueOf(dbIndexArr[i]);
 
             // master write
-            CloseSafeDatabase masterDb = masterEnvironment.openDatabase(DB_NAME_ARR[i]);
+            CloseSafeDatabase masterDb = masterEnvironment.openDatabase(dbNameArr[i]);
             Assert.assertEquals(i + 1, masterEnvironment.getDatabaseNames().size());
-            Assert.assertEquals(DB_INDEX_ARR[i], masterEnvironment.getDatabaseNames().get(i));
+            Assert.assertEquals(dbIndexArr[i], masterEnvironment.getDatabaseNames().get(i));
             masterDb.put(null, key, value);
             masterDb.close();
 
             Thread.sleep(1000);
 
             // follower read
-            for (BDBEnvironment followerEnvironment: followerEnvironments) {
+            for (BDBEnvironment followerEnvironment : followerEnvironments) {
                 Assert.assertEquals(i + 1, followerEnvironment.getDatabaseNames().size());
-                Assert.assertEquals(DB_INDEX_ARR[i], followerEnvironment.getDatabaseNames().get(i));
+                Assert.assertEquals(dbIndexArr[i], followerEnvironment.getDatabaseNames().get(i));
 
-                CloseSafeDatabase followerDb = followerEnvironment.openDatabase(DB_NAME_ARR[i]);
+                CloseSafeDatabase followerDb = followerEnvironment.openDatabase(dbNameArr[i]);
                 DatabaseEntry newvalue = new DatabaseEntry();
                 followerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
                 Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
@@ -256,24 +254,24 @@ public class BDBEnvironmentTest {
         }
 
         // drop first 2 dbs
-        masterEnvironment.removeDatabase(DB_NAME_ARR[0]);
-        masterEnvironment.removeDatabase(DB_NAME_ARR[1]);
+        masterEnvironment.removeDatabase(dbNameArr[0]);
+        masterEnvironment.removeDatabase(dbNameArr[1]);
 
         // check dbnames
         List<Long> expectDbNames = new ArrayList<>();
-        for (int i = 2;  i != DB_NAME_ARR.length; ++ i) {
-            expectDbNames.add(DB_INDEX_ARR[i]);
+        for (int i = 2;  i != dbNameArr.length; ++ i) {
+            expectDbNames.add(dbIndexArr[i]);
         }
         Assert.assertEquals(expectDbNames, masterEnvironment.getDatabaseNames());
         Thread.sleep(1000);
         // follower read
-        for (BDBEnvironment followerEnvironment: followerEnvironments) {
+        for (BDBEnvironment followerEnvironment : followerEnvironments) {
             Assert.assertEquals(expectDbNames, followerEnvironment.getDatabaseNames());
         }
 
         // close
         masterEnvironment.close();
-        for (BDBEnvironment followerEnvironment: followerEnvironments) {
+        for (BDBEnvironment followerEnvironment : followerEnvironments) {
             followerEnvironment.close();
         }
     }
@@ -286,26 +284,26 @@ public class BDBEnvironmentTest {
         initClusterMasterFollower();
 
         // master write db 0
-        Long DB_INDEX_OLD = 0L;
-        String DB_NAME_OLD = String.valueOf(DB_INDEX_OLD);
-        CloseSafeDatabase masterDb = masterEnvironment.openDatabase(DB_NAME_OLD);
+        Long dbIndexOld = 0L;
+        String dbNameOld = String.valueOf(dbIndexOld);
+        CloseSafeDatabase masterDb = masterEnvironment.openDatabase(dbNameOld);
         DatabaseEntry key = randomEntry();
         DatabaseEntry value = randomEntry();
         masterDb.put(null, key, value);
         masterDb.close();
         Assert.assertEquals(1, masterEnvironment.getDatabaseNames().size());
-        Assert.assertEquals(DB_INDEX_OLD, masterEnvironment.getDatabaseNames().get(0));
+        Assert.assertEquals(dbIndexOld, masterEnvironment.getDatabaseNames().get(0));
 
         Thread.sleep(1000);
 
         // follower read db 0
-        for (BDBEnvironment followerEnvironment: followerEnvironments) {
-            CloseSafeDatabase followerDb = followerEnvironment.openDatabase(DB_NAME_OLD);
+        for (BDBEnvironment followerEnvironment : followerEnvironments) {
+            CloseSafeDatabase followerDb = followerEnvironment.openDatabase(dbNameOld);
             DatabaseEntry newvalue = new DatabaseEntry();
             followerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
             Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
             Assert.assertEquals(1, followerEnvironment.getDatabaseNames().size());
-            Assert.assertEquals(DB_INDEX_OLD, followerEnvironment.getDatabaseNames().get(0));
+            Assert.assertEquals(dbIndexOld, followerEnvironment.getDatabaseNames().get(0));
             followerDb.close();
         }
 
@@ -317,20 +315,20 @@ public class BDBEnvironmentTest {
         }
 
         // master write 2 * txn_rollback_limit lines in new db and quit
-        Long DB_INDEX_NEW = 1L;
-        String DB_NAME_NEW = String.valueOf(DB_INDEX_NEW);
-        masterDb = masterEnvironment.openDatabase(DB_NAME_NEW);
+        Long dbIndexNew = 1L;
+        String dbNameNew = String.valueOf(dbIndexNew);
+        masterDb = masterEnvironment.openDatabase(dbNameNew);
         for (int i = 0; i < Config.txn_rollback_limit * 2; i++) {
             masterDb.put(null, randomEntry(), randomEntry());
         }
         masterDb.close();
         Assert.assertEquals(2, masterEnvironment.getDatabaseNames().size());
-        Assert.assertEquals(DB_INDEX_OLD, masterEnvironment.getDatabaseNames().get(0));
-        Assert.assertEquals(DB_INDEX_NEW, masterEnvironment.getDatabaseNames().get(1));
+        Assert.assertEquals(dbIndexOld, masterEnvironment.getDatabaseNames().get(0));
+        Assert.assertEquals(dbIndexNew, masterEnvironment.getDatabaseNames().get(1));
 
         // close all environment
         masterEnvironment.close();
-        for (BDBEnvironment followerEnvironment: followerEnvironments) {
+        for (BDBEnvironment followerEnvironment : followerEnvironments) {
             followerEnvironment.close();
         }
 
@@ -355,7 +353,7 @@ public class BDBEnvironmentTest {
                     true);
             followerEnvironments[i].setup();
             Assert.assertEquals(1, followerEnvironments[i].getDatabaseNames().size());
-            Assert.assertEquals(DB_INDEX_OLD, followerEnvironments[i].getDatabaseNames().get(0));
+            Assert.assertEquals(dbIndexOld, followerEnvironments[i].getDatabaseNames().get(0));
         }
 
         Thread.sleep(1000);
@@ -368,7 +366,7 @@ public class BDBEnvironmentTest {
                 if (followerEnvironments[i].getReplicatedEnvironment().getState() == ReplicatedEnvironment.State.MASTER) {
                     newMasterEnvironment = followerEnvironments[i];
                     LOG.warn("=========> new master is {}", newMasterEnvironment.getReplicatedEnvironment().getNodeName());
-                    masterDb = newMasterEnvironment.openDatabase(DB_NAME_OLD);
+                    masterDb = newMasterEnvironment.openDatabase(dbNameOld);
                     key = randomEntry();
                     value = randomEntry();
                     masterDb.put(null, key, value);
@@ -376,7 +374,7 @@ public class BDBEnvironmentTest {
                     Thread.sleep(1000);
 
                     int followerIndex = 1 - i;
-                    CloseSafeDatabase followerDb = followerEnvironments[followerIndex].openDatabase(DB_NAME_OLD);
+                    CloseSafeDatabase followerDb = followerEnvironments[followerIndex].openDatabase(dbNameOld);
                     DatabaseEntry newvalue = new DatabaseEntry();
                     followerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
                     Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));

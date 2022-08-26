@@ -22,8 +22,6 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
@@ -31,6 +29,9 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.system.Backend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -43,6 +44,10 @@ public class CreateTableTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+        Backend be = UtFrameUtils.addMockBackend(10002);
+        be.setIsDecommissioned(true);
+        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockBackend(10004);
         Config.enable_strict_storage_medium_check = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -121,7 +126,27 @@ public class CreateTableTest {
                         +
                         "distributed by hash(key1) buckets 1 properties('replication_num' = '1', 'storage_medium' = 'ssd');"));
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        ExceptionChecker
+                 .expectThrowsNoException(() -> createTable("create table test.tb8(key1 int, key2 varchar(10)) \n"
+                        + "distributed by hash(key1) buckets 1 \n"
+                        + "properties('replication_num' = '1', 'compression' = 'lz4_frame');"));
+
+        ExceptionChecker
+                 .expectThrowsNoException(() -> createTable("create table test.tb9(key1 int, key2 varchar(10)) \n"
+                        + "distributed by hash(key1) buckets 1 \n"
+                        + "properties('replication_num' = '1', 'compression' = 'lz4');"));
+
+        ExceptionChecker
+                 .expectThrowsNoException(() -> createTable("create table test.tb10(key1 int, key2 varchar(10)) \n"
+                        + "distributed by hash(key1) buckets 1 \n"
+                        + "properties('replication_num' = '1', 'compression' = 'zstd');"));
+
+        ExceptionChecker
+                 .expectThrowsNoException(() -> createTable("create table test.tb11(key1 int, key2 varchar(10)) \n"
+                        + "distributed by hash(key1) buckets 1 \n"
+                        + "properties('replication_num' = '1', 'compression' = 'zlib');"));
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl6 = (OlapTable) db.getTable("tbl6");
         Assert.assertTrue(tbl6.getColumn("k1").isKey());
         Assert.assertTrue(tbl6.getColumn("k2").isKey());
@@ -182,6 +207,12 @@ public class CreateTableTest {
                         () -> createTable(
                                 "create table test.tb7(key1 int, key2 varchar(10)) distributed by hash(key1) \n"
                                         + "buckets 1 properties('replication_num' = '1', 'storage_medium' = 'ssd');"));
+
+        ExceptionChecker
+                .expectThrowsWithMsg(DdlException.class, "unknown compression type: xxx",
+                        () -> createTable("create table test.atbl8\n" + "(key1 int, key2 varchar(10))\n"
+                                + "distributed by hash(key1) buckets 1\n"
+                                + "properties('replication_num' = '1', 'compression' = 'xxx');"));
     }
 
     @Test
@@ -278,7 +309,7 @@ public class CreateTableTest {
         ));
         // Add column in unique key
         ExceptionChecker.expectThrowsNoException(
-                () -> alterTable("ALTER TABLE test.t_json_unique_key ADD COLUMN k3 JSON"));
+                () -> alterTableWithNewParser("ALTER TABLE test.t_json_unique_key ADD COLUMN k3 JSON"));
 
         // Add column in primary key
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -294,7 +325,7 @@ public class CreateTableTest {
                         ");"
         ));
         ExceptionChecker.expectThrowsNoException(
-                () -> alterTable("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
+                () -> alterTableWithNewParser("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
     }
 
     @Test

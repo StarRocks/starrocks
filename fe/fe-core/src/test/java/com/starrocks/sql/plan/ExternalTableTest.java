@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -20,7 +20,8 @@ public class ExternalTableTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("0:SCAN MYSQL\n" +
                 "     TABLE: `ods_order`\n" +
-                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07') AND (order_no = 'p')\n" +
+                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, " +
+                "`mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07') AND (order_no = 'p')\n" +
                 "     limit: 10"));
 
         sql = "select * from ods_order where order_dt = '2025-08-07' and length(order_no) > 10 limit 10;";
@@ -32,7 +33,8 @@ public class ExternalTableTest extends PlanTestBase {
                         "  |  \n" +
                         "  0:SCAN MYSQL\n" +
                         "     TABLE: `ods_order`\n" +
-                        "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')"));
+                        "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, " +
+                        "`up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')"));
 
         sql = "select * from ods_order where order_dt = '2025-08-08' or length(order_no) > 10 limit 10;";
         plan = getFragmentPlan(sql);
@@ -43,7 +45,8 @@ public class ExternalTableTest extends PlanTestBase {
                         "  |  \n" +
                         "  0:SCAN MYSQL\n" +
                         "     TABLE: `ods_order`\n" +
-                        "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order`"));
+                        "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, " +
+                        "`up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order`"));
 
         sql = "select * from ods_order where order_dt = '2025-08-07' and (length(order_no) > 10 or order_no = 'p');";
         plan = getFragmentPlan(sql);
@@ -53,7 +56,8 @@ public class ExternalTableTest extends PlanTestBase {
                         "  |  \n" +
                         "  0:SCAN MYSQL\n" +
                         "     TABLE: `ods_order`\n" +
-                        "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')"));
+                        "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, " +
+                        "`up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')"));
 
         sql = "select * from ods_order where not (order_dt = '2025-08-07' and length(order_no) > 10)";
         plan = getFragmentPlan(sql);
@@ -64,15 +68,19 @@ public class ExternalTableTest extends PlanTestBase {
                         "  0:SCAN MYSQL\n" +
                         "     TABLE: `ods_order`\n" +
                         "    " +
-                        " Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order`"));
+                        " Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, " +
+                        "`up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order`"));
 
-        sql =
-                "select * from ods_order where order_dt in ('2025-08-08','2025-08-08') or order_dt between '2025-08-01' and '2025-09-05';";
+        sql = "select * from ods_order where order_dt in ('2025-08-08','2025-08-08') " +
+                "or order_dt between '2025-08-01' and '2025-09-05';";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
                 "  0:SCAN MYSQL\n" +
                         "     TABLE: `ods_order`\n" +
-                        "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE ((order_dt IN ('2025-08-08', '2025-08-08')) OR ((order_dt >= '2025-08-01') AND (order_dt <= '2025-09-05')))"));
+                        "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, " +
+                        "`up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` " +
+                        "WHERE ((order_dt IN ('2025-08-08', '2025-08-08')) " +
+                        "OR ((order_dt >= '2025-08-01') AND (order_dt <= '2025-09-05')))"));
 
         sql =
                 "select * from ods_order where (order_dt = '2025-08-07' and length(order_no) > 10) and org_order_no = 'p';";
@@ -82,7 +90,9 @@ public class ExternalTableTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:SCAN MYSQL\n" +
                 "     TABLE: `ods_order`\n" +
-                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07') AND (org_order_no = 'p')"));
+                "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, " +
+                "`up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` " +
+                "WHERE (order_dt = '2025-08-07') AND (org_order_no = 'p')"));
 
     }
 
@@ -127,7 +137,8 @@ public class ExternalTableTest extends PlanTestBase {
         String sql = "select * from ods_order where pay_st = 214748364;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
-                "Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, `up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (pay_st = 214748364)"));
+                "Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, " +
+                        "`up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` WHERE (pay_st = 214748364)"));
     }
 
     @Test
@@ -186,7 +197,7 @@ public class ExternalTableTest extends PlanTestBase {
     @Test
     public void testJoinWithMysqlTable() throws Exception {
         // set data size and row count for the olap table
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("jointest");
         for (Partition partition : tbl.getPartitions()) {
             partition.updateVisibleVersion(2);

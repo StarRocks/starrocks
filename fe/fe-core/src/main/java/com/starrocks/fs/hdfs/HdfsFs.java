@@ -35,6 +35,7 @@ public class HdfsFs {
     private long lastAccessTimestamp;
     private UUID fileSystemId;
     private Configuration configuration;
+    private String userName;
 
     public HdfsFs(HdfsFsIdentity identity) {
         this.identity = identity;
@@ -43,10 +44,16 @@ public class HdfsFs {
         this.lastAccessTimestamp = System.currentTimeMillis();
         this.fileSystemId = UUID.randomUUID();
         this.configuration = null;
+        this.userName = null;
     }
 
     public synchronized void setFileSystem(FileSystem fileSystem) {
         this.dfsFileSystem = fileSystem;
+        this.lastAccessTimestamp = System.currentTimeMillis();
+    }
+
+    public synchronized void setUserName(String userName) {
+        this.userName = userName;
         this.lastAccessTimestamp = System.currentTimeMillis();
     }
 
@@ -75,6 +82,11 @@ public class HdfsFs {
     public synchronized FileSystem getDFSFileSystem() {
         this.lastAccessTimestamp = System.currentTimeMillis();
         return dfsFileSystem;
+    }
+
+    public synchronized String getUserName() {
+        this.lastAccessTimestamp = System.currentTimeMillis();
+        return userName;
     }
 
     public synchronized Configuration getConfiguration() {

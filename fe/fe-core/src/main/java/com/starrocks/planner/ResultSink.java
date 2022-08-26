@@ -22,7 +22,6 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.OutFileClause;
 import com.starrocks.thrift.TDataSink;
@@ -83,7 +82,7 @@ public class ResultSink extends DataSink {
     }
 
     public boolean needBroker() {
-        return !Strings.isNullOrEmpty(brokerName);
+        return fileSinkOptions.isSetUse_broker() && fileSinkOptions.use_broker;
     }
 
     public String getBrokerName() {

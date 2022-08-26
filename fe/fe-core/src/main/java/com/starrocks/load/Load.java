@@ -48,12 +48,9 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Status;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -62,7 +59,6 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
-import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TOpType;
@@ -395,7 +391,6 @@ public class Load {
                             slotDesc.setType(tblColumn.getType());
                             slotDesc.setColumn(new Column(columnName, tblColumn.getType()));
                         }
-                        slotDesc.setIsNullable(tblColumn.isAllowNull());
                         slotDesc.setIsMaterialized(true);
                     } else if (columnName.equals(Load.LOAD_OP_COLUMN)) {
                         // to support auto mapping, the new grammer for compatible with existing load tool.
@@ -404,15 +399,16 @@ public class Load {
                         // columns:__op,pk,col1,col2 equals to columns:srccol0,srccol1,srccol2,srccol3,__op=srccol0,pk=srccol1,col1=srccol2,col2=srccol3
                         slotDesc.setType(Type.TINYINT);
                         slotDesc.setColumn(new Column(columnName, Type.TINYINT));
-                        slotDesc.setIsNullable(false);
                         slotDesc.setIsMaterialized(true);
                     } else {
                         slotDesc.setType(Type.VARCHAR);
                         slotDesc.setColumn(new Column(columnName, Type.VARCHAR));
-                        slotDesc.setIsNullable(true);
                         // Will check mapping expr has this slot or not later
                         slotDesc.setIsMaterialized(false);
                     }
+                    // FileScanNode will set all slot nullable, it check null in OlapTableSink if
+                    // dest table column is not null
+                    slotDesc.setIsNullable(true);
                 } else {
                     slotDesc.setType(Type.VARCHAR);
                     slotDesc.setColumn(new Column(columnName, Type.VARCHAR));
@@ -898,19 +894,6 @@ public class Load {
         public JobInfo(String dbName, String label) {
             this.dbName = dbName;
             this.label = label;
-        }
-    }
-
-    public static void replayClearRollupInfo(ReplicaPersistInfo info, GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getDb(info.getDbId());
-        db.writeLock();
-        try {
-            OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
-            Partition partition = olapTable.getPartition(info.getPartitionId());
-            MaterializedIndex index = partition.getIndex(info.getIndexId());
-            index.clearRollupIndexInfo();
-        } finally {
-            db.writeUnlock();
         }
     }
 

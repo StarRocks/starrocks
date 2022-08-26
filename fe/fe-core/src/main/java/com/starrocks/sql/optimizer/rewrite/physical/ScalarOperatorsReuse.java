@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rewrite.physical;
 
@@ -20,8 +20,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -228,7 +228,7 @@ public class ScalarOperatorsReuse {
 
         private static Set<ScalarOperator> getOperatorsByDepth(int depth,
                                                                Map<Integer, Set<ScalarOperator>> operatorsByDepth) {
-            operatorsByDepth.putIfAbsent(depth, new HashSet<>());
+            operatorsByDepth.putIfAbsent(depth, new LinkedHashSet<>());
             return operatorsByDepth.get(depth);
         }
 

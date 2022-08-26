@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableList;
@@ -196,8 +196,8 @@ public class SelectAnalyzer {
                         .filter(field -> field.getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE))
                         .map(Field::getName).collect(Collectors.toList());
                 if (!unknownTypeFields.isEmpty()) {
-                    throw new SemanticException("External Table Column " + unknownTypeFields
-                            + " convert failed, and column type is unknown!");
+                    throw new SemanticException("Datatype of external table column " + unknownTypeFields
+                            + " is not supported!");
                 }
                 if (fields.isEmpty()) {
                     if (item.getTblName() != null) {

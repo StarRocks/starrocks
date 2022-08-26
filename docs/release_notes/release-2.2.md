@@ -1,5 +1,38 @@
 # StarRocks version 2.2
 
+## 2.2.5
+
+Release date: August 18, 2022
+
+### Improvements
+
+- Improved the system performance when the pipeline engine is enabled. [#9580](https://github.com/StarRocks/starrocks/pull/9580)
+- Improved the accuracy of memory statistics for index metadata. [#9837](https://github.com/StarRocks/starrocks/pull/9837)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- BEs may be stuck in querying Kafka partition offsets (`get_partition_offset`) during Routine Load. [#9937](https://github.com/StarRocks/starrocks/pull/9937)
+- An error occurs when multiple Broker Load threads attempt to load the same HDFS file. [#9507](https://github.com/StarRocks/starrocks/pull/9507)
+
+## 2.2.4
+
+Release date: August 3, 2022
+
+### Improvements
+
+- Supports synchronizing schema changes on Hive table to the corresponding external table. [#9010](https://github.com/StarRocks/starrocks/pull/9010)
+- Supports loading ARRAY data in Parquet files via Broker Load. [#9131](https://github.com/StarRocks/starrocks/pull/9131)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Broker Load cannot handle Kerberos logins with multiple keytab files. [#8820](https://github.com/StarRocks/starrocks/pull/8820) [#8837](https://github.com/StarRocks/starrocks/pull/8837)
+- Supervisor may fail to restart services if **stop_be.sh** exits immediately after it is executed. [#9175](https://github.com/StarRocks/starrocks/pull/9175)
+- Incorrect Join Reorder precedence causes error "Column cannot be resolved". [#9063](https://github.com/StarRocks/starrocks/pull/9063) [#9487](https://github.com/StarRocks/starrocks/pull/9487)
+
 ## 2.2.3
 
 Release date: July 24, 2022

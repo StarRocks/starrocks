@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
@@ -29,13 +29,15 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
+import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
@@ -54,6 +56,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
@@ -252,14 +255,13 @@ public class ExpressionAnalyzer {
             Type compatibleType =
                     TypeManager.getCompatibleTypeForBinary(node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
+            final String ERROR_MSG = "Column type %s does not support binary predicate operation.";
             if (!Type.canCastTo(type1, compatibleType)) {
-                throw new SemanticException(
-                        "binary type " + type1.toSql() + " with type " + compatibleType.toSql() + " is invalid.");
+                throw new SemanticException(String.format(ERROR_MSG, type1.toSql()));
             }
 
             if (!Type.canCastTo(type2, compatibleType)) {
-                throw new SemanticException(
-                        "binary type " + type2.toSql() + " with type " + compatibleType.toSql() + " is invalid.");
+                throw new SemanticException(String.format(ERROR_MSG, type1.toSql()));
             }
 
             node.setType(Type.BOOLEAN);
@@ -834,8 +836,50 @@ public class ExpressionAnalyzer {
         }
 
         @Override
-        public Void visitSysVariableDesc(SysVariableDesc node, Scope context) {
+        public Void visitVariableExpr(VariableExpr node, Scope context) {
             try {
+                if (node.getSetType().equals(SetType.USER)) {
+                    UserVariable userVariable = session.getUserVariables(node.getName());
+                    //If referring to an uninitialized variable, its value is NULL and a string type.
+                    if (userVariable == null) {
+                        node.setType(Type.STRING);
+                        node.setIsNull();
+                        return null;
+                    }
+
+                    Type variableType = userVariable.getResolvedExpression().getType();
+                    String variableValue = userVariable.getResolvedExpression().getStringValue();
+
+                    if (userVariable.getResolvedExpression() instanceof NullLiteral) {
+                        node.setType(variableType);
+                        node.setIsNull();
+                        return null;
+                    }
+
+                    node.setType(variableType);
+                    switch (variableType.getPrimitiveType()) {
+                        case BOOLEAN:
+                            node.setBoolValue(Boolean.parseBoolean(variableValue));
+                            break;
+                        case TINYINT:
+                        case SMALLINT:
+                        case INT:
+                        case BIGINT:
+                            node.setIntValue(Long.parseLong(variableValue));
+                        case FLOAT:
+                        case DOUBLE:
+                            node.setFloatValue(Double.parseDouble(variableValue));
+                            break;
+                        case CHAR:
+                        case VARCHAR:
+                            node.setStringValue(variableValue);
+                            break;
+                        default:
+                            break;
+                    }
+                    return null;
+                }
+
                 VariableMgr.fillValue(session.getSessionVariable(), node);
                 if (!Strings.isNullOrEmpty(node.getName()) &&
                         node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {

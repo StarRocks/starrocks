@@ -22,14 +22,17 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Multimap;
-import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -38,6 +41,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -45,7 +49,7 @@ import java.util.Map;
 public class ColocateTableTest {
     private static ConnectContext connectContext;
     private static String dbName = "testDb";
-    private static String fullDbName = "default_cluster:" + dbName;
+    private static String fullDbName = dbName;
     private static String tableName1 = "t1";
     private static String tableName2 = "t2";
     private static String groupName = "group1";
@@ -227,6 +231,7 @@ public class ColocateTableTest {
 
     @Test
     public void testReplicationNum() throws Exception {
+        
         createTable("create table " + dbName + "." + tableName1 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +
@@ -241,6 +246,14 @@ public class ColocateTableTest {
 
         expectedEx.expect(DdlException.class);
         expectedEx.expectMessage("Colocate tables must have same replication num: 1");
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public List<Long> getAvailableBackendIds() {
+                return Arrays.asList(10001L, 10002L, 10003L);       
+            }
+        };
+        
         createTable("create table " + dbName + "." + tableName2 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +

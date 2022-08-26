@@ -91,6 +91,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RESOURCE_GROUP = "resource_group";
     public static final String AUTO_COMMIT = "autocommit";
     public static final String TX_ISOLATION = "tx_isolation";
+    public static final String TRANSACTION_ISOLATION = "transaction_isolation";
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
     public static final String CHARACTER_SET_CONNNECTION = "character_set_connection";
     public static final String CHARACTER_SET_RESULTS = "character_set_results";
@@ -155,6 +156,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
+    public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
 
@@ -208,6 +210,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
+    public static final String CBO_CTE_MAX_LIMIT = "cbo_cte_max_limit";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
@@ -220,6 +223,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // in the case of insufficient network bandwidth, but excess CPU resources, an algorithm with a
     // higher compression ratio may be chosen to use more CPU and make the overall query time lower.
     public static final String TRANSMISSION_COMPRESSION_TYPE = "transmission_compression_type";
+    public static final String LOAD_TRANSMISSION_COMPRESSION_TYPE = "load_transmission_compression_type";
 
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
@@ -241,6 +245,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
+    public static final String JOIN_IMPLEMENTATION_MODE_V2 = "join_implementation_mode_v2";
 
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
 
@@ -293,8 +298,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
     private boolean enableResourceGroup = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_TABLET_INTERNAL_PARALLEL)
-    private boolean enableTabletInternalParallel = false;
+    @VariableMgr.VarAttr(name = ENABLE_TABLET_INTERNAL_PARALLEL_V2,
+            alias = ENABLE_TABLET_INTERNAL_PARALLEL, show = ENABLE_TABLET_INTERNAL_PARALLEL)
+    private boolean enableTabletInternalParallel = true;
 
     @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN)
     private boolean enableSharedScan = false;
@@ -341,6 +347,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = TX_ISOLATION)
     private String txIsolation = "REPEATABLE-READ";
 
+    // this is used to compatible mysql 5.8
+    @VariableMgr.VarAttr(name = TRANSACTION_ISOLATION)
+    private String transactionIsolation = "REPEATABLE-READ";
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
     private String charsetClient = "utf8";
@@ -430,6 +439,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_CTE_REUSE_RATE, flag = VariableMgr.INVISIBLE)
     private double cboCTERuseRatio = 1.2;
+
+    @VarAttr(name = CBO_CTE_MAX_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int cboCTEMaxLimit = 10;
 
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
@@ -534,6 +546,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "LZ4";
 
+    @VariableMgr.VarAttr(name = LOAD_TRANSMISSION_COMPRESSION_TYPE)
+    private String loadTransmissionCompressionType = "NO_COMPRESSION";
+
     @VariableMgr.VarAttr(name = RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT)
     private long runtimeJoinFilterPushDownLimit = 1024000;
 
@@ -556,8 +571,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_GROUPBY_USE_OUTPUT_ALIAS)
     private boolean enableGroupbyUseOutputAlias = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
-    private boolean enableColumnExprPredicate = false;
+    @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE, flag = VariableMgr.INVISIBLE)
+    private boolean enableColumnExprPredicate = true;
 
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH, flag = VariableMgr.INVISIBLE)
     private boolean enableExchangePassThrough = true;
@@ -571,8 +586,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
 
-    @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE)
-    private String joinImplementationMode = "hash"; // auto, merge, hash
+    @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE_V2, alias = JOIN_IMPLEMENTATION_MODE)
+    private String joinImplementationMode = "auto"; // auto, merge, hash, nestloop
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;
@@ -588,6 +603,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PRUNE_SHUFFLE_COLUMN_RATE, flag = VariableMgr.INVISIBLE)
     private double cboPruneShuffleColumnRate = 0.1;
+
+    public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
+        this.cboCTEMaxLimit = cboCTEMaxLimit;
+    }
+
+    public int getCboCTEMaxLimit() {
+        return cboCTEMaxLimit;
+    }
 
     public double getCboPruneShuffleColumnRate() {
         return cboPruneShuffleColumnRate;
@@ -722,7 +745,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public int getDegreeOfParallelism() {
         if (enablePipelineEngine) {
             if (pipelineDop > 0) {
-                return pipelineDop * parallelExecInstanceNum;
+                return pipelineDop;
             }
             return BackendCoreStat.getDefaultDOP();
         } else {
@@ -860,6 +883,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setMaxTransformReorderJoins(int maxReorderNodeUseExhaustive) {
         this.cboMaxReorderNodeUseExhaustive = maxReorderNodeUseExhaustive;
+    }
+
+    public int getMaxTransformReorderJoins() {
+        return this.cboMaxReorderNodeUseExhaustive;
     }
 
     public long getBroadcastRowCountLimit() {
@@ -1061,6 +1088,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableQueryDebugTrace;
     }
 
+    public String getloadTransmissionCompressionType() {
+        return loadTransmissionCompressionType;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -1095,6 +1126,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         TCompressionType compressionType = CompressionUtils.findTCompressionByName(transmissionCompressionType);
         if (compressionType != null) {
             tResult.setTransmission_compression_type(compressionType);
+        }
+
+        TCompressionType loadCompressionType = CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);
+        if (loadCompressionType != null) {
+            tResult.setLoad_transmission_compression_type(loadCompressionType);
         }
 
         tResult.setRuntime_join_filter_pushdown_limit(runtimeJoinFilterPushDownLimit);

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
@@ -37,7 +37,8 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.MAX).add(FunctionSet.MIN)
                     .add(FunctionSet.LEAD).add(FunctionSet.LAG)
                     .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE)
-                    .add(FunctionSet.ANY_VALUE).add(FunctionSet.ARRAY_AGG).build();
+                    .add(FunctionSet.ANY_VALUE).add(FunctionSet.ARRAY_AGG)
+                    .add(FunctionSet.HISTOGRAM).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
             new ImmutableSortedSet.Builder<>(String::compareTo)
@@ -66,6 +67,10 @@ public class DecimalV3FunctionAnalyzer {
     public static Type normalizeDecimalArgTypes(Type[] argTypes, String fnName) {
         if (argTypes == null || argTypes.length == 0) {
             return Type.INVALID;
+        }
+
+        if (FunctionSet.HISTOGRAM.equals(fnName)) {
+            return Type.VARCHAR;
         }
 
         if (DECIMAL_UNARY_FUNCTION_SET.contains(fnName)) {
@@ -226,7 +231,7 @@ public class DecimalV3FunctionAnalyzer {
     // without decimal type rectification.
     public static Function convertSumToMultiDistinctSum(Function sumFn, Type argType) {
         AggregateFunction fn = (AggregateFunction) Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM,
-                new Type[]{argType},
+                new Type[] {argType},
                 IS_NONSTRICT_SUPERTYPE_OF);
         Preconditions.checkArgument(fn != null);
         // Only rectify decimal typed functions.

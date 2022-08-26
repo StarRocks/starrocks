@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.connector.hive;
 
@@ -20,7 +20,7 @@ public class HiveMetadata implements ConnectorMetadata {
     private HiveMetaCache metaCache = null;
     private final String resourceName;
 
-    public HiveMetadata(String resourceName) throws DdlException {
+    public HiveMetadata(String resourceName) {
         this.resourceName = resourceName;
     }
 

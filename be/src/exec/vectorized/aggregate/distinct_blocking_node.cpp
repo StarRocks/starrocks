@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/aggregate/distinct_blocking_node.h"
 
@@ -121,7 +121,7 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
     eval_join_runtime_filters(chunk->get());
 
     // For having
-    ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
+    RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
     _aggregator->update_num_rows_returned(-(old_size - (*chunk)->num_rows()));
 
     _aggregator->process_limit(chunk);

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer;
 
@@ -27,6 +27,7 @@ public class OptExpression {
 
     private LogicalProperty property;
     private Statistics statistics;
+    private double cost = 0;
     // The number of plans in the entire search space，this parameter is valid only when cbo_use_nth_exec_plan configured.
     // Default value is 0
     private int planCount = 0;
@@ -140,6 +141,14 @@ public class OptExpression {
 
     public void setPlanCount(int planCount) {
         this.planCount = planCount;
+    }
+
+    public double getCost() {
+        return cost;
+    }
+
+    public void setCost(double cost) {
+        this.cost = cost;
     }
 
     @Override

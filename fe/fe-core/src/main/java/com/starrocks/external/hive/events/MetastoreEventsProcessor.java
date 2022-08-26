@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive.events;
 
@@ -158,9 +158,9 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     public void registerTable(HiveTable tbl) {
         tablesLock.writeLock().lock();
         try {
-            tables.put(tbl.getResourceName(), new TableName(tbl.getHiveDb(), tbl.getTableName()), tbl);
+            tables.put(tbl.getResourceName(), new TableName(tbl.getDbName(), tbl.getTableName()), tbl);
             LOG.info("Succeed to register {}.{}.{} to Metastore event processor",
-                    tbl.getResourceName(), tbl.getHiveDb(), tbl.getTableName());
+                    tbl.getResourceName(), tbl.getDbName(), tbl.getTableName());
         } finally {
             tablesLock.writeLock().unlock();
         }
@@ -169,9 +169,9 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     public void unregisterTable(HiveTable tbl) {
         tablesLock.writeLock().lock();
         try {
-            tables.remove(tbl.getResourceName(), new TableName(tbl.getHiveDb(), tbl.getTableName()));
+            tables.remove(tbl.getResourceName(), new TableName(tbl.getDbName(), tbl.getTableName()));
             LOG.info("Succeed to remove {}.{}.{} from Metastore event processor",
-                    tbl.getResourceName(), tbl.getHiveDb(), tbl.getTableName());
+                    tbl.getResourceName(), tbl.getDbName(), tbl.getTableName());
         } finally {
             tablesLock.writeLock().unlock();
         }

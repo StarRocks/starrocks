@@ -1,10 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/crossjoin/cross_join_left_operator.h"
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exec/exec_node.h"
+#include "exec/pipeline/crossjoin/nljoin_probe_operator.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
@@ -325,10 +326,18 @@ void CrossJoinLeftOperatorFactory::_init_row_desc() {
     }
 }
 
+OperatorPtr CrossJoinLeftOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    return std::make_shared<NLJoinProbeOperator>(this, _id, _plan_node_id, driver_sequence, _join_op,
+                                                 _sql_join_conjuncts, _join_conjuncts, _conjunct_ctxs, _col_types,
+                                                 _probe_column_count, _build_column_count, _cross_join_context);
+}
+
 Status CrossJoinLeftOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorWithDependencyFactory::prepare(state));
 
     _init_row_desc();
+    RETURN_IF_ERROR(Expr::prepare(_join_conjuncts, state));
+    RETURN_IF_ERROR(Expr::open(_join_conjuncts, state));
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
@@ -336,6 +345,7 @@ Status CrossJoinLeftOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void CrossJoinLeftOperatorFactory::close(RuntimeState* state) {
+    Expr::close(_join_conjuncts, state);
     Expr::close(_conjunct_ctxs, state);
 
     OperatorWithDependencyFactory::close(state);

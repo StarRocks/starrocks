@@ -1,14 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -32,6 +34,16 @@ public class MergeTwoProjectRule extends TransformationRule {
         Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : firstProject.getColumnRefMap().entrySet()) {
             resultMap.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
+        }
+
+        // ASSERT_TRUE must be executed in the runtime, so it should be kept anyway.
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : secondProject.getColumnRefMap().entrySet()) {
+            if (entry.getValue() instanceof CallOperator) {
+                CallOperator callOp = entry.getValue().cast();
+                if (FunctionSet.ASSERT_TRUE.equals(callOp.getFnName())) {
+                    resultMap.put(entry.getKey(), entry.getValue());
+                }
+            }
         }
 
         OptExpression optExpression = new OptExpression(

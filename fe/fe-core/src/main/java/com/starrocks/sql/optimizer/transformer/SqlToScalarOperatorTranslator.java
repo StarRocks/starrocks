@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
@@ -29,8 +29,8 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
@@ -458,7 +458,11 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
-        public ScalarOperator visitSysVariableDesc(SysVariableDesc node, Void context) {
+        public ScalarOperator visitVariableExpr(VariableExpr node, Void context) {
+            if (node.isNull()) {
+                return ConstantOperator.createNull(node.getType());
+            }
+
             switch (node.getType().getPrimitiveType()) {
                 case BOOLEAN:
                     return ConstantOperator.createBoolean(node.getBoolValue());
@@ -473,8 +477,12 @@ public final class SqlToScalarOperatorTranslator {
                 case FLOAT:
                 case DOUBLE:
                     return ConstantOperator.createFloat(node.getFloatValue());
-                default:
+                case CHAR:
+                case VARCHAR:
                     return ConstantOperator.createVarchar(node.getStrValue());
+                default:
+                    throw new StarRocksPlannerException("Not support variable type "
+                            + node.getType().getPrimitiveType(), ErrorType.INTERNAL_ERROR);
             }
         }
 

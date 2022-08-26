@@ -148,7 +148,7 @@ public class TabletSchedCtxTest {
         systemInfoService.getBackends().forEach(be -> {
             List<Long> pathHashes =
                     be.getDisks().values().stream().map(DiskInfo::getPathHash).collect(Collectors.toList());
-            TabletScheduler.PathSlot slot = new TabletScheduler.PathSlot(pathHashes, Config.schedule_slot_num_per_path);
+            TabletScheduler.PathSlot slot = new TabletScheduler.PathSlot(pathHashes, Config.tablet_sched_slot_num_per_path);
             tabletScheduler.getBackendsWorkingSlots().put(be.getId(), slot);
         });
     }
@@ -157,11 +157,11 @@ public class TabletSchedCtxTest {
     public void testSingleReplicaRecover() throws SchedException {
         // mock be1 down and TABLET_ID_1 missing
         be1.setAlive(false);
-        LocalTablet MissedTablet = new LocalTablet(TABLET_ID_1, invertedIndex.getReplicasByTabletId(TABLET_ID_1));
+        LocalTablet missedTablet = new LocalTablet(TABLET_ID_1, invertedIndex.getReplicasByTabletId(TABLET_ID_1));
         TabletSchedCtx ctx =
                 new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PART_ID, INDEX_ID,
                         TABLET_ID_1, System.currentTimeMillis(), systemInfoService);
-        ctx.setTablet(MissedTablet);
+        ctx.setTablet(missedTablet);
         ctx.setStorageMedium(TStorageMedium.HDD);
 
         AgentBatchTask agentBatchTask = new AgentBatchTask();

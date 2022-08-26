@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.plan;
 
 import org.junit.Test;
@@ -70,8 +70,8 @@ public class SelectConstTest extends PlanTestBase {
 
     @Test
     public void testAggWithConstant() throws Exception {
-        assertPlanContains(
-                "select case when c1=1 then 1 end from (select '1' c1  union  all select '2') a group by rollup(case  when c1=1 then 1 end, 1 + 1)",
+        assertPlanContains("select case when c1=1 then 1 end from (select '1' c1  union  all select '2') a " +
+                        "group by rollup(case  when c1=1 then 1 end, 1 + 1)",
                 "<slot 4> : '2'",
                 "<slot 2> : '1'",
                 "  8:REPEAT_NODE\n" +
@@ -128,8 +128,8 @@ public class SelectConstTest extends PlanTestBase {
 
     @Test
     public void testDoubleCastWithoutScientificNotation() throws Exception {
-        String sql =
-                "SELECT * FROM t0 WHERE CAST(CAST(CASE WHEN TRUE THEN -1229625855 WHEN false THEN 1 ELSE 2 / 3 END AS STRING ) AS BOOLEAN );";
+        String sql = "SELECT * FROM t0 WHERE CAST(CAST(CASE WHEN TRUE THEN -1229625855 " +
+                "WHEN false THEN 1 ELSE 2 / 3 END AS STRING ) AS BOOLEAN );";
         assertPlanContains(sql, "PREDICATES: CAST('-1229625855' AS BOOLEAN)");
     }
 }

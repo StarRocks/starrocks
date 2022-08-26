@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.planner;
 
@@ -42,7 +42,7 @@ public class HdfsScanNode extends ScanNode {
         hiveTable = (HiveTable) desc.getTable();
     }
 
-    public HDFSScanNodePredicates getPredictsExpr() {
+    public HDFSScanNodePredicates getScanNodePredicates() {
         return scanNodePredicates;
     }
 
@@ -80,6 +80,14 @@ public class HdfsScanNode extends ScanNode {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
                     getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
         }
+        if (!scanNodePredicates.getNoEvalPartitionConjuncts().isEmpty()) {
+            output.append(prefix).append("NO EVAL-PARTITION PREDICATES: ").append(
+                    getExplainString(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
+        }
+        if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
+            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
+                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+        }
 
         output.append(prefix).append(
                 String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
@@ -114,6 +122,14 @@ public class HdfsScanNode extends ScanNode {
         if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
                     getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
+        }
+        if (!scanNodePredicates.getNoEvalPartitionConjuncts().isEmpty()) {
+            output.append(prefix).append("NO EVAL-PARTITION PREDICATES: ").append(
+                    getExplainString(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
+        }
+        if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
+            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
+                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
         output.append(prefix).append(

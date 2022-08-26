@@ -1,4 +1,4 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 from pyarrow import json
 import pyarrow as pa
@@ -21,6 +21,8 @@ data = [
     pa.array([1, 2, 3], type=pa.uint16()),
     pa.array([1, 2, 3], type=pa.uint32()),
     pa.array([1, 2, 3], type=pa.uint64()),
+    
+    pa.array([1659962123000, 1659962124000, 1659962125000], type=pa.timestamp('ms', tz='America/New_York')),
 
     pa.array([1.1, 2.1, 3.1], type=pa.float32()),
     pa.array([1.1, 2.1, 3.1], type=pa.float64()),
@@ -30,6 +32,15 @@ data = [
 
     pa.array([[1, 2], [3, 4], [5, 6]], type=pa.list_(pa.int32())),
     pa.array([[("s1", 1), ("s2", 3)], [("s2", 2)], [("s3", 3)]], type=pa.map_(pa.string(), pa.int32())),
+    pa.array(
+        [
+            [(1659962123000, 1)],
+            [(1659962124000, 2)],
+            [(1659962125000, 3)],
+        ],
+        type=pa.map_(pa.timestamp('ms', tz='America/New_York'), pa.int32()),
+    ),
+
     pa.array(
         [
             {"s0": 1, "s1": "string1"},
@@ -101,6 +112,8 @@ columns = [
     "col_json_uint16",
     "col_json_uint32",
     "col_json_uint64",
+    
+    "col_json_timestamp",
 
     "col_json_float32",
     "col_json_float64",
@@ -110,6 +123,7 @@ columns = [
 
     "col_json_list",
     "col_json_map",
+    "col_json_map_timestamp",
     "col_json_struct",
     "col_json_list_list",
     "col_json_map_list",

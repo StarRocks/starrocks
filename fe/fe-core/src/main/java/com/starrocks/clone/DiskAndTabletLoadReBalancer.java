@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.clone;
 
@@ -246,8 +246,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     }
                 }
             }
-            if ((maxUsedPercent > Config.balance_load_disk_safe_threshold) &&
-                    ((maxUsedPercent - minUsedPercent) > Config.balance_load_score_threshold)) {
+            if ((maxUsedPercent > Config.tablet_sched_balance_load_disk_safe_threshold) &&
+                    ((maxUsedPercent - minUsedPercent) > Config.tablet_sched_balance_load_score_threshold)) {
                 throw new SchedException(SchedException.Status.UNRECOVERABLE, "disk balance will be broken");
             }
 
@@ -315,8 +315,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
      * 2. difference between max used percent and min used percent smaller than Config.balance_load_score_threshold
      */
     private boolean isDiskBalanced(double maxUsedPercent, double minUsedPercent) {
-        return maxUsedPercent < Config.balance_load_disk_safe_threshold ||
-                (maxUsedPercent - minUsedPercent) < Config.balance_load_score_threshold;
+        return maxUsedPercent < Config.tablet_sched_balance_load_disk_safe_threshold ||
+                (maxUsedPercent - minUsedPercent) < Config.tablet_sched_balance_load_score_threshold;
     }
 
     /**
@@ -514,7 +514,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 schedCtx.setBalanceType(BalanceType.DISK);
                 selectedTablets.add(tabletId);
                 alternativeTablets.add(schedCtx);
-                if (alternativeTablets.size() >= Config.max_balancing_tablets) {
+                if (alternativeTablets.size() >= Config.tablet_sched_max_balancing_tablets) {
                     break OUT;
                 }
             }
@@ -596,7 +596,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             balanceBackendDisk(medium, avgUsedPercent, pathStats, beId, beStats.size(),
                     alternativeTablets);
-            if (alternativeTablets.size() >= Config.max_balancing_tablets) {
+            if (alternativeTablets.size() >= Config.tablet_sched_max_balancing_tablets) {
                 break;
             }
         }
@@ -712,7 +712,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 schedCtx.setBalanceType(BalanceType.DISK);
                 alternativeTablets.add(schedCtx);
 
-                if (alternativeTablets.size() >= Config.max_balancing_tablets) {
+                if (alternativeTablets.size() >= Config.tablet_sched_max_balancing_tablets) {
                     return;
                 }
             }
@@ -977,7 +977,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
 
             balanceTablet(medium, alternativeTablets, true, null, null, pathStats, beId);
-            if (alternativeTablets.size() >= Config.max_balancing_tablets) {
+            if (alternativeTablets.size() >= Config.tablet_sched_max_balancing_tablets) {
                 break;
             }
         }
@@ -1109,7 +1109,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             schedCtx.setDest(beId, destTablets.first);
                         }
                         alternativeTablets.add(schedCtx);
-                        if (alternativeTablets.size() >= Config.max_balancing_tablets) {
+                        if (alternativeTablets.size() >= Config.tablet_sched_max_balancing_tablets) {
                             return;
                         }
                         tabletFound = true;
@@ -1552,7 +1552,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
 
             // all bellow balance_load_disk_safe_threshold
-            if (maxUsedPercentAfterBalance < Config.balance_load_disk_safe_threshold) {
+            if (maxUsedPercentAfterBalance < Config.tablet_sched_balance_load_disk_safe_threshold) {
                 return true;
             }
 
@@ -1562,7 +1562,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
 
             // this will make disk balance worse, but can not exceed 0.9 * Config.balance_load_score_threshold;
-            return maxUsedPercentAfterBalance - minUsedPercentAfterBalance < 0.9 * Config.balance_load_score_threshold;
+            return maxUsedPercentAfterBalance - minUsedPercentAfterBalance <
+                    0.9 * Config.tablet_sched_balance_load_score_threshold;
         }
 
         public void moveReplica(Long src, Long dest, Long size) {

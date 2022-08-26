@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 #ifdef USE_STAROS
 
 #include "storage/lake/location_provider.h"
@@ -43,6 +43,9 @@ TEST_F(StarletLocationProviderTest, test_location) {
 
     location = _provider->txn_log_location(12345, 45678);
     EXPECT_EQ(build_starlet_uri(12345, txn_log_filename(12345, 45678)), location);
+
+    location = _provider->txn_vlog_location(12345, 10);
+    EXPECT_EQ(build_starlet_uri(12345, txn_vlog_filename(12345, 10)), location);
 
     location = _provider->segment_location(12345, "c805dab9-4048-4909-8239-6d5431989044.dat");
     EXPECT_EQ(build_starlet_uri(12345, "c805dab9-4048-4909-8239-6d5431989044.dat"), location);

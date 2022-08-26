@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql;
 
@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
@@ -368,7 +369,8 @@ public class Explain {
         }
 
         @Override
-        public OperatorStr visitPhysicalNestLoopJoin(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
+        public OperatorStr visitPhysicalNestLoopJoin(OptExpression optExpression,
+                                                     OperatorPrinter.ExplainContext context) {
             return visitPhysicalJoin(optExpression, context);
         }
 
@@ -377,7 +379,8 @@ public class Explain {
             OperatorStr right = visit(optExpression.getInputs().get(1), new ExplainContext(context.step + 1));
 
             PhysicalJoinOperator join = (PhysicalJoinOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder("- ").append(join.getJoinAlgo()).append("/").append(join.getJoinType());
+            StringBuilder sb =
+                    new StringBuilder("- ").append(join.getJoinAlgo()).append("/").append(join.getJoinType());
             if (!join.getJoinType().isCrossJoin()) {
                 sb.append(" [").append(new ExpressionPrinter().print(join.getOnPredicate())).append("]");
             }
@@ -538,7 +541,6 @@ public class Explain {
             sb.append("\n");
 
             buildCostEstimate(sb, optExpression, context.step);
-
             buildCommonProperty(sb, repeat, context.step);
             return new OperatorStr(sb.toString(), context.step, buildChildOperatorStr(optExpression, context.step));
         }
@@ -546,7 +548,6 @@ public class Explain {
         @Override
         public OperatorStr visitPhysicalFilter(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
             PhysicalFilterOperator filter = (PhysicalFilterOperator) optExpression.getOp();
-
             return new OperatorStr("- PREDICATE [" + filter.getPredicate() + "]", context.step,
                     buildChildOperatorStr(optExpression, context.step));
         }
@@ -602,8 +603,10 @@ public class Explain {
             OperatorStr right = visit(optExpression.getInputs().get(1), new ExplainContext(context.step + 1));
 
             PhysicalCTEAnchorOperator anchor = (PhysicalCTEAnchorOperator) optExpression.getOp();
-            return new OperatorStr("- CTEAnchor[" + anchor.getCteId() + "]", context.step,
-                    Arrays.asList(left, right));
+            StringBuilder sb = new StringBuilder();
+            sb.append("- CTEAnchor[").append(anchor.getCteId()).append("]\n");
+            buildCostEstimate(sb, optExpression, context.step);
+            return new OperatorStr(sb.toString(), context.step, Arrays.asList(left, right));
         }
 
         @Override
@@ -614,18 +617,25 @@ public class Explain {
         }
 
         @Override
+        public OperatorStr visitPhysicalNoCTE(OptExpression optExpression, ExplainContext context) {
+            PhysicalNoCTEOperator noop = (PhysicalNoCTEOperator) optExpression.getOp();
+            return new OperatorStr("- CTENoOp[" + noop.getCteId() + "]", context.step,
+                    buildChildOperatorStr(optExpression, context.step));
+        }
+
+        @Override
         public OperatorStr visitPhysicalCTEConsume(OptExpression optExpression, ExplainContext context) {
             PhysicalCTEConsumeOperator consume = (PhysicalCTEConsumeOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder("- CTEConsume[" + consume.getCteId() + "]");
+            StringBuilder sb = new StringBuilder("- CTEConsume[" + consume.getCteId() + "]\n");
 
             ExpressionPrinter printer = new ExpressionPrinter();
             for (Map.Entry<ColumnRefOperator, ColumnRefOperator> kv : consume.getCteOutputColumnRefMap().entrySet()) {
                 String expression = "" + printer.print(kv.getKey()) + " := " + printer.print(kv.getValue());
                 buildOperatorProperty(sb, expression, context.step);
             }
-
+            buildCostEstimate(sb, optExpression, context.step);
             buildCommonProperty(sb, consume, context.step);
-            return new OperatorStr("- CTEConsume[" + consume.getCteId() + "]", context.step,
+            return new OperatorStr(sb.toString(), context.step,
                     buildChildOperatorStr(optExpression, context.step));
         }
     }
@@ -821,13 +831,14 @@ public class Explain {
                 .allMatch(ColumnStatistic::isUnknown)) {
             buildOperatorProperty(sb, "Estimates: {" +
                     "row: " + (long) optExpression.getStatistics().getOutputRowCount() +
-                    ", cpu: ?, memory: ?, network: ?}", step);
+                    ", cpu: ?, memory: ?, network: ?, cost: " + optExpression.getCost() + "}", step);
         } else {
             buildOperatorProperty(sb, "Estimates: {" +
                     "row: " + (long) optExpression.getStatistics().getOutputRowCount() +
                     ", cpu: " + String.format("%.2f", cost.getCpuCost()) +
                     ", memory: " + String.format("%.2f", cost.getMemoryCost()) +
                     ", network: " + String.format("%.2f", cost.getNetworkCost()) +
+                    ", cost: " + String.format("%.2f", optExpression.getCost()) +
                     "}", step);
         }
     }

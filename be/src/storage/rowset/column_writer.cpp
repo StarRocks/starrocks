@@ -291,7 +291,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
                 null_options.meta->set_type(OLAP_FIELD_TYPE_BOOL);
                 null_options.meta->set_length(1);
                 null_options.meta->set_encoding(DEFAULT_ENCODING);
-                null_options.meta->set_compression(LZ4);
+                null_options.meta->set_compression(opts.meta->compression());
                 null_options.meta->set_is_nullable(false);
                 std::unique_ptr<Field> bool_field(FieldFactory::create_by_type(FieldType::OLAP_FIELD_TYPE_BOOL));
                 null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(bool_field), wfile);
@@ -304,7 +304,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
             array_size_options.meta->set_type(OLAP_FIELD_TYPE_INT);
             array_size_options.meta->set_length(4);
             array_size_options.meta->set_encoding(DEFAULT_ENCODING);
-            array_size_options.meta->set_compression(LZ4);
+            array_size_options.meta->set_compression(opts.meta->compression());
             array_size_options.meta->set_is_nullable(false);
             array_size_options.need_zone_map = false;
             array_size_options.need_bloom_filter = false;
@@ -590,7 +590,7 @@ Status ScalarColumnWriter::finish_current_page() {
 
     _push_back_page(page.release());
 
-    if (is_nullable() && _opts.adaptive_page_format) {
+    if (is_nullable()) {
         size_t num_data = (_curr_page_format == 1) ? _page_builder->count() : _null_map_builder_v2->data_count();
         size_t num_null = data_page_footer->num_values() - num_data;
         // If more than 80% of the current page is NULL records, using format 1 for the next page,
@@ -898,7 +898,9 @@ StringColumnWriter::StringColumnWriter(const ColumnWriterOptions& opts, std::uni
         : ColumnWriter(std::move(field), opts.meta->is_nullable()), _scalar_column_writer(std::move(column_writer)) {}
 
 Status StringColumnWriter::append(const vectorized::Column& column) {
-    RETURN_IF_ERROR(check_string_lengths(column));
+    if (config::enable_check_string_lengths) {
+        RETURN_IF_ERROR(check_string_lengths(column));
+    }
     if (_is_speculated) {
         return _scalar_column_writer->append(column);
     }
@@ -982,9 +984,16 @@ Status StringColumnWriter::finish() {
 Status StringColumnWriter::check_string_lengths(const vectorized::Column& column) {
     size_t limit = get_field()->length();
     const Slice* slices = (const Slice*)column.raw_data();
+    const uint8_t* null =
+            is_nullable() ? down_cast<const vectorized::NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
     for (size_t i = 0; i < column.size(); i++) {
+        // skip string length check if it is null
+        if (null != nullptr && null[i] == starrocks::vectorized::DATUM_NULL) {
+            continue;
+        }
         if (slices[i].get_size() > limit) {
-            return Status::InvalidArgument(fmt::format("string length({}) > limit({})", slices[i].get_size(), limit));
+            return Status::InvalidArgument(fmt::format("string length({}) > limit({}), string: {}",
+                                                       slices[i].get_size(), limit, slices[i].get_data()));
         }
     }
     return Status::OK();

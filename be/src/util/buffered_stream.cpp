@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "util/buffered_stream.h"
 
@@ -66,9 +66,9 @@ Status DefaultBufferedInputStream::_read_data() {
     return Status::OK();
 }
 
-Status DefaultBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) {
+Status DefaultBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes, bool peek) {
     seek_to(offset);
-    return get_bytes(buffer, nbytes, false);
+    return get_bytes(buffer, nbytes, peek);
 }
 
 // ===================================================================================
@@ -137,7 +137,7 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
     return Status::OK();
 }
 
-Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) {
+Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes, bool peek) {
     auto iter = _map.upper_bound(offset);
     if (iter == _map.end()) {
         return Status::RuntimeError("failed to find shared buffer based on offset");

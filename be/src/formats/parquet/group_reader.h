@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -60,6 +60,8 @@ struct GroupReaderParam {
     RandomAccessFile* file = nullptr;
 
     FileMetaData* file_metadata = nullptr;
+
+    bool case_sensitive = false;
 };
 
 class GroupReader {
@@ -92,6 +94,8 @@ private:
     Status _lazy_skip_rows(const std::vector<int>& read_columns, vectorized::ChunkPtr chunk, size_t chunk_size);
     void _dict_filter(vectorized::ChunkPtr* chunk, vectorized::Filter* filter_ptr);
     Status _dict_decode(vectorized::ChunkPtr* chunk);
+    void _collect_field_io_range(const ParquetField& field, std::vector<SharedBufferedInputStream::IORange>* ranges,
+                                 int64_t* end_offset);
 
     // row group meta
     std::shared_ptr<tparquet::RowGroup> _row_group_metadata;

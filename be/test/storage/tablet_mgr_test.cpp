@@ -39,8 +39,6 @@ using std::string;
 
 namespace starrocks {
 
-static StorageEngine* k_engine = nullptr;
-
 class TabletMgrTest : public testing::Test {
 public:
     virtual void SetUp() {
@@ -59,9 +57,6 @@ public:
         EngineOptions options;
         options.store_paths = paths;
         options.backend_uid = UniqueId::gen_uid();
-        if (k_engine == nullptr) {
-            k_engine = new StorageEngine(options);
-        }
 
         _data_dir = new DataDir(_engine_data_path);
         _data_dir->init();

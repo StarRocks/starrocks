@@ -23,7 +23,6 @@ package com.starrocks.common;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,27 +43,63 @@ public class ConfigBase {
 
     @Retention(RetentionPolicy.RUNTIME)
     public static @interface ConfField {
-        String value() default "";
-
         boolean mutable() default false;
 
         String comment() default "";
+
+        /**
+         * alias for a configuration defined in Config, use for compatibility reason.
+         * when changing a configuration name, you can put the old name in alias annotation.<p>
+         * usage: @ConfField(alias = {"old_name1", "old_name2"})
+         *
+         * @return an array of alias names
+         */
+        String[] aliases() default {};
     }
 
-    public static Properties props;
-    public static Class<? extends ConfigBase> confClass;
+    protected Properties props;
+    protected static Field[] configFields;
+    protected static Map<String, Field> allMutableConfigs = new HashMap<>();
 
-    public void init(String propfile) throws Exception {
+    public void init(String propFile) throws Exception {
+        configFields = this.getClass().getFields();
+        initAllMutableConfigs();
         props = new Properties();
-        confClass = this.getClass();
-        props.load(new FileReader(propfile));
+        FileReader reader = null;
+        try {
+            reader = new FileReader(propFile);
+            props.load(reader);
+        } catch (Exception e) {
+            throw e;
+        } finally {
+            if (reader != null) {
+                reader.close();
+            }
+        }
         replacedByEnv();
         setFields();
     }
 
+    public static void initAllMutableConfigs() {
+        for (Field field : configFields) {
+            ConfField confField = field.getAnnotation(ConfField.class);
+            if (confField == null || !confField.mutable()) {
+                continue;
+            }
+            allMutableConfigs.put(field.getName(), field);
+            for (String aliasName : confField.aliases()) {
+                allMutableConfigs.put(aliasName, field);
+            }
+        }
+    }
+
+    public static Map<String, Field> getAllMutableConfigs() {
+        return allMutableConfigs;
+    }
+
     public static HashMap<String, String> dump() throws Exception {
         HashMap<String, String> map = new HashMap<String, String>();
-        Field[] fields = confClass.getFields();
+        Field[] fields = configFields;
         for (Field f : fields) {
             if (f.getAnnotation(ConfField.class) == null) {
                 continue;
@@ -99,7 +134,7 @@ public class ConfigBase {
         return map;
     }
 
-    private static void replacedByEnv() throws Exception {
+    private void replacedByEnv() throws Exception {
         Pattern pattern = Pattern.compile("\\$\\{([^\\}]*)\\}");
         for (String key : props.stringPropertyNames()) {
             String value = props.getProperty(key);
@@ -117,8 +152,22 @@ public class ConfigBase {
         }
     }
 
-    private static void setFields() throws Exception {
-        Field[] fields = confClass.getFields();
+    public String getConfigValue(String confKey, String[] aliases) {
+        String confVal = props.getProperty(confKey);
+        if (Strings.isNullOrEmpty(confVal)) {
+            for (String aliasName : aliases) {
+                confVal = props.getProperty(aliasName);
+                if (!Strings.isNullOrEmpty(confVal)) {
+                    break;
+                }
+            }
+        }
+
+        return confVal;
+    }
+
+    private void setFields() throws Exception {
+        Field[] fields = configFields;
         for (Field f : fields) {
             // ensure that field has "@ConfField" annotation
             ConfField anno = f.getAnnotation(ConfField.class);
@@ -127,8 +176,7 @@ public class ConfigBase {
             }
 
             // ensure that field has property string
-            String confKey = anno.value().equals("") ? f.getName() : anno.value();
-            String confVal = props.getProperty(confKey);
+            String confVal = getConfigValue(f.getName(), anno.aliases());
             if (Strings.isNullOrEmpty(confVal)) {
                 continue;
             }
@@ -208,26 +256,8 @@ public class ConfigBase {
         }
     }
 
-    public static Map<String, Field> getAllMutableConfigs() {
-        Map<String, Field> mutableConfigs = Maps.newHashMap();
-        Field[] fields = ConfigBase.confClass.getFields();
-        for (Field field : fields) {
-            ConfField confField = field.getAnnotation(ConfField.class);
-            if (confField == null) {
-                continue;
-            }
-            if (!confField.mutable()) {
-                continue;
-            }
-            mutableConfigs.put(confField.value().equals("") ? field.getName() : confField.value(), field);
-        }
-
-        return mutableConfigs;
-    }
-
     public static synchronized void setMutableConfig(String key, String value) throws DdlException {
-        Map<String, Field> mutableConfigs = getAllMutableConfigs();
-        Field field = mutableConfigs.get(key);
+        Field field = allMutableConfigs.get(key);
         if (field == null) {
             throw new DdlException("Config '" + key + "' does not exist or is not mutable");
         }
@@ -241,9 +271,23 @@ public class ConfigBase {
         LOG.info("set config {} to {}", key, value);
     }
 
+    private static boolean isAliasesMatch(PatternMatcher matcher, String[] aliases) {
+        if (matcher == null) {
+            return true;
+        }
+
+        for (String aliasName : aliases) {
+            if (matcher.match(aliasName)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static synchronized List<List<String>> getConfigInfo(PatternMatcher matcher) throws DdlException {
         List<List<String>> configs = Lists.newArrayList();
-        Field[] fields = confClass.getFields();
+        Field[] fields = configFields;
         for (Field f : fields) {
             List<String> config = Lists.newArrayList();
             ConfField anno = f.getAnnotation(ConfField.class);
@@ -251,8 +295,9 @@ public class ConfigBase {
                 continue;
             }
 
-            String confKey = anno.value().equals("") ? f.getName() : anno.value();
-            if (matcher != null && !matcher.match(confKey)) {
+            String confKey = f.getName();
+            // If the alias match here, we also show the config
+            if (matcher != null && !matcher.match(confKey) && !isAliasesMatch(matcher, anno.aliases())) {
                 continue;
             }
             String confVal;
@@ -263,6 +308,7 @@ public class ConfigBase {
             }
 
             config.add(confKey);
+            config.add(Arrays.toString(anno.aliases()));
             config.add(Strings.nullToEmpty(confVal));
             config.add(f.getType().getSimpleName());
             config.add(String.valueOf(anno.mutable()));

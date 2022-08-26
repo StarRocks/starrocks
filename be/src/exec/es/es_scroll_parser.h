@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 #include <string>
@@ -34,38 +34,55 @@ public:
     void set_params(const TupleDescriptor* descs, const std::map<std::string, std::string>* docvalue_context);
 
 private:
-    static bool _pure_doc_value(const rapidjson::Value& obj);
+    static bool _is_pure_doc_value(const rapidjson::Value& obj);
 
     template <PrimitiveType type, class CppType = RunTimeCppType<type>>
     static void _append_data(Column* column, CppType& value);
 
     static void _append_null(Column* column);
 
-    Status _append_value_from_json_val(Column* column, PrimitiveType type, const rapidjson::Value& col,
+    Status _append_value_from_json_val(Column* column, const TypeDescriptor& type_desc, const rapidjson::Value& col,
                                        bool pure_doc_value);
 
     Slice _json_val_to_slice(const rapidjson::Value& val);
 
     template <PrimitiveType type, typename T = RunTimeCppType<type>>
-    Status _append_int_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
+    static Status _append_int_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
 
     template <PrimitiveType type, typename T = RunTimeCppType<type>>
-    Status _append_float_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
+    static Status _append_float_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
 
-    Status _append_bool_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
+    static Status _append_bool_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
 
     template <PrimitiveType type, typename T = RunTimeCppType<type>>
-    Status _append_date_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
+    static Status _append_date_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
 
-private:
+    // The representation of array value in _source and doc_value (column storage) is inconsistent
+    // in Elasticsearch, we need to do different processing to show consistent behavior.
+    // For examples:
+    // origin array: [1] -> _source: "1" -> doc_values: "[1]"
+    // origin array: [1, 2] -> _source: "[1, 2]" -> doc_values: "[1, 2]"
+    // origin array: [1, [2, 3]] -> _source: "[1, [2, 3]]" -> doc_values: "[1, 2, 3]"
+    // origin array: [1, [null, 3]] -> _source: "[1, [null, 3]]" -> doc_values: "[1, 3]"
+    Status _append_array_val(const rapidjson::Value& col, const TypeDescriptor& type_desc, Column* column,
+                             bool pure_doc_value);
+
+    Status _append_array_val_from_docvalue(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
+                                           Column* column);
+
+    // This is a recursive function.
+    Status _append_array_val_from_source(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
+                                         Column* column);
+
     const TupleDescriptor* _tuple_desc;
-    const std::map<std::string, std::string>* _docvalue_context;
+    const std::map<std::string, std::string>* _doc_value_context;
 
     std::string _scroll_id;
     size_t _size;
     rapidjson::SizeType _cur_line;
     rapidjson::Document _document_node;
     rapidjson::Value _inner_hits_node;
+    // TODO: This value assigned but never used.
     bool _doc_value_mode;
 
     rapidjson::StringBuffer _scratch_buffer;

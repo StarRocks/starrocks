@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -36,7 +36,7 @@ import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 public class CsvFileStatisticsStorage implements StatisticStorage {
     private static final Logger LOG = LogManager.getLogger(CsvFileStatisticsStorage.class);
 
-    private Map<Pair<String, String>, StatisticsEntry> columnStatisticMap = Maps.newHashMap();
+    private final Map<Pair<String, String>, StatisticsEntry> columnStatisticMap = Maps.newHashMap();
 
     private String path;
 
@@ -118,11 +118,20 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
                     maxValue = getLongFromDateTime(LocalDateTime.parse(statisticsEntry.max, dtf));
                 }
             } else {
-                if (statisticsEntry.isSetMin() && !statisticsEntry.min.isEmpty()) {
-                    minValue = Double.parseDouble(statisticsEntry.min);
+                try {
+                    if (statisticsEntry.isSetMin() && !statisticsEntry.min.isEmpty()) {
+                        minValue = Double.parseDouble(statisticsEntry.min);
+                    }
+                } catch (Exception m) {
+                    minValue = Double.MIN_VALUE;
                 }
-                if (statisticsEntry.isSetMax() && !statisticsEntry.max.isEmpty()) {
-                    maxValue = Double.parseDouble(statisticsEntry.max);
+
+                try {
+                    if (statisticsEntry.isSetMax() && !statisticsEntry.max.isEmpty()) {
+                        maxValue = Double.parseDouble(statisticsEntry.max);
+                    }
+                } catch (Exception e) {
+                    maxValue = Double.MAX_VALUE;
                 }
             }
         } catch (Exception e) {
@@ -133,9 +142,9 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
         return builder.setMinValue(minValue).
                 setMaxValue(maxValue).
                 setDistinctValuesCount(Double.parseDouble(statisticsEntry.distinctCount)).
-                setAverageRowSize(Double.parseDouble(statisticsEntry.dataSize) * 1.0 /
+                setAverageRowSize(Double.parseDouble(statisticsEntry.dataSize) /
                         Math.max(Double.parseDouble(statisticsEntry.rowCount), 1)).
-                setNullsFraction(Double.parseDouble(statisticsEntry.nullCount) * 1.0 /
+                setNullsFraction(Double.parseDouble(statisticsEntry.nullCount) /
                         Math.max(Double.parseDouble(statisticsEntry.rowCount), 1)).build();
     }
 
@@ -148,7 +157,7 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
         return Maps.newHashMap();
     }
 
-    private class StatisticsEntry {
+    private static class StatisticsEntry {
         public String tableId;
         public String columnName;
         public String dbId;

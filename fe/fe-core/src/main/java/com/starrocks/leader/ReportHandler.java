@@ -114,6 +114,7 @@ public class ReportHandler extends Daemon {
     private Map<ReportType, Map<Long, ReportTask>> pendingTaskMap = Maps.newHashMap();
 
     public ReportHandler() {
+        super("ReportHandler");
         GaugeMetric<Long> gaugeQueueSize = new GaugeMetric<Long>(
                 "report_queue_size", MetricUnit.NOUNIT, "report queue size") {
             @Override
@@ -238,7 +239,7 @@ public class ReportHandler extends Daemon {
     private void putToQueue(ReportTask reportTask) throws Exception {
         synchronized (pendingTaskMap) {
             if (!pendingTaskMap.containsKey(reportTask.type)) {
-                throw new Exception("Unkonw report task type" + reportTask.toString());
+                throw new Exception("Unknown report task type" + reportTask.toString());
             }
             ReportTask oldTask = pendingTaskMap.get(reportTask.type).get(reportTask.beId);
             if (oldTask == null) {
@@ -704,7 +705,8 @@ public class ReportHandler extends Daemon {
                                             olapTable.getCopiedIndexes(),
                                             olapTable.isInMemory(),
                                             olapTable.enablePersistentIndex(),
-                                            olapTable.getPartitionInfo().getTabletType(partitionId));
+                                            olapTable.getPartitionInfo().getTabletType(partitionId),
+                                            olapTable.getCompressionType());
                                     createReplicaTask.setIsRecoverTask(true);
                                     createReplicaBatchTask.addTask(createReplicaTask);
                                 } else {
@@ -825,7 +827,7 @@ public class ReportHandler extends Daemon {
                             // from some BE, but the BE's tablet report doesn't see this deletion and still report
                             // the deleted tablet info to FE.
                             if (e.getErrorCode() != InternalErrorCode.REPLICA_ENOUGH_ERR) {
-                                LOG.warn("failed add to meta. tablet[{}], backend[{}]. {}",
+                                LOG.debug("failed add to meta. tablet[{}], backend[{}]. {}",
                                         tabletId, backendId, e.getMessage());
                             }
                             needDelete = true;
@@ -904,7 +906,7 @@ public class ReportHandler extends Daemon {
                 long commitTime = transactionsToCommitTime.get(txnId);
                 PublishVersionTask task =
                         new PublishVersionTask(backendId, txnId, dbId, commitTime, map.get(txnId), null, null,
-                                createPublishVersionTaskTime);
+                                createPublishVersionTaskTime, null);
                 batchTask.addTask(task);
                 // add to AgentTaskQueue for handling finish report.
                 AgentTaskQueue.addTask(task);

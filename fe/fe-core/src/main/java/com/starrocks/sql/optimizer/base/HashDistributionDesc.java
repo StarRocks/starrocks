@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.base;
 
@@ -55,7 +55,8 @@ public class HashDistributionDesc {
 
         if (this.sourceType == SourceType.SHUFFLE_AGG && item.sourceType == SourceType.SHUFFLE_JOIN) {
             return this.columns.size() == item.columns.size() && this.columns.equals(item.columns);
-        } else if (this.sourceType == SourceType.SHUFFLE_JOIN && item.sourceType == SourceType.SHUFFLE_AGG) {
+        } else if (this.sourceType == SourceType.SHUFFLE_JOIN && (item.sourceType == SourceType.SHUFFLE_AGG ||
+                item.sourceType == SourceType.SHUFFLE_JOIN)) {
             return item.columns.containsAll(this.columns);
         } else if (!this.sourceType.equals(item.sourceType) &&
                 this.sourceType != HashDistributionDesc.SourceType.LOCAL) {

@@ -41,7 +41,6 @@ import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.InfoSchemaDb;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -348,9 +347,6 @@ public class Auth implements Writable {
      * If the given db is null, which means it will no check if database name is matched.
      */
     public boolean checkDbPriv(UserIdentity currentUser, String db, PrivPredicate wanted) {
-        // used for remove default_cluster from stmt
-        db = ClusterNamespace.getFullName(db);
-
         if (!Config.enable_auth_check) {
             return true;
         }
@@ -394,9 +390,6 @@ public class Auth implements Writable {
     }
 
     public boolean checkTblPriv(UserIdentity currentUser, String db, String tbl, PrivPredicate wanted) {
-        // used for remove default_cluster from stmt
-        db = ClusterNamespace.getFullName(db);
-
         if (!Config.enable_auth_check) {
             return true;
         }
@@ -1449,58 +1442,73 @@ public class Auth implements Writable {
         return userAuthInfos;
     }
 
-    /**
-     * TODO: This function is much too long and obscure. I'll refactor it in another PR.
-     */
-    private void getUserAuthInfo(List<List<String>> userAuthInfos, UserIdentity userIdent) {
-        List<String> userAuthInfo = Lists.newArrayList();
+    public List<List<String>> getAuthenticationInfo(UserIdentity specifiedUserIdent) {
+        List<List<String>> userAuthInfos = Lists.newArrayList();
+        readLock();
+        try {
+            Set<UserIdentity> userIdents;
+            if (specifiedUserIdent == null) {
+                userIdents = getAllUserIdents(false /* include entry set by resolver */);
+            } else {
+                userIdents = new HashSet<>();
+                userIdents.add(specifiedUserIdent);
+            }
 
-        // global
+            for (UserIdentity userIdent : userIdents) {
+                List<String> userAuthInfo = Lists.newArrayList();
+                getUserGlobalPrivs(userAuthInfo, userIdent, true);
+                userAuthInfos.add(userAuthInfo);
+            }
+        } finally {
+            readUnlock();
+        }
+        return userAuthInfos;
+    }
+
+    private void getUserGlobalPrivs(List<String> userAuthInfo, UserIdentity userIdent, boolean onlyAuthenticationInfo) {
         List<PrivEntry> userPrivEntries = userPrivTable.map.get(userIdent);
         if (userPrivEntries != null) {
-            for (PrivEntry entry : userPrivEntries) {
-                GlobalPrivEntry gEntry = (GlobalPrivEntry) entry;
-                userAuthInfo.add(userIdent.toString());
-                Password password = gEntry.getPassword();
-                //Password
-                if (userIdent.isDomain()) {
-                    // for domain user ident, password is saved in property manager
-                    userAuthInfo.add(propertyMgr.doesUserHasPassword(userIdent) ? "No" : "Yes");
+            Preconditions.checkArgument(userPrivEntries.size() == 1,
+                    "more than one entries for " + userIdent.toString() + ": " + userPrivEntries.toString());
+            GlobalPrivEntry gEntry = (GlobalPrivEntry) userPrivEntries.get(0);
+            userAuthInfo.add(userIdent.toString());
+            Password password = gEntry.getPassword();
+            // Password
+            if (userIdent.isDomain()) {
+                // for domain user ident, password is saved in property manager
+                userAuthInfo.add(propertyMgr.doesUserHasPassword(userIdent) ? "No" : "Yes");
+            } else {
+                userAuthInfo.add((password == null || password.getPassword().length == 0) ? "No" : "Yes");
+            }
+            // AuthPlugin and UserForAuthPlugin
+            if (password == null) {
+                userAuthInfo.add(FeConstants.null_string);
+                userAuthInfo.add(FeConstants.null_string);
+            } else {
+                if (password.getAuthPlugin() == null) {
+                    userAuthInfo.add(FeConstants.null_string);
                 } else {
-                    userAuthInfo.add((password == null || password.getPassword().length == 0) ? "No" : "Yes");
+                    userAuthInfo.add(password.getAuthPlugin().name());
                 }
-                //AuthPlugin and UserForAuthPlugin
-                if (password == null) {
-                    userAuthInfo.add(FeConstants.null_string);
-                    userAuthInfo.add(FeConstants.null_string);
-                } else {
-                    if (password.getAuthPlugin() == null) {
-                        userAuthInfo.add(FeConstants.null_string);
-                    } else {
-                        userAuthInfo.add(password.getAuthPlugin().name());
-                    }
 
-                    if (Strings.isNullOrEmpty(password.getUserForAuthPlugin())) {
-                        userAuthInfo.add(FeConstants.null_string);
-                    } else {
-                        userAuthInfo.add(password.getUserForAuthPlugin());
-                    }
+                if (Strings.isNullOrEmpty(password.getUserForAuthPlugin())) {
+                    userAuthInfo.add(FeConstants.null_string);
+                } else {
+                    userAuthInfo.add(password.getUserForAuthPlugin());
                 }
+            }
+            if (! onlyAuthenticationInfo) {
                 //GlobalPrivs
                 userAuthInfo.add(gEntry.getPrivSet().toString() + " (" + gEntry.isSetByDomainResolver() + ")");
-                break;
             }
         } else {
             // user not in user priv table
-            // TODO I cannot think of any occation that would lead to this branch.
-            //   I'll try to figure out and clean this up in another PR
             if (!userIdent.isDomain()) {
                 // If this is not a domain user identity, it must have global priv entry.
                 // TODO(cmy): I don't know why previous comment said:
                 // This may happen when we grant non global privs to a non exist user via GRANT stmt.
                 LOG.warn("user identity does not have global priv entry: {}", userIdent);
                 userAuthInfo.add(userIdent.toString());
-                userAuthInfo.add(FeConstants.null_string);
                 userAuthInfo.add(FeConstants.null_string);
                 userAuthInfo.add(FeConstants.null_string);
                 userAuthInfo.add(FeConstants.null_string);
@@ -1511,9 +1519,21 @@ public class Auth implements Writable {
                 userAuthInfo.add(propertyMgr.doesUserHasPassword(userIdent) ? "No" : "Yes");
                 userAuthInfo.add(FeConstants.null_string);
                 userAuthInfo.add(FeConstants.null_string);
+            }
+            if (! onlyAuthenticationInfo) {
                 userAuthInfo.add(FeConstants.null_string);
             }
         }
+    }
+
+    /**
+     * TODO: This function is much too long and obscure. I'll refactor it in another PR.
+     */
+    private void getUserAuthInfo(List<List<String>> userAuthInfos, UserIdentity userIdent) {
+        List<String> userAuthInfo = Lists.newArrayList();
+
+        // global
+        getUserGlobalPrivs(userAuthInfo, userIdent, false);
 
         // db
         List<String> dbPrivs = Lists.newArrayList();

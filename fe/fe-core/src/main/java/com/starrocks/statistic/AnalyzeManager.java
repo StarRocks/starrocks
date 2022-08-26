@@ -1,16 +1,15 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
@@ -37,8 +36,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.stream.Collectors;
 
 public class AnalyzeManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(AnalyzeManager.class);
@@ -47,9 +44,6 @@ public class AnalyzeManager implements Writable {
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
     private final Map<Long, BasicStatsMeta> basicStatsMetaMap;
     private final Map<Pair<Long, String>, HistogramStatsMeta> histogramStatsMetaMap;
-
-    private static final ExecutorService executor =
-            ThreadPoolManager.newDaemonFixedThreadPool(1, 16, "analyze-replay-pool", true);
 
     public AnalyzeManager() {
         analyzeJobMap = Maps.newConcurrentMap();
@@ -85,7 +79,6 @@ public class AnalyzeManager implements Writable {
     }
 
     public void replayAddAnalyzeJob(AnalyzeJob job) {
-        executor.submit(new AnalyzeReplayTask(job));
         analyzeJobMap.put(job.getId(), job);
     }
 
@@ -146,6 +139,18 @@ public class AnalyzeManager implements Writable {
         basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
     }
 
+    public void expireBasicStatisticsCache(BasicStatsMeta basicStatsMeta) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(basicStatsMeta.getDbId());
+        if (null == db) {
+            return;
+        }
+        Table table = db.getTable(basicStatsMeta.getTableId());
+        if (null == table) {
+            return;
+        }
+        GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, basicStatsMeta.getColumns());
+    }
+
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
         basicStatsMetaMap.remove(basicStatsMeta.getTableId());
     }
@@ -165,6 +170,19 @@ public class AnalyzeManager implements Writable {
                 new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);
     }
 
+    public void expireHistogramStatisticsCache(HistogramStatsMeta histogramStatsMeta) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(histogramStatsMeta.getDbId());
+        if (null == db) {
+            return;
+        }
+        Table table = db.getTable(histogramStatsMeta.getTableId());
+        if (null == table) {
+            return;
+        }
+        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(),
+                Lists.newArrayList(histogramStatsMeta.getColumn()));
+    }
+
     public void replayRemoveHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
         histogramStatsMetaMap.remove(new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()));
     }
@@ -182,11 +200,21 @@ public class AnalyzeManager implements Writable {
                 continue;
             }
 
-            db.getTables().stream().map(Table::getId).forEach(tables::add);
+            for (Table table : db.getTables()) {
+                /*
+                 * If the meta contains statistical information, but the data is empty,
+                 * it means that the table has been truncate or insert overwrite, and it is set to empty,
+                 * so it is treated as a table that has been deleted here.
+                 */
+                if (!StatisticUtils.isEmptyTable(table)) {
+                    tables.add(table.getId());
+                }
+            }
         }
 
         Set<Long> tableIdHasDeleted = new HashSet<>(basicStatsMetaMap.keySet());
         tableIdHasDeleted.removeAll(tables);
+
         dropBasicStatsMetaAndData(tableIdHasDeleted);
         dropHistogramStatsMetaAndData(tableIdHasDeleted);
     }
@@ -198,7 +226,10 @@ public class AnalyzeManager implements Writable {
             if (basicStatsMeta == null) {
                 continue;
             }
-            statisticExecutor.dropTableStatistics(tableId, basicStatsMeta.getType());
+            // Both types of tables need to be deleted, because there may have been a switch of
+            // collecting statistics types, leaving some discarded statistics data.
+            statisticExecutor.dropTableStatistics(tableId, StatsConstants.AnalyzeType.SAMPLE);
+            statisticExecutor.dropTableStatistics(tableId, StatsConstants.AnalyzeType.FULL);
             GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMeta(basicStatsMetaMap.get(tableId));
             basicStatsMetaMap.remove(tableId);
         }
@@ -262,7 +293,13 @@ public class AnalyzeManager implements Writable {
             BasicStatsMeta basicStatsMeta =
                     GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(transactionState.getTableIdList().get(0));
             if (basicStatsMeta != null) {
-                basicStatsMeta.increaseUpdateRows(((InsertTxnCommitAttachment) attachment).getLoadedRows());
+                long loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
+                if (loadRows == 0) {
+                    OlapTable table = (OlapTable) db.getTable(basicStatsMeta.getTableId());
+                    basicStatsMeta.increaseUpdateRows(table.getRowCount());
+                } else {
+                    basicStatsMeta.increaseUpdateRows(((InsertTxnCommitAttachment) attachment).getLoadedRows());
+                }
             }
         }
     }
@@ -339,79 +376,5 @@ public class AnalyzeManager implements Writable {
 
         @SerializedName("histogramStatsMeta")
         public List<HistogramStatsMeta> histogramStatsMeta;
-    }
-
-    // This task is used to expire cached statistics
-    public class AnalyzeReplayTask implements Runnable {
-        private AnalyzeJob analyzeJob;
-
-        public AnalyzeReplayTask(AnalyzeJob job) {
-            this.analyzeJob = job;
-        }
-
-        public void checkAndExpireCachedStatistics(Table table, AnalyzeJob job) {
-            if (null == table || !table.isNativeTable()) {
-                return;
-            }
-
-            // check table has update
-            // use job last work time compare table update time to determine whether to expire cached statistics
-            LocalDateTime updateTime = StatisticUtils.getTableLastUpdateTime(table);
-            LocalDateTime jobLastWorkTime = LocalDateTime.MIN;
-            if (analyzeJobMap.containsKey(job.getId())) {
-                jobLastWorkTime = analyzeJobMap.get(job.getId()).getWorkTime();
-            }
-            if (jobLastWorkTime.isBefore(updateTime)) {
-                List<String> columns = (job.getColumns() == null || job.getColumns().isEmpty()) ?
-                        table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
-                                .collect(Collectors.toList()) : job.getColumns();
-                GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
-            }
-        }
-
-        public void expireCachedStatistics(AnalyzeJob job) {
-            if (job.getScheduleType().equals(StatsConstants.ScheduleType.ONCE)) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(job.getDbId());
-                if (null == db) {
-                    return;
-                }
-                GlobalStateMgr.getCurrentStatisticStorage()
-                        .expireColumnStatistics(db.getTable(job.getTableId()), job.getColumns());
-            } else {
-                List<Table> tableNeedCheck = new ArrayList<>();
-                if (job.getDbId() == StatsConstants.DEFAULT_ALL_ID) {
-                    List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
-                    for (Long dbId : dbIds) {
-                        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-                        if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
-                            continue;
-                        }
-                        tableNeedCheck.addAll(db.getTables());
-                    }
-                } else if (job.getDbId() != StatsConstants.DEFAULT_ALL_ID &&
-                        job.getTableId() == StatsConstants.DEFAULT_ALL_ID) {
-                    Database db = GlobalStateMgr.getCurrentState().getDb(job.getDbId());
-                    if (null == db) {
-                        return;
-                    }
-                    tableNeedCheck.addAll(db.getTables());
-                } else {
-                    Database db = GlobalStateMgr.getCurrentState().getDb(job.getDbId());
-                    if (null == db) {
-                        return;
-                    }
-                    tableNeedCheck.add(db.getTable(job.getTableId()));
-                }
-
-                for (Table table : tableNeedCheck) {
-                    checkAndExpireCachedStatistics(table, job);
-                }
-            }
-        }
-
-        @Override
-        public void run() {
-            expireCachedStatistics(analyzeJob);
-        }
     }
 }

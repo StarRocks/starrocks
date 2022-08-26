@@ -28,7 +28,8 @@ public class Status {
         TIMEOUT,
         BAD_CONNECTION,
         COMMON_ERROR,
-        OLAP_VERSION_ALREADY_MERGED
+        OLAP_VERSION_ALREADY_MERGED,
+        UNSUPPORTED
     }
 
     private ErrCode errCode;

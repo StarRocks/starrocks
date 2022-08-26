@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 grammar StarRocks;
 import StarRocksLex;
@@ -16,44 +16,47 @@ statement
     : queryStatement                                                                        #query
 
     // Database Statement
-    | alterDbQuotaStmt                                                                      #alterDbQuota
+    | useDatabaseStatement                                                                  #useDb
+    | useCatalogStatement                                                                   #useCatalog
+    | showDatabasesStatement                                                                #showDatabases
+    | alterDbQuotaStmtatement                                                               #alterDbQuota
     | createDbStatement                                                                     #createDb
     | dropDbStatement                                                                       #dropDb
     | showCreateDbStatement                                                                 #showCreateDb
     | alterDatabaseRename                                                                   #databaseRename
     | recoverDbStmt                                                                         #revoverDb
     | showDataStmt                                                                          #showData
-    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // Table Statement
     | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
-    | alterTableStatement                                                                   #alterTable
-    | dropTableStatement                                                                    #dropTable
-    | showTableStatement                                                                    #showTables
-    | showCreateTableStatement                                                              #showCreateTable
-    | showColumnStatement                                                                   #showColumn
-    | showTableStatusStatement                                                              #showTableStatus
-    | createIndexStatement                                                                  #createIndex
-    | dropIndexStatement                                                                    #dropIndex
-    | refreshTableStatement                                                                 #refreshTable
-    | showAlterStatement                                                                    #showAlter
-    | showDeleteStatement                                                                   #showDelete
-    | descTableStatement                                                                    #descTable
     | createTableLikeStatement                                                              #createTableLike
-    | showIndexStatement                                                                    #showIndex
+    | showCreateTableStatement                                                              #showCreateTable
+    | dropTableStatement                                                                    #dropTable
     | recoverTableStatement                                                                 #recoverTable
     | truncateTableStatement                                                                #truncateTable
-    | showTabletStatement                                                                   #showTablet
+    | showTableStatement                                                                    #showTables
+    | descTableStatement                                                                    #descTable
+    | showTableStatusStatement                                                              #showTableStatus
+    | showColumnStatement                                                                   #showColumn
+    | refreshTableStatement                                                                 #refreshTable
+    | alterTableStatement                                                                   #alterTable
     | cancelAlterTableStatement                                                             #cancelAlterTable
-    | showPartitionsStatement                                                               #showPartitions
-    | recoverPartitionStatement                                                             #recoverPartition
-    | showOpenTableStatement                                                                #showOpenTable
+    | showAlterStatement                                                                    #showAlter
 
     // View Statement
     | createViewStatement                                                                   #createView
     | alterViewStatement                                                                    #alterView
     | dropViewStatement                                                                     #dropView
+
+    // Partition Statement
+    | showPartitionsStatement                                                               #showPartitions
+    | recoverPartitionStatement                                                             #recoverPartition
+
+    // Index Statement
+    | createIndexStatement                                                                  #createIndex
+    | dropIndexStatement                                                                    #dropIndex
+    | showIndexStatement                                                                    #showIndex
 
     // Task Statement
     | submitTaskStatement                                                                   #submitTask
@@ -76,13 +79,21 @@ statement
     | updateStatement                                                                       #update
     | deleteStatement                                                                       #delete
 
+    //Routine Statement
+    | stopRoutineLoadStatement                                                              #stopRoutineLoad
+    | resumeRoutineLoadStatement                                                            #resumeRoutineLoad
+    | pauseRoutineLoadStatement                                                             #pauseRoutineLoad
+    | showRoutineLoadStatement                                                              #showRoutineLoad
+
     // Admin Statement
-    | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
-    | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
-    | ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?                                     #adminShowConfig
-    | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
-    | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
-            (WHERE where=expression)?                                                       #adminShowReplicaStatus
+    | adminSetConfigStatement                                                               #adminSetConfig
+    | adminSetReplicaStatusStatement                                                        #adminSetReplicaStatus
+    | adminShowConfigStatement                                                              #adminShowConfig
+    | adminShowReplicaDistributionStatement                                                 #adminShowReplicaDistribution
+    | adminShowReplicaStatusStatement                                                       #adminShowReplicaStatus
+    | adminRepairTableStatement                                                             #adminRepairTable
+    | adminCancelRepairTableStatement                                                       #adminCancelRepairTable
+    | adminCheckTabletsStatement                                                            #adminCheckTablets
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -112,11 +123,11 @@ statement
 
     // Load Statement
     | loadStatement                                                                         #load
+    | showLoadStatement                                                                     #showLoad
+    | showLoadWarningsStatement                                                             #showLoadWarnings
+    | cancelLoadStatement                                                                   #cancelLoad
 
     // Other statement
-    | USE qualifiedName                                                                     #useDb
-    | USE CATALOG identifierOrString                                                        #useCatalog
-    | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
     | showProcesslistStatement                                                              #showProcesslist
     | showUserPropertyStatement                                                             #showUserProperty
@@ -125,7 +136,15 @@ statement
     | showStatusStatement                                                                   #showStatus
     | showCharsetStatement                                                                  #showCharset
     | showBrokerStatement                                                                   #showBroker
+    | showCollationStatement                                                                #showCollation
     | setStatement                                                                          #setStmt
+
+    //Show Statement
+    | showWarningStatement                                                                  #showWarning
+    | showTabletStatement                                                                   #showTablet
+    | showDeleteStatement                                                                   #showDelete
+    | showOpenTableStatement                                                                #showOpenTable
+    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -135,16 +154,31 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     | ALTER USER user authOption                                                            #alterUser
     | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
+    | DROP USER user                                                                        #dropUser
+    | showAuthenticationStatement                                                           #showAuthentication
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
 
     // proc
     | showProcStatement                                                                      #showProc
+
+    // Backup Restore Satement
+    | backupStatement                                                                        #backup
+    | showBackupStatement                                                                    #showBackup
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
-alterDbQuotaStmt
+
+useDatabaseStatement
+    : USE qualifiedName
+    ;
+
+useCatalogStatement
+    : USE CATALOG identifierOrString
+    ;
+
+alterDbQuotaStmtatement
     : ALTER DATABASE identifier SET DATA QUOTA identifier
     | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
     ;
@@ -175,11 +209,6 @@ showDataStmt
     : SHOW DATA
     | SHOW DATA FROM qualifiedName
     ;
-
-showDynamicPartitionStatement
-    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
-    ;
-
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
@@ -352,7 +381,7 @@ showPartitionsStatement
     (WHERE expression)?
     (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
-    
+
 showOpenTableStatement
     : SHOW OPEN TABLES
     ;
@@ -417,6 +446,38 @@ cancelRefreshMaterializedViewStatement
     : CANCEL REFRESH MATERIALIZED VIEW mvName=qualifiedName
     ;
 
+// ------------------------------------------- Admin Statement ---------------------------------------------------------
+
+adminSetConfigStatement
+    : ADMIN SET FRONTEND CONFIG '(' property ')'
+    ;
+adminSetReplicaStatusStatement
+    : ADMIN SET REPLICA STATUS properties
+    ;
+adminShowConfigStatement
+    : ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?
+    ;
+
+adminShowReplicaDistributionStatement
+    : ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?
+    ;
+
+adminShowReplicaStatusStatement
+    : ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames? (WHERE where=expression)?
+    ;
+
+adminRepairTableStatement
+    : ADMIN REPAIR TABLE qualifiedName partitionNames?
+    ;
+
+adminCancelRepairTableStatement
+    : ADMIN CANCEL REPAIR TABLE qualifiedName partitionNames?
+    ;
+
+adminCheckTabletsStatement
+    : ADMIN CHECK tabletList properties
+    ;
+
 // ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
 
 alterSystemStatement
@@ -454,9 +515,17 @@ alterClause
     | dropComputeNodeClause
     | swapTableClause
     | dropPartitionClause
+    | truncatePartitionClause
     | modifyTablePropertiesClause
     | addPartitionClause
     | modifyPartitionClause
+    | addColumnClause
+    | addColumnsClause
+    | dropColumnClause
+    | modifyColumnClause
+    | columnRenameClause
+    | reorderColumnsClause
+    | modifyBrokerClause
     ;
 
 addPartitionClause
@@ -473,6 +542,10 @@ dropIndexClause
 
 dropPartitionClause
     : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
+    ;
+
+truncatePartitionClause
+    : TRUNCATE partitionNames
     ;
 
 tableRenameClause
@@ -523,6 +596,36 @@ modifyPartitionClause
     : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
     ;
 
+addColumnClause
+    : ADD COLUMN columnDesc (FIRST | AFTER identifier)? ((TO | IN) rollupName=identifier)? properties?
+    ;
+
+addColumnsClause
+    : ADD COLUMN '(' columnDesc (',' columnDesc)* ')' ((TO | IN) rollupName=identifier)? properties?
+    ;
+
+dropColumnClause
+    : DROP COLUMN identifier (FROM rollupName=identifier)? properties?
+    ;
+
+modifyColumnClause
+    : MODIFY COLUMN columnDesc (FIRST | AFTER identifier)? (FROM rollupName=identifier)? properties?
+    ;
+
+columnRenameClause
+    : RENAME COLUMN oldColumn=identifier newColumn=identifier
+    ;
+
+reorderColumnsClause
+    : ORDER BY identifierList (FROM rollupName=identifier)? properties?
+    ;
+
+modifyBrokerClause
+    : ADD BROKER identifierOrString string (',' string)*
+    | DROP BROKER identifierOrString string (',' string)*
+    | DROP ALL BROKER identifierOrString
+    ;
+
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
@@ -537,6 +640,26 @@ updateStatement
 
 deleteStatement
     : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
+    ;
+
+// ------------------------------------------- Routine Statement -----------------------------------------------------------
+
+stopRoutineLoadStatement
+    : STOP ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+resumeRoutineLoadStatement
+    : RESUME ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+pauseRoutineLoadStatement
+    : PAUSE ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+showRoutineLoadStatement
+    : SHOW ALL? ROUTINE LOAD (FOR (db=qualifiedName '.')? name=identifier)?
+        (FROM db=qualifiedName)?
+        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
@@ -668,10 +791,24 @@ dataDesc
 
 brokerDesc
     : WITH BROKER name=identifierOrString props=propertyList?
+    | WITH BROKER props=propertyList?
     ;
 
 resourceDesc
     : WITH RESOURCE name=identifierOrString props=propertyList?
+    ;
+
+showLoadStatement
+    : SHOW LOAD (FROM identifier)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    ;
+
+showLoadWarningsStatement
+    : SHOW LOAD WARNINGS (FROM identifier)? (WHERE expression)? limitElement?
+    | SHOW LOAD WARNINGS ON string
+    ;
+
+cancelLoadStatement
+    : CANCEL LOAD (FROM identifier)? (WHERE expression)?
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
@@ -710,6 +847,10 @@ showCharsetStatement
     : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
     ;
 
+showWarningStatement
+    : SHOW (WARNINGS | ERRORS) (limitElement)?
+    ;
+
 showNodesStatement
     : SHOW COMPUTE NODES                                                       #showComputeNodes
     ;
@@ -718,14 +859,23 @@ showBrokerStatement
     : SHOW BROKER
     ;
 
+showCollationStatement
+    : SHOW COLLATION ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
 setStatement
     : SET setVar (',' setVar)*
     ;
 
 setVar
-    : varType? identifier '=' setExprOrDefault
-    | AT identifierOrString '=' expression
-    | AT AT (varType '.')? identifier '=' setExprOrDefault
+    : (CHAR SET | CHARSET) (identifierOrString | DEFAULT)                                       #setNames
+    | NAMES (charset = identifierOrString | DEFAULT)
+        (COLLATE (collate = identifierOrString | DEFAULT))?                                     #setNames
+    | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
+    | PASSWORD FOR user '=' (string | PASSWORD '(' string ')')                                  #setPassword
+    | varType? identifier '=' setExprOrDefault                                                  #setVariable
+    | userVariable '=' expression                                                         #setVariable
+    | systemVariable '=' setExprOrDefault                                                       #setVariable
     ;
 
 setExprOrDefault
@@ -733,6 +883,15 @@ setExprOrDefault
     | ON
     | ALL
     | expression
+    ;
+
+showAuthenticationStatement
+    : SHOW ALL AUTHENTICATION                                   #showAllAuthentication
+    | SHOW AUTHENTICATION (FOR user)?                           #showAuthenticationForUser
+    ;
+
+showDynamicPartitionStatement
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -900,6 +1059,18 @@ showProcStatement
     : SHOW PROC path=string
     ;
 
+// ---------------------------------------- Backup Restore Statement -----------------------------------------------------
+backupStatement
+    : BACKUP SNAPSHOT qualifiedName
+    TO identifier
+    ON '(' tableDesc (',' tableDesc) * ')'
+    (PROPERTIES propertyList)?
+    ;
+
+showBackupStatement
+    : SHOW BACKUP ((FROM | IN) identifier)?
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -971,7 +1142,8 @@ valueExpression
     ;
 
 primaryExpression
-    : variable                                                                            #var
+    : userVariable                                                                        #userVariableExpression
+    | systemVariable                                                                      #systemVariableExpression
     | columnReference                                                                     #columnRef
     | functionCall                                                                        #functionCallExpression
     | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
@@ -1021,7 +1193,11 @@ aggregationFunction
     | SUM '(' DISTINCT? expression ')'
     ;
 
-variable
+userVariable
+    : AT identifierOrString
+    ;
+
+systemVariable
     : AT AT (varType '.')? identifier
     ;
 
@@ -1100,6 +1276,10 @@ frameBound
     ;
 
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
+
+tableDesc
+    : qualifiedName partitionNames?
+    ;
 
 explainDesc
     : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?

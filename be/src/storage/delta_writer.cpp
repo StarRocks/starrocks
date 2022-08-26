@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/delta_writer.h"
 
@@ -141,7 +141,7 @@ Status DeltaWriter::_init() {
     }
 
     // from here, make sure to set state to kAborted if error happens
-    RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+    RowsetWriterContext writer_context;
 
     const std::size_t partial_cols_num = [this]() {
         if (_opt.slots->size() > 0 && _opt.slots->back()->col_name() == "__op") {

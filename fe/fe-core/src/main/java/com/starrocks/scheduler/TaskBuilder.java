@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
@@ -35,7 +35,7 @@ public class TaskBuilder {
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
         Map<String, String> taskProperties = Maps.newHashMap();
-        taskProperties.put(MvTaskRunProcessor.MV_ID, String.valueOf(materializedView.getId()));
+        taskProperties.put(PartitionBasedMaterializedViewRefreshProcessor.MV_ID, String.valueOf(materializedView.getId()));
         taskProperties.put(SessionVariable.ENABLE_INSERT_STRICT, "false");
         task.setProperties(taskProperties);
         task.setDefinition(

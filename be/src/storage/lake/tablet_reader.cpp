@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/lake/tablet_reader.h"
 
@@ -29,7 +29,14 @@ using PredicateParser = starrocks::vectorized::PredicateParser;
 using ZonemapPredicatesRewriter = starrocks::vectorized::ZonemapPredicatesRewriter;
 
 TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema)
-        : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version), _is_vertical_merge(false) {}
+        : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version) {}
+
+TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, const std::vector<RowsetPtr>& rowsets)
+        : ChunkIterator(std::move(schema)),
+          _tablet(std::move(tablet)),
+          _version(version),
+          _rowsets_inited(true),
+          _rowsets(std::move(rowsets)) {}
 
 TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, bool is_key, RowSourceMaskBuffer* mask_buffer)
         : ChunkIterator(std::move(schema)),
@@ -47,7 +54,10 @@ TabletReader::~TabletReader() {
 
 Status TabletReader::prepare() {
     ASSIGN_OR_RETURN(_tablet_schema, _tablet.get_schema());
-    ASSIGN_OR_RETURN(_rowsets, _tablet.get_rowsets(_version));
+    if (!_rowsets_inited) {
+        ASSIGN_OR_RETURN(_rowsets, _tablet.get_rowsets(_version));
+        _rowsets_inited = true;
+    }
     _stats.rowsets_read_count += _rowsets.size();
     return Status::OK();
 }
@@ -66,6 +76,7 @@ void TabletReader::close() {
         _collect_iter->close();
         _collect_iter.reset();
     }
+    STLDeleteElements(&_predicate_free_list);
     _rowsets.clear();
     _obj_pool.clear();
 }
@@ -83,13 +94,13 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
 }
 
 // TODO: support
-//  1. delete predicates
-//  2. primary key table
-//  3. rowid range and short key range
+//  1. primary key table
+//  2. rowid range and short key range
 Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
     RowsetReadOptions rs_opts;
     KeysType keys_type = _tablet_schema->keys_type();
     RETURN_IF_ERROR(init_predicates(params));
+    RETURN_IF_ERROR(init_delete_predicates(params, &_delete_predicates));
     RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
     rs_opts.predicates = _pushdown_predicates;
@@ -98,6 +109,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.sorted = (keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation;
     rs_opts.reader_type = params.reader_type;
     rs_opts.chunk_size = params.chunk_size;
+    rs_opts.delete_predicates = &_delete_predicates;
     rs_opts.stats = &_stats;
     rs_opts.runtime_state = params.runtime_state;
     rs_opts.profile = params.profile;
@@ -118,6 +130,78 @@ Status TabletReader::init_predicates(const TabletReaderParams& params) {
     for (const ColumnPredicate* pred : params.predicates) {
         _pushdown_predicates[pred->column_id()].emplace_back(pred);
     }
+    return Status::OK();
+}
+
+Status TabletReader::init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
+    PredicateParser pred_parser(*_tablet_schema);
+    ASSIGN_OR_RETURN(auto tablet_metadata, _tablet.get_metadata(_version));
+
+    for (int index = 0, size = tablet_metadata->rowsets_size(); index < size; ++index) {
+        const auto& rowset_metadata = tablet_metadata->rowsets(index);
+        if (!rowset_metadata.has_delete_predicate()) {
+            continue;
+        }
+
+        const auto& pred_pb = rowset_metadata.delete_predicate();
+        std::vector<TCondition> conds;
+        for (int i = 0; i < pred_pb.binary_predicates_size(); ++i) {
+            const auto& binary_predicate = pred_pb.binary_predicates(i);
+            TCondition cond;
+            cond.__set_column_name(binary_predicate.column_name());
+            auto& op = binary_predicate.op();
+            if (op == "<") {
+                cond.__set_condition_op("<<");
+            } else if (op == ">") {
+                cond.__set_condition_op(">>");
+            } else {
+                cond.__set_condition_op(op);
+            }
+            cond.condition_values.emplace_back(binary_predicate.value());
+            conds.emplace_back(std::move(cond));
+        }
+
+        for (int i = 0; i < pred_pb.is_null_predicates_size(); ++i) {
+            const auto& is_null_predicate = pred_pb.is_null_predicates(i);
+            TCondition cond;
+            cond.__set_column_name(is_null_predicate.column_name());
+            cond.__set_condition_op("IS");
+            cond.condition_values.emplace_back(is_null_predicate.is_not_null() ? "NOT NULL" : "NULL");
+            conds.emplace_back(std::move(cond));
+        }
+
+        for (int i = 0; i < pred_pb.in_predicates_size(); ++i) {
+            TCondition cond;
+            const InPredicatePB& in_predicate = pred_pb.in_predicates(i);
+            cond.__set_column_name(in_predicate.column_name());
+            if (in_predicate.is_not_in()) {
+                cond.__set_condition_op("!*=");
+            } else {
+                cond.__set_condition_op("*=");
+            }
+            for (const auto& value : in_predicate.values()) {
+                cond.condition_values.push_back(value);
+            }
+            conds.emplace_back(std::move(cond));
+        }
+
+        ConjunctivePredicates conjunctions;
+        for (const auto& cond : conds) {
+            ColumnPredicate* pred = pred_parser.parse_thrift_cond(cond);
+            if (pred == nullptr) {
+                LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
+                             << "], condition_op[" << cond.condition_op << "], condition_values["
+                             << cond.condition_values[0] << "].";
+                continue;
+            }
+            conjunctions.add(pred);
+            // save for memory release.
+            _predicate_free_list.emplace_back(pred);
+        }
+
+        dels->add(index, conjunctions);
+    }
+
     return Status::OK();
 }
 

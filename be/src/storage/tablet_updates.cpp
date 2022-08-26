@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/tablet_updates.h"
 
@@ -1117,7 +1117,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
             _tablet.num_columns(), config::vertical_compaction_max_columns_per_group, input_rowsets.size());
 
-    RowsetWriterContext context(kDataFormatV2, config::storage_format_version);
+    RowsetWriterContext context;
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.tablet_uid = _tablet.tablet_uid();
     context.tablet_id = _tablet.tablet_id();
@@ -1319,13 +1319,27 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     size_t total_rows = 0;
     vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
     vector<uint32_t> tmp_deletes;
+
+    // Since value stored in info->inputs of CompactInfo is rowset id
+    // we should get the real max rssid here by segment number
+    uint32_t max_rowset_id = *std::max_element(info->inputs.begin(), info->inputs.end());
+    Rowset* rowset = _get_rowset(max_rowset_id).get();
+    if (rowset == nullptr) {
+        string msg = Substitute("_apply_compaction_commit rowset not found tablet=$0 rowset=$1", _tablet.tablet_id(),
+                                max_rowset_id);
+        LOG(ERROR) << msg;
+        _set_error(msg);
+        return;
+    }
+    uint32_t max_src_rssid = max_rowset_id + rowset->num_segments() - 1;
+
     for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
         auto& pk_col = _compaction_state->pk_cols[i];
         total_rows += pk_col->size();
         uint32_t rssid = rowset_id + i;
         tmp_deletes.clear();
         // replace will not grow hashtable, so don't need to check memory limit
-        index.try_replace(rssid, 0, *pk_col, *std::max_element(info->inputs.begin(), info->inputs.end()), &tmp_deletes);
+        index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes);
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
             dv->init(version.major(), nullptr, 0);
@@ -1437,10 +1451,9 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
               << Substitute("($0/$1/$2)", t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
     VLOG(1) << "update compaction apply " << _debug_string(true, true);
     if (row_before != row_after) {
-        string msg = Substitute("actual row size changed after compaction $0 -> $1 $2", row_before, row_after,
-                                debug_string());
-        LOG(ERROR) << msg;
-        _set_error(msg);
+        string msg = Substitute("actual row size changed after compaction $0 -> $1", row_before, row_after);
+        LOG(ERROR) << msg << debug_string();
+        _set_error(msg + _debug_version_info(true));
     }
 }
 
@@ -2392,7 +2405,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
 
         RowsetId rid = StorageEngine::instance()->next_rowset_id();
 
-        RowsetWriterContext writer_context(kDataFormatUnknown, config::storage_format_version);
+        RowsetWriterContext writer_context;
         writer_context.rowset_id = rid;
         writer_context.tablet_uid = _tablet.tablet_uid();
         writer_context.tablet_id = _tablet.tablet_id();

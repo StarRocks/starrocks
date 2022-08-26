@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -13,6 +13,7 @@ namespace starrocks::lake {
 
 constexpr static const int kTabletMetadataFilenameLength = 37;
 constexpr static const int kTxnLogFilenameLength = 37;
+constexpr static const int kTabletMetadataLockFilenameLength = 55;
 
 inline bool is_segment(std::string_view file_name) {
     return HasSuffixString(file_name, ".dat");
@@ -22,8 +23,16 @@ inline bool is_txn_log(std::string_view file_name) {
     return HasPrefixString(file_name, "txn_");
 }
 
+inline bool is_txn_vlog(std::string_view file_name) {
+    return HasPrefixString(file_name, "vtxn_");
+}
+
 inline bool is_tablet_metadata(std::string_view file_name) {
     return HasPrefixString(file_name, "tbl_");
+}
+
+inline bool is_tablet_metadata_lock(std::string_view file_name) {
+    return HasPrefixString(file_name, "lock_");
 }
 
 inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) {
@@ -32,6 +41,14 @@ inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) 
 
 inline std::string txn_log_filename(int64_t tablet_id, int64_t txn_id) {
     return fmt::format("txn_{:016X}_{:016X}", tablet_id, txn_id);
+}
+
+inline std::string txn_vlog_filename(int64_t tablet_id, int64_t version) {
+    return fmt::format("vtxn_{:016X}_{:016X}", tablet_id, version);
+}
+
+inline std::string tablet_metadata_lock_filename(int64_t tablet_id, int64_t version, int64_t expire_time) {
+    return fmt::format("lock_{:016X}_{:016X}_{:016X}", tablet_id, version, expire_time);
 }
 
 // Return value: <tablet id, tablet version>
@@ -56,6 +73,20 @@ inline std::pair<int64_t, int64_t> parse_txn_log_filename(std::string_view file_
     auto txn_id = StringParser::string_to_int<int64_t>(file_name.data() + 21, 16, kBase, &res);
     CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
     return {tablet_id, txn_id};
+}
+
+// Return value: <tablet id, version, expire time>
+inline std::tuple<int64_t, int64_t, int64_t> parse_tablet_metadata_lock_filename(std::string_view file_name) {
+    constexpr static int kBase = 16;
+    CHECK_EQ(kTabletMetadataLockFilenameLength, file_name.size()) << file_name;
+    StringParser::ParseResult res;
+    auto tablet_id = StringParser::string_to_int<int64_t>(file_name.data() + 5, 16, kBase, &res);
+    CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
+    auto version = StringParser::string_to_int<int64_t>(file_name.data() + 22, 16, kBase, &res);
+    CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
+    auto expire_time = StringParser::string_to_int<int64_t>(file_name.data() + 39, 16, kBase, &res);
+    CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
+    return std::make_tuple(tablet_id, version, expire_time);
 }
 
 } // namespace starrocks::lake

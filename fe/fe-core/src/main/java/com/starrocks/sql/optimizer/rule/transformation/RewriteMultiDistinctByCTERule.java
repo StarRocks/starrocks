@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
@@ -163,7 +163,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
         while (allCteConsumes.size() > 1) {
             OptExpression left = allCteConsumes.poll();
             OptExpression right = allCteConsumes.poll();
-            OptExpression join = null;
+            OptExpression join;
             if (groupingKeys.isEmpty()) {
                 join = OptExpression.create(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null), left,
                         right);
@@ -335,7 +335,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
         }
         List<ColumnRefOperator> rewriteGroupingKeys = groupingKeys.stream().
                 map(column -> (ColumnRefOperator) rewriter.rewrite(column)).collect(
-                Collectors.toList());
+                        Collectors.toList());
 
         LogicalAggregationOperator newAggregate = new LogicalAggregationOperator.Builder().withOperator(aggregate).
                 setAggregations(aggregateFn).setGroupingKeys(rewriteGroupingKeys).
@@ -365,11 +365,10 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
         Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap();
         cteConsume.getCteOutputColumnRefMap().forEach((k, v) -> rewriteMap.put(v, k));
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
-        CallOperator aggDistinctFn =
-                (CallOperator) rewriter.rewrite(aggDistinctCall);
+        CallOperator aggDistinctFn = (CallOperator) rewriter.rewrite(aggDistinctCall);
         List<ColumnRefOperator> rewriteGroupingKeys = groupingKeys.stream().
                 map(column -> (ColumnRefOperator) rewriter.rewrite(column)).collect(
-                Collectors.toList());
+                        Collectors.toList());
 
         Map<ColumnRefOperator, CallOperator> aggregateFn = Maps.newHashMap();
         aggregateFn.put(aggDistinctRef, aggDistinctFn);

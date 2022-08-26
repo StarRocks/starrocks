@@ -1,12 +1,12 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.execution;
 
-import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.ast.AlterDatabaseRename;
 
 public class AlterDatabaseRenameExecutor implements DataDefinitionExecutor {
 

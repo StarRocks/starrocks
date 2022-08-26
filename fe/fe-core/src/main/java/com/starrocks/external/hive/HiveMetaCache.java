@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive;
 
@@ -12,6 +12,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -317,10 +318,16 @@ public class HiveMetaCache {
         }
     }
 
-
+    // load table according to hiveTableName, however the table could be hiveTable or hudiTable
+    // we should check table type by input format from hms
     private Table loadTable(HiveTableName hiveTableName) throws TException, DdlException {
         org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(hiveTableName);
-        HiveTable table =  HiveMetaStoreTableUtils.convertToSRTable(hiveTable, resourceName);
+        Table table = null;
+        if (HudiTable.fromInputFormat(hiveTable.getSd().getInputFormat()) != HudiTable.HudiTableType.UNKNOWN) {
+            table = HiveMetaStoreTableUtils.convertHudiConnTableToSRTable(hiveTable, resourceName);
+        } else {
+            table = HiveMetaStoreTableUtils.convertHiveConnTableToSRTable(hiveTable, resourceName);
+        }
         tableColumnStatsCache.invalidate(new HiveTableColumnsKey(hiveTableName.getDatabaseName(),
                 hiveTableName.getTableName(), null, null, table.getType()));
 
@@ -425,8 +432,13 @@ public class HiveMetaCache {
     public void refreshConnectorTable(String db, String name) throws TException, DdlException, ExecutionException {
         HiveTableName hiveTableName = HiveTableName.of(db, name);
         refreshConnectorTableSchema(hiveTableName);
-        HiveTable newHiveTable = (HiveTable) tableCache.get(hiveTableName);
-        refreshTable(newHiveTable.getHmsTableInfo());
+        if (tableCache.get(hiveTableName) instanceof HiveTable) {
+            HiveTable hiveTable = (HiveTable) tableCache.get(hiveTableName);
+            refreshTable(hiveTable.getHmsTableInfo());
+        } else if (tableCache.get(hiveTableName) instanceof HudiTable) {
+            HudiTable hudiTable = (HudiTable) tableCache.get(hiveTableName);
+            refreshTable(hudiTable.getHmsTableInfo());
+        }
     }
 
     public void refreshConnectorTableSchema(HiveTableName hiveTableName) throws TException, DdlException {

@@ -1,31 +1,29 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.persist;
 
-import com.starrocks.lake.ShardDeleter;
-import com.starrocks.lake.ShardManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.journal.JournalTask;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalTask;
+import com.starrocks.lake.ShardDeleter;
+import com.starrocks.lake.ShardManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-
-import java.lang.reflect.Field;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class EditLogTest {
@@ -34,9 +32,9 @@ public class EditLogTest {
     @Test
     public void testtNormal() throws Exception {
         BlockingQueue<JournalTask> logQueue = new ArrayBlockingQueue<>(100);
-        short THREAD_NUM = 20;
+        short threadNum = 20;
         List<Thread> allThreads = new ArrayList<>();
-        for (short i = 0; i != THREAD_NUM; i++) {
+        for (short i = 0; i != threadNum; i++) {
             final short n = i;
             allThreads.add(new Thread(new Runnable() {
                 @Override
@@ -50,7 +48,7 @@ public class EditLogTest {
         Thread consumer = new Thread(new Runnable() {
             @Override
             public void run() {
-                for (int i = 0; i != THREAD_NUM; i++) {
+                for (int i = 0; i != threadNum; i++) {
                     try {
                         JournalTask task = logQueue.take();
                         task.markSucceed();
@@ -61,11 +59,11 @@ public class EditLogTest {
             }
         });
         consumer.start();
-        for(Thread producer: allThreads) {
+        for (Thread producer : allThreads) {
             producer.start();
         }
 
-        for(Thread producer: allThreads) {
+        for (Thread producer : allThreads) {
             producer.join();
         }
         consumer.join();
@@ -102,13 +100,13 @@ public class EditLogTest {
         t2.start();
 
         // t1 got interrupt exception while blocking in task.get()
-        for (int i = 0; i != 3; i ++) {
+        for (int i = 0; i != 3; i++) {
             t1.interrupt();
             Thread.sleep(100);
         }
 
         // t2 got interrupt exception while blocking in queue.put()
-        for (int i = 0; i != 3; i ++) {
+        for (int i = 0; i != 3; i++) {
             t2.interrupt();
             Thread.sleep(100);
         }
@@ -184,4 +182,5 @@ public class EditLogTest {
         EditLog.loadJournal(mgr, journal);
         Assert.assertEquals(Deencapsulation.getField(shardDeleter, "shardIds"), new HashSet<>());
     }
+
 }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/json_functions.h"
 
@@ -225,18 +225,15 @@ ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns
 }
 
 ColumnPtr JsonFunctions::get_native_json_int(FunctionContext* context, const Columns& columns) {
-    auto jsons = json_query(context, columns);
-    return _json_int(context, Columns{jsons});
+    return _json_query_impl<TYPE_INT>(context, columns);
 }
 
 ColumnPtr JsonFunctions::get_native_json_double(FunctionContext* context, const Columns& columns) {
-    auto jsons = json_query(context, columns);
-    return _json_double(context, Columns{jsons});
+    return _json_query_impl<TYPE_DOUBLE>(context, columns);
 }
 
 ColumnPtr JsonFunctions::get_native_json_string(FunctionContext* context, const Columns& columns) {
-    auto jsons = json_query(context, columns);
-    return json_string(context, Columns{jsons});
+    return _json_query_impl<TYPE_VARCHAR>(context, columns);
 }
 
 ColumnPtr JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
@@ -422,12 +419,50 @@ Status JsonFunctions::native_json_path_close(starrocks_udf::FunctionContext* con
 }
 
 ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& columns) {
+    return _json_query_impl<TYPE_JSON>(context, columns);
+}
+
+// Convert the JSON Slice to a PrimitiveType through ColumnBuilder
+template <PrimitiveType ResultType>
+static Status _convert_json_slice(const vpack::Slice& slice, vectorized::ColumnBuilder<ResultType>& result) {
+    if (slice.isNone()) {
+        result.append_null();
+    } else if constexpr (ResultType == TYPE_JSON) {
+        JsonValue value(slice);
+        result.append(std::move(value));
+    } else if constexpr (ResultType == TYPE_VARCHAR || ResultType == TYPE_CHAR) {
+        if (LIKELY(slice.isType(vpack::ValueType::String))) {
+            vpack::ValueLength len;
+            const char* str = slice.getStringUnchecked(len);
+            result.append(Slice(str, len));
+        } else {
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            std::string str = slice.toJson(&options);
+
+            result.append(Slice(str));
+        }
+    } else if constexpr (ResultType == TYPE_INT) {
+        double num = slice.getNumber<int64_t>();
+        result.append(num);
+    } else if constexpr (ResultType == TYPE_DOUBLE) {
+        double num = slice.getNumber<double>();
+        result.append(num);
+    } else {
+        CHECK(false) << "unsupported";
+    }
+    return Status::OK();
+}
+
+template <PrimitiveType ResultType>
+ColumnPtr JsonFunctions::_json_query_impl(FunctionContext* context, const Columns& columns) {
     auto num_rows = columns[0]->size();
     auto json_viewer = ColumnViewer<TYPE_JSON>(columns[0]);
     auto path_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
-    ColumnBuilder<TYPE_JSON> result(num_rows);
+    ColumnBuilder<ResultType> result(num_rows);
 
     JsonPath stored_path;
+    vpack::Builder builder;
     for (int row = 0; row < num_rows; ++row) {
         if (json_viewer.is_null(row) || path_viewer.is_null(row)) {
             result.append_null();
@@ -443,13 +478,12 @@ ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& col
             continue;
         }
 
-        vpack::Builder builder;
+        builder.clear();
         vpack::Slice slice = JsonPath::extract(json_value, *jsonpath.value(), &builder);
-        if (slice.isNone()) {
+        Status st = _convert_json_slice<ResultType>(slice, result);
+        if (!st.ok()) {
             result.append_null();
-        } else {
-            JsonValue value(slice);
-            result.append(std::move(value));
+            continue;
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));

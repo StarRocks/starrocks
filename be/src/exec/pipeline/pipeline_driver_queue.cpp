@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 
@@ -8,6 +8,7 @@
 
 namespace starrocks::pipeline {
 
+/// QuerySharedDriverQueue.
 QuerySharedDriverQueue::QuerySharedDriverQueue() {
     double factor = 1;
     for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
@@ -39,6 +40,7 @@ void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
         _queues[level].put(driver);
         driver->set_in_ready_queue(true);
         _cv.notify_one();
+        ++_num_drivers;
     }
 }
 
@@ -54,6 +56,7 @@ void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) 
         drivers[i]->set_in_ready_queue(true);
         _cv.notify_one();
     }
+    _num_drivers += drivers.size();
 }
 
 void QuerySharedDriverQueue::put_back_from_executor(const DriverRawPtr driver) {
@@ -61,12 +64,7 @@ void QuerySharedDriverQueue::put_back_from_executor(const DriverRawPtr driver) {
     put_back(driver);
 }
 
-void QuerySharedDriverQueue::put_back_from_executor(const std::vector<DriverRawPtr>& drivers) {
-    // QuerySharedDriverQueue::put_back_from_executor is identical to put_back.
-    put_back(drivers);
-}
-
-StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(int worker_id) {
+StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
     // -1 means no candidates; else has candidate.
     int queue_idx = -1;
     double target_accu_time = 0;
@@ -99,6 +97,8 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(int worker_id) {
         // record queue's index to accumulate time for it.
         driver_ptr = _queues[queue_idx].take();
         driver_ptr->set_in_ready_queue(false);
+
+        --_num_drivers;
     }
 
     // next pipeline driver to execute.
@@ -121,11 +121,7 @@ void QuerySharedDriverQueue::cancel(DriverRawPtr driver) {
 size_t QuerySharedDriverQueue::size() const {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
-    size_t size = 0;
-    for (const auto& sub_queue : _queues) {
-        size += sub_queue.size();
-    }
-    return size;
+    return _num_drivers;
 }
 
 void QuerySharedDriverQueue::update_statistics(const DriverRawPtr driver) {
@@ -145,108 +141,13 @@ int QuerySharedDriverQueue::_compute_driver_level(const DriverRawPtr driver) con
     return QUEUE_SIZE - 1;
 }
 
-QuerySharedDriverQueueWithoutLock::QuerySharedDriverQueueWithoutLock() {
-    double factor = 1;
-    for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
-        // initialize factor for every sub queue,
-        // Higher priority queues have more execution time,
-        // so they have a larger factor.
-        _queues[i].factor_for_normal = factor;
-        factor *= RATIO_OF_ADJACENT_QUEUE;
-    }
-
-    int64_t time_slice = 0;
-    for (int i = 0; i < QUEUE_SIZE; ++i) {
-        time_slice += LEVEL_TIME_SLICE_BASE_NS * (i + 1);
-        _level_time_slices[i] = time_slice;
-    }
-}
-
-void QuerySharedDriverQueueWithoutLock::put_back(const DriverRawPtr driver) {
-    _put_back(driver);
-}
-
-void QuerySharedDriverQueueWithoutLock::put_back(const std::vector<DriverRawPtr>& drivers) {
-    for (auto driver : drivers) {
-        _put_back(driver);
-    }
-}
-
-void QuerySharedDriverQueueWithoutLock::put_back_from_executor(const DriverRawPtr driver) {
-    // QuerySharedDriverQueueWithoutLock::put_back_from_executor is identical to put_back.
-    put_back(driver);
-}
-
-void QuerySharedDriverQueueWithoutLock::put_back_from_executor(const std::vector<DriverRawPtr>& drivers) {
-    // QuerySharedDriverQueueWithoutLock::put_back_from_executor is identical to put_back.
-    put_back(drivers);
-}
-
-StatusOr<DriverRawPtr> QuerySharedDriverQueueWithoutLock::take(int worker_id) {
-    // -1 means no candidates; else has candidate.
-    int queue_idx = -1;
-    double target_accu_time = 0;
-    DriverRawPtr driver_ptr;
-
-    // Find the queue with the smallest execution time.
-    for (int i = 0; i < QUEUE_SIZE; ++i) {
-        // we just search for queue has element
-        if (!_queues[i].empty()) {
-            double local_target_time = _queues[i].accu_time_after_divisor();
-            if (queue_idx < 0 || local_target_time < target_accu_time) {
-                target_accu_time = local_target_time;
-                queue_idx = i;
-            }
-        }
-    }
-
-    // Always return non-null driver, which is guaranteed be the callee, e.g. DriverQueueWithWorkGroup::take().
-    DCHECK(queue_idx >= 0);
-    driver_ptr = _queues[queue_idx].take();
-    driver_ptr->set_in_ready_queue(false);
-
-    --_size;
-
-    return driver_ptr;
-}
-
-void QuerySharedDriverQueueWithoutLock::cancel(DriverRawPtr driver) {
-    if (!driver->is_in_ready_queue()) {
-        return;
-    }
-    int level = driver->get_driver_queue_level();
-    _queues[level].cancel(driver);
-}
-
-void QuerySharedDriverQueueWithoutLock::update_statistics(const DriverRawPtr driver) {
-    _queues[driver->get_driver_queue_level()].update_accu_time(driver);
-}
-
-void QuerySharedDriverQueueWithoutLock::_put_back(const DriverRawPtr driver) {
-    int level = _compute_driver_level(driver);
-    driver->set_driver_queue_level(level);
-    _queues[level].put(driver);
-    ++_size;
-}
-
-int QuerySharedDriverQueueWithoutLock::_compute_driver_level(const DriverRawPtr driver) const {
-    int time_spent = driver->driver_acct().get_accumulated_time_spent();
-    for (int i = driver->get_driver_queue_level(); i < QUEUE_SIZE; ++i) {
-        if (time_spent < _level_time_slices[i]) {
-            return i;
-        }
-    }
-
-    return QUEUE_SIZE - 1;
-}
-
 void SubQuerySharedDriverQueue::put(const DriverRawPtr driver) {
     if (driver->driver_state() == DriverState::CANCELED) {
         queue.emplace_front(driver);
     } else {
         queue.emplace_back(driver);
     }
-    driver_number++;
+    num_drivers++;
 }
 
 void SubQuerySharedDriverQueue::cancel(const DriverRawPtr driver) {
@@ -262,7 +163,7 @@ DriverRawPtr SubQuerySharedDriverQueue::take() {
         DriverRawPtr driver = pending_cancel_queue.front();
         pending_cancel_queue.pop();
         cancelled_set.insert(driver);
-        --driver_number;
+        --num_drivers;
         return driver;
     }
 
@@ -273,186 +174,242 @@ DriverRawPtr SubQuerySharedDriverQueue::take() {
         if (iter != cancelled_set.end()) {
             cancelled_set.erase(iter);
         } else {
-            --driver_number;
+            --num_drivers;
             return driver;
         }
     }
     return nullptr;
 }
 
-void DriverQueueWithWorkGroup::close() {
+/// WorkGroupDriverQueue.
+bool WorkGroupDriverQueue::WorkGroupDriverSchedEntityComparator::operator()(
+        const WorkGroupDriverSchedEntityPtr& lhs, const WorkGroupDriverSchedEntityPtr& rhs) const {
+    return lhs->vruntime_ns() < rhs->vruntime_ns();
+}
+
+void WorkGroupDriverQueue::close() {
     std::lock_guard<std::mutex> lock(_global_mutex);
     _is_closed = true;
     _cv.notify_all();
 }
 
-void DriverQueueWithWorkGroup::put_back(const DriverRawPtr driver) {
+void WorkGroupDriverQueue::put_back(const DriverRawPtr driver) {
     std::lock_guard<std::mutex> lock(_global_mutex);
     _put_back<false>(driver);
 }
 
-void DriverQueueWithWorkGroup::put_back(const std::vector<DriverRawPtr>& drivers) {
+void WorkGroupDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) {
     std::lock_guard<std::mutex> lock(_global_mutex);
     for (const auto driver : drivers) {
         _put_back<false>(driver);
     }
 }
 
-void DriverQueueWithWorkGroup::put_back_from_executor(const DriverRawPtr driver) {
+void WorkGroupDriverQueue::put_back_from_executor(const DriverRawPtr driver) {
     std::lock_guard<std::mutex> lock(_global_mutex);
     _put_back<true>(driver);
 }
 
-void DriverQueueWithWorkGroup::put_back_from_executor(const std::vector<DriverRawPtr>& drivers) {
-    std::lock_guard<std::mutex> lock(_global_mutex);
-
-    for (const auto driver : drivers) {
-        _put_back<true>(driver);
-    }
-}
-
-StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take(int worker_id) {
+StatusOr<DriverRawPtr> WorkGroupDriverQueue::take() {
     std::unique_lock<std::mutex> lock(_global_mutex);
 
-    if (_is_closed) {
-        return Status::Cancelled("Shutdown");
-    }
-
-    while (_ready_wgs.empty()) {
-        _cv.wait(lock);
+    workgroup::WorkGroupDriverSchedEntity* wg_entity = nullptr;
+    while (wg_entity == nullptr) {
         if (_is_closed) {
             return Status::Cancelled("Shutdown");
         }
+
+        _update_bandwidth_control_period();
+
+        if (_wg_entities.empty()) {
+            _cv.wait(lock);
+        } else if (wg_entity = _take_next_wg(); wg_entity == nullptr) {
+            int64_t cur_ns = MonotonicNanos();
+            int64_t sleep_ns = _bandwidth_control_period_end_ns - cur_ns;
+            if (sleep_ns <= 0) {
+                continue;
+            }
+
+            // All the ready tasks are throttled, so wait until the new period or a new task comes.
+            _cv.wait_for(lock, std::chrono::nanoseconds(sleep_ns));
+        }
     }
 
-    // Try to take driver from any owner workgroup first.
-    auto wg = _find_min_owner_wg(worker_id);
-    if (wg == nullptr) {
-        // All the owner workgroups don't have ready drivers, so select the other workgroup.
-        wg = _find_min_wg();
-    }
-    DCHECK(wg != nullptr);
-
-    // If wg only contains one ready driver, it will be not ready anymore after taking away
-    // the only one driver.
-    if (wg->driver_queue()->size() == 1) {
-        _sum_cpu_limit -= wg->cpu_limit();
-        _ready_wgs.erase(wg);
+    // If wg only contains one ready driver, it will be not ready anymore
+    // after taking away the only one driver.
+    if (wg_entity->queue()->size() == 1) {
+        _dequeue_workgroup(wg_entity);
     }
 
-    return wg->driver_queue()->take(worker_id);
+    return wg_entity->queue()->take();
 }
 
-void DriverQueueWithWorkGroup::cancel(DriverRawPtr driver) {
-    std::unique_lock<std::mutex> lock(_global_mutex);
+void WorkGroupDriverQueue::cancel(DriverRawPtr driver) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
     if (_is_closed) {
         return;
     }
     if (!driver->is_in_ready_queue()) {
         return;
     }
-    auto* wg = driver->workgroup();
-    wg->driver_queue()->cancel(driver);
+    auto* wg_entity = driver->workgroup()->driver_sched_entity();
+    wg_entity->queue()->cancel(driver);
 }
 
-void DriverQueueWithWorkGroup::update_statistics(const DriverRawPtr driver) {
+void WorkGroupDriverQueue::update_statistics(const DriverRawPtr driver) {
     // TODO: reduce the lock scope
-    std::unique_lock<std::mutex> lock(_global_mutex);
+    std::lock_guard<std::mutex> lock(_global_mutex);
 
     int64_t runtime_ns = driver->driver_acct().get_last_time_spent();
-    auto* wg = driver->workgroup();
-    wg->driver_queue()->update_statistics(driver);
-    wg->increment_real_runtime_ns(runtime_ns);
-    workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(runtime_ns);
+    auto* wg_entity = driver->workgroup()->driver_sched_entity();
 
-    // For big query check cpu
-    if (wg->big_query_cpu_second_limit()) {
-        // Calculate the cost of the source && sink operator alone
-        int64_t source_operator_last_cpu_time_ns = driver->source_operator()->get_last_growth_cpu_time_ns();
-        int64_t sink_operator_last_cpu_time_ns = driver->sink_operator()->get_last_growth_cpu_time_ns();
-        int64_t accounted_cpu_cost = runtime_ns + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
-
-        wg->incr_total_cpu_cost(accounted_cpu_cost);
+    // Update bandwidth control information.
+    _update_bandwidth_control_period();
+    if (!wg_entity->is_sq_wg()) {
+        _bandwidth_usage_ns += runtime_ns;
     }
+
+    // Update sched entity information.
+    bool is_in_queue = _wg_entities.find(wg_entity) != _wg_entities.end();
+    if (is_in_queue) {
+        _wg_entities.erase(wg_entity);
+    }
+    DCHECK(_wg_entities.find(wg_entity) == _wg_entities.end());
+    wg_entity->incr_runtime_ns(runtime_ns);
+    if (is_in_queue) {
+        _wg_entities.emplace(wg_entity);
+        _update_min_wg();
+    }
+
+    wg_entity->queue()->update_statistics(driver);
 }
 
-size_t DriverQueueWithWorkGroup::size() const {
+size_t WorkGroupDriverQueue::size() const {
     // TODO: reduce the lock scope
-    std::unique_lock<std::mutex> lock(_global_mutex);
+    std::lock_guard<std::mutex> lock(_global_mutex);
 
     size_t size = 0;
-    for (auto wg : _ready_wgs) {
-        size += wg->driver_queue()->size();
+    for (auto wg_entity : _wg_entities) {
+        size += wg_entity->queue()->size();
     }
 
     return size;
 }
 
-template <bool from_executor>
-void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
-    auto* wg = driver->workgroup();
-    if (_ready_wgs.find(wg) == _ready_wgs.end()) {
-        _sum_cpu_limit += wg->cpu_limit();
-        // The runtime needn't be adjusted for the workgroup put back from executor thread,
-        // because it has updated before executor thread put the workgroup back by update_statistics().
-        if constexpr (!from_executor) {
-            auto* min_wg = _find_min_wg();
-            if (min_wg != nullptr) {
-                int64_t origin_real_runtime_ns = wg->real_runtime_ns();
-
-                // The workgroup maybe leaves for a long time, which results in that the runtime of it
-                // may be much smaller than the other workgroups. If the runtime isn't adjusted, the others
-                // will starve. Therefore, the runtime is adjusted according the minimum vruntime in _ready_wgs,
-                // and give it half of ideal runtime in a schedule period as compensation.
-                int64_t new_vruntime_ns = std::min(min_wg->vruntime_ns() - _ideal_runtime_ns(wg) / 2,
-                                                   min_wg->real_runtime_ns() / int64_t(wg->cpu_limit()));
-                wg->set_vruntime_ns(std::max(wg->vruntime_ns(), new_vruntime_ns));
-                wg->update_last_real_runtime_ns(wg->real_runtime_ns());
-
-                int64_t diff_real_runtime_ns = wg->real_runtime_ns() - origin_real_runtime_ns;
-                workgroup::WorkGroupManager::instance()->increment_cpu_runtime_ns(diff_real_runtime_ns);
-                wg->incr_total_cpu_cost(diff_real_runtime_ns);
-            }
-        }
-        _ready_wgs.emplace(wg);
+bool WorkGroupDriverQueue::should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const {
+    if (_throttled(driver->workgroup()->driver_sched_entity(), unaccounted_runtime_ns)) {
+        return true;
     }
-    wg->driver_queue()->put_back(driver);
+
+    // Return true, if the minimum-vruntime workgroup is not current workgroup anymore.
+    auto* wg_entity = driver->workgroup()->driver_sched_entity();
+    return _min_wg_entity.load() != wg_entity &&
+           _min_vruntime_ns.load() < wg_entity->vruntime_ns() + unaccounted_runtime_ns / wg_entity->cpu_limit();
+}
+
+bool WorkGroupDriverQueue::_throttled(const workgroup::WorkGroupDriverSchedEntity* wg_entity,
+                                      int64_t unaccounted_runtime_ns) const {
+    if (wg_entity->is_sq_wg()) {
+        return false;
+    }
+    if (!workgroup::WorkGroupManager::instance()->is_sq_wg_running()) {
+        return false;
+    }
+
+    int64_t bandwidth_usage = unaccounted_runtime_ns + _bandwidth_usage_ns;
+    return bandwidth_usage >= _bandwidth_quota_ns();
+}
+
+template <bool from_executor>
+void WorkGroupDriverQueue::_put_back(const DriverRawPtr driver) {
+    auto* wg_entity = driver->workgroup()->driver_sched_entity();
+    wg_entity->set_in_queue(this);
+    wg_entity->queue()->put_back(driver);
+
+    if (_wg_entities.find(wg_entity) == _wg_entities.end()) {
+        _enqueue_workgroup<from_executor>(wg_entity);
+    }
+
     _cv.notify_one();
 }
 
-workgroup::WorkGroup* DriverQueueWithWorkGroup::_find_min_owner_wg(int worker_id) {
-    workgroup::WorkGroup* min_wg = nullptr;
-    int64_t min_vruntime_ns = 0;
+void WorkGroupDriverQueue::_update_min_wg() {
+    auto* min_wg_entity = _take_next_wg();
+    if (min_wg_entity == nullptr) {
+        _min_vruntime_ns = std::numeric_limits<int64_t>::max();
+        _min_wg_entity = nullptr;
+    } else {
+        _min_vruntime_ns = min_wg_entity->vruntime_ns();
+        _min_wg_entity = min_wg_entity;
+    }
+}
 
-    auto owner_wgs = workgroup::WorkGroupManager::instance()->get_owners_of_driver_worker(worker_id);
-    if (owner_wgs != nullptr) {
-        for (const auto& wg : *owner_wgs) {
-            if (_ready_wgs.find(wg.get()) != _ready_wgs.end() &&
-                (min_wg == nullptr || min_vruntime_ns > wg->vruntime_ns())) {
-                min_wg = wg.get();
-                min_vruntime_ns = wg->vruntime_ns();
+workgroup::WorkGroupDriverSchedEntity* WorkGroupDriverQueue::_take_next_wg() {
+    workgroup::WorkGroupDriverSchedEntity* min_unthrottled_wg_entity = nullptr;
+    for (auto* wg_entity : _wg_entities) {
+        if (!_throttled(wg_entity)) {
+            min_unthrottled_wg_entity = wg_entity;
+            break;
+        }
+    }
+
+    return min_unthrottled_wg_entity;
+}
+
+template <bool from_executor>
+void WorkGroupDriverQueue::_enqueue_workgroup(workgroup::WorkGroupDriverSchedEntity* wg_entity) {
+    _sum_cpu_limit += wg_entity->cpu_limit();
+    // The runtime needn't be adjusted for the workgroup put back from executor thread,
+    // because it has updated before executor thread put the workgroup back by update_statistics().
+    if constexpr (!from_executor) {
+        if (auto* min_wg_entity = _min_wg_entity.load(); min_wg_entity != nullptr) {
+            // The workgroup maybe leaves for a long time, which results in that the runtime of it
+            // may be much smaller than the other workgroups. If the runtime isn't adjusted, the others
+            // will starve. Therefore, the runtime is adjusted according the minimum vruntime in _ready_wgs,
+            // and give it half of ideal runtime in a schedule period as compensation.
+            int64_t new_vruntime_ns = std::min(min_wg_entity->vruntime_ns() - _ideal_runtime_ns(wg_entity) / 2,
+                                               min_wg_entity->runtime_ns() / int64_t(wg_entity->cpu_limit()));
+            int64_t diff_vruntime_ns = new_vruntime_ns - wg_entity->vruntime_ns();
+            if (diff_vruntime_ns > 0) {
+                DCHECK(_wg_entities.find(wg_entity) == _wg_entities.end());
+                wg_entity->incr_runtime_ns(diff_vruntime_ns * wg_entity->cpu_limit());
             }
         }
     }
 
-    return min_wg;
+    _wg_entities.emplace(wg_entity);
+    _update_min_wg();
 }
 
-workgroup::WorkGroup* DriverQueueWithWorkGroup::_find_min_wg() {
-    workgroup::WorkGroup* min_wg = nullptr;
-    int64_t min_vruntime_ns = 0;
+void WorkGroupDriverQueue::_dequeue_workgroup(workgroup::WorkGroupDriverSchedEntity* wg_entity) {
+    _sum_cpu_limit -= wg_entity->cpu_limit();
+    _wg_entities.erase(wg_entity);
+    _update_min_wg();
+}
 
-    for (auto wg : _ready_wgs) {
-        if (min_wg == nullptr || min_vruntime_ns > wg->vruntime_ns()) {
-            min_wg = wg;
-            min_vruntime_ns = wg->vruntime_ns();
+int64_t WorkGroupDriverQueue::_ideal_runtime_ns(workgroup::WorkGroupDriverSchedEntity* wg_entity) const {
+    return SCHEDULE_PERIOD_PER_WG_NS * _wg_entities.size() * wg_entity->cpu_limit() / _sum_cpu_limit;
+}
+
+void WorkGroupDriverQueue::_update_bandwidth_control_period() {
+    int64_t cur_ns = MonotonicNanos();
+    if (_bandwidth_control_period_end_ns == 0 || _bandwidth_control_period_end_ns <= cur_ns) {
+        _bandwidth_control_period_end_ns = cur_ns + BANDWIDTH_CONTROL_PERIOD_NS;
+
+        int64_t bandwidth_quota = _bandwidth_quota_ns();
+        int64_t bandwidth_usage = _bandwidth_usage_ns.load();
+        if (bandwidth_usage <= bandwidth_quota) {
+            _bandwidth_usage_ns = 0;
+        } else if (bandwidth_usage < 2 * bandwidth_quota) {
+            _bandwidth_usage_ns -= bandwidth_quota;
+        } else {
+            _bandwidth_usage_ns = bandwidth_quota;
         }
     }
-    return min_wg;
 }
 
-int64_t DriverQueueWithWorkGroup::_ideal_runtime_ns(workgroup::WorkGroup* wg) {
-    return SCHEDULE_PERIOD_PER_WG_NS * _ready_wgs.size() * wg->cpu_limit() / _sum_cpu_limit;
+int64_t WorkGroupDriverQueue::_bandwidth_quota_ns() const {
+    return BANDWIDTH_CONTROL_PERIOD_NS * workgroup::WorkGroupManager::instance()->normal_workgroup_cpu_hard_limit();
 }
 
 } // namespace starrocks::pipeline

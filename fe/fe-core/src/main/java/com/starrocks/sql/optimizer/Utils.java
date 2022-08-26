@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer;
 
@@ -476,6 +476,22 @@ public class Utils {
             }
         }
         return true;
+    }
+
+    public static boolean containsEqualBinaryPredicate(ScalarOperator predicate) {
+        if (predicate instanceof BinaryPredicateOperator) {
+            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
+            return binaryPredicate.getBinaryType().isEquivalence();
+        }
+        if (predicate instanceof CompoundPredicateOperator) {
+            CompoundPredicateOperator compoundPredicate = (CompoundPredicateOperator) predicate;
+            if (compoundPredicate.isAnd()) {
+                return isEqualBinaryPredicate(compoundPredicate.getChild(0)) ||
+                        isEqualBinaryPredicate(compoundPredicate.getChild(1));
+            }
+            return false;
+        }
+        return false;
     }
 
     public static boolean isEqualBinaryPredicate(ScalarOperator predicate) {

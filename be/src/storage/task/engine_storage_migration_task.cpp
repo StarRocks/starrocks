@@ -65,7 +65,7 @@ Status EngineStorageMigrationTask::execute() {
 }
 
 Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
-    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
     if (bg_worker_stopped) {
         LOG(WARNING) << "Process is going to quit. The migration will stop.";
         return Status::InternalError("Process is going to quit.");
@@ -289,14 +289,6 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
             res = Status::NotFound(fmt::format("Not found tablet: {}", _tablet_id));
             break;
         }
-        AlterTabletTaskSharedPtr alter_task = tablet->alter_task();
-        if (alter_task != nullptr) {
-            if (alter_task->alter_state() == ALTER_FINISHED) {
-                new_tablet->set_alter_state(ALTER_FINISHED);
-            } else {
-                new_tablet->delete_alter_task();
-            }
-        }
     } while (false);
 
     // 4. clear
@@ -346,7 +338,7 @@ Status EngineStorageMigrationTask::_copy_index_and_data_files(
         const std::vector<RowsetSharedPtr>& consistent_rowsets) const {
     Status status = Status::OK();
     for (const auto& rs : consistent_rowsets) {
-        bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+        bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
         if (bg_worker_stopped) {
             status = Status::InternalError("Process is going to quit.");
             break;

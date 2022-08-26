@@ -26,13 +26,13 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
@@ -43,8 +43,12 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import javax.annotation.Nullable;
 
 /**
  * Internal representation of table-related metadata. A table contains several partitions.
@@ -185,6 +189,10 @@ public class Table extends MetaObject implements Writable {
 
     public boolean isNativeTable() {
         return isLocalTable() || isLakeTable();
+    }
+
+    public boolean isHiveTable() {
+        return type == TableType.HIVE;
     }
 
     // for create table
@@ -341,6 +349,18 @@ public class Table extends MetaObject implements Writable {
         return null;
     }
 
+    public Partition getPartition(long partitionId) {
+        return null;
+    }
+
+    public Collection<Partition> getPartitions() {
+        return Collections.emptyList();
+    }
+
+    public Set<String> getDistributionColumnNames() {
+        return Collections.emptySet();
+    }
+
     public String getEngine() {
         if (this instanceof OlapTable) {
             return "StarRocks";
@@ -450,14 +470,19 @@ public class Table extends MetaObject implements Writable {
      * Delete this table. this method is called with the protection of the database's writer lock.
      *
      * @param replay is this a log replay operation.
-     * @return a Runnable object to be invoked after persisted the edit log and released the
-     * database's lock, null if no task need to run.
+     * @return a {@link Runnable} object that will be invoked after the table has been deleted from
+     * catalog, or null if no action need to be performed.
      */
+    @Nullable
     public Runnable delete(boolean replay) {
         return null;
     }
 
     public boolean isSupported() {
         return false;
+    }
+
+    public Map<String, String> getProperties() {
+        throw new NotImplementedException();
     }
 }

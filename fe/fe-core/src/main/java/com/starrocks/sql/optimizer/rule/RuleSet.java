@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule;
 
@@ -7,7 +7,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.rule.implementation.AssertOneRowImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEAnchorImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.CTEConsumerImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.CTEAnchorToNoCTEImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.CTEConsumeInlineImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.CTEConsumerReuseImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEProduceImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.EsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ExceptImplementationRule;
@@ -42,7 +44,7 @@ import com.starrocks.sql.optimizer.rule.transformation.EliminateLimitZeroRule;
 import com.starrocks.sql.optimizer.rule.transformation.EsScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2OuterJoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.InlineCTEConsumeRule;
+import com.starrocks.sql.optimizer.rule.transformation.InlineOneCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityWithOutInnerRule;
@@ -58,7 +60,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEConsumeColumnsRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneCTEConsumePlanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneExceptColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneExceptEmptyRule;
@@ -90,6 +91,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitCTEAnchor;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitUnionRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownMinMaxConjunctsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateCTEAnchor;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateCTEConsumeRule;
@@ -147,7 +149,9 @@ public class RuleSet {
             new TableFunctionImplementationRule(),
             new LimitImplementationRule(),
             new CTEAnchorImplementationRule(),
-            new CTEConsumerImplementationRule(),
+            new CTEAnchorToNoCTEImplementationRule(),
+            new CTEConsumerReuseImplementationRule(),
+            new CTEConsumeInlineImplementationRule(),
             new CTEProduceImplementationRule()
     );
 
@@ -189,6 +193,10 @@ public class RuleSet {
                 new DistributionPruneRule(),
                 RemoteScanPartitionPruneRule.HIVE_SCAN,
                 RemoteScanPartitionPruneRule.HUDI_SCAN,
+                RemoteScanPartitionPruneRule.ICEBERG_SCAN,
+                PushDownMinMaxConjunctsRule.HIVE_SCAN,
+                PushDownMinMaxConjunctsRule.HUDI_SCAN,
+                PushDownMinMaxConjunctsRule.ICEBERG_SCAN,
                 new EsScanPartitionPruneRule(),
                 new PartitionPredicatePrune()
         ));
@@ -274,8 +282,8 @@ public class RuleSet {
         ));
 
         rewriteRules.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
-                new RewriteMultiDistinctRule(),
-                new RewriteMultiDistinctByCTERule()
+                new RewriteMultiDistinctByCTERule(),
+                new RewriteMultiDistinctRule()
         ));
 
         rewriteRules.put(RuleSetType.PRUNE_SET_OPERATOR, ImmutableList.of(
@@ -297,16 +305,9 @@ public class RuleSet {
         ));
 
         rewriteRules.put(RuleSetType.INLINE_CTE, ImmutableList.of(
-                new InlineCTEConsumeRule(),
-                new PruneCTEConsumePlanRule(),
+                new InlineOneCTEConsumeRule(),
                 new PruneCTEProduceRule()
         ));
-
-        rewriteRules.put(RuleSetType.INLINE_ONE_CTE, ImmutableList.of(
-                new InlineCTEConsumeRule(),
-                new PruneCTEProduceRule()
-        ));
-
     }
 
     public RuleSet() {
@@ -350,9 +351,9 @@ public class RuleSet {
 
     public void addAutoJoinImplementationRule() {
         this.implementRules.add(HashJoinImplementationRule.getInstance());
-        this.implementRules.add(MergeJoinImplementationRule.getInstance());
-        // TODO: turn it on
-        // this.implementRules.add(NestLoopJoinImplementationRule.getInstance());
+        // TODO: implement merge join
+        // this.implementRules.add(MergeJoinImplementationRule.getInstance());
+        this.implementRules.add(NestLoopJoinImplementationRule.getInstance());
     }
 
 }

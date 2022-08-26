@@ -1,9 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.cost;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
@@ -33,7 +32,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatsConstants;
 
@@ -167,18 +165,6 @@ public class CostModel {
             return aggStage == 1 || aggStage == 0;
         }
 
-        public boolean isDistinctAggFun(CallOperator aggOperator, PhysicalHashAggregateOperator node) {
-            if (aggOperator.getFnName().equalsIgnoreCase(FunctionSet.MULTI_DISTINCT_COUNT) ||
-                    aggOperator.getFnName().equalsIgnoreCase(FunctionSet.MULTI_DISTINCT_SUM)) {
-                return true;
-            }
-            // only one stage agg node has not rewrite distinct function here
-            return node.getType().isGlobal() && !node.isSplit() &&
-                    (aggOperator.getFnName().equalsIgnoreCase(FunctionSet.COUNT) ||
-                            aggOperator.getFnName().equalsIgnoreCase(FunctionSet.SUM)) &&
-                    aggOperator.isDistinct();
-        }
-
         @Override
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
             if (!needGenerateOneStageAggNode(context) && !node.isSplit() && node.getType().isGlobal()) {
@@ -300,12 +286,13 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator join, ExpressionContext context) {
+            final double nestLoopPunishment = 1000000.0;
             Statistics leftStatistics = context.getChildStatistics(0);
             Statistics rightStatistics = context.getChildStatistics(1);
 
             double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
             double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-            return CostEstimate.of(leftSize * rightSize,
+            return CostEstimate.of(leftSize * rightSize + nestLoopPunishment,
                     rightSize * StatsConstants.CROSS_JOIN_COST_PENALTY * 2, 0);
         }
 
@@ -329,14 +316,16 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
-            return CostEstimate.zero();
+            // memory cost
+            Statistics cteStatistics = context.getChildStatistics(0);
+            double ratio = ConnectContext.get().getSessionVariable().getCboCTERuseRatio();
+            double produceSize = cteStatistics.getOutputSize(context.getChildOutputColumns(0));
+            return CostEstimate.of(produceSize * node.getConsumeNum() * 0.5, produceSize * (1 + ratio), 0);
         }
 
         @Override
         public CostEstimate visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
-            Statistics statistics = context.getStatistics();
-            Preconditions.checkNotNull(statistics);
-            return CostEstimate.of(statistics.getComputeSize(), 0, statistics.getComputeSize());
+            return CostEstimate.zero();
         }
 
         @Override

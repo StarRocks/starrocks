@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/repeat_node.h"
 
@@ -147,7 +147,7 @@ Status RepeatNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
     if ((*chunk) != nullptr) {
         ExecNode::eval_join_runtime_filters(chunk);
-        ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
         _num_rows_returned += (*chunk)->num_rows();
     }
     DCHECK_CHUNK(*chunk);

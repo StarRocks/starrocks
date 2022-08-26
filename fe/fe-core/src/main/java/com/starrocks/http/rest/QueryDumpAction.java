@@ -1,10 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -45,9 +46,18 @@ public class QueryDumpAction extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         ConnectContext context = ConnectContext.get();
-        String dbName = request.getSingleParameter(DB);
-        if (!Strings.isNullOrEmpty(dbName)) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        String catalogDbName = request.getSingleParameter(DB);
+
+        if (!Strings.isNullOrEmpty(catalogDbName)) {
+            String[] catalogDbNames = catalogDbName.split("\\.");
+
+            String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+            if (catalogDbNames.length == 2) {
+                catalogName = catalogDbNames[0];
+            }
+            String dbName = catalogDbNames[catalogDbNames.length - 1];
+            context.setCurrentCatalog(catalogName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
             if (db == null) {
                 response.getContent().append("Database [" + dbName + "] does not exists");
                 sendResult(request, response, HttpResponseStatus.NOT_FOUND);

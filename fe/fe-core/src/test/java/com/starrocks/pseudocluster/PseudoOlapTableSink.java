@@ -1,3 +1,4 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
 import com.starrocks.proto.PTabletWithPartition;
@@ -87,12 +88,14 @@ public class PseudoOlapTableSink {
             request.partitionIds = partitionsWithData;
             request.eos = true;
             PTabletWriterAddBatchResult result = cluster.getBackend(nodeId).tabletWriterAddChunk(request);
-            result.tabletVec.forEach(tablet -> {
-                TTabletCommitInfo commitInfo = new TTabletCommitInfo();
-                commitInfo.backendId = nodeId;
-                commitInfo.tabletId = tablet.tabletId;
-                tabletCommitInfos.add(commitInfo);
-            });
+            if (result.tabletVec != null) {
+                result.tabletVec.forEach(tablet -> {
+                    TTabletCommitInfo commitInfo = new TTabletCommitInfo();
+                    commitInfo.backendId = nodeId;
+                    commitInfo.tabletId = tablet.tabletId;
+                    tabletCommitInfos.add(commitInfo);
+                });
+            }
             if (result.status.statusCode != 0) {
                 LOG.warn("close tablet writer failed: node:{} {}", nodeId, result.status.errorMsgs.get(0));
                 return false;
@@ -110,6 +113,10 @@ public class PseudoOlapTableSink {
 
         private boolean has_intolerable_failure() {
             return errorNodes.size() >= (numReplica + 1) / 2;
+        }
+
+        String getErrorMessage() {
+            return String.format("index:%d has intolerable failure: %s numReplica:%s", indexId, errorNodes, numReplica);
         }
 
         boolean open() {
@@ -218,6 +225,17 @@ public class PseudoOlapTableSink {
             }
         }
         return true;
+    }
+
+    public String getErrorMessage() {
+        StringBuilder stringBuilder = new StringBuilder();
+        for (IndexChannel indexChannel : indexChannels) {
+            if (indexChannel.has_intolerable_failure()) {
+                stringBuilder.append(indexChannel.getErrorMessage());
+                stringBuilder.append("|");
+            }
+        }
+        return stringBuilder.toString();
     }
 
     public List<TTabletCommitInfo> getTabletCommitInfos() {

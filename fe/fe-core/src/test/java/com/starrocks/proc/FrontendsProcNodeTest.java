@@ -1,5 +1,13 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.proc;
+
+import com.starrocks.common.proc.FrontendsProcNode;
+import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.system.Frontend;
+import mockit.Expectations;
+import mockit.Mocked;
+import org.junit.Assert;
+import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -7,17 +15,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
-
-import com.starrocks.common.proc.FrontendsProcNode;
-import com.starrocks.ha.FrontendNodeType;
-import com.starrocks.system.Frontend;
-
-import org.junit.Assert;
-import org.junit.Test;
-
-
-import mockit.Expectations;
-import mockit.Mocked;
 
 public class FrontendsProcNodeTest {
 
@@ -27,25 +24,25 @@ public class FrontendsProcNodeTest {
     InetAddress addr1;
 
     private void mockAddress() {
-        new Expectations(){
+        new Expectations() {
             {
                 socketAddr1.getAddress();
                 result = addr1;
             }
         };
-        new Expectations(){
+        new Expectations() {
             {
                 socketAddr1.getPort();
                 result = 1000;
             }
         };
-        new Expectations(){
+        new Expectations() {
             {
                 addr1.getHostAddress();
                 result = "127.0.0.1";
             }
         };
-        new Expectations(){
+        new Expectations() {
             {
                 addr1.getHostName();
                 result = "sandbox";
@@ -53,39 +50,39 @@ public class FrontendsProcNodeTest {
         };
     }
 
-    @Test    
-    public void testIsJoin() throws ClassNotFoundException, 
-                                    NoSuchMethodException, 
-                                    SecurityException, 
-                                    IllegalAccessException, 
-                                    IllegalArgumentException, 
-                                    InvocationTargetException {
+    @Test
+    public void testIsJoin() throws ClassNotFoundException,
+            NoSuchMethodException,
+            SecurityException,
+            IllegalAccessException,
+            IllegalArgumentException,
+            InvocationTargetException {
         mockAddress();
         List<InetSocketAddress> list = new ArrayList<InetSocketAddress>();
         list.add(socketAddr1);
-        
+
         Class<?> clazz = Class.forName(FrontendsProcNode.class.getName());
-        Method isJoin = clazz.getDeclaredMethod("isJoin", new Class[]{List.class, Frontend.class});
+        Method isJoin = clazz.getDeclaredMethod("isJoin", List.class, Frontend.class);
         isJoin.setAccessible(true);
 
-        Frontend feCouldFoundByIP = new Frontend(FrontendNodeType.LEADER,"test","127.0.0.1",1000);
+        Frontend feCouldFoundByIP = new Frontend(FrontendNodeType.LEADER, "test", "127.0.0.1", 1000);
         boolean result1 = (boolean) isJoin.invoke(FrontendsProcNode.class, list, feCouldFoundByIP);
         Assert.assertTrue(result1);
 
-        Frontend feCouldNotFoundByIP = new Frontend(FrontendNodeType.LEADER,"test","127.0.0.2",1000);
+        Frontend feCouldNotFoundByIP = new Frontend(FrontendNodeType.LEADER, "test", "127.0.0.2", 1000);
         boolean result2 = (boolean) isJoin.invoke(FrontendsProcNode.class, list, feCouldNotFoundByIP);
         Assert.assertTrue(!result2);
 
-        Frontend feCouldFoundByHostName = new Frontend(FrontendNodeType.LEADER,"test","sandbox",1000);
+        Frontend feCouldFoundByHostName = new Frontend(FrontendNodeType.LEADER, "test", "sandbox", 1000);
         boolean result3 = (boolean) isJoin.invoke(FrontendsProcNode.class, list, feCouldFoundByHostName);
         Assert.assertTrue(result3);
 
-        Frontend feCouldNotFoundByHostName = new Frontend(FrontendNodeType.LEADER,"test","sandbox1",1000);
+        Frontend feCouldNotFoundByHostName = new Frontend(FrontendNodeType.LEADER, "test", "sandbox1", 1000);
         boolean result4 = (boolean) isJoin.invoke(FrontendsProcNode.class, list, feCouldNotFoundByHostName);
         Assert.assertTrue(!result4);
     }
 
-    @Test    
+    @Test
     public void testIPTitle() {
         Assert.assertTrue(FrontendsProcNode.TITLE_NAMES.get(1).equals("IP"));
     }

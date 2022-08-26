@@ -82,7 +82,7 @@ public abstract class BulkLoadJob extends LoadJob {
 
     // sessionVariable's name -> sessionVariable's value
     // we persist these sessionVariables due to the session is not available when replaying the job.
-    private Map<String, String> sessionVariables = Maps.newHashMap();
+    protected Map<String, String> sessionVariables = Maps.newHashMap();
 
     // only for log replay
     public BulkLoadJob() {
@@ -97,12 +97,13 @@ public abstract class BulkLoadJob extends LoadJob {
         if (ConnectContext.get() != null) {
             SessionVariable var = ConnectContext.get().getSessionVariable();
             sessionVariables.put(SessionVariable.SQL_MODE, Long.toString(var.getSqlMode()));
+            sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE, var.getloadTransmissionCompressionType());
         } else {
             sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
         }
     }
 
-    public static BulkLoadJob fromLoadStmt(LoadStmt stmt) throws DdlException {
+    public static BulkLoadJob fromLoadStmt(LoadStmt stmt, ConnectContext context) throws DdlException {
         // get db id
         String dbName = stmt.getLabel().getDbName();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -116,7 +117,7 @@ public abstract class BulkLoadJob extends LoadJob {
             switch (stmt.getEtlJobType()) {
                 case BROKER:
                     bulkLoadJob = new BrokerLoadJob(db.getId(), stmt.getLabel().getLabelName(),
-                            stmt.getBrokerDesc(), stmt.getOrigStmt());
+                            stmt.getBrokerDesc(), stmt.getOrigStmt(), context);
                     break;
                 case SPARK:
                     bulkLoadJob = new SparkLoadJob(db.getId(), stmt.getLabel().getLabelName(),

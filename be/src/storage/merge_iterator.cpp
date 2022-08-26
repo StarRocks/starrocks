@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/merge_iterator.h"
 
@@ -153,7 +153,7 @@ inline Status MergeIterator::init() {
     DCHECK(_chunk_size > 0);
     DCHECK_EQ(_children.size(), _chunk_pool.size());
     for (size_t i = 0; i < _children.size(); i++) {
-        _chunk_pool[i] = ChunkHelper::new_chunk(encoded_schema(), _chunk_size);
+        _chunk_pool[i] = ChunkHelper::new_chunk(output_schema(), _chunk_size);
         RETURN_IF_ERROR(fill(i));
     }
     _inited = true;

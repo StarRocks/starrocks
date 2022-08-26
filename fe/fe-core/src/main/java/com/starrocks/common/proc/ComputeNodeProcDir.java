@@ -1,11 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.common.proc;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.alter.DecommissionBackendJob;
+import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
@@ -88,11 +88,11 @@ public class ComputeNodeProcDir implements ProcDirInterface {
             computeNodeInfo.add(TimeUtils.longToTimeString(computeNode.getLastUpdateMs()));
             computeNodeInfo.add(String.valueOf(computeNode.isAlive()));
             if (computeNode.isDecommissioned()
-                    && computeNode.getDecommissionType() == DecommissionBackendJob.DecommissionType.ClusterDecommission) {
+                    && computeNode.getDecommissionType() == DecommissionType.ClusterDecommission) {
                 computeNodeInfo.add("false");
                 computeNodeInfo.add("true");
             } else if (computeNode.isDecommissioned()
-                    && computeNode.getDecommissionType() == DecommissionBackendJob.DecommissionType.SystemDecommission) {
+                    && computeNode.getDecommissionType() == DecommissionType.SystemDecommission) {
                 computeNodeInfo.add("true");
                 computeNodeInfo.add("false");
             } else {

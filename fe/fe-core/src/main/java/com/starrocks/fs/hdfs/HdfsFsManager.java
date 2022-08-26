@@ -33,12 +33,14 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
@@ -119,6 +121,17 @@ class HDFSConfigurationWrap extends HdfsConfiguration {
     }
 
     public void convertHDFSConfToProperties(THdfsProperties tProperties) {
+        Properties props =  this.getProps();
+        Enumeration<String> enums = (Enumeration<String>) props.propertyNames();
+        while (enums.hasMoreElements()) {
+            String key = enums.nextElement();
+            String value = props.getProperty(key);
+            switch (key) {
+                case HdfsFsManager.FS_HDFS_IMPL_DISABLE_CACHE:
+                    tProperties.setDisable_cache(Boolean.parseBoolean(value));
+                    break;
+            }
+        }
         return;
     }
 }
@@ -141,6 +154,7 @@ public class HdfsFsManager {
     // arguments for ha hdfs
     private static final String DFS_NAMESERVICES_KEY = "dfs.nameservices";
     private static final String FS_DEFAULTFS_KEY = "fs.defaultFS";
+    public static final String FS_HDFS_IMPL_DISABLE_CACHE = "fs.hdfs.impl.disable.cache";
     // If this property is not set to "true", FileSystem instance will be returned
     // from cache
     // which is not thread-safe and may cause 'Filesystem closed' exception when it
@@ -287,6 +301,12 @@ public class HdfsFsManager {
         String dfsNameServices = loadProperties.getOrDefault(DFS_NAMESERVICES_KEY, "");
         String authentication = loadProperties.getOrDefault(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
                 "");
+        String disableCache = loadProperties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
+        String disableCacheLowerCase = disableCache.toLowerCase();
+        if (!(disableCacheLowerCase.equals("true") || disableCacheLowerCase.equals("false"))) {
+            LOG.warn("invalid disable cache: " + disableCache);
+            throw new UserException("invalid disable cache: " + disableCache);
+        }
         if (!dfsNameServices.equals("")) {
             LOG.warn("Invalid load_properties, namenode HA should be set in hdfs/core-site.xml for" +
                     "broker load without broke. For broker load with broker, you can set namenode HA in the load_properties");
@@ -322,16 +342,39 @@ public class HdfsFsManager {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
                 Configuration conf = new HDFSConfigurationWrap();
-                // TODO get this param from loadProperties
-                FileSystem dfsFileSystem = FileSystem.get(pathUri.getUri(), conf);
+                conf.set(FS_HDFS_IMPL_DISABLE_CACHE, disableCache);
+                UserGroupInformation ugi = null;
+                if (!Strings.isNullOrEmpty(username) && conf.get("hadoop.security.authentication").equals("simple")) {
+                    ugi = UserGroupInformation.createRemoteUser(username);
+                }
+                FileSystem dfsFileSystem = null;
+                if (ugi != null) {
+                    dfsFileSystem = ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
+                        @Override
+                        public FileSystem run() throws Exception {
+                            return FileSystem.get(pathUri.getUri(), conf);
+                        }
+                    });
+                } else {
+                    dfsFileSystem = FileSystem.get(pathUri.getUri(), conf);
+                }
                 fileSystem.setFileSystem(dfsFileSystem);
                 fileSystem.setConfiguration(conf);
+                if (ugi != null) {
+                    fileSystem.setUserName(username);
+                }
                 if (tProperties != null) {
                     convertHDFSConfToProperties(conf, tProperties);
+                    if (ugi != null) {
+                        tProperties.setHdfs_username(username);
+                    }
                 }
             } else {
                 if (tProperties != null) {
                     convertHDFSConfToProperties(fileSystem.getConfiguration(), tProperties);
+                    if (fileSystem.getUserName() != null) {
+                        tProperties.setHdfs_username(fileSystem.getUserName());
+                    }
                 }
             }
             return fileSystem;
@@ -797,7 +840,6 @@ public class HdfsFsManager {
             throw new UserException("file not found: " + e.getMessage());
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
-            fileSystem.closeFileSystem();
             throw new UserException("unknown error when get file status: " + e.getMessage());
         }
         return resultFileStatus;
@@ -811,7 +853,6 @@ public class HdfsFsManager {
             fileSystem.getDFSFileSystem().delete(filePath, true);
         } catch (IOException e) {
             LOG.error("errors while delete path " + path);
-            fileSystem.closeFileSystem();
             throw new UserException("delete path " + path + "error");
         }
     }
@@ -829,11 +870,10 @@ public class HdfsFsManager {
         try {
             boolean isRenameSuccess = fileSystem.getDFSFileSystem().rename(srcfilePath, destfilePath);
             if (!isRenameSuccess) {
-                throw new UserException("failed to rename path from " + srcPath + "to " + destPath);
+                throw new UserException("failed to rename path from " + srcPath + " to " + destPath);
             }
         } catch (IOException e) {
             LOG.error("errors while rename path from " + srcPath + " to " + destPath);
-            fileSystem.closeFileSystem();
             throw new UserException("errors while rename " + srcPath + "to " +  destPath);
         }
     }
@@ -847,8 +887,7 @@ public class HdfsFsManager {
             return isPathExist;
         } catch (IOException e) {
             LOG.error("errors while check path exist: " + path);
-            fileSystem.closeFileSystem();
-            throw new UserException("errors while check if path" + path + "exist");
+            throw new UserException("errors while check if path " + path + " exist");
         }
     }
 
@@ -865,7 +904,6 @@ public class HdfsFsManager {
             return fd;
         } catch (IOException e) {
             LOG.error("errors while open path", e);
-            fileSystem.closeFileSystem();
             throw new UserException("could not open file " + path);
         }
     }
@@ -916,7 +954,7 @@ public class HdfsFsManager {
                 }
             } catch (IOException e) {
                 LOG.error("errors while read data from stream", e);
-                throw new UserException("errors while write data to output stream");
+                throw new UserException("errors while read data from stream");
             }
         }
     }
@@ -952,7 +990,6 @@ public class HdfsFsManager {
             return fd;
         } catch (IOException e) {
             LOG.error("errors while open path", e);
-            fileSystem.closeFileSystem();
             throw new UserException("could not open file " + path);
         }
     }

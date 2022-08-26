@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.common.util;
 
 import com.starrocks.common.AnalysisException;
@@ -16,6 +16,7 @@ public class DateUtils {
     public static final String DATEKEY_FORMAT = "yyyyMMdd";
     public static final String DATE_FORMAT = "yyyy-MM-dd";
     public static final String DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
+    public static final String SECOND_FORMAT = "yyyyMMddHHmmss";
     public static final String MINUTE_FORMAT = "yyyyMMddHHmm";
     public static final String HOUR_FORMAT = "yyyyMMddHH";
     public static final String MONTH_FORMAT = "yyyyMM";
@@ -25,11 +26,21 @@ public class DateUtils {
     public static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern(DATE_FORMAT);
     public static final DateTimeFormatter DATEKEY_FORMATTER = DateTimeFormatter.ofPattern(DATEKEY_FORMAT);
     public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern(DATE_TIME_FORMAT);
+    public static final DateTimeFormatter SECOND_FORMATTER = DateTimeFormatter.ofPattern(SECOND_FORMAT);
     public static final DateTimeFormatter MINUTE_FORMATTER = DateTimeFormatter.ofPattern(MINUTE_FORMAT);
     public static final DateTimeFormatter HOUR_FORMATTER = DateTimeFormatter.ofPattern(HOUR_FORMAT);
     public static final DateTimeFormatter YEAR_FORMATTER = DateTimeFormatter.ofPattern(YEAR_FORMAT);
     public static final DateTimeFormatter QUARTER_FORMATTER = DateTimeFormatter.ofPattern(QUARTER_FORMAT);
     public static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern(MONTH_FORMAT);
+
+    public static final DateTimeFormatter DATE_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d").toFormatter();
+    public static final DateTimeFormatter DATE_TIME_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s").toFormatter();
+    public static final DateTimeFormatter DATEKEY_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y%m%d").toFormatter();
+    public static final DateTimeFormatter DATETIMEKEY_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y%m%d%H%i%s").toFormatter();
 
     public static DateTimeFormatter probeFormat(String dateTimeStr) throws AnalysisException {
         if (dateTimeStr.length() == 8) {

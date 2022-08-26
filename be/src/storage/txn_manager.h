@@ -67,7 +67,7 @@ struct TabletTxnInfo {
 // txn manager is used to manage mapping between tablet and txns
 class TxnManager {
 public:
-    TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size);
+    TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, int32_t store_num);
 
     ~TxnManager() = default;
 
@@ -84,7 +84,7 @@ public:
     Status persist_tablet_related_txns(const std::vector<TabletSharedPtr>& tablets);
 
     // persist metadata of affected_dirs and make it crash-safe
-    static void flush_dirs(std::unordered_set<DataDir*>& affected_dirs);
+    void flush_dirs(std::unordered_set<DataDir*>& affected_dirs);
 
     // delete the txn from manager if it is not committed(not have a valid rowset)
     Status rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
@@ -179,6 +179,9 @@ private:
     std::unique_ptr<txn_partition_map_t[]> _txn_partition_maps;
 
     std::unique_ptr<std::shared_mutex[]> _txn_map_locks;
+
+    // Dynamic thread pool used to concurrently flush WAL to disk
+    std::unique_ptr<ThreadPool> _flush_thread_pool;
 
     TxnManager(const TxnManager&) = delete;
     const TxnManager& operator=(const TxnManager&) = delete;

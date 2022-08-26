@@ -37,6 +37,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.external.HiveMetaStoreTableUtils;
@@ -67,7 +68,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.util.Util.validateMetastoreUris;
-import static com.starrocks.external.HiveMetaStoreTableUtils.convertColumnType;
+import static com.starrocks.external.HiveMetaStoreTableUtils.convertHiveTableColumnType;
 import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
 
 /**
@@ -133,11 +134,12 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return String.format("%s.%s", hiveDbName, hiveTableName);
     }
 
+    @Override
     public String getResourceName() {
         return resourceName;
     }
 
-    public String getHiveDb() {
+    public String getDbName() {
         return hiveDbName;
     }
 
@@ -250,7 +252,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                     needRefreshColumn = true;
                     break;
                 }
-                Type type = convertColumnType(fieldSchema.getType());
+                Type type = convertHiveTableColumnType(fieldSchema.getType());
                 if (!type.equals(column.getType())) {
                     needRefreshColumn = true;
                     break;
@@ -269,7 +271,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
         // TODO: Column type conversion should not throw an exception, use invalidate type instead.
         for (FieldSchema fieldSchema : allHiveColumns) {
-            Type srType = convertColumnType(fieldSchema.getType());
+            Type srType = convertHiveTableColumnType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
             fullSchemaTemp.add(column);
             nameToColumnTemp.put(column.getName(), column);
@@ -393,7 +395,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             }
             // Only internal catalog like hive external table need to validate column type
             if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName) &&
-                    !HiveMetaStoreTableUtils.validateColumnType(hiveColumn.getType(), column.getType())) {
+                    !HiveMetaStoreTableUtils.validateColumnType(hiveColumn.getType(), column.getType()) &&
+                    !FeConstants.runningUnitTest) {
                 throw new DdlException("can not convert hive column type [" + hiveColumn.getType() + "] to " +
                         "starrocks type [" + column.getPrimitiveType() + "]");
             }

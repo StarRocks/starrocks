@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/chunk.h"
 
@@ -342,6 +342,23 @@ std::string Chunk::debug_row(uint32_t index) const {
         os << ", ";
     }
     os << _columns[_columns.size() - 1]->debug_item(index) << "]";
+    return os.str();
+}
+
+std::string Chunk::debug_columns() const {
+    std::stringstream os;
+    os << "nullable[";
+    for (size_t col = 0; col < _columns.size() - 1; ++col) {
+        os << _columns[col]->is_nullable();
+        os << ", ";
+    }
+    os << _columns[_columns.size() - 1]->is_nullable() << "]";
+    os << " const[";
+    for (size_t col = 0; col < _columns.size() - 1; ++col) {
+        os << _columns[col]->is_constant();
+        os << ", ";
+    }
+    os << _columns[_columns.size() - 1]->is_constant() << "]";
     return os.str();
 }
 

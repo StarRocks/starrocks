@@ -50,7 +50,6 @@ extern const char* const k_segment_magic;
 extern const uint32_t k_segment_magic_length;
 
 struct SegmentWriterOptions {
-    uint32_t storage_format_version = 1;
     uint32_t num_rows_per_block = 1024;
     vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
     std::vector<int32_t> referenced_column_ids;
@@ -109,7 +108,7 @@ public:
     // finalize columns data and index
     Status finalize_columns(uint64_t* index_size);
     // finalize footer
-    Status finalize_footer(uint64_t* segment_file_size);
+    Status finalize_footer(uint64_t* segment_file_size, uint64_t* footer_position = nullptr);
 
     uint32_t segment_id() const { return _segment_id; }
 

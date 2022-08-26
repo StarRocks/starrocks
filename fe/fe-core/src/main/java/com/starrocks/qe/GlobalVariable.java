@@ -22,6 +22,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.TimeUtils;
 
@@ -49,7 +50,7 @@ public final class GlobalVariable {
     public static String versionComment = "StarRocks version " + Version.STARROCKS_VERSION;
 
     @VariableMgr.VarAttr(name = VERSION, flag = VariableMgr.READ_ONLY)
-    public static String version = "5.1.0";
+    public static String version = Config.mysql_server_version;
 
     // 0: table names are stored as specified and comparisons are case sensitive.
     // 1: table names are stored in lowercase on disk and comparisons are not case sensitive.

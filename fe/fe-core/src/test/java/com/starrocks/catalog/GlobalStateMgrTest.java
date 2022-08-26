@@ -27,13 +27,7 @@ import com.sleepycat.je.rep.MemberNotFoundException;
 import com.sleepycat.je.rep.ReplicaStateException;
 import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
-import com.starrocks.alter.AlterJob;
-import com.starrocks.alter.AlterJob.JobType;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
-import com.starrocks.alter.SchemaChangeJob;
-import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.cluster.Cluster;
-
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -46,17 +40,12 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
-
-
-
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-
 import org.junit.Assert;
 import org.junit.Before;
-
 import org.junit.Test;
 
 import java.io.BufferedInputStream;
@@ -70,9 +59,7 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -199,7 +186,7 @@ public class GlobalStateMgrTest {
         frontends.put("testName", fe1);
         field1.set(nodeMgr, frontends);
 
-        Pair<String, Integer> selfNode = new Pair<String,Integer>("test-address", 1000);
+        Pair<String, Integer> selfNode = new Pair<>("test-address", 1000);
         Field field2 = nodeMgr.getClass().getDeclaredField("selfNode");
         field2.setAccessible(true);
         field2.set(nodeMgr, selfNode);
@@ -227,7 +214,7 @@ public class GlobalStateMgrTest {
     @Test
     public void testGetFeByHost() throws Exception {
         mockNet();
-        new Expectations(){
+        new Expectations() {
             {
                 addr1.getHostAddress();
                 result = "127.0.0.1";
@@ -266,7 +253,7 @@ public class GlobalStateMgrTest {
     @Test
     public void testUpdateFrontend() throws Exception {
         
-        new Expectations(){
+        new Expectations() {
             {
                 env.getReplicationGroupAdmin();
                 result = replicationGroupAdmin;
@@ -312,5 +299,11 @@ public class GlobalStateMgrTest {
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test-address", "sandbox-fqdn");
         // this case will occur [can not modify current master node] exception
         globalStateMgr.modifyFrontendHost(clause);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testAddRepeatedFe() throws Exception {
+        GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
+        globalStateMgr.addFrontend(FrontendNodeType.FOLLOWER, "127.0.0.1", 1000);
     }
 }

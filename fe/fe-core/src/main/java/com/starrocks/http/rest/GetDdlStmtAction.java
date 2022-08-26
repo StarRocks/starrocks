@@ -37,7 +37,6 @@ import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.codehaus.jackson.map.ObjectMapper;
 
 import java.util.List;
 import java.util.Map;
@@ -102,17 +101,6 @@ public class GetDdlStmtAction extends RestBaseAction {
         results.put("ROLLUP", createRollupStmt);
 
         // to json response
-        String result = "";
-        ObjectMapper mapper = new ObjectMapper();
-        try {
-            result = mapper.writeValueAsString(results);
-        } catch (Exception e) {
-            //  do nothing
-        }
-
-        // send result
-        response.setContentType("application/json");
-        response.getContent().append(result);
-        sendResult(request, response);
+        sendResultByJson(request, response, results);
     }
 }
