@@ -34,6 +34,7 @@ import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TBackend;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
@@ -111,7 +112,7 @@ public class AgentTaskTest {
                 version, KeysType.AGG_KEYS,
                 storageType, TStorageMedium.SSD,
                 columns, null, 0, latch, null,
-                false, false, TTabletType.TABLET_TYPE_DISK);
+                false, false, TTabletType.TABLET_TYPE_DISK, TCompressionType.LZ4_FRAME);
 
         // drop
         dropTask = new DropReplicaTask(backendId1, tabletId1, schemaHash1, false);
