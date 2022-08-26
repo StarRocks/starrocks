@@ -293,11 +293,9 @@ Status ColumnReader::_load_ordinal_index() {
     auto meta = _ordinal_index_meta.get();
     auto use_page_cache = !config::disable_storage_page_cache;
     auto kept_in_memory = keep_in_memory();
-    int64_t unloaded_mem_usage = _ordinal_index->mem_usage();
-    ASSIGN_OR_RETURN(auto first_load,
-                     _ordinal_index->load(fs, file_name(), *meta, num_rows(), use_page_cache, kept_in_memory));
+    ASSIGN_OR_RETURN(auto first_load, _ordinal_index->load(fs, file_name(), *meta, num_rows(), use_page_cache,
+                                                           kept_in_memory, mem_tracker()));
     if (UNLIKELY(first_load)) {
-        mem_tracker()->consume(_ordinal_index->mem_usage() - unloaded_mem_usage);
         mem_tracker()->release(_ordinal_index_meta->SpaceUsedLong());
         _ordinal_index_meta.reset();
     }
@@ -311,10 +309,9 @@ Status ColumnReader::_load_zonemap_index() {
     auto meta = _zonemap_index_meta.get();
     auto use_page_cache = !config::disable_storage_page_cache;
     auto kept_in_memory = keep_in_memory();
-    int64_t unloaded_mem_usage = _zonemap_index->mem_usage();
-    ASSIGN_OR_RETURN(auto first_load, _zonemap_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory));
+    ASSIGN_OR_RETURN(auto first_load,
+                     _zonemap_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory, mem_tracker()));
     if (UNLIKELY(first_load)) {
-        mem_tracker()->consume(_zonemap_index->mem_usage() - unloaded_mem_usage);
         mem_tracker()->release(_zonemap_index_meta->SpaceUsedLong());
         _zonemap_index_meta.reset();
     }
@@ -328,10 +325,9 @@ Status ColumnReader::_load_bitmap_index() {
     auto meta = _bitmap_index_meta.get();
     auto use_page_cache = !config::disable_storage_page_cache;
     auto kept_in_memory = keep_in_memory();
-    int64_t unloaded_mem_usage = _bitmap_index->mem_usage();
-    ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory));
+    ASSIGN_OR_RETURN(auto first_load,
+                     _bitmap_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory, mem_tracker()));
     if (UNLIKELY(first_load)) {
-        mem_tracker()->consume(_bitmap_index->mem_usage() - unloaded_mem_usage);
         mem_tracker()->release(_bitmap_index_meta->SpaceUsedLong());
         _bitmap_index_meta.reset();
     }
@@ -345,11 +341,9 @@ Status ColumnReader::_load_bloom_filter_index() {
     auto meta = _bloom_filter_index_meta.get();
     auto use_page_cache = !config::disable_storage_page_cache;
     auto kept_in_memory = keep_in_memory();
-    int64_t unloaded_mem_usage = _bloom_filter_index->mem_usage();
     ASSIGN_OR_RETURN(auto first_load,
-                     _bloom_filter_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory));
+                     _bloom_filter_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory, mem_tracker()));
     if (UNLIKELY(first_load)) {
-        mem_tracker()->consume(_bloom_filter_index->mem_usage() - unloaded_mem_usage);
         mem_tracker()->release(_bloom_filter_index_meta->SpaceUsedLong());
         _bloom_filter_index_meta.reset();
     }
