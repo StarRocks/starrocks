@@ -31,7 +31,6 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -74,9 +73,9 @@ public class SubqueryTransformer {
         ScalarOperator scalarPredicate =
                 SqlToScalarOperatorTranslator.translate(predicate, subOpt.getExpressionMapping(), correlation);
 
-        ArrayList<InPredicate> inPredicates = new ArrayList<>();
+        List<InPredicate> inPredicates = Lists.newArrayList();
         predicate.collect(InPredicate.class, inPredicates);
-        ArrayList<ExistsPredicate> existsSubquerys = new ArrayList<>();
+        List<ExistsPredicate> existsSubquerys = Lists.newArrayList();
         predicate.collect(ExistsPredicate.class, existsSubquerys);
 
         List<ScalarOperator> s = Utils.extractConjuncts(scalarPredicate);
@@ -102,6 +101,39 @@ public class SubqueryTransformer {
         scalarPredicate = Utils.compoundAnd(s);
 
         return scalarPredicate;
+    }
+
+    public Expr rewriteJoinOnPredicate(Expr predicate) {
+        List<Expr> conjuncts = Expr.extractConjuncts(predicate);
+        List<Expr> newConjuncts = Lists.newArrayListWithCapacity(conjuncts.size());
+        for (Expr conjunct : conjuncts) {
+            List<InPredicate> inPredicates = Lists.newArrayList();
+            conjunct.collect(InPredicate.class, inPredicates);
+            List<ExistsPredicate> existsSubquerys = Lists.newArrayList();
+            conjunct.collect(ExistsPredicate.class, existsSubquerys);
+
+            boolean skip = false;
+            for (InPredicate e : inPredicates) {
+                if (!(e.getChild(1) instanceof Subquery)) {
+                    continue;
+                }
+
+                if (((Subquery) e.getChild(1)).isUseSemiAnti()) {
+                    skip = true;
+                }
+            }
+            for (ExistsPredicate e : existsSubquerys) {
+                Preconditions.checkState(e.getChild(0) instanceof Subquery);
+                if (((Subquery) e.getChild(0)).isUseSemiAnti()) {
+                    skip = true;
+                }
+            }
+            if (!skip) {
+                newConjuncts.add(conjunct);
+            }
+        }
+
+        return Expr.compoundAnd(newConjuncts);
     }
 
     private static class SubqueryContext {

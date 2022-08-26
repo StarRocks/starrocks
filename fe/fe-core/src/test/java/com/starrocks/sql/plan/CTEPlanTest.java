@@ -350,7 +350,9 @@ public class CTEPlanTest extends PlanTestBase {
                 "FROM (SELECT t1.v4 FROM t1) t1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  33:Project\n" +
-                "  |  <slot 12> : CAST((7: expr) AND (CASE WHEN (16: countRows IS NULL) OR (16: countRows = 0) THEN FALSE WHEN CAST(CAST(1: v4 AS FLOAT) AS DOUBLE) IS NULL THEN NULL WHEN 14: cast IS NOT NULL THEN TRUE WHEN 17: countNotNulls < 16: countRows THEN NULL ELSE FALSE END) AS INT)\n");
+                "  |  <slot 12> : CAST((7: expr) AND (CASE WHEN (16: countRows IS NULL) OR (16: countRows = 0) " +
+                "THEN FALSE WHEN CAST(CAST(1: v4 AS FLOAT) AS DOUBLE) IS NULL THEN NULL WHEN 14: cast IS NOT NULL " +
+                "THEN TRUE WHEN 17: countNotNulls < 16: countRows THEN NULL ELSE FALSE END) AS INT)\n");
     }
 
     @Test
@@ -359,7 +361,9 @@ public class CTEPlanTest extends PlanTestBase {
                 "FROM t1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "16:Project\n" +
-                "  |  <slot 8> : CASE WHEN (11: countRows IS NULL) OR (11: countRows = 0) THEN FALSE WHEN 1: v4 IS NULL THEN NULL WHEN 9: v1 IS NOT NULL THEN TRUE WHEN 12: countNotNulls < 11: countRows THEN NULL ELSE FALSE END IS NULL");
+                "  |  <slot 8> : CASE WHEN (11: countRows IS NULL) OR (11: countRows = 0) " +
+                "THEN FALSE WHEN 1: v4 IS NULL THEN NULL WHEN 9: v1 IS NOT NULL " +
+                "THEN TRUE WHEN 12: countNotNulls < 11: countRows THEN NULL ELSE FALSE END IS NULL");
     }
 
     @Test
@@ -551,5 +555,81 @@ public class CTEPlanTest extends PlanTestBase {
                 "    RANDOM\n" +
                 "\n" +
                 "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testCTELimitNumInline() throws Exception {
+        connectContext.getSessionVariable().setCboCTEMaxLimit(4);
+        defaultCTEReuse();
+        String sql = "with x1 as (select * from t0),\n" +
+                "     x2 as (select * from t0),\n" +
+                "     x3 as (select * from t0),\n" +
+                "     x4 as (select * from t0),\n" +
+                "     x5 as (select * from t0)\n" +
+                "select * from x1 union all\n" +
+                "select * from x1 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x5 union all\n" +
+                "select * from x5;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboCTEMaxLimit(10);
+        System.out.println(plan);
+        Assert.assertFalse(plan.contains("MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testCTELimitNumReuse() throws Exception {
+        connectContext.getSessionVariable().setCboCTEMaxLimit(4);
+        connectContext.getSessionVariable().setCboCTERuseRatio(100000);
+        String sql = "with x1 as (select * from t0),\n" +
+                "     x2 as (select * from t0),\n" +
+                "     x3 as (select * from t0),\n" +
+                "     x4 as (select * from t0),\n" +
+                "     x5 as (select * from t0),\n" +
+                "     x6 as (select * from t0)\n" +
+                "select * from x1 union all\n" +
+                "select * from x1 union all\n" +
+                "select * from x1 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x5 union all\n" +
+                "select * from x5 union all\n" +
+                "select * from x5 union all\n" +
+                "select * from x6 union all\n" +
+                "select * from x6;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboCTEMaxLimit(10);
+        Assert.assertEquals(5, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testAllCTEConsumePruned() throws Exception {
+        String sql = "select * from t0 where (abs(2) = 1 or v1 in (select v4 from t1)) and v1 = 2 and v1 = 5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:EMPTYSET\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:EMPTYSET");
     }
 }

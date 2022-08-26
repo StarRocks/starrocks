@@ -29,7 +29,7 @@ public class HudiScanNode extends ScanNode {
         this.hudiTable = (HudiTable) desc.getTable();
     }
 
-    public HDFSScanNodePredicates getPredictsExpr() {
+    public HDFSScanNodePredicates getScanNodePredicates() {
         return scanNodePredicates;
     }
 

@@ -11,6 +11,7 @@ import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsRequest;
@@ -35,7 +36,6 @@ import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.PBackendServiceAsync;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.BackendService;
@@ -45,6 +45,7 @@ import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TAgentPublishRequest;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TAgentTaskRequest;
+import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TBackendInfo;
 import com.starrocks.thrift.TCancelPlanFragmentParams;
@@ -103,6 +104,8 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.transport.TTransportException;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -110,19 +113,30 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 public class PseudoBackend {
     private static final Logger LOG = LogManager.getLogger(PseudoBackend.class);
-    private static final int REPORT_INTERVAL_SEC = 5;
     public static final long PATH_HASH = 123456;
+
+    public static volatile long reportIntervalMs = 5000L;
+
+    public static volatile long tabletCheckIntervalMs = 5000L;
 
     private final PseudoCluster cluster;
     private final String runPath;
@@ -140,9 +154,11 @@ public class PseudoBackend {
     private final BlockingQueue<TAgentTaskRequest> taskQueue = Queues.newLinkedBlockingQueue();
     private final Map<TTaskType, Set<Long>> taskSignatures = new EnumMap(TTaskType.class);
     private volatile boolean stopped = false;
-    private Thread reportTabletsWorker;
-    private Thread reportDisksWorker;
-    private Thread reportTasksWorker;
+
+    private volatile boolean shutdown = false;
+
+    private TreeMap<Long, Runnable> maintenanceTasks = new TreeMap<>(Long::compare);
+    private Thread maintenanceWorkerThread;
 
     private volatile float writeFailureRate = 0.0f;
     private volatile float publishFailureRate = 0.0f;
@@ -158,12 +174,124 @@ public class PseudoBackend {
 
     private static ThreadLocal<PseudoBackend> currentBackend = new ThreadLocal<>();
 
+    static class QueryProgress {
+        String queryId;
+        ReentrantLock lock = new ReentrantLock();
+        Condition fragmentComplete = lock.newCondition();
+        int waitFragmentCount = 0;
+
+        QueryProgress(String id) {
+            this.queryId = id;
+        }
+
+        void addFragment(int count) {
+            lock.lock();
+            try {
+                waitFragmentCount += count;
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        void completeFragment(int count) {
+            lock.lock();
+            try {
+                waitFragmentCount -= count;
+                if (waitFragmentCount == 0) {
+                    fragmentComplete.signalAll();
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        void waitComplete() {
+            lock.lock();
+            try {
+                while (waitFragmentCount > 0) {
+                    try {
+                        fragmentComplete.await();
+                    } catch (InterruptedException e) {
+                        LOG.error("waitComplete interrupted", e);
+                    }
+                }
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        Future<PFetchDataResult> getFetchDataResult() {
+            return CompletableFuture.supplyAsync(() -> {
+                try {
+                    waitComplete();
+                } catch (Exception e) {
+                    LOG.error("getFetchDataResult error", e);
+                }
+                PFetchDataResult result = new PFetchDataResult();
+                StatusPB pStatus = new StatusPB();
+                pStatus.statusCode = 0;
+                PQueryStatistics pQueryStatistics = new PQueryStatistics();
+                pQueryStatistics.scanRows = 0L;
+                pQueryStatistics.scanBytes = 0L;
+                pQueryStatistics.cpuCostNs = 0L;
+                pQueryStatistics.memCostBytes = 0L;
+                result.status = pStatus;
+                result.packetSeq = 0L;
+                result.queryStatistics = pQueryStatistics;
+                result.eos = true;
+                return result;
+            });
+        }
+    }
+
+    // Those 2 maps will grow as queries are executed until test is finished(process exited)
+    private static Map<String, QueryProgress> queryProgresses = new ConcurrentHashMap<>();
+    private static Map<String, String> resultSinkInstanceToQueryId = new ConcurrentHashMap<>();
+
     public static PseudoBackend getCurrentBackend() {
         return currentBackend.get();
     }
 
     String genRowsetId() {
         return String.format("rowset-%d-%d", be.getId(), nextRowsetId.incrementAndGet());
+    }
+
+    private void maintenanceWorker() {
+        currentBackend.set(PseudoBackend.this);
+        while (!stopped) {
+            try {
+                Runnable task = null;
+                synchronized (maintenanceTasks) {
+                    if (!maintenanceTasks.isEmpty()) {
+                        long ts = maintenanceTasks.firstKey();
+                        long now = System.nanoTime();
+                        if (ts <= now) {
+                            task = maintenanceTasks.pollFirstEntry().getValue();
+                        }
+                    }
+                }
+                if (task != null) {
+                    task.run();
+                } else {
+                    Thread.sleep(500);
+                }
+            } catch (Throwable e) {
+                LOG.error("Error in maintenance worker be:" + getId(), e);
+            }
+        }
+        LOG.info("Maintenance worker stopped be:" + getId());
+    }
+
+    private void addMaintenanceTask(long ts, Runnable task) {
+        synchronized (maintenanceTasks) {
+            maintenanceTasks.put(ts, task);
+        }
+    }
+
+    private long nextScheduleTime(long intervalMs) {
+        // add -500 ~ 500 ms jitter
+        long randomMs = (random.nextInt(11) - 5) * 100;
+        return System.nanoTime() + intervalMs * 1000000 + randomMs;
     }
 
     public PseudoBackend(PseudoCluster cluster, String runPath, long backendId, String host, int brpcPort, int heartBeatPort,
@@ -197,95 +325,29 @@ public class PseudoBackend {
         be.setBePort(beThriftPort);
         be.setBrpcPort(brpcPort);
         be.setHttpPort(httpPort);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
         this.heatBeatClient = new HeartBeatClient();
         this.backendClient = new BeThriftClient();
         this.pBackendService = new PseudoPBackendService();
 
-        reportTabletsWorker = new Thread(() -> {
-            currentBackend.set(PseudoBackend.this);
-            while (!stopped) {
-                try {
-                    Random r = new Random();
-                    int wait = REPORT_INTERVAL_SEC + r.nextInt(7) - 3;
-                    for (int i = 0; i < wait; i++) {
-                        Thread.sleep(1000);
-                        if (stopped) {
-                            break;
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    LOG.error("reportWorker interrupted", e);
-                }
-                if (stopped) {
-                    break;
-                }
-                try {
-                    reportTablets();
-                } catch (Exception e) {
-                    LOG.error("reportWorker error", e);
-                }
-            }
-        }, "reportTablets-" + be.getId());
-        reportTabletsWorker.start();
+        maintenanceWorkerThread = new Thread(() -> maintenanceWorker(), "be-" + getId());
+        maintenanceWorkerThread.start();
 
-        reportDisksWorker = new Thread(() -> {
-            currentBackend.set(PseudoBackend.this);
-            while (!stopped) {
-                try {
-                    Random r = new Random();
-                    int wait = REPORT_INTERVAL_SEC + r.nextInt(7) - 3;
-                    for (int i = 0; i < wait; i++) {
-                        Thread.sleep(1000);
-                        if (stopped) {
-                            break;
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    LOG.error("reportWorker interrupted", e);
-                }
-                if (stopped) {
-                    break;
-                }
-                try {
-                    reportDisks();
-                } catch (Exception e) {
-                    LOG.error("reportWorker error", e);
-                }
-            }
-        }, "reportDisks-" + be.getId());
-        reportDisksWorker.start();
+        addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportTablets);
+        addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportDisks);
+        addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportTasks);
+        addMaintenanceTask(nextScheduleTime(tabletCheckIntervalMs), this::tabletMaintenance);
+    }
 
-        reportTasksWorker = new Thread(() -> {
-            currentBackend.set(PseudoBackend.this);
-            while (!stopped) {
-                try {
-                    Random r = new Random();
-                    int wait = REPORT_INTERVAL_SEC + r.nextInt(7) - 3;
-                    for (int i = 0; i < wait; i++) {
-                        Thread.sleep(1000);
-                        if (stopped) {
-                            break;
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    LOG.error("reportWorker interrupted", e);
-                }
-                if (stopped) {
-                    break;
-                }
-                try {
-                    reportTasks();
-                } catch (Exception e) {
-                    LOG.error("reportWorker error", e);
-                }
-            }
-        }, "reportTasks-" + be.getId());
-        reportTasksWorker.start();
+    public void setShutdown(boolean shutdown) {
+        this.shutdown = shutdown;
     }
 
     public String getHost() {
         return host;
+    }
+
+    public String getHostHeartbeatPort() {
+        return host + ":" + heartBeatPort;
     }
 
     public long getId() {
@@ -302,6 +364,10 @@ public class PseudoBackend {
 
     public Tablet getTablet(long tabletId) {
         return tabletManager.getTablet(tabletId);
+    }
+
+    public List<Tablet> getTabletsByTable(long tableId) {
+        return tabletManager.getTabletsByTable(tableId);
     }
 
     public void setWriteFailureRate(float rate) {
@@ -326,15 +392,20 @@ public class PseudoBackend {
         request.setTablets(tabletManager.getAllTabletInfo());
         request.setTablet_max_compaction_score(100);
         request.setBackend(tBackend);
+        reportVersion.incrementAndGet();
         request.setReport_version(reportVersion.get());
-        TMasterResult result;
         try {
-            result = frontendService.report(request);
-            LOG.info("report {} tablets", request.tablets.size());
+            if (!shutdown) {
+                TMasterResult result = frontendService.report(request);
+                LOG.info("report {} tablets", request.tablets.size());
+                if (result.status.status_code != TStatusCode.OK) {
+                    LOG.warn("Report tablets failed, status:" + result.status.error_msgs.get(0));
+                }
+            }
         } catch (TException e) {
             LOG.error("report tablets error", e);
-            return;
         }
+        addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportTablets);
     }
 
     private void reportDisks() {
@@ -356,14 +427,18 @@ public class PseudoBackend {
         request.setDisks(tdisks);
         request.setBackend(tBackend);
         request.setReport_version(reportVersion.get());
-        TMasterResult result;
         try {
-            result = frontendService.report(request);
-            LOG.info("report {} disks", request.disks.size());
+            if (!shutdown) {
+                TMasterResult result = frontendService.report(request);
+                LOG.info("report {} disks", request.disks.size());
+                if (result.status.status_code != TStatusCode.OK) {
+                    LOG.warn("Report disks failed, status:" + result.status.error_msgs.get(0));
+                }
+            }
         } catch (TException e) {
             LOG.error("report disk error", e);
-            return;
         }
+        addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportDisks);
     }
 
     private void reportTasks() {
@@ -381,14 +456,23 @@ public class PseudoBackend {
             }
         }
         request.setTasks(tasks);
-        TMasterResult result;
         try {
-            result = frontendService.report(request);
-            LOG.info("report {} tasks", request.tasks.size());
+            if (!shutdown) {
+                TMasterResult result = frontendService.report(request);
+                LOG.info("report {} tasks", request.tasks.size());
+                if (result.status.status_code != TStatusCode.OK) {
+                    LOG.warn("Report tasks failed, status:" + result.status.error_msgs.get(0));
+                }
+            }
         } catch (TException e) {
             LOG.error("report tasks error", e);
-            return;
         }
+        addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportTasks);
+    }
+
+    private void tabletMaintenance() {
+        tabletManager.maintenance();
+        addMaintenanceTask(nextScheduleTime(tabletCheckIntervalMs), this::tabletMaintenance);
     }
 
     public static TStatus toStatus(Exception e) {
@@ -420,10 +504,6 @@ public class PseudoBackend {
 
     void handleClone(TAgentTaskRequest request, TFinishTaskRequest finish) throws Exception {
         TCloneReq task = request.clone_req;
-        Tablet destTablet = tabletManager.getTablet(task.tablet_id);
-        if (destTablet == null) {
-            throw new Exception("clone failed dest tablet " + task.tablet_id + " on " + be.getId() + " not found");
-        }
         if (task.src_backends.size() != 1) {
             throw new Exception("bad src backends size " + task.src_backends.size());
         }
@@ -439,17 +519,46 @@ public class PseudoBackend {
         if (srcTablet == null) {
             throw new Exception("clone failed src tablet " + task.tablet_id + " on " + srcBackend.be.getId() + " not found");
         }
-        // currently, only incremental clone is supported
-        // TODO: add full clone support
-        destTablet.cloneFrom(srcTablet);
-        System.out.printf("clone tablet:%d %s -> %s %s\n", task.tablet_id, srcBackend.be.getId(), be.getId(),
-                destTablet.versionInfo());
+        Tablet destTablet = tabletManager.getTablet(task.tablet_id);
+        if (destTablet == null) {
+            destTablet = new Tablet(task.tablet_id, srcTablet.tableId, srcTablet.partitionId, srcTablet.schemaHash,
+                    srcTablet.enablePersistentIndex);
+            destTablet.fullCloneFrom(srcTablet, srcBackend.getId());
+            tabletManager.addClonedTablet(destTablet);
+        } else {
+            destTablet.cloneFrom(srcTablet, srcBackend.getId());
+        }
         finish.finish_tablet_infos = Lists.newArrayList(destTablet.getTabletInfo());
+    }
+
+    private void handleAlter(TAgentTaskRequest request, TFinishTaskRequest finishTaskRequest) throws Exception {
+        TAlterTabletReqV2 task = request.alter_tablet_req_v2;
+        Tablet baseTablet = tabletManager.getTablet(task.base_tablet_id);
+        if (baseTablet == null) {
+            throw new Exception(
+                    String.format("alter (base:%d, new:%d version:%d) failed base tablet not found", task.base_tablet_id,
+                            task.new_tablet_id, task.alter_version));
+        }
+        Tablet newTablet = tabletManager.getTablet(task.new_tablet_id);
+        if (newTablet == null) {
+            throw new Exception(
+                    String.format("alter (base:%d, new:%d version:%d) failed new tablet not found", task.base_tablet_id,
+                            task.new_tablet_id, task.alter_version));
+        }
+        if (newTablet.isRunning() == true) {
+            throw new Exception(
+                    String.format("alter (base:%d, new:%d version:%d) failed new tablet is running", task.base_tablet_id,
+                            task.new_tablet_id, task.alter_version));
+        }
+        newTablet.convertFrom(baseTablet, task.alter_version);
+        newTablet.setRunning(true);
+        finishTaskRequest.finish_tablet_infos = Lists.newArrayList(newTablet.getTabletInfo());
     }
 
     void handleTask(TAgentTaskRequest request) {
         TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(tBackend,
-                request.getTask_type(), request.getSignature(), new TStatus(TStatusCode.OK));
+                request.getTask_type(), request.getSignature(),
+                new TStatus(TStatusCode.OK));
         long v = reportVersion.incrementAndGet();
         finishTaskRequest.setReport_version(v);
         try {
@@ -468,6 +577,10 @@ public class PseudoBackend {
                     break;
                 case REALTIME_PUSH:
                     handleRealtimePush(request, finishTaskRequest);
+                    break;
+                case ALTER:
+                    handleAlter(request, finishTaskRequest);
+                    break;
                 default:
                     LOG.info("ignore task type:" + finishTaskRequest.task_type + " signature:" + finishTaskRequest.signature);
             }
@@ -501,11 +614,11 @@ public class PseudoBackend {
     }
 
     private void handleRealtimePushTypeDelete(TPushReq pushReq, TFinishTaskRequest finish) {
-        List<TTabletInfo> finish_tablet_infos = Lists.newArrayList();
+        List<TTabletInfo> finishTabletInfos = Lists.newArrayList();
         long tabletId = pushReq.getTablet_id();
         Tablet tablet = tabletManager.getTablet(tabletId);
-        finish_tablet_infos.add(tablet.getTabletInfo());
-        finish.setFinish_tablet_infos(finish_tablet_infos);
+        finishTabletInfos.add(tablet.getTabletInfo());
+        finish.setFinish_tablet_infos(finishTabletInfos);
         finish.setRequest_version(pushReq.getVersion());
     }
 
@@ -515,7 +628,10 @@ public class PseudoBackend {
         }
 
         @Override
-        public THeartbeatResult heartbeat(TMasterInfo master_info) throws TException {
+        public THeartbeatResult heartbeat(TMasterInfo masterInfo) throws TException {
+            if (shutdown) {
+                throw new TTransportException(TTransportException.NOT_OPEN, "backend " + getId() + " shutdown");
+            }
             TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
             backendInfo.setBrpc_port(brpcPort);
             return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
@@ -540,7 +656,10 @@ public class PseudoBackend {
         }
 
         @Override
-        public TAgentResult submit_tasks(List<TAgentTaskRequest> tasks) {
+        public TAgentResult submit_tasks(List<TAgentTaskRequest> tasks) throws TException {
+            if (shutdown) {
+                throw new TTransportException(TTransportException.NOT_OPEN, "backend " + getId() + " shutdown");
+            }
             synchronized (taskSignatures) {
                 for (TAgentTaskRequest task : tasks) {
                     Set<Long> signatures = taskSignatures.computeIfAbsent(task.getTask_type(), k -> new HashSet<>());
@@ -572,12 +691,12 @@ public class PseudoBackend {
         }
 
         @Override
-        public TAgentResult make_snapshot(TSnapshotRequest snapshot_request) {
+        public TAgentResult make_snapshot(TSnapshotRequest snapshotRequest) {
             return new TAgentResult(new TStatus(TStatusCode.OK));
         }
 
         @Override
-        public TAgentResult release_snapshot(String snapshot_path) {
+        public TAgentResult release_snapshot(String snapshotPath) {
             return new TAgentResult(new TStatus(TStatusCode.OK));
         }
 
@@ -607,17 +726,20 @@ public class PseudoBackend {
         }
 
         @Override
-        public TExportStatusResult get_export_status(TUniqueId task_id) {
+        public TExportStatusResult get_export_status(TUniqueId taskId) {
             return new TExportStatusResult(new TStatus(TStatusCode.OK), TExportState.FINISHED);
         }
 
         @Override
-        public TStatus erase_export_task(TUniqueId task_id) {
+        public TStatus erase_export_task(TUniqueId taskId) {
             return new TStatus(TStatusCode.OK);
         }
 
         @Override
-        public TTabletStatResult get_tablet_stat() {
+        public TTabletStatResult get_tablet_stat() throws TException {
+            if (shutdown) {
+                throw new TTransportException(TTransportException.NOT_OPEN, "backend " + getId() + " shutdown");
+            }
             TTabletStatResult stats = new TTabletStatResult();
             tabletManager.getTabletStat(stats);
             return stats;
@@ -646,9 +768,15 @@ public class PseudoBackend {
     }
 
     private class PseudoPBackendService implements PBackendServiceAsync {
-        private final ExecutorService executor = Executors.newSingleThreadExecutor();
+        private final ExecutorService executor;
 
         PseudoPBackendService() {
+            executor = Executors.newSingleThreadExecutor(new ThreadFactory() {
+                @Override
+                public Thread newThread(@NotNull Runnable r) {
+                    return new Thread(r, "PBackendService-" + be.getId());
+                }
+            });
             executor.submit(() -> {
                 currentBackend.set(PseudoBackend.this);
             });
@@ -656,53 +784,27 @@ public class PseudoBackend {
 
         @Override
         public PExecPlanFragmentResult execPlanFragment(PExecPlanFragmentRequest request) {
-            PExecPlanFragmentResult result = new PExecPlanFragmentResult();
-            StatusPB pStatus = new StatusPB();
-            pStatus.statusCode = 0;
-            result.status = pStatus;
-            return result;
+            throw new RuntimeException("not implemented");
         }
 
         @Override
         public PExecBatchPlanFragmentsResult execBatchPlanFragments(PExecBatchPlanFragmentsRequest request) {
-            PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
-            StatusPB pStatus = new StatusPB();
-            pStatus.statusCode = 0;
-            result.status = pStatus;
-            return result;
+            throw new RuntimeException("not implemented");
         }
 
         @Override
         public PCancelPlanFragmentResult cancelPlanFragment(PCancelPlanFragmentRequest request) {
-            PCancelPlanFragmentResult result = new PCancelPlanFragmentResult();
-            StatusPB pStatus = new StatusPB();
-            pStatus.statusCode = 0;
-            result.status = pStatus;
-            return result;
+            throw new RuntimeException("not implemented");
         }
 
         @Override
         public PFetchDataResult fetchData(PFetchDataRequest request) {
-            PFetchDataResult result = new PFetchDataResult();
-            StatusPB pStatus = new StatusPB();
-            pStatus.statusCode = 0;
-
-            PQueryStatistics pQueryStatistics = new PQueryStatistics();
-            pQueryStatistics.scanRows = 0L;
-            pQueryStatistics.scanBytes = 0L;
-            pQueryStatistics.cpuCostNs = 0L;
-            pQueryStatistics.memCostBytes = 0L;
-
-            result.status = pStatus;
-            result.packetSeq = 0L;
-            result.queryStatistics = pQueryStatistics;
-            result.eos = true;
-            return result;
+            throw new RuntimeException("not implemented");
         }
 
         @Override
         public PTriggerProfileReportResult triggerProfileReport(PTriggerProfileReportRequest request) {
-            return null;
+            throw new RuntimeException("not implemented");
         }
 
         @Override
@@ -713,11 +815,11 @@ public class PseudoBackend {
         @Override
         public Future<PExecPlanFragmentResult> execPlanFragment(
                 PExecPlanFragmentRequest request, RpcCallback<PExecPlanFragmentResult> callback) {
+            if (shutdown) {
+                throw new RuntimeException("backend " + getId() + " shutdown");
+            }
             TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecPlanFragmentParams params = new TExecPlanFragmentParams();
-            PExecPlanFragmentResult result = new PExecPlanFragmentResult();
-            result.status = new StatusPB();
-            result.status.statusCode = 0;
             try {
                 RpcContext rpcContext = RpcContext.getContext();
                 ByteBuf buf = rpcContext.getRequestBinaryAttachment();
@@ -726,28 +828,35 @@ public class PseudoBackend {
                 deserializer.deserialize(params, serialRequest);
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);
-                result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
-                result.status.errorMsgs = Lists.newArrayList(e.getMessage());
+                PExecPlanFragmentResult result = new PExecPlanFragmentResult();
+                result.status = statusPB(TStatusCode.INTERNAL_ERROR, e.getMessage());
                 return CompletableFuture.completedFuture(result);
             }
+            String queryid = DebugUtil.printId(params.params.query_id);
+            final QueryProgress progress = queryProgresses.computeIfAbsent(queryid, k -> new QueryProgress(k));
+            if (params.fragment.output_sink != null && params.fragment.output_sink.type == TDataSinkType.RESULT_SINK) {
+                resultSinkInstanceToQueryId.put(
+                        DebugUtil.printId(params.params.fragment_instance_id), queryid);
+            }
+            progress.addFragment(1);
             executor.submit(() -> {
-                try {
-                    execPlanFragmentWithReport(params);
-                } catch (Exception e) {
-                    LOG.warn("error execPlanFragment", e);
-                }
+                execPlanFragmentWithReport(params);
+                progress.completeFragment(1);
             });
+            PExecPlanFragmentResult result = new PExecPlanFragmentResult();
+            result.status = new StatusPB();
+            result.status.statusCode = 0;
             return CompletableFuture.completedFuture(result);
         }
 
         @Override
         public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragments(
                 PExecBatchPlanFragmentsRequest request, RpcCallback<PExecBatchPlanFragmentsResult> callback) {
+            if (shutdown) {
+                throw new RuntimeException("backend " + getId() + " shutdown");
+            }
             TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecBatchPlanFragmentsParams params = new TExecBatchPlanFragmentsParams();
-            PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
-            result.status = new StatusPB();
-            result.status.statusCode = 0;
             try {
                 RpcContext rpcContext = RpcContext.getContext();
                 ByteBuf buf = rpcContext.getRequestBinaryAttachment();
@@ -756,23 +865,42 @@ public class PseudoBackend {
                 deserializer.deserialize(params, serialRequest);
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);
+                PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
                 result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
                 result.status.errorMsgs = Lists.newArrayList(e.getMessage());
                 return CompletableFuture.completedFuture(result);
             }
-            executor.submit(() -> {
-                try {
-                    execBatchPlanFragmentsWithReport(params);
-                } catch (Exception e) {
-                    LOG.warn("error execBatchPlanFragments", e);
+            String queryid = DebugUtil.printId(params.common_param.params.query_id);
+            final QueryProgress progress = queryProgresses.computeIfAbsent(queryid, k -> new QueryProgress(k));
+            progress.addFragment(params.unique_param_per_instance.size());
+            if (params.common_param.fragment.output_sink != null &&
+                    params.common_param.fragment.output_sink.type == TDataSinkType.RESULT_SINK) {
+                if (params.unique_param_per_instance.size() != 1) {
+                    LOG.warn("should only have 1 fragment with RESULT_SINK");
+                    PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
+                    result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
+                    result.status.errorMsgs = Lists.newArrayList("should only have 1 fragment with RESULT_SINK");
+                    return CompletableFuture.completedFuture(result);
                 }
+                resultSinkInstanceToQueryId.put(
+                        DebugUtil.printId(params.unique_param_per_instance.get(0).params.fragment_instance_id), queryid);
+            }
+            executor.submit(() -> {
+                execBatchPlanFragmentsWithReport(params);
+                progress.completeFragment(params.unique_param_per_instance.size());
             });
+            PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
+            result.status = new StatusPB();
+            result.status.statusCode = 0;
             return CompletableFuture.completedFuture(result);
         }
 
         @Override
         public Future<PCancelPlanFragmentResult> cancelPlanFragment(
                 PCancelPlanFragmentRequest request, RpcCallback<PCancelPlanFragmentResult> callback) {
+            if (shutdown) {
+                throw new RuntimeException("backend " + getId() + " shutdown");
+            }
             return executor.submit(() -> {
                 PCancelPlanFragmentResult result = new PCancelPlanFragmentResult();
                 StatusPB pStatus = new StatusPB();
@@ -784,23 +912,26 @@ public class PseudoBackend {
 
         @Override
         public Future<PFetchDataResult> fetchData(PFetchDataRequest request, RpcCallback<PFetchDataResult> callback) {
-            return executor.submit(() -> {
+            if (shutdown) {
+                throw new RuntimeException("backend " + getId() + " shutdown");
+            }
+            String fid = DebugUtil.printId(request.finstId);
+            String queryId = resultSinkInstanceToQueryId.get(fid);
+            if (queryId == null) {
+                LOG.warn("no queryId found for finstId {}", fid);
                 PFetchDataResult result = new PFetchDataResult();
-                StatusPB pStatus = new StatusPB();
-                pStatus.statusCode = 0;
-
-                PQueryStatistics pQueryStatistics = new PQueryStatistics();
-                pQueryStatistics.scanRows = 0L;
-                pQueryStatistics.scanBytes = 0L;
-                pQueryStatistics.cpuCostNs = 0L;
-                pQueryStatistics.memCostBytes = 0L;
-
-                result.status = pStatus;
-                result.packetSeq = 0L;
-                result.queryStatistics = pQueryStatistics;
-                result.eos = true;
-                return result;
-            });
+                result.status = statusPB(TStatusCode.INTERNAL_ERROR, "no queryId found for finstId " + fid);
+                return CompletableFuture.completedFuture(result);
+            }
+            final QueryProgress progress = queryProgresses.get(queryId);
+            if (progress == null) {
+                LOG.warn("no progress found for finstId {} queryId", fid, queryId);
+                PFetchDataResult result = new PFetchDataResult();
+                result.status = statusPB(TStatusCode.INTERNAL_ERROR,
+                        "no progress found for finstId " + request.finstId + " queryId " + queryId);
+                return CompletableFuture.completedFuture(result);
+            }
+            return progress.getFetchDataResult();
         }
 
         @Override
@@ -822,36 +953,63 @@ public class PseudoBackend {
         return status;
     }
 
+    static StatusPB statusPB(TStatusCode code, String msg) {
+        StatusPB status = new StatusPB();
+        status.statusCode = code.getValue();
+        status.errorMsgs = Lists.newArrayList(msg);
+        return status;
+    }
+
     void execPlanFragmentWithReport(TExecPlanFragmentParams params) {
-        LOG.info("exec_plan_fragment {}", params.params.fragment_instance_id.toString());
         TReportExecStatusParams report = new TReportExecStatusParams();
         report.setProtocol_version(FrontendServiceVersion.V1);
         report.setQuery_id(params.params.query_id);
         report.setBackend_num(params.backend_num);
         report.setBackend_id(be.getId());
         report.setFragment_instance_id(params.params.fragment_instance_id);
-        report.setDone(true);
         // TODO: support error injection
         report.setStatus(new TStatus(TStatusCode.OK));
         try {
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("exec_plan_fragment query: %s fragment: %s", DebugUtil.printId(params.params.query_id),
+                    DebugUtil.printId(params.params.fragment_instance_id)));
+            int numTabletScan = 0;
             for (TPlanNode planNode : params.fragment.plan.nodes) {
                 if (planNode.node_type == TPlanNodeType.OLAP_SCAN_NODE) {
                     List<TScanRangeParams> scanRanges = params.params.per_node_scan_ranges.get(planNode.getNode_id());
-                    if (scanRanges == null) {
-                        continue;
+                    if (scanRanges != null) {
+                        numTabletScan += scanRanges.size();
+                        runOlapScan(planNode, scanRanges);
                     }
-                    runOlapScan(report, planNode, params.params.per_node_scan_ranges.get(planNode.getNode_id()));
+                    Map<Integer, List<TScanRangeParams>> scanRangesPerDriver =
+                            params.params.node_to_per_driver_seq_scan_ranges.get(planNode.getNode_id());
+                    if (scanRangesPerDriver != null) {
+                        scanRanges = scanRangesPerDriver.values().stream().flatMap(List::stream)
+                                .collect(Collectors.toList());
+                        numTabletScan += scanRanges.size();
+                        runOlapScan(planNode, scanRanges);
+                        System.out.printf("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan);
+                    }
                 }
             }
-            if (params.fragment.output_sink != null) {
-                TDataSink tDataSink = params.fragment.output_sink;
-                runSink(report, tDataSink);
+            if (numTabletScan > 0) {
+                scansByQueryId.computeIfAbsent(DebugUtil.printId(params.params.query_id), k -> new AtomicInteger(0))
+                        .addAndGet(numTabletScan);
+                sb.append(String.format(" #TabletScan: %d", numTabletScan));
             }
+            TDataSink tDataSink = params.fragment.output_sink;
+            if (tDataSink != null && tDataSink.type == TDataSinkType.OLAP_TABLE_SINK) {
+                runSink(report, tDataSink);
+                sb.append(String.format(" sink: %s %s", tDataSink.olap_table_sink.table_id,
+                        Objects.toString(tDataSink.olap_table_sink.table_name, "")));
+            }
+            LOG.info(sb.toString());
         } catch (Throwable e) {
             e.printStackTrace();
             LOG.warn("error execPlanFragmentWithReport", e);
             report.setStatus(status(TStatusCode.INTERNAL_ERROR, e.getMessage()));
         }
+        report.setDone(true);
         try {
             TReportExecStatusResult ret = frontendService.reportExecStatus(report);
             if (ret.status.status_code != TStatusCode.OK) {
@@ -862,38 +1020,73 @@ public class PseudoBackend {
         }
     }
 
-    void execBatchPlanFragment(TExecPlanFragmentParams commonParams, TExecPlanFragmentParams uniqueParams) {
-        TReportExecStatusParams report = new TReportExecStatusParams();
+    public static Map<String, AtomicInteger> scansByQueryId = new ConcurrentHashMap<>();
+
+    private void execBatchPlanFragment(TExecPlanFragmentParams commonParams, TExecPlanFragmentParams uniqueParams) {
+        final TReportExecStatusParams report = new TReportExecStatusParams();
         report.setProtocol_version(FrontendServiceVersion.V1);
         report.setQuery_id(commonParams.params.query_id);
         report.setBackend_num(uniqueParams.backend_num);
         report.setBackend_id(be.getId());
         report.setFragment_instance_id(uniqueParams.params.fragment_instance_id);
-        report.setDone(true);
         // TODO: support error injection
         report.setStatus(new TStatus(TStatusCode.OK));
         try {
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("exec_batch_plan_fragment query: %s fragment: %s",
+                    DebugUtil.printId(commonParams.params.query_id),
+                    DebugUtil.printId(uniqueParams.params.fragment_instance_id)));
+            int numTabletScan = 0;
+            int allScans = uniqueParams.params.per_node_scan_ranges.values().stream().mapToInt(List::size).sum();
             for (TPlanNode planNode : commonParams.fragment.plan.nodes) {
                 if (planNode.node_type == TPlanNodeType.OLAP_SCAN_NODE) {
                     List<TScanRangeParams> scanRanges = uniqueParams.params.per_node_scan_ranges.get(planNode.getNode_id());
-                    if (scanRanges == null) {
-                        continue;
+                    if (scanRanges != null) {
+                        numTabletScan += scanRanges.size();
+                        runOlapScan(planNode, scanRanges);
                     }
-                    runOlapScan(report, planNode, scanRanges);
+                    Map<Integer, List<TScanRangeParams>> scanRangesPerDriver =
+                            uniqueParams.params.node_to_per_driver_seq_scan_ranges.get(planNode.getNode_id());
+                    if (scanRangesPerDriver != null) {
+                        scanRanges = scanRangesPerDriver.values().stream().flatMap(List::stream)
+                                .collect(Collectors.toList());
+                        numTabletScan += scanRanges.size();
+                        runOlapScan(planNode, scanRanges);
+                        System.out.printf("per_driver_seq_scan_range not empty numTablets: %d\n", numTabletScan);
+                    }
                 }
             }
-            if (uniqueParams.fragment.output_sink != null) {
-                TDataSink tDataSink = uniqueParams.fragment.output_sink;
-                runSink(report, tDataSink);
-            } else if (commonParams.fragment.output_sink != null) {
-                TDataSink tDataSink = commonParams.fragment.output_sink;
-                runSink(report, tDataSink);
+            if (allScans != numTabletScan) {
+                System.out.printf("not all scanrange used: all:%d used:%d\n", allScans, numTabletScan);
             }
+            if (numTabletScan > 0) {
+                scansByQueryId.computeIfAbsent(DebugUtil.printId(commonParams.params.query_id), k -> new AtomicInteger(0))
+                        .addAndGet(numTabletScan);
+                sb.append(String.format(" #TabletScan: %d", numTabletScan));
+            }
+            TDataSink tDataSink = null;
+            if (uniqueParams.fragment.output_sink != null) {
+                throw new RuntimeException("not support output sink in uniqueParams");
+            } else if (commonParams.fragment.output_sink != null) {
+                tDataSink = commonParams.fragment.output_sink;
+            }
+            if (tDataSink != null) {
+                if (tDataSink.type == TDataSinkType.OLAP_TABLE_SINK) {
+                    runSink(report, tDataSink);
+                    sb.append(String.format(" sink: %s %s", tDataSink.olap_table_sink.table_id,
+                            Objects.toString(tDataSink.olap_table_sink.table_name, "")));
+                } else if (tDataSink.type == TDataSinkType.RESULT_SINK) {
+                    LOG.info("query {} fragment {} has RESULT_SINK", DebugUtil.printId(commonParams.params.query_id),
+                            DebugUtil.printId(uniqueParams.params.fragment_instance_id));
+                }
+            }
+            LOG.info(sb.toString());
         } catch (Throwable e) {
             e.printStackTrace();
             LOG.warn("error execBatchPlanFragment", e);
             report.setStatus(status(TStatusCode.INTERNAL_ERROR, e.getMessage()));
         }
+        report.setDone(true);
         try {
             TReportExecStatusResult ret = frontendService.reportExecStatus(report);
             if (ret.status.status_code != TStatusCode.OK) {
@@ -904,35 +1097,29 @@ public class PseudoBackend {
         }
     }
 
-    void execBatchPlanFragmentsWithReport(TExecBatchPlanFragmentsParams params) {
-        LOG.info("exec_batch_plan_fragments {} #instances:{}", params.common_param.params.query_id.toString(),
-                params.unique_param_per_instance.size());
+    private void execBatchPlanFragmentsWithReport(TExecBatchPlanFragmentsParams params) {
         for (TExecPlanFragmentParams uniqueParams : params.unique_param_per_instance) {
             execBatchPlanFragment(params.common_param, uniqueParams);
         }
     }
 
-    private void runOlapScan(TReportExecStatusParams report, TPlanNode olapScanNode, List<TScanRangeParams> tScanRangeParams) {
+    private void runOlapScan(TPlanNode olapScanNode, List<TScanRangeParams> tScanRangeParams)
+            throws Exception {
         for (TScanRangeParams scanRangeParams : tScanRangeParams) {
-            long tablet_id = scanRangeParams.scan_range.internal_scan_range.tablet_id;
+            long tabletId = scanRangeParams.scan_range.internal_scan_range.tablet_id;
             long version = Long.parseLong(scanRangeParams.scan_range.internal_scan_range.version);
-            Tablet tablet = tabletManager.getTablet(tablet_id);
+            Tablet tablet = tabletManager.getTablet(tabletId);
             if (tablet == null) {
-                report.setStatus(status(TStatusCode.INTERNAL_ERROR,
-                        String.format("olapScan(be:%d tablet:%d version:%d) failed: tablet not found ", getId(), tablet_id,
-                                version)));
-                return;
+                String msg = String.format("olapScan(be:%d tablet:%d version:%d) failed: tablet not found ", getId(), tabletId,
+                        version);
+                System.out.println(msg);
+                throw new Exception(msg);
             }
-            try {
-                tablet.read(version);
-            } catch (Exception e) {
-                report.setStatus(status(TStatusCode.INTERNAL_ERROR, e.getMessage()));
-                return;
-            }
+            tablet.read(version);
         }
     }
 
-    private void runSink(TReportExecStatusParams report, TDataSink tDataSink) {
+    private void runSink(TReportExecStatusParams report, TDataSink tDataSink) throws Exception {
         if (tDataSink.type != TDataSinkType.OLAP_TABLE_SINK) {
             return;
         }
@@ -940,15 +1127,12 @@ public class PseudoBackend {
         PseudoOlapTableSink sink = new PseudoOlapTableSink(cluster, tDataSink);
         if (!sink.open()) {
             sink.cancel();
-            report.status = status(TStatusCode.INTERNAL_ERROR,
-                    String.format("open sink failed, backend:%s txn:%d", be.getId(), sink.txnId));
-            return;
+            throw new Exception(String.format("open sink failed, backend:%s txn:%d", be.getId(), sink.txnId));
         }
         if (!sink.close()) {
             sink.cancel();
-            report.status = status(TStatusCode.INTERNAL_ERROR,
+            throw new Exception(
                     String.format("open sink failed, backend:%s txn:%d %s", be.getId(), sink.txnId, sink.getErrorMessage()));
-            return;
         }
         List<TTabletCommitInfo> commitInfos = sink.getTabletCommitInfos();
         report.setCommitInfos(commitInfos);

@@ -24,6 +24,10 @@ public class Rowset {
         this.id = id;
     }
 
+    public int getId() {
+        return id;
+    }
+
     public Rowset copy() {
         Rowset r = new Rowset(txnId, rowsetid);
         r.id = id;

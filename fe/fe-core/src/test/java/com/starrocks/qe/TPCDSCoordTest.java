@@ -47,8 +47,9 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         setTPCDSFactor(1);
 
         // make sure global runtime filter been push-downed to two fragments.
-        String sql =
-                "select * from (select a.inv_item_sk as x, b.inv_warehouse_sk from inventory a join inventory b on a.inv_item_sk = b.inv_item_sk ) t1 join [shuffle] item t0  on t0.i_item_sk = t1.x;";
+        String sql = "select * from (select a.inv_item_sk as x, b.inv_warehouse_sk " +
+                "from inventory a join inventory b on a.inv_item_sk = b.inv_item_sk ) t1 " +
+                "join [shuffle] item t0  on t0.i_item_sk = t1.x;";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String[] ss = plan.split("\\n");
         List<String> fragments = new ArrayList<>();

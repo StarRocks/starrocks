@@ -55,6 +55,14 @@ Status Tablet::delete_txn_vlog(int64_t version) {
     return _mgr->delete_txn_vlog(_id, version);
 }
 
+Status Tablet::put_tablet_metadata_lock(int64_t version, int64_t expire_time) {
+    return _mgr->put_tablet_metadata_lock(_id, version, expire_time);
+}
+
+Status Tablet::delete_tablet_metadata_lock(int64_t version, int64_t expire_time) {
+    return _mgr->delete_tablet_metadata_lock(_id, version, expire_time);
+}
+
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer() {
     // TODO: check tablet type
     return std::make_unique<GeneralTabletWriter>(*this);
@@ -83,17 +91,17 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
 
 StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
                                           bool fill_cache) {
-    auto segment = _mgr->lookup_segment(segment_name);
+    auto location = segment_location(segment_name);
+    auto segment = _mgr->lookup_segment(location);
     if (segment != nullptr) {
         return segment;
     }
-    auto location = segment_location(segment_name);
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
     ASSIGN_OR_RETURN(segment, Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, location, seg_id,
                                             std::move(tablet_schema), footer_size_hint));
     if (fill_cache) {
-        _mgr->cache_segment(segment_name, segment);
+        _mgr->cache_segment(location, segment);
     }
     return segment;
 }

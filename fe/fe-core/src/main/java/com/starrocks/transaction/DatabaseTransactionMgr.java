@@ -75,6 +75,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
@@ -187,6 +188,7 @@ public class DatabaseTransactionMgr {
     }
 
     @VisibleForTesting
+    @Nullable
     protected Set<Long> unprotectedGetTxnIdsByLabel(String label) {
         return labelToTxnIds.get(label);
     }
@@ -430,7 +432,6 @@ public class DatabaseTransactionMgr {
             tableListString.append(table.getName());
             stateListeners.add(listener);
         }
-        transactionState.buildFinishChecker(db);
         txnSpan.setAttribute("tables", tableListString.toString());
 
         // before state transform
@@ -455,6 +456,7 @@ public class DatabaseTransactionMgr {
             // after state transform
             transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
         }
+        transactionState.prepareFinishChecker(db);
 
         // 6. update nextVersion because of the failure of persistent transaction resulting in error version
         Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);
@@ -1151,11 +1153,7 @@ public class DatabaseTransactionMgr {
     }
 
     private void updateTxnLabels(TransactionState transactionState) {
-        Set<Long> txnIds = labelToTxnIds.get(transactionState.getLabel());
-        if (txnIds == null) {
-            txnIds = Sets.newHashSet();
-            labelToTxnIds.put(transactionState.getLabel(), txnIds);
-        }
+        Set<Long> txnIds = labelToTxnIds.computeIfAbsent(transactionState.getLabel(), k -> Sets.newHashSet());
         txnIds.add(transactionState.getTransactionId());
     }
 

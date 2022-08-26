@@ -6,6 +6,7 @@
 #include "column/column_helper.h"
 #include "exec/pipeline/crossjoin/cross_join_right_sink_operator.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
@@ -329,7 +330,7 @@ Status NLJoinProbeOperator::_permute_right_join(RuntimeState* state) {
         }
 
         RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
-        _output_accumulator.push(chunk);
+        RETURN_IF_ERROR(_output_accumulator.push(std::move(chunk)));
         match_flag_index += chunk_size;
     }
 
@@ -367,7 +368,7 @@ StatusOr<vectorized::ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* sta
         RETURN_IF_ERROR(_probe(state, chunk));
         RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
 
-        _output_accumulator.push(chunk);
+        RETURN_IF_ERROR(_output_accumulator.push(std::move(chunk)));
         if (ChunkPtr res = _output_accumulator.pull()) {
             return res;
         }

@@ -28,6 +28,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Status;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TOlapTableIndex;
 import com.starrocks.thrift.TStatusCode;
@@ -55,6 +56,7 @@ public class CreateReplicaTask extends AgentTask {
 
     private KeysType keysType;
     private TStorageType storageType;
+    private TCompressionType compressionType;
     private TStorageMedium storageMedium;
 
     private List<Column> columns;
@@ -94,7 +96,7 @@ public class CreateReplicaTask extends AgentTask {
                              List<Index> indexes,
                              boolean isInMemory,
                              boolean enablePersistentIndex,
-                             TTabletType tabletType) {
+                             TTabletType tabletType, TCompressionType compressionType) {
         super(null, backendId, TTaskType.CREATE, dbId, tableId, partitionId, indexId, tabletId);
 
         this.shortKeyColumnCount = shortKeyColumnCount;
@@ -117,6 +119,8 @@ public class CreateReplicaTask extends AgentTask {
         this.isInMemory = isInMemory;
         this.enablePersistentIndex = enablePersistentIndex;
         this.tabletType = tabletType;
+
+        this.compressionType = compressionType;
     }
 
     public void setIsRecoverTask(boolean isRecoverTask) {
@@ -224,6 +228,7 @@ public class CreateReplicaTask extends AgentTask {
         if (storageFormat != null) {
             createTabletReq.setStorage_format(storageFormat);
         }
+        createTabletReq.setCompression_type(compressionType);
 
         createTabletReq.setTablet_type(tabletType);
         return createTabletReq;

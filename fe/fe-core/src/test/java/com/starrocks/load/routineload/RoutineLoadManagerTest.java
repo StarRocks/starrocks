@@ -774,7 +774,7 @@ public class RoutineLoadManagerTest {
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         connectContext.setThreadLocalInfo();
-        String DB = "test";
+        String db = "test";
         String createSQL = "CREATE ROUTINE LOAD db0.routine_load_0 ON t1 " +
                 "PROPERTIES(\"format\" = \"json\",\"jsonpaths\"=\"[\\\"$.k1\\\",\\\"$.k2.\\\\\\\"k2.1\\\\\\\"\\\"]\") " +
                 "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:xxx\",\"kafka_topic\" = \"topic_0\");";
@@ -784,18 +784,22 @@ public class RoutineLoadManagerTest {
 
         // 1. create a job that will be discard after image load
         long discardJobId = 1L;
-        RoutineLoadJob discardJob = new KafkaRoutineLoadJob(discardJobId, "discardJob", "default_cluster", 1, 1, "xxx", "xxtopic");
+        RoutineLoadJob discardJob = new KafkaRoutineLoadJob(discardJobId, "discardJob",
+                "default_cluster", 1, 1, "xxx", "xxtopic");
         discardJob.setOrigStmt(new OriginStatement(createSQL, 0));
-        leaderLoadManager.addRoutineLoadJob(discardJob, DB);
-        discardJob.updateState(RoutineLoadJob.JobState.CANCELLED, new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
+        leaderLoadManager.addRoutineLoadJob(discardJob, db);
+        discardJob.updateState(RoutineLoadJob.JobState.CANCELLED,
+                new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
         discardJob.endTimestamp = now - Config.label_keep_max_second * 2 * 1000L;
 
         // 2. create a new job that will keep for a while
         long goodJobId = 2L;
-        RoutineLoadJob goodJob = new KafkaRoutineLoadJob(goodJobId, "goodJob", "default_cluster", 1, 1, "xxx", "xxtopic");
+        RoutineLoadJob goodJob = new KafkaRoutineLoadJob(goodJobId, "goodJob", "default_cluster",
+                1, 1, "xxx", "xxtopic");
         goodJob.setOrigStmt(new OriginStatement(createSQL, 0));
-        leaderLoadManager.addRoutineLoadJob(goodJob, DB);
-        goodJob.updateState(RoutineLoadJob.JobState.CANCELLED, new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
+        leaderLoadManager.addRoutineLoadJob(goodJob, db);
+        goodJob.updateState(RoutineLoadJob.JobState.CANCELLED,
+                new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
         Assert.assertNotNull(leaderLoadManager.getJob(discardJobId));
         Assert.assertNotNull(leaderLoadManager.getJob(goodJobId));
 

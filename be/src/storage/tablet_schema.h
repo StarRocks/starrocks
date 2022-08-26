@@ -248,6 +248,7 @@ public:
     size_t next_column_unique_id() const { return _next_column_unique_id; }
     bool has_bf_fpp() const { return _has_bf_fpp; }
     double bf_fpp() const { return _bf_fpp; }
+    CompressionTypePB compression_type() const { return _compression_type; }
 
     // The in-memory property is no longer supported, but leave this API for compatibility.
     // Newly-added code should not rely on this method, it may be removed at any time.
@@ -297,6 +298,7 @@ private:
     // Using `uint8_t` instead of `CompressKind` and `KeysType` for less memory usage.
     uint8_t _compress_kind = static_cast<uint8_t>(COMPRESS_NONE);
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
+    CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;
 
     bool _has_bf_fpp = false;
 

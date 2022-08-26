@@ -76,6 +76,7 @@ struct TCreateTabletReq {
     13: optional TStorageFormat storage_format
     14: optional TTabletType tablet_type
     15: optional bool enable_persistent_index
+    16: optional Types.TCompressionType compression_type = Types.TCompressionType.LZ4_FRAME
 }
 
 struct TDropTabletReq {
@@ -101,6 +102,8 @@ struct TAlterTabletReqV2 {
     5: optional Types.TVersion alter_version
     6: optional Types.TVersionHash alter_version_hash // Deprecated
     7: optional list<TAlterMaterializedViewParam> materialized_view_params
+    8: optional TTabletType tablet_type
+    9: optional i64 txn_id
 }
 
 struct TAlterMaterializedViewParam {

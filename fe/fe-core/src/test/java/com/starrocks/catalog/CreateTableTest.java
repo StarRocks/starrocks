@@ -22,8 +22,6 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.sql.ast.CreateDbStmt;
-import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
@@ -31,6 +29,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -126,6 +126,26 @@ public class CreateTableTest {
                         +
                         "distributed by hash(key1) buckets 1 properties('replication_num' = '1', 'storage_medium' = 'ssd');"));
 
+        ExceptionChecker
+                 .expectThrowsNoException(() -> createTable("create table test.tb8(key1 int, key2 varchar(10)) \n"
+                        + "distributed by hash(key1) buckets 1 \n"
+                        + "properties('replication_num' = '1', 'compression' = 'lz4_frame');"));
+
+        ExceptionChecker
+                 .expectThrowsNoException(() -> createTable("create table test.tb9(key1 int, key2 varchar(10)) \n"
+                        + "distributed by hash(key1) buckets 1 \n"
+                        + "properties('replication_num' = '1', 'compression' = 'lz4');"));
+
+        ExceptionChecker
+                 .expectThrowsNoException(() -> createTable("create table test.tb10(key1 int, key2 varchar(10)) \n"
+                        + "distributed by hash(key1) buckets 1 \n"
+                        + "properties('replication_num' = '1', 'compression' = 'zstd');"));
+
+        ExceptionChecker
+                 .expectThrowsNoException(() -> createTable("create table test.tb11(key1 int, key2 varchar(10)) \n"
+                        + "distributed by hash(key1) buckets 1 \n"
+                        + "properties('replication_num' = '1', 'compression' = 'zlib');"));
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl6 = (OlapTable) db.getTable("tbl6");
         Assert.assertTrue(tbl6.getColumn("k1").isKey());
@@ -187,6 +207,12 @@ public class CreateTableTest {
                         () -> createTable(
                                 "create table test.tb7(key1 int, key2 varchar(10)) distributed by hash(key1) \n"
                                         + "buckets 1 properties('replication_num' = '1', 'storage_medium' = 'ssd');"));
+
+        ExceptionChecker
+                .expectThrowsWithMsg(DdlException.class, "unknown compression type: xxx",
+                        () -> createTable("create table test.atbl8\n" + "(key1 int, key2 varchar(10))\n"
+                                + "distributed by hash(key1) buckets 1\n"
+                                + "properties('replication_num' = '1', 'compression' = 'xxx');"));
     }
 
     @Test

@@ -2,10 +2,10 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.common.MetaUtils;
 
 public class CancelAlterTableStatementAnalyzer {

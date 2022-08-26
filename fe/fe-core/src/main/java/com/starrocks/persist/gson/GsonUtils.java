@@ -84,6 +84,7 @@ import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.optimizer.dump.HiveTableDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpSerializer;
@@ -202,6 +203,12 @@ public class GsonUtils {
 
     private static final JsonDeserializer<QueryDumpInfo> dumpInfoDeserializer = new QueryDumpDeserializer();
 
+    private static final JsonSerializer<HiveTableDumpInfo> hiveTableDumpInfoSerializer = new HiveTableDumpInfo.
+            HiveTableDumpInfoSerializer();
+
+    private static final JsonDeserializer<HiveTableDumpInfo> hiveTableDumpInfoDeserializer = new HiveTableDumpInfo.
+            HiveTableDumpInfoDeserializer();
+
     private static final JsonSerializer<Expr> expressionSerializer = new ExpressionSerializer();
 
     private static final JsonDeserializer<Expr> expressionDeserializer = new ExpressionDeserializer();
@@ -230,6 +237,8 @@ public class GsonUtils {
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeDeserializer)
             .registerTypeAdapter(QueryDumpInfo.class, dumpInfoSerializer)
             .registerTypeAdapter(QueryDumpInfo.class, dumpInfoDeserializer)
+            .registerTypeAdapter(HiveTableDumpInfo.class, hiveTableDumpInfoSerializer)
+            .registerTypeAdapter(HiveTableDumpInfo.class, hiveTableDumpInfoDeserializer)
             .registerTypeAdapter(PrimitiveType.class, primitiveTypeDeserializer)
             .registerTypeHierarchyAdapter(Expr.class, expressionSerializer)
             .registerTypeHierarchyAdapter(Expr.class, expressionDeserializer);

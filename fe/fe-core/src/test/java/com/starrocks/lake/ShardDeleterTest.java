@@ -2,12 +2,11 @@
 
 package com.starrocks.lake;
 
-import com.baidu.brpc.client.RpcCallback;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.proto.DeleteTabletRequest;
 import com.starrocks.lake.proto.DeleteTabletResponse;
-import com.starrocks.rpc.LakeServiceAsync;
 import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeServiceAsync;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -95,14 +94,14 @@ public class ShardDeleterTest {
         response.failedTablets = new ArrayList<>();
 
         new Expectations() {{
-            lakeService.deleteTablet((DeleteTabletRequest) any);
-            minTimes = 1;
-            result = response;
+                lakeService.deleteTablet((DeleteTabletRequest) any);
+                minTimes = 1;
+                result = response;
 
-            starOSAgent.deleteShards(ids);
-            minTimes = 1;
-            result = null;
-        }};
+                starOSAgent.deleteShards(ids);
+                minTimes = 1;
+                result = null;
+            }};
 
         shardDeleter.addUnusedShardId(ids);
         shardDeleter.runAfterCatalogReady();

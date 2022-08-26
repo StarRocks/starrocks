@@ -3,7 +3,6 @@
 package com.starrocks.system;
 
 import com.starrocks.ha.FrontendNodeType;
-
 import org.junit.Assert;
 import org.junit.Test;
 

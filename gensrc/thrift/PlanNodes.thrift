@@ -262,6 +262,12 @@ struct THdfsScanRange {
     
     // for iceberg table scanrange should contains the full path of file
     8: optional string full_path
+
+    // delta logs of hudi MOR table
+    9: optional list<string> hudi_logs
+
+    // whether to use JNI scanner to read data of hudi MOR table for snapshot queries
+    10: optional bool use_hudi_jni_reader;
 }
 
 // Specification of an individual data range which is held in its entirety
