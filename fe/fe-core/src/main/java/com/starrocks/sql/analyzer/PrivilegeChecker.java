@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.BackupStmt;
@@ -43,8 +44,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.routineload.RoutineLoadManager;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
@@ -1016,9 +1020,20 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt statement, ConnectContext session) {
-            String db = statement.getDbFullName();
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            String dbName = statement.getDbFullName();
+            String jobName = statement.getJobName();
+            RoutineLoadManager routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
+            String tableName = "";
+            try {
+                RoutineLoadJob routineLoadJob = routineLoadManager.getJob(dbName, jobName);
+                Preconditions.checkNotNull(routineLoadJob, "[%s] does not exists", jobName);
+                tableName = routineLoadJob.getTableName();
+            } catch (MetaNotFoundException e) {
+                throw new SemanticException(e.getMessage());
+            }
+
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, dbName, tableName, PrivPredicate.LOAD)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), dbName);
             }
             return null;
         }
