@@ -42,7 +42,7 @@ public class HdfsScanNode extends ScanNode {
         hiveTable = (HiveTable) desc.getTable();
     }
 
-    public HDFSScanNodePredicates getPredictsExpr() {
+    public HDFSScanNodePredicates getScanNodePredicates() {
         return scanNodePredicates;
     }
 

@@ -1005,7 +1005,7 @@ PARALLEL_TEST(ArrayColumnTest, test_assign) {
     offsets->append(6);
 
     // assign
-    column->assign(4,0);
+    column->assign(4, 0);
     ASSERT_EQ(4, column->size());
     ASSERT_EQ("[1, 2, 3]", column->debug_item(0));
     ASSERT_EQ("[1, 2, 3]", column->debug_item(1));
