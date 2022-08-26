@@ -249,10 +249,10 @@ CONF_Int32(min_file_descriptor_number, "60000");
 CONF_Int64(index_stream_cache_capacity, "10737418240");
 // CONF_Int64(max_packed_row_block_size, "20971520");
 
-// Cache for stoage page size
+// Cache for storage page size
 CONF_String(storage_page_cache_limit, "0");
 // whether to disable page cache feature in storage
-CONF_Bool(disable_storage_page_cache, "true");
+CONF_Bool(disable_storage_page_cache, "false");
 // whether to disable column pool
 CONF_Bool(disable_column_pool, "false");
 
