@@ -70,7 +70,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.LakeServiceAsync;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentClient;
@@ -635,7 +635,7 @@ public class ExportJob implements Writable {
                     continue;
                 }
                 try {
-                    LakeServiceAsync lakeService = BrpcProxy.getLakeService(host, port);
+                    LakeService lakeService = BrpcProxy.getLakeService(host, port);
                     UnlockTabletMetadataRequest request = new UnlockTabletMetadataRequest();
                     request.tabletId = internalScanRange.getTablet_id();
                     request.version = Long.parseLong(internalScanRange.getVersion());

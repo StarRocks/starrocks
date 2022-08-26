@@ -14,8 +14,8 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.LakeServiceAsync;
-import com.starrocks.rpc.PBackendServiceAsync;
+import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.PBackendService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
@@ -93,12 +93,12 @@ public class PseudoCluster {
 
     private class PseudoBrpcRroxy extends BrpcProxy {
         @Override
-        protected PBackendServiceAsync getBackendServiceImpl(TNetworkAddress address) {
+        protected PBackendService getBackendServiceImpl(TNetworkAddress address) {
             return getBackendByHost(address.getHostname()).pBackendService;
         }
 
         @Override
-        protected LakeServiceAsync getLakeServiceImpl(TNetworkAddress address) {
+        protected LakeService getLakeServiceImpl(TNetworkAddress address) {
             Preconditions.checkNotNull(getBackendByHost(address.getHostname()));
             Preconditions.checkState(false, "not implemented");
             return null;
