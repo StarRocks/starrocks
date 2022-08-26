@@ -53,7 +53,7 @@ protected:
     void get_bitmap_reader_iter(std::string& file_name, const ColumnIndexMetaPB& meta, BitmapIndexReader** reader,
                                 BitmapIndexIterator** iter) {
         *reader = new BitmapIndexReader();
-        ASSIGN_OR_ABORT(auto r, (*reader)->load(_fs.get(), file_name, meta.bitmap_index(), true, false));
+        ASSIGN_OR_ABORT(auto r, (*reader)->load(_fs.get(), file_name, meta.bitmap_index(), true, false, &_tracker));
         ASSERT_TRUE(r);
         ASSERT_OK((*reader)->new_iterator(iter));
     }
@@ -247,7 +247,8 @@ TEST_F(BitmapIndexTest, test_concurrent_load) {
             while (count.load() < count) {
                 ;
             }
-            ASSIGN_OR_ABORT(auto first_load, reader->load(_fs.get(), file_name, meta.bitmap_index(), false, false));
+            ASSIGN_OR_ABORT(auto first_load,
+                            reader->load(_fs.get(), file_name, meta.bitmap_index(), false, false, &_tracker));
             loads.fetch_add(first_load);
         });
     }

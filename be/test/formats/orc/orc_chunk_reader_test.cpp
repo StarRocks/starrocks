@@ -1213,7 +1213,6 @@ TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
         Slice s = char_col->get(0).get_slice();
         std::string res(s.data, s.size);
         EXPECT_EQ(res, "nihao");
-
     }
 }
 

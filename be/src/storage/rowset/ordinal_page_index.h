@@ -27,6 +27,7 @@
 
 #include "common/status.h"
 #include "gutil/macros.h"
+#include "runtime/mem_tracker.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/page_pointer.h"
@@ -72,7 +73,7 @@ public:
     // Return true if the index data was successfully loaded by the caller, false if
     // the data was loaded by another caller.
     StatusOr<bool> load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
-                        bool use_page_cache, bool kept_in_memory);
+                        bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker);
 
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     OrdinalPageIndexIterator seek_at_or_before(ordinal_t ordinal);
@@ -112,7 +113,7 @@ private:
     };
 
     Status do_load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
-                   bool use_page_cache, bool kept_in_memory);
+                   bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker);
 
     std::atomic<State> _state;
     // valid after load

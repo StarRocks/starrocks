@@ -31,14 +31,14 @@
 namespace starrocks {
 
 StatusOr<bool> BloomFilterIndexReader::load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                                            bool use_page_cache, bool kept_in_memory) {
+                                            bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker) {
     while (true) {
         auto curr_state = _state.load(std::memory_order_acquire);
         if (curr_state == kLoaded) {
             return false;
         }
         if (curr_state == kUnloaded && _state.compare_exchange_weak(curr_state, kLoading, std::memory_order_release)) {
-            auto st = do_load(fs, filename, meta, use_page_cache, kept_in_memory);
+            auto st = do_load(fs, filename, meta, use_page_cache, kept_in_memory, mem_tracker);
             if (st.ok()) {
                 _state.store(kLoaded, std::memory_order_release);
                 int r = bthread::futex_wake_private(&_state, INT_MAX);
@@ -59,13 +59,16 @@ StatusOr<bool> BloomFilterIndexReader::load(FileSystem* fs, const std::string& f
 }
 
 Status BloomFilterIndexReader::do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                                       bool use_page_cache, bool kept_in_memory) {
+                                       bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker) {
+    const auto old_mem_usage = mem_usage();
     _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
     _algorithm = meta.algorithm();
     _hash_strategy = meta.hash_strategy();
     const IndexedColumnMetaPB& bf_index_meta = meta.bloom_filter();
     _bloom_filter_reader = std::make_unique<IndexedColumnReader>(fs, filename, bf_index_meta);
     RETURN_IF_ERROR(_bloom_filter_reader->load(use_page_cache, kept_in_memory));
+    const auto new_mem_usage = mem_usage();
+    mem_tracker->consume(new_mem_usage - old_mem_usage);
     return Status::OK();
 }
 

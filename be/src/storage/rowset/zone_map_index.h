@@ -74,7 +74,7 @@ public:
     // Return true if the index data was successfully loaded by the caller, false if
     // the data was loaded by another caller.
     StatusOr<bool> load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB& meta, bool use_page_cache,
-                        bool kept_in_memory);
+                        bool kept_in_memory, MemTracker* mem_tracker);
 
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     const std::vector<ZoneMapPB>& page_zone_maps() const { return _page_zone_maps; }
@@ -94,7 +94,7 @@ private:
     };
 
     Status do_load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB& meta, bool use_page_cache,
-                   bool kept_in_memory);
+                   bool kept_in_memory, MemTracker* mem_tracker);
 
     std::atomic<State> _state;
     std::vector<ZoneMapPB> _page_zone_maps;
