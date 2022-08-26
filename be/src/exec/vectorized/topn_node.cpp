@@ -199,7 +199,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     auto degree_of_parallelism =
             down_cast<SourceOperatorFactory*>(operators_sink_with_sort[0].get())->degree_of_parallelism();
     auto sort_context_factory = std::make_shared<SortContextFactory>(
-            runtime_state(), is_merging, _limit, degree_of_parallelism, _is_asc_order, _is_null_first);
+            runtime_state(), is_merging, _offset, _limit, degree_of_parallelism, _is_asc_order, _is_null_first);
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
