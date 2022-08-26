@@ -1435,6 +1435,14 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
             tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
+            try {
+                for (Long mvId : olapTable.getRelatedMaterializedViews()) {
+                    refreshMaterializedView(db.getFullName(), db.getTable(mvId).getName(),
+                            Constants.TaskRunPriority.NORMAL.value());
+                }
+            } catch (MetaNotFoundException e) {
+                throw new DdlException(e.getMessage());
+            }
         }
 
         // log
