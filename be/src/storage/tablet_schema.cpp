@@ -273,7 +273,7 @@ TabletColumn::TabletColumn(const TabletColumn& rhs)
     }
 }
 
-TabletColumn::TabletColumn(TabletColumn&& rhs)
+TabletColumn::TabletColumn(TabletColumn&& rhs) noexcept
         : _col_name(std::move(rhs._col_name)),
           _unique_id(rhs._unique_id),
           _length(rhs._length),
@@ -311,7 +311,7 @@ TabletColumn& TabletColumn::operator=(const TabletColumn& rhs) {
     return *this;
 }
 
-TabletColumn& TabletColumn::operator=(TabletColumn&& rhs) {
+TabletColumn& TabletColumn::operator=(TabletColumn&& rhs) noexcept {
     TabletColumn tmp(std::move(rhs));
     swap(&tmp);
     return *this;
@@ -435,9 +435,7 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
         auto* tablet_column = partial_tablet_schema_pb.add_column();
         src_tablet_schema.column(referenced_column_id).to_schema_pb(tablet_column);
     }
-    auto partial_tablet_schema = std::make_shared<TabletSchema>();
-    partial_tablet_schema->init_from_pb(partial_tablet_schema_pb);
-    return partial_tablet_schema;
+    return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
 }
 
 void TabletSchema::_init_schema() const {

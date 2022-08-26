@@ -155,6 +155,7 @@ set(EXEC_FILES
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
         ./storage/tablet_mgr_test.cpp
+        ./storage/tablet_schema_helper.cpp
         ./storage/version_graph_test.cpp
         ./storage/lake/async_delta_writer_test.cpp
         ./storage/lake/compaction_policy_test.cpp
