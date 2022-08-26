@@ -19,6 +19,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
@@ -86,7 +87,9 @@ protected:
     void SetUp() override {
         (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(kTestGroupPath));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
     }
 
@@ -182,8 +185,8 @@ TEST_F(DeltaWriterTest, test_write) {
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
-    auto path0 = fmt::format("{}/{}", kTestGroupPath, txnlog->op_write().rowset().segments(0));
-    auto path1 = fmt::format("{}/{}", kTestGroupPath, txnlog->op_write().rowset().segments(1));
+    auto path0 = _location_provider->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
+    auto path1 = _location_provider->segment_location(tablet_id, txnlog->op_write().rowset().segments(1));
 
     ASSIGN_OR_ABORT(auto seg0, Segment::open(_mem_tracker.get(), fs, path0, 0, _tablet_schema.get()));
     ASSIGN_OR_ABORT(auto seg1, Segment::open(_mem_tracker.get(), fs, path1, 1, _tablet_schema.get()));
@@ -238,8 +241,8 @@ TEST_F(DeltaWriterTest, test_close) {
 
     // Segment file should not exist
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
-    ASSERT_OK(fs->iterate_dir(kTestGroupPath, [&](std::string_view name) {
-        EXPECT_TRUE(HasPrefixString(name, "tbl_"));
+    ASSERT_OK(fs->iterate_dir(join_path(kTestGroupPath, kMetadataDirectoryName), [&](std::string_view name) {
+        EXPECT_TRUE(is_tablet_metadata(name)) << name;
         return true;
     }));
 }
