@@ -1127,7 +1127,8 @@ public class PseudoBackend {
         PseudoOlapTableSink sink = new PseudoOlapTableSink(cluster, tDataSink);
         if (!sink.open()) {
             sink.cancel();
-            throw new Exception(String.format("open sink failed, backend:%s txn:%d", be.getId(), sink.txnId));
+            throw new Exception(
+                    String.format("open sink failed, backend:%s txn:%d %s", be.getId(), sink.txnId, sink.getErrorMessage()));
         }
         if (!sink.close()) {
             sink.cancel();
@@ -1148,15 +1149,26 @@ public class PseudoBackend {
                 this.indexId = indexId;
             }
 
-            void open(PTabletWriterOpenRequest request) {
+            void open(PTabletWriterOpenRequest request) throws Exception {
                 tablets = request.tablets;
+                for (PTabletWithPartition tabletWithPartition : tablets) {
+                    Tablet tablet = tabletManager.getTablet(tabletWithPartition.tabletId);
+                    if (tablet == null) {
+                        LOG.warn("tablet not found {}", tabletWithPartition.tabletId);
+                        throw new Exception("tablet not found " + tabletWithPartition.tabletId);
+                    }
+                    if (tablet.getRowsetCount() >= Tablet.maxVersions) {
+                        throw new Exception(String.format("Too many versions. tablet_id: %d, version_count: %d, limit: %d",
+                                tablet.id, tablet.getRowsetCount(), Tablet.maxVersions));
+                    }
+                }
             }
 
             void cancel() {
             }
 
             void buildAndCommitRowset(long txnId, Tablet tablet) throws UserException {
-                Rowset rowset = new Rowset(txnId, genRowsetId());
+                Rowset rowset = new Rowset(txnId, genRowsetId(), 100, 100000);
                 txnManager.commit(txnId, tablet.partitionId, tablet, rowset);
             }
 
@@ -1184,7 +1196,7 @@ public class PseudoBackend {
             this.id = id;
         }
 
-        void open(PTabletWriterOpenRequest request, PTabletWriterOpenResult result) {
+        void open(PTabletWriterOpenRequest request, PTabletWriterOpenResult result) throws Exception {
             this.txnId = request.txnId;
             if (indexToTabletsChannel.containsKey(request.indexId)) {
                 return;
@@ -1202,8 +1214,8 @@ public class PseudoBackend {
         void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
             TabletsChannel tabletsChannel = indexToTabletsChannel.get(request.indexId);
             if (tabletsChannel == null) {
-                result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
-                result.status.errorMsgs.add("cannot find the tablets channel associated with the index id");
+                result.status =
+                        statusPB(TStatusCode.INTERNAL_ERROR, "cannot find the tablets channel associated with the index id");
             } else {
                 tabletsChannel.close(request, result);
             }
@@ -1219,7 +1231,13 @@ public class PseudoBackend {
         result.status.errorMsgs = new ArrayList<>();
         String loadIdString = String.format("%d-%d", request.id.hi, request.id.lo);
         LoadChannel loadChannel = loadChannels.computeIfAbsent(loadIdString, k -> new LoadChannel(request.id));
-        loadChannel.open(request, result);
+        try {
+            loadChannel.open(request, result);
+        } catch (Exception e) {
+            loadChannel.cancel();
+            loadChannels.remove(loadIdString);
+            result.status = statusPB(TStatusCode.INTERNAL_ERROR, e.getMessage());
+        }
         return result;
     }
 
@@ -1246,9 +1264,8 @@ public class PseudoBackend {
                 if (random.nextFloat() < writeFailureRate) {
                     channel.cancel();
                     loadChannels.remove(loadIdString);
-                    result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
-                    result.status.errorMsgs.add("inject error writeFailureRate:" + writeFailureRate);
-                    LOG.info("inject write failure txn:{} backend:{}", request.txnId, be.getId());
+                    result.status = statusPB(TStatusCode.INTERNAL_ERROR, "inject error writeFailureRate:" + writeFailureRate);
+                    LOG.warn("inject write failure txn:{} backend:{}", request.txnId, be.getId());
                     return result;
                 }
                 try {
@@ -1257,12 +1274,10 @@ public class PseudoBackend {
                     LOG.warn("error close load channel", e);
                     channel.cancel();
                     loadChannels.remove(loadIdString);
-                    result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
-                    result.status.errorMsgs.add(e.getMessage());
+                    result.status = statusPB(TStatusCode.INTERNAL_ERROR, e.getMessage());
                 }
             } else {
-                result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
-                result.status.errorMsgs.add("no associated load channel");
+                result.status = statusPB(TStatusCode.INTERNAL_ERROR, "no associated load channel");
             }
         }
         return result;

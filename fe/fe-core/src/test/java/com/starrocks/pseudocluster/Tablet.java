@@ -21,9 +21,17 @@ import java.util.stream.Collectors;
 public class Tablet {
     private static final Logger LOG = LogManager.getLogger(Tablet.class);
 
+    // same as BE's config tablet_max_versions
+    public static volatile int maxVersions = 1000;
+
+    // same as BE's config tablet_max_pending_versions
     public static volatile int maxPendingVersions = 1000;
+
     // default 30 minutes
     public static volatile long versionExpireSec = 1800L;
+
+    // compaction interval
+    public static volatile long compactionIntervalMs = 60000L;
 
     @SerializedName(value = "id")
     long id;
@@ -53,6 +61,7 @@ public class Tablet {
     private static AtomicInteger totalIncrementalClone = new AtomicInteger(0);
     private static AtomicInteger totalFullClone = new AtomicInteger(0);
     private static AtomicInteger totalClone = new AtomicInteger(0);
+    private static AtomicInteger totalCompaction = new AtomicInteger(0);
 
     public static void clearStats() {
         totalReadExecuted.set(0);
@@ -116,12 +125,15 @@ public class Tablet {
     @SerializedName(value = "pendingRowsets")
     TreeMap<Long, Rowset> pendingRowsets = new TreeMap<>();
 
+    long lastCompactionMs = 0L;
+
     public Tablet(long id, long tableId, long partitionId, int schemaHash, boolean enablePersistentIndex) {
         this.id = id;
         this.tableId = tableId;
         this.partitionId = partitionId;
         this.schemaHash = schemaHash;
         this.enablePersistentIndex = enablePersistentIndex;
+        this.lastCompactionMs = System.nanoTime() / 1000000L;
         versions = Lists.newArrayList(new EditVersion(1, 0, System.currentTimeMillis()));
     }
 
@@ -164,6 +176,18 @@ public class Tablet {
         } else {
             return pendingRowsets.lastKey();
         }
+    }
+
+    public synchronized int getRowsetCount() {
+        return getMaxContinuousEditVersion().rowsets.size();
+    }
+
+    public synchronized int getVersionCount() {
+        return versions.size();
+    }
+
+    public synchronized int getPendingRowsetCount() {
+        return pendingRowsets.size();
     }
 
     public synchronized long minVersion() {
@@ -234,6 +258,10 @@ public class Tablet {
 
     public static int getTotalClone() {
         return totalClone.get();
+    }
+
+    public static int getTotalCompaction() {
+        return totalCompaction.get();
     }
 
     private void tryCommitPendingRowsets() {
@@ -397,6 +425,42 @@ public class Tablet {
         }
         versions = newVersions;
         totalVersionGCed.addAndGet(i);
+    }
+
+    public synchronized void doCompaction() {
+        long curMs = System.nanoTime() / 1000000;
+        if (curMs - lastCompactionMs < compactionIntervalMs) {
+            return;
+        }
+        EditVersion cur = getMaxContinuousEditVersion();
+        if (cur.minor != 0) {
+            // skip compaction if last version is compacted
+            return;
+        }
+        int i = cur.rowsets.size();
+        long totalRows = 0;
+        long totalSize = 0;
+        for (; i > 0; i--) {
+            Rowset r = cur.rowsets.get(i - i);
+            if (r.dataSize >= 1000000) {
+                break;
+            }
+            totalRows += r.numRows;
+            totalSize += r.dataSize;
+        }
+        if (i >= cur.rowsets.size() - 1) {
+            // skip compaction if on input or only 1 input
+            return;
+        }
+        EditVersion newVersion = new EditVersion(cur.major, cur.minor + 1, System.currentTimeMillis());
+        newVersion.rowsets.addAll(cur.rowsets.subList(0, i));
+        Rowset newRowset = new Rowset(0, "compaction-" + id + "-" + cur.major, totalRows, totalSize);
+        newRowset.id = ++nextRssId;
+        newVersion.rowsets.add(newRowset);
+        versions.add(newVersion);
+        totalCompaction.incrementAndGet();
+        LOG.info("tablet:{} compaction #rowset:{} {}", id, cur.rowsets.size() - i, versionInfo());
+        lastCompactionMs = curMs;
     }
 
     public synchronized void convertFrom(Tablet baseTablet, long alterVersion) throws Exception {
