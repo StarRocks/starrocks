@@ -113,8 +113,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                     logicalIcebergScanOperator.getLimit(),
                     logicalIcebergScanOperator.getPredicate());
 
-            icebergScanOperator.getMinMaxConjuncts().addAll(logicalIcebergScanOperator.getMinMaxConjuncts());
-            icebergScanOperator.getMinMaxColumnRefMap().putAll(logicalIcebergScanOperator.getMinMaxColumnRefMap());
+            icebergScanOperator.setScanOperatorPredicates(logicalIcebergScanOperator.getScanOperatorPredicates());
 
             return Lists.newArrayList(new OptExpression(icebergScanOperator));
         } else if (scanOperator instanceof LogicalHudiScanOperator) {
