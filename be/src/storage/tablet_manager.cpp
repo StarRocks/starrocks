@@ -1158,7 +1158,6 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
     tablet_map.erase(it);
     _remove_tablet_from_partition(*dropped_tablet);
     dropped_tablet->stop_compaction();
-    LOG(INFO) << "Succeed to stop compaction of tablet " << tablet_id;
 
     DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = flag};
 
