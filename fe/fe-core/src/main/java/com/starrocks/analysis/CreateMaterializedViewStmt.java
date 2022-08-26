@@ -289,6 +289,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             QueryStatement queryStatement = statement.getQueryStatement();
             com.starrocks.sql.analyzer.Analyzer.analyze(statement.getQueryStatement(), context);
 
+            // forbid explain query
+            if (queryStatement.isExplain()) {
+                throw new IllegalArgumentException("Materialized view does not support explain query");
+            }
+
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
                 throw new SemanticException("Materialized view query statement only support select");
             }
