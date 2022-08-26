@@ -7,6 +7,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.plan.ExecPlan;
