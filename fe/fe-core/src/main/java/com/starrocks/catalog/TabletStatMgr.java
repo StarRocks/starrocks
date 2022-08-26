@@ -21,7 +21,6 @@
 
 package com.starrocks.catalog;
 
-import com.baidu.brpc.RpcContext;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -239,9 +238,6 @@ public class TabletStatMgr extends LeaderDaemon {
                 }
                 TabletStatRequest request = new TabletStatRequest();
                 request.tabletInfos = entry.getValue();
-
-                RpcContext rpcContext = RpcContext.getContext();
-                rpcContext.setReadTimeoutMillis(600000);
 
                 LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
                 Future<TabletStatResponse> responseFuture = lakeService.getTabletStats(request);
