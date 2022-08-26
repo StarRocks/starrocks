@@ -291,7 +291,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
                 null_options.meta->set_type(OLAP_FIELD_TYPE_BOOL);
                 null_options.meta->set_length(1);
                 null_options.meta->set_encoding(DEFAULT_ENCODING);
-                null_options.meta->set_compression(LZ4);
+                null_options.meta->set_compression(opts.meta->compression());
                 null_options.meta->set_is_nullable(false);
                 std::unique_ptr<Field> bool_field(FieldFactory::create_by_type(FieldType::OLAP_FIELD_TYPE_BOOL));
                 null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(bool_field), wfile);
@@ -304,7 +304,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
             array_size_options.meta->set_type(OLAP_FIELD_TYPE_INT);
             array_size_options.meta->set_length(4);
             array_size_options.meta->set_encoding(DEFAULT_ENCODING);
-            array_size_options.meta->set_compression(LZ4);
+            array_size_options.meta->set_compression(opts.meta->compression());
             array_size_options.meta->set_is_nullable(false);
             array_size_options.need_zone_map = false;
             array_size_options.need_bloom_filter = false;

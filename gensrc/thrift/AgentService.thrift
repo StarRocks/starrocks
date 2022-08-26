@@ -76,6 +76,7 @@ struct TCreateTabletReq {
     13: optional TStorageFormat storage_format
     14: optional TTabletType tablet_type
     15: optional bool enable_persistent_index
+    16: optional Types.TCompressionType compression_type = Types.TCompressionType.LZ4_FRAME
 }
 
 struct TDropTabletReq {

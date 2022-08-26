@@ -25,4 +25,22 @@ public class CompressionUtils {
     public static TCompressionType findTCompressionByName(String name) {
         return tCompressionByName.get(name);
     }
+
+    // Return TCompressionType according to input name for some specified compression types.
+    // Return null if input name is an invalid compression type.
+    public static TCompressionType getCompressTypeByName(String name) {
+        TCompressionType compressionType = tCompressionByName.get(name);
+
+        // Only lz4, zlib, zstd is available.
+        if (compressionType == null) {
+            return null;
+        } else if (compressionType == TCompressionType.LZ4
+                   || compressionType == TCompressionType.LZ4_FRAME
+                   || compressionType == TCompressionType.ZLIB
+                   || compressionType == TCompressionType.ZSTD) {
+            return compressionType;
+        } else {
+            return null;
+        }
+    }
 }
