@@ -180,16 +180,16 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
     if ((_join_conjuncts.empty())) {
         return Status::OK();
     }
+    if (!chunk || chunk->is_empty()) {
+        return Status::OK();
+    }
     vectorized::FilterPtr filter;
-    if (chunk && !chunk->is_empty()) {
-        size_t rows = chunk->num_rows();
-        RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter));
-        DCHECK(!!filter);
-
-        // The filter has not been assigned if no rows matched
-        if (chunk->num_rows() == 0) {
-            filter->assign(rows, 0);
-        }
+    size_t rows = chunk->num_rows();
+    RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter));
+    DCHECK(!!filter);
+    // The filter has not been assigned if no rows matched
+    if (chunk->num_rows() == 0) {
+        filter->assign(rows, 0);
     }
 
     if (_is_left_join()) {
@@ -218,7 +218,7 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
         }
     }
 
-    if (_is_right_join() && filter) {
+    if (_is_right_join()) {
         VLOG(3) << fmt::format("NLJoin operator {} set build_flags for right join: {}", _driver_sequence,
                                fmt::join(*filter, ","));
         bool multi_probe_rows = _num_build_chunks() == 1;
