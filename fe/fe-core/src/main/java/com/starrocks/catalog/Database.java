@@ -99,7 +99,7 @@ public class Database extends MetaObject implements Writable {
 
     private long lastSlowLockLogTime = 0;
 
-    private boolean dropped = false;
+    private boolean exist = true;
 
     public Database() {
         this(0, null);
@@ -149,10 +149,9 @@ public class Database extends MetaObject implements Writable {
     @Deprecated
     // use readLockAndExist()
     public void readLock() {
-        readLockAndExist();
     }
 
-    // return false if the db has been dropped
+    // no
     public boolean readLockAndExist() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         Thread formerOwner = rwLock.getOwner();
@@ -812,7 +811,24 @@ public class Database extends MetaObject implements Writable {
     }
 
     // the invoker should hold db's writeLock
-    public void setDropped() {
-        dropped = true;
+    public void setExist(boolean exist) {
+        this.exist = exist;
+    }
+
+    public static class LockState {
+        boolean locked;
+        boolean exist;
+        public LockState(boolean locked, boolean exist) {
+            this.locked = locked;
+            this.exist = exist;
+        }
+
+        public boolean isLocked() {
+            return locked;
+        }
+
+        public boolean isExist() {
+            return exist;
+        }
     }
 }
