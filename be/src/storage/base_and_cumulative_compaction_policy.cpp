@@ -74,18 +74,18 @@ void BaseAndCumulativeCompactionPolicy::_pick_cumulative_rowsets(bool* has_delet
             rowset->creation_time() + config::cumulative_compaction_skip_window_seconds > now) {
             // rowset in rowset_levels is ordered
             VLOG(2) << "rowset:" << rowset->rowset_id() << ", version:" << rowset->version()
-                      << " is newly created. creation time:" << rowset->creation_time()
-                      << ", threshold:" << config::cumulative_compaction_skip_window_seconds
-                      << ", rowset overlapping:" << rowset->rowset_meta()->segments_overlap() << ", index:" << index
-                      << ", is_creation_time_ordered:" << is_creation_time_ordered;
+                    << " is newly created. creation time:" << rowset->creation_time()
+                    << ", threshold:" << config::cumulative_compaction_skip_window_seconds
+                    << ", rowset overlapping:" << rowset->rowset_meta()->segments_overlap() << ", index:" << index
+                    << ", is_creation_time_ordered:" << is_creation_time_ordered;
             break;
         }
-        rowsets->emplace_back(std::move(rowset->shared_from_this()));
+        rowsets->emplace_back(rowset->shared_from_this());
         *rowsets_compaction_score += rowset->rowset_meta()->get_compaction_score();
         if (*rowsets_compaction_score >= config::max_cumulative_compaction_num_singleton_deltas) {
             VLOG(2) << "cumulative compaction rowsets_compaction_score:" << *rowsets_compaction_score
-                      << " is larger than config:" << config::max_cumulative_compaction_num_singleton_deltas
-                      << ", cumulative rowset size:" << _compaction_context->rowset_levels[0].size();
+                    << " is larger than config:" << config::max_cumulative_compaction_num_singleton_deltas
+                    << ", cumulative rowset size:" << _compaction_context->rowset_levels[0].size();
             break;
         }
         ++index;
@@ -170,9 +170,9 @@ void BaseAndCumulativeCompactionPolicy::_pick_base_rowsets(std::vector<RowsetSha
         rowsets_compaction_score += rowset->rowset_meta()->get_compaction_score();
         if (rowsets_compaction_score >= config::max_base_compaction_num_singleton_deltas) {
             VLOG(2) << "base compaction rowsets_compaction_score:" << rowsets_compaction_score
-                      << " is larger than config:" << config::max_base_compaction_num_singleton_deltas
-                      << ", base rowset size:"
-                      << _compaction_context->rowset_levels[1].size() + _compaction_context->rowset_levels[2].size();
+                    << " is larger than config:" << config::max_base_compaction_num_singleton_deltas
+                    << ", base rowset size:"
+                    << _compaction_context->rowset_levels[1].size() + _compaction_context->rowset_levels[2].size();
             break;
         }
 
