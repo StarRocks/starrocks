@@ -27,6 +27,7 @@
 #include <filesystem>
 #include <set>
 
+#include "agent/agent_common.h"
 #include "agent/finish_task.h"
 #include "agent/master_info.h"
 #include "common/status.h"
@@ -65,8 +66,8 @@ const uint32_t DOWNLOAD_FILE_MAX_RETRY = 3;
 const uint32_t LIST_REMOTE_FILE_TIMEOUT = 15;
 const uint32_t GET_LENGTH_TIMEOUT = 10;
 
-void run_clone_task(std::shared_ptr<TAgentTaskRequest> agent_task_req) {
-    const TCloneReq& clone_req = agent_task_req->clone_req;
+void run_clone_task(std::shared_ptr<CloneAgentTaskRequest> agent_task_req) {
+    const TCloneReq& clone_req = agent_task_req->task_req;
     AgentStatus status = STARROCKS_SUCCESS;
 
     // Return result to fe
