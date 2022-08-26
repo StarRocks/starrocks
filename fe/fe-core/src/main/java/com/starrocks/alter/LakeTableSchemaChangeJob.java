@@ -642,7 +642,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 Preconditions.checkNotNull(droppedIdx, originIdxId + " vs. " + shadowIdxId);
 
                 // Add Tablet to TabletInvertedIndex.
-                TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partition.getId(), shadowIdxId, 0, medium);
+                TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partition.getId(), shadowIdxId, 0, medium, true);
                 for (Tablet tablet : shadowIdx.getTablets()) {
                     invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
                 }
