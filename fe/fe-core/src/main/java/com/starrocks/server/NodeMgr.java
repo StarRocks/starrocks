@@ -742,7 +742,7 @@ public class NodeMgr {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            Frontend fe = checkFeExist(host, port);
+            Frontend fe = unprotectCheckFeExist(host, port);
             if (fe == null) {
                 throw new DdlException("frontend does not exist[" + host + ":" + port + "]");
             }
@@ -769,7 +769,7 @@ public class NodeMgr {
     public void replayAddFrontend(Frontend fe) {
         tryLock(true);
         try {
-            Frontend existFe = checkFeExist(fe.getHost(), fe.getEditLogPort());
+            Frontend existFe = unprotectCheckFeExist(fe.getHost(), fe.getEditLogPort());
             if (existFe != null) {
                 LOG.warn("fe {} already exist.", existFe);
                 if (existFe.getRole() != fe.getRole()) {
@@ -834,6 +834,15 @@ public class NodeMgr {
     }
 
     public Frontend checkFeExist(String host, int port) {
+        tryLock(true);
+        try {
+            return unprotectCheckFeExist(host, port);
+        } finally {
+            unlock();
+        }
+    }
+
+    public Frontend unprotectCheckFeExist(String host, int port) {
         for (Frontend fe : frontends.values()) {
             if (fe.getHost().equals(host) && fe.getEditLogPort() == port) {
                 return fe;
