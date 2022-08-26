@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -89,14 +90,24 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
+        aggregationOperator.getGroupingKeys().forEach(g -> projectMap.put(g, g));
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
+            // in this case, CallOperator must have only one child ColumnRefOperator
+            projectMap.put(entry.getKey(), entry.getValue().getChild(0));
+        }
         if (aggregationOperator.getProjection() != null) {
-            projectMap.putAll(aggregationOperator.getProjection().getColumnRefMap());
-        } else {
-            aggregationOperator.getGroupingKeys().forEach(g -> projectMap.put(g, g));
-            for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
-                // in this case, CallOperator must have only one child ColumnRefOperator
-                projectMap.put(entry.getKey(), entry.getValue().getChild(0));
+            // projectMap.putAll(aggregationOperator.getProjection().getColumnRefMap());
+            // use ScalarOperatorVisitor to replace the ColumnRefOperator
+            Map<ColumnRefOperator, ScalarOperator> newProjectMap =
+                    Maps.newHashMap(aggregationOperator.getProjection().getColumnRefMap());
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectMap);
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry :
+                    aggregationOperator.getProjection().getColumnRefMap().entrySet()) {
+                ScalarOperator rewrittenOperator = rewriter.rewrite(entry.getValue());
+                newProjectMap.put(entry.getKey(), rewrittenOperator);
             }
+            projectMap.clear();
+            projectMap.putAll(newProjectMap);
         }
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projectMap);
         return Lists.newArrayList(OptExpression.create(projectOperator, input.getInputs().get(0)));
