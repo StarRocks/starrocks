@@ -22,6 +22,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -772,6 +773,16 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(1, normalIndexes.size());
         MaterializedIndex normalIndex = normalIndexes.get(0);
         Assert.assertEquals(shadowTabletIds, normalIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()));
+
+        for (Long tabletId : shadowTabletIds) {
+            TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
+            Assert.assertNotSame(TabletInvertedIndex.NOT_EXIST_TABLET_META, tabletMeta);
+            Assert.assertTrue(tabletMeta.isLakeTablet());
+            Assert.assertEquals(db.getId(), tabletMeta.getDbId());
+            Assert.assertEquals(table.getId(), tabletMeta.getTableId());
+            Assert.assertEquals(partition.getId(), tabletMeta.getPartitionId());
+            Assert.assertEquals(normalIndex.getId(), tabletMeta.getIndexId());
+        }
 
         // Does not support cancel job in FINISHED state.
         schemaChangeJob.cancel("test");
