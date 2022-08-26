@@ -605,6 +605,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String comment =
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+
         // process properties
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -613,8 +614,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        //process refresh
-        RefreshSchemeDesc refreshSchemeDesc = null;
+        // process refresh
+        RefreshSchemeDesc refreshSchemeDesc;
         if (context.refreshSchemeDesc() == null) {
             refreshSchemeDesc = new SyncRefreshSchemeDesc();
         } else {
