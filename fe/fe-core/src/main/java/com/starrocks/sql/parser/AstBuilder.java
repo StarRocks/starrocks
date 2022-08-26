@@ -1678,16 +1678,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowRoutineLoadTaskStatement(StarRocksParser.ShowRoutineLoadTaskStatementContext context) {
-        String database = "";
+        QualifiedName dbName = null;
         if (context.db != null) {
-            database = context.db.getText();
+            dbName = getQualifiedName(context.db);
         }
 
         Expr where = null;
         if (context.expression() != null) {
             where = (Expr) visit(context.expression());
         }
-        return new ShowRoutineLoadTaskStmt(database, where);
+        return new ShowRoutineLoadTaskStmt(dbName == null ? null : dbName.toString(), where);
     }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------
