@@ -465,6 +465,7 @@ void TabletSchema::init_from_pb(const TabletSchemaPB& schema) {
     _keys_type = static_cast<uint8_t>(schema.keys_type());
     _num_key_columns = 0;
     _cols.clear();
+    _compression_type = schema.compression_type();
     for (auto& column_pb : schema.column()) {
         TabletColumn column;
         column.init_from_pb(column_pb);
@@ -501,6 +502,7 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
         tablet_schema_pb->set_bf_fpp(_bf_fpp);
     }
     tablet_schema_pb->set_next_column_unique_id(_next_column_unique_id);
+    tablet_schema_pb->set_compression_type(_compression_type);
 }
 
 bool TabletSchema::contains_format_v1_column() const {
