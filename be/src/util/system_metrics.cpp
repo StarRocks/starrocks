@@ -60,63 +60,6 @@ public:
 const char* const CpuMetrics::cpu_metrics[] = {"user", "nice",     "system", "idle",  "iowait",
                                                "irq",  "soft_irq", "steal",  "guest", "guest_nice"};
 
-class MemoryMetrics {
-public:
-#ifndef USE_JEMALLOC
-    // tcmalloc metrics.
-    METRIC_DEFINE_INT_GAUGE(allocated_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(total_thread_cache_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(central_cache_free_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(transfer_cache_free_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(thread_cache_free_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(pageheap_free_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(pageheap_unmapped_bytes, MetricUnit::BYTES);
-#else
-    METRIC_DEFINE_INT_GAUGE(jemalloc_allocated_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(jemalloc_active_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(jemalloc_metadata_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(jemalloc_metadata_thp, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(jemalloc_resident_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(jemalloc_mapped_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(jemalloc_retained_bytes, MetricUnit::BYTES);
-#endif
-    // MemPool metrics
-    // Process memory usage
-    METRIC_DEFINE_INT_GAUGE(process_mem_bytes, MetricUnit::BYTES);
-    // Query memory usage
-    METRIC_DEFINE_INT_GAUGE(query_mem_bytes, MetricUnit::BYTES);
-    // Load memory usage
-    METRIC_DEFINE_INT_GAUGE(load_mem_bytes, MetricUnit::BYTES);
-    // Tablet meta memory usage
-    METRIC_DEFINE_INT_GAUGE(tablet_meta_mem_bytes, MetricUnit::BYTES);
-    // Compaction memory usage
-    METRIC_DEFINE_INT_GAUGE(compaction_mem_bytes, MetricUnit::BYTES);
-    // SchemaChange memory usage
-    METRIC_DEFINE_INT_GAUGE(schema_change_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(storage_page_cache_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(update_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(chunk_allocator_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(clone_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(consistency_mem_bytes, MetricUnit::BYTES);
-
-    // column pool metrics.
-    METRIC_DEFINE_INT_GAUGE(column_pool_total_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_local_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_central_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_binary_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_uint8_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int8_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int16_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int32_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int64_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int128_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_float_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_double_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_decimal_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_date_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_datetime_bytes, MetricUnit::BYTES);
-};
 
 class DiskMetrics {
 public:
