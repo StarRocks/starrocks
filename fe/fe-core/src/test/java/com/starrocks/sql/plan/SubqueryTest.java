@@ -76,21 +76,22 @@ public class SubqueryTest extends PlanTestBase {
                 + "FROM t0\n"
                 + "WHERE v1 = 1;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  15:Project\n" +
-                "  |  <slot 19> : if(8: expr > 74219, 13: expr, 17: avg)\n" +
+        assertContains(plan, "  14:Project\n" +
+                "  |  <slot 8> : 8: expr\n" +
+                "  |  <slot 13> : 12: avg\n" +
                 "  |  \n" +
-                "  14:NESTLOOP JOIN\n" +
+                "  13:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
-                "  |----13:EXCHANGE\n" +
+                "  |----12:EXCHANGE\n" +
                 "  |    \n" +
-                "  10:Project");
+                "  7:Project");
         assertContains(plan, "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 13\n" +
+                "    EXCHANGE ID: 17\n" +
                 "    UNPARTITIONED\n" +
                 "\n" +
-                "  12:AGGREGATE (update finalize)\n" +
+                "  16:AGGREGATE (update finalize)\n" +
                 "  |  output: avg(15: v8)");
     }
 
@@ -793,10 +794,10 @@ public class SubqueryTest extends PlanTestBase {
             String sql = "select * from t0 " +
                     "join t1 on t0.v1 = (select count(*) from t3 join t4)";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  14:NESTLOOP JOIN\n" +
+            assertContains(plan, "  16:NESTLOOP JOIN\n" +
                     "  |  join op: CROSS JOIN\n" +
-                    "  |  colocate: false, reason: ");
-            assertContains(plan, "  10:HASH JOIN\n" +
+                    "  |  colocate: false, reason:");
+            assertContains(plan, "  12:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v1 = 13: count");

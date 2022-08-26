@@ -311,10 +311,11 @@ CROSS JOIN (join-predicate [4: sum < multiply(105, 8: max)] post-join-predicate 
         AGGREGATE ([LOCAL] aggregate [{4: sum=sum(3: v3)}] group by [[1: v1]] having [null]
             SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{8: max=max(8: max)}] group by [[]] having [null]
-            EXCHANGE GATHER
-                AGGREGATE ([LOCAL] aggregate [{8: max=max(5: v4)}] group by [[]] having [null]
-                    SCAN (columns[5: v4] predicate[null])
+        ASSERT LE 1
+            AGGREGATE ([GLOBAL] aggregate [{8: max=max(8: max)}] group by [[]] having [null]
+                EXCHANGE GATHER
+                    AGGREGATE ([LOCAL] aggregate [{8: max=max(5: v4)}] group by [[]] having [null]
+                        SCAN (columns[5: v4] predicate[null])
 [end]
 
 [sql]
@@ -435,10 +436,11 @@ select t0.v1, (select max(v4) from t1) / 2 from t0;
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1] predicate[null])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{7: max=max(7: max)}] group by [[]] having [null]
-            EXCHANGE GATHER
-                AGGREGATE ([LOCAL] aggregate [{7: max=max(4: v4)}] group by [[]] having [null]
-                    SCAN (columns[4: v4] predicate[null])
+        ASSERT LE 1
+            AGGREGATE ([GLOBAL] aggregate [{7: max=max(7: max)}] group by [[]] having [null]
+                EXCHANGE GATHER
+                    AGGREGATE ([LOCAL] aggregate [{7: max=max(4: v4)}] group by [[]] having [null]
+                        SCAN (columns[4: v4] predicate[null])
 [end]
 
 [sql]
@@ -458,10 +460,12 @@ select t0.v1 from t0 where t0.v2 = (select SUM(v4) from t1) / 2;
 INNER JOIN (join-predicate [9: cast = 10: divide] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[cast(2: v2 as double) IS NOT NULL])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{7: sum=sum(7: sum)}] group by [[]] having [divide(cast(7: sum as double), 2.0) IS NOT NULL]
-            EXCHANGE GATHER
-                AGGREGATE ([LOCAL] aggregate [{7: sum=sum(4: v4)}] group by [[]] having [null]
-                    SCAN (columns[4: v4] predicate[null])
+        PREDICATE divide(cast(7: sum as double), 2.0) IS NOT NULL
+            ASSERT LE 1
+                AGGREGATE ([GLOBAL] aggregate [{7: sum=sum(7: sum)}] group by [[]] having [null]
+                    EXCHANGE GATHER
+                        AGGREGATE ([LOCAL] aggregate [{7: sum=sum(4: v4)}] group by [[]] having [null]
+                            SCAN (columns[4: v4] predicate[null])
 [end]
 
 [sql]
