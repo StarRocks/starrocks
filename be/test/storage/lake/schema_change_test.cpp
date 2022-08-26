@@ -67,7 +67,7 @@ public:
             c1->set_is_nullable(false);
         }
 
-        _base_tablet_schema = TabletSchema::create(_mem_tracker.get(), *base_schema);
+        _base_tablet_schema = TabletSchema::create(*base_schema);
         _base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_base_tablet_schema));
 
         // new tablet
@@ -113,7 +113,7 @@ public:
             c2->set_default_value("10");
         }
 
-        _new_tablet_schema = TabletSchema::create(_mem_tracker.get(), *new_schema);
+        _new_tablet_schema = TabletSchema::create(*new_schema);
         _new_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_new_tablet_schema));
     }
 
@@ -285,7 +285,7 @@ public:
             c1->set_is_nullable(false);
         }
 
-        _base_tablet_schema = TabletSchema::create(_mem_tracker.get(), *base_schema);
+        _base_tablet_schema = TabletSchema::create(*base_schema);
         _base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_base_tablet_schema));
 
         // new tablet
@@ -321,7 +321,7 @@ public:
             c1->set_is_nullable(false);
         }
 
-        _new_tablet_schema = TabletSchema::create(_mem_tracker.get(), *new_schema);
+        _new_tablet_schema = TabletSchema::create(*new_schema);
         _new_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_new_tablet_schema));
     }
 
@@ -501,7 +501,7 @@ public:
             c2->set_is_nullable(false);
         }
 
-        _base_tablet_schema = TabletSchema::create(_mem_tracker.get(), *base_schema);
+        _base_tablet_schema = TabletSchema::create(*base_schema);
         _base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_base_tablet_schema));
 
         // new tablet
@@ -547,7 +547,7 @@ public:
             c2->set_default_value("10");
         }
 
-        _new_tablet_schema = TabletSchema::create(_mem_tracker.get(), *new_schema);
+        _new_tablet_schema = TabletSchema::create(*new_schema);
         _new_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_new_tablet_schema));
     }
 
