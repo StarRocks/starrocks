@@ -60,7 +60,6 @@ public:
 const char* const CpuMetrics::cpu_metrics[] = {"user", "nice",     "system", "idle",  "iowait",
                                                "irq",  "soft_irq", "steal",  "guest", "guest_nice"};
 
-
 class DiskMetrics {
 public:
     METRIC_DEFINE_INT_ATOMIC_COUNTER(reads_completed, MetricUnit::OPERATIONS);
