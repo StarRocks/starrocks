@@ -3491,7 +3491,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "WHERE 0 < (\n" +
                 "    SELECT MAX(k9)\n" +
                 "    FROM test.pushdown_test);";
-        starRocksAssert.query(sql).explainContains("  4:CROSS JOIN\n" +
+        starRocksAssert.query(sql).explainContains("  6:CROSS JOIN\n" +
                         "  |  cross join:\n" +
                         "  |  predicates is NULL",
                 "  2:AGGREGATE (update finalize)\n" +
