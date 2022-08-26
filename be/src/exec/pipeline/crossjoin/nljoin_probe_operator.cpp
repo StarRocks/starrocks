@@ -193,6 +193,9 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
     if ((_join_conjuncts.empty())) {
         return Status::OK();
     }
+    if (!chunk || chunk->is_empty()) {
+        return Status::OK();
+    }
     vectorized::FilterPtr filter;
     if (chunk && !chunk->is_empty()) {
         size_t rows = chunk->num_rows();
@@ -264,8 +267,7 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk(RuntimeState* state) {
     _probe_row_start = _probe_row_current;
     for (; _probe_row_current < _probe_chunk->num_rows(); ++_probe_row_current) {
         // Last build chunk must permute a chunk
-        if (_curr_build_chunk_index == _num_build_chunks() - 1 && _num_build_chunks() > 1) {
-            _permute_probe_row(state, chunk);
+        if (_curr_build_chunk_index == _num_build_chunks() - 1 && _num_build_chunks() > 1) { _permute_probe_row(state, chunk);
             _move_build_chunk_index(0);
             ++_probe_row_current;
             return chunk;
