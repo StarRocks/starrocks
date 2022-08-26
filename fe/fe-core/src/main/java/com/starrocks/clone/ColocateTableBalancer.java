@@ -194,7 +194,8 @@ public class ColocateTableBalancer extends LeaderDaemon {
             }
 
             boolean isGroupStable = true;
-            db.readLock();
+            // ignore the result, because the tablet in dropped db can still be repaired
+            db.readLockAndExist();
             try {
                 OUT:
                 for (Long tableId : tableIds) {

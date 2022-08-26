@@ -146,17 +146,20 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
+    @Deprecated
+    // use readLockAndExist()
     public void readLock() {
+        readLockAndExist();
+    }
+
+    // return false if the db has been dropped
+    public boolean readLockAndExist() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         Thread formerOwner = rwLock.getOwner();
         this.rwLock.readLock().lock();
         logSlowLockEventIfNeeded(startMs, "readLock", formerOwner);
-    }
-
-    public boolean readLockAndExist() {
-        readLock();
         if (dropped) {
-            readUnlock();
+            this.rwLock.readLock().unlock();
             return false;
         }
         return true;
@@ -171,6 +174,7 @@ public class Database extends MetaObject implements Writable {
                 return false;
             }
             logSlowLockEventIfNeeded(startMs, "tryReadLock", formerOwner);
+            Preconditions.checkState(!dropped, "db " + fullQualifiedName + " has been dropped");
             return true;
         } catch (InterruptedException e) {
             LOG.warn("failed to try read lock at db[" + id + "]", e);
@@ -191,6 +195,7 @@ public class Database extends MetaObject implements Writable {
 
     public void readUnlock() {
         this.rwLock.readLock().unlock();
+        Preconditions.checkState(!dropped, "db " + fullQualifiedName + " has been dropped");
     }
 
     public void writeLock() {
@@ -198,6 +203,7 @@ public class Database extends MetaObject implements Writable {
         Thread formerOwner = rwLock.getOwner();
         this.rwLock.writeLock().lock();
         logSlowLockEventIfNeeded(startMs, "writeLock", formerOwner);
+        Preconditions.checkState(!dropped, "db " + fullQualifiedName + " has been dropped");
     }
 
     public boolean writeLockAndExist() {
@@ -218,6 +224,7 @@ public class Database extends MetaObject implements Writable {
                 return false;
             }
             logSlowLockEventIfNeeded(startMs, "tryWriteLock", formerOwner);
+            Preconditions.checkState(!dropped, "db " + fullQualifiedName + " has been dropped");
             return true;
         } catch (InterruptedException e) {
             LOG.warn("failed to try write lock at db[" + id + "]", e);

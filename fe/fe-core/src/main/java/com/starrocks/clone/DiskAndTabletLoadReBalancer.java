@@ -877,7 +877,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             return 0;
         }
 
-        db.readLock();
+        // ignore the result, because the tablet in dropped be should still be calculated.
+        db.readLockAndExist();
         try {
             OlapTable table = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
@@ -1209,8 +1210,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             return result;
         }
 
+        db.readLock();
         try {
-            db.readLock();
             OlapTable table = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
                 return result;
