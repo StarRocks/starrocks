@@ -283,6 +283,7 @@ public class PreAggregateTurnOnRule {
                         if (!AggregateType.BITMAP_UNION.equals(column.getAggregationType())) {
                             scan.setTurnOffReason(
                                     "Aggregate Operator not match: BITMAP_UNION <--> " + column.getAggregationType());
+                            return true;
                         }
                     } else if (!call.getFnName().equalsIgnoreCase(column.getAggregationType().name())) {
                         scan.setTurnOffReason(
