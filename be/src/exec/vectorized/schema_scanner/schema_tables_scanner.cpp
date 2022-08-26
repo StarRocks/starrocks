@@ -62,7 +62,8 @@ Status SchemaTablesScanner::start(RuntimeState* state) {
     get_tables_info_request.__set_auth_info(auth_info);
 
     if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_tables_info(*(_param->ip), _param->port, get_tables_info_request, &_tabls_info_response));
+        RETURN_IF_ERROR(SchemaHelper::get_tables_info(*(_param->ip), _param->port, get_tables_info_request,
+                                                      &_tabls_info_response));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
