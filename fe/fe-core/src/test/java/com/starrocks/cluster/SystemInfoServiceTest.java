@@ -22,10 +22,7 @@
 package com.starrocks.cluster;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AddBackendClause;
-import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
@@ -36,6 +33,9 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;

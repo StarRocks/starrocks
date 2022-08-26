@@ -19,6 +19,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AddRollupClause;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;

@@ -24,9 +24,7 @@ package com.starrocks.clone;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionValue;
@@ -49,6 +47,8 @@ import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.DropPartitionClause;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

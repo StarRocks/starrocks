@@ -23,9 +23,6 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobV2.JobState;
-import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.ModifyTablePropertiesClause;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
@@ -48,6 +45,9 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.thrift.TStorageFormat;
@@ -76,7 +76,7 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 
-public class SchemaChangeJobV2Test extends DDLTestBase  {
+public class SchemaChangeJobV2Test extends DDLTestBase {
     private static String fileName = "./SchemaChangeV2Test";
     private AlterTableStmt alterTableStmt;
 
@@ -84,6 +84,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase  {
     public ExpectedException expectedEx = ExpectedException.none();
 
     private static final Logger LOG = LogManager.getLogger(SchemaChangeJobV2Test.class);
+
     @Before
     public void setUp() throws Exception {
         super.setUp();

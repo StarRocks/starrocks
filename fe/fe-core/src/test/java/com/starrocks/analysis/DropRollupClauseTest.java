@@ -18,6 +18,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.DropRollupClause;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;

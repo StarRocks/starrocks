@@ -5,7 +5,6 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DistributionDesc;

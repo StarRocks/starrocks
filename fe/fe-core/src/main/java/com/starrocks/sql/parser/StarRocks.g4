@@ -13,159 +13,159 @@ singleStatement
 
 statement
     // Query Statement
-    : queryStatement                                                                        #query
+    : queryStatement
 
     // Database Statement
-    | useDatabaseStatement                                                                  #useDb
-    | useCatalogStatement                                                                   #useCatalog
-    | showDatabasesStatement                                                                #showDatabases
-    | alterDbQuotaStmtatement                                                               #alterDbQuota
-    | createDbStatement                                                                     #createDb
-    | dropDbStatement                                                                       #dropDb
-    | showCreateDbStatement                                                                 #showCreateDb
-    | alterDatabaseRename                                                                   #databaseRename
-    | recoverDbStmt                                                                         #revoverDb
-    | showDataStmt                                                                          #showData
+    | useDatabaseStatement
+    | useCatalogStatement
+    | showDatabasesStatement
+    | alterDbQuotaStmtatement
+    | createDbStatement
+    | dropDbStatement
+    | showCreateDbStatement
+    | alterDatabaseRename
+    | recoverDbStmt
+    | showDataStmt
 
     // Table Statement
-    | createTableStatement                                                                  #createTable
-    | createTableAsSelectStatement                                                          #createTableAsSelect
-    | createTableLikeStatement                                                              #createTableLike
-    | showCreateTableStatement                                                              #showCreateTable
-    | dropTableStatement                                                                    #dropTable
-    | recoverTableStatement                                                                 #recoverTable
-    | truncateTableStatement                                                                #truncateTable
-    | showTableStatement                                                                    #showTables
-    | descTableStatement                                                                    #descTable
-    | showTableStatusStatement                                                              #showTableStatus
-    | showColumnStatement                                                                   #showColumn
-    | refreshTableStatement                                                                 #refreshTable
-    | alterTableStatement                                                                   #alterTable
-    | cancelAlterTableStatement                                                             #cancelAlterTable
-    | showAlterStatement                                                                    #showAlter
+    | createTableStatement
+    | createTableAsSelectStatement
+    | createTableLikeStatement
+    | showCreateTableStatement
+    | dropTableStatement
+    | recoverTableStatement
+    | truncateTableStatement
+    | showTableStatement
+    | descTableStatement
+    | showTableStatusStatement
+    | showColumnStatement
+    | refreshTableStatement
+    | alterTableStatement
+    | cancelAlterTableStatement
+    | showAlterStatement
 
     // View Statement
-    | createViewStatement                                                                   #createView
-    | alterViewStatement                                                                    #alterView
-    | dropViewStatement                                                                     #dropView
+    | createViewStatement
+    | alterViewStatement
+    | dropViewStatement
 
     // Partition Statement
-    | showPartitionsStatement                                                               #showPartitions
-    | recoverPartitionStatement                                                             #recoverPartition
+    | showPartitionsStatement
+    | recoverPartitionStatement
 
     // Index Statement
-    | createIndexStatement                                                                  #createIndex
-    | dropIndexStatement                                                                    #dropIndex
-    | showIndexStatement                                                                    #showIndex
+    | createIndexStatement
+    | dropIndexStatement
+    | showIndexStatement
 
     // Task Statement
-    | submitTaskStatement                                                                   #submitTask
+    | submitTaskStatement
 
     // Materialized View Statement
-    | createMaterializedViewStatement                                                       #createMaterializedView
-    | showMaterializedViewStatement                                                         #showMaterializedView
-    | dropMaterializedViewStatement                                                         #dropMaterializedView
-    | alterMaterializedViewStatement                                                        #alterMaterializedView
-    | refreshMaterializedViewStatement                                                      #refreshMaterializedView
-    | cancelRefreshMaterializedViewStatement                                                #cancelRefreshMaterializedView
+    | createMaterializedViewStatement
+    | showMaterializedViewStatement
+    | dropMaterializedViewStatement
+    | alterMaterializedViewStatement
+    | refreshMaterializedViewStatement
+    | cancelRefreshMaterializedViewStatement
 
     // Catalog Statement
-    | createExternalCatalogStatement                                                        #createCatalog
-    | dropExternalCatalogStatement                                                          #dropCatalog
-    | showCatalogsStatement                                                                 #showCatalogs
+    | createExternalCatalogStatement
+    | dropExternalCatalogStatement
+    | showCatalogsStatement
 
     // DML Statement
-    | insertStatement                                                                       #insert
-    | updateStatement                                                                       #update
-    | deleteStatement                                                                       #delete
+    | insertStatement
+    | updateStatement
+    | deleteStatement
 
     //Routine Statement
-    | stopRoutineLoadStatement                                                              #stopRoutineLoad
-    | resumeRoutineLoadStatement                                                            #resumeRoutineLoad
-    | pauseRoutineLoadStatement                                                             #pauseRoutineLoad
-    | showRoutineLoadStatement                                                              #showRoutineLoad
+    | stopRoutineLoadStatement
+    | resumeRoutineLoadStatement
+    | pauseRoutineLoadStatement
+    | showRoutineLoadStatement
 
     // Admin Statement
-    | adminSetConfigStatement                                                               #adminSetConfig
-    | adminSetReplicaStatusStatement                                                        #adminSetReplicaStatus
-    | adminShowConfigStatement                                                              #adminShowConfig
-    | adminShowReplicaDistributionStatement                                                 #adminShowReplicaDistribution
-    | adminShowReplicaStatusStatement                                                       #adminShowReplicaStatus
-    | adminRepairTableStatement                                                             #adminRepairTable
-    | adminCancelRepairTableStatement                                                       #adminCancelRepairTable
-    | adminCheckTabletsStatement                                                            #adminCheckTablets
+    | adminSetConfigStatement
+    | adminSetReplicaStatusStatement
+    | adminShowConfigStatement
+    | adminShowReplicaDistributionStatement
+    | adminShowReplicaStatusStatement
+    | adminRepairTableStatement
+    | adminCancelRepairTableStatement
+    | adminCheckTabletsStatement
 
     // Cluster Mangement Statement
-    | alterSystemStatement                                                                  #alterSystem
-    | showNodesStatement                                                                    #showNodes
+    | alterSystemStatement
+    | showNodesStatement
 
     // Analyze Statement
-    | analyzeStatement                                                                      #analyze
-    | dropStatsStatement                                                                    #dropStats
-    | createAnalyzeStatement                                                                #createAnalyze
-    | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
-    | analyzeHistogramStatement                                                             #analyzeHistogram
-    | dropHistogramStatement                                                                #dropHistogram
-    | showAnalyzeStatement                                                                  #showAnalyze
-    | showStatsMetaStatement                                                                #showStatsMeta
-    | showHistogramMetaStatement                                                            #showHistogramMeta
+    | analyzeStatement
+    | dropStatsStatement
+    | createAnalyzeStatement
+    | dropAnalyzeJobStatement
+    | analyzeHistogramStatement
+    | dropHistogramStatement
+    | showAnalyzeStatement
+    | showStatsMetaStatement
+    | showHistogramMetaStatement
 
     // Work Group Statement
-    | createResourceGroupStatement                                                          #createResourceGroup
-    | dropResourceGroupStatement                                                            #dropResourceGroup
-    | alterResourceGroupStatement                                                           #alterResourceGroup
-    | showResourceGroupStatement                                                            #showResourceGroup
+    | createResourceGroupStatement
+    | dropResourceGroupStatement
+    | alterResourceGroupStatement
+    | showResourceGroupStatement
 
     //UDF
-    | showFunctionsStatement                                                                #showFunctions
-    | dropFunctionStatement                                                                 #dropFunctionst
-    | createFunctionStatement                                                               #createFunction
+    | showFunctionsStatement
+    | dropFunctionStatement
+    | createFunctionStatement
 
     // Load Statement
-    | loadStatement                                                                         #load
-    | showLoadStatement                                                                     #showLoad
-    | showLoadWarningsStatement                                                             #showLoadWarnings
-    | cancelLoadStatement                                                                   #cancelLoad
+    | loadStatement
+    | showLoadStatement
+    | showLoadWarningsStatement
+    | cancelLoadStatement
 
     // Other statement
-    | showVariablesStatement                                                                #showVariables
-    | showProcesslistStatement                                                              #showProcesslist
-    | showUserPropertyStatement                                                             #showUserProperty
-    | killStatement                                                                         #kill
-    | setUserPropertyStatement                                                              #setUserProperty
-    | showStatusStatement                                                                   #showStatus
-    | showCharsetStatement                                                                  #showCharset
-    | showBrokerStatement                                                                   #showBroker
-    | showCollationStatement                                                                #showCollation
-    | setStatement                                                                          #setStmt
+    | showVariablesStatement
+    | showProcesslistStatement
+    | showUserPropertyStatement
+    | killStatement
+    | setUserPropertyStatement
+    | showStatusStatement
+    | showCharsetStatement
+    | showBrokerStatement
+    | showCollationStatement
+    | setStatement
 
     //Show Statement
-    | showWarningStatement                                                                  #showWarning
-    | showTabletStatement                                                                   #showTablet
-    | showDeleteStatement                                                                   #showDelete
-    | showOpenTableStatement                                                                #showOpenTable
-    | showDynamicPartitionStatement                                                         #showDynamicPartition
+    | showWarningStatement
+    | showTabletStatement
+    | showDeleteStatement
+    | showOpenTableStatement
+    | showDynamicPartitionStatement
 
     // privilege
-    | GRANT identifierOrString TO user                                                      #grantRole
-    | GRANT IMPERSONATE ON user TO user                                                     #grantImpersonate
-    | REVOKE identifierOrString FROM user                                                   #revokeRole
-    | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
-    | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
-    | ALTER USER user authOption                                                            #alterUser
-    | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
-    | DROP USER user                                                                        #dropUser
-    | showAuthenticationStatement                                                           #showAuthentication
+    | grantRoleStatement
+    | grantImpersonateStatement
+    | revokeRoleStatement
+    | revokeImpersonateStatement
+    | executeAsStatement
+    | alterUserStatement
+    | createUserStatement
+    | dropUserStatement
+    | showAuthenticationStatement
 
     // procedure
-    | showProcedureStatement                                                                 #showProcedure
+    | showProcedureStatement
 
     // proc
-    | showProcStatement                                                                      #showProc
+    | showProcStatement
 
     // Backup Restore Satement
-    | backupStatement                                                                        #backup
-    | showBackupStatement                                                                    #showBackup
+    | backupStatement
+    | showBackupStatement
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -268,10 +268,10 @@ aggDesc
     ;
 
 rollupDesc
-    : ROLLUP '(' addRollupClause (',' addRollupClause)* ')'
+    : ROLLUP '(' rollupItem (',' rollupItem)* ')'
     ;
 
-addRollupClause
+rollupItem
     : rollupName=identifier identifierList (dupKeys)? (fromRollup)? properties?
     ;
 
@@ -298,6 +298,8 @@ dropTableStatement
 
 alterTableStatement
     : ALTER TABLE qualifiedName alterClause (',' alterClause)*
+    | ALTER TABLE qualifiedName ADD ROLLUP rollupItem (',' rollupItem)*
+    | ALTER TABLE qualifiedName DROP ROLLUP identifierList
     ;
 
 createIndexStatement
@@ -513,6 +515,7 @@ alterClause
     | addComputeNodeClause
     | dropComputeNodeClause
     | modifyBrokerClause
+    | alterLoadErrorUrlClause
 
     //Alter table clause
     | createIndexClause
@@ -526,6 +529,7 @@ alterClause
     | modifyColumnClause
     | columnRenameClause
     | reorderColumnsClause
+    | rollupRenameClause
 
     //Alter partition clause
     | addPartitionClause
@@ -533,7 +537,7 @@ alterClause
     | truncatePartitionClause
     | modifyPartitionClause
     | replacePartitionClause
-    | renamePartitionClause
+    | partitionRenameClause
     ;
 
 // ---------Alter system clause---------
@@ -578,6 +582,10 @@ modifyBrokerClause
     : ADD BROKER identifierOrString string (',' string)*
     | DROP BROKER identifierOrString string (',' string)*
     | DROP ALL BROKER identifierOrString
+    ;
+
+alterLoadErrorUrlClause
+    : SET LOAD ERRORS HUB properties?
     ;
 
 // ---------Alter table clause---------
@@ -626,6 +634,10 @@ reorderColumnsClause
     : ORDER BY identifierList (FROM rollupName=identifier)? properties?
     ;
 
+rollupRenameClause
+    : RENAME ROLLUP rollupName=identifier newRollupName=identifier
+    ;
+
 // ---------Alter partition clause---------
 
 addPartitionClause
@@ -647,7 +659,7 @@ replacePartitionClause
     : REPLACE parName=partitionNames WITH tempParName=partitionNames properties?
     ;
 
-renamePartitionClause
+partitionRenameClause
     : RENAME PARTITION parName=identifier newParName=identifier
     ;
 
@@ -836,6 +848,45 @@ cancelLoadStatement
     : CANCEL LOAD (FROM identifier)? (WHERE expression)?
     ;
 
+// ------------------------------------------- Privilege Statement -----------------------------------------------------
+
+grantRoleStatement
+    : GRANT identifierOrString TO user
+    ;
+
+grantImpersonateStatement
+    : GRANT IMPERSONATE ON user TO user
+    ;
+
+revokeRoleStatement
+    : REVOKE identifierOrString FROM user
+    ;
+
+revokeImpersonateStatement
+    : REVOKE IMPERSONATE ON user FROM user
+    ;
+
+executeAsStatement
+    : EXECUTE AS user (WITH NO REVERT)?
+    ;
+
+alterUserStatement
+    : ALTER USER user authOption
+    ;
+
+createUserStatement
+    : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?
+    ;
+
+dropUserStatement
+    : DROP USER user
+    ;
+
+showAuthenticationStatement
+    : SHOW ALL AUTHENTICATION                                                                #showAllAuthentication
+    | SHOW AUTHENTICATION (FOR user)?                                                        #showAuthenticationForUser
+    ;
+
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showDatabasesStatement
@@ -908,11 +959,6 @@ setExprOrDefault
     | ON
     | ALL
     | expression
-    ;
-
-showAuthenticationStatement
-    : SHOW ALL AUTHENTICATION                                   #showAllAuthentication
-    | SHOW AUTHENTICATION (FOR user)?                           #showAuthenticationForUser
     ;
 
 showDynamicPartitionStatement
@@ -1528,7 +1574,7 @@ nonReserved
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FILE | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
-    | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR
+    | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL

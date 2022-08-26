@@ -24,10 +24,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.starrocks.sql.ast.CreateResourceGroupStmt;
-import com.starrocks.sql.ast.AlterResourceGroupStmt;
-import com.starrocks.sql.ast.DropResourceGroupStmt;
-import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
@@ -234,34 +230,33 @@ terminal String KW_ADD, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ARR
     KW_COLLATE, KW_COLLATION, KW_COLUMNS, KW_COMMENT, KW_COMMIT, KW_COMMITTED,
     KW_CONFIG, KW_CONNECTION, KW_CONNECTION_ID, KW_CONSISTENT, KW_COUNT, KW_CREATE, KW_CURRENT, KW_CURRENT_TIMESTAMP, KW_CURRENT_USER,
     KW_DATA, KW_DATABASE, KW_DATABASES, KW_DATE, KW_DATETIME, KW_DAY, KW_DECIMAL, KW_DECIMALV2, KW_DECIMAL32, KW_DECIMAL64, KW_DECIMAL128, KW_DECOMMISSION, KW_DEFAULT, KW_DESC,
-    KW_DELETE, KW_DISTINCT, KW_DISTINCTPC, KW_DISTINCTPCSA, KW_DYNAMIC, KW_BUCKETS, KW_DIV, KW_DOUBLE, KW_DROP, KW_DROPP, KW_DUPLICATE,
+    KW_DELETE, KW_DISTINCT, KW_DISTINCTPC, KW_DISTINCTPCSA, KW_DYNAMIC, KW_BUCKETS, KW_DIV, KW_DOUBLE, KW_DROP,
     KW_ELSE, KW_END, KW_ENGINE, KW_ENGINES, KW_ERRORS, KW_EVENTS, KW_EXISTS, KW_EXPORT,
     KW_EXTERNAL, KW_EXTRACT,
-    KW_FALSE, KW_FOLLOWER, KW_FOLLOWING, KW_FREE, KW_FROM, KW_FILE, KW_FIRST, KW_FLOAT, KW_FOR, KW_FORCE, KW_FORMAT, KW_FRONTENDS, KW_FULL, KW_FN, KW_FUNCTION,
-    KW_GLOBAL, KW_GRANT, KW_GRANTS, KW_GROUP, KW_GROUPS, KW_GROUPING,
+    KW_FALSE, KW_FOLLOWING, KW_FREE, KW_FROM, KW_FILE, KW_FIRST, KW_FLOAT, KW_FOR, KW_FORMAT, KW_FRONTENDS, KW_FULL, KW_FN, KW_FUNCTION,
+    KW_GLOBAL, KW_GRANT, KW_GRANTS, KW_GROUPING,
     KW_HASH, KW_HELP,KW_HLL, KW_HLL_UNION, KW_HOUR, KW_HUB,
-    KW_IDENTIFIED, KW_IF, KW_IN, KW_INDEX, KW_INDEXES, KW_INSTALL,
+    KW_IDENTIFIED, KW_IF, KW_IN, KW_INDEXES, KW_INSTALL,
     KW_INT, KW_SIGNED, KW_INTERVAL, KW_IS, KW_ISNULL, KW_ISOLATION,
     KW_JSON,
-    KW_KEY,
     KW_LABEL, KW_LARGEINT, KW_LAST, KW_LEFT, KW_LESS, KW_LEVEL, KW_LIKE, KW_LIMIT, KW_LINK, KW_LIST, KW_LOAD,
     KW_LOCAL, KW_LOCATION, KW_LOGICAL,
     KW_MATERIALIZED, KW_MAX, KW_MERGE, KW_MIN, KW_MINUTE, KW_MODIFY, KW_MONTH,
     KW_NAME, KW_NAMES, KW_NEGATIVE, KW_NO, KW_NOT, KW_NULL, KW_NULLS,
-    KW_OBSERVER, KW_OFFSET, KW_ON, KW_ONLY, KW_OPEN, KW_OR, KW_ORDER, KW_OVER,
+    KW_OFFSET, KW_ON, KW_ONLY, KW_OPEN, KW_OR, KW_ORDER, KW_OVER,
     KW_PARTITION, KW_PARTITIONS, KW_PASSWORD, KW_PATH, KW_PAUSE, KW_PIPE, KW_PRECEDING,
     KW_PLUGIN, KW_PLUGINS,
     KW_PROC, KW_PROPERTIES, KW_PROPERTY, KW_PERCENTILE, KW_PERCENTILE_UNION,
     KW_QUERY, KW_QUOTA,
-    KW_RANDOM, KW_RANGE, KW_READ, KW_RECOVER, KW_REGEXP, KW_RELEASE, KW_RENAME,
+    KW_RANDOM, KW_RANGE, KW_READ, KW_RECOVER, KW_REGEXP, KW_RELEASE,
     KW_REPEATABLE, KW_REPOSITORY, KW_REPOSITORIES, KW_REPLACE, KW_REPLACE_IF_NOT_NULL, KW_RESOURCE, KW_RESOURCES, KW_RESTORE, KW_RETURNS, KW_RESUME, KW_REVOKE,
     KW_RIGHT, KW_ROLE, KW_ROLES, KW_ROLLBACK, KW_ROLLUP, KW_ROUTINE, KW_ROW, KW_ROWS,
     KW_SCHEMA, KW_SCHEMAS, KW_SECOND, KW_SERIALIZABLE, KW_SESSION, KW_SET, KW_SHOW,
     KW_SMALLINT, KW_SNAPSHOT, KW_SONAME, KW_SPLIT, KW_START, KW_STATUS, KW_STOP, KW_STORAGE, KW_STRING,
-    KW_SUM, KW_SUPERUSER, KW_SYNC, KW_SYSTEM,
+    KW_SUM, KW_SUPERUSER, KW_SYNC,
     KW_TABLE, KW_TABLES, KW_TABLET, KW_TASK, KW_TEMPORARY, KW_TERMINATED, KW_THAN, KW_TIME, KW_THEN, KW_TIMESTAMP, KW_TINYINT,
     KW_TO, KW_TRANSACTION, KW_TRIGGERS, KW_TRIM, KW_TRUE, KW_TRUNCATE, KW_TYPE, KW_TYPES,
-    KW_UNCOMMITTED, KW_UNBOUNDED, KW_USER, KW_USING, KW_UNINSTALL,
+    KW_UNCOMMITTED, KW_UNBOUNDED, KW_USER, KW_UNINSTALL,
     KW_VALUE, KW_VARCHAR, KW_VARIABLES, KW_VERBOSE, KW_VIEW,
     KW_WARNINGS, KW_WEEK, KW_WHEN, KW_SQLBLACKLIST, KW_WHITELIST, KW_WHERE, KW_WITH, KW_WORK, KW_WRITE,
     KW_YEAR;
@@ -325,8 +320,6 @@ nonterminal FunctionName function_name;
 nonterminal Expr where_clause;
 nonterminal Predicate predicate, between_predicate, comparison_predicate,
   compound_predicate, in_predicate, like_predicate, exists_predicate;
-nonterminal List<List<Predicate>> classifier_list;
-nonterminal List<Predicate> classifier, predicate_list;
 nonterminal ArrayList<Expr> opt_partition_by_clause;
 nonterminal ArrayList<OrderByElement> order_by_elements, order_by_clause;
 nonterminal OrderByElement order_by_element;
@@ -362,7 +355,6 @@ nonterminal List<SetVar> option_value_list, option_value_list_continued, start_o
         start_option_value_list_following_option_type;
 
 nonterminal Map<String, String> key_value_map, opt_properties;
-nonterminal IndexDef index_definition;
 nonterminal Long opt_field_length;
 
 nonterminal List<AccessPrivilege> privilege_list;
@@ -372,7 +364,7 @@ nonterminal AccessPrivilege privilege_type;
 
 nonterminal LabelName job_label;
 nonterminal BrokerDesc opt_broker;
-nonterminal List<String> opt_col_list, opt_dup_keys;
+nonterminal List<String> opt_col_list;
 nonterminal ColumnSeparator column_separator;
 nonterminal RowDelimiter row_delimiter;
 nonterminal String opt_user_role;
@@ -386,26 +378,16 @@ nonterminal List<ParseNode> opt_load_property_list;
 
 // Boolean
 nonterminal Boolean opt_read_only;
-nonterminal String opt_from_rollup;
-
-// Alter statement
-nonterminal AlterClause alter_system_clause, alter_table_clause;
-nonterminal List<AlterClause> alter_table_clause_list, add_rollup_clause_list, drop_rollup_clause_list;
-nonterminal AddRollupClause add_rollup_clause;
-nonterminal DropRollupClause drop_rollup_clause;
 
 nonterminal String keyword, ident, ident_or_text, variable_name, text_or_password,
         charset_name_or_default, old_or_new_charset_name_or_default, opt_collate,
         collation_name_or_default, type_func_name_keyword, type_function_name, time_unit;
 
-nonterminal String opt_db, opt_comment;
-nonterminal Boolean opt_if_exists, opt_if_not_exists, opt_or_replace;
+nonterminal String opt_db;
+nonterminal Boolean opt_if_exists, opt_if_not_exists;
 nonterminal Boolean externalable_resource;
-nonterminal Boolean opt_force;
-nonterminal IndexDef.IndexType opt_index_type;
 
 nonterminal RoutineLoadDataSourceProperties opt_datasource_properties;
-nonterminal Boolean opt_all;
 
 precedence nonassoc COMMA;
 precedence nonassoc STRING_LITERAL;
@@ -571,59 +553,9 @@ uninstall_plugin_stmt ::=
     :}
     ;
 
-classifier_list ::=
-    classifier:classifier
-    {:
-        List<List<Predicate>> list = new ArrayList<>();
-        list.add(classifier);
-        RESULT = list;
-    :}
-    | classifier_list:list COMMA classifier:classifier
-    {:
-        list.add(classifier);
-        RESULT = list;
-    :}
-    ;
-
-classifier ::= LPAREN predicate_list:list RPAREN
-    {:
-        RESULT = list;
-    :}
-    ;
-
-predicate_list ::= predicate:item
-    {:
-        List<Predicate> list = new ArrayList<>();
-        list.add(item);
-        RESULT = list;
-    :}
-    | predicate_list:list COMMA predicate:item
-    {:
-        list.add(item);
-        RESULT = list;
-    :}
-    ;
-
 // Alter Statement
 alter_stmt ::=
-    KW_ALTER KW_TABLE table_name:tbl
-    alter_table_clause_list:clauses
-    {:
-        RESULT = new AlterTableStmt(tbl, clauses);
-    :}
-    | KW_ALTER KW_TABLE table_name:tbl KW_ADD KW_ROLLUP add_rollup_clause_list:clauses
-    {:
-        RESULT = new AlterTableStmt(tbl, clauses);
-    :}
-    | KW_ALTER KW_TABLE table_name:tbl KW_DROP KW_ROLLUP drop_rollup_clause_list:clauses
-    {:
-        RESULT = new AlterTableStmt(tbl, clauses);
-    :}
-    | KW_ALTER KW_SYSTEM alter_system_clause:clause
-    {:
-        RESULT = new AlterSystemStmt(clause);
-    :}
-    | KW_ALTER KW_ROUTINE KW_LOAD KW_FOR job_label:jobLabel
+     KW_ALTER KW_ROUTINE KW_LOAD KW_FOR job_label:jobLabel
       opt_load_property_list:loadPropertyList
       opt_properties:jobProperties
       opt_datasource_properties:datasourceProperties
@@ -641,25 +573,6 @@ alter_stmt ::=
     :}
     ;
 
-alter_resource_group_stmt ::=
-    KW_ALTER KW_RESOURCE KW_GROUP ident:name KW_ADD classifier_list:list
-    {:
-        RESULT = new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.AddClassifiers(list));
-    :}
-    |KW_ALTER KW_RESOURCE KW_GROUP ident:name KW_DROP LPAREN integer_list:list RPAREN
-    {:
-        RESULT = new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.DropClassifiers(list));
-    :}
-    |KW_ALTER KW_RESOURCE KW_GROUP ident:name KW_DROP KW_ALL
-    {:
-        RESULT = new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.DropAllClassifiers());
-    :}
-    |KW_ALTER KW_RESOURCE KW_GROUP ident:name KW_WITH LPAREN key_value_map:properties RPAREN
-    {:
-        RESULT = new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.AlterProperties(properties));
-    :}
-    ;
-
 opt_datasource_properties ::=
     // empty
     {:
@@ -668,91 +581,6 @@ opt_datasource_properties ::=
     | KW_FROM ident:type LPAREN key_value_map:customProperties RPAREN
     {:
         RESULT = new RoutineLoadDataSourceProperties(type, customProperties);
-    :}
-    ;
-
-add_rollup_clause ::=
-    ident:rollupName LPAREN ident_list:cols RPAREN opt_dup_keys:dup_keys opt_from_rollup:baseRollup opt_properties:properties
-    {:
-        RESULT = new AddRollupClause(rollupName, cols, dup_keys, baseRollup, properties);
-    :}
-    ;
-
-add_rollup_clause_list ::=
-    add_rollup_clause:clause
-    {:
-        RESULT = Lists.newArrayList(clause);
-    :}
-    | add_rollup_clause_list:list COMMA add_rollup_clause:clause
-    {:
-        list.add(clause);
-        RESULT = list;
-    :}
-    ;
-
-drop_rollup_clause ::=
-    ident:rollupName opt_properties:properties
-    {:
-        RESULT = new DropRollupClause(rollupName, properties);
-    :}
-    ;
-
-drop_rollup_clause_list ::=
-    drop_rollup_clause:clause
-    {:
-        RESULT = Lists.newArrayList(clause);
-    :}
-    | drop_rollup_clause_list:list COMMA drop_rollup_clause:clause
-    {:
-        list.add(clause);
-        RESULT = list;
-    :}
-    ;
-
-alter_table_clause_list ::=
-    alter_table_clause:clause
-    {:
-        RESULT = Lists.newArrayList(clause);
-    :}
-    | alter_table_clause_list:list COMMA alter_table_clause:clause
-    {:
-        list.add(clause);
-        RESULT = list;
-    :}
-    ;
-
-opt_from_rollup ::=
-    {:
-        RESULT = null;
-    :}
-    | KW_FROM ident:rollup
-    {:
-        RESULT = rollup;
-    :}
-    ;
-
-opt_dup_keys ::=
-    {:
-        RESULT = null;
-    :}
-    | KW_DUPLICATE KW_KEY LPAREN ident_list:cols RPAREN
-    {:
-        RESULT = cols;
-    :}
-    ;
-
-alter_table_clause ::=
-    KW_RENAME KW_ROLLUP ident:rollupName ident:newRollupName
-    {:
-        RESULT = new RollupRenameClause(rollupName, newRollupName);
-    :}
-    ;
-
-alter_system_clause ::=
-    // set load errors hub
-    KW_SET KW_LOAD KW_ERRORS KW_HUB opt_properties:properties
-    {:
-        RESULT = new AlterLoadErrorUrlClause(properties);
     :}
     ;
 
@@ -795,12 +623,6 @@ create_stmt ::=
     | KW_CREATE externalable_resource:isExternal ident_or_text:resourceName opt_properties:properties
     {:
         RESULT = new CreateResourceStmt(isExternal, resourceName, properties);
-    :}
-    | KW_CREATE KW_RESOURCE KW_GROUP opt_if_not_exists:if_not_exists opt_or_replace:or_replace ident:name
-      KW_TO classifier_list:classifiers
-      KW_WITH LPAREN key_value_map:properties RPAREN
-    {:
-        RESULT = new CreateResourceGroupStmt(name, if_not_exists, or_replace, classifiers, properties);
     :}
     ;
 
@@ -1149,10 +971,6 @@ drop_stmt ::=
     {:
         RESULT = new DropResourceStmt(resourceName);
     :}
-    | KW_DROP KW_RESOURCE KW_GROUP ident:name
-    {:
-        RESULT = new DropResourceGroupStmt(name);
-    :}
     ;
 
 key_value_map ::=
@@ -1178,34 +996,6 @@ opt_properties ::=
     :}
     ;
 
-index_definition ::=
-    KW_INDEX ident:indexName LPAREN ident_list:cols RPAREN opt_index_type:indexType opt_comment:comment
-    {:
-        RESULT = new IndexDef(indexName, cols, indexType, comment);
-    :}
-    ;
-
-opt_comment ::=
-    /* empty */
-    {:
-        RESULT = "";
-    :}
-    | KW_COMMENT STRING_LITERAL:comment
-    {:
-        RESULT = comment;
-    :}
-    ;
-
-opt_index_type ::=
-    {:
-        RESULT = null;
-    :}
-    | KW_USING KW_BITMAP
-    {:
-        RESULT = IndexDef.IndexType.BITMAP;
-    :}
-    ;
-
 opt_if_exists ::=
     {:
         RESULT = false;
@@ -1226,33 +1016,12 @@ opt_if_not_exists ::=
     :}
     ;
 
-opt_or_replace ::=
-    {:
-        RESULT = false;
-    :}
-    | KW_OR KW_REPLACE
-    {:
-        RESULT = true;
-    :}
-    ;
-
 externalable_resource ::=
     KW_RESOURCE
     {:
         RESULT = false;
     :}
     | KW_EXTERNAL KW_RESOURCE
-    {:
-        RESULT = true;
-    :}
-    ;
-
-opt_force ::=
-     /* empty */
-    {:
-        RESULT = false;
-    :}
-    | KW_FORCE
     {:
         RESULT = true;
     :}
@@ -1390,26 +1159,7 @@ show_param ::=
     {:
         RESULT = new ShowTransactionStmt(dbName, parser.where);
     :}
-    | KW_RESOURCE KW_GROUPS opt_all:list_all
-    {:
-        RESULT = new ShowResourceGroupStmt(null, list_all);
-    :}
-    | KW_RESOURCE KW_GROUP ident:name
-    {:
-        RESULT = new ShowResourceGroupStmt(name, false);
-    :}
     ;
-
-opt_all ::=
-    /* empty */
-    {:
-        RESULT = false;
-    :}
-    | KW_ALL
-    {:
-        RESULT = true;
-    :}
-     ;
 
 opt_db ::=
     /* empty */

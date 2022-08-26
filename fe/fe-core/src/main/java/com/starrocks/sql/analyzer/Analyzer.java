@@ -1,8 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
@@ -42,6 +40,8 @@ import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;

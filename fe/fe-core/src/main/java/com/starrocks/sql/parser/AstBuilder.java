@@ -6,17 +6,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AddBackendClause;
-import com.starrocks.analysis.AddColumnClause;
-import com.starrocks.analysis.AddColumnsClause;
-import com.starrocks.analysis.AddComputeNodeClause;
-import com.starrocks.analysis.AddFollowerClause;
-import com.starrocks.analysis.AddObserverClause;
-import com.starrocks.analysis.AddPartitionClause;
-import com.starrocks.analysis.AddRollupClause;
-import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
@@ -36,29 +25,19 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.analysis.ColumnRenameClause;
 import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
-import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.DecommissionBackendClause;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.DropBackendClause;
-import com.starrocks.analysis.DropColumnClause;
-import com.starrocks.analysis.DropComputeNodeClause;
-import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropFunctionStmt;
-import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropObserverClause;
-import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -86,12 +65,6 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.ListPartitionDesc;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.analysis.ModifyBackendAddressClause;
-import com.starrocks.analysis.ModifyBrokerClause;
-import com.starrocks.analysis.ModifyColumnClause;
-import com.starrocks.analysis.ModifyFrontendAddressClause;
-import com.starrocks.analysis.ModifyPartitionClause;
-import com.starrocks.analysis.ModifyTablePropertiesClause;
 import com.starrocks.analysis.MultiItemListPartitionDesc;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.NullLiteral;
@@ -102,14 +75,11 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionNames;
-import com.starrocks.analysis.PartitionRenameClause;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.RecoverPartitionStmt;
-import com.starrocks.analysis.ReorderColumnsClause;
-import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.ResourceDesc;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SelectList;
@@ -151,12 +121,9 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.analysis.TruncatePartitionClause;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.analysis.UserDesc;
@@ -179,6 +146,14 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddComputeNodeClause;
+import com.starrocks.sql.ast.AddFollowerClause;
+import com.starrocks.sql.ast.AddObserverClause;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -187,10 +162,14 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeBasicDesc;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
@@ -200,21 +179,32 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.ColumnAssignment;
+import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
+import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropFollowerClause;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropIndexClause;
+import com.starrocks.sql.ast.DropObserverClause;
+import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
+import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -228,6 +218,13 @@ import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBrokerClause;
+import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.ModifyPartitionClause;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
@@ -238,8 +235,11 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.ShowAlterStmt;
@@ -259,9 +259,12 @@ import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.SwapTableClause;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
@@ -425,7 +428,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties,
                 extProperties,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
-                context.rollupDesc() == null ? null : getRollupDesc(context.rollupDesc()));
+                context.rollupDesc() == null ?
+                        null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()));
     }
 
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context) {
@@ -449,35 +453,29 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return partitionDesc;
     }
 
-    private List<AlterClause> getRollupDesc(StarRocksParser.RollupDescContext context) {
-        List<AlterClause> rollupList = new ArrayList<>();
-        for (StarRocksParser.AddRollupClauseContext addRollupClauseContext : context.addRollupClause()) {
-            String rollupName = ((Identifier) visit(addRollupClauseContext.identifier())).getValue();
-            List<Identifier> columnList =
-                    visit(addRollupClauseContext.identifierList().identifier(), Identifier.class);
-            List<String> dupKeys = null;
-            if (addRollupClauseContext.dupKeys() != null) {
-                final List<Identifier> identifierList =
-                        visit(addRollupClauseContext.dupKeys().identifierList().identifier(), Identifier.class);
-                dupKeys = identifierList.stream().map(Identifier::getValue).collect(toList());
-            }
-            String baseRollupName = addRollupClauseContext.fromRollup() != null ?
-                    ((Identifier) visit(addRollupClauseContext.fromRollup().identifier())).getValue() : null;
-            Map<String, String> properties = null;
-            if (addRollupClauseContext.properties() != null) {
-                properties = new HashMap<>();
-                List<Property> propertyList = visit(addRollupClauseContext.properties().property(), Property.class);
-                for (Property property : propertyList) {
-                    properties.put(property.getKey(), property.getValue());
-                }
-            }
-            final AddRollupClause addRollupClause =
-                    new AddRollupClause(rollupName, columnList.stream().map(Identifier::getValue).collect(toList()),
-                            dupKeys, baseRollupName,
-                            properties);
-            rollupList.add(addRollupClause);
+    private AlterClause getRollup(StarRocksParser.RollupItemContext rollupItemContext) {
+        String rollupName = ((Identifier) visit(rollupItemContext.identifier())).getValue();
+        List<Identifier> columnList =
+                visit(rollupItemContext.identifierList().identifier(), Identifier.class);
+        List<String> dupKeys = null;
+        if (rollupItemContext.dupKeys() != null) {
+            final List<Identifier> identifierList =
+                    visit(rollupItemContext.dupKeys().identifierList().identifier(), Identifier.class);
+            dupKeys = identifierList.stream().map(Identifier::getValue).collect(toList());
         }
-        return rollupList;
+        String baseRollupName = rollupItemContext.fromRollup() != null ?
+                ((Identifier) visit(rollupItemContext.fromRollup().identifier())).getValue() : null;
+        Map<String, String> properties = null;
+        if (rollupItemContext.properties() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(rollupItemContext.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new AddRollupClause(rollupName, columnList.stream().map(Identifier::getValue).collect(toList()),
+                dupKeys, baseRollupName,
+                properties);
     }
 
     private KeysDesc getKeysDesc(StarRocksParser.KeyDescContext context) {
@@ -713,8 +711,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitAlterTableStatement(StarRocksParser.AlterTableStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        List<AlterClause> alterClauses = visit(context.alterClause(), AlterClause.class);
-        return new AlterTableStmt(targetTableName, alterClauses);
+        if (context.ROLLUP() != null) {
+            if (context.ADD() != null) {
+                List<AlterClause> clauses = context.rollupItem().stream().map(this::getRollup).collect(toList());
+                return new AlterTableStmt(targetTableName, clauses);
+            } else {
+                List<Identifier> columnList = visit(context.identifierList().identifier(), Identifier.class);
+                List<AlterClause> clauses = new ArrayList<>();
+                for (Identifier rollupName : columnList) {
+                    clauses.add(new DropRollupClause(rollupName.getValue(), null));
+                }
+                return new AlterTableStmt(targetTableName, clauses);
+            }
+        } else {
+            List<AlterClause> alterClauses = visit(context.alterClause(), AlterClause.class);
+            return new AlterTableStmt(targetTableName, alterClauses);
+        }
     }
 
     @Override
@@ -821,7 +833,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new ShowWarningStmt();
     }
-
 
 
     @Override
@@ -1349,6 +1360,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return ModifyBrokerClause.createDropBrokerClause(brokerName, hostPorts);
     }
 
+    @Override
+    public ParseNode visitAlterLoadErrorUrlClause(StarRocksParser.AlterLoadErrorUrlClauseContext context) {
+        return new AlterLoadErrorUrlClause(getProperties(context.properties()));
+    }
+
     // ---------Alter table clause---------
 
     @Override
@@ -1467,16 +1483,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ReorderColumnsClause(cols, rollupName, getProperties(context.properties()));
     }
 
-    private Map<String, String> getProperties(StarRocksParser.PropertiesContext context) {
-        Map<String, String> properties = new HashMap<>();
-        if (context != null && context.property() != null) {
-            List<Property> propertyList = visit(context.property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-        return properties;
+    @Override
+    public ParseNode visitRollupRenameClause(StarRocksParser.RollupRenameClauseContext context) {
+        String rollupName = ((Identifier) visit(context.rollupName)).getValue();
+        String newRollupName = ((Identifier) visit(context.newRollupName)).getValue();
+        return new RollupRenameClause(rollupName, newRollupName);
     }
+
+    // ---------Alter partition clause---------
 
     @Override
     public ParseNode visitAddPartitionClause(StarRocksParser.AddPartitionClauseContext context) {
@@ -1544,17 +1558,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitReplacePartitionClause(StarRocksParser.ReplacePartitionClauseContext context) {
-        PartitionNames partitionNames = null;
-        if (context.partitionNames() != null) {
-            //partitionNames = (PartitionNames) visit(context);
-        }
+        PartitionNames partitionNames = (PartitionNames) visit(context.parName);
+        PartitionNames newPartitionNames = (PartitionNames) visit(context.tempParName);
 
-        return new ReplacePartitionClause(null, null, null);
+        return new ReplacePartitionClause(partitionNames, newPartitionNames,
+                getProperties(context.properties()));
     }
 
     @Override
-    public ParseNode visitRenamePartitionClause(StarRocksParser.RenamePartitionClauseContext context) {
-        return new PartitionRenameClause(null, null);
+    public ParseNode visitPartitionRenameClause(StarRocksParser.PartitionRenameClauseContext context) {
+        String partitionName = ((Identifier) visit(context.parName)).getValue();
+        String newPartitionName = ((Identifier) visit(context.newParName)).getValue();
+
+        return new PartitionRenameClause(partitionName, newPartitionName);
     }
 
     // ------------------------------------------- DML Statement -------------------------------------------------------
@@ -2530,13 +2546,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Privilege Statement -------------------------------------------------
 
     @Override
-    public ParseNode visitDropUser(StarRocksParser.DropUserContext context) {
+    public ParseNode visitDropUserStatement(StarRocksParser.DropUserStatementContext context) {
         UserIdentifier user = (UserIdentifier) visit(context.user());
         return new DropUserStmt(user.getUserIdentity());
     }
 
     @Override
-    public ParseNode visitCreateUser(StarRocksParser.CreateUserContext context) {
+    public ParseNode visitCreateUserStatement(StarRocksParser.CreateUserStatementContext context) {
         UserDesc userDesc;
         UserIdentifier user = (UserIdentifier) visit(context.user());
         UserAuthOption authOption = context.authOption() == null ? null : (UserAuthOption) visit(context.authOption());
@@ -2554,7 +2570,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitAlterUser(StarRocksParser.AlterUserContext context) {
+    public ParseNode visitAlterUserStatement(StarRocksParser.AlterUserStatementContext context) {
         UserDesc userDesc;
         UserIdentifier user = (UserIdentifier) visit(context.user());
         UserAuthOption authOption = (UserAuthOption) visit(context.authOption());
@@ -2914,35 +2930,35 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitGrantRole(StarRocksParser.GrantRoleContext context) {
+    public ParseNode visitGrantRoleStatement(StarRocksParser.GrantRoleStatementContext context) {
         UserIdentifier user = (UserIdentifier) visit(context.user());
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         return new GrantRoleStmt(identifier.getValue(), user.getUserIdentity());
     }
 
     @Override
-    public ParseNode visitRevokeRole(StarRocksParser.RevokeRoleContext context) {
+    public ParseNode visitRevokeRoleStatement(StarRocksParser.RevokeRoleStatementContext context) {
         UserIdentifier user = (UserIdentifier) visit(context.user());
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         return new RevokeRoleStmt(identifier.getValue(), user.getUserIdentity());
     }
 
     @Override
-    public ParseNode visitGrantImpersonate(StarRocksParser.GrantImpersonateContext context) {
+    public ParseNode visitGrantImpersonateStatement(StarRocksParser.GrantImpersonateStatementContext context) {
         UserIdentity securedUser = ((UserIdentifier) visit(context.user(0))).getUserIdentity();
         UserIdentity authorizedUser = ((UserIdentifier) visit(context.user(1))).getUserIdentity();
         return new GrantImpersonateStmt(authorizedUser, securedUser);
     }
 
     @Override
-    public ParseNode visitRevokeImpersonate(StarRocksParser.RevokeImpersonateContext context) {
+    public ParseNode visitRevokeImpersonateStatement(StarRocksParser.RevokeImpersonateStatementContext context) {
         UserIdentity securedUser = ((UserIdentifier) visit(context.user(0))).getUserIdentity();
         UserIdentity authorizedUser = ((UserIdentifier) visit(context.user(1))).getUserIdentity();
         return new RevokeImpersonateStmt(authorizedUser, securedUser);
     }
 
     @Override
-    public ParseNode visitExecuteAs(StarRocksParser.ExecuteAsContext context) {
+    public ParseNode visitExecuteAsStatement(StarRocksParser.ExecuteAsStatementContext context) {
         UserIdentity toUser = ((UserIdentifier) visit(context.user())).getUserIdentity();
         boolean allowRevert = context.WITH() == null;
         // we only support WITH NO REVERT for now
@@ -4253,5 +4269,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             throw new ParsingException("error table name ");
         }
+    }
+
+    private Map<String, String> getProperties(StarRocksParser.PropertiesContext context) {
+        Map<String, String> properties = new HashMap<>();
+        if (context != null && context.property() != null) {
+            List<Property> propertyList = visit(context.property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return properties;
     }
 }
