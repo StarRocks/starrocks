@@ -353,12 +353,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | path_gc_check_step_interval_ms                        | 10          | ms     | 多次连续scan文件间隔时间                                     |
 | path_scan_interval_second                             | 86400       | second | gc线程清理过期数据的间隔时间                                 |
 | storage_flood_stage_usage_percent                     | 95          | %      | 如果空间使用率超过该值，会拒绝 Load 和 Restore 作业。        |
-| storage_flood_stage_left_capacity_bytes               | 1073741824  | Byte   | 如果剩余空间小于该值，会拒绝 Load Restore 作业，单位为 Byte。 |
-| tablet_meta_checkpoint_min_new_rowsets_num            | 10          | N/A    | 自上次 TabletMeta Checkpoint 至今新创建的rowset数量。        |
-| tablet_meta_checkpoint_min_interval_secs              | 600         | second | TabletMeta Checkpoint 线程轮询的时间间隔，单位为秒。         |
-| max_runnings_transactions_per_txn_map                 | 100         | N/A    | 每个partition内部同时running的最大transaction数量            |
-| tablet_max_pending_versions                           | 1000        | N/A    | PrimaryKey表允许committed未apply的最大版本数                 |
-| max_hdfs_file_handle                                  | 1000        | N/A    | 最多可以打开的HDFS文件句柄数量。                             |
+| storage_flood_stage_left_capacity_bytes               | 1073741824  | Byte   | 如果剩余空间小于该值，会拒绝 Load Restore 作业。 |
+| tablet_meta_checkpoint_min_new_rowsets_num            | 10          | N/A    | 自上次 TabletMeta Checkpoint 至今新创建的 rowset 数量。        |
+| tablet_meta_checkpoint_min_interval_secs              | 600         | second | TabletMeta Checkpoint 线程轮询的时间间隔。         |
+| max_runnings_transactions_per_txn_map                 | 100         | N/A    | 每个分区内部同时运行的最大事务数量。            |
+| tablet_max_pending_versions                           | 1000        | N/A    | PrimaryKey 表允许 committed 未 apply 的最大版本数。                 |
+| max_hdfs_file_handle                                  | 1000        | N/A    | 最多可以打开的 HDFS 文件句柄数量。                             |
 | parquet_buffer_stream_reserve_size                    | 1048576     | Byte   | Parquet reader在读取时为每个列预留的内存空间。               |
 
 ### BE 静态参数
@@ -437,7 +437,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |routine_load_thread_pool_size|10|例行导入的线程池数目。|
 |default_rowset_type|ALPHA|存储引擎的格式，默认新 ALPHA，后面会替换成 BETA。|
 |brpc_max_body_size|2147483648|BRPC 最大的包容量，单位为 Byte。|
-|max_runnings_transactions_per_txn_map|100|存储引擎支持的最大事务数。|
 |tablet_map_shard_size|32|Tablet 分组数。|
 |enable_bitmap_union_disk_format_with_set|FALSE|Bitmap 新存储格式，可以优化 bitmap_union 性能。|
 
