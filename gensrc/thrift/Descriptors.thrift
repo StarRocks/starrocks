@@ -345,6 +345,9 @@ struct THudiTable {
 
     // hudi table serde_lib
     10: optional string serde_lib
+
+    // hudi table type: copy on write or merge on read
+    11: optional bool is_mor_table
 }
 
 struct TJDBCTable {

@@ -191,7 +191,8 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             }
         }
         RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
-                mutable_new_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema()));
+                mutable_new_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema(),
+                req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     } else {
         std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
         uint32_t next_unique_id = req.tablet_schema.columns.size();
@@ -199,9 +200,9 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             col_idx_to_unique_id[col_idx] = col_idx;
         }
         RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
-                req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema()));
+                req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema(),
+                req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     }
-
     return put_tablet_metadata(tablet_metadata_pb);
 }
 

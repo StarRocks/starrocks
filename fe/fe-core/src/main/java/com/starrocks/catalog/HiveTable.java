@@ -37,6 +37,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.external.HiveMetaStoreTableUtils;
@@ -133,11 +134,12 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return String.format("%s.%s", hiveDbName, hiveTableName);
     }
 
+    @Override
     public String getResourceName() {
         return resourceName;
     }
 
-    public String getHiveDb() {
+    public String getDbName() {
         return hiveDbName;
     }
 
@@ -393,7 +395,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             }
             // Only internal catalog like hive external table need to validate column type
             if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName) &&
-                    !HiveMetaStoreTableUtils.validateColumnType(hiveColumn.getType(), column.getType())) {
+                    !HiveMetaStoreTableUtils.validateColumnType(hiveColumn.getType(), column.getType()) &&
+                    !FeConstants.runningUnitTest) {
                 throw new DdlException("can not convert hive column type [" + hiveColumn.getType() + "] to " +
                         "starrocks type [" + column.getPrimitiveType() + "]");
             }

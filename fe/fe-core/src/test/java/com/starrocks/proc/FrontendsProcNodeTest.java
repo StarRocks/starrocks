@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.proc;
 
-
 import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.system.Frontend;
@@ -52,18 +51,18 @@ public class FrontendsProcNodeTest {
     }
 
     @Test
-    public void testIsJoin() throws ClassNotFoundException, 
-                                    NoSuchMethodException, 
-                                    SecurityException, 
-                                    IllegalAccessException, 
-                                    IllegalArgumentException,
+    public void testIsJoin() throws ClassNotFoundException,
+            NoSuchMethodException,
+            SecurityException,
+            IllegalAccessException,
+            IllegalArgumentException,
             InvocationTargetException {
         mockAddress();
         List<InetSocketAddress> list = new ArrayList<InetSocketAddress>();
         list.add(socketAddr1);
-        
+
         Class<?> clazz = Class.forName(FrontendsProcNode.class.getName());
-        Method isJoin = clazz.getDeclaredMethod("isJoin", new Class[]{List.class, Frontend.class});
+        Method isJoin = clazz.getDeclaredMethod("isJoin", List.class, Frontend.class);
         isJoin.setAccessible(true);
 
         Frontend feCouldFoundByIP = new Frontend(FrontendNodeType.LEADER, "test", "127.0.0.1", 1000);
@@ -83,7 +82,7 @@ public class FrontendsProcNodeTest {
         Assert.assertTrue(!result4);
     }
 
-    @Test    
+    @Test
     public void testIPTitle() {
         Assert.assertTrue(FrontendsProcNode.TITLE_NAMES.get(1).equals("IP"));
     }

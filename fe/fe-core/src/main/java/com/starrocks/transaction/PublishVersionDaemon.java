@@ -33,21 +33,14 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
-import com.starrocks.lake.proto.PublishLogVersionRequest;
-import com.starrocks.lake.proto.PublishLogVersionResponse;
-import com.starrocks.lake.proto.PublishVersionRequest;
-import com.starrocks.lake.proto.PublishVersionResponse;
-import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -57,12 +50,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -293,7 +283,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
     private boolean publishPartition(@NotNull Database db, @NotNull TableCommitInfo tableCommitInfo,
                                      @NotNull PartitionCommitInfo partitionCommitInfo,
-                                     @NotNull TransactionState txnState) throws ExecutionException, InterruptedException {
+                                     @NotNull TransactionState txnState)
+            throws RpcException, NoAliveBackendException {
         long tableId = tableCommitInfo.getTableId();
         long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
@@ -350,104 +341,20 @@ public class PublishVersionDaemon extends LeaderDaemon {
     }
 
     private boolean publishNormalTablets(@Nullable List<Tablet> tablets, long txnId, long version)
-            throws ExecutionException, InterruptedException {
+            throws RpcException, NoAliveBackendException {
         if (tablets == null || tablets.isEmpty()) {
             return true;
         }
-        Map<Long, List<Long>> beToTablets = new HashMap<>();
-        for (Tablet tablet : tablets) {
-            Long beId = Utils.chooseBackend((LakeTablet) tablet);
-            if (beId == null) {
-                LOG.warn("No available backend can execute publish version task");
-                return false;
-            }
-            beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
-        }
-
-        List<Long> txnIds = Lists.newArrayList(txnId);
-        List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
-        List<Backend> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            Backend backend = systemInfoService.getBackend(entry.getKey());
-            if (backend == null) {
-                LOG.warn("Backend {} has been dropped", entry.getKey());
-                return false;
-            }
-            if (!backend.isAlive()) {
-                LOG.warn("Backend {} not alive", backend.getHost());
-                return false;
-            }
-
-            PublishVersionRequest request = new PublishVersionRequest();
-            request.baseVersion = version - 1;
-            request.newVersion = version;
-            request.tabletIds = entry.getValue();
-            request.txnIds = txnIds;
-
-            LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-            Future<PublishVersionResponse> future = lakeService.publishVersion(request);
-            responseList.add(future);
-            backendList.add(backend);
-        }
-
-        for (int i = 0; i < responseList.size(); i++) {
-            PublishVersionResponse response = responseList.get(i).get();
-            if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                LOG.warn("Fail to publish tablet {} on BE {}", response.failedTablets, backendList.get(i).getHost());
-                return false;
-            }
-        }
+        Utils.publishVersion(tablets, txnId, version - 1, version);
         return true;
     }
 
     private boolean publishShadowTablets(@Nullable List<Tablet> tablets, long txnId, long version)
-            throws ExecutionException, InterruptedException {
+            throws RpcException, NoAliveBackendException {
         if (tablets == null || tablets.isEmpty()) {
             return true;
         }
-        Map<Long, List<Long>> beToTablets = new HashMap<>();
-        for (Tablet tablet : tablets) {
-            Long beId = Utils.chooseBackend((LakeTablet) tablet);
-            if (beId == null) {
-                LOG.warn("No available backend can execute publish version task");
-                return false;
-            }
-            beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
-        }
-        List<Future<PublishLogVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
-        List<Backend> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            Backend backend = systemInfoService.getBackend(entry.getKey());
-            if (backend == null) {
-                LOG.warn("Backend {} has been dropped", entry.getKey());
-                return false;
-            }
-            if (!backend.isAlive()) {
-                LOG.warn("Backend {} not alive", backend.getHost());
-                return false;
-            }
-
-            PublishLogVersionRequest request = new PublishLogVersionRequest();
-            request.tabletIds = entry.getValue();
-            request.txnId = txnId;
-            request.version = version;
-
-            LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-            Future<PublishLogVersionResponse> future = lakeService.publishLogVersion(request);
-            responseList.add(future);
-            backendList.add(backend);
-        }
-
-        for (int i = 0; i < responseList.size(); i++) {
-            PublishLogVersionResponse response = responseList.get(i).get();
-            if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                LOG.warn("Fail to publish log of shadow tablet {} on BE {}", response.failedTablets,
-                        backendList.get(i).getHost());
-                return false;
-            }
-        }
+        Utils.publishLogVersion(tablets, txnId, version);
         return true;
     }
 

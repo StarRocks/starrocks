@@ -22,17 +22,10 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.QueryStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -42,7 +35,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.StringReader;
 import java.lang.ref.SoftReference;
 import java.util.List;
 
@@ -105,41 +97,11 @@ public class View extends Table {
         isLocalView = false;
     }
 
-    /**
-     * C'tor for WITH-clause views that already have a parsed QueryStmt and an optional
-     * list of column labels.
-     */
-    public View(String alias, QueryStmt queryStmt, List<String> colLabels) {
-        super(-1, alias, TableType.VIEW, null);
-        this.isLocalView = true;
-        this.queryStmt = null;
-        this.colLabels = colLabels;
-    }
-
     public View(String alias, QueryStatement queryStmt, List<String> colLabels) {
         super(-1, alias, TableType.VIEW, null);
         this.isLocalView = true;
         this.queryStmt = queryStmt;
         this.colLabels = colLabels;
-    }
-
-    public boolean isLocalView() {
-        return isLocalView;
-    }
-
-    @Deprecated
-    // It's really crazy
-    // 1. Write member variable in a readonly interface
-    // 2. Hold a temporary cache in the globally shared metadata
-    public QueryStmt getQueryStmt() {
-        try {
-            SqlScanner input = new SqlScanner(new StringReader(inlineViewDef), sqlMode);
-            SqlParser parser = new SqlParser(input);
-            StatementBase node = SqlParserUtils.getFirstStmt(parser);
-            return (QueryStmt) node;
-        } catch (Exception e) {
-            throw new SemanticException(e.getMessage());
-        }
     }
 
     public QueryStatement getQueryStatement() throws StarRocksPlannerException {
@@ -212,24 +174,6 @@ public class View extends Table {
      */
     public List<String> getOriginalColLabels() {
         return colLabels;
-    }
-
-    /**
-     * Returns the explicit column labels for this view, or null if they need to be derived
-     * entirely from the underlying query statement. The returned list has at least as many
-     * elements as the number of column labels in the query stmt.
-     */
-    public List<String> getColLabels() {
-        QueryStmt stmt = getQueryStmt();
-        if (colLabels == null) {
-            return null;
-        }
-        if (colLabels.size() >= stmt.getColLabels().size()) {
-            return colLabels;
-        }
-        List<String> explicitColLabels = Lists.newArrayList(colLabels);
-        explicitColLabels.addAll(stmt.getColLabels().subList(colLabels.size(), stmt.getColLabels().size()));
-        return explicitColLabels;
     }
 
     public boolean hasColLabels() {
