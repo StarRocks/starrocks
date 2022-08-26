@@ -22,7 +22,22 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.AccessTestUtil;
+import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.HelpStmt;
+import com.starrocks.analysis.LabelName;
+import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.ShowAuthorStmt;
+import com.starrocks.analysis.ShowBackendsStmt;
+import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowEnginesStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowPartitionsStmt;
+import com.starrocks.analysis.ShowProcedureStmt;
+import com.starrocks.analysis.ShowRoutineLoadStmt;
+import com.starrocks.analysis.ShowUserStmt;
+import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -46,10 +61,14 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.ShowColumnStmt;
+import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
-
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -311,12 +330,10 @@ public class ShowExecutorTest {
     @Test
     public void testShowPartitions(@Mocked Analyzer analyzer) throws UserException {
 
-        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
-        new Expectations(globalStateMgr) {
-            {
-                GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
-                minTimes = 0;
-                result = Arrays.asList(10001, 10002, 10003);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public List<Long> getAvailableBackendIds() {
+                return Arrays.asList(10001L, 10002L, 10003L);       
             }
         };
         // Prepare to Test
@@ -614,7 +631,7 @@ public class ShowExecutorTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            long getWorkerIdByBackendId(long BackendId) {
+            long getWorkerIdByBackendId(long backendId) {
                 return 5;
             }
         };

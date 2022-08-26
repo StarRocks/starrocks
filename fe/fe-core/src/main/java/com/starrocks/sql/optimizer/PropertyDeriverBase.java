@@ -133,7 +133,4 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
         return new PhysicalPropertySet(distributionProperty);
     }
 
-    protected PhysicalPropertySet createBroadcastPropertySet() {
-        return new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
-    }
 }

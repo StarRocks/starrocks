@@ -5,6 +5,8 @@ package com.starrocks.external;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -111,6 +113,34 @@ public class RemoteScanRangeLocations {
         result.add(scanRangeLocations);
     }
 
+    private void createHudiScanRangeLocations(long partitionId,
+                                              HivePartition partition,
+                                              HdfsFileDesc fileDesc) {
+        TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+
+        THdfsScanRange hdfsScanRange = new THdfsScanRange();
+        hdfsScanRange.setRelative_path(fileDesc.getFileName());
+        hdfsScanRange.setOffset(0);
+        hdfsScanRange.setLength(fileDesc.getLength());
+        hdfsScanRange.setPartition_id(partitionId);
+        hdfsScanRange.setFile_length(fileDesc.getLength());
+        hdfsScanRange.setFile_format(partition.getFormat().toThrift());
+        hdfsScanRange.setText_file_desc(fileDesc.getTextFileFormatDesc().toThrift());
+        for (String log : fileDesc.getHudiDeltaLogs()) {
+            hdfsScanRange.addToHudi_logs(log);
+        }
+        hdfsScanRange.setHudi_mor_table((fileDesc.isHudiMORTable()));
+        TScanRange scanRange = new TScanRange();
+        scanRange.setHdfs_scan_range(hdfsScanRange);
+        scanRangeLocations.setScan_range(scanRange);
+
+        // TODO: get block info
+        TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
+        scanRangeLocations.addToLocations(scanRangeLocation);
+
+        result.add(scanRangeLocations);
+    }
+
     public void setupScanRangeLocations(DescriptorTable descTbl, Table table,
                                         HDFSScanNodePredicates scanNodePredicates) throws UserException {
         HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
@@ -129,20 +159,37 @@ public class RemoteScanRangeLocations {
         }
         List<HivePartition> partitions = hiveMetaStoreTable.getPartitions(partitionKeys);
 
-        for (int i = 0; i < partitions.size(); i++) {
-            descTbl.addReferencedPartitions(table, partitionInfos.get(i));
-            for (HdfsFileDesc fileDesc : partitions.get(i).getFiles()) {
-                if (fileDesc.getLength() == 0) {
-                    continue;
-                }
-                for (HdfsFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
-                    addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc, blockDesc);
-                    LOG.debug("Add scan range success. partition: {}, file: {}, block: {}-{}",
-                            partitions.get(i).getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
-                            blockDesc.getLength());
+        if (table instanceof HiveTable) {
+            for (int i = 0; i < partitions.size(); i++) {
+                descTbl.addReferencedPartitions(table, partitionInfos.get(i));
+                for (HdfsFileDesc fileDesc : partitions.get(i).getFiles()) {
+                    if (fileDesc.getLength() == 0) {
+                        continue;
+                    }
+                    for (HdfsFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
+                        addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc, blockDesc);
+                        LOG.debug("Add scan range success. partition: {}, file: {}, block: {}-{}",
+                                partitions.get(i).getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
+                                blockDesc.getLength());
+                    }
                 }
             }
+        } else if (table instanceof HudiTable) {
+            for (int i = 0; i < partitions.size(); i++) {
+                descTbl.addReferencedPartitions(table, partitionInfos.get(i));
+                for (HdfsFileDesc fileDesc : partitions.get(i).getFiles()) {
+                    if (fileDesc.getLength() == -1 && fileDesc.getHudiDeltaLogs().isEmpty()) {
+                        String message = "Error: get a empty hudi fileSlice";
+                        throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
+                    }
+                    createHudiScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc);
+                }
+            }
+        } else {
+            String message = "Only Hive/Hudi table is supported.";
+            throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
         }
+
         LOG.debug("Get {} scan range locations cost: {} ms",
                 getScanRangeLocationsSize(), (System.currentTimeMillis() - start));
     }

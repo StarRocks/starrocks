@@ -149,6 +149,11 @@ int main(int argc, char** argv) {
         return -1;
     }
 
+#if defined(ENABLE_STATUS_FAILED)
+    // read range of source code for inject errors.
+    starrocks::Status::access_directory_of_inject();
+#endif
+
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
     // Aggressive decommit is required so that unused pages in the TCMalloc page heap are
     // not backed by physical pages and do not contribute towards memory consumption.
@@ -249,7 +254,6 @@ int main(int argc, char** argv) {
 
     // Init exec env.
     EXIT_IF_ERROR(starrocks::ExecEnv::init(exec_env, paths));
-    exec_env->set_storage_engine(engine);
     engine->set_heartbeat_flags(exec_env->heartbeat_flags());
 
     // Start all background threads of storage engine.
@@ -294,7 +298,6 @@ int main(int argc, char** argv) {
 
     engine->stop();
     delete engine;
-    exec_env->set_storage_engine(nullptr);
     starrocks::ExecEnv::destroy(exec_env);
 
     return 0;

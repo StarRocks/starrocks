@@ -377,11 +377,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=1/1\n" +
                 "     rollup: t2\n" +
-                "     tabletRatio=3/3\n" +
-                "     tabletList=10024,10026,10028\n" +
-                "     cardinality=100000\n" +
-                "     avgRowSize=1.0\n" +
-                "     numNodes=0\n"));
+                "     tabletRatio=3/3\n"));
 
         // Right sub join tree (a)
         assertContains(planFragment, "  STREAM DATA SINK\n" +
@@ -456,6 +452,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "select v1,v4 from t0 join t1 on v1 = v4 ) a join (" +
                 "select t1a, null as t1b,v7 from test_all_type join t2 on t1a = v7) b on v1 = t1a";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("<slot 27> : CAST(NULL AS VARCHAR(20))"));
+        Assert.assertTrue(plan.contains("<slot 27> : NULL"));
     }
 }

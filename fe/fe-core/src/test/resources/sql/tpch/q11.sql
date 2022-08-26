@@ -29,7 +29,7 @@ order by
 [result]
 TOP-N (order by [[21: sum DESC NULLS LAST]])
     TOP-N (order by [[21: sum DESC NULLS LAST]])
-        CROSS JOIN (join-predicate [null] post-join-predicate [21: sum > 43: expr])
+        CROSS JOIN (join-predicate [21: sum > 43: expr] post-join-predicate [null])
             AGGREGATE ([GLOBAL] aggregate [{21: sum=sum(21: sum)}] group by [[1: PS_PARTKEY]] having [null]
                 AGGREGATE ([LOCAL] aggregate [{21: sum=sum(20: expr)}] group by [[1: PS_PARTKEY]] having [null]
                     INNER JOIN (join-predicate [2: PS_SUPPKEY = 7: S_SUPPKEY] post-join-predicate [null])

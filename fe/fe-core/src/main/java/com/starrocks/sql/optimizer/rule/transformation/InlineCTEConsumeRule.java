@@ -5,22 +5,21 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
 public class InlineCTEConsumeRule extends TransformationRule {
-    public InlineCTEConsumeRule() {
-        super(RuleType.TF_INLINE_CTE_CONSUME, Pattern.create(OperatorType.LOGICAL_CTE_CONSUME)
-                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)));
+    private static final InlineCTEConsumeRule instance = new InlineCTEConsumeRule();
+
+    public static InlineCTEConsumeRule getInstance() {
+        return instance;
     }
 
-    @Override
-    public boolean check(OptExpression input, OptimizerContext context) {
-        LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) input.getOp();
-        return context.getCteContext().needInline(consume.getCteId());
+    private InlineCTEConsumeRule() {
+        super(RuleType.TF_INLINE_CTE_CONSUME, Pattern.create(OperatorType.LOGICAL_CTE_CONSUME)
+                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)));
     }
 
     @Override

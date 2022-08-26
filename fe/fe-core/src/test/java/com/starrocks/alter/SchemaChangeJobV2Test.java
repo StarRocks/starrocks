@@ -53,6 +53,9 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.hadoop.util.ThreadUtil;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -80,6 +83,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase  {
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
 
+    private static final Logger LOG = LogManager.getLogger(SchemaChangeJobV2Test.class);
     @Before
     public void setUp() throws Exception {
         super.setUp();
@@ -141,31 +145,19 @@ public class SchemaChangeJobV2Test extends DDLTestBase  {
         schemaChangeHandler.runAfterCatalogReady();
         Assert.assertEquals(JobState.RUNNING, schemaChangeJob.getJobState());
 
-        // runWaitingTxnJob, task not finished
-        schemaChangeHandler.runAfterCatalogReady();
-        Assert.assertEquals(JobState.RUNNING, schemaChangeJob.getJobState());
-
-        // runRunningJob
-        schemaChangeHandler.runAfterCatalogReady();
-        // task not finished, still running
-        Assert.assertEquals(JobState.RUNNING, schemaChangeJob.getJobState());
+        int retryCount = 0;
+        int maxRetry = 5;
+        while (retryCount < maxRetry) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+            schemaChangeHandler.runAfterCatalogReady();
+            if (schemaChangeJob.getJobState() == JobState.FINISHED) {
+                break;
+            }
+            retryCount++;
+            LOG.info("testSchemaChange1 is waiting for JobState retryCount:" + retryCount);
+        }
 
         // finish alter tasks
-        List<AgentTask> tasks = AgentTaskQueue.getTask(TTaskType.ALTER);
-        Assert.assertEquals(3, tasks.size());
-        for (AgentTask agentTask : tasks) {
-            agentTask.setFinished(true);
-        }
-        MaterializedIndex shadowIndex = testPartition.getMaterializedIndices(IndexExtState.SHADOW).get(0);
-        for (Tablet shadowTablet : shadowIndex.getTablets()) {
-            for (Replica shadowReplica : ((LocalTablet) shadowTablet).getImmutableReplicas()) {
-                shadowReplica
-                        .updateRowCount(testPartition.getVisibleVersion(),
-                                shadowReplica.getDataSize(), shadowReplica.getRowCount());
-            }
-        }
-
-        schemaChangeHandler.runAfterCatalogReady();
         Assert.assertEquals(JobState.FINISHED, schemaChangeJob.getJobState());
     }
 

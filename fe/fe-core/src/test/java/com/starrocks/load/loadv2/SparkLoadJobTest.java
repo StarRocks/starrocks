@@ -174,7 +174,7 @@ public class SparkLoadJobTest {
         try {
             Assert.assertTrue(resource.getSparkConfigs().isEmpty());
             resourceDesc.analyze();
-            BulkLoadJob bulkLoadJob = BulkLoadJob.fromLoadStmt(loadStmt);
+            BulkLoadJob bulkLoadJob = BulkLoadJob.fromLoadStmt(loadStmt, null);
             SparkLoadJob sparkLoadJob = (SparkLoadJob) bulkLoadJob;
             // check member
             Assert.assertEquals(dbId, bulkLoadJob.dbId);

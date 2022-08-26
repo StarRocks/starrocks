@@ -58,6 +58,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import javax.validation.constraints.NotNull;
 
 public class TransactionState implements Writable {
     private static final Logger LOG = LogManager.getLogger(TransactionState.class);
@@ -222,7 +223,6 @@ public class TransactionState implements Writable {
     private boolean hasSendTask;
     private long publishVersionTime = -1;
     private long publishVersionFinishTime = -1;
-    private TransactionStatus preStatus = null;
 
     private long callbackId = -1;
     private long timeoutMs = Config.stream_load_default_timeout_second * 1000;
@@ -246,7 +246,7 @@ public class TransactionState implements Writable {
 
     // used for PublishDaemon to check whether this txn can be published
     // not persisted, so need to rebuilt if FE restarts
-    private TransactionChecker finishChecker = null;
+    private volatile TransactionChecker finishChecker = null;
     private long checkTimes = 0;
     private Span txnSpan = null;
     private String traceParent = null;
@@ -305,8 +305,7 @@ public class TransactionState implements Writable {
     }
 
     public boolean isRunning() {
-        return transactionStatus == TransactionStatus.PREPARE
-                || transactionStatus == TransactionStatus.COMMITTED;
+        return transactionStatus == TransactionStatus.PREPARE || transactionStatus == TransactionStatus.COMMITTED;
     }
 
     // Only for OlapTable
@@ -371,10 +370,6 @@ public class TransactionState implements Writable {
         return reason;
     }
 
-    public TransactionStatus getPreStatus() {
-        return this.preStatus;
-    }
-
     public TxnCommitAttachment getTxnCommitAttachment() {
         return txnCommitAttachment;
     }
@@ -397,7 +392,6 @@ public class TransactionState implements Writable {
 
     public void setTransactionStatus(TransactionStatus transactionStatus) {
         // status changed
-        this.preStatus = this.transactionStatus;
         this.transactionStatus = transactionStatus;
 
         // after status changed
@@ -510,8 +504,12 @@ public class TransactionState implements Writable {
         }
     }
 
-    public void waitTransactionVisible(long timeoutMillis) throws InterruptedException {
-        this.latch.await(timeoutMillis, TimeUnit.MILLISECONDS);
+    public void waitTransactionVisible() throws InterruptedException {
+        this.latch.await();
+    }
+
+    public boolean waitTransactionVisible(long timeout, @NotNull TimeUnit unit) throws InterruptedException {
+        return this.latch.await(timeout, unit);
     }
 
     public void setPrepareTime(long prepareTime) {
@@ -581,7 +579,7 @@ public class TransactionState implements Writable {
     public boolean isTimeout(long currentMillis) {
         return (transactionStatus == TransactionStatus.PREPARE && currentMillis - prepareTime > timeoutMs)
                 || (transactionStatus == TransactionStatus.PREPARED && (currentMillis - commitTime)
-                        / 1000 > Config.prepared_transaction_default_timeout_second);
+                / 1000 > Config.prepared_transaction_default_timeout_second);
     }
 
     /*
@@ -641,7 +639,7 @@ public class TransactionState implements Writable {
                 sb.append(", finish txn cost: ").append(finishTime - publishVersionFinishTime).append("ms");
             }
         }
-        if (finishTime > commitTime) {
+        if (finishTime > commitTime && commitTime > 0) {
             sb.append(", publish total cost: ").append(finishTime - commitTime).append("ms");
         }
         if (finishTime > prepareTime) {
@@ -891,17 +889,27 @@ public class TransactionState implements Writable {
     }
 
     // Note: caller should hold db lock
-    public void buildFinishChecker(Database db) {
-        this.finishChecker = TransactionChecker.create(this, db);
+    public void prepareFinishChecker(Database db) {
+        if (finishChecker == null) {
+            synchronized (this) {
+                if (finishChecker == null) {
+                    finishChecker = TransactionChecker.create(this, db);
+                }
+            }
+        }
     }
 
     public boolean checkCanFinish() {
         // this may happen if FE restarts
         if (finishChecker == null) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                // consider txn finished if db is dropped
+                return true;
+            }
             db.readLock();
             try {
-                finishChecker = TransactionChecker.create(this, db);
+                prepareFinishChecker(db);
             } finally {
                 db.readUnlock();
             }

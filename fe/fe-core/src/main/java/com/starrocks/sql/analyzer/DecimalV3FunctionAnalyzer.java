@@ -37,7 +37,8 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.MAX).add(FunctionSet.MIN)
                     .add(FunctionSet.LEAD).add(FunctionSet.LAG)
                     .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE)
-                    .add(FunctionSet.ANY_VALUE).add(FunctionSet.ARRAY_AGG).build();
+                    .add(FunctionSet.ANY_VALUE).add(FunctionSet.ARRAY_AGG)
+                    .add(FunctionSet.HISTOGRAM).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
             new ImmutableSortedSet.Builder<>(String::compareTo)
@@ -66,6 +67,10 @@ public class DecimalV3FunctionAnalyzer {
     public static Type normalizeDecimalArgTypes(Type[] argTypes, String fnName) {
         if (argTypes == null || argTypes.length == 0) {
             return Type.INVALID;
+        }
+
+        if (FunctionSet.HISTOGRAM.equals(fnName)) {
+            return Type.VARCHAR;
         }
 
         if (DECIMAL_UNARY_FUNCTION_SET.contains(fnName)) {
@@ -165,7 +170,7 @@ public class DecimalV3FunctionAnalyzer {
             returnScale = originalScale;
             returnType = ScalarType.createType(returnPrimitiveType, -1, returnPrecision, returnScale);
         } else {
-            return Expr.getBuiltinFunction(fn.getFunctionName().getFunction(), new Type[] {Type.DOUBLE, Type.INT},
+            return Expr.getBuiltinFunction(fn.getFunctionName().getFunction(), new Type[]{Type.DOUBLE, Type.INT},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
 

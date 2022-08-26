@@ -35,25 +35,34 @@ public class BeTabletManager {
         if (tablets.get(request.tablet_id) != null) {
             throw new AlreadyExistsException("Tablet already exists");
         }
+        boolean isSchemaChange = false;
+        if (request.base_tablet_id > 0) {
+            Tablet baseTablet = getTablet(request.base_tablet_id);
+            if (baseTablet == null) {
+                throw new UserException("Base tablet not found");
+            }
+            isSchemaChange = true;
+        }
         Tablet tablet = new Tablet(request.tablet_id, request.table_id, request.partition_id,
                 request.tablet_schema.getSchema_hash(), request.enable_persistent_index);
+        tablet.setRunning(!isSchemaChange);
         tablets.put(request.tablet_id, tablet);
         tabletIdsByPartition.computeIfAbsent(tablet.partitionId, k -> Sets.newHashSet()).add(tablet.id);
-        LOG.info("created tablet {}", tablet.id);
+        LOG.info("created tablet {} {}", tablet.id, isSchemaChange ? "base tablet: " + request.base_tablet_id : "");
         return tablet;
     }
 
     public synchronized void dropTablet(long tabletId, boolean force) {
         Tablet removed = tablets.remove(tabletId);
-        Set<Long> tabletIds = tabletIdsByPartition.get(removed.partitionId);
-        tabletIds.remove(tabletId);
-        if (tabletIds.isEmpty()) {
-            tabletIdsByPartition.remove(removed.partitionId);
-        }
         if (removed != null) {
+            Set<Long> tabletIds = tabletIdsByPartition.get(removed.partitionId);
+            tabletIds.remove(tabletId);
+            if (tabletIds.isEmpty()) {
+                tabletIdsByPartition.remove(removed.partitionId);
+            }
             LOG.info("Dropped tablet {} force:{}", removed.id, force);
         } else {
-            LOG.info("Drop Tablet {} not found", tabletId);
+            LOG.warn("Drop Tablet {} not found", tabletId);
         }
     }
 
@@ -89,5 +98,11 @@ public class BeTabletManager {
             tabletInfo.put(tablet.id, tTablet);
         }
         return tabletInfo;
+    }
+
+    public synchronized void maintenance() {
+        for (Tablet tablet : tablets.values()) {
+            tablet.versionGC();
+        }
     }
 }

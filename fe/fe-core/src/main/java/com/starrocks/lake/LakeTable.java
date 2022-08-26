@@ -18,6 +18,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -31,6 +32,7 @@ import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Metadata for StarRocks lake table
@@ -63,8 +65,8 @@ public class LakeTable extends OlapTable {
         return tableProperty.getStorageInfo().getShardStorageInfo();
     }
 
-    public void setStorageInfo(ShardStorageInfo shardStorageInfo, boolean enableCache, long cacheTtlS)
-            throws DdlException {
+    public void setStorageInfo(ShardStorageInfo shardStorageInfo, boolean enableCache, long cacheTtlS,
+            boolean allowAsyncWriteBack) throws DdlException {
         String storageGroup;
         // s3://bucket/serviceId/tableId/
         String path = String.format("%s/%d/", shardStorageInfo.getObjectStorageInfo().getObjectUri(), id);
@@ -88,8 +90,8 @@ public class LakeTable extends OlapTable {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty
-                .setStorageInfo(new StorageInfo(newShardStorageInfo, new StorageCacheInfo(enableCache, cacheTtlS)));
+        tableProperty.setStorageInfo(new StorageInfo(
+                newShardStorageInfo, new StorageCacheInfo(enableCache, cacheTtlS, allowAsyncWriteBack)));
     }
 
     @Override
@@ -130,5 +132,27 @@ public class LakeTable extends OlapTable {
     @Override
     public AlterJobV2Builder alterTable() {
         return new LakeTableAlterJobV2Builder();
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        Map<String, String> properties = super.getProperties();
+        if (tableProperty != null) {
+            StorageInfo storageInfo = tableProperty.getStorageInfo();
+            if (storageInfo != null) {
+                // enable_storage_cache
+                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
+                        String.valueOf(storageInfo.isEnableStorageCache()));
+
+                // storage_cache_ttl
+                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
+                        String.valueOf(storageInfo.getStorageCacheTtlS()));
+
+                // allow_async_write_back
+                properties.put(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK,
+                        String.valueOf(storageInfo.isAllowAsyncWriteBack()));
+            }
+        }
+        return properties;
     }
 }

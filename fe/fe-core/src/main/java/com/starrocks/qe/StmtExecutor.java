@@ -27,7 +27,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AddSqlBlackListStmt;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
@@ -60,7 +59,9 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.QueryDumpLog;
+import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.DebugUtil;
@@ -98,6 +99,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
@@ -120,6 +122,7 @@ import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
+import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -329,8 +332,7 @@ public class StmtExecutor {
             boolean execPlanBuildByNewPlanner = false;
 
             // Entrance to the new planner
-            if (isStatisticsOrAnalyzer(parsedStmt, context) ||
-                    StatementPlanner.supportedByNewPlanner(parsedStmt)) {
+            if (StatementPlanner.supportedByNewPlanner(parsedStmt)) {
                 try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
                     redirectStatus = parsedStmt.getRedirectStatus();
                     if (!isForwardToLeader()) {
@@ -343,10 +345,10 @@ public class StmtExecutor {
                             QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
                             if (selectStmt != null) {
                                 parsedStmt = selectStmt;
-                                execPlan = new StatementPlanner().plan(parsedStmt, context);
+                                execPlan = StatementPlanner.plan(parsedStmt, context);
                             }
                         } else {
-                            execPlan = new StatementPlanner().plan(parsedStmt, context);
+                            execPlan = StatementPlanner.plan(parsedStmt, context);
                         }
                         execPlanBuildByNewPlanner = true;
                     }
@@ -1363,5 +1365,28 @@ public class StmtExecutor {
             return "";
         }
         return originStmt.originStmt;
+    }
+
+    public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan) {
+        List<TResultBatch> sqlResult = Lists.newArrayList();
+        try {
+            coord = new Coordinator(context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+
+            coord.exec();
+            RowBatch batch;
+            do {
+                batch = coord.getNext();
+                if (batch.getBatch() != null) {
+                    sqlResult.add(batch.getBatch());
+                }
+            } while (!batch.isEos());
+        } catch (Exception e) {
+            LOG.warn(e);
+            coord.getExecStatus().setStatus(e.getMessage());
+        } finally {
+            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+        }
+        return Pair.create(sqlResult, coord.getExecStatus());
     }
 }

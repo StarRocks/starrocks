@@ -26,7 +26,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.RefreshType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -66,11 +65,10 @@ public class MaterializedViewAnalyzer {
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
         public enum RefreshTimeUnit {
-            YEAR,
-            MONTH,
             DAY,
             HOUR,
-            MINUTE
+            MINUTE,
+            SECOND
         }
 
         @Override
@@ -355,25 +353,16 @@ public class MaterializedViewAnalyzer {
         private void checkDistribution(CreateMaterializedViewStatement statement,
                                        Map<TableName, Table> tableNameTableMap) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();
-            Map<String, String> properties = statement.getProperties();
             List<Column> mvColumnItems = statement.getMvColumnItems();
-
-            // For replication_num, we select the maximum value of all tables replication_num
-            int defaultReplicationNum = 1;
-            for (Table table : tableNameTableMap.values()) {
-                if (table instanceof OlapTable) {
-                    OlapTable olapTable = (OlapTable) table;
-                    Short replicationNum = olapTable.getDefaultReplicationNum();
-                    if (replicationNum > defaultReplicationNum) {
-                        defaultReplicationNum = replicationNum;
-                    }
-                }
-            }
+            Map<String, String> properties = statement.getProperties();
             if (properties == null) {
                 properties = Maps.newHashMap();
+                statement.setProperties(properties);
             }
-            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(defaultReplicationNum));
-
+            if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM,
+                        autoInferReplicationNum(tableNameTableMap).toString());
+            }
             if (distributionDesc == null) {
                 if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
                     distributionDesc = new HashDistributionDesc(Config.default_bucket_num,
@@ -390,6 +379,21 @@ public class MaterializedViewAnalyzer {
                 }
             }
             distributionDesc.analyze(columnSet);
+        }
+
+        private Short autoInferReplicationNum(Map<TableName, Table> tableNameTableMap) {
+            // For replication_num, we select the maximum value of all tables replication_num
+            Short defaultReplicationNum = 1;
+            for (Table table : tableNameTableMap.values()) {
+                if (table instanceof OlapTable) {
+                    OlapTable olapTable = (OlapTable) table;
+                    Short replicationNum = olapTable.getDefaultReplicationNum();
+                    if (replicationNum > defaultReplicationNum) {
+                        defaultReplicationNum = replicationNum;
+                    }
+                }
+            }
+            return defaultReplicationNum;
         }
 
         @Override
@@ -409,7 +413,7 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Same materialized view name %s", newMvName);
                 }
             } else if (refreshSchemeDesc != null) {
-                if (refreshSchemeDesc.getType().equals(RefreshType.SYNC)) {
+                if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
                     throw new SemanticException("Unsupported change to SYNC refresh type");
                 }
                 if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
@@ -452,7 +456,8 @@ public class MaterializedViewAnalyzer {
             Preconditions.checkState(table instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) table;
             if (!mv.isActive()) {
-                throw new SemanticException("Refresh materialized view failed because " + mv.getName() + " is not active.");
+                throw new SemanticException(
+                        "Refresh materialized view failed because " + mv.getName() + " is not active.");
             }
             return null;
         }

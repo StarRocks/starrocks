@@ -34,39 +34,24 @@ import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.AddPartitionClause;
-import com.starrocks.analysis.AdminCheckTabletsStmt;
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
-import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelAlterSystemStmt;
-import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.ColumnRenameClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.CreateTableLikeStmt;
-import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
-import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.PartitionRenameClause;
-import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
-import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
-import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.BrokerMgr;
@@ -211,9 +196,24 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
+import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.RecoverDbStmt;
+import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -925,7 +925,6 @@ public class GlobalStateMgr {
 
         // set this after replay thread stopped. to avoid replay thread modify them.
         isReady.set(false);
-        canRead.set(false);
 
         // setup for journal
         try {
@@ -984,7 +983,6 @@ public class GlobalStateMgr {
 
             MetricRepo.init();
 
-            canRead.set(true);
             isReady.set(true);
 
             String msg = "leaer finished to replay journal, can write now.";
@@ -2516,6 +2514,10 @@ public class GlobalStateMgr {
 
     public HiveRepository getHiveRepository() {
         return this.hiveRepository;
+    }
+
+    public void setHiveRepository(HiveRepository hiveRepository) {
+        this.hiveRepository = hiveRepository;
     }
 
     public IcebergRepository getIcebergRepository() {

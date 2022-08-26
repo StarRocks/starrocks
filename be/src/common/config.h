@@ -46,9 +46,9 @@ CONF_String(priority_networks, "");
 //// tcmalloc gc parameter
 ////
 // Min memory for TCmalloc, when used memory is smaller than this, do not returned to OS.
-CONF_mInt64(tc_use_memory_min, "10737418240");
+CONF_mInt64(tc_use_memory_min, "0");
 // free memory rate.[0-100]
-CONF_mInt64(tc_free_memory_rate, "20");
+CONF_mInt64(tc_free_memory_rate, "0");
 // tcmalloc gc period, default 60, it should be between [1, 180]
 CONF_mInt64(tc_gc_period, "60");
 
@@ -660,10 +660,11 @@ CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
 // The buffer size of SinkBuffer.
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
-CONF_Int64(pipeline_sink_brpc_dop, "8");
+CONF_Int64(pipeline_sink_brpc_dop, "64");
 // Used to reject coming fragment instances, when the number of running drivers
 // exceeds it*pipeline_exec_thread_pool_thread_num.
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
+CONF_mBool(pipeline_print_profile, "false");
 
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
@@ -702,6 +703,9 @@ CONF_Int64(object_storage_max_connection, "102400");
 // Acccess object storage using https.
 // this options is applicable only if `object_storage_endpoint` is not specified.
 CONF_Bool(object_storage_endpoint_use_https, "false");
+// https://github.com/aws/aws-sdk-cpp/issues/587
+// https://hadoop.apache.org/docs/current2/hadoop-aws/tools/hadoop-aws/index.html
+CONF_Bool(object_storage_endpoint_path_style_access, "false");
 
 CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
@@ -734,6 +738,8 @@ CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
 CONF_mInt64(experimental_s3_min_upload_part_size, "16777216");
 
 CONF_Int64(max_load_dop, "16");
+
+CONF_Bool(enable_load_colocate_mv, "false");
 
 CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
 CONF_Bool(manual_compact_before_data_dir_load, "false");
@@ -795,4 +801,16 @@ CONF_Int16(jdbc_connection_pool_size, "8");
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
 CONF_Int32(internal_service_async_thread_num, "10");
 
+/*
+ * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject
+ * to inject error through return random status(except ok).
+ */
+CONF_Int32(cardinality_of_inject, "100");
+
+/*
+ * Config range for inject erros,
+ * Specify the source code directory,
+ * Split by "," strictly.
+ */
+CONF_String(directory_of_inject, "/src/exec,/src/exprs");
 } // namespace starrocks::config

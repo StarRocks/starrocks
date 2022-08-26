@@ -54,6 +54,9 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TTaskType;
+import org.apache.hadoop.util.ThreadUtil;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -75,6 +78,7 @@ public class RollupJobV2Test extends DDLTestBase {
     private static AddRollupClause clause;
     private static AddRollupClause clause2;
 
+    private static final Logger LOG = LogManager.getLogger(SchemaChangeJobV2Test.class);
     @Before
     public void setUp() throws Exception {
         super.setUp();
@@ -153,27 +157,19 @@ public class RollupJobV2Test extends DDLTestBase {
         materializedViewHandler.runAfterCatalogReady();
         assertEquals(AlterJobV2.JobState.RUNNING, rollupJob.getJobState());
 
-        // runWaitingTxnJob, task not finished
-        materializedViewHandler.runAfterCatalogReady();
-        assertEquals(AlterJobV2.JobState.RUNNING, rollupJob.getJobState());
-
-        // finish all tasks
-        List<AgentTask> tasks = AgentTaskQueue.getTask(TTaskType.ALTER);
-        assertEquals(3, tasks.size());
-        for (AgentTask agentTask : tasks) {
-            agentTask.setFinished(true);
-        }
-        MaterializedIndex shadowIndex =
-                testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).get(0);
-        for (Tablet shadowTablet : shadowIndex.getTablets()) {
-            for (Replica shadowReplica : ((LocalTablet) shadowTablet).getImmutableReplicas()) {
-                shadowReplica.updateRowCount(testPartition.getVisibleVersion(),
-                        shadowReplica.getDataSize(),
-                        shadowReplica.getRowCount());
+        int retryCount = 0;
+        int maxRetry = 5;
+        while (retryCount < maxRetry) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+            materializedViewHandler.runAfterCatalogReady();
+            if (rollupJob.getJobState() == AlterJobV2.JobState.FINISHED) {
+                break;
             }
+            retryCount++;
+            LOG.info("testSchemaChange1 is waiting for JobState retryCount:" + retryCount);
         }
 
-        materializedViewHandler.runAfterCatalogReady();
+        // finish alter tasks
         assertEquals(AlterJobV2.JobState.FINISHED, rollupJob.getJobState());
     }
 

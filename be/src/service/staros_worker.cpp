@@ -149,6 +149,9 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
             // use shard id as cache identifier
             localconf[fslib::kCacheFsIdentifier] = absl::StrFormat("%d", info.id);
             localconf[fslib::kCacheFsTtlSecs] = absl::StrFormat("%ld", cache_setting.cache_entry_ttl_sec);
+            if (cache_setting.allow_async_write_back) {
+                localconf[fslib::kCacheFsAsyncWriteBack] = "true";
+            }
 
             // set environ variable to cachefs directory
             setenv(fslib::kFslibCacheDir.c_str(), cache_dir.c_str(), 0 /*overwrite*/);

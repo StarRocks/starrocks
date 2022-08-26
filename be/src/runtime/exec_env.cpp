@@ -231,9 +231,9 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                 .set_max_queue_size(1000)
                                 .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                                 .build(&scan_worker_thread_pool_with_workgroup));
-        _scan_executor_with_workgroup = new workgroup::ScanExecutor(
-                std::move(scan_worker_thread_pool_with_workgroup),
-                std::make_unique<workgroup::ScanTaskQueueWithWorkGroup>(workgroup::TypeOlapScanExecutor));
+        _scan_executor_with_workgroup =
+                new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_with_workgroup),
+                                            std::make_unique<workgroup::WorkGroupScanTaskQueue>());
         _scan_executor_with_workgroup->initialize(num_io_threads);
 
         int connector_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
@@ -258,9 +258,9 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                 .set_max_queue_size(1000)
                                 .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                                 .build(&connector_scan_worker_thread_pool_with_workgroup));
-        _connector_scan_executor_with_workgroup = new workgroup::ScanExecutor(
-                std::move(connector_scan_worker_thread_pool_with_workgroup),
-                std::make_unique<workgroup::ScanTaskQueueWithWorkGroup>(workgroup::TypeConnectorScanExecutor));
+        _connector_scan_executor_with_workgroup =
+                new workgroup::ScanExecutor(std::move(connector_scan_worker_thread_pool_with_workgroup),
+                                            std::make_unique<workgroup::WorkGroupScanTaskQueue>());
         _connector_scan_executor_with_workgroup->initialize(connector_num_io_threads);
 
         Status status = _load_path_mgr->init();
@@ -587,10 +587,6 @@ void ExecEnv::_destroy() {
 
 void ExecEnv::destroy(ExecEnv* env) {
     env->_destroy();
-}
-
-void ExecEnv::set_storage_engine(StorageEngine* storage_engine) {
-    _storage_engine = storage_engine;
 }
 
 int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {

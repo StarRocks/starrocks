@@ -358,8 +358,8 @@ public class RuntimeProfileTest {
 
             Counter count2 = profile1.addCounter("count2", TUnit.UNIT);
             count2.setValue(5);
-            Counter count2_sub = profile1.addCounter("count2_sub", TUnit.UNIT, "count2");
-            count2_sub.setValue(6);
+            Counter count2Sub = profile1.addCounter("count2_sub", TUnit.UNIT, "count2");
+            count2Sub.setValue(6);
             profiles.add(profile1);
         }
 
@@ -367,8 +367,8 @@ public class RuntimeProfileTest {
         {
             Counter count1 = profile2.addCounter("count1", TUnit.UNIT);
             count1.setValue(1);
-            Counter count1_sub = profile2.addCounter("count1_sub", TUnit.UNIT, "count1");
-            count1_sub.setValue(2);
+            Counter count1Sub = profile2.addCounter("count1_sub", TUnit.UNIT, "count1");
+            count1Sub.setValue(2);
 
             profiles.add(profile2);
         }

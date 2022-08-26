@@ -12,10 +12,13 @@ import org.apache.hadoop.hive.metastore.api.StringColumnStatsData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import static java.lang.Double.NEGATIVE_INFINITY;
+import static java.lang.Double.POSITIVE_INFINITY;
+
 public class HiveColumnStats {
     private static final Logger LOG = LogManager.getLogger(HiveColumnStats.class);
 
-    private enum StatisticType {
+    public enum StatisticType {
         UNKNOWN,
         ESTIMATE
     }
@@ -28,7 +31,32 @@ public class HiveColumnStats {
     private double maxValue = Double.POSITIVE_INFINITY;
     private StatisticType type = StatisticType.UNKNOWN;
 
+    public static final HiveColumnStats UNKNOWN =
+            new HiveColumnStats(NEGATIVE_INFINITY, POSITIVE_INFINITY, -1, -1, -1, StatisticType.UNKNOWN);
+
     public HiveColumnStats() {
+    }
+
+    public HiveColumnStats(double minValue,
+                           double maxValue,
+                           long numNulls,
+                           double averageRowSize,
+                           long distinctValuesCount) {
+        this(minValue, maxValue, numNulls, averageRowSize, distinctValuesCount, StatisticType.ESTIMATE);
+    }
+
+    public HiveColumnStats(double minValue,
+                           double maxValue,
+                           long numNulls,
+                           double averageRowSize,
+                           long distinctValuesCount,
+                           StatisticType type) {
+        this.minValue = minValue;
+        this.maxValue = maxValue;
+        this.numNulls = numNulls;
+        this.avgSize = averageRowSize;
+        this.numDistinctValues = distinctValuesCount;
+        this.type = type;
     }
 
     public boolean isUnknown() {
@@ -221,5 +249,9 @@ public class HiveColumnStats {
 
     public void setMaxValue(double maxValue) {
         this.maxValue = maxValue;
+    }
+
+    public void setType(StatisticType type) {
+        this.type = type;
     }
 }

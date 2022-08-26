@@ -1,8 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -11,6 +9,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -178,24 +178,24 @@ public class CTASAnalyzerTest {
     @Test
     public void testSimpleCase() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        String CTASSQL1 = "create table test2 as select * from test;";
+        String ctassql1 = "create table test2 as select * from test;";
 
-        UtFrameUtils.parseStmtWithNewParser(CTASSQL1, ctx);
+        UtFrameUtils.parseStmtWithNewParser(ctassql1, ctx);
 
-        String CTASSQL2 = "create table test6 as select c1+c2 as cr from test3;";
+        String ctassql2 = "create table test6 as select c1+c2 as cr from test3;";
 
-        UtFrameUtils.parseStmtWithNewParser(CTASSQL2, ctx);
+        UtFrameUtils.parseStmtWithNewParser(ctassql2, ctx);
 
-        String CTASSQL3 = "create table t1 as select k1,k2,k3,k4,k5,k6,k7,k8 from duplicate_table_with_null;";
+        String ctassql3 = "create table t1 as select k1,k2,k3,k4,k5,k6,k7,k8 from duplicate_table_with_null;";
 
-        UtFrameUtils.parseStmtWithNewParser(CTASSQL3, ctx);
+        UtFrameUtils.parseStmtWithNewParser(ctassql3, ctx);
     }
 
     @Test
     public void testSelectColumn() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
 
-        String SQL = "create table t2 as select k1 as a,k2 as b from duplicate_table_with_null t2;";
+        String sql = "create table t2 as select k1 as a,k2 as b from duplicate_table_with_null t2;";
 
         StatisticStorage storage = new CachedStatisticStorage();
         Table table = ctx.getGlobalStateMgr().getDb("ctas")
@@ -209,7 +209,7 @@ public class CTASAnalyzerTest {
 
         ctx.getGlobalStateMgr().setStatisticStorage(storage);
 
-        UtFrameUtils.parseStmtWithNewParser(SQL, ctx);
+        UtFrameUtils.parseStmtWithNewParser(sql, ctx);
     }
 
     @Test
@@ -226,7 +226,7 @@ public class CTASAnalyzerTest {
     @Test
     public void testTPCH() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        String CTASTPCH = "CREATE TABLE lineorder_flat \n" +
+        String ctastpch = "CREATE TABLE lineorder_flat \n" +
                 "    AS SELECT\n" +
                 "    l.LO_ORDERKEY AS LO_ORDERKEY_1,\n" +
                 "    l.LO_LINENUMBER AS LO_LINENUMBER,\n" +
@@ -270,7 +270,7 @@ public class CTASAnalyzerTest {
                 "INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY\n" +
                 "INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY\n" +
                 "INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;";
-        UtFrameUtils.parseStmtWithNewParser(CTASTPCH, ctx);
+        UtFrameUtils.parseStmtWithNewParser(ctastpch, ctx);
     }
 
     @Test
@@ -295,7 +295,8 @@ public class CTASAnalyzerTest {
                 "  `c_2_14` varchar(31) MAX NULL COMMENT \"\",\n" +
                 "  `c_2_15` decimal128(25, 6) SUM NOT NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
-                "AGGREGATE KEY(`c_2_0`, `c_2_1`, `c_2_2`, `c_2_3`, `c_2_4`, `c_2_5`, `c_2_6`, `c_2_7`, `c_2_8`, `c_2_9`, `c_2_10`, `c_2_11`, `c_2_12`)\n" +
+                "AGGREGATE KEY(`c_2_0`, `c_2_1`, `c_2_2`, `c_2_3`, `c_2_4`, `c_2_5`, `c_2_6`, `c_2_7`, " +
+                "`c_2_8`, `c_2_9`, `c_2_10`, `c_2_11`, `c_2_12`)\n" +
                 "COMMENT \"OLAP\"\n" +
                 "DISTRIBUTED BY HASH(`c_2_9`, `c_2_12`, `c_2_0`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
@@ -305,9 +306,11 @@ public class CTASAnalyzerTest {
                 ");");
 
         String ctasSql = "CREATE TABLE `decimal_ctas1` as " +
-                "SELECT  c_2_0, c_2_1, c_2_2, c_2_3, c_2_4, c_2_5, c_2_6, c_2_7, c_2_8, c_2_9, c_2_10, c_2_11, c_2_12, c_2_14, c_2_15 " +
+                "SELECT  c_2_0, c_2_1, c_2_2, c_2_3, c_2_4, c_2_5, c_2_6, c_2_7, " +
+                "c_2_8, c_2_9, c_2_10, c_2_11, c_2_12, c_2_14, c_2_15 " +
                 "FROM     t2 WHERE     (NOT (false)) " +
-                "GROUP BY c_2_0, c_2_1, c_2_2, c_2_3, c_2_4, c_2_5, c_2_6, c_2_7, c_2_8, c_2_9, c_2_10, c_2_11, c_2_12, c_2_14, c_2_15";
+                "GROUP BY c_2_0, c_2_1, c_2_2, c_2_3, c_2_4, c_2_5, c_2_6, c_2_7, " +
+                "c_2_8, c_2_9, c_2_10, c_2_11, c_2_12, c_2_14, c_2_15";
         CreateTableAsSelectStmt createTableStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql, ctx);
         createTableStmt.createTable(ctx);

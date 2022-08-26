@@ -21,7 +21,12 @@ public:
 
     virtual std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const = 0;
 
+    virtual std::string txn_vlog_location(int64_t tablet_id, int64_t version) const = 0;
+
     virtual std::string segment_location(int64_t tablet_id, std::string_view segment_name) const = 0;
+
+    virtual std::string tablet_metadata_lock_location(int64_t tablet_id, int64_t version,
+                                                      int64_t expire_time) const = 0;
 
     virtual Status list_root_locations(std::set<std::string>* groups) const = 0;
 };

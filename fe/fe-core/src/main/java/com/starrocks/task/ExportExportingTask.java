@@ -136,7 +136,7 @@ public class ExportExportingTask extends LeaderTask {
         // move tmp file to final destination
         Status mvStatus = moveTmpFiles();
         if (!mvStatus.ok()) {
-            String failMsg = "move tmp file to final destination fail";
+            String failMsg = "move tmp file to final destination fail, ";
             failMsg += mvStatus.getErrorMsg();
             job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, failMsg);
             LOG.warn("move tmp file to final destination fail. job:{}", job);
@@ -230,9 +230,21 @@ public class ExportExportingTask extends LeaderTask {
                                     exportedTempFile, exportedFile, job.getId(), i, failMsg);
                             break;
                         }
+                        if (!HdfsUtil.checkPathExist(exportedTempFile, job.getBrokerDesc())) {
+                            failMsg = exportedFile + " temp file not exist";
+                            LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
+                                    exportedTempFile, exportedFile, job.getId(), i, failMsg);
+                            break;
+                        }
                     } else {
                         if (BrokerUtil.checkPathExist(exportedFile, job.getBrokerDesc())) {
                             failMsg = exportedFile + " already exist";
+                            LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
+                                    exportedTempFile, exportedFile, job.getId(), i, failMsg);
+                            break;
+                        }
+                        if (!BrokerUtil.checkPathExist(exportedTempFile, job.getBrokerDesc())) {
+                            failMsg = exportedFile + " temp file not exist";
                             LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
                                     exportedTempFile, exportedFile, job.getId(), i, failMsg);
                             break;

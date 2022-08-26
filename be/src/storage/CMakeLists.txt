@@ -130,6 +130,7 @@ add_library(Storage STATIC
     push_handler.cpp
     row_source_mask.cpp
     schema_change.cpp
+    schema_change_utils.cpp
     tablet_reader.cpp
     tablet_reader_params.cpp
     meta_reader.cpp
@@ -164,6 +165,7 @@ add_library(Storage STATIC
     lake/gc.cpp
     lake/general_tablet_writer.cpp
     lake/rowset.cpp
+    lake/schema_change.cpp
     lake/starlet_location_provider.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp

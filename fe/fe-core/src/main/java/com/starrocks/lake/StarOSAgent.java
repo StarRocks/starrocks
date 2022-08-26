@@ -42,13 +42,13 @@ public class StarOSAgent {
     public static final String SERVICE_NAME = "starrocks";
 
     private StarClient client;
-    private long serviceId;
+    private String serviceId;
     private Map<String, Long> workerToId;
     private Map<Long, Long> workerToBackend;
     private ReentrantReadWriteLock rwLock;
 
     public StarOSAgent() {
-        serviceId = -1;
+        serviceId = "";
         workerToId = Maps.newHashMap();
         workerToBackend = Maps.newHashMap();
         rwLock = new ReentrantReadWriteLock();
@@ -75,7 +75,7 @@ public class StarOSAgent {
 
     private void prepare() {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (serviceId == -1) {
+            if (serviceId.equals("")) {
                 getServiceId();
             }
         }
@@ -83,7 +83,7 @@ public class StarOSAgent {
 
     public void getServiceId() {
         try {
-            ServiceInfo serviceInfo = client.getServiceInfo(SERVICE_NAME);
+            ServiceInfo serviceInfo = client.getServiceInfoByName(SERVICE_NAME);
             serviceId = serviceInfo.getServiceId();
         } catch (StarClientException e) {
             LOG.warn("Failed to get serviceId from starMgr. Error: {}", e);
@@ -168,8 +168,8 @@ public class StarOSAgent {
     public void addWorker(long backendId, String workerIpPort) {
         prepare();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (serviceId == -1) {
-                LOG.warn("When addWorker serviceId is -1");
+            if (serviceId.equals("")) {
+                LOG.warn("When addWorker serviceId is empty");
                 return;
             }
 

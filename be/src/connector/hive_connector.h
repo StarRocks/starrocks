@@ -5,6 +5,7 @@
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "exec/vectorized/hdfs_scanner.h"
+
 namespace starrocks {
 
 namespace connector {
@@ -100,6 +101,7 @@ private:
     bool _has_partition_columns = false;
 
     std::vector<std::string> _hive_column_names;
+    bool _case_sensitive = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
     // ======================================

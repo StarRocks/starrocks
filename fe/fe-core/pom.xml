@@ -611,12 +611,12 @@ under the License.
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starclient</artifactId>
-            <version>0.1.4</version>
+            <version>0.1.5</version>
         </dependency>
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starmanager</artifactId>
-            <version>0.1.4</version>
+            <version>0.1.5</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-api -->
@@ -948,6 +948,7 @@ under the License.
                     <consoleOutput>true</consoleOutput>
                     <failsOnError>true</failsOnError>
                     <linkXRef>false</linkXRef>
+                    <includeTestSourceDirectory>true</includeTestSourceDirectory>
                     <excludes>**/sql/parser/gen/**</excludes>
                 </configuration>
                 <executions>

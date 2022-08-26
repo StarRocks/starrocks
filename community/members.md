@@ -10,6 +10,7 @@
 - amber-create
 - Astralidea
 - caneGuy
+- choury
 - decster
 - dirtysalt
 - EsoragotoSpirit
@@ -19,6 +20,7 @@
 - HangyuanLiu
 - hellolilyliuyi
 - liuyehcf
+- meegoo
 - mofeiatwork
 - satanson
 - sduzh
@@ -36,7 +38,6 @@
 - blackstar-baba
 - chaoyangqi
 - chenyjsr
-- choury
 - darionyaphet
 - DeepThinker666
 - dixingxing0
@@ -55,7 +56,6 @@
 - LittleBeeBee
 - lunmer
 - mchades
-- meegoo
 - miomiocat
 - mklzl
 - padmejin

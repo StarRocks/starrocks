@@ -2,12 +2,13 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.RefreshType;
+
+import com.starrocks.catalog.MaterializedView;
 
 public class ManualRefreshSchemeDesc extends RefreshSchemeDesc {
 
     public ManualRefreshSchemeDesc() {
-        super(RefreshType.MANUAL);
+        super(MaterializedView.RefreshType.MANUAL);
     }
 
 }

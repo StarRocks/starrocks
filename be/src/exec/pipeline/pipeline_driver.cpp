@@ -20,7 +20,7 @@ namespace starrocks::pipeline {
 
 PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
-        _workgroup->decrease_num_drivers();
+        _workgroup->decr_num_running_drivers();
     }
 }
 
@@ -78,7 +78,13 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
 
     for (auto& op : _operators) {
-        RETURN_IF_ERROR(op->prepare(runtime_state));
+        int64_t time_spent = 0;
+        {
+            SCOPED_RAW_TIMER(&time_spent);
+            RETURN_IF_ERROR(op->prepare(runtime_state));
+        }
+        op->set_prepare_time(time_spent);
+
         _operator_stages[op->get_id()] = OperatorStage::PREPARED;
     }
 
@@ -216,7 +222,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             }
 
             if (_workgroup != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-                workgroup::WorkGroupManager::instance()->should_yield_driver_worker(worker_id, _workgroup)) {
+                _workgroup->driver_sched_entity()->in_queue()->should_yield(this, time_spent)) {
                 should_yield = true;
                 COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
                 break;
@@ -332,6 +338,13 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     // last finished driver notify FE the fragment's completion again and
     // unregister the FragmentContext.
     if (_fragment_ctx->count_down_drivers()) {
+        if (config::pipeline_print_profile) {
+            std::stringstream ss;
+            // Print profile for this fragment
+            _fragment_ctx->runtime_state()->runtime_profile()->compute_time_in_profile();
+            _fragment_ctx->runtime_state()->runtime_profile()->pretty_print(&ss);
+            LOG(INFO) << ss.str();
+        }
         _fragment_ctx->finish();
         auto status = _fragment_ctx->final_status();
         _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_fragment_ctx, status, true);
@@ -401,9 +414,13 @@ workgroup::WorkGroup* PipelineDriver::workgroup() {
     return _workgroup.get();
 }
 
+const workgroup::WorkGroup* PipelineDriver::workgroup() const {
+    return _workgroup.get();
+}
+
 void PipelineDriver::set_workgroup(workgroup::WorkGroupPtr wg) {
     this->_workgroup = std::move(wg);
-    this->_workgroup->increase_num_drivers();
+    this->_workgroup->incr_num_running_drivers();
 }
 
 bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {

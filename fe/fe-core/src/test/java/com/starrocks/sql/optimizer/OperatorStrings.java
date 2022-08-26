@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
@@ -94,8 +95,8 @@ public class OperatorStrings {
 
             return new OperatorStr("logical project (" +
                     project.getColumnRefMap().values().stream().map(ScalarOperator::debugString)
-                            .collect(Collectors.joining(",")) + ")"
-                    , step, Collections.singletonList(strBuilder));
+                            .collect(Collectors.joining(",")) + ")",
+                    step, Collections.singletonList(strBuilder));
         }
 
         @Override
@@ -125,8 +126,8 @@ public class OperatorStrings {
                     + aggregate.getGroupingKeys().stream().map(ScalarOperator::debugString)
                     .collect(Collectors.joining(",")) + ") ("
                     + aggregate.getAggregations().values().stream().map(CallOperator::debugString).
-                    collect(Collectors.joining(",")) + ")"
-                    , step, Collections.singletonList(strBuilder));
+                    collect(Collectors.joining(",")) + ")",
+                    step, Collections.singletonList(strBuilder));
         }
 
         @Override
@@ -163,8 +164,8 @@ public class OperatorStrings {
 
             LogicalApplyOperator apply = (LogicalApplyOperator) optExpression.getOp();
             return new OperatorStr("logical apply " +
-                    "(" + apply.getSubqueryOperator().debugString() + ")"
-                    , step, Arrays.asList(left, right));
+                    "(" + apply.getSubqueryOperator().debugString() + ")",
+                    step, Arrays.asList(left, right));
         }
 
         @Override
@@ -229,6 +230,19 @@ public class OperatorStrings {
         public OperatorStr visitPhysicalJDBCScan(OptExpression optExpression, Integer step) {
             PhysicalJDBCScanOperator scan = (PhysicalJDBCScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("JDBC SCAN (");
+            sb.append("columns").append(scan.getUsedColumns());
+            sb.append(" predicate[").append(scan.getPredicate()).append("]");
+            sb.append(")");
+            if (scan.getLimit() >= 0) {
+                sb.append(" Limit ").append(scan.getLimit());
+            }
+            return new OperatorStr(sb.toString(), step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalHiveScan(OptExpression optExpression, Integer step) {
+            PhysicalHiveScanOperator scan = (PhysicalHiveScanOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("SCAN (");
             sb.append("columns").append(scan.getUsedColumns());
             sb.append(" predicate[").append(scan.getPredicate()).append("]");
             sb.append(")");
@@ -451,6 +465,11 @@ public class OperatorStrings {
             PhysicalCTEConsumeOperator op = (PhysicalCTEConsumeOperator) optExpression.getOp();
             String sb = "CTEConsumer(cteid=" + op.getCteId() + ")";
             return new OperatorStr(sb, step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalNoCTE(OptExpression optExpression, Integer step) {
+            return visit(optExpression.getInputs().get(0), step);
         }
     }
 }

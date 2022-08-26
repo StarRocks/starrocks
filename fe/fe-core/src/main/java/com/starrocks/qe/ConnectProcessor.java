@@ -38,6 +38,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.external.iceberg.StarRocksIcebergException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -279,7 +280,8 @@ public class ConnectProcessor {
                 .setTimestamp(System.currentTimeMillis())
                 .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
                 .setUser(ctx.getQualifiedUser())
-                .setDb(ctx.getDatabase());
+                .setDb(ctx.getDatabase())
+                .setCatalog(ctx.getCurrentCatalog());
         ctx.getPlannerProfile().reset();
 
         // execute this query.
@@ -398,6 +400,8 @@ public class ConnectProcessor {
                 channel.sendOnePacket(serializer.toByteBuffer());
             }
 
+        } catch (StarRocksIcebergException e) {
+            LOG.warn("errors happened when getting Iceberg table {}", tableName, e);
         } finally {
             db.readUnlock();
         }

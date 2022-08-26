@@ -88,6 +88,7 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPipelineProfileLevel;
@@ -271,13 +272,46 @@ public class Coordinator {
         this.forceScheduleLocal = context.getSessionVariable().isForceScheduleLocal();
     }
 
-    // Used for broker load task/export task coordinator
+    // Used for broker export task coordinator
     public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable, List<PlanFragment> fragments,
-                       List<ScanNode> scanNodes, String timezone, long startTime, Map<String, String> sessionVariables) {
+                       List<ScanNode> scanNodes, String timezone, long startTime,
+                       Map<String, String> sessionVariables) {
         this.isBlockQuery = true;
         this.jobId = jobId;
         this.queryId = queryId;
         this.connectContext = null;
+        this.descTable = descTable.toThrift();
+        this.fragments = fragments;
+        this.scanNodes = scanNodes;
+        this.queryOptions = new TQueryOptions();
+        if (sessionVariables.containsKey(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE)) {
+            final TCompressionType loadCompressionType = CompressionUtils
+                    .findTCompressionByName(
+                            sessionVariables.get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
+            if (loadCompressionType != null) {
+                this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
+            }
+        }
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
+        this.queryGlobals.setNow_string(nowString);
+        this.queryGlobals.setTimestamp_ms(startTime);
+        this.queryGlobals.setTime_zone(timezone);
+        this.needReport = true;
+        this.preferComputeNode = false;
+        this.useComputeNodeNumber = -1;
+        this.nextInstanceId = new TUniqueId();
+        nextInstanceId.setHi(queryId.hi);
+        nextInstanceId.setLo(queryId.lo + 1);
+    }
+
+    // Used for broker load task coordinator
+    public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable, List<PlanFragment> fragments,
+                       List<ScanNode> scanNodes, String timezone, long startTime, Map<String, String> sessionVariables,
+                       ConnectContext context) {
+        this.isBlockQuery = true;
+        this.jobId = jobId;
+        this.queryId = queryId;
+        this.connectContext = context;
         this.descTable = descTable.toThrift();
         this.fragments = fragments;
         this.scanNodes = scanNodes;
@@ -1445,7 +1479,9 @@ public class Coordinator {
                             dest.fragment_instance_id = instanceExecParams.instanceId;
                             dest.server = toRpcHost(instanceExecParams.host);
                             dest.setBrpc_server(toBrpcHost(instanceExecParams.host));
-                            dest.setPipeline_driver_sequence(driverSeq);
+                            if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
+                                dest.setPipeline_driver_sequence(driverSeq);
+                            }
                             break;
                         }
                     }
@@ -1516,7 +1552,9 @@ public class Coordinator {
                                 dest.fragment_instance_id = instanceExecParams.instanceId;
                                 dest.server = toRpcHost(instanceExecParams.host);
                                 dest.setBrpc_server(toBrpcHost(instanceExecParams.host));
-                                dest.setPipeline_driver_sequence(driverSeq);
+                                if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
+                                    dest.setPipeline_driver_sequence(driverSeq);
+                                }
                                 break;
                             }
                         }
@@ -1768,7 +1806,9 @@ public class Coordinator {
                             FInstanceExecParam instanceParam = new FInstanceExecParam(null, key, 0, params);
                             params.instanceExecParams.add(instanceParam);
 
-                            if (!assignScanRangesPerDriverSeq) {
+                            boolean assignPerDriverSeq = assignScanRangesPerDriverSeq &&
+                                    enableAssignScanRangesPerDriverSeq(scanRangeParams, pipelineDop);
+                            if (!assignPerDriverSeq) {
                                 instanceParam.perNodeScanRanges.put(planNodeId, scanRangeParams);
                             } else {
                                 int expectedDop = Math.max(1, Math.min(pipelineDop, scanRangeParams.size()));
@@ -1975,6 +2015,21 @@ public class Coordinator {
         return value;
     }
 
+    /**
+     * This strategy assigns buckets to each driver sequence to avoid local shuffle.
+     * If the number of buckets assigned to a fragment instance is less than pipelineDop,
+     * pipelineDop will be set to num_buckets, which will reduce the degree of operator parallelism.
+     * Therefore, when there are few buckets (<=pipeline_dop/2), insert local shuffle instead of using this strategy
+     * to improve the degree of parallelism.
+     *
+     * @param scanRanges The buckets assigned to a fragment instance.
+     * @param pipelineDop The expected pipelineDop.
+     * @return Whether using the strategy of assigning scanRanges to each driver sequence.
+     */
+    private <T> boolean enableAssignScanRangesPerDriverSeq(List<T> scanRanges, int pipelineDop) {
+        return scanRanges.size() > pipelineDop / 2;
+    }
+
     public void computeColocatedJoinInstanceParam(Map<Integer, TNetworkAddress> bucketSeqToAddress,
                                                   BucketSeqToScanRange bucketSeqToScanRange,
                                                   int parallelExecInstanceNum, int pipelineDop, boolean enablePipeline,
@@ -1984,12 +2039,14 @@ public class Coordinator {
                 Maps.newHashMap();
         for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> bucketSeqAndScanRanges : bucketSeqToScanRange.entrySet()) {
             TNetworkAddress address = bucketSeqToAddress.get(bucketSeqAndScanRanges.getKey());
-
-            if (!addressToScanRanges.containsKey(address)) {
-                addressToScanRanges.put(address, Lists.newArrayList());
-            }
-            addressToScanRanges.get(address).add(bucketSeqAndScanRanges);
+            addressToScanRanges
+                    .computeIfAbsent(address, k -> Lists.newArrayList())
+                    .add(bucketSeqAndScanRanges);
         }
+
+        boolean assignPerDriverSeq =
+                enablePipeline && addressToScanRanges.values().stream()
+                        .allMatch(scanRanges -> enableAssignScanRangesPerDriverSeq(scanRanges, pipelineDop));
 
         for (Map.Entry<TNetworkAddress, List<Map.Entry<Integer, Map<Integer,
                 List<TScanRangeParams>>>>> addressScanRange : addressToScanRanges.entrySet()) {
@@ -2017,16 +2074,23 @@ public class Coordinator {
                 }
                 List<List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>>> scanRangesPerDriverSeq =
                         ListUtil.splitBySize(scanRangePerInstance, expectedDop);
-                instanceParam.pipelineDop = scanRangesPerDriverSeq.size();
+
+                if (assignPerDriverSeq) {
+                    instanceParam.pipelineDop = scanRangesPerDriverSeq.size();
+                }
 
                 for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
                     final int finalDriverSeq = driverSeq;
                     scanRangesPerDriverSeq.get(finalDriverSeq).forEach(bucketSeqAndScanRanges -> {
-                        instanceParam.addBucketSeqAndDriverSeq(bucketSeqAndScanRanges.getKey(), finalDriverSeq);
+                        if (assignPerDriverSeq) {
+                            instanceParam.addBucketSeqAndDriverSeq(bucketSeqAndScanRanges.getKey(), finalDriverSeq);
+                        } else {
+                            instanceParam.addBucketSeq(bucketSeqAndScanRanges.getKey());
+                        }
 
                         bucketSeqAndScanRanges.getValue().forEach((scanId, scanRanges) -> {
                             List<TScanRangeParams> destScanRanges;
-                            if (!enablePipeline) {
+                            if (!assignPerDriverSeq) {
                                 destScanRanges = instanceParam.perNodeScanRanges
                                         .computeIfAbsent(scanId, k -> new ArrayList<>());
                             } else {
@@ -2388,6 +2452,7 @@ public class Coordinator {
     // FragmentExecParams
     static class FInstanceExecParam {
         static final int ABSENT_PIPELINE_DOP = -1;
+        static final int ABSENT_DRIVER_SEQUENCE = -1;
 
         TUniqueId instanceId;
         TNetworkAddress host;
@@ -2406,6 +2471,10 @@ public class Coordinator {
 
         public void addBucketSeqAndDriverSeq(int bucketSeq, int driverSeq) {
             this.bucketSeqToDriverSeq.putIfAbsent(bucketSeq, driverSeq);
+        }
+
+        public void addBucketSeq(int bucketSeq) {
+            this.bucketSeqToDriverSeq.putIfAbsent(bucketSeq, ABSENT_DRIVER_SEQUENCE);
         }
 
         public FInstanceExecParam(TUniqueId id, TNetworkAddress host,
@@ -2964,6 +3033,13 @@ public class Coordinator {
                 if (esScanRange != null) {
                     sb.append("{ index=").append(esScanRange.getIndex())
                             .append(", shardid=").append(esScanRange.getShard_id())
+                            .append("}");
+                }
+                THdfsScanRange hdfsScanRange = range.getScan_range().getHdfs_scan_range();
+                if (hdfsScanRange != null) {
+                    sb.append("{relative_path=").append(hdfsScanRange.getRelative_path())
+                            .append(", offset=").append(hdfsScanRange.getOffset())
+                            .append(", length=").append(hdfsScanRange.getLength())
                             .append("}");
                 }
             }

@@ -190,9 +190,6 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     _peak_buffer_size_counter->set(buffer_size());
 
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
-    if (_workgroup != nullptr) {
-        _workgroup->incr_period_ask_chunk_num(1);
-    }
 
     vectorized::ChunkPtr res = get_chunk_from_buffer();
     if (res == nullptr) {
@@ -304,12 +301,12 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     int32_t driver_id = CurrentThread::current().get_driver_id();
 
     workgroup::ScanTask task;
-    task.workgroup = _workgroup;
+    task.workgroup = _workgroup.get();
     // TODO: consider more factors, such as scan bytes and i/o time.
     task.priority = vectorized::OlapScanNode::compute_priority(_submit_task_counter->value());
     const auto io_task_start_nano = MonotonicNanos();
     task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id,
-                          io_task_start_nano](int worker_id) {
+                          io_task_start_nano]() {
         if (auto sp = wp.lock()) {
             // Set driver_id here to share some driver-local contents.
             // Current it's used by ExprContext's driver-local state
@@ -334,19 +331,12 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             int64_t prev_scan_rows = chunk_source->get_scan_rows();
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
 
-            // Read chunk
-            auto [status, num_read_chunks] =
-                    chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup, worker_id);
+            auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
             if (!status.ok() && !status.is_end_of_file()) {
                 _set_scan_status(status);
             }
 
             int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
-            if (_workgroup != nullptr) {
-                _workgroup->increment_real_runtime_ns(delta_cpu_time);
-                _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
-            }
-
             _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
                                       chunk_source->get_scan_rows() - prev_scan_rows,
                                       chunk_source->get_scan_bytes() - prev_scan_bytes);
@@ -446,7 +436,7 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
 
     const auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(scan_operator.get());
     scan_operator->set_degree_of_parallelism(morsel_queue_factory->size());
-    scan_operator->set_need_local_shuffle(morsel_queue_factory->is_shared());
+    scan_operator->set_need_local_shuffle(morsel_queue_factory->need_local_shuffle());
 
     ops.emplace_back(std::move(scan_operator));
 

@@ -6,6 +6,7 @@
 #include "exec/vectorized/hdfs_scanner_orc.h"
 #include "exec/vectorized/hdfs_scanner_parquet.h"
 #include "exec/vectorized/hdfs_scanner_text.h"
+#include "exec/vectorized/jni_scanner.h"
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
@@ -144,6 +145,9 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.hive_column_names) {
         _hive_column_names = hdfs_scan_node.hive_column_names;
     }
+    if (hdfs_scan_node.__isset.case_sensitive) {
+        _case_sensitive = hdfs_scan_node.case_sensitive;
+    }
 }
 
 Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
@@ -249,12 +253,56 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
+    scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.open_limit = nullptr;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;
-    if (format == THdfsFileFormat::PARQUET) {
+    if (dynamic_cast<const HudiTableDescriptor*>(_tuple_desc->table_desc()) && scan_range.hudi_mor_table) {
+        const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(_hive_table);
+        auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
+        std::string partition_full_path = partition_desc->location();
+
+        std::string required_fields;
+        for (auto slot : _tuple_desc->slots()) {
+            required_fields.append(slot->col_name());
+            required_fields.append(",");
+        }
+        required_fields = required_fields.substr(0, required_fields.size() - 1);
+
+        std::string delta_file_paths;
+        if (!scan_range.hudi_logs.empty()) {
+            for (const std::string& log : scan_range.hudi_logs) {
+                delta_file_paths.append(partition_full_path.append("/").append(log));
+                delta_file_paths.append(",");
+            }
+            delta_file_paths = delta_file_paths.substr(0, delta_file_paths.size() - 1);
+        }
+
+        std::string data_file_path;
+        if (scan_range.relative_path.empty()) {
+            data_file_path = "";
+        } else {
+            data_file_path = partition_full_path.append("/").append(scan_range.relative_path);
+        }
+
+        std::map<std::string, std::string> jni_scanner_params;
+        jni_scanner_params["base_path"] = hudi_table->get_base_path();
+        jni_scanner_params["hive_column_names"] = hudi_table->get_hive_column_names();
+        jni_scanner_params["hive_column_types"] = hudi_table->get_hive_column_types();
+        jni_scanner_params["required_fields"] = required_fields;
+        jni_scanner_params["instant_time"] = hudi_table->get_instant_time();
+        jni_scanner_params["delta_file_paths"] = delta_file_paths;
+        jni_scanner_params["data_file_path"] = data_file_path;
+        jni_scanner_params["data_file_length"] = std::to_string(scan_range.file_length);
+        jni_scanner_params["serde"] = hudi_table->get_serde_lib();
+        jni_scanner_params["input_format"] = hudi_table->get_input_format();
+
+        std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
+
+        scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
+    } else if (format == THdfsFileFormat::PARQUET) {
         scanner = _pool.add(new HdfsParquetScanner());
     } else if (format == THdfsFileFormat::ORC) {
         scanner = _pool.add(new HdfsOrcScanner());

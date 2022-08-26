@@ -30,7 +30,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
-import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
@@ -57,6 +56,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -760,7 +760,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
                         rangePartitionInfo.getRange(partition.getId()),
                         rangePartitionInfo.getDataProperty(partition.getId()),
                         rangePartitionInfo.getReplicationNum(partition.getId()),
-                        rangePartitionInfo.getIsInMemory(partition.getId()));
+                        rangePartitionInfo.getIsInMemory(partition.getId()),
+                        rangePartitionInfo.getStorageInfo(partition.getId()),
+                        isLakeTable());
             } else if (!reserveTablets) {
                 tabletIds = GlobalStateMgr.getCurrentState().onErasePartition(partition);
             }
@@ -1870,6 +1872,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
             if (tmpTable != null) {
                 MaterializedView mv = (MaterializedView) tmpTable;
                 mv.setActive(false);
+            } else {
+                LOG.warn("Ignore materialized view {} does not exists", mvId);
             }
         }
     }
@@ -1948,5 +1952,20 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 }
             }
         }
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        Map<String, String> properties = Maps.newHashMap();
+
+        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, getDefaultReplicationNum().toString());
+        properties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, isInMemory().toString());
+
+        Map<String, String> tableProperty = getTableProperty().getProperties();
+        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
+                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        }
+        return properties;
     }
 }

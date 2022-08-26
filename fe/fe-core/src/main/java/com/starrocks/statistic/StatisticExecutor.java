@@ -4,7 +4,6 @@ package com.starrocks.statistic;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -12,30 +11,17 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.Coordinator;
-import com.starrocks.qe.QeProcessorImpl;
-import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.Optimizer;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.transformer.LogicalPlan;
-import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -47,7 +33,6 @@ import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
@@ -83,28 +68,8 @@ public class StatisticExecutor {
         } else {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }
-        Map<String, Database> dbs = Maps.newHashMap();
 
-        ConnectContext context = StatisticUtils.buildConnectContext();
-        StatementBase parsedStmt;
-        try {
-            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
-            if (parsedStmt instanceof QueryStatement) {
-                dbs = AnalyzerUtils.collectAllDatabase(context, parsedStmt);
-            }
-        } catch (Exception e) {
-            LOG.warn("Parse statistic table query fail.", e);
-            throw e;
-        }
-
-        try {
-            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, true, true);
-            List<TResultBatch> sqlResult = executeStmt(context, execPlan).first;
-            return deserializerStatisticData(sqlResult);
-        } catch (Exception e) {
-            LOG.warn("Execute statistic table query fail.", e);
-            throw e;
-        }
+        return executeDQL(sql);
     }
 
     public void dropTableStatistics(Long tableIds, StatsConstants.AnalyzeType analyzeType) {
@@ -122,34 +87,13 @@ public class StatisticExecutor {
         }
     }
 
-    public List<TStatisticData> queryHistogram(Long tableId, List<String> columnNames) throws Exception {
+    public List<TStatisticData> queryHistogram(Long tableId, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildQueryHistogramStatisticsSQL(tableId, columnNames);
-        ConnectContext context = StatisticUtils.buildConnectContext();
-        StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
-        try {
-            ExecPlan execPlan = getExecutePlan(Maps.newHashMap(), context, parsedStmt, true, true);
-            List<TResultBatch> sqlResult = executeStmt(context, execPlan).first;
-            return deserializerStatisticData(sqlResult);
-        } catch (Exception e) {
-            LOG.warn("Execute statistic table query fail.", e);
-            throw e;
-        }
+        return executeDQL(sql);
     }
 
-    public List<TStatisticData> queryMCV(String sql) throws Exception {
-        ConnectContext context = StatisticUtils.buildConnectContext();
-        StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
-        try {
-            ExecPlan execPlan = getExecutePlan(Maps.newHashMap(), context, parsedStmt, true, true);
-            Pair<List<TResultBatch>, Status> result = executeStmt(context, execPlan);
-            if (!result.second.ok()) {
-                throw new DdlException(result.second.getErrorMsg());
-            }
-            return deserializerStatisticData(result.first);
-        } catch (Exception e) {
-            LOG.warn("Execute statistic table query fail.", e);
-            throw e;
-        }
+    public List<TStatisticData> queryMCV(String sql) {
+        return executeDQL(sql);
     }
 
     public void dropHistogram(Long tableId, List<String> columnNames) {
@@ -192,31 +136,17 @@ public class StatisticExecutor {
                 "`) as _dict_merge_" + column +
                 " from " + catalogName + "." + dbName + "." + tableName + " [_META_]";
 
-        Map<String, Database> dbs = Maps.newHashMap();
-        ConnectContext context = StatisticUtils.buildConnectContext();
-        StatementBase parsedStmt;
-        try {
-            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
-            if (parsedStmt instanceof QueryStatement) {
-                dbs = AnalyzerUtils.collectAllDatabase(context, parsedStmt);
-            }
-            Preconditions.checkState(dbs.size() == 1);
-        } catch (Exception e) {
-            LOG.warn("Parse statistic dict query {} fail.", sql, e);
-            throw e;
-        }
 
-        try {
-            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, true, false);
-            Pair<List<TResultBatch>, Status> sqlResult = executeStmt(context, execPlan);
-            if (!sqlResult.second.ok()) {
-                return Pair.create(Collections.emptyList(), sqlResult.second);
-            } else {
-                return Pair.create(deserializerStatisticData(sqlResult.first), sqlResult.second);
-            }
-        } catch (Exception e) {
-            LOG.warn("Execute statistic dict query {} fail.", sql, e);
-            throw e;
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+
+        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, false, TResultSinkType.STATISTIC);
+        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
+        if (!sqlResult.second.ok()) {
+            return Pair.create(Collections.emptyList(), sqlResult.second);
+        } else {
+            return Pair.create(deserializerStatisticData(sqlResult.first), sqlResult.second);
         }
     }
 
@@ -294,80 +224,20 @@ public class StatisticExecutor {
         return analyzeStatus;
     }
 
-    private static ExecPlan getExecutePlan(Map<String, Database> dbs, ConnectContext context,
-                                           StatementBase parsedStmt, boolean isStatistic, boolean isLockDb) {
-        ExecPlan execPlan;
-        try {
-            if (isLockDb) {
-                lock(dbs);
+    private List<TStatisticData> executeDQL(String sql) {
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, true, TResultSinkType.STATISTIC);
+        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
+        if (!sqlResult.second.ok()) {
+            throw new SemanticException(sqlResult.second.getErrorMsg());
+        } else {
+            try {
+                return deserializerStatisticData(sqlResult.first);
+            } catch (TException e) {
+                throw new SemanticException(e.getMessage());
             }
-
-            Analyzer.analyze(parsedStmt, context);
-
-            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, context).transform(
-                    ((QueryStatement) parsedStmt).getQueryRelation());
-
-            Optimizer optimizer = new Optimizer();
-            OptExpression optimizedPlan = optimizer.optimize(
-                    context,
-                    logicalPlan.getRoot(),
-                    new PhysicalPropertySet(),
-                    new ColumnRefSet(logicalPlan.getOutputColumn()),
-                    columnRefFactory);
-
-            execPlan = new PlanFragmentBuilder()
-                    .createStatisticPhysicalPlan(optimizedPlan, context, logicalPlan.getOutputColumn(),
-                            columnRefFactory, isStatistic);
-        } finally {
-            if (isLockDb) {
-                unLock(dbs);
-            }
-        }
-        return execPlan;
-    }
-
-    private static Pair<List<TResultBatch>, Status> executeStmt(ConnectContext context, ExecPlan plan)
-            throws Exception {
-        Coordinator coord =
-                new Coordinator(context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
-        QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
-        List<TResultBatch> sqlResult = Lists.newArrayList();
-        try {
-            coord.exec();
-            RowBatch batch;
-            do {
-                batch = coord.getNext();
-                if (batch.getBatch() != null) {
-                    sqlResult.add(batch.getBatch());
-                }
-            } while (!batch.isEos());
-        } catch (Exception e) {
-            LOG.warn(e);
-            coord.getExecStatus().setStatus(e.getMessage());
-        } finally {
-            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
-        }
-        return Pair.create(sqlResult, coord.getExecStatus());
-    }
-
-    // Lock all database before analyze
-    private static void lock(Map<String, Database> dbs) {
-        if (dbs == null) {
-            return;
-        }
-        for (Database db : dbs.values()) {
-            db.readLock();
-        }
-    }
-
-    // unLock all database after analyze
-    private static void unLock(Map<String, Database> dbs) {
-        if (dbs == null) {
-            return;
-        }
-        for (Database db : dbs.values()) {
-            db.readUnlock();
         }
     }
 }

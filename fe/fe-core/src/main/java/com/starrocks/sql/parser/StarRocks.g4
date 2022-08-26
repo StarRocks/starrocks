@@ -16,44 +16,47 @@ statement
     : queryStatement                                                                        #query
 
     // Database Statement
-    | alterDbQuotaStmt                                                                      #alterDbQuota
+    | useDatabaseStatement                                                                  #useDb
+    | useCatalogStatement                                                                   #useCatalog
+    | showDatabasesStatement                                                                #showDatabases
+    | alterDbQuotaStmtatement                                                               #alterDbQuota
     | createDbStatement                                                                     #createDb
     | dropDbStatement                                                                       #dropDb
     | showCreateDbStatement                                                                 #showCreateDb
     | alterDatabaseRename                                                                   #databaseRename
     | recoverDbStmt                                                                         #revoverDb
     | showDataStmt                                                                          #showData
-    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // Table Statement
     | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
-    | alterTableStatement                                                                   #alterTable
-    | dropTableStatement                                                                    #dropTable
-    | showTableStatement                                                                    #showTables
-    | showCreateTableStatement                                                              #showCreateTable
-    | showColumnStatement                                                                   #showColumn
-    | showTableStatusStatement                                                              #showTableStatus
-    | createIndexStatement                                                                  #createIndex
-    | dropIndexStatement                                                                    #dropIndex
-    | refreshTableStatement                                                                 #refreshTable
-    | showAlterStatement                                                                    #showAlter
-    | showDeleteStatement                                                                   #showDelete
-    | descTableStatement                                                                    #descTable
     | createTableLikeStatement                                                              #createTableLike
-    | showIndexStatement                                                                    #showIndex
+    | showCreateTableStatement                                                              #showCreateTable
+    | dropTableStatement                                                                    #dropTable
     | recoverTableStatement                                                                 #recoverTable
     | truncateTableStatement                                                                #truncateTable
-    | showTabletStatement                                                                   #showTablet
+    | showTableStatement                                                                    #showTables
+    | descTableStatement                                                                    #descTable
+    | showTableStatusStatement                                                              #showTableStatus
+    | showColumnStatement                                                                   #showColumn
+    | refreshTableStatement                                                                 #refreshTable
+    | alterTableStatement                                                                   #alterTable
     | cancelAlterTableStatement                                                             #cancelAlterTable
-    | showPartitionsStatement                                                               #showPartitions
-    | recoverPartitionStatement                                                             #recoverPartition
-    | showOpenTableStatement                                                                #showOpenTable
+    | showAlterStatement                                                                    #showAlter
 
     // View Statement
     | createViewStatement                                                                   #createView
     | alterViewStatement                                                                    #alterView
     | dropViewStatement                                                                     #dropView
+
+    // Partition Statement
+    | showPartitionsStatement                                                               #showPartitions
+    | recoverPartitionStatement                                                             #recoverPartition
+
+    // Index Statement
+    | createIndexStatement                                                                  #createIndex
+    | dropIndexStatement                                                                    #dropIndex
+    | showIndexStatement                                                                    #showIndex
 
     // Task Statement
     | submitTaskStatement                                                                   #submitTask
@@ -83,12 +86,14 @@ statement
     | showRoutineLoadStatement                                                              #showRoutineLoad
 
     // Admin Statement
-    | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
-    | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
-    | ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?                                     #adminShowConfig
-    | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
-    | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
-            (WHERE where=expression)?                                                       #adminShowReplicaStatus
+    | adminSetConfigStatement                                                               #adminSetConfig
+    | adminSetReplicaStatusStatement                                                        #adminSetReplicaStatus
+    | adminShowConfigStatement                                                              #adminShowConfig
+    | adminShowReplicaDistributionStatement                                                 #adminShowReplicaDistribution
+    | adminShowReplicaStatusStatement                                                       #adminShowReplicaStatus
+    | adminRepairTableStatement                                                             #adminRepairTable
+    | adminCancelRepairTableStatement                                                       #adminCancelRepairTable
+    | adminCheckTabletsStatement                                                            #adminCheckTablets
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -123,9 +128,6 @@ statement
     | cancelLoadStatement                                                                   #cancelLoad
 
     // Other statement
-    | USE qualifiedName                                                                     #useDb
-    | USE CATALOG identifierOrString                                                        #useCatalog
-    | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
     | showProcesslistStatement                                                              #showProcesslist
     | showUserPropertyStatement                                                             #showUserProperty
@@ -136,7 +138,13 @@ statement
     | showBrokerStatement                                                                   #showBroker
     | showCollationStatement                                                                #showCollation
     | setStatement                                                                          #setStmt
+
+    //Show Statement
     | showWarningStatement                                                                  #showWarning
+    | showTabletStatement                                                                   #showTablet
+    | showDeleteStatement                                                                   #showDelete
+    | showOpenTableStatement                                                                #showOpenTable
+    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -157,10 +165,20 @@ statement
 
     // Backup Restore Satement
     | backupStatement                                                                        #backup
+    | showBackupStatement                                                                    #showBackup
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
-alterDbQuotaStmt
+
+useDatabaseStatement
+    : USE qualifiedName
+    ;
+
+useCatalogStatement
+    : USE CATALOG identifierOrString
+    ;
+
+alterDbQuotaStmtatement
     : ALTER DATABASE identifier SET DATA QUOTA identifier
     | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
     ;
@@ -191,11 +209,6 @@ showDataStmt
     : SHOW DATA
     | SHOW DATA FROM qualifiedName
     ;
-
-showDynamicPartitionStatement
-    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
-    ;
-
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
@@ -431,6 +444,38 @@ refreshMaterializedViewStatement
 
 cancelRefreshMaterializedViewStatement
     : CANCEL REFRESH MATERIALIZED VIEW mvName=qualifiedName
+    ;
+
+// ------------------------------------------- Admin Statement ---------------------------------------------------------
+
+adminSetConfigStatement
+    : ADMIN SET FRONTEND CONFIG '(' property ')'
+    ;
+adminSetReplicaStatusStatement
+    : ADMIN SET REPLICA STATUS properties
+    ;
+adminShowConfigStatement
+    : ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?
+    ;
+
+adminShowReplicaDistributionStatement
+    : ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?
+    ;
+
+adminShowReplicaStatusStatement
+    : ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames? (WHERE where=expression)?
+    ;
+
+adminRepairTableStatement
+    : ADMIN REPAIR TABLE qualifiedName partitionNames?
+    ;
+
+adminCancelRepairTableStatement
+    : ADMIN CANCEL REPAIR TABLE qualifiedName partitionNames?
+    ;
+
+adminCheckTabletsStatement
+    : ADMIN CHECK tabletList properties
     ;
 
 // ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
@@ -845,6 +890,10 @@ showAuthenticationStatement
     | SHOW AUTHENTICATION (FOR user)?                           #showAuthenticationForUser
     ;
 
+showDynamicPartitionStatement
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
+    ;
+
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
@@ -1016,6 +1065,10 @@ backupStatement
     TO identifier
     ON '(' tableDesc (',' tableDesc) * ')'
     (PROPERTIES propertyList)?
+    ;
+
+showBackupStatement
+    : SHOW BACKUP ((FROM | IN) identifier)?
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------

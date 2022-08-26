@@ -2,8 +2,8 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import avro.shaded.com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.CreateDbStmt;
+
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -11,9 +11,10 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.statistic.StatsConstants;
 import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -74,8 +75,8 @@ public class CachedStatisticStorageTest {
         starRocksAssert = new StarRocksAssert(connectContext);
 
         createStatisticsTable();
-        String DB_NAME = "test";
-        starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+        String dbName = "test";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -101,18 +102,18 @@ public class CachedStatisticStorageTest {
         OlapTable table = (OlapTable) db.getTable("t0");
 
         new Expectations() {{
-            cachedStatisticStorage.getColumnStatistic(table, "v1");
-            result = ColumnStatistic.builder().setDistinctValuesCount(888).build();
-            minTimes = 0;
+                cachedStatisticStorage.getColumnStatistic(table, "v1");
+                result = ColumnStatistic.builder().setDistinctValuesCount(888).build();
+                minTimes = 0;
 
-            cachedStatisticStorage.getColumnStatistic(table, "v2");
-            result = ColumnStatistic.builder().setDistinctValuesCount(999).build();
-            minTimes = 0;
+                cachedStatisticStorage.getColumnStatistic(table, "v2");
+                result = ColumnStatistic.builder().setDistinctValuesCount(999).build();
+                minTimes = 0;
 
-            cachedStatisticStorage.getColumnStatistic(table, "v3");
-            result = ColumnStatistic.builder().setDistinctValuesCount(666).build();
-            minTimes = 0;
-        }};
+                cachedStatisticStorage.getColumnStatistic(table, "v3");
+                result = ColumnStatistic.builder().setDistinctValuesCount(666).build();
+                minTimes = 0;
+            }};
         ColumnStatistic columnStatistic1 =
                 Deencapsulation.invoke(cachedStatisticStorage, "getColumnStatistic", table, "v1");
         Assert.assertEquals(888, columnStatistic1.getDistinctValuesCount(), 0.001);
@@ -135,10 +136,10 @@ public class CachedStatisticStorageTest {
         ColumnStatistic columnStatistic2 = ColumnStatistic.builder().setDistinctValuesCount(999).build();
 
         new Expectations() {{
-            cachedStatisticStorage.getColumnStatistics(table, ImmutableList.of("v1", "v2"));
-            result = ImmutableList.of(columnStatistic1, columnStatistic2);
-            minTimes = 0;
-        }};
+                cachedStatisticStorage.getColumnStatistics(table, ImmutableList.of("v1", "v2"));
+                result = ImmutableList.of(columnStatistic1, columnStatistic2);
+                minTimes = 0;
+            }};
         List<ColumnStatistic> columnStatistics = Deencapsulation
                 .invoke(cachedStatisticStorage, "getColumnStatistics", table, ImmutableList.of("v1", "v2"));
         Assert.assertEquals(2, columnStatistics.size());
@@ -152,10 +153,10 @@ public class CachedStatisticStorageTest {
         Table table = db.getTable("t0");
 
         new Expectations() {{
-            cachedStatisticStorage.getColumnStatistic(table, "v1");
-            result = ColumnStatistic.unknown();
-            minTimes = 0;
-        }};
+                cachedStatisticStorage.getColumnStatistic(table, "v1");
+                result = ColumnStatistic.unknown();
+                minTimes = 0;
+            }};
         ColumnStatistic columnStatistic =
                 Deencapsulation.invoke(cachedStatisticStorage, "getColumnStatistic", table, "v1");
         Assert.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
