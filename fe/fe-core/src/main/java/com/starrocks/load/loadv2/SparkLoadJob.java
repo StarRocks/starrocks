@@ -513,7 +513,8 @@ public class SparkLoadJob extends BulkLoadJob {
                                     Backend backend = GlobalStateMgr.getCurrentSystemInfo().
                                             getBackend(backendId);
                                     if (backend == null) {
-                                        LOG.debug("replica {} not exists", backendId);
+                                        LOG.warn("replica {} not exists", backendId);
+                                        continue;
                                     }
                                     pushTask(backend.getId(), tableId, partitionId, indexId, tabletId,
                                             tabletId, schemaHash, params, batchTask, tabletMetaStr,
