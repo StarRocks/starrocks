@@ -56,7 +56,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 List<Long> shadowTabletIds = createShards(originTablets.size(), table.getShardStorageInfo());
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
-                TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId, 0, medium);
+                TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId, 0, medium, true);
                 MaterializedIndex shadowIndex = new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW);
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);

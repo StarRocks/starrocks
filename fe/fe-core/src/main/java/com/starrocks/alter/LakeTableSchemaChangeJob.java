@@ -29,7 +29,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -450,13 +450,10 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
 
         // Delete shards from StarOS
-        try {
-            StarOSAgent starOSAgent = GlobalStateMgr.getCurrentStarOSAgent();
-            for (MaterializedIndex droppedIndex : droppedIndexes) {
-                starOSAgent.deleteShards(droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toSet()));
-            }
-        } catch (Exception e) { // Ignore any delete shard error
-            LOG.warn("Fail to delete StarOS shards: {}", e.getMessage());
+        ShardDeleter shardDeleter = GlobalStateMgr.getCurrentState().getShardManager().getShardDeleter();
+        for (MaterializedIndex droppedIndex : droppedIndexes) {
+            Set<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toSet());
+            shardDeleter.addUnusedShardId(shards);
         }
 
         if (span != null) {
