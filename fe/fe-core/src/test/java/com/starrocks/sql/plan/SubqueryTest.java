@@ -1175,4 +1175,18 @@ public class SubqueryTest extends PlanTestBase {
                     e.getMessage());
         }
     }
+
+    @Test
+    public void testPushDownAssertProject() throws Exception {
+        String sql = "select (select 1 from t2) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  2:Project\n" +
+                "  |  <slot 7> : 1\n" +
+                "  |  \n" +
+                "  1:OlapScanNode");
+    }
 }
