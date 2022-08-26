@@ -366,7 +366,7 @@ public class ExportJob implements Writable {
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
                 rowDelimiter, brokerDesc, hdfsProperties));
         try {
-            fragment.finalize(TResultSinkType.MYSQL_PROTOCAL);
+            fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
         } catch (Exception e) {
             LOG.info("Fragment finalize failed. e=", e);
             throw new UserException("Fragment finalize failed");

@@ -695,16 +695,16 @@ public class SystemInfoService {
             }
         }
 
-        if (isCreate) {
-            lastBackendIdForCreation = lastBackendId;
-        } else {
-            lastBackendIdForOther = lastBackendId;
-        }
         if (backendIds.size() != backendNum) {
             failed = true;
         }
 
         if (!failed) {
+            if (isCreate) {
+                lastBackendIdForCreation = lastBackendId;
+            } else {
+                lastBackendIdForOther = lastBackendId;
+            }
             return backendIds;
         }
 

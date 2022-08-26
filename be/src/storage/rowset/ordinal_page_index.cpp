@@ -64,13 +64,17 @@ Status OrdinalIndexWriter::finish(WritableFile* wfile, ColumnIndexMetaPB* meta) 
 }
 
 StatusOr<bool> OrdinalIndexReader::load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta,
-                                        ordinal_t num_values, bool use_page_cache, bool kept_in_memory) {
-    return success_once(_load_once,
-                        [&]() { return do_load(fs, filename, meta, num_values, use_page_cache, kept_in_memory); });
+                                        ordinal_t num_values, bool use_page_cache, bool kept_in_memory,
+                                        MemTracker* mem_tracker) {
+    return success_once(_load_once, [&]() {
+        return do_load(fs, filename, meta, num_values, use_page_cache, kept_in_memory, mem_tracker);
+    });
 }
 
 Status OrdinalIndexReader::do_load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta,
-                                   ordinal_t num_values, bool use_page_cache, bool kept_in_memory) {
+                                   ordinal_t num_values, bool use_page_cache, bool kept_in_memory,
+                                   MemTracker* mem_tracker) {
+    const auto old_mem_usage = mem_usage();
     if (meta.root_page().is_root_data_page()) {
         // only one data page, no index page
         _num_pages = 1;
@@ -114,6 +118,8 @@ Status OrdinalIndexReader::do_load(FileSystem* fs, const std::string& filename, 
         _pages[i] = reader.get_value(i);
     }
     _ordinals[_num_pages] = num_values;
+    const auto new_mem_usage = mem_usage();
+    mem_tracker->consume(new_mem_usage - old_mem_usage);
     return Status::OK();
 }
 

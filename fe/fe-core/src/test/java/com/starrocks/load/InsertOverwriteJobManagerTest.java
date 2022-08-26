@@ -3,7 +3,6 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
@@ -12,6 +11,7 @@ import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.InsertStmt;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;

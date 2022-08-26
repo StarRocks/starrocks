@@ -91,6 +91,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitCTEAnchor;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitUnionRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownMinMaxConjunctsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateCTEAnchor;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateCTEConsumeRule;
@@ -192,8 +193,11 @@ public class RuleSet {
                 new DistributionPruneRule(),
                 RemoteScanPartitionPruneRule.HIVE_SCAN,
                 RemoteScanPartitionPruneRule.HUDI_SCAN,
+                RemoteScanPartitionPruneRule.ICEBERG_SCAN,
+                PushDownMinMaxConjunctsRule.HIVE_SCAN,
+                PushDownMinMaxConjunctsRule.HUDI_SCAN,
+                PushDownMinMaxConjunctsRule.ICEBERG_SCAN,
                 new EsScanPartitionPruneRule(),
-                new CastToEmptyRule(),
                 new PartitionPredicatePrune()
         ));
 
