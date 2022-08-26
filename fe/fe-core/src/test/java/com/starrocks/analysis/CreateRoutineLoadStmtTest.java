@@ -70,7 +70,23 @@ public class CreateRoutineLoadStmtTest {
 
     @Test
     public void testParser() {
-        String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1\n" + "WHERE k1 > 100 and k2 like \"%starrocks%\",\n" + "COLUMNS(k1, k2, k3 = k1 + k2),\n" + "COLUMNS TERMINATED BY \"\\t\",\n" + "PARTITION(p1,p2) \n" + "PROPERTIES\n" + "(\n" + "    \"desired_concurrent_number\"=\"3\",\n" + "    \"max_batch_interval\" = \"20\",\n" + "    \"strict_mode\" = \"false\",\n" + "    \"timezone\" = \"Asia/Shanghai\"\n" + ")\n" + "FROM KAFKA\n" + "(\n" + "    \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n" + "    \"kafka_topic\" = \"topictest\"\n" + ");";
+        String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1\n"
+                + "WHERE k1 > 100 and k2 like \"%starrocks%\",\n"
+                + "COLUMNS(k1, k2, k3 = k1 + k2),\n"
+                + "COLUMNS TERMINATED BY \"\\t\",\n"
+                + "PARTITION(p1,p2) \n"
+                + "PROPERTIES\n"
+                + "(\n"
+                + "\"desired_concurrent_number\"=\"3\",\n"
+                + "\"max_batch_interval\" = \"20\",\n"
+                + "\"strict_mode\" = \"false\",\n"
+                + "\"timezone\" = \"Asia/Shanghai\"\n"
+                + ")\n"
+                + "FROM KAFKA\n"
+                + "(\n"
+                + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                + "\"kafka_topic\" = \"topictest\"\n"
+                + ");";
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
@@ -90,7 +106,17 @@ public class CreateRoutineLoadStmtTest {
 
     @Test
     public void testLoadPropertiesContexts() {
-        String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1 PROPERTIES( \"desired_concurrent_number\"=\"3\",\n" + "    \"max_batch_interval\" = \"20\",\n" + "    \"strict_mode\" = \"false\",\n" + "    \"timezone\" = \"Asia/Shanghai\"\n" + ")\n" + "FROM KAFKA\n" + "(\n" + "    \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n" + "\"kafka_topic\" = \"topictest\"\n" + ");";
+        String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1"
+                + " PROPERTIES( \"desired_concurrent_number\"=\"3\",\n"
+                + "\"max_batch_interval\" = \"20\",\n"
+                + "\"strict_mode\" = \"false\",\n"
+                + "\"timezone\" = \"Asia/Shanghai\"\n"
+                + ")\n"
+                + "FROM KAFKA\n"
+                + "(\n"
+                + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                + "\"kafka_topic\" = \"topictest\"\n"
+                + ");";
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
         CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
