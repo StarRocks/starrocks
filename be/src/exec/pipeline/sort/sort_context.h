@@ -25,9 +25,10 @@ using SortContextPtr = std::shared_ptr<SortContext>;
 using SortContexts = std::vector<SortContextPtr>;
 class SortContext final : public ContextWithDependency {
 public:
-    explicit SortContext(RuntimeState* state, int64_t limit, const int32_t num_right_sinkers,
+    explicit SortContext(RuntimeState* state, int64_t offset, int64_t limit, const int32_t num_right_sinkers,
                          const std::vector<bool>& is_asc_order, const std::vector<bool>& is_null_first)
             : _state(state),
+              _offset(offset),
               _limit(limit),
               _num_partition_sinkers(num_right_sinkers),
               _comparer(limit, is_asc_order, is_null_first) {
@@ -51,7 +52,7 @@ public:
         auto is_partions_finish = _num_partition_finished.load(std::memory_order_acquire) == _num_partition_sinkers;
         if (is_partions_finish) {
             _require_rows = ((_limit < 0) ? _total_rows.load(std::memory_order_relaxed)
-                                          : std::min(_limit, _total_rows.load(std::memory_order_relaxed)));
+                                          : std::min(_limit + _offset, _total_rows.load(std::memory_order_relaxed)));
             _heapify_chunks_sorter();
             _is_partions_finish = true;
         }
@@ -100,8 +101,7 @@ public:
             for (; rows_number < needed_rows; ++rows_number) {
                 selective_values.push_back(get_and_update_min_entry_func(min_heap_entry));
             }
-
-            result_chunk->append_selective(*min_heap_entry->chunk, selective_values.data(), 0, selective_values.size());
+            _update_result_chunk(result_chunk, min_heap_entry->chunk, selective_values);
             _next_output_row += rows_number;
             return result_chunk;
         }
@@ -117,8 +117,7 @@ public:
                 selective_values.push_back(get_and_update_min_entry_func(min_heap_entry));
             } else {
                 // data from different data segment, just copy datas to reuslt chunk.
-                result_chunk->append_selective(*min_heap_entry->chunk, selective_values.data(), 0,
-                                               selective_values.size());
+                _update_result_chunk(result_chunk, min_heap_entry->chunk, selective_values);
                 // re-select min-heap entry.
                 min_heap_entry = _data_segment_heaps[0];
                 selective_values.clear();
@@ -131,7 +130,7 @@ public:
 
         _next_output_row += rows_number;
         // last copy of data
-        result_chunk->append_selective(*min_heap_entry->chunk, selective_values.data(), 0, selective_values.size());
+        _update_result_chunk(result_chunk, min_heap_entry->chunk, selective_values);
         return result_chunk;
     }
 
@@ -141,6 +140,7 @@ public:
 
 private:
     RuntimeState* _state;
+    int64_t _offset;
     const int64_t _limit;
     // size of all chunks from all partitions.
     std::atomic<int64_t> _total_rows = 0;
@@ -238,13 +238,23 @@ private:
         }
     }
 
+    void _update_result_chunk(ChunkPtr& result, ChunkPtr& src, const std::vector<uint32_t>& selective_values) {
+        if (_offset >= selective_values.size()) {
+            // all data should be skipped
+            _offset -= selective_values.size();
+        } else {
+            // skip the first `_offset` rows
+            result->append_selective(*src, selective_values.data(), _offset, selective_values.size() - _offset);
+        }
+    }
+
     size_t _next_output_row = 0;
 };
 class SortContextFactory;
 using SortContextFactoryPtr = std::shared_ptr<SortContextFactory>;
 class SortContextFactory {
 public:
-    SortContextFactory(RuntimeState* state, bool is_merging, int64_t limit, int32_t num_right_sinkers,
+    SortContextFactory(RuntimeState* state, bool is_merging, int64_t offset, int64_t limit, int32_t num_right_sinkers,
                        const std::vector<bool>& _is_asc_order, const std::vector<bool>& is_null_first);
 
     SortContextPtr create(int32_t idx);
@@ -257,6 +267,7 @@ private:
     // LocalMergeSortSourceOperator respectively for scenarios of AnalyticNode with partition by.
     const bool _is_merging;
     SortContexts _sort_contexts;
+    const int64_t _offset;
     const int64_t _limit;
     const int32_t _num_right_sinkers;
     std::vector<bool> _is_asc_order;
