@@ -162,9 +162,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         Preconditions.checkState(watershedTxnId != -1);
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             Partition partition = table.getPartition(partitionId);
-            if (partition == null) {
-                continue;
-            }
+            Preconditions.checkState(partition != null);
             Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
             for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                 shadowIndex.setVisibleTxnId(watershedTxnId);

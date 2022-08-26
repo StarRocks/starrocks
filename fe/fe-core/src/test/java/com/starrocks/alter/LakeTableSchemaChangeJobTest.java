@@ -29,7 +29,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
@@ -39,12 +38,12 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -58,9 +57,6 @@ public class LakeTableSchemaChangeJobTest {
     private Database db;
     private LakeTable table;
     private List<Long> shadowTabletIds = new ArrayList<>();
-
-    @Mocked
-    private StarOSAgent starOSAgent;
 
     public LakeTableSchemaChangeJobTest() {
         connectContext = new ConnectContext(null);
@@ -134,11 +130,51 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
+    public void testCancelPendingJob() throws IOException {
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void writeEditLog(LakeTableSchemaChangeJob job) {
+                // nothing to do.
+            }
+        };
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+
+        // test cancel again
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+
+        // Test replay
+
+    }
+
+    @Test
+    public void testDropTableBeforeCancel() {
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void writeEditLog(LakeTableSchemaChangeJob job) {
+                // nothing to do.
+            }
+        };
+
+        db.dropTable(table.getName());
+
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+    }
+
+    @Test
     public void testPendingJobNoAliveBackend() {
         new MockUp<Utils>() {
             @Mock
             public Long chooseBackend(LakeTablet tablet) {
                 return null;
+            }
+        };
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void writeEditLog(LakeTableSchemaChangeJob job) {
+                // nothing to do.
             }
         };
 
@@ -148,6 +184,9 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertTrue(exception.getMessage().contains("No alive backend"));
         Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
         Assert.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
+
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
@@ -156,6 +195,12 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public Long chooseBackend(LakeTablet tablet) {
                 return 1L;
+            }
+        };
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void writeEditLog(LakeTableSchemaChangeJob job) {
+                // nothing to do.
             }
         };
 
@@ -175,6 +220,9 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertTrue(exception.getMessage().contains("Database does not exist"));
         Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
         Assert.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
+
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
@@ -192,6 +240,11 @@ public class LakeTableSchemaChangeJobTest {
                                              long timeoutSeconds) throws AlterCancelException {
                 throw new AlterCancelException("Create tablet failed");
             }
+
+            @Mock
+            public void writeEditLog(LakeTableSchemaChangeJob job) {
+                // nothing to do.
+            }
         };
 
         Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
@@ -200,6 +253,9 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertTrue(exception.getMessage().contains("Create tablet failed"));
         Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
         Assert.assertEquals(-1, schemaChangeJob.getWatershedTxnId());
+
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 
     @Test
@@ -232,6 +288,14 @@ public class LakeTableSchemaChangeJobTest {
         schemaChangeJob.runPendingJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
         Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
+
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+
+        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        Partition partition = table.getPartitions().stream().findFirst().get();
+        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -272,6 +336,14 @@ public class LakeTableSchemaChangeJobTest {
 
         schemaChangeJob.runWaitingTxnJob();
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+
+        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        Partition partition = table.getPartitions().stream().findFirst().get();
+        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -315,6 +387,14 @@ public class LakeTableSchemaChangeJobTest {
         });
         Assert.assertTrue(exception.getMessage().contains("sPreviousLoadFinished exception"));
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+
+        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        Partition partition = table.getPartitions().stream().findFirst().get();
+        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -367,6 +447,16 @@ public class LakeTableSchemaChangeJobTest {
         });
         Assert.assertTrue(exception.getMessage().contains("Database does not exist"));
         Assert.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(db.getId(), db);
+        db.createTable(table);
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+
+        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        Partition partition = table.getPartitions().stream().findFirst().get();
+        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -426,6 +516,16 @@ public class LakeTableSchemaChangeJobTest {
             schemaChangeJob.runRunningJob();
         });
         Assert.assertTrue(exception.getMessage().contains("Table or database does not exist"));
+
+        GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().put(db.getId(), db);
+        db.createTable(table);
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+
+        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        Partition partition = table.getPartitions().stream().findFirst().get();
+        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -478,6 +578,14 @@ public class LakeTableSchemaChangeJobTest {
             schemaChangeJob.runRunningJob();
         });
         Assert.assertTrue(exception.getMessage().contains("schema change task failed after try three times"));
+
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+
+        Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+
+        Partition partition = table.getPartitions().stream().findFirst().get();
+        Assert.assertEquals(0, partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -535,6 +643,10 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(1, shadowIndexes.size());
         MaterializedIndex shadowIndex = shadowIndexes.get(0);
         Assert.assertEquals(shadowTabletIds, shadowIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()));
+
+        // Does not support cancel job in FINISHED_REWRITING state.
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
     }
 
     @Test
@@ -645,6 +757,10 @@ public class LakeTableSchemaChangeJobTest {
         schemaChangeJob.runFinishedRewritingJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
 
+        Assert.assertEquals(2, table.getBaseSchema().size());
+        Assert.assertEquals("c0", table.getBaseSchema().get(0).getName());
+        Assert.assertEquals("c1", table.getBaseSchema().get(1).getName());
+
         Assert.assertSame(partition, table.getPartitions().stream().findFirst().get());
         Assert.assertEquals(3, partition.getVisibleVersion());
         Assert.assertEquals(4, partition.getNextVersion());
@@ -656,5 +772,9 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertEquals(1, normalIndexes.size());
         MaterializedIndex normalIndex = normalIndexes.get(0);
         Assert.assertEquals(shadowTabletIds, normalIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()));
+
+        // Does not support cancel job in FINISHED state.
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
     }
 }
