@@ -4,11 +4,11 @@
 
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/push_handler.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "storage/lake/filenames.h"
 
 namespace starrocks::lake {
 

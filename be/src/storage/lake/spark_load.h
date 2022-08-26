@@ -22,7 +22,6 @@ public:
     int64_t write_rows() const { return _write_rows; }
 
 private:
-
     Status _load_convert(Tablet& cur_tablet);
 
     void _get_tablet_infos(const Tablet& tablet, std::vector<TTabletInfo>* tablet_info_vec);

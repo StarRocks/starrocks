@@ -188,7 +188,7 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
             StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
             return tablet_or.status();
         }
-        
+
         auto tablet = tablet_or.value();
 
         lake::SparkLoadHandler handler;
