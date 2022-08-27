@@ -348,4 +348,19 @@ public class CreateTableTest {
                 "DISTRIBUTED BY HASH(id_int) BUCKETS 10\n" +
                 "PROPERTIES(\"replication_num\" = \"1\");");
     }
+
+    @Test
+    public void testLongColumnName() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql = "CREATE TABLE long_column_table (oh_my_gosh_this_is_a_long_column_name_look_at_it_it_has_more_" +
+                "than_64_chars VARCHAR(100)) DISTRIBUTED BY HASH(oh_my_gosh_this_is_a_long_column_name_look_at_it_it_" +
+                "has_more_than_64_chars) BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
+        starRocksAssert.withTable(sql);
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                .getTable("long_column_table");
+        Assert.assertEquals(1, table.getColumns().size());
+        Assert.assertNotNull(
+                table.getColumn("oh_my_gosh_this_is_a_long_column_name_look_at_it_it_has_more_than_64_chars"));
+    }
 }
