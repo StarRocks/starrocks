@@ -365,4 +365,60 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Data type of first column cannot be HLL",
                 () -> createTable("create table test.tmp3\n" + "(k1 hll, k2 float)\n"));
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testCreateSumAgg() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        starRocksAssert.withTable("CREATE TABLE aggregate_table_sum\n" +
+                "(\n" +
+                "    id_int INT,\n" +
+                "    sum_decimal decimal(5, 4) SUM DEFAULT '0',\n" +
+                "    sum_bigint bigint SUM DEFAULT '0'\n" +
+                ")\n" +
+                "AGGREGATE KEY(id_int)\n" +
+                "DISTRIBUTED BY HASH(id_int) BUCKETS 10\n" +
+                "PROPERTIES(\"replication_num\" = \"1\");");
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                .getTable("aggregate_table_sum");
+        String columns = table.getColumns().toString();
+        System.out.println("columns = " + columns);
+        Assert.assertTrue(columns.contains("`sum_decimal` decimal128(38, 4) SUM"));
+        Assert.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
+    }
+
+    @Test(expected = AnalysisException.class)
+    public void testCreateSumSmallTypeAgg() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        starRocksAssert.withTable("CREATE TABLE aggregate_table_sum\n" +
+                "(\n" +
+                "    id_int INT,\n" +
+                "    sum_int int SUM DEFAULT '0',\n" +
+                "    sum_smallint smallint SUM DEFAULT '0',\n" +
+                "    sum_tinyint tinyint SUM DEFAULT '0'\n" +
+                ")\n" +
+                "AGGREGATE KEY(id_int)\n" +
+                "DISTRIBUTED BY HASH(id_int) BUCKETS 10\n" +
+                "PROPERTIES(\"replication_num\" = \"1\");");
+    }
+
+    @Test
+    public void testLongColumnName() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql = "CREATE TABLE long_column_table (oh_my_gosh_this_is_a_long_column_name_look_at_it_it_has_more_" +
+                "than_64_chars VARCHAR(100)) DISTRIBUTED BY HASH(oh_my_gosh_this_is_a_long_column_name_look_at_it_it_" +
+                "has_more_than_64_chars) BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
+        starRocksAssert.withTable(sql);
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                .getTable("long_column_table");
+        Assert.assertEquals(1, table.getColumns().size());
+        Assert.assertNotNull(
+                table.getColumn("oh_my_gosh_this_is_a_long_column_name_look_at_it_it_has_more_than_64_chars"));
+    }
+}
+>>>>>>> aa27516c3 ([Feature] Support column name length <= 1023 (#10005))
