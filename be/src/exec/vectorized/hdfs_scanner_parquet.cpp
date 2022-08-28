@@ -14,7 +14,10 @@
 
 #include "exec/vectorized/hdfs_scanner_parquet.h"
 
+#include "exec/vectorized/hdfs_scanner.h"
+#include "exec/vectorized/iceberg/iceberg_delete_builder.h"
 #include "formats/parquet/file_reader.h"
+#include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
@@ -22,6 +25,16 @@ namespace starrocks::vectorized {
 static const std::string kParquetProfileSectionPrefix = "Parquet";
 
 Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
+    if (!scanner_params.deletes.empty()) {
+        auto iceberg_delete_builder =
+                new IcebergDeleteBuilder(scanner_params.fs, scanner_params.path, scanner_params.conjunct_ctxs,
+                                         scanner_params.materialize_slots, scanner_params._need_skip_rowids);
+        for (const auto& tdelete_file : scanner_params.deletes) {
+            RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(runtime_state->timezone(),
+                                                  const_cast<TIcebergDeleteFile*>(tdelete_file)));
+        }
+    }
+
     return Status::OK();
 }
 
@@ -70,7 +83,8 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     // create file reader
     _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(),
-                                                    _scanner_params.scan_ranges[0]->file_length);
+                                                    _scanner_params.scan_ranges[0]->file_length,
+                                                    _scanner_params._need_skip_rowids);
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     RETURN_IF_ERROR(_reader->init(&_scanner_ctx));
     return Status::OK();

@@ -32,6 +32,11 @@
 #include "util/thrift_util.h"
 
 namespace starrocks::parquet {
+static constexpr uint32_t kFooterSize = 8;
+
+FileReader::FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size,
+                       std::set<std::int64_t> need_skip_rowids)
+        : _chunk_size(chunk_size), _file(file), _file_size(file_size), _need_skip_rowids(std::move(need_skip_rowids)) {}
 
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size)
         : _chunk_size(chunk_size), _file(file), _file_size(file_size) {}
@@ -439,7 +444,7 @@ Status FileReader::_init_group_readers() {
                 continue;
             }
 
-            auto row_group_reader = std::make_shared<GroupReader>(_group_reader_param, i);
+            auto row_group_reader = std::make_shared<GroupReader>(_group_reader_param, i, _need_skip_rowids);
             _row_group_readers.emplace_back(row_group_reader);
             _total_row_count += _file_metadata->t_metadata().row_groups[i].num_rows;
         } else {

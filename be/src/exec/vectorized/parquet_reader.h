@@ -75,14 +75,14 @@ private:
     Status next_selected_row_group();
 
     const int32_t _num_of_columns_from_file;
-    parquet::ReaderProperties _properties;
+    ::parquet::ReaderProperties _properties;
     std::shared_ptr<arrow::io::RandomAccessFile> _parquet;
 
     // parquet file reader object
     std::shared_ptr<::arrow::RecordBatchReader> _rb_batch;
     std::shared_ptr<arrow::RecordBatch> _batch;
-    std::unique_ptr<parquet::arrow::FileReader> _reader;
-    std::shared_ptr<parquet::FileMetaData> _file_metadata;
+    std::unique_ptr<::parquet::arrow::FileReader> _reader;
+    std::shared_ptr<::parquet::FileMetaData> _file_metadata;
 
     // For nested column type, it's consisting of multiple physical-columns
     std::map<std::string, std::vector<int>> _map_column_nested;

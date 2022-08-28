@@ -43,6 +43,7 @@ class FileMetaData;
 
 class FileReader {
 public:
+    FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size, std::set<std::int64_t> need_skip_rowids);
     FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size);
     ~FileReader();
 
@@ -124,6 +125,7 @@ private:
     vectorized::HdfsScannerContext* _scanner_ctx = nullptr;
     std::shared_ptr<SharedBufferedInputStream> _sb_stream = nullptr;
     GroupReaderParam _group_reader_param;
+    std::set<std::int64_t> _need_skip_rowids;
 };
 
 } // namespace starrocks::parquet
