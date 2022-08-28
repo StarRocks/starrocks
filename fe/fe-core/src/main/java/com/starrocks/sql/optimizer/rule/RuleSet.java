@@ -193,7 +193,6 @@ public class RuleSet {
                 RemoteScanPartitionPruneRule.HIVE_SCAN,
                 RemoteScanPartitionPruneRule.HUDI_SCAN,
                 new EsScanPartitionPruneRule(),
-                new CastToEmptyRule(),
                 new PartitionPredicatePrune()
         ));
 

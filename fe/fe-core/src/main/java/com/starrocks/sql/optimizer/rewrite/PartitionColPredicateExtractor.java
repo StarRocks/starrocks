@@ -81,11 +81,11 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
         if (partitionColumnSet.containsAll(predicate.getUsedColumns())) {
             ScalarOperator left = predicate.getChild(0).accept(this, null);
-            if (isShortCut(left)) {
+            if (isColumnOrPrune(left)) {
                 return ConstantOperator.createBoolean(true);
             }
             ScalarOperator right = predicate.getChild(1).accept(this, null);
-            if (isShortCut(right)) {
+            if (isValueOrPrune(right)) {
                 return ConstantOperator.createBoolean(true);
             }
 
@@ -105,20 +105,28 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
         if (predicate.isNot()) {
             return ConstantOperator.createBoolean(true);
         }
+        
         ScalarOperator first = predicate.getChild(0).accept(this, null);
+        if (first == null) {
+            first = ConstantOperator.createBoolean(true);
+        }
+
         if (predicate.isAnd()) {
             ScalarOperator second = predicate.getChild(1);
             if (first.isConstantRef()) {
                 boolean isTrue = ((ConstantOperator) first).getBoolean();
                 if (isTrue) {
                     second = second.accept(this, null);
-                    return second;
+                    return second == null ? ConstantOperator.createBoolean(true) : second;
                 } else {
                     return ConstantOperator.createBoolean(false);
                 }
 
             } else {
                 second = second.accept(this, null);
+                if (second == null) {
+                    second = ConstantOperator.createBoolean(true);
+                }
                 if (second.isConstantRef()) {
                     boolean isTrue = ((ConstantOperator) second).getBoolean();
                     if (isTrue) {
@@ -132,6 +140,9 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
             }
         } else {
             ScalarOperator second = predicate.getChild(1).accept(this, null);
+            if (second == null) {
+                second = ConstantOperator.createBoolean(true);
+            }
             if (first.isConstantRef()) {
                 return ((ConstantOperator) first).getBoolean() ? first : second;
             } else if (second.isConstantRef()) {
@@ -145,7 +156,7 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, Void context) {
         ScalarOperator first = predicate.getChild(0).accept(this, null);
-        if (isShortCut(first)) {
+        if (isColumnOrPrune(first)) {
             return ConstantOperator.createBoolean(true);
         } else {
             if (predicate.allValuesMatch(ScalarOperator::isConstantRef)) {
@@ -163,7 +174,7 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
     @Override
     public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
         ScalarOperator first = predicate.getChild(0).accept(this, null);
-        if (isShortCut(first) || predicate.isNotNull()) {
+        if (isColumnOrPrune(first)|| predicate.isNotNull()) {
             return ConstantOperator.createBoolean(true);
         } else {
             return ConstantOperator.createBoolean(false);
@@ -177,12 +188,23 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
         return ConstantOperator.createBoolean(true);
     }
 
-    // when operator == null, it means this predicate node isn't related to partition column
-    // we return true to indicate that we can safely prune this predicate node.
-    private boolean isShortCut(ScalarOperator operator) {
-        return operator == null;
+    // For the operator in inExpr(first child), binaryExpr(first child), we need it's a columnRef.
+    // For compoundExpr, its children may a bool type column or other expr.
+    // when it == null or it's not a columnRef,
+    // it means this predicate node cannot been used for further evaluator
+    // we return a true flag to prune this predicate.
+    private boolean isColumnOrPrune(ScalarOperator operator) {
+        return operator == null || !operator.isColumnRef();
     }
 
+    // For the second operator in binaryPredicateExpr, we need it's a constant value
+    // when it == null or it's not a constant,
+    // it means this predicate node cannot been used for further evaluator
+    // we return a true flag to prune this predicate.
+    private boolean isValueOrPrune(ScalarOperator operator) {
+        return operator == null || !operator.isConstant();
+    }
+    
     private boolean isConstantNull(ScalarOperator operator) {
         if (operator.isConstantRef()) {
             return ((ConstantOperator) operator).isNull();

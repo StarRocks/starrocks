@@ -44,6 +44,7 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
                 + ");");
         starRocksAssert.withTable("CREATE TABLE `tbl_int` (\n" +
                 "  `k1` int(11) NULL,\n" +
+                "  `b1` boolean NULL ,\n" +
                 "  `s1` varchar(5) NULL ,\n" +
                 "  `s2` varchar(5) NULL COMMENT \"\"\n" +
                 ") ENGINE=OLAP\n" +
@@ -83,7 +84,7 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
     @MethodSource("emptyPartitionSqlList")
     void testEmptyPartitionSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        assertTrue(plan, plan.contains("0:EMPTYSET"));
+        assertTrue(plan, plan.contains("partitions=0/4"));
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -130,7 +131,6 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from ptest where s1 is null and d2 not in (null, '2022-01-01')");
         sqlList.add("select * from ptest where s1 not like '%s1' and d2 in (null, null)");
         sqlList.add("select * from ptest where d2 not in (null, null) and s1 like '%1'");
-        sqlList.add("select * from ptest where (d2 < '1000-01-01' and d2 >= '2020-12-01') and s1 = 'str'");
         sqlList.add(
                 "select * from ptest where (d2 < '1000-01-01' or s1 >= '2020-12-01') and d2 not in ('2020-01-01', null)");
         sqlList.add(
@@ -306,6 +306,9 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from tbl_int where k1 in (1,100,200,300) or k1 > 300");
 
         sqlList.add("select * from two_key where k1 < 100 or k1 > 200");
+        sqlList.add("select * from tbl_int where k1 = 1 = true");
+        sqlList.add("select * from tbl_int where b1 or (k1 < 100) or k1 > 200");
+        sqlList.add("select * from tbl_int where b1");
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 }

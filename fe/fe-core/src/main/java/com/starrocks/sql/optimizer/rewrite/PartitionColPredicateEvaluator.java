@@ -21,12 +21,16 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.BitSet;
 import java.util.List;
 import java.util.stream.Collectors;
 
 public class PartitionColPredicateEvaluator {
+
+    private static final Logger LOG = LogManager.getLogger(PartitionColPredicateEvaluator.class);
 
     private static final int IN_OPERANDS_LIMIT = 50;
 
@@ -48,16 +52,25 @@ public class PartitionColPredicateEvaluator {
         }
     }
 
-    public List<Long> prunePartitions(ScalarOperator predicates) {
+    public List<Long> prunePartitions(PartitionColPredicateExtractor extractor, ScalarOperator predicates) {
         Evaluator evaluator = new Evaluator();
-        BitSet predicatesRes = predicates.accept(evaluator, null);
         List<Long> res = Lists.newArrayList();
-        for (int i = 0; i < candidatePartitions.size(); i++) {
-            if (predicatesRes.get(i)) {
-                res.add(candidatePartitions.get(i));
+        try {
+            ScalarOperator newPredicates = extractor.extract(predicates);
+            if (null == newPredicates) {
+                return candidatePartitions;
             }
+            BitSet predicatesRes = newPredicates.accept(evaluator, null);
+            for (int i = 0; i < candidatePartitions.size(); i++) {
+                if (predicatesRes.get(i)) {
+                    res.add(candidatePartitions.get(i));
+                }
+            }
+            return res;
+        } catch (Exception e) {
+            LOG.warn("evaluate range partitions failed.", e);
+            return candidatePartitions;
         }
-        return res;
     }
 
     private class Evaluator extends ScalarOperatorVisitor<BitSet, Void> {
