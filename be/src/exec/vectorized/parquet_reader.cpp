@@ -151,23 +151,31 @@ Status ParquetReaderWrap::size(int64_t* size) {
 
 Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs) {
     _parquet_column_ids.clear();
-    for (int i = 0; i < _num_of_columns_from_file; i++) {
-        auto* slot_desc = tuple_slot_descs.at(i);
-        if (slot_desc == nullptr) {
-            continue;
+    if (_num_of_columns_from_file == -1) {
+        // used by iceberg equality delete file
+        // do not support nested type for delete file now
+        for (int i = 0; i < _file_metadata->schema()->num_columns(); i++) {
+            _parquet_column_ids.emplace_back(i);
         }
-        std::string col_name = slot_desc->col_name();
-
-        auto iter = _map_column_nested.find(col_name);
-        if (iter != _map_column_nested.end()) {
-            for (auto index : iter->second) {
-                _parquet_column_ids.emplace_back(index);
+    } else {
+        for (int i = 0; i < _num_of_columns_from_file; i++) {
+            auto* slot_desc = tuple_slot_descs.at(i);
+            if (slot_desc == nullptr) {
+                continue;
             }
-        } else {
-            std::stringstream str_error;
-            str_error << "Invalid Column Name:" << slot_desc->col_name();
-            LOG(WARNING) << str_error.str();
-            return Status::InvalidArgument(str_error.str());
+            std::string col_name = slot_desc->col_name();
+
+            auto iter = _map_column_nested.find(col_name);
+            if (iter != _map_column_nested.end()) {
+                for (auto index : iter->second) {
+                    _parquet_column_ids.emplace_back(index);
+                }
+            } else {
+                std::stringstream str_error;
+                str_error << "Invalid Column Name:" << slot_desc->col_name();
+                LOG(WARNING) << str_error.str();
+                return Status::InvalidArgument(str_error.str());
+            }
         }
     }
     return Status::OK();

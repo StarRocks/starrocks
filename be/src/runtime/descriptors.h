@@ -57,6 +57,7 @@ class PSlotDescriptor;
 // bit_mask) regardless of whether the slot is nullable or not.
 // This is more efficient than branching to check if the slot is non-nullable.
 struct NullIndicatorOffset {
+    NullIndicatorOffset() = default;
     int byte_offset;
     uint8_t bit_mask;   // to extract null indicator
     uint8_t bit_offset; // only used to serialize, from 1 to 8
@@ -77,6 +78,9 @@ std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indic
 
 class SlotDescriptor {
 public:
+    SlotDescriptor();
+    SlotDescriptor(const std::string col_name) : _col_name(std::move(col_name)){};
+
     SlotId id() const { return _id; }
     const TypeDescriptor& type() const { return _type; }
     TypeDescriptor& type() { return _type; }
@@ -98,18 +102,19 @@ private:
     friend class vectorized::SchemaScanner;
     friend class OlapTableSchemaParam;
 
-    const SlotId _id;
+    SlotId _id;
     TypeDescriptor _type;
     const TupleId _parent;
     const NullIndicatorOffset _null_indicator_offset;
     const std::string _col_name;
+    int _tuple_offset;
 
     // the idx of the slot in the tuple descriptor (0-based).
     // this is provided by the FE
-    const int _slot_idx;
+    int _slot_idx;
 
     // the byte size of this slot.
-    const int _slot_size;
+    int _slot_size;
 
     const bool _is_materialized;
 
@@ -311,6 +316,8 @@ private:
 
 class TupleDescriptor {
 public:
+    TupleDescriptor();
+
     int byte_size() const { return _byte_size; }
     const std::vector<SlotDescriptor*>& slots() const { return _slots; }
     std::vector<SlotDescriptor*>& slots() { return _slots; }
@@ -324,6 +331,8 @@ public:
     std::string debug_string() const;
 
     void to_protobuf(PTupleDescriptor* ptuple) const;
+
+    void add_slot(SlotDescriptor* slot);
 
 private:
     friend class DescriptorTbl;
@@ -339,7 +348,9 @@ private:
 
     TupleDescriptor(const TTupleDescriptor& tdesc);
     TupleDescriptor(const PTupleDescriptor& tdesc);
-    void add_slot(SlotDescriptor* slot);
+
+    /// Returns slots in their physical order.
+    std::vector<SlotDescriptor*> slots_ordered_by_idx() const;
 };
 
 class DescriptorTbl {
@@ -367,7 +378,7 @@ private:
     TupleDescriptorMap _tuple_desc_map;
     SlotDescriptorMap _slot_desc_map;
 
-    DescriptorTbl() {}
+    DescriptorTbl() = default;
 };
 
 // Records positions of tuples within row produced by ExecNode.
