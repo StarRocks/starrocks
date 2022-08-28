@@ -99,6 +99,10 @@ public class Database extends MetaObject implements Writable {
 
     private long lastSlowLockLogTime = 0;
 
+    // This param is used to make sure db not dropped when lead node writes wal,
+    // so this param need not to persist,
+    // and this param maybe not right when the db is dropped and the catalog has done a checkpoint,
+    // but that'ok to meet our needs.
     private boolean exist = true;
 
     public Database() {
