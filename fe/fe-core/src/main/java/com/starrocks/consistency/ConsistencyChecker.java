@@ -370,7 +370,10 @@ public class ConsistencyChecker extends LeaderDaemon {
 
     public void replayFinishConsistencyCheck(ConsistencyCheckInfo info, GlobalStateMgr globalStateMgr) {
         Database db = globalStateMgr.getDb(info.getDbId());
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            LOG.warn("db: {} has been dropped", db.getFullName());
+            return;
+        }
         try {
             OlapTable table = (OlapTable) db.getTable(info.getTableId());
             Partition partition = table.getPartition(info.getPartitionId());

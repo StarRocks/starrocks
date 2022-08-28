@@ -660,7 +660,9 @@ public class Alter {
         List<Column> newFullSchema = alterViewInfo.getNewFullSchema();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            throw new DdlException("db has been dropped");
+        }
         try {
             View view = (View) db.getTable(tableId);
             String viewName = view.getName();
@@ -789,7 +791,10 @@ public class Alter {
 
     public void replayModifyPartition(ModifyPartitionInfo info) {
         Database db = GlobalStateMgr.getCurrentState().getDb(info.getDbId());
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            LOG.warn("db: {} has been dropped", info.getDbId());
+            return;
+        }
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();

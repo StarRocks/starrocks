@@ -846,7 +846,7 @@ public class DatabaseTransactionMgr {
         }
 
         Database db = globalStateMgr.getDb(transactionState.getDbId());
-        if (db == null) {
+        if (db == null || !db.writeLockAndExist()) {
             writeLock();
             try {
                 transactionState.setTransactionStatus(TransactionStatus.ABORTED);
@@ -859,7 +859,6 @@ public class DatabaseTransactionMgr {
             }
         }
         Span finishSpan = TraceManager.startSpan("finishTransaction", transactionState.getTxnSpan());
-        db.writeLock();
         try {
             boolean hasError = false;
             for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
@@ -1584,7 +1583,7 @@ public class DatabaseTransactionMgr {
 
     public void finishTransactionNew(TransactionState transactionState, Set<Long> publishErrorReplicas) throws UserException {
         Database db = globalStateMgr.getDb(transactionState.getDbId());
-        if (db == null) {
+        if (db == null || !db.writeLockAndExist()) {
             writeLock();
             try {
                 transactionState.setTransactionStatus(TransactionStatus.ABORTED);
@@ -1597,7 +1596,6 @@ public class DatabaseTransactionMgr {
             }
         }
         Span finishSpan = TraceManager.startSpan("finishTransaction", transactionState.getTxnSpan());
-        db.writeLock();
         finishSpan.addEvent("db_lock");
         try {
             boolean txnOperated = false;

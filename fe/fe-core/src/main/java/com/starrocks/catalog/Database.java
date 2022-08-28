@@ -150,8 +150,6 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
-    @Deprecated
-    // use readLockAndExist()
     public void readLock() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         Thread formerOwner = rwLock.getOwner();
@@ -159,18 +157,19 @@ public class Database extends MetaObject implements Writable {
         logSlowLockEventIfNeeded(startMs, "readLock", formerOwner);
     }
 
-    // return true means locked and exist
-    // return false means locked but not exist
     public boolean readLockAndExist() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         Thread formerOwner = rwLock.getOwner();
         this.rwLock.readLock().lock();
         logSlowLockEventIfNeeded(startMs, "readLock", formerOwner);
-        return exist;
+        if (exist) {
+            return true;
+        } else {
+            this.rwLock.readLock().unlock();
+            return false;
+        }
     }
 
-    @Deprecated
-    // use tryReadLockAndExist
     public boolean tryReadLock(long timeout, TimeUnit unit) {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
@@ -187,20 +186,25 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
-    public LockState tryReadLockAndExist(long timeout, TimeUnit unit) {
+    public boolean tryReadLockAndExist(long timeout, TimeUnit unit) {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
             Thread formerOwner = rwLock.getOwner();
             if (!this.rwLock.readLock().tryLock(timeout, unit)) {
                 logTryLockFailureEvent("readLock");
-                return new LockState(false, exist);
+                return false;
             }
             logSlowLockEventIfNeeded(startMs, "tryReadLock", formerOwner);
-            return new LockState(true, exist);
+            if (exist) {
+                return true;
+            } else {
+                this.rwLock.readLock().unlock();
+                return false;
+            }
         } catch (InterruptedException e) {
             LOG.warn("failed to try read lock at db[" + id + "]", e);
             Thread.currentThread().interrupt();
-            return new LockState(false, exist);
+            return false;
         }
     }
 
@@ -208,8 +212,6 @@ public class Database extends MetaObject implements Writable {
         this.rwLock.readLock().unlock();
     }
 
-    @Deprecated
-    // use writeLockAndExist
     public void writeLock() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         Thread formerOwner = rwLock.getOwner();
@@ -217,24 +219,25 @@ public class Database extends MetaObject implements Writable {
         logSlowLockEventIfNeeded(startMs, "writeLock", formerOwner);
     }
 
-    // return true means locked and exist
-    // return false means locked but not exist
     public boolean writeLockAndExist() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         Thread formerOwner = rwLock.getOwner();
         this.rwLock.writeLock().lock();
         logSlowLockEventIfNeeded(startMs, "writeLock", formerOwner);
-        return exist;
+        if (exist) {
+            return true;
+        } else {
+            this.rwLock.writeLock().unlock();
+            return false;
+        }
     }
 
-    @Deprecated
-    // use tryWriteLockAndExist
     public boolean tryWriteLock(long timeout, TimeUnit unit) {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
             Thread formerOwner = rwLock.getOwner();
             if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
-                logTryLockFailureEvent("writeLock");
+                logTryLockFailureEvent("tryWriteLock");
                 return false;
             }
             logSlowLockEventIfNeeded(startMs, "tryWriteLock", formerOwner);
@@ -246,20 +249,25 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
-    public LockState tryWriteLockAndExist(long timeout, TimeUnit unit) {
+    public boolean tryWriteLockAndExist(long timeout, TimeUnit unit) {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
             Thread formerOwner = rwLock.getOwner();
             if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
-                logTryLockFailureEvent("writeLock");
-                return new LockState(false, exist);
+                logTryLockFailureEvent("tryWriteLock");
+                return false;
             }
             logSlowLockEventIfNeeded(startMs, "tryWriteLock", formerOwner);
-            return new LockState(true, exist);
+            if (exist) {
+                return true;
+            } else {
+                this.rwLock.writeLock().unlock();
+                return false;
+            }
         } catch (InterruptedException e) {
             LOG.warn("failed to try write lock at db[" + id + "]", e);
             Thread.currentThread().interrupt();
-            return new LockState(false, exist);
+            return false;
         }
     }
 
@@ -398,7 +406,9 @@ public class Database extends MetaObject implements Writable {
 
     // return false if table already exists
     public boolean createTableWithLock(Table table, boolean isReplay) {
-        writeLock();
+        if (!writeLockAndExist()) {
+            return false;
+        }
         try {
             String tableName = table.getName();
             if (nameToTable.containsKey(tableName)) {
@@ -436,7 +446,9 @@ public class Database extends MetaObject implements Writable {
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
         Table table;
         Runnable runnable;
-        writeLock();
+        if (!writeLockAndExist()) {
+            throw new DdlException("db: " + fullQualifiedName + " has been dropped");
+        }
         try {
             table = getTable(tableName);
             if (table == null && isSetIfExists) {
@@ -489,19 +501,6 @@ public class Database extends MetaObject implements Writable {
         return runnable;
     }
 
-    public void dropTableWithLock(String tableName) {
-        writeLock();
-        try {
-            Table table = this.nameToTable.get(tableName);
-            if (table != null) {
-                this.nameToTable.remove(tableName);
-                this.idToTable.remove(table.getId());
-            }
-        } finally {
-            writeUnlock();
-        }
-    }
-
     public void dropTable(String tableName) {
         Table table = this.nameToTable.get(tableName);
         if (table != null) {
@@ -510,26 +509,21 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
-    public boolean createMaterializedWithLock(MaterializedView materializedView, boolean isReplay) {
-        writeLock();
-        try {
-            String mvName = materializedView.getName();
-            if (nameToTable.containsKey(mvName)) {
-                return false;
-            } else {
-                idToTable.put(materializedView.getId(), materializedView);
-                nameToTable.put(materializedView.getName(), materializedView);
-                if (!isReplay) {
-                    // Write edit log
-                    CreateTableInfo info = new CreateTableInfo(fullQualifiedName, materializedView);
-                    GlobalStateMgr.getCurrentState().getEditLog().logCreateMaterializedView(info);
-                }
-                materializedView.onCreate();
+    public boolean createMaterialized(MaterializedView materializedView, boolean isReplay) {
+        String mvName = materializedView.getName();
+        if (nameToTable.containsKey(mvName)) {
+            return false;
+        } else {
+            idToTable.put(materializedView.getId(), materializedView);
+            nameToTable.put(materializedView.getName(), materializedView);
+            if (!isReplay) {
+                // Write edit log
+                CreateTableInfo info = new CreateTableInfo(fullQualifiedName, materializedView);
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateMaterializedView(info);
             }
-            return true;
-        } finally {
-            writeUnlock();
+            materializedView.onCreate();
         }
+        return true;
     }
 
     public List<Table> getTables() {

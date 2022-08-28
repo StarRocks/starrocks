@@ -135,11 +135,11 @@ public class DatabaseTest {
         // drop not exist tableFamily
         db.dropTable("invalid");
         Assert.assertEquals(1, db.getTables().size());
-        db.dropTableWithLock("invalid");
+        db.dropTable("invalid");
         Assert.assertEquals(1, db.getTables().size());
 
         // drop normal
-        db.dropTableWithLock(table.getName());
+        db.dropTable(table.getName());
         Assert.assertEquals(0, db.getTables().size());
 
         db.createTable(table);

@@ -850,7 +850,10 @@ public class ColocateTableIndex implements Writable {
         Map<String, String> properties = info.getPropertyMap();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(info.getGroupId().dbId);
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            LOG.warn("db: {} has been dropped", db.getFullName());
+            return;
+        }
         try {
             OlapTable table = (OlapTable) db.getTable(tableId);
             modifyTableColocate(db, table, properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH), true,

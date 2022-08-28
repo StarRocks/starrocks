@@ -366,11 +366,6 @@ public class LeaderImpl {
         long backendId = pushTask.getBackendId();
         long signature = task.getSignature();
         long transactionId = ((PushTask) task).getTransactionId();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            AgentTaskQueue.removeTask(backendId, TTaskType.REALTIME_PUSH, signature);
-            return;
-        }
 
         long tableId = pushTask.getTableId();
         long partitionId = pushTask.getPartitionId();
@@ -398,7 +393,11 @@ public class LeaderImpl {
         }
         LOG.debug("push report state: {}", pushState.name());
 
-        db.writeLock();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null || !db.writeLockAndExist()) {
+            AgentTaskQueue.removeTask(backendId, TTaskType.REALTIME_PUSH, signature);
+            return;
+        }
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
             if (olapTable == null) {
@@ -677,12 +676,10 @@ public class LeaderImpl {
 
         long dbId = tabletMeta.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
+        if (db == null || !db.writeLockAndExist()) {
             LOG.warn("db does not exist. db id: {}", dbId);
             return;
         }
-
-        db.writeLock();
         try {
             // local migration just set path hash
             Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, backendId);

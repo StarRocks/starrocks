@@ -366,7 +366,7 @@ public class GlobalTransactionMgr implements Writable {
         stopWatch.start();
         if (!db.tryWriteLockAndExist(timeoutMillis, TimeUnit.MILLISECONDS)) {
             throw new UserException("get database write lock timeout, database="
-                    + db.getFullName() + ", timeoutMillis=" + timeoutMillis);
+                    + db.getFullName() + ", timeoutMillis=" + timeoutMillis + ", or it has been dropped");
         }
         try {
             waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
@@ -398,7 +398,7 @@ public class GlobalTransactionMgr implements Writable {
         stopWatch.start();
         if (!db.tryWriteLockAndExist(timeoutMillis, TimeUnit.MILLISECONDS)) {
             throw new UserException("get database write lock timeout, database="
-                    + db.getOriginName() + ", timeoutMillis=" + timeoutMillis);
+                    + db.getOriginName() + ", timeoutMillis=" + timeoutMillis + ", or it has been dropped");
         }
         VisibleStateWaiter waiter;
         try {

@@ -213,7 +213,9 @@ public abstract class AlterJobV2 implements Writable {
             db.readUnlock();
         }
 
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            throw new AlterCancelException("db: " + db.getFullName() + " has been dropped");
+        }
         try {
             if (!isStable) {
                 errMsg = "table is unstable";

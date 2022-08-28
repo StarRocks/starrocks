@@ -307,12 +307,10 @@ public class ExternalOlapTable extends OlapTable {
         externalTableInfo.setTableId(meta.getTable_id());
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
+        if (db == null || !db.writeLockAndExist()) {
             throw new DdlException("database " + dbId + " does not exist");
         }
-        db.writeLock();
         long start = System.currentTimeMillis();
-
         try {
             lastExternalMeta = meta;
 

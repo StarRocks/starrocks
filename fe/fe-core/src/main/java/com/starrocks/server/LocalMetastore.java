@@ -2512,7 +2512,15 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
         Database db = this.fullNameToDb.get(dbName);
-        db.createMaterializedWithLock(materializedView, true);
+        if (!db.writeLockAndExist()) {
+            LOG.warn("db: {} has been dropped", dbName);
+            return;
+        }
+        try {
+            db.createMaterialized(materializedView, true);
+        } finally {
+            db.writeUnlock();
+        }
 
         if (!isCheckpointThread()) {
             // add to inverted index
@@ -3239,30 +3247,27 @@ public class LocalMetastore implements ConnectorMetadata {
             buildPartitions(db, materializedView, Collections.singletonList(partition));
             materializedView.addPartition(partition);
         }
-        // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
+
+        if (!db.writeLockAndExist()) {
+            throw new DdlException("Database has been dropped when creating materialized view");
         }
         try {
-            if (getDb(db.getId()) == null) {
-                throw new DdlException("Database has been dropped when creating materialized view");
-            }
-            createMvSuccess = db.createMaterializedWithLock(materializedView, false);
-            if (!createMvSuccess) {
-                for (Long tabletId : tabletIdSet) {
-                    GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-                }
-                if (!stmt.isIfNotExists()) {
-                    ErrorReport
-                            .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, materializedView,
-                                    "Materialized view already exists");
-                } else {
-                    LOG.info("Create materialized view[{}] which already exists", materializedView);
-                    return;
-                }
-            }
+            createMvSuccess = db.createMaterialized(materializedView, false);
         } finally {
-            unlock();
+            db.writeUnlock();
+        }
+        if (!createMvSuccess) {
+            for (Long tabletId : tabletIdSet) {
+                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+            }
+            if (!stmt.isIfNotExists()) {
+                ErrorReport
+                        .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, materializedView,
+                                "Materialized view already exists");
+            } else {
+                LOG.info("Create materialized view[{}] which already exists", materializedView);
+                return;
+            }
         }
         LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
 

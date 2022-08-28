@@ -205,7 +205,9 @@ public class CheckConsistencyJob {
 
         if (state != JobState.RUNNING) {
             // failed to send task. set tablet's checked version to avoid choosing it again
-            db.writeLock();
+            if (!db.writeLockAndExist()) {
+                return false;
+            }
             try {
                 tablet.setCheckedVersion(checkedVersion);
             } finally {
