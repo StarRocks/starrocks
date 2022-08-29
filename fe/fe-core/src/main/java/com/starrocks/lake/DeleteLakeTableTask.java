@@ -62,9 +62,7 @@ class DeleteLakeTableTask implements Runnable {
             LakeService lakeService = BrpcProxy.getLakeService(address);
             Future<DropTableResponse> future = lakeService.dropTable(request);
             DropTableResponse response = future.get();
-            if (response != null) {
-                GlobalStateMgr.getCurrentStarOSAgent().deleteShards(tabletIds);
-            }
+            GlobalStateMgr.getCurrentStarOSAgent().deleteShards(tabletIds);
 
         } catch (Throwable ex) {
             LOG.info("Fail to get lake service proxy: {}", ex.getMessage());

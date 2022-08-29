@@ -146,7 +146,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
             try {
                 LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-                lakeService.abortTxn(request).get();
+                lakeService.abortTxn(request);
             } catch (Throwable e) {
                 LOG.error(e);
             }
