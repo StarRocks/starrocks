@@ -82,7 +82,7 @@ StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg
     auto location = segment_location(segment_name);
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
-    ASSIGN_OR_RETURN(segment, Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, location, seg_id,
+    ASSIGN_OR_RETURN(segment, Segment::open(ExecEnv::GetInstance()->metadata_mem_tracker(), fs, location, seg_id,
                                             std::move(tablet_schema), footer_size_hint));
     if (fill_cache) {
         _mgr->cache_segment(segment_name, segment);

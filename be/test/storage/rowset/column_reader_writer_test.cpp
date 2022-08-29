@@ -60,7 +60,7 @@ static const std::string TEST_DIR = "/column_reader_writer_test";
 class ColumnReaderWriterTest : public testing::Test {
 public:
     ColumnReaderWriterTest() {
-        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
+        _metadata_mem_tracker = std::make_unique<MemTracker>();
 
         TabletSchemaPB schema_pb;
         auto* c0 = schema_pb.add_column();
@@ -77,7 +77,7 @@ public:
         c2->set_name("v2");
         c2->set_type("INT");
 
-        _dummy_segment_schema = TabletSchema::create(_tablet_meta_mem_tracker.get(), schema_pb);
+        _dummy_segment_schema = TabletSchema::create(_metadata_mem_tracker.get(), schema_pb);
     }
 
     ~ColumnReaderWriterTest() override = default;
@@ -89,7 +89,7 @@ protected:
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
         return std::make_shared<Segment>(Segment::private_type(0), fs, fname, 1, _dummy_segment_schema.get(),
-                                         _tablet_meta_mem_tracker.get());
+                                         _metadata_mem_tracker.get());
     }
 
     template <FieldType type, EncodingTypePB encoding, uint32_t version, bool adaptive = true>
@@ -557,7 +557,7 @@ protected:
     }
 
     MemPool _pool;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker;
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
 };
 
