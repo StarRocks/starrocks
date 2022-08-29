@@ -116,4 +116,13 @@ public class LoadStmtTest {
                 "LOAD LABEL testLabel (DATA FROM TABLE t0 INTO TABLE t1)",
                 "Load from table should use Spark Load");
     }
+
+    @Test
+    public void testBrokerLoad() {
+        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER hdfs_broker PROPERTIES (\"strict_mode\"=\"true\")");
+        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER PROPERTIES (\"strict_mode\"=\"true\")");
+        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER hdfs_broker (\"username\"=\"sr\") PROPERTIES (\"strict_mode\"=\"true\")");
+        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER (\"username\"=\"sr\") PROPERTIES (\"strict_mode\"=\"true\")");
+        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER (\"username\"=\"sr\")");
+    }
 }
