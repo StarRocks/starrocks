@@ -149,4 +149,48 @@ public class PrivilegeCheckerTest {
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
     }
+
+    @Test
+    public void testSelectView() throws Exception {
+        auth = starRocksAssert.getCtx().getCatalog().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        // create view
+        TablePattern tablePattern = new TablePattern("db1", "tbl1");
+        tablePattern.analyze("default_cluster");
+        auth.grantPrivs(testUser, tablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), false);
+        tablePattern = new TablePattern("db1", "*");
+        tablePattern.analyze("default_cluster");
+        auth.grantPrivs(testUser, tablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), false);
+        String sql = "create view db1.view1 as select k1 from db1.tbl1;";
+        starRocksAssert.withView(sql);
+
+        // select privilege on base table
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(
+                "select * from db1.view1", starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        // revoke select privilege on base table
+        tablePattern = new TablePattern("db1", "tbl1");
+        tablePattern.analyze("default_cluster");
+        auth.revokePrivs(testUser, tablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), false);
+        // grant select privilege on view
+        tablePattern = new TablePattern("db1", "view1");
+        tablePattern.analyze("default_cluster");
+        auth.grantPrivs(testUser, tablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), false);
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        // no select privilege on neither the base table nor the view
+        UserIdentity testUser2 = new UserIdentity("test2", "%");
+        testUser2.analyze("default_cluster");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser2);
+        try {
+            PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains("SELECT command denied to user"));
+        }
+    }
 }
