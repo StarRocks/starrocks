@@ -7,9 +7,9 @@
 #include "exec/vectorized/file_scanner.h"
 #include "runtime/descriptors.h"
 #include "storage/olap_common.h"
+#include "storage/push_utils.h"
 #include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
-#include "storage/push_utils.h"
 
 namespace starrocks::vectorized {
 

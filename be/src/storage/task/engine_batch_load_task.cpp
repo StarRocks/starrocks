@@ -102,12 +102,12 @@ AgentStatus EngineBatchLoadTask::_init() {
 
     // not need to check these conditions for lake tablet
     if (_push_req.tablet_type != TTabletType::TABLET_TYPE_LAKE) {
-         // Check replica exist
+        // Check replica exist
         TabletSharedPtr tablet;
         tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_push_req.tablet_id);
         if (tablet == nullptr) {
             LOG(WARNING) << "get tables failed. "
-                        << "tablet_id: " << _push_req.tablet_id << ", schema_hash: " << _push_req.schema_hash;
+                         << "tablet_id: " << _push_req.tablet_id << ", schema_hash: " << _push_req.schema_hash;
             return STARROCKS_PUSH_INVALID_TABLE;
         }
 
