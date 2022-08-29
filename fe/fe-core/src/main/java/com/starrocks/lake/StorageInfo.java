@@ -41,7 +41,9 @@ public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
         return shardStorageInfo;
     }
 
-    public StorageCacheInfo getStorageCacheInfo() { return storageCacheInfo; }
+    public StorageCacheInfo getStorageCacheInfo() {
+        return storageCacheInfo;
+    }
 
     @Override
     public void gsonPreProcess() throws IOException {
