@@ -229,7 +229,7 @@ public:
     }
 
     Type value() const { return _value; }
-    Type double_value() const {
+    double double_value() const {
         double result = 0;
         DecimalV3Cast::to_float<Type, double>(_value, scale_factor, &result);
         return result;
