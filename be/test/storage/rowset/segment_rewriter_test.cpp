@@ -111,8 +111,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     partial_rowset_footer.set_position(footer_position);
     partial_rowset_footer.set_size(file_size - footer_position);
 
-    auto partial_segment =
-            *Segment::open(_metadata_mem_tracker.get(), _fs, file_name, 0, partial_tablet_schema.get());
+    auto partial_segment = *Segment::open(_metadata_mem_tracker.get(), _fs, file_name, 0, partial_tablet_schema.get());
     ASSERT_EQ(partial_segment->num_rows(), num_rows);
 
     std::unique_ptr<TabletSchema> tablet_schema = create_schema(
