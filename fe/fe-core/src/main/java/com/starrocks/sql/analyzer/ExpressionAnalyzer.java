@@ -66,6 +66,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpression;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -549,7 +550,20 @@ public class ExpressionAnalyzer {
                 // return decimal version even if the input parameters are not decimal, such as (INT, INT),
                 // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
                 // to go through `getDecimalV3Function` here
-                fn = getDecimalV3Function(node, argumentTypes);
+                if (FunctionSet.varianceFunctions.contains(fnName)) {
+                    // When decimal values are too small, the stddev and variance alogrithm of decimal-version do not
+                    // work incorrectly. because we use decimal128(38,9) multiplication in this algorithm,
+                    // decimal128(38,9) * decimal128(38,9) produces a result of decimal128(38,9). if two numbers are
+                    // too small, for an example, 0.000000001 * 0.000000001 produces 0.000000000, so the algorithm
+                    // can not work. Because of this reason, stddev and variance on very small decimal numbers always
+                    // yields a zero, so we use double instead of decimal128(38,9) to compute stddev and variance of
+                    // decimal types.
+                    Type[] doubleArgTypes = Stream.of(argumentTypes).map(t -> Type.DOUBLE).toArray(Type[]::new);
+                    fn = Expr.getBuiltinFunction(fnName, doubleArgTypes,
+                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                } else {
+                    fn = getDecimalV3Function(node, argumentTypes);
+                }
             } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 if (fn instanceof AggregateFunction) {
