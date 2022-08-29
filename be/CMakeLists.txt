@@ -684,6 +684,31 @@ else()
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OUTPUT_DIR}/lib)
 endif ()
 
+add_subdirectory(${SRC_DIR}/agent)
+add_subdirectory(${SRC_DIR}/common)
+add_subdirectory(${SRC_DIR}/connector)
+add_subdirectory(${SRC_DIR}/column)
+add_subdirectory(${SRC_DIR}/formats)
+add_subdirectory(${SRC_DIR}/fs)
+add_subdirectory(${SRC_DIR}/exec)
+add_subdirectory(${SRC_DIR}/exprs)
+add_subdirectory(${SRC_DIR}/gen_cpp)
+add_subdirectory(${SRC_DIR}/geo)
+add_subdirectory(${SRC_DIR}/gutil)
+add_subdirectory(${SRC_DIR}/http)
+add_subdirectory(${SRC_DIR}/io)
+add_subdirectory(${SRC_DIR}/storage)
+add_subdirectory(${SRC_DIR}/runtime)
+add_subdirectory(${SRC_DIR}/serde)
+add_subdirectory(${SRC_DIR}/service)
+add_subdirectory(${SRC_DIR}/testutil)
+add_subdirectory(${SRC_DIR}/types)
+add_subdirectory(${SRC_DIR}/udf)
+
+add_subdirectory(${SRC_DIR}/tools)
+
+add_subdirectory(${SRC_DIR}/util)
+
 # Utility CMake function to make specifying tests and benchmarks less verbose
 FUNCTION(ADD_BE_TEST TEST_NAME)
     set(BUILD_OUTPUT_ROOT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/")
@@ -726,30 +751,6 @@ FUNCTION(ADD_BE_BENCH TEST_NAME)
     ADD_TEST(${TEST_FILE_NAME} "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_NAME}")
 ENDFUNCTION()
 
-add_subdirectory(${SRC_DIR}/agent)
-add_subdirectory(${SRC_DIR}/bench)
-add_subdirectory(${SRC_DIR}/common)
-add_subdirectory(${SRC_DIR}/connector)
-add_subdirectory(${SRC_DIR}/column)
-add_subdirectory(${SRC_DIR}/formats)
-add_subdirectory(${SRC_DIR}/fs)
-add_subdirectory(${SRC_DIR}/exec)
-add_subdirectory(${SRC_DIR}/exprs)
-add_subdirectory(${SRC_DIR}/gen_cpp)
-add_subdirectory(${SRC_DIR}/geo)
-add_subdirectory(${SRC_DIR}/gutil)
-add_subdirectory(${SRC_DIR}/http)
-add_subdirectory(${SRC_DIR}/io)
-add_subdirectory(${SRC_DIR}/storage)
-add_subdirectory(${SRC_DIR}/runtime)
-add_subdirectory(${SRC_DIR}/serde)
-add_subdirectory(${SRC_DIR}/service)
-add_subdirectory(${SRC_DIR}/testutil)
-add_subdirectory(${SRC_DIR}/types)
-add_subdirectory(${SRC_DIR}/udf)
-
-add_subdirectory(${SRC_DIR}/tools)
-add_subdirectory(${SRC_DIR}/util)
 
 if (${MAKE_TEST} STREQUAL "ON")
     add_subdirectory(test)
@@ -784,4 +785,5 @@ install(FILES
 install(DIRECTORY
     ${BASE_DIR}/../webroot/be/
     DESTINATION ${OUTPUT_DIR}/www)
+
 

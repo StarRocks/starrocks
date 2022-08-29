@@ -42,7 +42,7 @@ export STARROCKS_HOME=${ROOT}
 . ${STARROCKS_HOME}/env.sh
 
 #build thirdparty libraries if necessary
-if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib64/libbenchmark.a ]]; then
+if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib/mariadb/libmariadbclient.a ]]; then
     echo "Thirdparty libraries need to be build ..."
     ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
 fi
