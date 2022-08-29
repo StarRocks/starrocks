@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 
 public class OlapTableTxnStateListener implements TransactionStateListener {
     private static final Logger LOG = LogManager.getLogger(OlapTableTxnStateListener.class);
-    private static final List<ClearTransactionTask> clearTransactionTasks = Lists.newArrayList();
+    private static final List<ClearTransactionTask> CLEAR_TRANSACTION_TASKS = Lists.newArrayList();
 
     private final DatabaseTransactionMgr dbTxnMgr;
     private final OlapTable table;
@@ -220,18 +220,18 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         // for aborted transaction, we don't know which backends are involved, so we have to send clear task to all backends.
         List<Long> allBeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
         AgentBatchTask batchTask = null;
-        synchronized (clearTransactionTasks) {
+        synchronized (CLEAR_TRANSACTION_TASKS) {
             for (Long beId : allBeIds) {
                 ClearTransactionTask task = new ClearTransactionTask(beId, txnState.getTransactionId(), Lists.newArrayList());
-                clearTransactionTasks.add(task);
+                CLEAR_TRANSACTION_TASKS.add(task);
             }
             // try to group send tasks, not sending every time a txn is aborted. to avoid too many task rpc.
-            if (clearTransactionTasks.size() > allBeIds.size() * 2) {
+            if (CLEAR_TRANSACTION_TASKS.size() > allBeIds.size() * 2) {
                 batchTask = new AgentBatchTask();
-                for (ClearTransactionTask clearTransactionTask : clearTransactionTasks) {
+                for (ClearTransactionTask clearTransactionTask : CLEAR_TRANSACTION_TASKS) {
                     batchTask.addTask(clearTransactionTask);
                 }
-                clearTransactionTasks.clear();
+                CLEAR_TRANSACTION_TASKS.clear();
             }
         }
         if (batchTask != null) {

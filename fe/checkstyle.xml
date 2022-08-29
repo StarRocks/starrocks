@@ -185,6 +185,7 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
             <message key="name.invalidPattern"
                      value="Parameter name ''{0}'' must match pattern ''{1}''."/>
         </module>
+        <module name="ConstantName"/>
         <module name="LambdaParameterName">
             <property name="format" value="^[a-z]([a-zA-Z0-9]*)?$"/>
             <message key="name.invalidPattern"

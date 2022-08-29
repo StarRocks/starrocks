@@ -3367,13 +3367,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return buildOverClause(functionCallExpr, context.over());
     }
 
-    public static final ImmutableSet<String> WindowFunctionSet = ImmutableSet.of(
+    public static final ImmutableSet<String> WINDOW_FUNCTION_SET = ImmutableSet.of(
             FunctionSet.ROW_NUMBER, FunctionSet.RANK, FunctionSet.DENSE_RANK, FunctionSet.NTILE, FunctionSet.LEAD,
             FunctionSet.LAG, FunctionSet.FIRST_VALUE, FunctionSet.LAST_VALUE);
 
     @Override
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {
-        if (WindowFunctionSet.contains(context.name.getText().toLowerCase())) {
+        if (WINDOW_FUNCTION_SET.contains(context.name.getText().toLowerCase())) {
             return new FunctionCallExpr(context.name.getText().toLowerCase(),
                     new FunctionParams(false, visit(context.expression(), Expr.class)));
         }

@@ -20,10 +20,10 @@ public class SplitTopNRule extends TransformationRule {
         super(RuleType.TF_SPLIT_TOPN, Pattern.create(OperatorType.LOGICAL_TOPN, OperatorType.PATTERN_LEAF));
     }
 
-    private static final SplitTopNRule instance = new SplitTopNRule();
+    private static final SplitTopNRule INSTANCE = new SplitTopNRule();
 
     public static SplitTopNRule getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     public boolean check(final OptExpression input, OptimizerContext context) {

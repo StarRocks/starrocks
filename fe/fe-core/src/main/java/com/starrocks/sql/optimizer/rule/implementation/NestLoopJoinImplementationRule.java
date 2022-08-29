@@ -19,10 +19,10 @@ public class NestLoopJoinImplementationRule extends JoinImplementationRule {
         super(RuleType.IMP_JOIN_TO_NESTLOOP_JOIN);
     }
 
-    private static final NestLoopJoinImplementationRule instance = new NestLoopJoinImplementationRule();
+    private static final NestLoopJoinImplementationRule INSTANCE = new NestLoopJoinImplementationRule();
 
     public static NestLoopJoinImplementationRule getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     // Only choose NestLoopJoin for such scenarios, which HashJoin could not handle
