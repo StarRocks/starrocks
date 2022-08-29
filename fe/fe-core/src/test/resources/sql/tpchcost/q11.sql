@@ -54,7 +54,7 @@ UNPARTITIONED
 26:NESTLOOP JOIN
 |  join op: CROSS JOIN
 |  colocate: false, reason:
-|  other join predicates: 21: sum > 43: expr
+|  other predicates: 21: sum > 43: expr
 |
 |----25:EXCHANGE
 |

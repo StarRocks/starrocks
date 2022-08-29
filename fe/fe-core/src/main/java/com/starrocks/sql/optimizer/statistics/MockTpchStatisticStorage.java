@@ -3,9 +3,6 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.starrocks.catalog.Table;
-import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.optimizer.statistics.StatisticStorage;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 
 import java.time.LocalDate;

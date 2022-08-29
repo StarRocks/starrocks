@@ -65,7 +65,7 @@ OutPut Exchange Id: 29
 |
 26:NESTLOOP JOIN
 |  join op: CROSS JOIN
-|  other join predicates: [21: sum, DOUBLE, true] > [43: expr, DOUBLE, true]
+|  other predicates: [21: sum, DOUBLE, true] > [43: expr, DOUBLE, true]
 |  cardinality: 1600000
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1600000.0] ESTIMATE
