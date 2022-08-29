@@ -116,7 +116,7 @@ AgentStatus EngineBatchLoadTask::_init() {
             return STARROCKS_DISK_REACH_CAPACITY_LIMIT;
         }
     }
-    
+
     DCHECK(!_push_req.__isset.http_file_path);
     _is_init = true;
     return status;
