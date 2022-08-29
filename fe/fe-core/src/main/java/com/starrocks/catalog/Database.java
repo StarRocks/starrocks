@@ -103,7 +103,7 @@ public class Database extends MetaObject implements Writable {
     // so this param dose not need to be persistent,
     // and this param maybe not right when the db is dropped and the catalog has done a checkpoint,
     // but that'ok to meet our needs.
-    private boolean exist = true;
+    private volatile boolean exist = true;
 
     public Database() {
         this(0, null);
