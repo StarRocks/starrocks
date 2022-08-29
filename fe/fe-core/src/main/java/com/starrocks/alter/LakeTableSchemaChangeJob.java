@@ -596,6 +596,15 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         for (String shadowIndexName : indexIdToName.values()) {
             table.deleteIndexInfo(shadowIndexName);
         }
+        // Delete tablet from TabletInvertedIndex
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        for (long partitionId : partitionIndexMap.rowKeySet()) {
+            for (MaterializedIndex shadowIdx : partitionIndexMap.row(partitionId).values()) {
+                for (Tablet tablet : shadowIdx.getTablets()) {
+                    invertedIndex.deleteTablet(tablet.getId());
+                }
+            }
+        }
         table.setState(OlapTable.OlapTableState.NORMAL);
     }
 

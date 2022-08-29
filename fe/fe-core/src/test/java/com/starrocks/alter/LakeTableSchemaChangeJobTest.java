@@ -30,6 +30,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.lake.Utils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
@@ -51,6 +53,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
+
+import static com.starrocks.catalog.TabletInvertedIndex.NOT_EXIST_TABLET_META;
 
 public class LakeTableSchemaChangeJobTest {
     private ConnectContext connectContext;
@@ -111,8 +115,13 @@ public class LakeTableSchemaChangeJobTest {
         ShardStorageInfo.Builder builder = ShardStorageInfo.newBuilder();
         ObjectStorageInfo.Builder osib = builder.getObjectStorageInfoBuilder();
         ObjectStorageInfo osi = osib.setObjectUri("s3://test").setAccessKey("zzz").setAccessKeySecret("yyy").build();
-        ShardStorageInfo storageInfo = ShardStorageInfo.newBuilder().setObjectStorageInfo(osi).build();
-        table.setStorageInfo(storageInfo, false, 0, false);
+        ShardStorageInfo shardStorageInfo = ShardStorageInfo.newBuilder().setObjectStorageInfo(osi).build();
+
+        StorageCacheInfo storageCacheInfo = new StorageCacheInfo(false, 0, false);
+
+        StorageInfo storageInfo = new StorageInfo(shardStorageInfo, storageCacheInfo);
+        table.setStorageInfo(shardStorageInfo, false, 0, false);
+        partitionInfo.setStorageInfo(partitionId, storageInfo);
 
         db.createTable(table);
 
@@ -138,15 +147,22 @@ public class LakeTableSchemaChangeJobTest {
                 // nothing to do.
             }
         };
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        for (Long tabletId : shadowTabletIds) {
+            Assert.assertNotNull(invertedIndex.getTabletMeta(tabletId));
+        }
+
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+
+        for (Long tabletId : shadowTabletIds) {
+            Assert.assertNull(invertedIndex.getTabletMeta(tabletId));
+        }
 
         // test cancel again
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
-
-        // Test replay
-
     }
 
     @Test
@@ -776,7 +792,7 @@ public class LakeTableSchemaChangeJobTest {
 
         for (Long tabletId : shadowTabletIds) {
             TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
-            Assert.assertNotSame(TabletInvertedIndex.NOT_EXIST_TABLET_META, tabletMeta);
+            Assert.assertNotSame(NOT_EXIST_TABLET_META, tabletMeta);
             Assert.assertTrue(tabletMeta.isLakeTablet());
             Assert.assertEquals(db.getId(), tabletMeta.getDbId());
             Assert.assertEquals(table.getId(), tabletMeta.getTableId());
