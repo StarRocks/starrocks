@@ -1438,7 +1438,7 @@ public class LocalMetastore implements ConnectorMetadata {
             try {
                 for (Long mvId : olapTable.getRelatedMaterializedViews()) {
                     MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
-                    if (materializedView.isLoadTriggeredRefresh()) {
+                    if (materializedView != null && materializedView.isLoadTriggeredRefresh()) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
                                 db.getFullName(), materializedView.getName(), Constants.TaskRunPriority.NORMAL.value());
                     }
