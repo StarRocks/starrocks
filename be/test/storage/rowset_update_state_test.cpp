@@ -6,6 +6,7 @@
 
 #include <functional>
 #include <iostream>
+#include <memory>
 
 #include "column/datum_tuple.h"
 #include "env/env_memory.h"
@@ -37,8 +38,8 @@ namespace starrocks {
 class RowsetUpdateStateTest : public ::testing::Test {
 public:
     void SetUp() override {
-        _compaction_mem_tracker.reset(new MemTracker(-1));
-        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
+        _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
+        _metadata_mem_tracker = std::make_unique<MemTracker>();
     }
 
     void TearDown() override {
@@ -118,7 +119,7 @@ public:
 protected:
     TabletSharedPtr _tablet;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker;
 };
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,

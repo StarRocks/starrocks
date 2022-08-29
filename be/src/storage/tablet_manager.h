@@ -145,7 +145,7 @@ public:
 
     Status delete_shutdown_tablet(int64_t tablet_id);
 
-    MemTracker* tablet_meta_mem_tracker() { return _mem_tracker; }
+    MemTracker* metadata_mem_tracker() { return _mem_tracker; }
 
     // return map<TabletId, vector<pair<rowsetid, segment file num>>>
     std::unordered_map<TTabletId, std::vector<std::pair<uint32_t, uint32_t>>> get_tablets_need_repair_compaction();

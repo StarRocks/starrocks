@@ -181,7 +181,7 @@ public:
 
     bool bg_worker_stopped() { return _bg_worker_stopped.load(std::memory_order_consume); }
 
-    MemTracker* tablet_meta_mem_tracker() { return _options.tablet_meta_mem_tracker; }
+    MemTracker* metadata_mem_tracker() { return _options.metadata_mem_tracker; }
 
     // submit repair compaction tasks
     void submit_repair_compaction_tasks(const std::vector<std::pair<int64_t, std::vector<uint32_t>>>& tasks);

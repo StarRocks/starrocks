@@ -68,7 +68,7 @@ protected:
         _block_mgr = new fs::FileBlockManager(_env, fs::BlockManagerOptions());
         ASSERT_TRUE(_env->create_dir(kSegmentDir).ok());
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
-        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
+        _metadata_mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
     }
 
@@ -104,7 +104,7 @@ protected:
         uint64_t file_size, index_size, footer_position;
         ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
-        *res = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, filename, 0, &query_schema);
+        *res = *Segment::open(_metadata_mem_tracker.get(), _block_mgr, filename, 0, &query_schema);
         ASSERT_EQ(nrows, (*res)->num_rows());
     }
 
@@ -113,7 +113,7 @@ protected:
     EnvMemory* _env = nullptr;
     fs::FileBlockManager* _block_mgr = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker = nullptr;
 };
 
 TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
@@ -222,7 +222,7 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     uint64_t footer_position;
     ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
-    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, tablet_schema.get());
+    auto segment = *Segment::open(_metadata_mem_tracker.get(), _block_mgr, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
@@ -335,7 +335,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
 
     ASSERT_OK(writer.finalize_footer(&file_size));
 
-    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, tablet_schema.get());
+    auto segment = *Segment::open(_metadata_mem_tracker.get(), _block_mgr, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
@@ -442,7 +442,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     }
 
     ASSERT_OK(writer.finalize_footer(&file_size));
-    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, tablet_schema.get());
+    auto segment = *Segment::open(_metadata_mem_tracker.get(), _block_mgr, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
