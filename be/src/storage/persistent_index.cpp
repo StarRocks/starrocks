@@ -2422,16 +2422,6 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         // so we can load persistent index according to PersistentIndexMetaPB
         EditVersion version = index_meta.version();
         if (version == lastest_applied_version) {
-<<<<<<< HEAD
-            status = load(index_meta);
-            LOG(INFO) << "load persistent index tablet:" << tablet->tablet_id() << " version:" << version.to_string()
-                      << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
-                      << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
-                      << " #shard: " << (_l1 ? _l1->_shards.size() : 0) << " l1_size:" << (_l1 ? _l1->_size : 0)
-                      << " memory: " << memory_usage() << " status: " << status.to_string()
-                      << " time:" << timer.elapsed_time() / 1000000 << "ms";
-            return status;
-=======
             // If format version is not equal to PERSISTENT_INDEX_VERSION_2, this maybe upgrade from
             // PERSISTENT_INDEX_VERSION_2.
             // We need to rebuild persistent index because the meta structure is changed
@@ -2467,7 +2457,6 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
                     LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
                 }
             }
->>>>>>> edbc4bc0b ([Enhancement] Remove varlen key limitation of persistent index (#10474))
         }
     }
 
