@@ -1444,7 +1444,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             } catch (MetaNotFoundException e) {
-                throw new DdlException(e.getMessage());
+                throw new DdlException("fail to refresh materialized views when dropping partition", e);
             }
         }
 
