@@ -9,6 +9,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.common.DdlException;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -162,10 +163,18 @@ public class InsertOverwriteJobRunner {
         if (state == InsertOverwriteJobState.OVERWRITE_SUCCESS) {
             Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
         }
-        InsertOverwriteStateChangeInfo info =
-                new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(), state,
-                        job.getSourcePartitionIds(), job.getTmpPartitionIds());
-        GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
+        if (!db.writeLockAndCheckExist()) {
+            LOG.warn("database:{} do not exist.", db.getFullName());
+            return;
+        }
+        try {
+            InsertOverwriteStateChangeInfo info =
+                    new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(), state,
+                            job.getSourcePartitionIds(), job.getTmpPartitionIds());
+            GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
+        } finally {
+            db.writeUnlock();
+        }
         job.setJobState(state);
         handle();
     }
@@ -193,7 +202,7 @@ public class InsertOverwriteJobRunner {
         }
     }
 
-    private void createTempPartitions() {
+    private void createTempPartitions() throws DdlException {
         try {
             long createPartitionStartTimestamp = System.currentTimeMillis();
             PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
