@@ -174,7 +174,7 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
     @Override
     public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
         ScalarOperator first = predicate.getChild(0).accept(this, null);
-        if (isColumnOrPrune(first)|| predicate.isNotNull()) {
+        if (isColumnOrPrune(first) || predicate.isNotNull()) {
             return ConstantOperator.createBoolean(true);
         } else {
             return ConstantOperator.createBoolean(false);

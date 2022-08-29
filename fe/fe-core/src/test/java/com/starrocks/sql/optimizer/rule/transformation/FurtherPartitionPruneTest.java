@@ -117,7 +117,6 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
 
     private static Stream<Arguments> emptyPartitionSqlList() {
         List<String> sqlList = Lists.newArrayList();
-        sqlList.add("select * from ptest where d2 <=> null");
         sqlList.add("select * from tbl_int where (k1 = 1 or k1 > s1) and k1 is null");
         sqlList.add("select * from ptest where d2 in (null, '2021-01-01')");
         sqlList.add("select * from ptest where (d2 < '1000-01-01') or (d2 in (null, '2021-01-01'))");
@@ -139,7 +138,6 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from tbl_int where not (k1 >= 0 and k1 < 400)");
         sqlList.add("select * from tbl_int where not (k1 >= 0 and k1 < 400 or s1 > s2)");
 
-        sqlList.add("select * from ptest where not not d2 <=> null");
         sqlList.add(
                 "select * from ptest where not not (d2 not between '1000-01-01' and '2020-12-01' and s1 >= '2020-12-01') " +
                         "or (d2 >= '2020-12-01')");
