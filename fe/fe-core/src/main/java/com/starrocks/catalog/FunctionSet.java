@@ -258,6 +258,31 @@ public class FunctionSet {
                     .add("sleep")
                     .build();
 
+<<<<<<< HEAD
+=======
+    public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
+            .add(FunctionSet.DENSE_RANK)
+            .add(FunctionSet.RANK)
+            .add(FunctionSet.NTILE)
+            .add(FunctionSet.ROW_NUMBER)
+            .add(FunctionSet.FIRST_VALUE)
+            .add(FunctionSet.LAST_VALUE)
+            .add(FunctionSet.FIRST_VALUE_REWRITE)
+            .build();
+
+    public static final Set<String> varianceFunctions = ImmutableSet.<String>builder()
+            .add(FunctionSet.VAR_POP)
+            .add(FunctionSet.VAR_SAMP)
+            .add(FunctionSet.VARIANCE)
+            .add(FunctionSet.VARIANCE_POP)
+            .add(FunctionSet.VARIANCE_SAMP)
+            .add(FunctionSet.STD)
+            .add(FunctionSet.STDDEV)
+            .add(FunctionSet.STDDEV_POP)
+            .add(FunctionSet.STDDEV_SAMP)
+            .add(FunctionSet.STDDEV_VAL).build();
+
+>>>>>>> 251ac6d35 (use double instead of decimal128(38,9) to compute variance and stddev… (#10425))
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
     }
