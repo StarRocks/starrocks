@@ -130,7 +130,6 @@ std::shared_ptr<CompactionTask> BaseAndCumulativeCompactionPolicy::_create_cumul
                   << " is smaller than threshold:" << config::min_cumulative_compaction_num_singleton_deltas;
         return nullptr;
     }
-    DCHECK(input_rowsets.size() > 0) << "input rowsets size can not be empty";
 
     if (input_rowsets.size() < 1) {
         LOG(INFO) << "no suitable rowsets for cumulative compaction";
