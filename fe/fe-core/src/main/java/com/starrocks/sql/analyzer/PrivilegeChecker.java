@@ -1,14 +1,17 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
+import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
@@ -344,7 +347,30 @@ public class PrivilegeChecker {
             }
             return null;
         }
-
+        @Override
+        public Void visitCreateResourceStatement(CreateResourceStmt statement,
+                                                ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+        @Override
+        public Void visitDropResourceStatement(DropResourceStmt statement,
+                                               ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+        @Override
+        public Void visitAlterResourceStatement(AlterResourceStmt statement,
+                                                ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
         public Void visitRecoverTableStatement(RecoverTableStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), statement.getDbName(),
                     statement.getTableName(),

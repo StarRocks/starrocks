@@ -116,6 +116,12 @@ statement
     | alterResourceGroupStatement                                                           #alterResourceGroup
     | showResourceGroupStatement                                                            #showResourceGroup
 
+    // Extenal Resource Statement
+    | createResourceStatement                                                               #createResource
+    | alterResourceStatement                                                                #alterResource
+    | dropResourceStatement                                                                 #dropResource
+    | showResourceStatement                                                                 #showResource
+
     //UDF
     | showFunctionsStatement                                                                #showFunctions
     | dropFunctionStatement                                                                 #dropFunctionst
@@ -724,6 +730,22 @@ alterResourceGroupStatement
 showResourceGroupStatement
     : SHOW RESOURCE GROUP identifier
     | SHOW RESOURCE GROUPS ALL?
+    ;
+
+createResourceStatement
+    : CREATE EXTERNAL? RESOURCE resourceName=identifierOrString properties?
+    ;
+
+alterResourceStatement
+    : ALTER RESOURCE resourceName=identifierOrString SET properties
+    ;
+
+dropResourceStatement
+    : DROP RESOURCE resourceName=identifierOrString
+    ;
+
+showResourceStatement
+    : SHOW RESOURCES
     ;
 
 classifier
@@ -1514,7 +1536,7 @@ nonReserved
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
-    | RESOURCE | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
+    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE
     | STRING | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION

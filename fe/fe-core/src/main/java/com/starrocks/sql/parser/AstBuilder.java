@@ -16,6 +16,7 @@ import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AddRollupClause;
 import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterUserStmt;
@@ -43,6 +44,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.DateLiteral;
@@ -59,6 +61,7 @@ import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.DropPartitionClause;
+import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -136,6 +139,7 @@ import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowProcesslistStmt;
+import com.starrocks.analysis.ShowResourcesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowStatusStmt;
 import com.starrocks.analysis.ShowTabletStmt;
@@ -1411,6 +1415,36 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAlterSystemStatement(StarRocksParser.AlterSystemStatementContext context) {
         return new AlterSystemStmt((AlterClause) visit(context.alterClause()));
+    }
+    // ------------------------------------------- Resource Statement ---------------------------------------------------
+    public ParseNode visitCreateResourceStatement(StarRocksParser.CreateResourceStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateResourceStmt(context.EXTERNAL() != null, identifier.getValue(), properties);
+    }
+    public ParseNode visitDropResourceStatement(StarRocksParser.DropResourceStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        return new DropResourceStmt(identifier.getValue());
+    }
+    public ParseNode visitAlterResourceStatement(StarRocksParser.AlterResourceStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new AlterResourceStmt(identifier.getValue(), properties);
+    }
+    public ParseNode visitShowResourceStatement(StarRocksParser.ShowResourceStatementContext context) {
+        return new ShowResourcesStmt();
     }
 
     // ------------------------------------------- Catalog Statement ---------------------------------------------------
