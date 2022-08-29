@@ -64,7 +64,7 @@ public:
     ~ColumnReaderWriterTest() override = default;
 
 protected:
-    void SetUp() override { _tablet_meta_mem_tracker = std::make_unique<MemTracker>(); }
+    void SetUp() override { _metadata_mem_tracker = std::make_unique<MemTracker>(); }
 
     void TearDown() override {}
 
@@ -103,7 +103,7 @@ protected:
         std::vector<int32_t> column_indexes;
         std::shared_ptr<TabletSchema> tablet_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
 
-        MemTracker* mem_tracker = _tablet_meta_mem_tracker.get();
+        MemTracker* mem_tracker = _metadata_mem_tracker.get();
         return std::shared_ptr<Segment>(
                 new Segment(Segment::private_type(0), block_mgr.get(), fname, 1, tablet_schema.get(), mem_tracker),
                 DeleterWithMemTracker<Segment>(mem_tracker));
@@ -588,7 +588,7 @@ protected:
     }
 
     MemPool _pool;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker;
 };
 
 // NOLINTNEXTLINE

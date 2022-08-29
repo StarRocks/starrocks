@@ -180,7 +180,7 @@ public:
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
-        options.tablet_meta_mem_tracker = _tablet_meta_mem_tracker.get();
+        options.metadata_mem_tracker = _tablet_meta_mem_tracker.get();
         options.compaction_mem_tracker = _compaction_mem_tracker.get();
         if (k_engine == nullptr) {
             Status s = starrocks::StorageEngine::open(options, &k_engine);

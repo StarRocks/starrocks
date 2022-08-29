@@ -74,7 +74,7 @@ protected:
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
-        options.tablet_meta_mem_tracker = _metadata_mem_tracker.get();
+        options.metadata_mem_tracker = _metadata_mem_tracker.get();
         options.schema_change_mem_tracker = _schema_change_mem_tracker.get();
         Status s = starrocks::StorageEngine::open(options, &k_engine);
         ASSERT_TRUE(s.ok()) << s.to_string();

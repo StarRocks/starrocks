@@ -31,7 +31,7 @@ public:
         _block_mgr = new fs::FileBlockManager(_env, fs::BlockManagerOptions());
         ASSERT_TRUE(_env->create_dir(kSegmentDir).ok());
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
-        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
+        _metadata_mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
     }
 
@@ -45,7 +45,7 @@ public:
     EnvMemory* _env = nullptr;
     fs::FileBlockManager* _block_mgr = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker = nullptr;
 };
 
 // NOLINTNEXTLINE
@@ -61,7 +61,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
 
     std::vector<Slice> data_strs;
     for (const auto& data : values) {
-        data_strs.push_back(data);
+        data_strs.emplace_back(data);
     }
 
     ColumnPB c1 = create_int_key_pb(1);
@@ -125,7 +125,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     }
     ASSERT_OK(writer.finalize_footer(&file_size));
 
-    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, tablet_schema.get());
+    auto segment = *Segment::open(_metadata_mem_tracker.get(), _block_mgr, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
@@ -256,7 +256,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     }
     ASSERT_OK(writer.finalize_footer(&file_size));
 
-    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, tablet_schema.get());
+    auto segment = *Segment::open(_metadata_mem_tracker.get(), _block_mgr, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;

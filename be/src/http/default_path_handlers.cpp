@@ -115,8 +115,8 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
         } else if (iter->second == "load") {
             start_mem_tracker = ExecEnv::GetInstance()->load_mem_tracker();
             cur_level = 2;
-        } else if (iter->second == "tablet_meta") {
-            start_mem_tracker = ExecEnv::GetInstance()->tablet_meta_mem_tracker();
+        } else if (iter->second == "metadata") {
+            start_mem_tracker = ExecEnv::GetInstance()->metadata_mem_tracker();
             cur_level = 2;
         } else if (iter->second == "query_pool") {
             start_mem_tracker = ExecEnv::GetInstance()->query_pool_mem_tracker();
@@ -155,8 +155,8 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
 
     // Metadata memory statistics use the old memory framework,
     // not in RootMemTrackerTree, so it needs to be added here
-    MemTracker* meta_mem_tracker = ExecEnv::GetInstance()->tablet_meta_mem_tracker();
-    MemTracker::SimpleItem meta_item{"tablet_meta",
+    MemTracker* meta_mem_tracker = ExecEnv::GetInstance()->metadata_mem_tracker();
+    MemTracker::SimpleItem meta_item{"metadata",
                                      "process",
                                      2,
                                      meta_mem_tracker->limit(),
