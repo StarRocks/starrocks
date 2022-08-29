@@ -19,6 +19,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
+import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
+
 /**
  * This class represents the StarRocks lake tablet related metadata.
  * LakeTablet is based on cloud object storage, such as S3, OSS.
@@ -83,7 +85,7 @@ public class LakeTablet extends Tablet {
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
         for (long backendId : getBackendIds()) {
-            Replica replica = new Replica(getId(), backendId, -1, null);
+            Replica replica = new Replica(getId(), backendId, -1, NORMAL);
             allQuerableReplicas.add(replica);
             if (localBeId != -1 && backendId == localBeId) {
                 localReplicas.add(replica);

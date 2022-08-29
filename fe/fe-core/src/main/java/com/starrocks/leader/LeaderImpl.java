@@ -127,11 +127,12 @@ import org.apache.thrift.TException;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
 
 public class LeaderImpl {
     private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
@@ -532,14 +533,7 @@ public class LeaderImpl {
 
         Tablet tablet = index.getTablet(tabletId);
         if (tablet instanceof LakeTablet) {
-            List<Replica> allQueryableReplicas = Lists.newArrayList();
-            tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
-                    0, -1, 0);
-            if (allQueryableReplicas.isEmpty()) {
-                LOG.warn("no queryable replica found in tablet {}", tabletId);
-                return null;
-            }
-            return allQueryableReplicas.get(0);
+            return new Replica(tabletId, backendId, -1, NORMAL);
         } else {
             if (tablet == null) {
                 LOG.warn("could not find tablet {} in rollup index {} ", tabletId, indexId);
