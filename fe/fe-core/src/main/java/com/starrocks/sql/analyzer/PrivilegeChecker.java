@@ -1069,6 +1069,7 @@ public class PrivilegeChecker {
             return visit(node.getQueryStatement());
         }
 
+        @Override
         public Void visitView(ViewRelation node, Void context) {
             // if user has select privilege for the view, then there's no need to check base table
             if (checkTblPriv(session, node.getName(), PrivPredicate.SELECT)) {
