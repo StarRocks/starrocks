@@ -1189,8 +1189,7 @@ primaryExpression
     | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | primaryExpression ARROW string                                                      #arrowExpression
-    | identifier '->' expression                                                          #lambdaFunction
-    | identifierList  '->' expression                                                     #lambdaFunction
+    | (identifier | identifierList) '->' expression                                       #lambdaFunction
     ;
 
 literalExpression

@@ -1,10 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.Expr;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
@@ -31,17 +32,17 @@ public class LambdaFunction extends Expr {
     @Override
     protected String toSqlImpl() {
         if (getChild(0) instanceof LambdaArguments) {
-            return String.format("%s -> %s", getChild(0).toSqlImpl(), getChild(1).toSqlImpl());
+            return String.format("%s -> %s", getChild(0).toSql(), getChild(1).toSql());
         } else { // moved the lambda function to the first argument, and arguments are slots.
-            String names = getChild(1).toSqlImpl();
+            String names = getChild(1).toSql();
             if (getChildren().size() > 2) {
-                names = "(" + getChild(1).toSqlImpl();
+                names = "(" + getChild(1).toSql();
                 for (int i = 2; i < getChildren().size(); ++i) {
-                    names = names + ", " + getChild(i).toSqlImpl();
+                    names = names + ", " + getChild(i).toSql();
                 }
                 names = names + ")";
             }
-            return String.format("%s -> %s", names, getChild(0).toSqlImpl());
+            return String.format("%s -> %s", names, getChild(0).toSql());
         }
     }
 

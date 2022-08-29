@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -48,6 +49,7 @@ public class LambdaFunctionOperator extends ScalarOperator {
 
     @Override
     public void setChild(int index, ScalarOperator child) {
+        Preconditions.checkState(false);
     }
 
     @Override

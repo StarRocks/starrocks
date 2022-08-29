@@ -48,8 +48,6 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.KillStmt;
-import com.starrocks.analysis.LambdaArguments;
-import com.starrocks.analysis.LambdaFunction;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;

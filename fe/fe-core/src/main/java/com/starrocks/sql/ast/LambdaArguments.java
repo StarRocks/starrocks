@@ -1,10 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TExprNode;
@@ -48,7 +50,7 @@ public class LambdaArguments extends Expr {
         if (names.size() > 1) {
             name = "(" + names.stream().map(String::valueOf).collect(Collectors.joining(",")) + ")";
         }
-        return String.format("%s", name);
+        return name;
     }
 
     @Override

@@ -39,7 +39,7 @@ under the License.
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.5</jacoco.version>
         <iceberg.version>0.12.1</iceberg.version>
-        <python>python</python>
+        <python>python3</python>
     </properties>
 
     <profiles>
@@ -81,7 +81,7 @@ under the License.
             </properties>
         </profile>
         <profile>
-            <id>python</id>
+            <id>python3</id>
             <activation>
                 <property>
                     <name>env.PYTHON</name>

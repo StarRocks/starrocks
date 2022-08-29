@@ -27,8 +27,6 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LambdaArguments;
-import com.starrocks.analysis.LambdaFunction;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
@@ -62,6 +60,8 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.LambdaArguments;
+import com.starrocks.sql.ast.LambdaFunction;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -132,7 +132,7 @@ public class ExpressionAnalyzer {
         for (int i = 1; i < childSize; ++i) {
             Expr expr = expression.getChild(i);
             bottomUpAnalyze(visitor, expr, scope);
-            if (expr instanceof NullLiteral) {
+            if (expr instanceof NullLiteral) { //TODO: disable this when support push down null to BE
                 expr.setType(Type.ARRAY_INT); // Since Type.NULL cannot be pushed to to BE, hack it here.
             }
             if (!expr.getType().isArrayType()) {
