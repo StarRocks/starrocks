@@ -178,8 +178,15 @@ bool ScanOperator::is_finished() const {
     return true;
 }
 
+void ScanOperator::_detach_chunk_sources() {
+    for (size_t i = 0; i < _chunk_sources.size(); i++) {
+        detach_chunk_source(i);
+    }
+}
+
 Status ScanOperator::set_finishing(RuntimeState* state) {
     std::lock_guard guard(_task_mutex);
+    _detach_chunk_sources();
     _is_finished = true;
     return Status::OK();
 }
