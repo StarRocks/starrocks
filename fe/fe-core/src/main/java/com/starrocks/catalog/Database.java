@@ -158,7 +158,7 @@ public class Database extends MetaObject implements Writable {
     }
 
     // this function make sure lock can only be obtained if the db has not been dropped
-    public boolean readLockAndExist() {
+    public boolean readLockAndCheckExist() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         Thread formerOwner = rwLock.getOwner();
         this.rwLock.readLock().lock();
@@ -188,7 +188,7 @@ public class Database extends MetaObject implements Writable {
     }
 
     // this function make sure lock can only be obtained if the db has not been dropped
-    public boolean tryReadLockAndExist(long timeout, TimeUnit unit) {
+    public boolean tryReadLockAndCheckExist(long timeout, TimeUnit unit) {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
             Thread formerOwner = rwLock.getOwner();
@@ -222,7 +222,7 @@ public class Database extends MetaObject implements Writable {
     }
 
     // this function make sure lock can only be obtained if the db has not been dropped
-    public boolean writeLockAndExist() {
+    public boolean writeLockAndCheckExist() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         Thread formerOwner = rwLock.getOwner();
         this.rwLock.writeLock().lock();
@@ -252,7 +252,7 @@ public class Database extends MetaObject implements Writable {
     }
 
     // this function make sure lock can only be obtained if the db has not been dropped
-    public boolean tryWriteLockAndExist(long timeout, TimeUnit unit) {
+    public boolean tryWriteLockAndCheckExist(long timeout, TimeUnit unit) {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
             Thread formerOwner = rwLock.getOwner();
