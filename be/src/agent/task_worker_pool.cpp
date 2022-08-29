@@ -420,7 +420,7 @@ void AlterTableTaskWorkerPool::_alter_tablet(const TAgentTaskRequest& agent_task
         EngineAlterTabletTask engine_task(ExecEnv::GetInstance()->schema_change_mem_tracker(),
                                           agent_task_req.alter_tablet_req_v2, signature, task_type, &error_msgs,
                                           process_name);
-        Status sc_status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+        Status sc_status = StorageEngine::instance()->execute_task(&engine_task);
         if (!sc_status.ok()) {
             status = STARROCKS_ERROR;
         } else {
