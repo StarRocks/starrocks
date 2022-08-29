@@ -31,10 +31,38 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
+>>>>>>> 6fd8ae5b7 ([BugFix] Allow select from view when user is only granted on view (#10508))
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.JoinRelation;
+>>>>>>> 6fd8ae5b7 ([BugFix] Allow select from view when user is only granted on view (#10508))
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.ShowComputeNodesStmt;
+import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataStmt;
+import com.starrocks.sql.ast.ShowTableStatusStmt;
+import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.ViewRelation;
+>>>>>>> 6fd8ae5b7 ([BugFix] Allow select from view when user is only granted on view (#10508))
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.Map;
@@ -178,14 +206,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitQueryStatement(QueryStatement stmt, ConnectContext session) {
-            Map<TableName, Table> tables = AnalyzerUtils.collectAllTable(stmt);
-            for (Map.Entry<TableName, Table> table : tables.entrySet()) {
-                TableName tableName = table.getKey();
-                if (!checkTblPriv(session, tableName, PrivPredicate.SELECT)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
-                            session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
-                }
-            }
+            new TablePrivilegeChecker(session).visit(stmt);
             return null;
         }
 
@@ -318,4 +339,69 @@ public class PrivilegeChecker {
             return null;
         }
     }
+
+    private static class TablePrivilegeChecker extends AstVisitor<Void, Void> {
+        private ConnectContext session;
+        public TablePrivilegeChecker(ConnectContext session) {
+            this.session = session;
+        }
+        @Override
+        public Void visitQueryStatement(QueryStatement node, Void context) {
+            return visit(node.getQueryRelation());
+        }
+
+        @Override
+        public Void visitSubquery(SubqueryRelation node, Void context) {
+            return visit(node.getQueryStatement());
+        }
+
+        @Override
+        public Void visitView(ViewRelation node, Void context) {
+            // if user has select privilege for the view, then there's no need to check base table
+            if (checkTblPriv(session, node.getName(), PrivPredicate.SELECT)) {
+                return null;
+            }
+            return visit(node.getQueryStatement());
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (node.hasWithClause()) {
+                node.getCteRelations().forEach(this::visit);
+            }
+
+            return visit(node.getRelation());
+        }
+
+        @Override
+        public Void visitSetOp(SetOperationRelation node, Void context) {
+            if (node.hasWithClause()) {
+                node.getRelations().forEach(this::visit);
+            }
+            node.getRelations().forEach(this::visit);
+            return null;
+        }
+
+        @Override
+        public Void visitJoin(JoinRelation node, Void context) {
+            visit(node.getLeft());
+            visit(node.getRight());
+            return null;
+        }
+
+        @Override
+        public Void visitCTE(CTERelation node, Void context) {
+            return visit(node.getCteQueryStatement());
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            if (!checkTblPriv(session, node.getName(), PrivPredicate.SELECT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
+                        session.getQualifiedUser(), session.getRemoteIP(), node.getTable());
+            }
+            return null;
+        }
+    }
+
 }
