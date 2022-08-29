@@ -281,7 +281,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0, Partition.PARTITION_INIT_VERSION,
                                 originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema, bfColumns, bfFpp,
                                 countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
-                                TTabletType.TABLET_TYPE_LAKE);
+                                TTabletType.TABLET_TYPE_LAKE, table.getCompressionType());
 
                         Long baseTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
                         assert baseTabletId != null;
@@ -570,6 +570,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             }
 
             if (jobState == JobState.PENDING) {
+                addTabletToTabletInvertedIndex(table);
                 table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
             } else if (jobState == JobState.WAITING_TXN) {
                 addShadowIndexToCatalog(table);
@@ -581,6 +582,23 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 removeShadowIndex(table);
             } else {
                 throw new RuntimeException("unknown job state '{}'" + jobState.name());
+            }
+        }
+    }
+
+    void addTabletToTabletInvertedIndex(@NotNull LakeTable table) {
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        for (Table.Cell<Long, Long, MaterializedIndex> cell : partitionIndexMap.cellSet()) {
+            Long partitionId = cell.getRowKey();
+            Long shadowIndexId = cell.getColumnKey();
+            MaterializedIndex shadowIndex = cell.getValue();
+            assert partitionId != null;
+            assert shadowIndexId != null;
+            assert shadowIndex != null;
+            TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
+            TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId, 0, medium, true);
+            for (Tablet shadowTablet : shadowIndex.getTablets()) {
+                invertedIndex.addTablet(shadowTablet.getId(), shadowTabletMeta);
             }
         }
     }
