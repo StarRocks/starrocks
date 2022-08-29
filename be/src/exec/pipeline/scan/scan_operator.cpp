@@ -315,11 +315,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id,
                           io_task_start_nano]() {
         if (auto sp = wp.lock()) {
-            // Set driver_id here to share some driver-local contents.
-            // Current it's used by ExprContext's driver-local state
-            CurrentThread::current().set_pipeline_driver_id(driver_id);
-            DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
-
+            // set driver_id/query_id/fragment_instance_id to thread local
+            // driver_id will be used in some Expr such as regex_replace
+            SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 
             [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);

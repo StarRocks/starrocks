@@ -1148,7 +1148,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         // which are consistent with BE implementations.
         private boolean checkTypeCanPushDown(ScalarOperator scalarOperator) {
             Type leftType = scalarOperator.getChild(0).getType();
-            return !leftType.isFloatingPointType() && !leftType.isJsonType() && !leftType.isTime();
+            return !leftType.isFloatingPointType() && !leftType.isComplexType() && !leftType.isJsonType() &&
+                    !leftType.isTime();
         }
     }
 }
