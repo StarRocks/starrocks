@@ -5,6 +5,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -26,6 +27,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class RemoveAggregationFromAggTable extends TransformationRule {
@@ -47,6 +49,9 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
         OptExpression scanExpression = input.getInputs().get(0);
         Preconditions.checkState(scanExpression.getOp() instanceof LogicalOlapScanOperator);
         LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) scanExpression.getOp();
+        if (scanOperator.getProjection() != null) {
+            return false;
+        }
         OlapTable olapTable = (OlapTable) scanOperator.getTable();
 
         MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByIndexId(scanOperator.getSelectedIndexId());
@@ -54,10 +59,10 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
         if (!materializedIndexMeta.getKeysType().isAggregationFamily()) {
             return false;
         }
-        int keyCount = 0;
+        Set<String> keyColumnNames = Sets.newHashSet();
         for (Column column : materializedIndexMeta.getSchema()) {
             if (column.isKey()) {
-                keyCount++;
+                keyColumnNames.add(column.getName().toLowerCase());
             }
         }
 
@@ -79,11 +84,11 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
                 return false;
             }
         }
-        List<String> keyColumns = aggregationOperator.getGroupingKeys().stream()
+        List<String> groupKeyColumns = aggregationOperator.getGroupingKeys().stream()
                 .map(columnRefOperator -> columnRefOperator.getName().toLowerCase()).collect(Collectors.toList());
-        return keyCount == keyColumns.size()
-                && keyColumns.containsAll(partitionColumnNames)
-                && keyColumns.containsAll(distributionColumnNames);
+        return groupKeyColumns.containsAll(keyColumnNames)
+                && groupKeyColumns.containsAll(partitionColumnNames)
+                && groupKeyColumns.containsAll(distributionColumnNames);
     }
 
     @Override

@@ -1284,5 +1284,21 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     partitions=7/7\n" +
                 "     rollup: agg_mv\n" +
                 "     tabletRatio=1050/1050");
+
+        String sql4 = "select LO_ORDERDATE, LO_ORDERKEY, sum(LO_REVENUE) + 1, count(C_NAME) * 3" +
+                " from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
+        String plan4 = getFragmentPlan(sql4);
+        assertContains(plan4, "1:Project\n" +
+                "  |  <slot 1> : 1: LO_ORDERDATE\n" +
+                "  |  <slot 2> : 2: LO_ORDERKEY\n" +
+                "  |  <slot 43> : 13: LO_REVENUE + 1\n" +
+                "  |  <slot 44> : 39: mv_count_c_name * 3\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: lineorder_flat_for_mv\n" +
+                "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
+                "     partitions=7/7\n" +
+                "     rollup: agg_mv\n" +
+                "     tabletRatio=1050/1050");
     }
 }
