@@ -139,16 +139,21 @@ public class AnalyzeManager implements Writable {
         basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
     }
 
-    public void expireBasicStatisticsCache(BasicStatsMeta basicStatsMeta) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(basicStatsMeta.getDbId());
+    public void refreshBasicStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (null == db) {
             return;
         }
-        Table table = db.getTable(basicStatsMeta.getTableId());
+        Table table = db.getTable(tableId);
         if (null == table) {
             return;
         }
-        GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, basicStatsMeta.getColumns());
+        GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
+        if (async) {
+            GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
+        } else {
+            GlobalStateMgr.getCurrentStatisticStorage().getColumnStatisticsSync(table, columns);
+        }
     }
 
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
@@ -170,17 +175,22 @@ public class AnalyzeManager implements Writable {
                 new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);
     }
 
-    public void expireHistogramStatisticsCache(HistogramStatsMeta histogramStatsMeta) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(histogramStatsMeta.getDbId());
+    public void refreshHistogramStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (null == db) {
             return;
         }
-        Table table = db.getTable(histogramStatsMeta.getTableId());
+        Table table = db.getTable(tableId);
         if (null == table) {
             return;
         }
-        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(),
-                Lists.newArrayList(histogramStatsMeta.getColumn()));
+
+        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
+        if (async) {
+            GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columns);
+        } else {
+            GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatisticsSync(table, columns);
+        }
     }
 
     public void replayRemoveHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {

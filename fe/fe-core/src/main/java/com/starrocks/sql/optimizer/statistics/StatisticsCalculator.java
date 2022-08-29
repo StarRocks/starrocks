@@ -361,14 +361,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
         Preconditions.checkState(requiredColumnRefs.size() == columnStatisticList.size());
 
-        Map<ColumnRefOperator, Histogram> histogramStatistics =
-                GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, requiredColumnRefs);
+        Map<String, Histogram> histogramStatistics =
+                GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columns);
 
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
             ColumnStatistic columnStatistic;
-            if (histogramStatistics.containsKey(requiredColumnRefs.get(i))) {
+            if (histogramStatistics.containsKey(requiredColumnRefs.get(i).getName())) {
                 columnStatistic = ColumnStatistic.buildFrom(columnStatisticList.get(i)).setHistogram(
-                        histogramStatistics.get(requiredColumnRefs.get(i))).build();
+                        histogramStatistics.get(requiredColumnRefs.get(i).getName())).build();
             } else {
                 columnStatistic = columnStatisticList.get(i);
             }
