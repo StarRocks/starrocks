@@ -1502,8 +1502,6 @@ void* TaskWorkerPool::_upload_worker_thread_callback(void* arg_this) {
             if (worker_pool_this->_stopped) {
                 break;
             }
-
-            agent_task_req = worker_pool_this->_tasks.front();
             swap(agent_task_req, worker_pool_this->_tasks.front());
             worker_pool_this->_tasks.pop_front();
         }
