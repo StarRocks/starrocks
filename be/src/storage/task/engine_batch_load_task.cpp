@@ -57,11 +57,7 @@ Status EngineBatchLoadTask::execute() {
 
     AgentStatus status = STARROCKS_SUCCESS;
     if (_push_req.push_type == TPushType::LOAD_V2) {
-        if (_push_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-            status = _init_lake();
-        } else {
-            status = _init();
-        }
+        status = _init();
 
         if (status == STARROCKS_SUCCESS) {
             uint32_t retry_time = 0;
@@ -104,32 +100,24 @@ AgentStatus EngineBatchLoadTask::_init() {
         return status;
     }
 
-    // Check replica exist
-    TabletSharedPtr tablet;
-    tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_push_req.tablet_id);
-    if (tablet == nullptr) {
-        LOG(WARNING) << "get tables failed. "
-                     << "tablet_id: " << _push_req.tablet_id << ", schema_hash: " << _push_req.schema_hash;
-        return STARROCKS_PUSH_INVALID_TABLE;
+    // not need to check these conditions for lake tablet
+    if (_push_req.tablet_type != TTabletType::TABLET_TYPE_LAKE) {
+         // Check replica exist
+        TabletSharedPtr tablet;
+        tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_push_req.tablet_id);
+        if (tablet == nullptr) {
+            LOG(WARNING) << "get tables failed. "
+                        << "tablet_id: " << _push_req.tablet_id << ", schema_hash: " << _push_req.schema_hash;
+            return STARROCKS_PUSH_INVALID_TABLE;
+        }
+
+        // check disk capacity
+        if (tablet->data_dir()->capacity_limit_reached(_push_req.__isset.http_file_size)) {
+            return STARROCKS_DISK_REACH_CAPACITY_LIMIT;
+        }
+        DCHECK(!_push_req.__isset.http_file_path);
     }
 
-    // check disk capacity
-    if (tablet->data_dir()->capacity_limit_reached(_push_req.__isset.http_file_size)) {
-        return STARROCKS_DISK_REACH_CAPACITY_LIMIT;
-    }
-    DCHECK(!_push_req.__isset.http_file_path);
-    _is_init = true;
-    return status;
-}
-
-// only set _is_init
-AgentStatus EngineBatchLoadTask::_init_lake() {
-    AgentStatus status = STARROCKS_SUCCESS;
-
-    if (_is_init) {
-        VLOG(3) << "has been inited";
-        return status;
-    }
     _is_init = true;
     return status;
 }
