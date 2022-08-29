@@ -819,7 +819,7 @@ TEST_F(FileReaderTest, TestReadStructUpperColumns) {
 TEST_F(FileReaderTest, TestReadArray2dColumn) {
     auto file = _create_file(_file5_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                std::filesystem::file_size(_file5_path));
+                                                    std::filesystem::file_size(_file5_path));
 
     //init
     auto* ctx = _create_file5_base_context();

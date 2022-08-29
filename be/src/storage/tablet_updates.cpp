@@ -2798,8 +2798,8 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
         }
         std::string seg_path =
                 BetaRowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
-        auto segment = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path,
-                                     rssid - iter->first, &rowset->schema());
+        auto segment = Segment::open(ExecEnv::GetInstance()->metadata_mem_tracker(), fs, seg_path, rssid - iter->first,
+                                     &rowset->schema());
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();

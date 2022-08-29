@@ -23,7 +23,6 @@
 
 #include <functional>
 
-#include "common/config.h"
 #include "fs/fs.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/substitute.h"

@@ -301,7 +301,7 @@ Status ExecEnv::init_mem_tracker() {
     int64_t load_mem_limit = calc_max_load_memory(_mem_tracker->limit());
     _load_mem_tracker = new MemTracker(MemTracker::LOAD, load_mem_limit, "load", _mem_tracker);
     // Metadata statistics memory statistics do not use new mem statistics framework with hook
-    _tablet_meta_mem_tracker = new MemTracker(-1, "tablet_meta", nullptr);
+    _metadata_mem_tracker = new MemTracker(-1, "metadata", nullptr);
 
     int64_t compaction_mem_limit = calc_max_compaction_memory(_mem_tracker->limit());
     _compaction_mem_tracker = new MemTracker(compaction_mem_limit, "compaction", _mem_tracker);
@@ -317,7 +317,7 @@ Status ExecEnv::init_mem_tracker() {
 
     ChunkAllocator::init_instance(_chunk_allocator_mem_tracker, config::chunk_reserved_bytes_limit);
 
-    GlobalTabletSchemaMap::Instance()->set_mem_tracker(_tablet_meta_mem_tracker);
+    GlobalTabletSchemaMap::Instance()->set_mem_tracker(_metadata_mem_tracker);
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
     _init_storage_page_cache();
@@ -474,9 +474,9 @@ void ExecEnv::_destroy() {
         delete _compaction_mem_tracker;
         _compaction_mem_tracker = nullptr;
     }
-    if (_tablet_meta_mem_tracker) {
-        delete _tablet_meta_mem_tracker;
-        _tablet_meta_mem_tracker = nullptr;
+    if (_metadata_mem_tracker) {
+        delete _metadata_mem_tracker;
+        _metadata_mem_tracker = nullptr;
     }
     if (_load_mem_tracker) {
         delete _load_mem_tracker;

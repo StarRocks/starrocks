@@ -142,7 +142,7 @@ public:
 
     Status delete_shutdown_tablet(int64_t tablet_id);
 
-    MemTracker* tablet_meta_mem_tracker() { return _mem_tracker; }
+    MemTracker* metadata_mem_tracker() { return _mem_tracker; }
 
     // return true if all tablets visited
     bool get_next_batch_tablets(size_t batch_size, std::vector<TabletSharedPtr>* tablets);

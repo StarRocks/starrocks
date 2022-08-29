@@ -6,13 +6,13 @@
 
 #include <functional>
 #include <iostream>
+#include <memory>
 
 #include "column/datum_tuple.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/empty_iterator.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"
@@ -30,8 +30,8 @@ namespace starrocks {
 class RowsetUpdateStateTest : public ::testing::Test {
 public:
     void SetUp() override {
-        _compaction_mem_tracker.reset(new MemTracker(-1));
-        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
+        _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
+        _metadata_mem_tracker = std::make_unique<MemTracker>();
     }
 
     void TearDown() override {
@@ -148,7 +148,7 @@ public:
 protected:
     TabletSharedPtr _tablet;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker;
 };
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,

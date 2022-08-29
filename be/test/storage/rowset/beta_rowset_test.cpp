@@ -60,7 +60,7 @@ protected:
     OlapReaderStatistics _stats;
 
     void SetUp() override {
-        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
+        _metadata_mem_tracker = std::make_unique<MemTracker>();
         _schema_change_mem_tracker = std::make_unique<MemTracker>();
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
         config::tablet_map_shard_size = 1;
@@ -78,7 +78,7 @@ protected:
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
-        options.tablet_meta_mem_tracker = _tablet_meta_mem_tracker.get();
+        options.metadata_mem_tracker = _metadata_mem_tracker.get();
         options.schema_change_mem_tracker = _schema_change_mem_tracker.get();
         Status s = starrocks::StorageEngine::open(options, &k_engine);
         ASSERT_TRUE(s.ok()) << s.to_string();
@@ -269,7 +269,7 @@ protected:
     }
 
 private:
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _schema_change_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
 };
@@ -337,7 +337,7 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
     std::string segment_file =
             BetaRowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
 
-    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), seg_options.fs, segment_file, 0, &tablet_schema);
+    auto segment = *Segment::open(_metadata_mem_tracker.get(), seg_options.fs, segment_file, 0, &tablet_schema);
     ASSERT_NE(segment->num_rows(), 0);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
@@ -437,7 +437,7 @@ TEST_F(BetaRowsetTest, FinalMergeVerticalTest) {
     std::string segment_file =
             BetaRowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
     auto segment =
-            *Segment::open(_tablet_meta_mem_tracker.get(), seg_options.fs, segment_file, 0, &tablet->tablet_schema());
+            *Segment::open(_metadata_mem_tracker.get(), seg_options.fs, segment_file, 0, &tablet->tablet_schema());
     ASSERT_NE(segment->num_rows(), 0);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);

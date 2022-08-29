@@ -76,7 +76,7 @@ public:
         column_3->set_is_bf_column(false);
         column_3->set_aggregation("SUM");
 
-        _tablet_schema.reset(new TabletSchema);
+        _tablet_schema = std::make_unique<TabletSchema>();
         _tablet_schema->init_from_pb(tablet_schema_pb);
     }
 
@@ -159,7 +159,7 @@ public:
         }
 
         TabletSharedPtr tablet =
-                Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta,
+                Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta,
                                                 starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0]);
         tablet->init();
 
@@ -183,7 +183,7 @@ public:
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
-        options.tablet_meta_mem_tracker = _tablet_meta_mem_tracker.get();
+        options.metadata_mem_tracker = _metadata_mem_tracker.get();
         options.compaction_mem_tracker = _compaction_mem_tracker.get();
         if (k_engine == nullptr) {
             Status s = starrocks::StorageEngine::open(options, &k_engine);
@@ -196,10 +196,10 @@ public:
         _schema_hash_path = fmt::format("{}/data/0/12345/1111", config::storage_root_path);
         ASSERT_OK(fs::create_directories(_schema_hash_path));
 
-        _tablet_meta_mem_tracker.reset(new MemTracker(-1));
-        _mem_pool.reset(new MemPool());
+        _metadata_mem_tracker = std::make_unique<MemTracker>(-1);
+        _mem_pool = std::make_unique<MemPool>();
 
-        _compaction_mem_tracker.reset(new MemTracker(-1));
+        _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
     }
 
     void TearDown() override {
@@ -212,14 +212,14 @@ protected:
     std::unique_ptr<TabletSchema> _tablet_schema;
     RowsetTypePB _rowset_type = BETA_ROWSET;
     std::string _schema_hash_path;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
 };
 
 TEST_F(CumulativeCompactionTest, test_init_succeeded) {
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta, nullptr);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta, nullptr);
     CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(cumulative_compaction.compact().ok());
 }
@@ -232,7 +232,7 @@ TEST_F(CumulativeCompactionTest, test_candidate_rowsets_empty) {
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
     tablet_meta->set_tablet_schema(schema);
 
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta, nullptr);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta, nullptr);
     tablet->init();
     CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(cumulative_compaction.compact().ok());
