@@ -518,7 +518,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                     }
                                     pushTask(backend.getId(), tableId, partitionId, indexId, tabletId,
                                             tabletId, schemaHash, params, batchTask, tabletMetaStr,
-                                            backend, new Replica(tableId, backendId, 0, null),
+                                            backend, new Replica(tabletId, backendId, 0, null),
                                             tabletFinishedReplicas, TTabletType.TABLET_TYPE_LAKE);
                                 }
                             }

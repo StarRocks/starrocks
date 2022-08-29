@@ -115,9 +115,9 @@ AgentStatus EngineBatchLoadTask::_init() {
         if (tablet->data_dir()->capacity_limit_reached(_push_req.__isset.http_file_size)) {
             return STARROCKS_DISK_REACH_CAPACITY_LIMIT;
         }
-        DCHECK(!_push_req.__isset.http_file_path);
     }
-
+    
+    DCHECK(!_push_req.__isset.http_file_path);
     _is_init = true;
     return status;
 }
