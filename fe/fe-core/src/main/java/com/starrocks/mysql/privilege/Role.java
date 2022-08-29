@@ -55,6 +55,8 @@ public class Role implements Writable {
     private String roleName;
     private Map<TablePattern, PrivBitSet> tblPatternToPrivs = Maps.newConcurrentMap();
     private Map<ResourcePattern, PrivBitSet> resourcePatternToPrivs = Maps.newConcurrentMap();
+
+    private Set<UserIdentity> impersonateUsers = Sets.newConcurrentHashSet();
     // users which this role
     private Set<UserIdentity> users = Sets.newConcurrentHashSet();
 
@@ -83,6 +85,11 @@ public class Role implements Writable {
         this.resourcePatternToPrivs.put(resourcePattern, resourcePrivs);
     }
 
+    public Role(String roleName, UserIdentity securedUser) {
+        this.roleName = roleName;
+        this.impersonateUsers.add(securedUser);
+    }
+
     public String getRoleName() {
         return roleName;
     }
@@ -97,6 +104,10 @@ public class Role implements Writable {
 
     public Set<UserIdentity> getUsers() {
         return users;
+    }
+
+    public Set<UserIdentity> getImpersonateUsers() {
+        return impersonateUsers;
     }
 
     public void merge(Role other) {
@@ -117,6 +128,7 @@ public class Role implements Writable {
                 resourcePatternToPrivs.put(entry.getKey(), entry.getValue());
             }
         }
+        this.impersonateUsers.addAll(other.impersonateUsers);
     }
 
     public void addUser(UserIdentity userIdent) {

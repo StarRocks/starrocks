@@ -773,24 +773,40 @@ public class Auth implements Writable {
     }
 
     public void grantImpersonate(GrantImpersonateStmt stmt) throws DdlException {
-        grantImpersonateInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
+        if (stmt.getAuthorizedUser() != null) {
+            grantImpersonateToUserInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
+        } else {
+            grantImpersonateToRoleInternal(stmt.getAuthorizedRoleName(), stmt.getSecuredUser(), false);
+        }
     }
 
     public void replayGrantImpersonate(ImpersonatePrivInfo info) {
         try {
-            grantImpersonateInternal(info.getAuthorizedUser(), info.getSecuredUser(), true);
+            if (info.getAuthorizedUser() != null) {
+                grantImpersonateToUserInternal(info.getAuthorizedUser(), info.getSecuredUser(), true);
+            } else {
+                grantImpersonateToRoleInternal(info.getAuthorizedRoleName(), info.getSecuredUser(), true);
+            }
         } catch (DdlException e) {
             LOG.error("should not happend", e);
         }
     }
 
     public void revokeImpersonate(RevokeImpersonateStmt stmt) throws DdlException {
-        revokeImpersonateInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
+        if (stmt.getAuthorizedUser() != null) {
+            revokeImpersonateFromUserInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
+        } else {
+            revokeImpersonateFromRoleInternal(stmt.getAuthorizedRoleName(), stmt.getSecuredUser(), false);
+        }
     }
 
     public void replayRevokeImpersonate(ImpersonatePrivInfo info) {
         try {
-            revokeImpersonateInternal(info.getAuthorizedUser(), info.getSecuredUser(), true);
+            if (info.getAuthorizedUser() != null) {
+                revokeImpersonateFromUserInternal(info.getAuthorizedUser(), info.getSecuredUser(), true);
+            } else {
+                revokeImpersonateFromRoleInternal(info.getAuthorizedRoleName(), info.getSecuredUser(), true);
+            }
         } catch (DdlException e) {
             LOG.error("should not happend", e);
         }
@@ -954,7 +970,7 @@ public class Auth implements Writable {
         }
     }
 
-    private void grantImpersonateInternal(
+    private void grantImpersonateToUserInternal(
             UserIdentity authorizedUser, UserIdentity securedUser, boolean isReplay) throws DdlException {
         writeLock();
         try {
@@ -974,7 +990,28 @@ public class Auth implements Writable {
         }
     }
 
+    private void grantImpersonateToRoleInternal(
+            String authorizedRoleName, UserIdentity securedUser, boolean isReplay) throws DdlException {
+        writeLock();
+        try {
+            // grant privs to role, role must exist
+            Role newRole = new Role(authorizedRoleName, securedUser);
+            Role existingRole = roleManager.addRole(newRole, false /* err on exist */);
 
+            // update users' privs of this role
+            for (UserIdentity user : existingRole.getUsers()) {
+                grantImpersonateToUserInternal(user, securedUser, isReplay);
+            }
+
+            if (!isReplay) {
+                ImpersonatePrivInfo info = new ImpersonatePrivInfo(authorizedRoleName, securedUser);
+                GlobalStateMgr.getCurrentState().getEditLog().logGrantImpersonate(info);
+            }
+            LOG.debug("finished to grant impersonate to role. is replay: {}", isReplay);
+        } finally {
+            writeUnlock();
+        }
+    }
 
     // return true if user ident exist
     private boolean doesUserExist(UserIdentity userIdent) {
@@ -1105,7 +1142,7 @@ public class Auth implements Writable {
         }
     }
 
-    private void revokeImpersonateInternal(
+    private void revokeImpersonateFromUserInternal(
             UserIdentity authorizedUser, UserIdentity securedUser, boolean isReplay) throws DdlException {
         writeLock();
         try {
@@ -1120,6 +1157,29 @@ public class Auth implements Writable {
             LOG.debug("finished to revoke impersonate. is replay: {}", isReplay);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    private void revokeImpersonateFromRoleInternal(
+            String authorizedRoleName, UserIdentity securedUser, boolean isReplay) throws DdlException {
+        writeLock();
+        try {
+            // revoke privs from role, role must exist
+            Role existingRole = roleManager.revokePrivs(authorizedRoleName, securedUser);
+
+            // revoke privs from users of this role
+            for (UserIdentity user : existingRole.getUsers()) {
+                revokeImpersonateFromUserInternal(user, securedUser, isReplay);
+            }
+
+            if (!isReplay) {
+                ImpersonatePrivInfo info = new ImpersonatePrivInfo(authorizedRoleName, securedUser);
+                GlobalStateMgr.getCurrentState().getEditLog().logRevokeImpersonate(info);
+            }
+            LOG.debug("finished to revoke impersonate from role. is replay: {}", isReplay);
+
         } finally {
             writeUnlock();
         }

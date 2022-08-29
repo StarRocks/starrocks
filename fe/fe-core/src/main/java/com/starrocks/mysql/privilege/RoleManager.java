@@ -124,6 +124,15 @@ public class RoleManager implements Writable {
         return existingRole;
     }
 
+    public Role revokePrivs(String role, UserIdentity securedUser) throws DdlException {
+        Role existingRole = roles.get(role);
+        if (existingRole == null) {
+            throw new DdlException("Role " + role + " does not exist");
+        }
+        existingRole.getImpersonateUsers().remove(securedUser);
+        return existingRole;
+    }
+
     public void dropUser(UserIdentity userIdentity) {
         for (Role role : roles.values()) {
             role.dropUser(userIdentity);

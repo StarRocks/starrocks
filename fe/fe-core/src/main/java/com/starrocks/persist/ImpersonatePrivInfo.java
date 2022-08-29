@@ -14,7 +14,9 @@ import java.io.IOException;
 
 public class ImpersonatePrivInfo implements Writable {
     @SerializedName(value = "authorizedUser")
-    private UserIdentity authorizedUser;
+    private UserIdentity authorizedUser = null;
+    @SerializedName(value = "authorizedRoleName")
+    private String authorizedRoleName = null;
     @SerializedName(value = "securedUser")
     private UserIdentity securedUser;
 
@@ -28,6 +30,11 @@ public class ImpersonatePrivInfo implements Writable {
         this.securedUser = securedUser;
     }
 
+    public ImpersonatePrivInfo(String authorizedRoleName, UserIdentity securedUser) {
+        this.authorizedRoleName = authorizedRoleName;
+        this.securedUser = securedUser;
+    }
+
     public UserIdentity getAuthorizedUser() {
         return authorizedUser;
     }
@@ -35,6 +42,11 @@ public class ImpersonatePrivInfo implements Writable {
     public UserIdentity getSecuredUser() {
         return securedUser;
     }
+
+    public String getAuthorizedRoleName() {
+        return authorizedRoleName;
+    }
+
     public static ImpersonatePrivInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, ImpersonatePrivInfo.class);
