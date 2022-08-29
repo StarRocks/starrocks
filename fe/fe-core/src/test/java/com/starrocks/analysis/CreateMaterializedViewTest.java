@@ -995,5 +995,17 @@ public class CreateMaterializedViewTest {
                     "Do not support alter non-OLAP table[v1]");
         }
     }
+
+    @Test
+    public void createViewBadName() {
+        String longLongName = "view___123456789012345678901234567890123456789012345678901234567890";
+        String sql = "create view db1." + longLongName + " as select 1,2,3";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.fail(); // should raise Exception
+        } catch (Exception e) {
+            Assert.assertEquals("Incorrect table name '" + longLongName + "'", e.getMessage());
+        }
+    }
 }
 
