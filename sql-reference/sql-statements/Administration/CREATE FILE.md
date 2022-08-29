@@ -10,7 +10,6 @@ CREATE FILE 语句用于创建文件。文件创建后会自动上传并持久�
 
 ```SQL
 CREATE FILE "file_name" [IN database]
-
 [properties]
 ```
 
@@ -22,7 +21,7 @@ CREATE FILE "file_name" [IN database]
 | database   | 否       | 文件所属的数据库。如果没有指定该参数，则使用当前会话的数据库。 |
 | properties | 是       | 文件属性，具体配置项见下表：`properties` 配置项。            |
 
-`**properties**` **配置项**
+**properties** **配置项**
 
 | **配置项** | **必填** | **描述**                                                     |
 | ---------- | -------- | ------------------------------------------------------------ |
@@ -36,15 +35,10 @@ CREATE FILE "file_name" [IN database]
 
 ```SQL
 CREATE FILE "test.pem"
-
 PROPERTIES
-
 (
-
     "url" = "http://starrocks-public.oss-cn-xxxx.aliyuncs.com/key/test.pem",
-
     "catalog" = "kafka"
-
 );
 ```
 
@@ -52,16 +46,10 @@ PROPERTIES
 
 ```SQL
 CREATE FILE "client.key"
-
 IN my_database
-
 PROPERTIES
-
 (
-
     "url" = "http://test.bj.bcebos.com/kafka-key/client.key",
-
     "catalog" = "my_catalog",
-
 );
 ```
