@@ -229,7 +229,8 @@ public class StatisticUtils {
                     return Optional.of(Double.parseDouble(statistic));
             }
         } catch (Exception e) {
-            LOG.warn("Statistic convert error, type" + type.toSql() + ", statistic " + statistic + ", " + e.getMessage());
+            LOG.warn(String.format("Statistic convert error, type %s, statistic %s, %s",
+                    type.toSql(), statistic, e.getMessage()));
             return Optional.empty();
         }
     }
