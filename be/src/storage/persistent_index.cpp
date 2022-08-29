@@ -565,11 +565,6 @@ Status ImmutableIndexWriter::finish() {
             _total_kv_size * 1000 / std::max(_total_bytes, 1UL) / 1000.0);
     _version.to_pb(_meta.mutable_version());
     _meta.set_size(_total);
-    //TODO(zhangqiang)
-    // fixed_key_size and fixed_value_size should be delete
-    // And format version should be set to 2
-    _meta.set_fixed_key_size(_cur_key_size);
-    _meta.set_fixed_value_size(_cur_value_size);
     _meta.set_format_version(PERSISTENT_INDEX_VERSION_2);
     for (const auto& [key_size, shard_info] : _shard_info_by_length) {
         const auto [shard_offset, shard_num] = shard_info;
@@ -2202,8 +2197,6 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
     std::unique_ptr<ImmutableIndex> idx = std::make_unique<ImmutableIndex>();
     idx->_version = EditVersion(meta.version());
     idx->_size = meta.size();
-    idx->_fixed_key_size = meta.fixed_key_size();
-    idx->_fixed_value_size = meta.fixed_value_size();
     size_t nshard = meta.shards_size();
     idx->_shards.resize(nshard);
     for (size_t i = 0; i < nshard; i++) {
@@ -2429,14 +2422,41 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         // so we can load persistent index according to PersistentIndexMetaPB
         EditVersion version = index_meta.version();
         if (version == lastest_applied_version) {
-            status = load(index_meta);
-            LOG(INFO) << "load persistent index tablet:" << tablet->tablet_id() << " version:" << version.to_string()
-                      << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
-                      << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
-                      << " #shard: " << (_l1 ? _l1->_shards.size() : 0) << " l1_size:" << (_l1 ? _l1->_size : 0)
-                      << " memory: " << memory_usage() << " status: " << status.to_string()
-                      << " time:" << timer.elapsed_time() / 1000000 << "ms";
-            return status;
+            // If format version is not equal to PERSISTENT_INDEX_VERSION_2, this maybe upgrade from
+            // PERSISTENT_INDEX_VERSION_2.
+            // We need to rebuild persistent index because the meta structure is changed
+            if (index_meta.format_version() != PERSISTENT_INDEX_VERSION_2) {
+                LOG(WARNING) << "different format version, we need to rebuild persistent index";
+                status = Status::InternalError("different format version");
+            } else {
+                status = load(index_meta);
+            }
+            if (status.ok()) {
+                LOG(INFO) << "load persistent index tablet:" << tablet->tablet_id()
+                          << " version:" << version.to_string() << " size: " << _size
+                          << " l0_size: " << (_l0 ? _l0->size() : 0) << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
+                          << " #shard: " << (_l1 ? _l1->_shards.size() : 0) << " l1_size:" << (_l1 ? _l1->_size : 0)
+                          << " memory: " << memory_usage() << " status: " << status.to_string()
+                          << " time:" << timer.elapsed_time() / 1000000 << "ms";
+                return status;
+            } else {
+                LOG(WARNING) << "load persistent index failed, tablet: " << tablet->tablet_id()
+                             << ", status: " << status;
+                if (index_meta.has_l0_meta()) {
+                    EditVersion l0_version = index_meta.l0_meta().snapshot().version();
+                    std::string l0_file_name =
+                            strings::Substitute("index.l0.$0.$1", l0_version.major(), l0_version.minor());
+                    Status st = FileSystem::Default()->delete_file(l0_file_name);
+                    LOG(WARNING) << "delete error l0 index file: " << l0_file_name << ", status: " << st;
+                }
+                if (index_meta.has_l1_version()) {
+                    EditVersion l1_version = index_meta.l1_version();
+                    std::string l1_file_name =
+                            strings::Substitute("index.l1.$0.$1", l1_version.major(), l1_version.minor());
+                    Status st = FileSystem::Default()->delete_file(l1_file_name);
+                    LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
+                }
+            }
         }
     }
 
@@ -2447,10 +2467,6 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     }
     auto pkey_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, pk_columns);
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
-    if (fix_size == 0) {
-        LOG(WARNING) << "Build persistent index failed because get key cloumn size failed";
-        return Status::InternalError("get key column size failed");
-    }
 
     // Init PersistentIndex
     _key_size = fix_size;
@@ -2473,6 +2489,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     //   3. reset SnapshotMeta
     //   4. write all data into new tmp _l0 index file (tmp file will be delete in _build_commit())
     index_meta.set_key_size(_key_size);
+    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_2);
     lastest_applied_version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
     l0_meta->clear_wals();
@@ -2554,6 +2571,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     if (_flushed) {
         // update PersistentIndexMetaPB
         index_meta->set_size(_size);
+        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
         _version.to_pb(index_meta->mutable_version());
         _version.to_pb(index_meta->mutable_l1_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
@@ -2562,11 +2580,13 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         RETURN_IF_ERROR(_reload(*index_meta));
     } else if (_dump_snapshot) {
         index_meta->set_size(_size);
+        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kSnapshot));
     } else {
         index_meta->set_size(_size);
+        index_meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kAppendWAL));
