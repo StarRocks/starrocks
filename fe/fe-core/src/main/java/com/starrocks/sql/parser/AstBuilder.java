@@ -1577,7 +1577,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         QueryStatement queryStatement;
         if (context.VALUES() != null) {
-            List<ValueList> rowValues = visit(context.expressionsWithDefault(), ValueList.class);
+            List<ValueList> rowValues = visit(context.insertValueExpressionsWithDefault(), ValueList.class);
             List<ArrayList<Expr>> rows = rowValues.stream().map(ValueList::getRow).collect(toList());
 
             List<String> colNames = new ArrayList<>();
@@ -3061,12 +3061,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitExpressionsWithDefault(StarRocksParser.ExpressionsWithDefaultContext context) {
+    public ParseNode visitInsertValueExpressionsWithDefault(StarRocksParser.InsertValueExpressionsWithDefaultContext context) {
         ArrayList<Expr> row = Lists.newArrayList();
-        for (int i = 0; i < context.expressionOrDefault().size(); ++i) {
-            row.add((Expr) visit(context.expressionOrDefault(i)));
+        for (int i = 0; i < context.insertValueExpressionOrDefault().size(); ++i) {
+            row.add((Expr) visit(context.insertValueExpressionOrDefault(i)));
         }
         return new ValueList(row);
+    }
+
+    @Override
+    public ParseNode visitInsertValueExpressionOrDefault(StarRocksParser.InsertValueExpressionOrDefaultContext context) {
+        if (context.DEFAULT() != null) {
+            return new DefaultValueExpr();
+        } else {
+            return visit(context.colValueExpression());
+        }
     }
 
     @Override
@@ -3232,7 +3241,49 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitInsertArithmeticUnary(StarRocksParser.InsertArithmeticUnaryContext context) {
+        Expr child = (Expr) visit(context.colValueExpression());
+        switch (context.operator.getType()) {
+            case StarRocksLexer.MINUS_SYMBOL:
+                if (child.isLiteral() && child.getType().isNumericType()) {
+                    try {
+                        ((LiteralExpr) child).swapSign();
+                    } catch (NotImplementedException e) {
+                        throw new ParsingException(e.getMessage());
+                    }
+                    return child;
+                } else {
+                    return new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, new IntLiteral(-1), child);
+                }
+            case StarRocksLexer.PLUS_SYMBOL:
+                return child;
+            default:
+                throw new UnsupportedOperationException("Unsupported sign for insert values clause. sign: " + context.operator.getText());
+        }
+    }
+
+
+    @Override
     public ParseNode visitArithmeticBinary(StarRocksParser.ArithmeticBinaryContext context) {
+        Expr left = (Expr) visit(context.left);
+        Expr right = (Expr) visit(context.right);
+        if (left instanceof IntervalLiteral) {
+            return new TimestampArithmeticExpr(getArithmeticBinaryOperator(context.operator), right,
+                    ((IntervalLiteral) left).getValue(),
+                    ((IntervalLiteral) left).getUnitIdentifier().getDescription(), true);
+        }
+
+        if (right instanceof IntervalLiteral) {
+            return new TimestampArithmeticExpr(getArithmeticBinaryOperator(context.operator), left,
+                    ((IntervalLiteral) right).getValue(),
+                    ((IntervalLiteral) right).getUnitIdentifier().getDescription(), false);
+        }
+
+        return new ArithmeticExpr(getArithmeticBinaryOperator(context.operator), left, right);
+    }
+
+    @Override
+    public ParseNode visitInsertArithmeticBinary(StarRocksParser.InsertArithmeticBinaryContext context) {
         Expr left = (Expr) visit(context.left);
         Expr right = (Expr) visit(context.right);
         if (left instanceof IntervalLiteral) {
@@ -3332,6 +3383,31 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitInsertSimpleFunctionCall(StarRocksParser.InsertSimpleFunctionCallContext context) {
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        if (DATE_FUNCTIONS.contains(functionName)) {
+            if (context.colValueExpression().size() != 2) {
+                throw new ParsingException(
+                        functionName + " must as format " + functionName + "(date,INTERVAL expr unit)");
+            }
+
+            Expr e1 = (Expr) visit(context.colValueExpression(0));
+            Expr e2 = (Expr) visit(context.colValueExpression(1));
+            if (!(e2 instanceof IntervalLiteral)) {
+                e2 = new IntervalLiteral(e2, new UnitIdentifier("DAY"));
+            }
+            IntervalLiteral intervalLiteral = (IntervalLiteral) e2;
+
+            return new TimestampArithmeticExpr(functionName, e1, intervalLiteral.getValue(),
+                    intervalLiteral.getUnitIdentifier().getDescription());
+        }
+        FunctionName fnName = FunctionName.createFnName(functionName);
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
+                new FunctionParams(false, visit(context.colValueExpression(), Expr.class)));
+        return functionCallExpr;
+    }
+
+    @Override
     public ParseNode visitAggregationFunctionCall(StarRocksParser.AggregationFunctionCallContext context) {
 
         String functionName;
@@ -3402,6 +3478,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCast(StarRocksParser.CastContext context) {
         return new CastExpr(new TypeDef(getType(context.type())), (Expr) visit(context.expression()));
+    }
+
+    @Override
+    public ParseNode visitInsertCast(StarRocksParser.InsertCastContext context) {
+        return new CastExpr(new TypeDef(getType(context.type())), (Expr) visit(context.colValueExpression()));
     }
 
     @Override
@@ -3483,6 +3564,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitInsertNullLiteral(StarRocksParser.InsertNullLiteralContext context) {
+        return new NullLiteral();
+    }
+
+    @Override
     public ParseNode visitBooleanLiteral(StarRocksParser.BooleanLiteralContext context) {
         try {
             return new BoolLiteral(context.getText());
@@ -3492,7 +3578,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitInsertBooleanLiteral(StarRocksParser.InsertBooleanLiteralContext context) {
+        try {
+            return new BoolLiteral(context.getText());
+        } catch (AnalysisException e) {
+            throw new ParsingException("Invalid boolean literal in insert value clause. literal: " + context.getText());
+        }
+    }
+
+
+    @Override
     public ParseNode visitNumericLiteral(StarRocksParser.NumericLiteralContext context) {
+        return visit(context.number());
+    }
+
+    @Override
+    public ParseNode visitInsertNumericLiteral(StarRocksParser.InsertNumericLiteralContext context) {
         return visit(context.number());
     }
 
@@ -3570,6 +3671,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitInsertDateLiteral(StarRocksParser.InsertDateLiteralContext context) {
+        String value = ((StringLiteral) visit(context.string())).getValue();
+        try {
+            if (context.DATE() != null) {
+                return new DateLiteral(value, Type.DATE);
+            }
+            if (context.DATETIME() != null) {
+                return new DateLiteral(value, Type.DATETIME);
+            }
+        } catch (AnalysisException e) {
+            throw new ParsingException(e.getMessage());
+        }
+        throw new ParsingException("Parse date value error. Unknown type: " + context.getText());
+    }
+
+    @Override
     public ParseNode visitString(StarRocksParser.StringContext context) {
         String quotedString;
         if (context.SINGLE_QUOTED_TEXT() != null) {
@@ -3637,6 +3754,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new ArrayExpr(null, visit(context.expression(), Expr.class));
+    }
+
+    @Override
+    public ParseNode visitInsertArrayConstructor(StarRocksParser.InsertArrayConstructorContext context) {
+        if (context.arrayType() != null) {
+            return new ArrayExpr(
+                    new ArrayType(getType(context.arrayType().type())),
+                    visit(context.colValueExpression(), Expr.class));
+        }
+
+        return new ArrayExpr(null, visit(context.colValueExpression(), Expr.class));
     }
 
     @Override

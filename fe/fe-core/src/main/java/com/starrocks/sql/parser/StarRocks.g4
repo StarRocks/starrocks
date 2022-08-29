@@ -637,7 +637,7 @@ modifyBrokerClause
 insertStatement
     : explainDesc? INSERT (INTO | OVERWRITE) qualifiedName partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
-        (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
+        (queryStatement | (VALUES insertValueExpressionsWithDefault (',' insertValueExpressionsWithDefault)*))
     ;
 
 updateStatement
@@ -1114,8 +1114,36 @@ showBackupStatement
  * = (assignment)
  */
 
-expressionsWithDefault
-    : '(' expressionOrDefault (',' expressionOrDefault)* ')'
+insertValueExpressionsWithDefault
+    : '(' insertValueExpressionOrDefault (',' insertValueExpressionOrDefault)* ')'
+    ;
+
+insertValueExpressionOrDefault
+    : DEFAULT
+    | colValueExpression
+    ;
+
+colValueExpression
+    : '(' colValueExpression ')'                                                         #insertParenthesizedExpression
+    | CAST '(' colValueExpression AS type ')'                                            #insertCast
+    | qualifiedName '(' (colValueExpression (',' colValueExpression)*)? ')'              #insertSimpleFunctionCall
+    | operator = (MINUS_SYMBOL | PLUS_SYMBOL) colValueExpression                         #insertArithmeticUnary
+    | left = colValueExpression operator = (
+              ASTERISK_SYMBOL
+            | SLASH_SYMBOL
+            | PERCENT_SYMBOL
+            | INT_DIV
+            | MOD)
+      right = colValueExpression                                                         #insertArithmeticBinary
+    | left = colValueExpression operator = (PLUS_SYMBOL | MINUS_SYMBOL)
+        right = colValueExpression                                                       #insertArithmeticBinary
+    | arrayType? '[' (colValueExpression (',' colValueExpression)*)? ']'                 #insertArrayConstructor
+    | NULL                                                                               #insertNullLiteral
+    | booleanValue                                                                       #insertBooleanLiteral
+    | number                                                                             #insertNumericLiteral
+    | (DATE | DATETIME) string                                                           #insertDateLiteral
+    | string                                                                             #insertStringLiteral
+    | interval                                                                           #insertIntervalLiteral
     ;
 
 expressionOrDefault
@@ -1464,7 +1492,7 @@ baseType
     | BITMAP
     | HLL
     | PERCENTILE
-    | JSON
+    | ARROW
     ;
 
 decimalType
