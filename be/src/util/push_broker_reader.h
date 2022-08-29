@@ -2,16 +2,16 @@
 
 #pragma once
 
+#include "column/column_builder.h"
+#include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "common/statusor.h"
 #include "exec/vectorized/file_scanner.h"
+#include "exec/vectorized/parquet_scanner.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/MasterService_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "exec/vectorized/parquet_scanner.h"
-#include "column/column_builder.h"
-#include "column/column_helper.h"
-#include "column/column_viewer.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::vectorized {

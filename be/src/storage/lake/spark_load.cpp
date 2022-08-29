@@ -4,9 +4,9 @@
 
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_writer.h"
-#include "util/push_broker_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
+#include "util/push_broker_reader.h"
 
 namespace starrocks::lake {
 

@@ -2,7 +2,6 @@
 
 #include "util/push_broker_reader.h"
 
-
 namespace starrocks::vectorized {
 
 PushBrokerReader::~PushBrokerReader() {
