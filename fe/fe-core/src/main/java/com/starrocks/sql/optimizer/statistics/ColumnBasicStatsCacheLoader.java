@@ -58,7 +58,7 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
     public CompletableFuture<Map<@NonNull ColumnStatsCacheKey, @NonNull Optional<ColumnStatistic>>> asyncLoadAll(
             @NonNull Iterable<? extends @NonNull ColumnStatsCacheKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
-            Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
+
             try {
                 long tableId = -1;
                 List<String> columns = new ArrayList<>();
@@ -67,18 +67,17 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                     columns.add(key.column);
                 }
                 List<TStatisticData> statisticData = queryStatisticsData(tableId, columns);
-                // check TStatisticData is not empty, There may be no such column Statistics in BE
-                if (!statisticData.isEmpty()) {
-                    for (TStatisticData data : statisticData) {
-                        ColumnStatistic columnStatistic = convert2ColumnStatistics(data);
-                        result.put(new ColumnStatsCacheKey(data.tableId, data.columnName),
-                                Optional.of(columnStatistic));
-                    }
-                } else {
-                    // put null for cache key which can't get TStatisticData from BE
-                    for (ColumnStatsCacheKey cacheKey : keys) {
-                        result.put(cacheKey, Optional.empty());
-                    }
+                Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
+                // There may be no statistics for the column in BE
+                // Complete the list of statistics information, otherwise the columns without statistics may be called repeatedly
+                for (ColumnStatsCacheKey cacheKey : keys) {
+                    result.put(cacheKey, Optional.empty());
+                }
+
+                for (TStatisticData data : statisticData) {
+                    ColumnStatistic columnStatistic = convert2ColumnStatistics(data);
+                    result.put(new ColumnStatsCacheKey(data.tableId, data.columnName),
+                            Optional.of(columnStatistic));
                 }
                 return result;
             } catch (RuntimeException e) {
