@@ -479,10 +479,10 @@ public class SparkLoadJob extends BulkLoadJob {
                                         indexId, bucket++, schemaHash);
 
                                 Set<Long> tabletFinishedReplicas = Sets.newHashSet();
+                                Set<Long> tabletAllReplicas = Sets.newHashSet();
                                 PushBrokerReaderParams params = getPushBrokerReaderParams(table, indexId);
 
                                 if (tablet instanceof LocalTablet) {
-                                    Set<Long> tabletAllReplicas = Sets.newHashSet();
                                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                         long replicaId = replica.getId();
                                         tabletAllReplicas.add(replicaId);
@@ -499,14 +499,6 @@ public class SparkLoadJob extends BulkLoadJob {
                                         LOG.error("invalid situation. tablet is empty. id: {}", tabletId);
                                     }
 
-                                    // check tablet push states
-                                    if (tabletFinishedReplicas.size() >= quorumReplicaNum) {
-                                        quorumTablets.add(tabletId);
-                                        if (tabletFinishedReplicas.size() == tabletAllReplicas.size()) {
-                                            fullTablets.add(tabletId);
-                                        }
-                                    }
-
                                 } else {
                                     // lake tablet
                                     long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
@@ -516,10 +508,19 @@ public class SparkLoadJob extends BulkLoadJob {
                                         LOG.warn("replica {} not exists", backendId);
                                         continue;
                                     }
+                                    tabletAllReplicas.add(tabletId);
                                     pushTask(backend.getId(), tableId, partitionId, indexId, tabletId,
                                             tabletId, schemaHash, params, batchTask, tabletMetaStr,
                                             backend, new Replica(tabletId, backendId, 0, null),
                                             tabletFinishedReplicas, TTabletType.TABLET_TYPE_LAKE);
+                                }
+
+                                // check tablet push states
+                                if (tabletFinishedReplicas.size() >= quorumReplicaNum) {
+                                    quorumTablets.add(tabletId);
+                                    if (tabletFinishedReplicas.size() == tabletAllReplicas.size()) {
+                                        fullTablets.add(tabletId);
+                                    }
                                 }
                             }
                         }
