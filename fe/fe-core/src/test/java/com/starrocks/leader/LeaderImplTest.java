@@ -7,6 +7,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -19,6 +20,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Set;
+
+import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
 
 public class LeaderImplTest {
 
@@ -81,7 +84,7 @@ public class LeaderImplTest {
             }
         };
 
-        Assert.assertNull(Deencapsulation.invoke(leader, "findRelatedReplica",
+        Assert.assertEquals(new Replica(tabletId, backendId, -1, NORMAL), Deencapsulation.invoke(leader, "findRelatedReplica",
                 olapTable, partition, backendId, tabletId, indexId));
     }
 }
