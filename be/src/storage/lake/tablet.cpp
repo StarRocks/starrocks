@@ -49,5 +49,4 @@ StatusOr<TxnLogPtr> Tablet::get_txn_log(int64_t txn_id) {
 Status Tablet::delete_txn_log(int64_t txn_id) {
     return _mgr->delete_txn_log(_group, _id, txn_id);
 }
-
 } // namespace starrocks::lake

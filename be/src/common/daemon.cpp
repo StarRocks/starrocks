@@ -183,10 +183,10 @@ void calculate_metrics(void* arg_this) {
 
         LOG(INFO) << fmt::format(
                 "Current memory statistics: process({}), query_pool({}), load({}), "
-                "tablet_meta({}), compaction({}), schema_change({}), column_pool({}), "
+                "metadata({}), compaction({}), schema_change({}), column_pool({}), "
                 "page_cache({}), update({}), chunk_allocator({}), clone({}), consistency({})",
                 mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
-                mem_metrics->load_mem_bytes.value(), mem_metrics->tablet_meta_mem_bytes.value(),
+                mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
                 mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
                 mem_metrics->column_pool_mem_bytes.value(), mem_metrics->storage_page_cache_mem_bytes.value(),
                 mem_metrics->update_mem_bytes.value(), mem_metrics->chunk_allocator_mem_bytes.value(),

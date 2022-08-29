@@ -203,7 +203,7 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("process_mem_bytes", &_memory_metrics->process_mem_bytes);
     registry->register_metric("query_mem_bytes", &_memory_metrics->query_mem_bytes);
     registry->register_metric("load_mem_bytes", &_memory_metrics->load_mem_bytes);
-    registry->register_metric("tablet_meta_mem_bytes", &_memory_metrics->tablet_meta_mem_bytes);
+    registry->register_metric("metadata_mem_bytes", &_memory_metrics->metadata_mem_bytes);
     registry->register_metric("compaction_mem_bytes", &_memory_metrics->compaction_mem_bytes);
     registry->register_metric("schema_change_mem_bytes", &_memory_metrics->schema_change_mem_bytes);
     registry->register_metric("column_pool_mem_bytes", &_memory_metrics->column_pool_mem_bytes);
@@ -266,9 +266,8 @@ void SystemMetrics::_update_memory_metrics() {
     if (ExecEnv::GetInstance()->load_mem_tracker() != nullptr) {
         _memory_metrics->load_mem_bytes.set_value(ExecEnv::GetInstance()->load_mem_tracker()->consumption());
     }
-    if (ExecEnv::GetInstance()->tablet_meta_mem_tracker() != nullptr) {
-        _memory_metrics->tablet_meta_mem_bytes.set_value(
-                ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consumption());
+    if (ExecEnv::GetInstance()->metadata_mem_tracker() != nullptr) {
+        _memory_metrics->metadata_mem_bytes.set_value(ExecEnv::GetInstance()->metadata_mem_tracker()->consumption());
     }
     if (ExecEnv::GetInstance()->compaction_mem_tracker() != nullptr) {
         _memory_metrics->compaction_mem_bytes.set_value(
