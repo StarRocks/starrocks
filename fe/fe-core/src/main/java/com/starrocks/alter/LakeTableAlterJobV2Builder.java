@@ -4,6 +4,7 @@ package com.starrocks.alter;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.staros.proto.CacheInfo;
 import com.staros.proto.ShardStorageInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
@@ -14,6 +15,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 
@@ -50,12 +52,22 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             // create SHADOW index for each partition
             for (Partition partition : table.getPartitions()) {
                 long partitionId = partition.getId();
-                TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
+
+                // Get cache properties of this partition.
+                StorageCacheInfo partitionCacheInfo = table.getPartitionInfo().getStorageInfo(partitionId).getStorageCacheInfo();
+                CacheInfo cacheInfo = CacheInfo.newBuilder()
+                        .setEnableCache(partitionCacheInfo.isEnableCache())
+                        .setTtlSeconds(partitionCacheInfo.getCacheTtlS())
+                        .setAllowAsyncWriteBack(partitionCacheInfo.isAllowAsyncWriteBack())
+                        .build();
+                ShardStorageInfo shardStorageInfo = ShardStorageInfo.newBuilder(table.getShardStorageInfo())
+                        .setCacheInfo(cacheInfo).build();
 
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
-                List<Long> shadowTabletIds = createShards(originTablets.size(), table.getShardStorageInfo());
+                List<Long> shadowTabletIds = createShards(originTablets.size(), shardStorageInfo);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
+                TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
                 TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId, 0, medium, true);
                 MaterializedIndex shadowIndex = new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW);
                 for (int i = 0; i < originTablets.size(); i++) {
