@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <memory>
 #include <string>
 #include <thread>
 
@@ -288,8 +289,8 @@ public:
     }
 
     void SetUp() override {
-        _compaction_mem_tracker.reset(new MemTracker(-1));
-        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
+        _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
+        _metadata_mem_tracker = std::make_unique<MemTracker>();
     }
 
     void TearDown() override {
@@ -409,7 +410,7 @@ protected:
     TabletSharedPtr _tablet;
     TabletSharedPtr _tablet2;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker;
 };
 
 static TabletSharedPtr load_same_tablet_from_store(MemTracker* mem_tracker, const TabletSharedPtr& tablet) {
@@ -688,7 +689,7 @@ TEST_F(TabletUpdatesTest, noncontinous_meta_save_load) {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     _tablet->save_meta();
 
-    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
+    auto tablet1 = load_same_tablet_from_store(_metadata_mem_tracker.get(), _tablet);
 
     ASSERT_EQ(2, tablet1->updates()->num_pending());
     ASSERT_EQ(2, tablet1->updates()->max_version());
@@ -717,7 +718,7 @@ TEST_F(TabletUpdatesTest, save_meta) {
 
     _tablet->save_meta();
 
-    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
+    auto tablet1 = load_same_tablet_from_store(_metadata_mem_tracker.get(), _tablet);
     ASSERT_EQ(31, tablet1->updates()->version_history_count());
     ASSERT_EQ(31, tablet1->updates()->max_version());
 
@@ -786,7 +787,7 @@ TEST_F(TabletUpdatesTest, remove_expired_versions) {
     EXPECT_EQ(-1, read_tablet(_tablet, 2));
     EXPECT_EQ(-1, read_tablet(_tablet, 1));
 
-    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
+    auto tablet1 = load_same_tablet_from_store(_metadata_mem_tracker.get(), _tablet);
     EXPECT_EQ(1, tablet1->updates()->version_history_count());
     EXPECT_EQ(4, tablet1->updates()->max_version());
     EXPECT_EQ(N, read_tablet(tablet1, 4));
@@ -824,7 +825,7 @@ TEST_F(TabletUpdatesTest, apply) {
 
     // Ensure the persistent meta is correct.
     auto max_version = rowsets.size() + 1;
-    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
+    auto tablet1 = load_same_tablet_from_store(_metadata_mem_tracker.get(), _tablet);
     EXPECT_EQ(max_version, tablet1->updates()->max_version());
     EXPECT_EQ(max_version, tablet1->updates()->version_history_count());
     for (int i = 2; i <= max_version; i++) {
@@ -896,7 +897,7 @@ TEST_F(TabletUpdatesTest, concurrent_write_read_and_gc) {
     EXPECT_EQ(version.load(), _tablet->updates()->max_version());
 
     // Ensure the persistent meta is correct.
-    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
+    auto tablet1 = load_same_tablet_from_store(_metadata_mem_tracker.get(), _tablet);
     EXPECT_EQ(1, tablet1->updates()->version_history_count());
     EXPECT_EQ(version.load(), tablet1->updates()->max_version());
     EXPECT_EQ(N, read_tablet(tablet1, version.load()));
@@ -1191,7 +1192,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental) {
     ASSERT_EQ(6, tablet1->updates()->version_history_count());
     EXPECT_EQ(10, read_tablet(tablet1, 6));
 
-    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
+    auto tablet2 = load_same_tablet_from_store(_metadata_mem_tracker.get(), tablet1);
     ASSERT_EQ(6, tablet2->updates()->max_version());
     ASSERT_EQ(6, tablet2->updates()->version_history_count());
     EXPECT_EQ(10, read_tablet(tablet2, 6));
@@ -1255,7 +1256,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_ignore_already_committed_ver
     ASSERT_EQ(6, tablet1->updates()->version_history_count());
     EXPECT_EQ(10, read_tablet(tablet1, 6));
 
-    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
+    auto tablet2 = load_same_tablet_from_store(_metadata_mem_tracker.get(), tablet1);
     ASSERT_EQ(6, tablet2->updates()->max_version());
     ASSERT_EQ(6, tablet2->updates()->version_history_count());
     EXPECT_EQ(10, read_tablet(tablet2, 6));
@@ -1747,7 +1748,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_full) {
     EXPECT_EQ(keys0.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
 
     // Ensure that the tablet state is valid after process restarted.
-    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
+    auto tablet2 = load_same_tablet_from_store(_metadata_mem_tracker.get(), tablet1);
     ASSERT_EQ(11, tablet2->updates()->max_version());
     ASSERT_EQ(1, tablet2->updates()->version_history_count());
     EXPECT_EQ(keys0.size(), read_tablet(tablet2, tablet2->updates()->max_version()));
@@ -1807,7 +1808,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_full_file_not_exist) {
     EXPECT_EQ(keys1.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
 
     // Ensure that the persistent meta is still valid.
-    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
+    auto tablet2 = load_same_tablet_from_store(_metadata_mem_tracker.get(), tablet1);
     ASSERT_EQ(3, tablet2->updates()->max_version());
     ASSERT_EQ(3, tablet2->updates()->version_history_count());
     EXPECT_EQ(keys1.size(), read_tablet(tablet2, tablet2->updates()->max_version()));
@@ -1901,7 +1902,7 @@ TEST_F(TabletUpdatesTest, test_issue_4193) {
     EXPECT_EQ(keys0.size() + keys1.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
 
     // Ensure that the tablet state is valid after process restarted.
-    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
+    auto tablet2 = load_same_tablet_from_store(_metadata_mem_tracker.get(), tablet1);
     ASSERT_EQ(13, tablet2->updates()->max_version());
     EXPECT_EQ(keys0.size() + keys1.size(), read_tablet(tablet2, tablet2->updates()->max_version()));
 }
@@ -1944,7 +1945,7 @@ TEST_F(TabletUpdatesTest, test_issue_4181) {
     EXPECT_EQ(keys0.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
 
     // Ensure that the tablet state is valid after process restarted.
-    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
+    auto tablet2 = load_same_tablet_from_store(_metadata_mem_tracker.get(), tablet1);
     ASSERT_EQ(11, tablet2->updates()->max_version());
     EXPECT_EQ(keys0.size(), read_tablet(tablet2, tablet2->updates()->max_version()));
 }
