@@ -62,6 +62,7 @@ public class SqlParser {
         parser.removeParseListeners();
         parser.addParseListener(new TokenNumberListener(sessionVariable.getParseTokensLimit()));
     }
+
     public static List<StatementBase> parse(String originSql, long sqlMode) {
         List<String> splitSql = splitSQL(originSql);
         List<StatementBase> statements = Lists.newArrayList();

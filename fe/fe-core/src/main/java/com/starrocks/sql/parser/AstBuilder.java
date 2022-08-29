@@ -3258,7 +3258,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             case StarRocksLexer.PLUS_SYMBOL:
                 return child;
             default:
-                throw new UnsupportedOperationException("Unsupported sign for insert values clause. sign: " + context.operator.getText());
+                throw new UnsupportedOperationException("Unsupported sign for insert values clause. sign: "
+                        + context.operator.getText());
         }
     }
 

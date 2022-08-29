@@ -51,7 +51,7 @@ public class ParserBench {
         sql = generateSQL();
     }
 
-    @Param({"SLL"})
+    @Param({"SLL", "LL"})
     public String mode;
 
     @Param({"100", "1000", "5000", "10000"})

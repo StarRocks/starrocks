@@ -1492,7 +1492,7 @@ baseType
     | BITMAP
     | HLL
     | PERCENTILE
-    | ARROW
+    | JSON
     ;
 
 decimalType
