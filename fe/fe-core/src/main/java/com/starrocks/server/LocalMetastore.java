@@ -423,7 +423,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 } else {
                     stateMgr.onEraseDatabase(db.getId());
                 }
-                db.setExist(true);
+                db.setExist(false);
             } finally {
                 db.writeUnlock();
             }
