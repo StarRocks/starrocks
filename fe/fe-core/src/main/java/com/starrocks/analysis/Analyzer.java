@@ -256,10 +256,6 @@ public class Analyzer {
             String viewAlias = tableName.getTbl();
             Analyzer analyzer = this;
             do {
-                View localView = analyzer.localViews_.get(viewAlias);
-                if (localView != null) {
-                    return new InlineViewRef(localView, tableRef);
-                }
                 analyzer = (analyzer.ancestors.isEmpty() ? null : analyzer.ancestors.get(0));
             } while (analyzer != null);
         }
@@ -290,12 +286,8 @@ public class Analyzer {
         }
 
         TableName tblName = new TableName(database.getFullName(), table.getName());
-        if (table instanceof View) {
-            return new InlineViewRef((View) table, tableRef);
-        } else {
-            // The table must be a base table.
-            return new BaseTableRef(tableRef, table, tblName);
-        }
+        // The table must be a base table.
+        return new BaseTableRef(tableRef, table, tblName);
     }
 
     public Table getTable(TableName tblName) {

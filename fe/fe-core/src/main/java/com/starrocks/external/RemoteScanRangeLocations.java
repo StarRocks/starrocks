@@ -2,7 +2,9 @@
 
 package com.starrocks.external;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
@@ -14,6 +16,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.external.hive.HdfsFileBlockDesc;
 import com.starrocks.external.hive.HdfsFileDesc;
 import com.starrocks.external.hive.HivePartition;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -29,6 +32,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 public class RemoteScanRangeLocations {
     private static final Logger LOG = LogManager.getLogger(RemoteScanRangeLocations.class);
@@ -162,6 +166,14 @@ public class RemoteScanRangeLocations {
         List<HivePartition> partitions = hiveMetaStoreTable.getPartitions(partitionKeys);
 
         if (table instanceof HiveTable) {
+            Preconditions.checkState(partitions.size() == partitionKeys.size());
+            Map<PartitionKey, HivePartition> partitionMap = Maps.newHashMap();
+            for (int index = 0; index < partitions.size(); ++index) {
+                partitionMap.put(partitionKeys.get(index), partitions.get(index));
+            }
+            ConnectContext.get().getDumpInfo().getHMSTable(hiveMetaStoreTable.getResourceName(),
+                    hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName()).addPartitions(partitionMap);
+
             for (int i = 0; i < partitions.size(); i++) {
                 descTbl.addReferencedPartitions(table, partitionInfos.get(i));
                 for (HdfsFileDesc fileDesc : partitions.get(i).getFiles()) {

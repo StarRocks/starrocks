@@ -212,6 +212,11 @@ public:
         return _total_queued_tasks;
     }
 
+    MonoTime last_active_timestamp() const {
+        std::lock_guard l(_lock);
+        return _last_active_timestamp;
+    }
+
 private:
     friend class ThreadPoolBuilder;
     friend class ThreadPoolToken;
@@ -293,6 +298,9 @@ private:
     //
     // Protected by _lock.
     int _total_queued_tasks;
+
+    // Last task executed timestamp
+    MonoTime _last_active_timestamp;
 
     // All allocated tokens.
     //

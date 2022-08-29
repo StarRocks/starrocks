@@ -185,9 +185,8 @@ public:
             tablet_meta->add_rs_meta(src_rowset->rowset_meta());
         }
 
-        TabletSharedPtr tablet =
-                Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta,
-                                                starrocks::StorageEngine::instance()->get_stores()[0]);
+        TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta,
+                                                                 starrocks::StorageEngine::instance()->get_stores()[0]);
         tablet->init();
         tablet->calculate_cumulative_point();
 

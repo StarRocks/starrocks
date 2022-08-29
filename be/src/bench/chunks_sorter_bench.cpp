@@ -485,9 +485,6 @@ BENCHMARK(BM_fullsort_varchar_column_incr)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_low_card_colinc)->Apply(CustomArgsFull);
 BENCHMARK(BM_fullsort_low_card_nullable)->Apply(CustomArgsFull);
 
-BENCHMARK(BM_heapsort_row_wise)->Apply(CustomArgsFull);
-BENCHMARK(BM_mergesort_row_wise)->Apply(CustomArgsFull);
-
 // TopN sort
 BENCHMARK(BM_topn_limit_heapsort)->Apply(CustomArgsLimit);
 BENCHMARK(BM_topn_limit_mergesort_notnull)->Apply(CustomArgsLimit);

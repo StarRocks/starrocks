@@ -190,6 +190,7 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
@@ -369,6 +370,9 @@ public class LocalMetastore implements ConnectorMetadata {
     public void unprotectCreateDb(Database db) {
         idToDb.put(db.getId(), db);
         fullNameToDb.put(db.getFullName(), db);
+        db.writeLock();
+        db.setExist(true);
+        db.writeUnlock();
         final Cluster cluster = defaultCluster;
         cluster.addDb(db.getFullName(), db.getId());
         stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
@@ -419,6 +423,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 } else {
                     stateMgr.onEraseDatabase(db.getId());
                 }
+                db.setExist(false);
             } finally {
                 db.writeUnlock();
             }
@@ -467,6 +472,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 } else {
                     stateMgr.onEraseDatabase(db.getId());
                 }
+                db.setExist(false);
             } finally {
                 db.writeUnlock();
             }
@@ -508,6 +514,9 @@ public class LocalMetastore implements ConnectorMetadata {
 
             fullNameToDb.put(db.getFullName(), db);
             idToDb.put(db.getId(), db);
+            db.writeLock();
+            db.setExist(true);
+            db.writeUnlock();
             final Cluster cluster = defaultCluster;
             cluster.addDb(db.getFullName(), db.getId());
 
@@ -1698,7 +1707,8 @@ public class LocalMetastore implements ConnectorMetadata {
                         table.getIndexes(),
                         table.getPartitionInfo().getIsInMemory(partition.getId()),
                         table.enablePersistentIndex(),
-                        TTabletType.TABLET_TYPE_LAKE);
+                        TTabletType.TABLET_TYPE_LAKE,
+                        table.getCompressionType());
                 tasks.add(task);
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -1722,7 +1732,8 @@ public class LocalMetastore implements ConnectorMetadata {
                             table.getIndexes(),
                             table.getPartitionInfo().getIsInMemory(partition.getId()),
                             table.enablePersistentIndex(),
-                            table.getPartitionInfo().getTabletType(partition.getId()));
+                            table.getPartitionInfo().getTabletType(partition.getId()),
+                            table.getCompressionType());
                     tasks.add(task);
                 }
             }
@@ -2111,6 +2122,15 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
         olapTable.setStorageFormat(storageFormat);
+
+        // get compression type
+        TCompressionType compressionType = TCompressionType.LZ4_FRAME;
+        try {
+            compressionType = PropertyAnalyzer.analyzeCompressionType(properties);
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+        olapTable.setCompressionType(compressionType);
 
         // a set to record every new tablet created when create table
         // if failed in any step, use this set to do clear things

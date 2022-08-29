@@ -104,6 +104,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.transport.TTransportException;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -153,6 +154,8 @@ public class PseudoBackend {
     private final BlockingQueue<TAgentTaskRequest> taskQueue = Queues.newLinkedBlockingQueue();
     private final Map<TTaskType, Set<Long>> taskSignatures = new EnumMap(TTaskType.class);
     private volatile boolean stopped = false;
+
+    private volatile boolean shutdown = false;
 
     private TreeMap<Long, Runnable> maintenanceTasks = new TreeMap<>(Long::compare);
     private Thread maintenanceWorkerThread;
@@ -335,8 +338,16 @@ public class PseudoBackend {
         addMaintenanceTask(nextScheduleTime(tabletCheckIntervalMs), this::tabletMaintenance);
     }
 
+    public void setShutdown(boolean shutdown) {
+        this.shutdown = shutdown;
+    }
+
     public String getHost() {
         return host;
+    }
+
+    public String getHostHeartbeatPort() {
+        return host + ":" + heartBeatPort;
     }
 
     public long getId() {
@@ -353,6 +364,10 @@ public class PseudoBackend {
 
     public Tablet getTablet(long tabletId) {
         return tabletManager.getTablet(tabletId);
+    }
+
+    public List<Tablet> getTabletsByTable(long tableId) {
+        return tabletManager.getTabletsByTable(tableId);
     }
 
     public void setWriteFailureRate(float rate) {
@@ -377,11 +392,16 @@ public class PseudoBackend {
         request.setTablets(tabletManager.getAllTabletInfo());
         request.setTablet_max_compaction_score(100);
         request.setBackend(tBackend);
+        reportVersion.incrementAndGet();
         request.setReport_version(reportVersion.get());
-        TMasterResult result;
         try {
-            result = frontendService.report(request);
-            LOG.info("report {} tablets", request.tablets.size());
+            if (!shutdown) {
+                TMasterResult result = frontendService.report(request);
+                LOG.info("report {} tablets", request.tablets.size());
+                if (result.status.status_code != TStatusCode.OK) {
+                    LOG.warn("Report tablets failed, status:" + result.status.error_msgs.get(0));
+                }
+            }
         } catch (TException e) {
             LOG.error("report tablets error", e);
         }
@@ -407,10 +427,14 @@ public class PseudoBackend {
         request.setDisks(tdisks);
         request.setBackend(tBackend);
         request.setReport_version(reportVersion.get());
-        TMasterResult result;
         try {
-            result = frontendService.report(request);
-            LOG.info("report {} disks", request.disks.size());
+            if (!shutdown) {
+                TMasterResult result = frontendService.report(request);
+                LOG.info("report {} disks", request.disks.size());
+                if (result.status.status_code != TStatusCode.OK) {
+                    LOG.warn("Report disks failed, status:" + result.status.error_msgs.get(0));
+                }
+            }
         } catch (TException e) {
             LOG.error("report disk error", e);
         }
@@ -432,10 +456,14 @@ public class PseudoBackend {
             }
         }
         request.setTasks(tasks);
-        TMasterResult result;
         try {
-            result = frontendService.report(request);
-            LOG.info("report {} tasks", request.tasks.size());
+            if (!shutdown) {
+                TMasterResult result = frontendService.report(request);
+                LOG.info("report {} tasks", request.tasks.size());
+                if (result.status.status_code != TStatusCode.OK) {
+                    LOG.warn("Report tasks failed, status:" + result.status.error_msgs.get(0));
+                }
+            }
         } catch (TException e) {
             LOG.error("report tasks error", e);
         }
@@ -476,10 +504,6 @@ public class PseudoBackend {
 
     void handleClone(TAgentTaskRequest request, TFinishTaskRequest finish) throws Exception {
         TCloneReq task = request.clone_req;
-        Tablet destTablet = tabletManager.getTablet(task.tablet_id);
-        if (destTablet == null) {
-            throw new Exception("clone failed dest tablet " + task.tablet_id + " on " + be.getId() + " not found");
-        }
         if (task.src_backends.size() != 1) {
             throw new Exception("bad src backends size " + task.src_backends.size());
         }
@@ -495,11 +519,15 @@ public class PseudoBackend {
         if (srcTablet == null) {
             throw new Exception("clone failed src tablet " + task.tablet_id + " on " + srcBackend.be.getId() + " not found");
         }
-        // currently, only incremental clone is supported
-        String oldInfo = destTablet.versionInfo();
-        destTablet.cloneFrom(srcTablet);
-        System.out.printf("clone tablet:%d src:%s dest:%s %s->%s\n", task.tablet_id, srcBackend.be.getId(), be.getId(),
-                oldInfo, destTablet.versionInfo());
+        Tablet destTablet = tabletManager.getTablet(task.tablet_id);
+        if (destTablet == null) {
+            destTablet = new Tablet(task.tablet_id, srcTablet.tableId, srcTablet.partitionId, srcTablet.schemaHash,
+                    srcTablet.enablePersistentIndex);
+            destTablet.fullCloneFrom(srcTablet, srcBackend.getId());
+            tabletManager.addClonedTablet(destTablet);
+        } else {
+            destTablet.cloneFrom(srcTablet, srcBackend.getId());
+        }
         finish.finish_tablet_infos = Lists.newArrayList(destTablet.getTabletInfo());
     }
 
@@ -529,7 +557,8 @@ public class PseudoBackend {
 
     void handleTask(TAgentTaskRequest request) {
         TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(tBackend,
-                request.getTask_type(), request.getSignature(), new TStatus(TStatusCode.OK));
+                request.getTask_type(), request.getSignature(),
+                new TStatus(TStatusCode.OK));
         long v = reportVersion.incrementAndGet();
         finishTaskRequest.setReport_version(v);
         try {
@@ -600,6 +629,9 @@ public class PseudoBackend {
 
         @Override
         public THeartbeatResult heartbeat(TMasterInfo masterInfo) throws TException {
+            if (shutdown) {
+                throw new TTransportException(TTransportException.NOT_OPEN, "backend " + getId() + " shutdown");
+            }
             TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
             backendInfo.setBrpc_port(brpcPort);
             return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
@@ -624,7 +656,10 @@ public class PseudoBackend {
         }
 
         @Override
-        public TAgentResult submit_tasks(List<TAgentTaskRequest> tasks) {
+        public TAgentResult submit_tasks(List<TAgentTaskRequest> tasks) throws TException {
+            if (shutdown) {
+                throw new TTransportException(TTransportException.NOT_OPEN, "backend " + getId() + " shutdown");
+            }
             synchronized (taskSignatures) {
                 for (TAgentTaskRequest task : tasks) {
                     Set<Long> signatures = taskSignatures.computeIfAbsent(task.getTask_type(), k -> new HashSet<>());
@@ -701,7 +736,10 @@ public class PseudoBackend {
         }
 
         @Override
-        public TTabletStatResult get_tablet_stat() {
+        public TTabletStatResult get_tablet_stat() throws TException {
+            if (shutdown) {
+                throw new TTransportException(TTransportException.NOT_OPEN, "backend " + getId() + " shutdown");
+            }
             TTabletStatResult stats = new TTabletStatResult();
             tabletManager.getTabletStat(stats);
             return stats;
@@ -777,6 +815,9 @@ public class PseudoBackend {
         @Override
         public Future<PExecPlanFragmentResult> execPlanFragment(
                 PExecPlanFragmentRequest request, RpcCallback<PExecPlanFragmentResult> callback) {
+            if (shutdown) {
+                throw new RuntimeException("backend " + getId() + " shutdown");
+            }
             TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecPlanFragmentParams params = new TExecPlanFragmentParams();
             try {
@@ -811,6 +852,9 @@ public class PseudoBackend {
         @Override
         public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragments(
                 PExecBatchPlanFragmentsRequest request, RpcCallback<PExecBatchPlanFragmentsResult> callback) {
+            if (shutdown) {
+                throw new RuntimeException("backend " + getId() + " shutdown");
+            }
             TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecBatchPlanFragmentsParams params = new TExecBatchPlanFragmentsParams();
             try {
@@ -854,6 +898,9 @@ public class PseudoBackend {
         @Override
         public Future<PCancelPlanFragmentResult> cancelPlanFragment(
                 PCancelPlanFragmentRequest request, RpcCallback<PCancelPlanFragmentResult> callback) {
+            if (shutdown) {
+                throw new RuntimeException("backend " + getId() + " shutdown");
+            }
             return executor.submit(() -> {
                 PCancelPlanFragmentResult result = new PCancelPlanFragmentResult();
                 StatusPB pStatus = new StatusPB();
@@ -865,6 +912,9 @@ public class PseudoBackend {
 
         @Override
         public Future<PFetchDataResult> fetchData(PFetchDataRequest request, RpcCallback<PFetchDataResult> callback) {
+            if (shutdown) {
+                throw new RuntimeException("backend " + getId() + " shutdown");
+            }
             String fid = DebugUtil.printId(request.finstId);
             String queryId = resultSinkInstanceToQueryId.get(fid);
             if (queryId == null) {

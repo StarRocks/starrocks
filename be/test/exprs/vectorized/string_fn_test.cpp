@@ -1509,7 +1509,8 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractNullablePattern) {
 
     context->impl()->set_constant_columns(columns);
 
-    ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract(context, columns);
 
@@ -1553,7 +1554,8 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractOnlyNullPattern) {
 
     context->impl()->set_constant_columns(columns);
 
-    ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract(context, columns);
     for (int i = 0; i < length; ++i) {
@@ -1591,7 +1593,8 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractConstPattern) {
 
     context->impl()->set_constant_columns(columns);
 
-    ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract(context, columns);
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -1634,7 +1637,8 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtract) {
 
     context->impl()->set_constant_columns(columns);
 
-    ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract(context, columns);
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -1680,7 +1684,8 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceNullablePattern) {
 
     context->impl()->set_constant_columns(columns);
 
-    ASSERT_TRUE(StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(
+            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
     auto result = StringFunctions::regexp_replace(context, columns);
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
@@ -1719,7 +1724,8 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceOnlyNullPattern) {
 
     context->impl()->set_constant_columns(columns);
 
-    ASSERT_TRUE(StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(
+            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
     auto result = StringFunctions::regexp_replace(context, columns);
 
@@ -1757,7 +1763,8 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceConstPattern) {
 
     context->impl()->set_constant_columns(columns);
 
-    ASSERT_TRUE(StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(
+            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
     auto result = StringFunctions::regexp_replace(context, columns);
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
@@ -1816,7 +1823,8 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplace) {
 
     context->impl()->set_constant_columns(columns);
 
-    ASSERT_TRUE(StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(
+            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
     auto result = StringFunctions::regexp_replace(context, columns);
     auto v = ColumnHelper::as_column<BinaryColumn>(result);

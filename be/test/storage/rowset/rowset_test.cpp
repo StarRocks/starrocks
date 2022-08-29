@@ -603,8 +603,7 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
 
     ASSERT_TRUE(tablet->rowset_commit(2, rowset).ok());
     EXPECT_EQ(rows_per_segment * 2, read_tablet_and_compare(tablet, partial_schema, 2, rows_per_segment * 2));
-    ASSERT_OK(starrocks::StorageEngine::instance()->update_manager()->on_rowset_finished(tablet.get(),
-                                                                                                        rowset.get()));
+    ASSERT_OK(starrocks::StorageEngine::instance()->update_manager()->on_rowset_finished(tablet.get(), rowset.get()));
 }
 
 TEST_F(RowsetTest, VerticalWriteTest) {

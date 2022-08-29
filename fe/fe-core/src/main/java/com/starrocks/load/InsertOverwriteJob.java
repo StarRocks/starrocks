@@ -3,7 +3,7 @@
 package com.starrocks.load;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.InsertStmt;
+import com.starrocks.sql.ast.InsertStmt;
 
 import java.util.List;
 

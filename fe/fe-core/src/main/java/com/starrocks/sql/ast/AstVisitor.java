@@ -43,7 +43,6 @@ import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.LikePredicate;
