@@ -157,6 +157,7 @@ add_library(Storage STATIC
     compaction_task_factory.cpp
     base_and_cumulative_compaction_policy.cpp
     cluster_id_mgr.cpp
+    push_utils.cpp
     lake/async_delta_writer.cpp
     lake/compaction_policy.cpp
     lake/horizontal_compaction_task.cpp

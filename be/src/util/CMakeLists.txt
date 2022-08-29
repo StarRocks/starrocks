@@ -105,7 +105,6 @@ set(UTIL_FILES
   lru_cache.cpp
   tdigest.cpp
   debug/query_trace_impl.cpp
-  push_broker_reader.cpp
 )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
