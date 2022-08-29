@@ -54,6 +54,7 @@ public:
     void set_fragment_instance_id(const starrocks::TUniqueId& fragment_instance_id) {
         _fragment_instance_id = fragment_instance_id;
     }
+    const starrocks::TUniqueId& fragment_instance_id() { return _fragment_instance_id; }
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
     int32_t get_driver_id() const { return _driver_id; }
 
