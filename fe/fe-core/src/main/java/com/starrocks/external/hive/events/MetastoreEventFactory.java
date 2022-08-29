@@ -63,9 +63,10 @@ public class MetastoreEventFactory implements EventFactory {
         try {
             metaCache = GlobalStateMgr.getCurrentState().getHiveRepository().getMetaCache(resourceName);
         } catch (DdlException e) {
-            LOG.error(e.getMessage());
+            LOG.error("Filed to get meta cache on resource [{}]", resourceName, e);
         }
         if (metaCache == null) {
+            LOG.error("Meta cache is null on resource [{}]", resourceName);
             return metastoreEvents;
         }
 
@@ -83,6 +84,8 @@ public class MetastoreEventFactory implements EventFactory {
             }
 
             if (table == null) {
+                LOG.warn("Table is null on resource [{}], table [{}.{}]. Skipping notification event {}",
+                        resourceName, event.getDbName(), event.getTableName(), event);
                 continue;
             }
             metastoreEvents.addAll(get(event, metaCache, table));
@@ -93,6 +96,7 @@ public class MetastoreEventFactory implements EventFactory {
                 .collect(Collectors.toList());
 
         if (tobeProcessEvents.isEmpty()) {
+            LOG.warn("The metastore events to process is empty on resource {}", resourceName);
             return Collections.emptyList();
         }
 
