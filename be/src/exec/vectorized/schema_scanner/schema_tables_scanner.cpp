@@ -9,6 +9,8 @@
 
 namespace starrocks::vectorized {
 
+const int32_t DEF_NULL_NUM = -1;
+
 SchemaScanner::ColumnDesc SchemaTablesScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
         {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
@@ -144,7 +146,11 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
             // version
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.version);
+                if (table_info.version == DEF_NULL_NUM) {
+                    fill_data_column_with_null(column.get());
+                } else {
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.version);
+                }
             }
             break;
         }
@@ -162,7 +168,11 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
             // table_rows
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.table_rows);
+                if (table_info.table_rows == DEF_NULL_NUM) {
+                    fill_data_column_with_null(column.get());
+                } else {
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.table_rows);
+                }
             }
             break;
         }
@@ -170,7 +180,11 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
             // avg_row_length
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.avg_row_length);
+                if (table_info.avg_row_length == DEF_NULL_NUM) {
+                    fill_data_column_with_null(column.get());
+                } else {
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.avg_row_length);
+                }
             }
             break;
         }
@@ -178,7 +192,11 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
             // data_length
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.data_length);
+                if (table_info.data_length == DEF_NULL_NUM) {
+                    fill_data_column_with_null(column.get());
+                } else {
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.data_length);
+                }
             }
             break;
         }
@@ -186,7 +204,11 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
             // max_data_length
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.max_data_length);
+                if (table_info.max_data_length == DEF_NULL_NUM) {
+                    fill_data_column_with_null(column.get());
+                } else {
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.max_data_length);
+                }
             }
             break;
         }
@@ -194,7 +216,11 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
             // index_length
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.index_length);
+                if (table_info.index_length == DEF_NULL_NUM) {
+                    fill_data_column_with_null(column.get());
+                } else {
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.index_length);
+                }
             }
             break;
         }
@@ -202,7 +228,11 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
             // data_free
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.data_free);
+                if (table_info.data_free == DEF_NULL_NUM) {
+                    fill_data_column_with_null(column.get());
+                } else {
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.data_free);
+                }
             }
             break;
         }
@@ -210,7 +240,11 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
             // auto_increment
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(14);
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.auto_increment);
+                if (table_info.auto_increment == DEF_NULL_NUM) {
+                    fill_data_column_with_null(column.get());
+                } else {
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.auto_increment);
+                }
             }
             break;
         }
@@ -237,7 +271,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
         case 16: {
             // update_time
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(15);
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
                 NullableColumn* nullable_column = down_cast<NullableColumn*>(column.get());
                 if (table_info.__isset.update_time) {
                     int64_t create_time = table_info.update_time;
@@ -288,7 +322,11 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
             // checksum
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(19);
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.checksum);
+                if (table_info.checksum == DEF_NULL_NUM) {
+                    fill_data_column_with_null(column.get());
+                } else {
+                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&table_info.checksum);
+                }
             }
             break;
         }
