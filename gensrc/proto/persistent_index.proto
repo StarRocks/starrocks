@@ -45,11 +45,7 @@ message ImmutableIndexMetaPB {
     EditVersionPB version = 2;
     uint64 size = 3;
     repeated ImmutableIndexShardMetaPB shards = 4;
-    // only support fixed length KVs currently
-    // will add varlen KV in future
-    uint64 fixed_key_size = 5; // Deprecated, will be delete in future
-    uint64 fixed_value_size = 6; // Deprecated, will be delete in future
-    repeated ShardInfoPB shard_info = 7;
+    repeated ShardInfoPB shard_info = 5;
 }
 
 message PersistentIndexMetaPB {
@@ -60,4 +56,5 @@ message PersistentIndexMetaPB {
     // l1's meta stored in l1 file
     // only store a version to get file name
     EditVersionPB l1_version = 5;
+    uint32 format_version = 6;
 }
