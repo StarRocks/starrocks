@@ -119,29 +119,12 @@ import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
-import com.starrocks.analysis.ShowAuthenticationStmt;
-import com.starrocks.analysis.ShowBackupStmt;
-import com.starrocks.analysis.ShowBrokerStmt;
-import com.starrocks.analysis.ShowCharsetStmt;
-import com.starrocks.analysis.ShowCollationStmt;
-import com.starrocks.analysis.ShowDbStmt;
-import com.starrocks.analysis.ShowDeleteStmt;
-import com.starrocks.analysis.ShowDynamicPartitionStmt;
-import com.starrocks.analysis.ShowFunctionsStmt;
-import com.starrocks.analysis.ShowIndexStmt;
-import com.starrocks.analysis.ShowLoadStmt;
-import com.starrocks.analysis.ShowLoadWarningsStmt;
+import com.starrocks.sql.ast.ShowUserStmt;
+import com.starrocks.sql.ast.ShowRepositoriesStmt;
+import com.starrocks.sql.ast.ShowPluginsStmt;
+import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowOpenTableStmt;
-import com.starrocks.analysis.ShowPartitionsStmt;
-import com.starrocks.analysis.ShowProcStmt;
-import com.starrocks.analysis.ShowProcesslistStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
-import com.starrocks.analysis.ShowStatusStmt;
-import com.starrocks.analysis.ShowTabletStmt;
-import com.starrocks.analysis.ShowUserPropertyStmt;
-import com.starrocks.analysis.ShowVariablesStmt;
-import com.starrocks.analysis.ShowWarningStmt;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
@@ -243,18 +226,44 @@ import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowAuthorStmt;
+import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
+import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowCharsetStmt;
+import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
+import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.ShowDeleteStmt;
+import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
+import com.starrocks.sql.ast.ShowEnginesStmt;
+import com.starrocks.sql.ast.ShowEventsStmt;
+import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.sql.ast.ShowIndexStmt;
+import com.starrocks.sql.ast.ShowLoadStmt;
+import com.starrocks.sql.ast.ShowLoadWarningsStmt;
+import com.starrocks.sql.ast.ShowOpenTableStmt;
+import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
+import com.starrocks.sql.ast.ShowProcesslistStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowStatusStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
+import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTriggersStmt;
+import com.starrocks.sql.ast.ShowUserPropertyStmt;
+import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
@@ -857,14 +866,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowWarningStatement(StarRocksParser.ShowWarningStatementContext context) {
-        if (context.limitElement() != null) {
-            return new ShowWarningStmt((LimitElement) visit(context.limitElement()));
-        }
-        return new ShowWarningStmt();
-    }
-
-    @Override
     public ParseNode visitAddPartitionClause(StarRocksParser.AddPartitionClauseContext context) {
         boolean temporary = context.TEMPORARY() != null;
         PartitionDesc partitionDesc = null;
@@ -913,15 +914,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             return new ShowTabletStmt(dbTblName, -1L, partitionNames, where, orderByElements, limitElement);
         }
-    }
-
-    @Override
-    public ParseNode visitShowDeleteStatement(StarRocksParser.ShowDeleteStatementContext context) {
-        QualifiedName dbName = null;
-        if (context.qualifiedName() != null) {
-            dbName = getQualifiedName(context.db);
-        }
-        return new ShowDeleteStmt(dbName == null ? null : dbName.toString());
     }
 
     @Override
@@ -1029,11 +1021,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             limitElement = (LimitElement) visit(context.limitElement());
         }
         return new ShowPartitionsStmt(tableName, where, orderByElements, limitElement, temp);
-    }
-
-    @Override
-    public ParseNode visitShowOpenTableStatement(StarRocksParser.ShowOpenTableStatementContext context) {
-        return new ShowOpenTableStmt();
     }
 
     @Override
@@ -2734,6 +2721,171 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new CancelLoadStmt(db, labelExpr);
     }
 
+    // ------------------------------------------- Show Statement ------------------------------------------------------
+
+    @Override
+    public ParseNode visitShowAuthorStatement(StarRocksParser.ShowAuthorStatementContext context) {
+        return new ShowAuthorStmt();
+    }
+
+    @Override
+    public ParseNode visitShowBackendsStatement(StarRocksParser.ShowBackendsStatementContext context) {
+        return new ShowBackendsStmt();
+    }
+
+    @Override
+    public ParseNode visitShowBrokerStatement(StarRocksParser.ShowBrokerStatementContext context) {
+        return new ShowBrokerStmt();
+    }
+
+    @Override
+    public ParseNode visitShowCharsetStatement(StarRocksParser.ShowCharsetStatementContext context) {
+        String pattern = null;
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            pattern = stringLiteral.getValue();
+        }
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        return new ShowCharsetStmt(pattern, where);
+    }
+
+    @Override
+    public ParseNode visitShowCollationStatement(StarRocksParser.ShowCollationStatementContext context) {
+        String pattern = null;
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            pattern = stringLiteral.getValue();
+        }
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        return new ShowCollationStmt(pattern, where);
+    }
+
+    @Override
+    public ParseNode visitShowDeleteStatement(StarRocksParser.ShowDeleteStatementContext context) {
+        QualifiedName dbName = null;
+        if (context.qualifiedName() != null) {
+            dbName = getQualifiedName(context.db);
+        }
+        return new ShowDeleteStmt(dbName == null ? null : dbName.toString());
+    }
+
+    @Override
+    public ParseNode visitShowDynamicPartitionStatement(StarRocksParser.ShowDynamicPartitionStatementContext context) {
+
+        QualifiedName dbName = null;
+        if (context.db != null) {
+            dbName = getQualifiedName(context.db);
+        }
+
+        return new ShowDynamicPartitionStmt(dbName == null ? null : dbName.toString());
+    }
+
+    @Override
+    public ParseNode visitShowEventsStatement(StarRocksParser.ShowEventsStatementContext context) {
+        return new ShowEventsStmt();
+    }
+
+    @Override
+    public ParseNode visitShowEnginesStatement(StarRocksParser.ShowEnginesStatementContext context) {
+        return new ShowEnginesStmt();
+    }
+
+    @Override
+    public ParseNode visitShowFrontendsStatement(StarRocksParser.ShowFrontendsStatementContext context) {
+        return new ShowFrontendsStmt();
+    }
+
+    @Override
+    public ParseNode visitShowPluginsStatement(StarRocksParser.ShowPluginsStatementContext context) {
+        return new ShowPluginsStmt();
+    }
+
+    @Override
+    public ParseNode visitShowRepositoriesStatement(StarRocksParser.ShowRepositoriesStatementContext context) {
+        return new ShowRepositoriesStmt();
+    }
+
+    @Override
+    public ParseNode visitShowOpenTableStatement(StarRocksParser.ShowOpenTableStatementContext context) {
+        return new ShowOpenTableStmt();
+    }
+
+    @Override
+    public ParseNode visitShowProcedureStatement(StarRocksParser.ShowProcedureStatementContext context) {
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new ShowProcedureStmt(stringLiteral.getValue());
+        } else if (context.expression() != null) {
+            return new ShowProcedureStmt((Expr) visit(context.expression()));
+        } else {
+            return new ShowProcedureStmt();
+        }
+    }
+
+    @Override
+    public ParseNode visitShowProcStatement(StarRocksParser.ShowProcStatementContext context) {
+        StringLiteral stringLiteral = (StringLiteral) visit(context.path);
+        return new ShowProcStmt(stringLiteral.getValue());
+    }
+
+    @Override
+    public ParseNode visitShowTriggersStatement(StarRocksParser.ShowTriggersStatementContext context) {
+        return new ShowTriggersStmt();
+    }
+
+    @Override
+    public ParseNode visitShowUserStatement(StarRocksParser.ShowUserStatementContext context) {
+        return new ShowUserStmt();
+    }
+
+    @Override
+    public ParseNode visitShowUserPropertyStatement(StarRocksParser.ShowUserPropertyStatementContext context) {
+        String user;
+        String pattern;
+        if (context.FOR() == null) {
+            user = null;
+            pattern = context.LIKE() == null ? null : ((StringLiteral) visit(context.string(0))).getValue();
+        } else {
+            user = ((StringLiteral) visit(context.string(0))).getValue();
+            pattern = context.LIKE() == null ? null : ((StringLiteral) visit(context.string(1))).getValue();
+        }
+        return new ShowUserPropertyStmt(user, pattern);
+    }
+
+    @Override
+    public ParseNode visitShowVariablesStatement(StarRocksParser.ShowVariablesStatementContext context) {
+        String pattern = null;
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            pattern = stringLiteral.getValue();
+        }
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        return new ShowVariablesStmt(getVariableType(context.varType()), pattern, where);
+    }
+
+    @Override
+    public ParseNode visitShowWarningStatement(StarRocksParser.ShowWarningStatementContext context) {
+        if (context.limitElement() != null) {
+            return new ShowWarningStmt((LimitElement) visit(context.limitElement()));
+        }
+        return new ShowWarningStmt();
+    }
+
     // ------------------------------------------- Other Statement -----------------------------------------------------
 
     @Override
@@ -2752,20 +2904,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return new ShowDbStmt(null, null, catalog);
         }
-    }
-
-    @Override
-    public ParseNode visitShowUserPropertyStatement(StarRocksParser.ShowUserPropertyStatementContext context) {
-        String user;
-        String pattern;
-        if (context.FOR() == null) {
-            user = null;
-            pattern = context.LIKE() == null ? null : ((StringLiteral) visit(context.string(0))).getValue();
-        } else {
-            user = ((StringLiteral) visit(context.string(0))).getValue();
-            pattern = context.LIKE() == null ? null : ((StringLiteral) visit(context.string(1))).getValue();
-        }
-        return new ShowUserPropertyStmt(user, pattern);
     }
 
     @Override
@@ -2939,41 +3077,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowVariablesStatement(StarRocksParser.ShowVariablesStatementContext context) {
-        String pattern = null;
-        if (context.pattern != null) {
-            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            pattern = stringLiteral.getValue();
-        }
-
-        Expr where = null;
-        if (context.expression() != null) {
-            where = (Expr) visit(context.expression());
-        }
-
-        return new ShowVariablesStmt(getVariableType(context.varType()), pattern, where);
-    }
-
-    @Override
     public ParseNode visitShowProcesslistStatement(StarRocksParser.ShowProcesslistStatementContext context) {
         boolean isShowFull = context.FULL() != null;
         return new ShowProcesslistStmt(isShowFull);
-    }
-
-    @Override
-    public ParseNode visitShowBrokerStatement(StarRocksParser.ShowBrokerStatementContext context) {
-        return new ShowBrokerStmt();
-    }
-
-    @Override
-    public ParseNode visitShowDynamicPartitionStatement(StarRocksParser.ShowDynamicPartitionStatementContext context) {
-
-        QualifiedName dbName = null;
-        if (context.db != null) {
-            dbName = getQualifiedName(context.db);
-        }
-
-        return new ShowDynamicPartitionStmt(dbName == null ? null : dbName.toString());
     }
 
     // ------------------------------------------- Backup Store Statement ----------------------------------------------
@@ -3999,20 +4105,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new UserIdentifier(user.getValue(), "%", false);
     }
 
-    // ------------------------------------------- Procedure Statement -------------------------------------------
-
-    @Override
-    public ParseNode visitShowProcedureStatement(StarRocksParser.ShowProcedureStatementContext context) {
-        if (context.pattern != null) {
-            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            return new ShowProcedureStmt(stringLiteral.getValue());
-        } else if (context.expression() != null) {
-            return new ShowProcedureStmt((Expr) visit(context.expression()));
-        } else {
-            return new ShowProcedureStmt();
-        }
-    }
-
     // ------------------------------------------- Util Functions -------------------------------------------
 
     private <T> List<T> visit(List<? extends ParserRuleContext> contexts, Class<T> clazz) {
@@ -4172,49 +4264,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowProcStatement(StarRocksParser.ShowProcStatementContext context) {
-        StringLiteral stringLiteral = (StringLiteral) visit(context.path);
-        return new ShowProcStmt(stringLiteral.getValue());
-    }
-
-    @Override
     public ParseNode visitRecoverPartitionStatement(StarRocksParser.RecoverPartitionStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName tableName = qualifiedNameToTableName(qualifiedName);
         String partitionName = ((Identifier) visit(context.identifier())).getValue();
         return new RecoverPartitionStmt(tableName, partitionName);
-    }
-
-    @Override
-    public ParseNode visitShowCharsetStatement(StarRocksParser.ShowCharsetStatementContext context) {
-        String pattern = null;
-        if (context.pattern != null) {
-            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            pattern = stringLiteral.getValue();
-        }
-
-        Expr where = null;
-        if (context.expression() != null) {
-            where = (Expr) visit(context.expression());
-        }
-
-        return new ShowCharsetStmt(pattern, where);
-    }
-
-    @Override
-    public ParseNode visitShowCollationStatement(StarRocksParser.ShowCollationStatementContext context) {
-        String pattern = null;
-        if (context.pattern != null) {
-            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            pattern = stringLiteral.getValue();
-        }
-
-        Expr where = null;
-        if (context.expression() != null) {
-            where = (Expr) visit(context.expression());
-        }
-
-        return new ShowCollationStmt(pattern, where);
     }
 
     private LabelName qualifiedNameToLabelName(QualifiedName qualifiedName) {

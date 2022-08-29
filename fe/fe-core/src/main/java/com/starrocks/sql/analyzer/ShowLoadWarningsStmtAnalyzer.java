@@ -6,7 +6,7 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.ShowLoadWarningsStmt;
+import com.starrocks.sql.ast.ShowLoadWarningsStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.ErrorCode;

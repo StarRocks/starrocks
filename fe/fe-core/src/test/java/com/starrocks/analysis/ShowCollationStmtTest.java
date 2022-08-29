@@ -2,6 +2,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mocked;
 import org.junit.Assert;

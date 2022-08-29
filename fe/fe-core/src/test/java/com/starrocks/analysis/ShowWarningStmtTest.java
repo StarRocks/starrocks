@@ -1,6 +1,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
 import org.junit.Assert;

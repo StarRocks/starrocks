@@ -5,7 +5,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SetUserPropertyStmt;
-import com.starrocks.analysis.ShowUserPropertyStmt;
+import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;

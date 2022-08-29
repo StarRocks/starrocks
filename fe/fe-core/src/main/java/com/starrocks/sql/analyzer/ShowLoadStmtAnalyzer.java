@@ -7,7 +7,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ShowLoadStmt;
+import com.starrocks.sql.ast.ShowLoadStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.AnalysisException;

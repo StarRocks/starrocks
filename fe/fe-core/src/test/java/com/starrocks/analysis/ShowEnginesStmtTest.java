@@ -22,6 +22,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.ShowEnginesStmt;
 import org.junit.Assert;
 import org.junit.Test;
 

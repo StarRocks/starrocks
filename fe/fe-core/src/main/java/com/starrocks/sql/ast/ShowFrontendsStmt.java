@@ -1,6 +1,6 @@
 // This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/ShowUserStmt.java
+//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/ShowFrontendsStmt.java
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -19,24 +19,39 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.qe.ShowResultSetMetaData;
 
-public class ShowUserStmt extends ShowStmt {
-    private static final ShowResultSetMetaData META_DATA =
-        ShowResultSetMetaData.builder()
-                .addColumn(new Column("User", ScalarType.createVarchar(50)))
-                .build();
-
-    public ShowUserStmt() { }
+public class ShowFrontendsStmt extends ShowStmt {
 
     @Override
     public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
+        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
+        for (String title : FrontendsProcNode.TITLE_NAMES) {
+            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
+        }
+        return builder.build();
     }
 
+    @Override
+    public RedirectStatus getRedirectStatus() {
+        return RedirectStatus.FORWARD_NO_SYNC;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowFrontendsStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }
 

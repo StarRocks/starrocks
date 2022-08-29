@@ -15,18 +15,9 @@ import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
-import com.starrocks.analysis.ShowAuthenticationStmt;
-import com.starrocks.analysis.ShowBackupStmt;
-import com.starrocks.analysis.ShowBrokerStmt;
-import com.starrocks.analysis.ShowDeleteStmt;
-import com.starrocks.analysis.ShowFunctionsStmt;
-import com.starrocks.analysis.ShowIndexStmt;
+import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowPartitionsStmt;
-import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
-import com.starrocks.analysis.ShowTabletStmt;
-import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.TableName;
@@ -90,11 +81,22 @@ import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.sql.ast.ShowBackupStmt;
+import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
+import com.starrocks.sql.ast.ShowDeleteStmt;
+import com.starrocks.sql.ast.ShowFunctionsStmt;
+import com.starrocks.sql.ast.ShowIndexStmt;
+import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
+import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.StatsConstants;
@@ -1049,6 +1051,26 @@ public class PrivilegeChecker {
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
                 }
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowBackendsStmt(ShowBackendsStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)
+                    && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
+                    PrivPredicate.OPERATOR)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN/OPERATOR");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowFrontendsStmt(ShowFrontendsStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)
+                    && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
+                    PrivPredicate.OPERATOR)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN/OPERATOR");
             }
             return null;
         }

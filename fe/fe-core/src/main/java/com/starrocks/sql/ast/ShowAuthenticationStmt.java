@@ -1,11 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowAuthenticationStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA;
@@ -19,7 +20,7 @@ public class ShowAuthenticationStmt extends ShowStmt {
         META_DATA = builder.build();
     }
 
-    private boolean isAll;
+    private final boolean isAll;
     private UserIdentity userIdent;
 
     // SHOW AUTHENTICATION -> (null, false)

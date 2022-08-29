@@ -2,7 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.ShowUserPropertyStmt;
+import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
 

@@ -5,7 +5,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.PartitionNames;
-import com.starrocks.analysis.ShowBackupStmt;
+import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;

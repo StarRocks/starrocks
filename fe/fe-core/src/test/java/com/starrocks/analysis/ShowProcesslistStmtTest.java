@@ -3,6 +3,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.ShowProcesslistStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import java.util.Locale;
 import org.junit.Assert;

@@ -15,13 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
+import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowDynamicPartitionStmt extends ShowStmt {
     private String db;
@@ -53,21 +52,6 @@ public class ShowDynamicPartitionStmt extends ShowStmt {
 
     public void setDb(String db) {
         this.db = db;
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("SHOW DYNAMIC PARTITION TABLES");
-        if (!Strings.isNullOrEmpty(db)) {
-            sb.append(" FROM ").append(db);
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override

@@ -63,27 +63,9 @@ import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
-import com.starrocks.analysis.ShowAuthenticationStmt;
-import com.starrocks.analysis.ShowBackupStmt;
-import com.starrocks.analysis.ShowBrokerStmt;
-import com.starrocks.analysis.ShowDbStmt;
-import com.starrocks.analysis.ShowDeleteStmt;
-import com.starrocks.analysis.ShowDynamicPartitionStmt;
-import com.starrocks.analysis.ShowFunctionsStmt;
-import com.starrocks.analysis.ShowIndexStmt;
-import com.starrocks.analysis.ShowLoadStmt;
-import com.starrocks.analysis.ShowLoadWarningsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowOpenTableStmt;
-import com.starrocks.analysis.ShowPartitionsStmt;
-import com.starrocks.analysis.ShowProcStmt;
-import com.starrocks.analysis.ShowProcesslistStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowTabletStmt;
-import com.starrocks.analysis.ShowUserPropertyStmt;
-import com.starrocks.analysis.ShowVariablesStmt;
-import com.starrocks.analysis.ShowWarningStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
@@ -149,6 +131,32 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowDataStmt(ShowDataStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    // ---------------------------------------- Show Statement ---------------------------------------------------------
+
+    public R visitShowStatement(ShowStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowBackendsStmt(ShowBackendsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowBrokerStmt(ShowBrokerStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowDeleteStmt(ShowDeleteStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowFrontendsStmt(ShowFrontendsStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -277,10 +285,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(node, context);
     }
 
-    public R visitShowStatement(ShowStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     public R visitShowTableStmt(ShowTableStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -290,10 +294,6 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowCreateTableStmt(ShowCreateTableStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    public R visitShowDeleteStmt(ShowDeleteStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -345,9 +345,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitShowBrokerStmt(ShowBrokerStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
 
     public R visitShowColumnStmt(ShowColumnStmt statement, C context) {
         return visitShowStatement(statement, context);
@@ -383,10 +380,6 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowRoutineLoadStatement(ShowRoutineLoadStmt statement, C context) {
         return visitShowStatement(statement, context);
-    }
-
-    public R visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt statement, C context) {
-        return visitStatement(statement, context);
     }
 
     public R visitShowUserPropertyStmt(ShowUserPropertyStmt statement, C context) {

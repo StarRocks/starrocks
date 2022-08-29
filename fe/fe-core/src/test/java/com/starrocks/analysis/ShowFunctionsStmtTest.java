@@ -22,8 +22,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.sql.analyzer.DDLTestBase;
+import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Rule;

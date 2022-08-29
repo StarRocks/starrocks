@@ -3,6 +3,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
 import org.junit.Assert;

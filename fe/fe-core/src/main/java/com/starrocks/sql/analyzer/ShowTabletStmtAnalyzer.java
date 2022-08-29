@@ -9,7 +9,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.PartitionNames;
-import com.starrocks.analysis.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Replica;

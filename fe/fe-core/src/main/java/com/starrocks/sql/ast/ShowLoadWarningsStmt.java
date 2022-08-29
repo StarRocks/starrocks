@@ -1,27 +1,13 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.UserException;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.sql.ast.AstVisitor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,10 +25,10 @@ public class ShowLoadWarningsStmt extends ShowStmt {
                     .build();
 
     private String dbName;
-    private String rawUrl;
+    private final String rawUrl;
     private URL url;
-    private Expr whereClause;
-    private LimitElement limitElement;
+    private final Expr whereClause;
+    private final LimitElement limitElement;
 
     private String label;
     private long jobId;
@@ -97,14 +83,6 @@ public class ShowLoadWarningsStmt extends ShowStmt {
         return -1L;
     }
 
-    public boolean isFindByLabel() {
-        return label != null;
-    }
-
-    public boolean isFindByJobId() {
-        return jobId != 0;
-    }
-
     public String getRawUrl() {
         return rawUrl;
     }
@@ -115,10 +93,6 @@ public class ShowLoadWarningsStmt extends ShowStmt {
 
     public void setUrl(URL url) {
         this.url = url;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
     }
 
     @Override

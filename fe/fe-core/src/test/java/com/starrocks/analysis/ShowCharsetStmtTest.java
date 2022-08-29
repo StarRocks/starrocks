@@ -3,6 +3,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.qe.ConnectContext;
 import mockit.Mocked;

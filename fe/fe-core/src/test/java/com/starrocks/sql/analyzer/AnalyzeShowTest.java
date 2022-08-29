@@ -3,9 +3,9 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;

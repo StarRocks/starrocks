@@ -27,6 +27,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.ShowLoadStmt;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
