@@ -193,9 +193,6 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
     if ((_join_conjuncts.empty())) {
         return Status::OK();
     }
-    if (!chunk || chunk->is_empty()) {
-        return Status::OK();
-    }
     vectorized::FilterPtr filter;
     if (chunk && !chunk->is_empty()) {
         size_t rows = chunk->num_rows();
@@ -237,6 +234,8 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
     }
 
     if (_is_right_join() && filter) {
+        VLOG(3) << fmt::format("NLJoin operator {} set build_flags for right join: {}", _driver_sequence,
+                               fmt::join(*filter, ","));
         bool multi_probe_rows = _num_build_chunks() == 1;
         if (multi_probe_rows) {
             size_t num_build_rows = _cross_join_context->num_build_rows();
