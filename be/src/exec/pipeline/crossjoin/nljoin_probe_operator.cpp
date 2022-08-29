@@ -180,16 +180,15 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
     if ((_join_conjuncts.empty())) {
         return Status::OK();
     }
-    if (!chunk || chunk->is_empty()) {
-        return Status::OK();
-    }
     vectorized::FilterPtr filter;
-    size_t rows = chunk->num_rows();
-    RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter));
-    DCHECK(!!filter);
-    // The filter has not been assigned if no rows matched
-    if (chunk->num_rows() == 0) {
-        filter->assign(rows, 0);
+    if (chunk && !chunk->is_empty()) {
+        size_t rows = chunk->num_rows();
+        RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter));
+        DCHECK(!!filter);
+        // The filter has not been assigned if no rows matched
+        if (chunk->num_rows() == 0) {
+            filter->assign(rows, 0);
+        }
     }
 
     if (_is_left_join()) {
@@ -197,28 +196,31 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
             // Empty right table
             DCHECK_EQ(_probe_row_current, _probe_chunk->num_rows());
             _permute_left_join(state, chunk, 0, _probe_chunk->num_rows());
-        } else if (_num_build_chunks() == 1) {
-            // Multiple probe rows
-            size_t num_build_rows = _cross_join_context->num_build_rows();
-            DCHECK_GE(filter->size(), num_build_rows);
-            DCHECK_LE(_probe_row_start, _probe_row_current);
-            for (size_t i = 0; i < filter->size(); i += num_build_rows) {
-                bool probe_matched = SIMD::contain_nonzero(*filter, i, num_build_rows);
-                if (!probe_matched) {
-                    size_t probe_row_index = _probe_row_start + i / num_build_rows;
-                    _permute_left_join(state, chunk, probe_row_index, 1);
+        }
+        if (filter) {
+            if (_num_build_chunks() == 1) {
+                // Multiple probe rows
+                size_t num_build_rows = _cross_join_context->num_build_rows();
+                DCHECK_GE(filter->size(), num_build_rows);
+                DCHECK_LE(_probe_row_start, _probe_row_current);
+                for (size_t i = 0; i < filter->size(); i += num_build_rows) {
+                    bool probe_matched = SIMD::contain_nonzero(*filter, i, num_build_rows);
+                    if (!probe_matched) {
+                        size_t probe_row_index = _probe_row_start + i / num_build_rows;
+                        _permute_left_join(state, chunk, probe_row_index, 1);
+                    }
                 }
-            }
-        } else {
-            _probe_row_matched = _probe_row_matched || SIMD::contain_nonzero(*filter);
-            bool probe_row_finished = _curr_build_chunk_index >= _num_build_chunks();
-            if (!_probe_row_matched && probe_row_finished) {
-                _permute_left_join(state, chunk, _probe_row_current, 1);
+            } else {
+                _probe_row_matched = _probe_row_matched || SIMD::contain_nonzero(*filter);
+                bool probe_row_finished = _curr_build_chunk_index >= _num_build_chunks();
+                if (!_probe_row_matched && probe_row_finished) {
+                    _permute_left_join(state, chunk, _probe_row_current, 1);
+                }
             }
         }
     }
 
-    if (_is_right_join()) {
+    if (_is_right_join() && filter) {
         VLOG(3) << fmt::format("NLJoin operator {} set build_flags for right join: {}", _driver_sequence,
                                fmt::join(*filter, ","));
         bool multi_probe_rows = _num_build_chunks() == 1;
