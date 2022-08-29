@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-DROP MATERIALIZED VIEW [IF EXISTS] mv_name FROM table_name;
+DROP MATERIALIZED VIEW [IF EXISTS] [db_name.]mv_name;
 ```
 
 说明：
@@ -20,9 +20,9 @@ DROP MATERIALIZED VIEW [IF EXISTS] mv_name FROM table_name;
 
 待删除的物化视图的名称。必填项。
 
-**table_name**
+**db_name**
 
-待删除的物化视图所属的表名。必填项。
+待删除的物化视图所属的数据库名。选填项。如果不指定该参数，则默认使用当前数据库。
 
 ## 示例
 
