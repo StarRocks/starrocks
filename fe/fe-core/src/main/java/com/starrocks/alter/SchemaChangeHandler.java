@@ -1596,12 +1596,15 @@ public class SchemaChangeHandler extends AlterHandler {
             if (metaValue == olapTable.enablePersistentIndex()) {
                 return;
             }
+<<<<<<< HEAD
             if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS && metaValue) {
                 if (!olapTable.checkPersistentIndex()) {
                     throw new DdlException("PrimaryKey table using persistent index don't support " + 
                          "varchar(char) as key so far, and key length should be no more than 64 Bytes");
                 }
             }
+=======
+>>>>>>> edbc4bc0b ([Enhancement] Remove varlen key limitation of persistent index (#10474))
         } else {
             LOG.warn("meta type: {} does not support", metaType);
             return;
