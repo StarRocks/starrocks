@@ -27,8 +27,27 @@ public class BinaryPredicateStatisticCalculator {
                                                                 Statistics statistics) {
         switch (predicate.getBinaryType()) {
             case EQ:
-            case EQ_FOR_NULL:
                 return estimateColumnEqualToConstant(columnRefOperator, columnStatistic, constant, statistics);
+            case EQ_FOR_NULL:
+                if (constant.isPresent() && constant.get().isNull()) {
+
+                    ColumnStatistic estimatedColumnStatistic = ColumnStatistic.builder()
+                            .setAverageRowSize(columnStatistic.getAverageRowSize())
+                            .setNullsFraction(1)
+                            .setMinValue(NEGATIVE_INFINITY)
+                            .setMaxValue(POSITIVE_INFINITY)
+                            .setDistinctValuesCount(1)
+                            .setHistogram(null)
+                            .setType(columnStatistic.getType())
+                            .build();
+
+                    double rowCount = statistics.getOutputRowCount() * columnStatistic.getNullsFraction();
+                    return columnRefOperator.map(operator -> Statistics.buildFrom(statistics)
+                                    .setOutputRowCount(rowCount).addColumnStatistic(operator, estimatedColumnStatistic).build())
+                            .orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
+                } else {
+                    return estimateColumnEqualToConstant(columnRefOperator, columnStatistic, constant, statistics);
+                }
             case NE:
                 return estimateColumnNotEqualToConstant(columnRefOperator, columnStatistic, constant, statistics);
             case LE:
