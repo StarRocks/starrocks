@@ -302,7 +302,7 @@ CONF_mInt32(compaction_trace_threshold, "60");
 // the columns will be divided into groups for vertical compaction.
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
-CONF_Bool(enable_event_based_compaction_framework, "true");
+CONF_Bool(enable_event_based_compaction_framework, "false");
 
 CONF_Bool(enable_check_string_lengths, "true");
 // 5GB
