@@ -834,6 +834,26 @@ public class Auth implements Writable {
     private void grantInternal(UserIdentity userIdent, String role, TablePattern tblPattern,
                                PrivBitSet privs, boolean errOnNonExist, boolean isReplay)
             throws DdlException {
+
+        if (!isReplay) {
+            // check privilege only on leader, in case of replaying old journal
+            switch (tblPattern.getPrivLevel()) {
+                case DATABASE:
+                    if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
+                        throw new DdlException("Some of the privileges are not for database: " + privs);
+                    }
+                    break;
+
+                case TABLE:
+                    if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
+                        throw new DdlException("Some of the privileges are not for table: " + privs);
+                    }
+                    break;
+
+                default:
+                    break;
+            }
+        }
         writeLock();
         try {
             if (role != null) {
@@ -864,6 +884,19 @@ public class Auth implements Writable {
 
     private void grantInternal(UserIdentity userIdent, String role, ResourcePattern resourcePattern, PrivBitSet privs,
                                boolean errOnNonExist, boolean isReplay) throws DdlException {
+        if (!isReplay) {
+            // check privilege only on leader, in case of replaying old journal
+            switch (resourcePattern.getPrivLevel()) {
+                case RESOURCE:
+                    if (privs.containsNodePriv() || privs.containsDbTablePriv() || privs.containsImpersonatePriv()) {
+                        throw new DdlException("Some of the privileges are not for resource: " + privs);
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
         writeLock();
         try {
             if (role != null) {
