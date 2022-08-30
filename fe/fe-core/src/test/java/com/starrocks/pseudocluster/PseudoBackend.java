@@ -1190,11 +1190,6 @@ public class PseudoBackend {
             void cancel() {
             }
 
-            void buildAndCommitRowset(long txnId, Tablet tablet) throws UserException {
-                Rowset rowset = new Rowset(txnId, genRowsetId(), 100, 100000);
-                txnManager.commit(txnId, tablet.partitionId, tablet, rowset);
-            }
-
             void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
                 for (PTabletWithPartition tabletWithPartition : tablets) {
                     Tablet tablet = tabletManager.getTablet(tabletWithPartition.tabletId);
@@ -1202,7 +1197,8 @@ public class PseudoBackend {
                         LOG.warn("tablet not found {}", tabletWithPartition.tabletId);
                         continue;
                     }
-                    buildAndCommitRowset(txnId, tablet);
+                    Rowset rowset = new Rowset(txnId, genRowsetId(), 100, 100000);
+                    txnManager.commit(txnId, tablet.partitionId, tablet, rowset);
                     PTabletInfo info = new PTabletInfo();
                     info.tabletId = tablet.id;
                     info.schemaHash = tablet.schemaHash;
