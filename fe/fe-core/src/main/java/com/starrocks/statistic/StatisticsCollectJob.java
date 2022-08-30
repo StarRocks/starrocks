@@ -86,6 +86,7 @@ public abstract class StatisticsCollectJob {
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
         context.setExecutor(executor);
         context.setQueryId(UUIDUtil.genUUID());
+        context.setStartTime();
         executor.execute();
 
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
