@@ -54,8 +54,7 @@ TEST(TabletSchemaTest, test_estimate_row_size) {
     c7->set_type("VARCHAR");
     c7->set_is_key(false);
 
-    TabletSchema tablet_schema;
-    tablet_schema.init_from_pb(schema_pb);
+    TabletSchema tablet_schema(schema_pb);
     size_t row_size = tablet_schema.estimate_row_size(100);
     ASSERT_EQ(row_size, 134);
 }
