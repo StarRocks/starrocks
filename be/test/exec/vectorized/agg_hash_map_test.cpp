@@ -14,55 +14,9 @@
 #include "runtime/mem_pool.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 using StringAggHashMap = phmap::flat_hash_map<std::string, AggDataPtr>;
-
-template <class T>
-void hash_map_test(T& hashtable) {
-    int64_t sum = 0;
-    AggDataPtr agg_data = (AggDataPtr)(&sum);
-
-    hashtable.emplace(1, agg_data);
-
-    sum = 13;
-
-    using Iterator = typename T::iterator;
-
-    Iterator it = hashtable.find(1);
-    ASSERT_EQ(13, *(int64_t*)(it->second));
-
-    ASSERT_EQ(13, *(int64_t*)hashtable[1]);
-
-    int64_t sum2 = 10;
-    hashtable.emplace(2, (AggDataPtr)&sum2);
-
-    ASSERT_EQ(13, *(int64_t*)hashtable[1]);
-    ASSERT_EQ(10, *(int64_t*)hashtable[2]);
-
-    it = hashtable.find(2);
-    ASSERT_EQ(10, *(int64_t*)(it->second));
-
-    AggDataPtr data2 = it->second;
-    int64_t* sum3 = (int64_t*)data2;
-    *sum3 += 2048;
-
-    it = hashtable.find(2);
-    ASSERT_EQ(2058, *(int64_t*)(it->second));
-
-    ASSERT_EQ(13, *(int64_t*)hashtable[1]);
-    ASSERT_EQ(2058, *(int64_t*)hashtable[2]);
-
-    for (const auto& n : hashtable) {
-        std::cout << n.first << "  value is " << *(int64_t*)n.second << "\n";
-    }
-
-    T new_table(std::move(hashtable));
-    for (const auto& n : new_table) {
-        std::cout << n.first << "  value is " << *(int64_t*)n.second << "\n";
-    }
-}
 
 struct HashMapVariants {
     enum class Type { empty = 0, int32, string, int32_two_level };
@@ -89,7 +43,7 @@ struct HashMapVariants {
         case Type::string: {
             string = std::make_unique<StringAggHashMap>();
             break;
-        } break;
+        }
         }
     }
 };
@@ -259,5 +213,4 @@ TEST(HashMapTest, TwoLevelConvert) {
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
