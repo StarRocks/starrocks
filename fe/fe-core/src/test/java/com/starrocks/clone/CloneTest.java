@@ -34,7 +34,7 @@ public class CloneTest {
 
     @AfterClass
     public static void tearDown() throws Exception {
-        PseudoCluster.getInstance().shutdown(true);
+        PseudoCluster.getInstance().shutdown(false);
     }
 
     @Test
