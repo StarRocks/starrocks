@@ -116,6 +116,8 @@ const THdfsProperties* FSOptions::hdfs_properties() const {
         return &upload->hdfs_properties;
     } else if (download != nullptr && download->__isset.hdfs_properties) {
         return &download->hdfs_properties;
+    } else if (hdfs_scan_node != nullptr && hdfs_scan_node->__isset.hdfs_properties) {
+        return &hdfs_scan_node->hdfs_properties;
     }
     return nullptr;
 }

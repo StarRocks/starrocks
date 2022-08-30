@@ -56,7 +56,20 @@ bool operator==(const Aws::Client::ClientConfiguration& lhs, const Aws::Client::
 
 class S3ClientFactory {
 public:
-    using ClientConfiguration = Aws::Client::ClientConfiguration;
+    // add bucket and credential infos to ClientConfiguration can prevent invalid _clients[i] use
+    // when bueket or credential change but properties of Aws::Client::ClientConfiguration unchanged
+    struct ClientConfiguration {
+        Aws::Client::ClientConfiguration client_config;
+        std::string bucket;
+        std::string access_key_id;
+        std::string secret_access_key;
+
+        bool operator==(const ClientConfiguration& rhs) {
+            return client_config == rhs.client_config && bucket == rhs.bucket && access_key_id == rhs.access_key_id &&
+                   secret_access_key == rhs.secret_access_key;
+        }
+    };
+
     using S3Client = Aws::S3::S3Client;
     using S3ClientPtr = std::shared_ptr<S3Client>;
 
@@ -110,26 +123,24 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
     string access_key_id;
     string secret_access_key;
     bool path_style_access = config::object_storage_endpoint_path_style_access;
-    const THdfsProperties* hdfs_properties = opts.hdfs_properties();
-    if (hdfs_properties != nullptr) {
-        DCHECK(hdfs_properties->__isset.access_key);
-        DCHECK(hdfs_properties->__isset.secret_key);
-        access_key_id = hdfs_properties->access_key;
-        secret_access_key = hdfs_properties->secret_key;
+    if (!config.access_key_id.empty() && !config.secret_access_key.empty()) {
+        access_key_id = config.access_key_id;
+        secret_access_key = config.secret_access_key;
     } else {
         access_key_id = config::object_storage_access_key_id;
         secret_access_key = config::object_storage_secret_access_key;
     }
+
     if (!access_key_id.empty() && !secret_access_key.empty()) {
         auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key);
-        client = std::make_shared<Aws::S3::S3Client>(credentials, config,
+        client = std::make_shared<Aws::S3::S3Client>(credentials, config.client_config,
                                                      /* signPayloads */
                                                      Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
                                                      /* useVirtualAddress */
                                                      !path_style_access);
     } else {
         // if not cred provided, we can use default cred in aws profile.
-        client = std::make_shared<Aws::S3::S3Client>(config,
+        client = std::make_shared<Aws::S3::S3Client>(config.client_config,
                                                      /* signPayloads */
                                                      Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
                                                      /* useVirtualAddress */
@@ -149,39 +160,48 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 }
 
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const FSOptions& opts) {
-    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
+    S3ClientFactory::ClientConfiguration config = S3ClientFactory::getClientConfig();
+    config.bucket = uri.bucket();
+
+    Aws::Client::ClientConfiguration& client_config = config.client_config;
+
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
     if (hdfs_properties != nullptr) {
         DCHECK(hdfs_properties->__isset.end_point);
         if (hdfs_properties->__isset.end_point) {
-            config.endpointOverride = hdfs_properties->end_point;
+            client_config.endpointOverride = hdfs_properties->end_point;
         }
         if (hdfs_properties->__isset.ssl_enable && hdfs_properties->ssl_enable) {
-            config.scheme = Aws::Http::Scheme::HTTPS;
+            client_config.scheme = Aws::Http::Scheme::HTTPS;
         }
 
         if (hdfs_properties->__isset.region) {
-            config.region = hdfs_properties->region;
+            client_config.region = hdfs_properties->region;
         }
         if (hdfs_properties->__isset.max_connection) {
-            config.maxConnections = hdfs_properties->max_connection;
+            client_config.maxConnections = hdfs_properties->max_connection;
         } else {
-            config.maxConnections = config::object_storage_max_connection;
+            client_config.maxConnections = config::object_storage_max_connection;
         }
+        DCHECK(hdfs_properties->__isset.access_key);
+        DCHECK(hdfs_properties->__isset.secret_key);
+        config.access_key_id = hdfs_properties->access_key;
+        config.secret_access_key = hdfs_properties->secret_key;
+
     } else {
         if (!uri.endpoint().empty()) {
-            config.endpointOverride = uri.endpoint();
+            client_config.endpointOverride = uri.endpoint();
         } else if (!config::object_storage_endpoint.empty()) {
-            config.endpointOverride = config::object_storage_endpoint;
+            client_config.endpointOverride = config::object_storage_endpoint;
         } else if (config::object_storage_endpoint_use_https) {
-            config.scheme = Aws::Http::Scheme::HTTPS;
+            client_config.scheme = Aws::Http::Scheme::HTTPS;
         } else {
-            config.scheme = Aws::Http::Scheme::HTTP;
+            client_config.scheme = Aws::Http::Scheme::HTTP;
         }
         if (!config::object_storage_region.empty()) {
-            config.region = config::object_storage_region;
+            client_config.region = config::object_storage_region;
         }
-        config.maxConnections = config::object_storage_max_connection;
+        client_config.maxConnections = config::object_storage_max_connection;
     }
     return S3ClientFactory::instance().new_client(config, opts);
 }

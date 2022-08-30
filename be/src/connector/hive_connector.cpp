@@ -233,7 +233,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         native_file_path = file_path.native();
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path));
+    const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, FSOptions(&hdfs_scan_node)));
 
     COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
     HdfsScannerParams scanner_params;

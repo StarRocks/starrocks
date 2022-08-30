@@ -854,6 +854,8 @@ struct THdfsScanNode {
 
     // Flag to indicate wheather the column names are case sensitive
     12: optional bool case_sensitive;
+
+    13: optional THdfsProperties hdfs_properties;
 }
 
 struct TProjectNode {

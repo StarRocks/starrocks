@@ -42,27 +42,32 @@ struct SpaceInfo {
 struct FSOptions {
 private:
     FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
-              const ResultFileOptions* result_file_options, const TUploadReq* upload, const TDownloadReq* download)
+              const ResultFileOptions* result_file_options, const TUploadReq* upload, const TDownloadReq* download,
+              const THdfsScanNode* hdfs_scan_node)
             : scan_range_params(scan_range_params),
               export_sink(export_sink),
               result_file_options(result_file_options),
               upload(upload),
-              download(download) {}
+              download(download),
+              hdfs_scan_node(hdfs_scan_node) {}
 
 public:
-    FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr) {}
+    FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
 
     FSOptions(const TBrokerScanRangeParams* scan_range_params)
-            : FSOptions(scan_range_params, nullptr, nullptr, nullptr, nullptr) {}
+            : FSOptions(scan_range_params, nullptr, nullptr, nullptr, nullptr, nullptr) {}
 
-    FSOptions(const TExportSink* export_sink) : FSOptions(nullptr, export_sink, nullptr, nullptr, nullptr) {}
+    FSOptions(const TExportSink* export_sink) : FSOptions(nullptr, export_sink, nullptr, nullptr, nullptr, nullptr) {}
 
     FSOptions(const ResultFileOptions* result_file_options)
-            : FSOptions(nullptr, nullptr, result_file_options, nullptr, nullptr) {}
+            : FSOptions(nullptr, nullptr, result_file_options, nullptr, nullptr, nullptr) {}
 
-    FSOptions(const TUploadReq* upload) : FSOptions(nullptr, nullptr, nullptr, upload, nullptr) {}
+    FSOptions(const TUploadReq* upload) : FSOptions(nullptr, nullptr, nullptr, upload, nullptr, nullptr) {}
 
-    FSOptions(const TDownloadReq* download) : FSOptions(nullptr, nullptr, nullptr, nullptr, download) {}
+    FSOptions(const TDownloadReq* download) : FSOptions(nullptr, nullptr, nullptr, nullptr, download, nullptr) {}
+
+    FSOptions(const THdfsScanNode* hdfs_scan_node)
+            : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, hdfs_scan_node) {}
 
     const THdfsProperties* hdfs_properties() const;
 
@@ -71,6 +76,7 @@ public:
     const ResultFileOptions* result_file_options;
     const TUploadReq* upload;
     const TDownloadReq* download;
+    const THdfsScanNode* hdfs_scan_node;
 };
 
 struct FileStatus {
