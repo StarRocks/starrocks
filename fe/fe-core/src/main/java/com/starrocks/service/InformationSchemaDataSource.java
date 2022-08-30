@@ -125,7 +125,7 @@ public class InformationSchemaDataSource {
                             // BROKER (use default)                           
                             info = genDefaultConfigInfo(info);
                         }
-
+                        // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         infos.add(info);
                     });
                 } finally {
