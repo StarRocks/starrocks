@@ -18,4 +18,16 @@ public class ComputeNodeTest {
         boolean needSync = node.handleHbResponse(hbResponse);
         Assert.assertTrue(needSync);
     }
+
+    @Test
+    public void testUpdateStartTime() {
+
+        BackendHbResponse hbResponse = new BackendHbResponse();
+        hbResponse.status = HbStatus.OK;
+        hbResponse.setRebootTime(1000L);
+        ComputeNode node = new ComputeNode();
+        boolean needSync = node.handleHbResponse(hbResponse);
+        Assert.assertTrue(node.getLastStartTime() == 1000000L);    
+        Assert.assertTrue(needSync);
+    }
 }
