@@ -844,11 +844,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private void checkPasswordAndPrivs(String cluster, String user, String passwd, String db, String tbl,
                                        String clientIp, PrivPredicate predicate) throws AuthenticationException {
 
-        final String fullUserName = ClusterNamespace.getFullName(user);
         List<UserIdentity> currentUser = Lists.newArrayList();
         if (!GlobalStateMgr.getCurrentState().getAuth()
-                .checkPlainPassword(fullUserName, clientIp, passwd, currentUser)) {
-            throw new AuthenticationException("Access denied for " + fullUserName + "@" + clientIp);
+                .checkPlainPassword(user, clientIp, passwd, currentUser)) {
+            throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
         }
 
         Preconditions.checkState(currentUser.size() == 1);

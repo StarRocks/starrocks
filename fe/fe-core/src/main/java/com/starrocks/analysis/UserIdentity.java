@@ -32,6 +32,8 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.thrift.TUserIdentity;
 
 import java.io.DataInput;
@@ -44,8 +46,12 @@ import java.io.IOException;
 // cmy@%
 // cmy@192.168.%
 // cmy@[domain.name]
-public class UserIdentity implements Writable {
+public class UserIdentity implements Writable, GsonPostProcessable, GsonPreProcessable {
+    // change user to default_cluster:user for write
+    // and change default_cluster:user to user after read
     @SerializedName("user")
+    private String userForJsonPersist;
+
     private String user;
     @SerializedName("host")
     private String host;
@@ -124,9 +130,6 @@ public class UserIdentity implements Writable {
         }
 
         FeNameFormat.checkUserName(user);
-        if (!user.equals(Auth.ROOT_USER)) {
-            user = ClusterNamespace.getFullName(user);
-        }
 
         // reuse createMysqlPattern to validate host pattern
         PatternMatcher.createMysqlPattern(host, CaseSensibility.HOST.getCaseSensibility());
@@ -220,15 +223,25 @@ public class UserIdentity implements Writable {
     @Override
     public void write(DataOutput out) throws IOException {
         Preconditions.checkState(isAnalyzed);
-        Text.writeString(out, user);
+        Text.writeString(out, ClusterNamespace.getFullName(user));
         Text.writeString(out, host);
         out.writeBoolean(isDomain);
     }
 
     public void readFields(DataInput in) throws IOException {
-        user = Text.readString(in);
+        user = ClusterNamespace.getNameFromFullName(Text.readString(in));
         host = Text.readString(in);
         isDomain = in.readBoolean();
         isAnalyzed = true;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        user = ClusterNamespace.getNameFromFullName(userForJsonPersist);
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        userForJsonPersist = ClusterNamespace.getFullName(user);
     }
 }
