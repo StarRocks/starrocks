@@ -305,6 +305,7 @@ TEST_F(DeltaWriterTest, test_reached_memory_limit) {
     ASSERT_OK(delta_writer->open());
 
     // Write tree times
+    _mem_tracker->consume(10);
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -348,6 +349,7 @@ TEST_F(DeltaWriterTest, test_reached_parent_memory_limit) {
     ASSERT_OK(delta_writer->open());
 
     // Write tree times
+    _parent_mem_tracker->consume(10);
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
