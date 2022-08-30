@@ -35,7 +35,7 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
     <module name="SuppressWarningsFilter"/>
     <module name="BeforeExecutionExclusionFileFilter">
         <property name="fileNamePattern"
-                  value="(.*[\\/]starrocks[\\/](analysis)|(planner)[\\/].*$)|Log4jConfig.java|FunctionSet.java|HiveMetaStoreThriftClient.java"/>
+                  value="(.*[\\/]starrocks[\\/](analysis)|(planner)[\\/].*$)|Log4jConfig.java|FunctionSet.java|HiveMetaStoreThriftClient.java|Platform.java"/>
     </module>
 
     <module name="FileTabCharacter">
