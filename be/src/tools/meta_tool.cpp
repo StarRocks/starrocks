@@ -83,7 +83,6 @@ DEFINE_string(json_meta_path, "", "absolute json meta file path");
 DEFINE_string(pb_meta_path, "", "pb meta file path");
 DEFINE_string(tablet_file, "", "file to save a set of tablets");
 DEFINE_string(file, "", "segment file path");
-DEFINE_string(file, "", "segment file path");
 
 std::string get_usage(const std::string& progname) {
     std::stringstream ss;
