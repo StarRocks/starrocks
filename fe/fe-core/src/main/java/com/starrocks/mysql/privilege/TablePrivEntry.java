@@ -56,10 +56,6 @@ public class TablePrivEntry extends DbPrivEntry {
 
     public static TablePrivEntry create(String host, String db, String user, String tbl, boolean isDomain,
                                         PrivBitSet privs) throws AnalysisException {
-        if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
-            throw new AnalysisException(
-                    "Table privilege can not contains global or resource or impersonate privileges: " + privs);
-        }
 
         TablePrivEntry tablePrivEntry = new TablePrivEntry(host, user, isDomain, privs, db, tbl);
         tablePrivEntry.analyse();
