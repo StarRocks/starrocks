@@ -938,6 +938,27 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    private int calAvgBucketNumOfLastFivePartitions(OlapTable olapTable) {
+        int avgBucketNum = 0;
+        if (olapTable.getPartitions().size() < 5) {
+            avgBucketNum = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds().size();
+            return avgBucketNum;
+        }
+
+        List<Partition> partitions = (List<Partition>) olapTable.getLastFivePartitions();
+
+        int totalDataSize = 0;
+        for (Partition partition : partitions) {
+            totalDataSize += partition.getDataSize();
+        }
+        // A tablet will be regarded using the 10GB size
+        avgBucketNum = totalDataSize / (10 * 1024 * 1024 * 1024);
+        if (avgBucketNum == 0) {
+            avgBucketNum = 1;
+        }
+        return avgBucketNum;
+    }
+
     private DistributionInfo getDistributionInfo(OlapTable olapTable, AddPartitionClause addPartitionClause)
             throws DdlException {
         DistributionInfo distributionInfo;
@@ -1249,6 +1270,9 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // get distributionInfo
             distributionInfo = getDistributionInfo(olapTable, addPartitionClause);
+
+            int numBucket = calAvgBucketNumOfLastFivePartitions(olapTable);
+            distributionInfo.setBucketNum(numBucket);
 
             // check colocation
             checkColocation(db, olapTable, distributionInfo, partitionDescs);
@@ -1962,6 +1986,17 @@ public class LocalMetastore implements ConnectorMetadata {
 
             if (!enableStorageCache && allowAsyncWriteBack) {
                 throw new DdlException("storage allow_async_write_back can't be enabled when cache is disabled");
+                ((LakeTable) olapTable)
+                        .setStorageInfo(shardStorageInfo, enableStorageCache, storageCacheTtlS, allowAsyncWriteBack);
+            } else {
+                if (distributionInfo.getBucketNum() == 0) {
+                    int numBucket = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds().size();
+                    distributionInfo.setBucketNum(numBucket);
+                }
+
+                Preconditions.checkState(stmt.isOlapEngine());
+                olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
+                        distributionInfo, indexes);
             }
 
             // get service shard storage info from StarMgr
@@ -4393,9 +4428,6 @@ public class LocalMetastore implements ConnectorMetadata {
     public void convertDistributionType(Database db, OlapTable tbl) throws DdlException {
         db.writeLock();
         try {
-            if (!tbl.convertRandomDistributionToHashDistribution()) {
-                throw new DdlException("Table " + tbl.getName() + " is not random distributed");
-            }
             TableInfo tableInfo = TableInfo.createForModifyDistribution(db.getId(), tbl.getId());
             editLog.logModifyDistributionType(tableInfo);
             LOG.info("finished to modify distribution type of table: " + tbl.getName());
@@ -4409,7 +4441,6 @@ public class LocalMetastore implements ConnectorMetadata {
         db.writeLock();
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableInfo.getTableId());
-            tbl.convertRandomDistributionToHashDistribution();
             LOG.info("replay modify distribution type of table: " + tbl.getName());
         } finally {
             db.writeUnlock();

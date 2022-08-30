@@ -258,7 +258,6 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("property", new Integer(SqlParserSymbols.KW_PROPERTY));
         keywordMap.put("query", new Integer(SqlParserSymbols.KW_QUERY));
         keywordMap.put("quota", new Integer(SqlParserSymbols.KW_QUOTA));
-        keywordMap.put("random", new Integer(SqlParserSymbols.KW_RANDOM));
         keywordMap.put("range", new Integer(SqlParserSymbols.KW_RANGE));
         keywordMap.put("range", new Integer(SqlParserSymbols.KW_RANGE));
         keywordMap.put("read", new Integer(SqlParserSymbols.KW_READ));

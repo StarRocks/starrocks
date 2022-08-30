@@ -541,6 +541,7 @@ alterClause
     //Alter partition clause
     | addPartitionClause
     | dropPartitionClause
+    | distributionClause
     | truncatePartitionClause
     | modifyPartitionClause
     | replacePartitionClause
@@ -660,6 +661,7 @@ truncatePartitionClause
 
 modifyPartitionClause
     : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
+    | MODIFY PARTITION distributionDesc
     ;
 
 replacePartitionClause
@@ -1515,6 +1517,10 @@ partitionValueList
 
 partitionValue
     : MAXVALUE | string
+    ;
+
+distributionClause
+    : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
     ;
 
 distributionDesc

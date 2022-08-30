@@ -35,6 +35,7 @@ import java.sql.SQLException;
 import java.sql.SQLSyntaxErrorException;
 import java.sql.Statement;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -120,6 +121,10 @@ public class PseudoCluster {
             return null;
         }
         return backends.get(host);
+    }
+
+    public Collection<PseudoBackend> getBackends() {
+        return backends.values();
     }
 
     public PseudoBackend getBackendByHost(String host) {
