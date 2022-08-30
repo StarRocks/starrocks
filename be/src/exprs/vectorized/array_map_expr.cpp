@@ -44,9 +44,6 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* ptr) {
     for (int i = 1; i < _children.size(); ++i) {
         ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[i], ptr);
         // the column is a null literal.
-        if (child_col->is_constant() && child_col->size() == 1 && child_col->is_null(0)) {
-            return child_col;
-        }
         if (child_col->only_null()) {
             return child_col;
         }

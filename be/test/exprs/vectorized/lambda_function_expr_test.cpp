@@ -142,21 +142,22 @@ public:
         type_arr_int.type = PrimitiveType::TYPE_ARRAY;
         type_arr_int.children.emplace_back();
         type_arr_int.children.back().type = PrimitiveType::TYPE_INT;
-        // null
-        auto array = ColumnHelper::create_column(type_arr_int, true);
-        array->append_datum(Datum{}); // null
-        auto* const_null = new_fake_const_expr(array, type_arr_int);
-        _array_expr.push_back(const_null);
 
         // [1,4]
         // [null,null]
         // [null,12]
-        array = ColumnHelper::create_column(type_arr_int, true);
+        auto array = ColumnHelper::create_column(type_arr_int, true);
         array->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
         array->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
         array->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
         auto* array_values = new_fake_const_expr(array, type_arr_int);
         _array_expr.push_back(array_values);
+
+        // null
+        array = ColumnHelper::create_column(type_arr_int, true);
+        array->append_datum(Datum{}); // null
+        auto* const_null = new_fake_const_expr(array, type_arr_int);
+        _array_expr.push_back(const_null);
 
         // [null]
         array = ColumnHelper::create_column(type_arr_int, true);
@@ -264,11 +265,11 @@ private:
 
 // just consider one level, not nested
 // array_map(lambdaFunction(x<type>, lambdaExpr),array<type>)
-TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test) {
+TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
     auto cur_chunk = std::make_shared<vectorized::Chunk>();
     std::vector<int> vec_a = {1, 1, 1};
     cur_chunk->append_column(build_int_column(vec_a), 1);
-    for (int i = 0; i < _array_expr.size(); ++i) {
+    for (int i = 0; i < 1; ++i) {
         for (int j = 0; j < _lambda_func.size(); ++j) {
             expr_node.fn.name.function_name = "array_map";
             ArrayMapExpr array_map_expr(expr_node);
@@ -297,13 +298,10 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test) {
 
             ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
 
-            if (i == 0) { // array_map(x->xxx,null)
-                EXPECT_EQ(1, result->size());
-                ASSERT_TRUE(result->is_null(0));
-            } else if (i == 1 && j == 0) { // array_map(x -> x, array<int>)
-                                           // [1,4]
-                                           // [null,null]
-                                           // [null,12]
+            if (i == 0 && j == 0) { // array_map(x -> x, array<int>)
+                                    // [1,4]
+                                    // [null,null]
+                                    // [null,12]
                 ASSERT_FALSE(result->is_constant());
                 ASSERT_FALSE(result->is_numeric());
 
@@ -314,7 +312,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test) {
                 ASSERT_TRUE(result->get(1).get_array()[1].is_null());
                 ASSERT_TRUE(result->get(2).get_array()[0].is_null());
                 EXPECT_EQ(12, result->get(2).get_array()[1].get_int32());
-            } else if (i == 1 && j == 1) { // array_map(x -> x is null, array<int>)
+            } else if (i == 0 && j == 1) { // array_map(x -> x is null, array<int>)
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(0, result->get(0).get_array()[0].get_int8());
                 EXPECT_EQ(0, result->get(0).get_array()[1].get_int8());
@@ -322,7 +320,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test) {
                 EXPECT_EQ(1, result->get(1).get_array()[1].get_int8());
                 EXPECT_EQ(1, result->get(2).get_array()[0].get_int8());
                 EXPECT_EQ(0, result->get(2).get_array()[1].get_int8());
-            } else if (i == 1 && j == 2) { // // array_map(x -> x+a, array<int>)
+            } else if (i == 0 && j == 2) { // // array_map(x -> x+a, array<int>)
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(2, result->get(0).get_array()[0].get_int32());
                 EXPECT_EQ(5, result->get(0).get_array()[1].get_int32());
@@ -330,7 +328,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test) {
                 ASSERT_TRUE(result->get(1).get_array()[1].is_null());
                 ASSERT_TRUE(result->get(2).get_array()[0].is_null());
                 EXPECT_EQ(13, result->get(2).get_array()[1].get_int32());
-            } else if (i == 1 && j == 3) {
+            } else if (i == 0 && j == 3) {
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(-110, result->get(0).get_array()[0].get_int32());
                 EXPECT_EQ(-110, result->get(0).get_array()[1].get_int32());
@@ -338,6 +336,49 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test) {
                 EXPECT_EQ(-110, result->get(1).get_array()[1].get_int32());
                 EXPECT_EQ(-110, result->get(2).get_array()[0].get_int32());
                 EXPECT_EQ(-110, result->get(2).get_array()[1].get_int32());
+            }
+
+            exprContext.close(nullptr);
+        }
+    }
+}
+
+TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
+    auto cur_chunk = std::make_shared<vectorized::Chunk>();
+    std::vector<int> vec_a = {1, 1, 1};
+    cur_chunk->append_column(build_int_column(vec_a), 1);
+    for (int i = 1; i < 5; ++i) {
+        for (int j = 0; j < _lambda_func.size(); ++j) {
+            expr_node.fn.name.function_name = "array_map";
+            ArrayMapExpr array_map_expr(expr_node);
+            array_map_expr.clear_children();
+            array_map_expr.add_child(_lambda_func[j]);
+            array_map_expr.add_child(_array_expr[i]);
+            ExprContext exprContext(&array_map_expr);
+            exprContext._is_clone = true;
+            WARN_IF_ERROR(array_map_expr.prepare(nullptr, &exprContext), "");
+            auto lambda = dynamic_cast<LambdaFunction*>(_lambda_func[j]);
+
+            // check LambdaFunction::prepare()
+            std::vector<SlotId> ids, arguments;
+            lambda->get_slot_ids(&ids);
+            lambda->get_lambda_arguments_ids(&arguments);
+
+            ASSERT_TRUE(arguments.size() == 1 && arguments[0] == 100000); // the x's slot_id = 100000
+            if (j == 2) {
+                ASSERT_TRUE(ids.size() == 1 && ids[0] == 1); // the slot_id of the captured column is 1
+            } else {
+                ASSERT_TRUE(ids.empty());
+            }
+
+            WARN_IF_ERROR(array_map_expr.open(nullptr, &exprContext, FunctionContext::FunctionStateScope::THREAD_LOCAL),
+                          "");
+
+            ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
+
+            if (i == 1) { // array_map(x->xxx,null)
+                EXPECT_EQ(1, result->size());
+                ASSERT_TRUE(result->is_null(0));
             } else if (i == 2 && (j == 0 || j == 2)) { // array_map( x->x || x->x+a, [null])
                 EXPECT_EQ(1, result->size());
                 ASSERT_TRUE(result->get(0).get_array()[0].is_null());
@@ -368,7 +409,47 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test) {
                 EXPECT_EQ(-110, result->get(0).get_array()[0].get_int32());
                 ASSERT_TRUE(result->get(1).get_array().empty());
                 ASSERT_TRUE(result->is_null(2));
-            } else if (i == 5 && j == 0) { // array_map( x->x, array<const[1,4]...>)
+            }
+
+            exprContext.close(nullptr);
+        }
+    }
+}
+
+TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
+    auto cur_chunk = std::make_shared<vectorized::Chunk>();
+    std::vector<int> vec_a = {1, 1, 1};
+    cur_chunk->append_column(build_int_column(vec_a), 1);
+    for (int i = 5; i < _array_expr.size(); ++i) {
+        for (int j = 0; j < _lambda_func.size(); ++j) {
+            expr_node.fn.name.function_name = "array_map";
+            ArrayMapExpr array_map_expr(expr_node);
+            array_map_expr.clear_children();
+            array_map_expr.add_child(_lambda_func[j]);
+            array_map_expr.add_child(_array_expr[i]);
+            ExprContext exprContext(&array_map_expr);
+            exprContext._is_clone = true;
+            WARN_IF_ERROR(array_map_expr.prepare(nullptr, &exprContext), "");
+            auto lambda = dynamic_cast<LambdaFunction*>(_lambda_func[j]);
+
+            // check LambdaFunction::prepare()
+            std::vector<SlotId> ids, arguments;
+            lambda->get_slot_ids(&ids);
+            lambda->get_lambda_arguments_ids(&arguments);
+
+            ASSERT_TRUE(arguments.size() == 1 && arguments[0] == 100000); // the x's slot_id = 100000
+            if (j == 2) {
+                ASSERT_TRUE(ids.size() == 1 && ids[0] == 1); // the slot_id of the captured column is 1
+            } else {
+                ASSERT_TRUE(ids.empty());
+            }
+
+            WARN_IF_ERROR(array_map_expr.open(nullptr, &exprContext, FunctionContext::FunctionStateScope::THREAD_LOCAL),
+                          "");
+
+            ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
+
+            if (i == 5 && j == 0) { // array_map( x->x, array<const[1,4]...>)
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(1, result->get(0).get_array()[0].get_int32());
                 EXPECT_EQ(4, result->get(0).get_array()[1].get_int32());

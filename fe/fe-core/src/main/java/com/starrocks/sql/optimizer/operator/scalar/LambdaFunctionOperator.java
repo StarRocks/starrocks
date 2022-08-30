@@ -38,9 +38,9 @@ public class LambdaFunctionOperator extends ScalarOperator {
 
     @Override
     public ScalarOperator getChild(int index) {
+        Preconditions.checkState(index == 0);
         return lambdaExpr;
     }
-
 
     @Override
     public boolean isNullable() {
@@ -49,7 +49,8 @@ public class LambdaFunctionOperator extends ScalarOperator {
 
     @Override
     public void setChild(int index, ScalarOperator child) {
-        Preconditions.checkState(false);
+        Preconditions.checkState(index == 0);
+        this.lambdaExpr = child;
     }
 
     @Override
