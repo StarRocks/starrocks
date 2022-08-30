@@ -55,7 +55,8 @@ public abstract class AlterJobV2 implements Writable {
         // waiting for previous txns to be finished
         RUNNING, // alter tasks are sent to BE, and waiting for them finished.
         FINISHED, // job is done
-        CANCELLED; // job is cancelled(failed or be cancelled by user)
+        CANCELLED, // job is cancelled(failed or be cancelled by user)
+        FINISHED_REWRITING; // For LakeTable, has finished rewriting historical data.
 
         public boolean isFinalState() {
             return this == JobState.FINISHED || this == JobState.CANCELLED;
@@ -179,6 +180,9 @@ public abstract class AlterJobV2 implements Writable {
                 case RUNNING:
                     runRunningJob();
                     break;
+                case FINISHED_REWRITING:
+                    runFinishedRewritingJob();
+                    break;
                 default:
                     break;
             }
@@ -236,6 +240,8 @@ public abstract class AlterJobV2 implements Writable {
     protected abstract void runWaitingTxnJob() throws AlterCancelException;
 
     protected abstract void runRunningJob() throws AlterCancelException;
+
+    protected abstract void runFinishedRewritingJob() throws AlterCancelException;
 
     protected abstract boolean cancelImpl(String errMsg);
 

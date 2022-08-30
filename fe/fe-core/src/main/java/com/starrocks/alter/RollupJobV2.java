@@ -489,6 +489,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.span.end();
     }
 
+    @Override
+    protected void runFinishedRewritingJob() {
+        // nothing to do
+    }
+
     private void onFinished(OlapTable tbl) {
         for (Partition partition : tbl.getPartitions()) {
             MaterializedIndex rollupIndex = partition.getIndex(rollupIndexId);
