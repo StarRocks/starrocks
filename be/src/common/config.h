@@ -820,4 +820,12 @@ CONF_Int32(cardinality_of_inject, "10");
 CONF_String(directory_of_inject,
             "/src/exec/pipeline/hashjoin,/src/exec/pipeline/scan,/src/exec/pipeline/aggregate,/src/exec/pipeline/"
             "crossjoin,/src/exec/pipeline/sort,/src/exec/pipeline/exchange,/src/exec/pipeline/analysis");
+CONF_String(directory_of_inject, "/src/exec,/src/exprs");
+
+// Used by to_base64
+CONF_Int64(max_length_for_to_base64, "200000");
+// Used by bitmap_to_string
+CONF_Int64(max_length_for_bitmap_to_string, "200000");
+// Used by bitmap_to_array
+CONF_Int64(max_length_for_bitmap_to_array, "200000");
 } // namespace starrocks::config

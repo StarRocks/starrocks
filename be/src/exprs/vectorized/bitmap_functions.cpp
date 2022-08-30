@@ -144,6 +144,11 @@ ColumnPtr BitmapFunctions::bitmap_and(FunctionContext* context, const starrocks:
 
 // bitmap_to_string
 DEFINE_STRING_UNARY_FN_WITH_IMPL(bitmapToStingImpl, bitmap_ptr) {
+    if (bitmap_ptr->cardinality() > config::max_length_for_bitmap_to_string) {
+        std::stringstream ss;
+        ss << "bitmap_to_string not supported size > " << config::max_length_for_bitmap_to_string;
+        throw std::runtime_error(ss.str());
+    }
     return bitmap_ptr->to_string();
 }
 
@@ -289,12 +294,24 @@ ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starr
     if (columns[0]->has_null()) {
         for (int row = 0; row < size; ++row) {
             if (!lhs.is_null(row)) {
-                data_size += lhs.value(row)->cardinality();
+                const auto cardinality = lhs.value(row)->cardinality();
+                if (cardinality > config::max_length_for_bitmap_to_array) {
+                    std::stringstream ss;
+                    ss << "bitmap_to_array not supported size > " << config::max_length_for_bitmap_to_array;
+                    throw std::runtime_error(ss.str());
+                }
+                data_size += cardinality;
             }
         }
     } else {
         for (int row = 0; row < size; ++row) {
-            data_size += lhs.value(row)->cardinality();
+            const auto cardinality = lhs.value(row)->cardinality();
+            if (cardinality > config::max_length_for_bitmap_to_array) {
+                std::stringstream ss;
+                ss << "bitmap_to_array not supported size > " << config::max_length_for_bitmap_to_array;
+                throw std::runtime_error(ss.str());
+            }
+            data_size += cardinality;
         }
     }
 
