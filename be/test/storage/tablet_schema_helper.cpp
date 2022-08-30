@@ -25,7 +25,7 @@ std::unique_ptr<TabletSchema> TabletSchemaHelper::create_tablet_schema(const std
     return std::make_unique<TabletSchema>(schema_pb);
 }
 
-inline std::shared_ptr<TabletSchema> TabletSchemaHelper::create_tablet_schema() {
+std::shared_ptr<TabletSchema> TabletSchemaHelper::create_tablet_schema() {
     TabletSchemaPB tablet_schema_pb;
     tablet_schema_pb.set_keys_type(DUP_KEYS);
     tablet_schema_pb.set_num_short_key_columns(2);
