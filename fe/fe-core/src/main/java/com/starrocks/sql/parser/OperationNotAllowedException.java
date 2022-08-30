@@ -4,7 +4,7 @@ package com.starrocks.sql.parser;
 
 import static java.lang.String.format;
 
-public class OperationNotAllowedException extends ParsingException{
+public class OperationNotAllowedException extends ParsingException {
 
     public OperationNotAllowedException(String message) {
         super(message);
