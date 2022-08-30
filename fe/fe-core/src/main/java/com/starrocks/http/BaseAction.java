@@ -29,7 +29,6 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
@@ -254,13 +253,12 @@ public abstract class BaseAction implements IAction {
         public String fullUserName;
         public String remoteIp;
         public String password;
-        public String cluster;
 
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
             sb.append("user: ").append(fullUserName).append(", remote ip: ").append(remoteIp);
-            sb.append(", password: ").append(password).append(", cluster: ").append(cluster);
+            sb.append(", password: ").append(password);
             return sb.toString();
         }
     }
@@ -339,10 +337,8 @@ public abstract class BaseAction implements IAction {
             final String[] elements = authInfo.fullUserName.split("@");
             if (elements != null && elements.length < 2) {
                 authInfo.fullUserName = ClusterNamespace.getFullName(authInfo.fullUserName);
-                authInfo.cluster = SystemInfoService.DEFAULT_CLUSTER;
             } else if (elements != null && elements.length == 2) {
                 authInfo.fullUserName = ClusterNamespace.getFullName(elements[0]);
-                authInfo.cluster = elements[1];
             }
             authInfo.password = authString.substring(index + 1);
             authInfo.remoteIp = request.getHostString();
