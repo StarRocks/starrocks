@@ -463,7 +463,7 @@ public abstract class AstVisitor<R, C> {
     public R visitCreateFunction(CreateFunctionStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
-    
+
     public R visitShowOpenTableStmt(ShowOpenTableStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -500,6 +500,25 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    public R visitKillAnalyzeStatement(KillAnalyzeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ----------------- Resource Clause -------------
+
+    public R visitCreateResourceStatement(CreateResourceStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+    public R visitDropResourceStatement(DropResourceStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+    public R visitAlterResourceStatement(AlterResourceStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+    public R visitShowResourceStatement(ShowResourcesStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ----------------- Catalog Clause -------------

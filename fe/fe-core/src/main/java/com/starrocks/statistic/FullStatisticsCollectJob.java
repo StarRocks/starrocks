@@ -7,6 +7,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
 import org.apache.velocity.VelocityContext;
 
 import java.util.List;
@@ -34,7 +35,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @Override
-    public void collect() throws Exception {
+    public void collect(ConnectContext context) throws Exception {
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
 
@@ -48,7 +49,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
             for (List<String> splitColItem : Lists.partition(columns, partitionSize)) {
                 String sql = buildCollectFullStatisticSQL(db, table, partition, splitColItem);
-                collectStatisticSync(sql);
+                collectStatisticSync(sql, context);
             }
         }
     }

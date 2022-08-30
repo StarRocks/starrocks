@@ -8,6 +8,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.velocity.VelocityContext;
 
@@ -45,7 +46,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @Override
-    public void collect() throws Exception {
+    public void collect(ConnectContext context) throws Exception {
         long sampleRowCount = Long.parseLong(properties.getOrDefault(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
                 String.valueOf(Config.statistic_sample_collect_rows)));
 
@@ -54,7 +55,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
         for (List<String> splitColItem : Lists.partition(columns, partitionSize)) {
             String sql = buildSampleInsertSQL(db.getId(), table.getId(), splitColItem, sampleRowCount);
-            collectStatisticSync(sql);
+            collectStatisticSync(sql, context);
         }
     }
 

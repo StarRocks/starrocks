@@ -104,6 +104,7 @@ statement
     | showAnalyzeStatement                                                                  #showAnalyze
     | showStatsMetaStatement                                                                #showStatsMeta
     | showHistogramMetaStatement                                                            #showHistogramMeta
+    | killAnalyzeStatement                                                                  #killAnalyze
 
     // Work Group Statement
     | createResourceGroupStatement                                                          #createResourceGroup
@@ -641,6 +642,10 @@ showStatsMetaStatement
 
 showHistogramMetaStatement
     : SHOW HISTOGRAM META (WHERE expression)?
+    ;
+
+killAnalyzeStatement
+    : KILL ANALYZE INTEGER_VALUE
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
