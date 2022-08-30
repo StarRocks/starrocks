@@ -30,9 +30,11 @@
 
 namespace starrocks {
 
-StatusOr<bool> BloomFilterIndexReader::load(fs::BlockManager* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                                            bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker) {
-    return success_once(_load_once, [&]() { return do_load(fs, filename, meta, use_page_cache, kept_in_memory, mem_tracker); });
+StatusOr<bool> BloomFilterIndexReader::load(fs::BlockManager* fs, const std::string& filename,
+                                            const BloomFilterIndexPB& meta, bool use_page_cache, bool kept_in_memory,
+                                            MemTracker* mem_tracker) {
+    return success_once(_load_once,
+                        [&]() { return do_load(fs, filename, meta, use_page_cache, kept_in_memory, mem_tracker); });
 }
 
 Status BloomFilterIndexReader::do_load(fs::BlockManager* fs, const std::string& filename,
