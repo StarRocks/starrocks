@@ -458,7 +458,7 @@ TabletSchema::~TabletSchema() {
     }
 }
 
-void TabletSchema::init_from_pb(const TabletSchemaPB& schema) {
+void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     _id = schema.has_id() ? schema.id() : invalid_id();
     _keys_type = static_cast<uint8_t>(schema.keys_type());
     _num_key_columns = 0;
