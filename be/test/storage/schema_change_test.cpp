@@ -24,6 +24,7 @@ class SchemaChangeTest : public testing::Test {
         }
     }
 
+protected:
     void SetCreateTabletReq(TCreateTabletReq* request, int64_t tablet_id, TKeysType::type type = TKeysType::DUP_KEYS) {
         request->tablet_id = tablet_id;
         request->__set_version(1);
@@ -89,8 +90,9 @@ class SchemaChangeTest : public testing::Test {
         ASSERT_TRUE(tablet->add_rowset(new_rowset, false).ok());
     }
 
-    void SetTabletSchema(const std::string& name, const std::string& type, const std::string& aggregation,
-                         uint32_t length, bool is_allow_null, bool is_key, TabletSchema* tablet_schema) {
+    std::shared_ptr<TabletSchema> SetTabletSchema(const std::string& name, const std::string& type,
+                                                  const std::string& aggregation, uint32_t length, bool is_allow_null,
+                                                  bool is_key) {
         TabletSchemaPB tablet_schema_pb;
         ColumnPB* column = tablet_schema_pb.add_column();
         column->set_unique_id(0);
@@ -100,20 +102,17 @@ class SchemaChangeTest : public testing::Test {
         column->set_is_nullable(is_allow_null);
         column->set_length(length);
         column->set_aggregation(aggregation);
-        tablet_schema->init_from_pb(tablet_schema_pb);
+        return std::make_shared<TabletSchema>(tablet_schema_pb);
     }
 
     template <typename T>
     void test_convert_to_varchar(FieldType type, int type_size, T val, const std::string& expect_val) {
-        TabletSchema src_tablet_schema;
-        SetTabletSchema("SrcColumn", field_type_to_string(type), "REPLACE", type_size, false, false,
-                        &src_tablet_schema);
+        auto src_tablet_schema =
+                SetTabletSchema("SrcColumn", field_type_to_string(type), "REPLACE", type_size, false, false);
+        auto dst_tablet_schema = SetTabletSchema("VarcharColumn", "VARCHAR", "REPLACE", 255, false, false);
 
-        TabletSchema dst_tablet_schema;
-        SetTabletSchema("VarcharColumn", "VARCHAR", "REPLACE", 255, false, false, &dst_tablet_schema);
-
-        Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema.column(0));
-        Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema.column(0));
+        Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
+        Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
 
         Datum src_datum;
         src_datum.set<T>(val);
@@ -128,15 +127,12 @@ class SchemaChangeTest : public testing::Test {
 
     template <typename T>
     void test_convert_from_varchar(FieldType type, int type_size, std::string val, T expect_val) {
-        TabletSchema src_tablet_schema;
-        SetTabletSchema("VarcharColumn", "VARCHAR", "REPLACE", 255, false, false, &src_tablet_schema);
+        auto src_tablet_schema = SetTabletSchema("VarcharColumn", "VARCHAR", "REPLACE", 255, false, false);
+        auto dst_tablet_schema =
+                SetTabletSchema("DstColumn", field_type_to_string(type), "REPLACE", type_size, false, false);
 
-        TabletSchema dst_tablet_schema;
-        SetTabletSchema("DstColumn", field_type_to_string(type), "REPLACE", type_size, false, false,
-                        &dst_tablet_schema);
-
-        Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema.column(0));
-        Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema.column(0));
+        Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
+        Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
 
         Datum src_datum;
         Slice slice;
@@ -212,14 +208,11 @@ TEST_F(SchemaChangeTest, convert_varchar_to_double) {
 }
 
 TEST_F(SchemaChangeTest, convert_float_to_double) {
-    TabletSchema src_tablet_schema;
-    SetTabletSchema("SrcColumn", "FLOAT", "REPLACE", 4, false, false, &src_tablet_schema);
+    auto src_tablet_schema = SetTabletSchema("SrcColumn", "FLOAT", "REPLACE", 4, false, false);
+    auto dst_tablet_schema = SetTabletSchema("VarcharColumn", "DOUBLE", "REPLACE", 8, false, false);
 
-    TabletSchema dst_tablet_schema;
-    SetTabletSchema("VarcharColumn", "DOUBLE", "REPLACE", 8, false, false, &dst_tablet_schema);
-
-    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema.column(0));
-    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema.column(0));
+    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     src_datum.set_float(1.2345);
@@ -233,14 +226,11 @@ TEST_F(SchemaChangeTest, convert_float_to_double) {
 }
 
 TEST_F(SchemaChangeTest, convert_datetime_to_date) {
-    TabletSchema src_tablet_schema;
-    SetTabletSchema("DateTimeColumn", "DATETIME", "REPLACE", 8, false, false, &src_tablet_schema);
+    auto src_tablet_schema = SetTabletSchema("DateTimeColumn", "DATETIME", "REPLACE", 8, false, false);
+    auto dst_tablet_schema = SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false);
 
-    TabletSchema dst_tablet_schema;
-    SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false, &dst_tablet_schema);
-
-    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema.column(0));
-    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema.column(0));
+    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     Datum src_datum;
@@ -262,14 +252,11 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
 }
 
 TEST_F(SchemaChangeTest, convert_date_to_datetime) {
-    TabletSchema src_tablet_schema;
-    SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false, &src_tablet_schema);
+    auto src_tablet_schema = SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false);
+    auto dst_tablet_schema = SetTabletSchema("DateTimeColumn", "DATETIME", "REPLACE", 8, false, false);
 
-    TabletSchema dst_tablet_schema;
-    SetTabletSchema("DateTimeColumn", "DATETIME", "REPLACE", 8, false, false, &dst_tablet_schema);
-
-    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema.column(0));
-    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema.column(0));
+    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     Datum src_datum;
     std::string origin_val = "2021-09-28";
@@ -289,14 +276,11 @@ TEST_F(SchemaChangeTest, convert_date_to_datetime) {
 }
 
 TEST_F(SchemaChangeTest, convert_int_to_date_v2) {
-    TabletSchema src_tablet_schema;
-    SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false, &src_tablet_schema);
+    auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
+    auto dst_tablet_schema = SetTabletSchema("DateColumn", "DATE V2", "REPLACE", 3, false, false);
 
-    TabletSchema dst_tablet_schema;
-    SetTabletSchema("DateColumn", "DATE V2", "REPLACE", 3, false, false, &dst_tablet_schema);
-
-    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema.column(0));
-    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema.column(0));
+    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     Datum src_datum;
@@ -314,14 +298,11 @@ TEST_F(SchemaChangeTest, convert_int_to_date_v2) {
 }
 
 TEST_F(SchemaChangeTest, convert_int_to_date) {
-    TabletSchema src_tablet_schema;
-    SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false, &src_tablet_schema);
+    auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
+    auto dst_tablet_schema = SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false);
 
-    TabletSchema dst_tablet_schema;
-    SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false, &dst_tablet_schema);
-
-    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema.column(0));
-    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema.column(0));
+    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     Datum src_datum;
@@ -340,18 +321,15 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
 }
 
 TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
-    TabletSchema src_tablet_schema;
-    SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false, &src_tablet_schema);
+    auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
+    auto dst_tablet_schema = SetTabletSchema("BitmapColumn", "OBJECT", "BITMAP_UNION", 8, false, false);
 
-    TabletSchema dst_tablet_schema;
-    SetTabletSchema("BitmapColumn", "OBJECT", "BITMAP_UNION", 8, false, false, &dst_tablet_schema);
-
-    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(dst_tablet_schema), 4096);
+    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*dst_tablet_schema), 4096);
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
-    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema.column(0));
-    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema.column(0));
+    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     src_datum.set_int32(2);
@@ -367,18 +345,15 @@ TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
 }
 
 TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
-    TabletSchema src_tablet_schema;
-    SetTabletSchema("IntColumn", "VARCHAR", "REPLACE", 255, false, false, &src_tablet_schema);
+    auto src_tablet_schema = SetTabletSchema("IntColumn", "VARCHAR", "REPLACE", 255, false, false);
+    auto dst_tablet_schema = SetTabletSchema("HLLColumn", "HLL", "HLL_UNION", 8, false, false);
 
-    TabletSchema dst_tablet_schema;
-    SetTabletSchema("HLLColumn", "HLL", "HLL_UNION", 8, false, false, &dst_tablet_schema);
-
-    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(dst_tablet_schema), 4096);
+    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*dst_tablet_schema), 4096);
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
-    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema.column(0));
-    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema.column(0));
+    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     std::string str = "test string";
@@ -396,18 +371,15 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
 }
 
 TEST_F(SchemaChangeTest, convert_int_to_count) {
-    TabletSchema src_tablet_schema;
-    SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false, &src_tablet_schema);
+    auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
+    auto dst_tablet_schema = SetTabletSchema("CountColumn", "BIGINT", "SUM", 8, false, false);
 
-    TabletSchema dst_tablet_schema;
-    SetTabletSchema("CountColumn", "BIGINT", "SUM", 8, false, false, &dst_tablet_schema);
-
-    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(src_tablet_schema), 4096);
-    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(dst_tablet_schema), 4096);
+    ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*src_tablet_schema), 4096);
+    ChunkPtr dst_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*dst_tablet_schema), 4096);
     ColumnPtr& src_col = src_chunk->get_column_by_index(0);
     ColumnPtr& dst_col = dst_chunk->get_column_by_index(0);
-    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema.column(0));
-    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema.column(0));
+    Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
+    Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     src_datum.set_int32(2);

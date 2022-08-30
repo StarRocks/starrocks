@@ -20,8 +20,6 @@ class ChunkHelperTest : public testing::Test {
 public:
     void add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key, std::string type, int32_t length,
                            bool is_nullable);
-    starrocks::Schema* gen_schema(bool is_nullable);
-    vectorized::SchemaPtr gen_v_schema(bool is_nullable);
     void check_chunk(Chunk* chunk, size_t column_size, size_t row_size);
     void check_chunk_nullable(Chunk* chunk, size_t column_size, size_t row_size);
     void check_column(Column* column, FieldType type, size_t row_size);
@@ -83,37 +81,6 @@ void ChunkHelperTest::add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_
     column->set_length(length);
     column->set_is_nullable(is_nullable);
     column->set_aggregation("NONE");
-}
-
-starrocks::Schema* ChunkHelperTest::gen_schema(bool is_nullable) {
-    TabletSchemaPB tablet_schema_pb;
-    add_tablet_column(tablet_schema_pb, 0, true, "TINYINT", 1, is_nullable);
-    add_tablet_column(tablet_schema_pb, 1, false, "SMALLINT", 2, is_nullable);
-    add_tablet_column(tablet_schema_pb, 2, false, "INT", 4, is_nullable);
-    add_tablet_column(tablet_schema_pb, 3, false, "BIGINT", 8, is_nullable);
-    add_tablet_column(tablet_schema_pb, 4, false, "LARGEINT", 16, is_nullable);
-    add_tablet_column(tablet_schema_pb, 5, false, "FLOAT", 4, is_nullable);
-    add_tablet_column(tablet_schema_pb, 6, false, "DOUBLE", 8, is_nullable);
-    add_tablet_column(tablet_schema_pb, 7, false, "VARCHAR", 16, is_nullable);
-    add_tablet_column(tablet_schema_pb, 8, false, "CHAR", 16, is_nullable);
-
-    TabletSchema* tablet_schema = new TabletSchema();
-    tablet_schema->init_from_pb(tablet_schema_pb);
-    return new starrocks::Schema(*tablet_schema);
-}
-
-vectorized::SchemaPtr ChunkHelperTest::gen_v_schema(bool is_nullable) {
-    vectorized::Fields fields;
-    fields.emplace_back(std::make_shared<Field>(0, "c0", get_type_info(OLAP_FIELD_TYPE_TINYINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(1, "c1", get_type_info(OLAP_FIELD_TYPE_SMALLINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(2, "c2", get_type_info(OLAP_FIELD_TYPE_INT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(3, "c3", get_type_info(OLAP_FIELD_TYPE_BIGINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(4, "c4", get_type_info(OLAP_FIELD_TYPE_LARGEINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(5, "c5", get_type_info(OLAP_FIELD_TYPE_FLOAT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(6, "c6", get_type_info(OLAP_FIELD_TYPE_DOUBLE), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(7, "c7", get_type_info(OLAP_FIELD_TYPE_VARCHAR), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(8, "c8", get_type_info(OLAP_FIELD_TYPE_CHAR), is_nullable));
-    return std::make_shared<Schema>(fields);
 }
 
 void ChunkHelperTest::check_chunk(Chunk* chunk, size_t column_size, size_t row_size) {
