@@ -580,7 +580,7 @@ int meta_tool_main(int argc, char** argv) {
     } else if (FLAGS_operation == "print_lake_txn_log") {
         starrocks::lake::TxnLogPB txn_log;
         if (!txn_log.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse tablet metadata";
+            std::cerr << "Fail to parse txn log";
             return -1;
         }
         json2pb::Pb2JsonOptions options;
