@@ -110,6 +110,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
+
 /**
  * There are 4 steps in SparkLoadJob:
  * Step1: SparkLoadPendingTask will be created by unprotectedExecuteJob method and submit spark etl job.
@@ -516,10 +518,10 @@ public class SparkLoadJob extends BulkLoadJob {
                                         LOG.warn("replica {} not exists", backendId);
                                         continue;
                                     }
-                                    tabletAllReplicas.add(tabletId);
+
                                     pushTask(backend.getId(), tableId, partitionId, indexId, tabletId,
                                             tabletId, schemaHash, params, batchTask, tabletMetaStr,
-                                            backend, new Replica(tabletId, backendId, 0, null),
+                                            backend, new Replica(tabletId, backendId, -1, NORMAL),
                                             tabletFinishedReplicas, TTabletType.TABLET_TYPE_LAKE);
 
                                     if (tabletFinishedReplicas.contains(tabletId)) {
