@@ -166,7 +166,8 @@ public class PlanFragmentBuilder {
     private void createOutputFragment(PlanFragment inputFragment, ExecPlan execPlan,
                                       List<ColumnRefOperator> outputColumns,
                                       boolean hasOutputFragment) {
-        if (inputFragment.getPlanRoot() instanceof ExchangeNode || !inputFragment.isPartitioned() || !hasOutputFragment) {
+        if (inputFragment.getPlanRoot() instanceof ExchangeNode || !inputFragment.isPartitioned() ||
+                !hasOutputFragment) {
             List<Expr> outputExprs = outputColumns.stream().map(variable -> ScalarOperatorToExpr
                     .buildExecExpression(variable,
                             new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr()))
@@ -310,12 +311,14 @@ public class PlanFragmentBuilder {
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
 
+            long estimatedCpuCosts = 0;
             Map<SlotId, Expr> commonSubOperatorMap = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : node.getCommonSubOperatorMap().entrySet()) {
                 Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
                                 node.getCommonSubOperatorMap()));
 
+                estimatedCpuCosts += new ExpressionCpuCostsEstimate().visit(entry.getValue(), null);
                 commonSubOperatorMap.put(new SlotId(entry.getKey().getId()), expr);
 
                 SlotDescriptor slotDescriptor =
@@ -331,6 +334,7 @@ public class PlanFragmentBuilder {
                 Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(), node.getColumnRefMap()));
 
+                estimatedCpuCosts += new ExpressionCpuCostsEstimate().visit(entry.getValue(), null);
                 projectMap.put(new SlotId(entry.getKey().getId()), expr);
 
                 SlotDescriptor slotDescriptor =
@@ -342,12 +346,15 @@ public class PlanFragmentBuilder {
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
 
+            boolean passThrough = context.getConnectContext().getSessionVariable().getProjectPassthroughThreshold() >
+                    estimatedCpuCosts;
+
             ProjectNode projectNode =
                     new ProjectNode(context.getNextNodeId(),
                             tupleDescriptor,
                             inputFragment.getPlanRoot(),
                             projectMap,
-                            commonSubOperatorMap);
+                            commonSubOperatorMap, passThrough);
 
             projectNode.setHasNullableGenerateChild();
             projectNode.computeStatistics(optExpr.getStatistics());
@@ -373,12 +380,14 @@ public class PlanFragmentBuilder {
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
 
+            long estimatedCpuCosts = 0;
             Map<SlotId, Expr> commonSubOperatorMap = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : node.getCommonSubOperatorMap().entrySet()) {
                 Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
                                 node.getCommonSubOperatorMap()));
 
+                estimatedCpuCosts += new ExpressionCpuCostsEstimate().visit(entry.getValue(), null);
                 commonSubOperatorMap.put(new SlotId(entry.getKey().getId()), expr);
 
                 SlotDescriptor slotDescriptor =
@@ -394,6 +403,7 @@ public class PlanFragmentBuilder {
                 Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(), node.getColumnRefMap()));
 
+                estimatedCpuCosts += new ExpressionCpuCostsEstimate().visit(entry.getValue(), null);
                 projectMap.put(new SlotId(entry.getKey().getId()), expr);
 
                 SlotDescriptor slotDescriptor =
@@ -405,12 +415,15 @@ public class PlanFragmentBuilder {
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
 
+            boolean passThrough = context.getConnectContext().getSessionVariable().getProjectPassthroughThreshold() >
+                    estimatedCpuCosts;
+
             ProjectNode projectNode =
                     new ProjectNode(context.getNextNodeId(),
                             tupleDescriptor,
                             inputFragment.getPlanRoot(),
                             projectMap,
-                            commonSubOperatorMap);
+                            commonSubOperatorMap, passThrough);
 
             projectNode.setHasNullableGenerateChild();
 

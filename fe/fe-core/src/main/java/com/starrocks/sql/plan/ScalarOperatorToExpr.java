@@ -305,7 +305,7 @@ public class ScalarOperatorToExpr {
         static Function isNotNullFN = new Function(new FunctionName("is_not_null_pred"),
                 new Type[] {Type.INVALID}, Type.BOOLEAN, false);
 
-        {
+        static {
             isNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
             isNotNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
         }

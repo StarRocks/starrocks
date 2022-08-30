@@ -25,14 +25,17 @@ import java.util.TreeMap;
 public class ProjectNode extends PlanNode {
     private final Map<SlotId, Expr> slotMap;
     private final Map<SlotId, Expr> commonSlotMap;
+    private final boolean passThrough;
 
     public ProjectNode(PlanNodeId id, TupleDescriptor tupleDescriptor, PlanNode child,
                        Map<SlotId, Expr> slotMap,
-                       Map<SlotId, Expr> commonSlotMap) {
+                       Map<SlotId, Expr> commonSlotMap,
+                       boolean passThrough) {
         super(id, tupleDescriptor.getId().asList(), "Project");
         addChild(child);
         this.slotMap = slotMap;
         this.commonSlotMap = commonSlotMap;
+        this.passThrough = passThrough;
     }
 
     @Override
@@ -41,6 +44,7 @@ public class ProjectNode extends PlanNode {
         msg.project_node = new TProjectNode();
         slotMap.forEach((key, value) -> msg.project_node.putToSlot_map(key.asInt(), value.treeToThrift()));
         commonSlotMap.forEach((key, value) -> msg.project_node.putToCommon_slot_map(key.asInt(), value.treeToThrift()));
+        msg.project_node.setPass_through(passThrough);
     }
 
     @Override

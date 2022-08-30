@@ -253,6 +253,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
 
+    public static final String PROJECT_PASSTHROUGH_THRESHOLD = "project_passthrough_threshold";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -603,6 +605,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PRUNE_SHUFFLE_COLUMN_RATE, flag = VariableMgr.INVISIBLE)
     private double cboPruneShuffleColumnRate = 0.1;
+
+    // If the project operator's cpu costs are greater than this threshold,
+    // we will try to add pass_through exchange after it to increase parallelism
+    @VarAttr(name = PROJECT_PASSTHROUGH_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private int projectPassthroughThreshold = 200;
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
@@ -1090,6 +1097,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getloadTransmissionCompressionType() {
         return loadTransmissionCompressionType;
+    }
+
+    public int getProjectPassthroughThreshold() {
+        return projectPassthroughThreshold;
+    }
+
+    public void setProjectPassthroughThreshold(int projectPassthroughThreshold) {
+        this.projectPassthroughThreshold = projectPassthroughThreshold;
     }
 
     // Serialize to thrift object

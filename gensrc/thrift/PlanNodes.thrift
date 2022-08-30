@@ -860,6 +860,8 @@ struct TProjectNode {
     1: optional map<Types.TSlotId, Exprs.TExpr> slot_map
     // Used for common operator compute result reuse
     2: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
+
+    3: optional bool pass_through
 }
 
 struct TMetaScanNode {
