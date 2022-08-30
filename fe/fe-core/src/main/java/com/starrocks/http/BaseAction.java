@@ -334,9 +334,7 @@ public abstract class BaseAction implements IAction {
             int index = authString.indexOf(":");
             authInfo.fullUserName = authString.substring(0, index);
             final String[] elements = authInfo.fullUserName.split("@");
-            if (elements.length < 2) {
-                authInfo.fullUserName = authInfo.fullUserName;
-            } else if (elements.length == 2) {
+            if (elements.length == 2) {
                 authInfo.fullUserName = elements[0];
             }
             authInfo.password = authString.substring(index + 1);
