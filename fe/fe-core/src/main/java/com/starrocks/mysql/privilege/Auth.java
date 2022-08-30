@@ -739,6 +739,10 @@ public class Auth implements Writable {
             grantInternal(userIdent, null /* role */, entry.getKey(), entry.getValue().copy(),
                     errOnNonExist /* err on non exist */, true /* is replay */);
         }
+        for (UserIdentity user : role.getImpersonateUsers()) {
+            grantImpersonateToUserInternal(userIdent, user, true);
+        }
+
         role.addUser(userIdent);
     }
 
@@ -769,6 +773,10 @@ public class Auth implements Writable {
             revokeInternal(userIdent, null /* role */, entry.getKey(), entry.getValue().copy(),
                     false /* err on non exist */, false /* is replay */);
         }
+        for (UserIdentity user : role.getImpersonateUsers()) {
+            revokeImpersonateFromUserInternal(userIdent, user, true);
+        }
+
         role.dropUser(userIdent);
     }
 

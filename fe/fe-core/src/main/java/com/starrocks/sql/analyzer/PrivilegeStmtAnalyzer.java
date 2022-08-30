@@ -96,6 +96,7 @@ public class PrivilegeStmtAnalyzer {
          */
         @Override
         public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt stmt, ConnectContext session) {
+            analyseUser(stmt.getSecuredUser(), session, true);
             if (stmt.getAuthorizedUser() != null) {
                 analyseUser(stmt.getAuthorizedUser(), session, true);
             } else {

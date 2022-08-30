@@ -57,7 +57,7 @@ public abstract class BaseGrantRevokeImpersonateStmt extends DdlStmt {
 
     @Override
     public String toString() {
-        String authorizedEntity = authorizedUser == null ? " ROLE " + authorizedRoleName : authorizedUser.toString();
+        String authorizedEntity = authorizedUser == null ? "ROLE '" + authorizedRoleName + "'" : authorizedUser.toString();
         return String.format("%s IMPERSONATE ON %s %s %s",
                 operationName, securedUser.toString(), prepositionName, authorizedEntity);
     }
