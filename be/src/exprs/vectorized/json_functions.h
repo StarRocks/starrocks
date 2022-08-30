@@ -183,6 +183,13 @@ public:
      */
     DEFINE_VECTORIZED_FN(json_array_empty);
 
+    /**
+     * Return number of elements in a JSON object/array
+     * @param JSON, JSONPath
+     * @return number of elements if it's object or array, otherwise return 1
+     */
+    DEFINE_VECTORIZED_FN(json_length);
+
     static Status native_json_path_prepare(starrocks_udf::FunctionContext* context,
                                            starrocks_udf::FunctionContext::FunctionStateScope scope);
     static Status native_json_path_close(starrocks_udf::FunctionContext* context,
