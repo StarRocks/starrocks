@@ -253,13 +253,15 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
             }
 
             // deserialize hive table level column statistics
-            JsonObject tableLevelColumnStats = dumpJsonObject.getAsJsonObject("tableLevelColumnStats");
-            Map<String, HiveColumnStats> tableLevelColumnStatsMap = Maps.newHashMap();
-            for (Map.Entry<String, JsonElement> columnStats : tableLevelColumnStats.entrySet()) {
-                tableLevelColumnStatsMap.put(columnStats.getKey(), HiveColumnStats.fromString(
-                        columnStats.getValue().getAsString()));
+            if (dumpJsonObject.has("tableLevelColumnStats")) {
+                JsonObject tableLevelColumnStats = dumpJsonObject.getAsJsonObject("tableLevelColumnStats");
+                Map<String, HiveColumnStats> tableLevelColumnStatsMap = Maps.newHashMap();
+                for (Map.Entry<String, JsonElement> columnStats : tableLevelColumnStats.entrySet()) {
+                    tableLevelColumnStatsMap.put(columnStats.getKey(), HiveColumnStats.fromString(
+                            columnStats.getValue().getAsString()));
+                }
+                hiveTableDumpInfo.addTableLevelColumnStats(tableLevelColumnStatsMap);
             }
-            hiveTableDumpInfo.addTableLevelColumnStats(tableLevelColumnStatsMap);
 
             // deserialize partition columns
             JsonArray partitionColumnsJson = dumpJsonObject.getAsJsonArray("PartitionColumns");
