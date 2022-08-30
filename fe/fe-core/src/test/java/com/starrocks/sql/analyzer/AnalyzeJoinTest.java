@@ -175,7 +175,7 @@ public class AnalyzeJoinTest {
         analyzeSuccess(sql);
 
         sql = "select * from (t0 a, (t1) b)";
-        analyzeFail(sql, "You have an error in your SQL syntax");
+        analyzeFail(sql, "the right syntax to use near 'b'");
 
         sql = "select * from (t0 a, t1 a)";
         analyzeFail(sql, "Not unique table/alias: 'a'");
