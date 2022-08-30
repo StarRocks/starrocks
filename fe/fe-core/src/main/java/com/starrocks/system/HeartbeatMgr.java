@@ -47,6 +47,7 @@ import com.starrocks.thrift.THeartbeatResult;
 import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
@@ -70,6 +71,8 @@ public class HeartbeatMgr extends LeaderDaemon {
     private final SystemInfoService nodeMgr;
     private final HeartbeatFlags heartbeatFlags;
 
+    private final GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+
     private static AtomicReference<TMasterInfo> masterInfo = new AtomicReference<>();
 
     public HeartbeatMgr(SystemInfoService nodeMgr, boolean needRegisterMetric) {
@@ -87,6 +90,7 @@ public class HeartbeatMgr extends LeaderDaemon {
         tMasterInfo.setHttp_port(Config.http_port);
         long flags = heartbeatFlags.getHeartbeatFlags();
         tMasterInfo.setHeartbeat_flags(flags);
+        tMasterInfo.setMin_active_txn_log_id(transactionMgr.getMinActiveTxnId());
         masterInfo.set(tMasterInfo);
     }
 
@@ -263,6 +267,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                 long flags = heartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);
                 copiedMasterInfo.setBackend_id(computeNodeId);
+                copiedMasterInfo.setMin_active_txn_log_id(transactionMgr.getMinActiveTxnId());
                 THeartbeatResult result = client.heartbeat(copiedMasterInfo);
 
                 ok = true;

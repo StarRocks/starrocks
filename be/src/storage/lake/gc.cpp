@@ -25,7 +25,8 @@ static std::string format_time(time_t ts) {
 }
 
 // TODO: txn log GC
-Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr) {
+Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, 
+    int64_t min_active_txn_log_id) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
 
     const auto max_versions = config::lake_gc_metadata_max_versions;
@@ -34,6 +35,7 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     }
 
     std::unordered_map<int64_t, std::vector<int64_t>> tablet_metadatas;
+    std::unordered_map<int64_t, std::vector<int64_t>> tablet_txn_logs; 
     std::unordered_map<int64_t, std::unordered_set<int64_t>> locked_tablet_metadatas;
 
     auto start_time =
@@ -49,6 +51,13 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr) {
             auto [tablet_id, version, expire_time] = parse_tablet_metadata_lock_filename(name);
             if (start_time < expire_time) {
                 locked_tablet_metadatas[tablet_id].insert(version);
+            }
+        }
+        // clear txn log
+        if (is_txn_log(name)) {
+            auto [tablet_id, txn_id] = parse_txn_log_filename(name);
+            if (txn_id < min_active_txn_log_id) {
+                tablet_txn_logs[tablet_id].emplace_back(txn_id);
             }
         }
         return true;
@@ -82,6 +91,14 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr) {
             auto st = tablet_mgr->delete_tablet_metadata(tablet_id, versions[i]);
             LOG_IF(WARNING, !st.ok() && !st.is_not_found())
                     << "Fail to delete " << tablet_metadata_filename(tablet_id, versions[i]) << ": " << st;
+        }
+    }
+
+    // Delete txn logs
+    for (auto& [tablet_id, txn_id_vec] : tablet_txn_logs) {
+        for (auto txn_id : txn_id_vec) {
+            auto st = tablet_mgr->delete_txn_log(tablet_id, txn_id);
+            LOG_IF(WARNING, !st.ok()) << "Fail to delete " << txn_log_filename(tablet_id, txn_id);
         }
     }
     return Status::OK();

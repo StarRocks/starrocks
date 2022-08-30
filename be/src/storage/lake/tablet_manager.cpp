@@ -11,6 +11,7 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 DIAGNOSTIC_POP
 
 #include "agent/agent_server.h"
+#include "agent/master_info.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -772,11 +773,12 @@ void* metadata_gc_trigger(void* arg) {
         auto st = lp->list_root_locations(&roots);
 
         LOG_IF(ERROR, !st.ok()) << st;
+        auto master_info = get_master_info();
 
         for (const auto& root : roots) {
             // TODO: limit GC concurrency
             st = thread_pool->submit_func([=]() {
-                auto r = metadata_gc(root, tablet_mgr);
+                auto r = metadata_gc(root, tablet_mgr, master_info.min_active_txn_log_id);
                 LOG_IF(WARNING, !r.ok()) << "Fail to do metadata gc in " << root << ": " << r;
             });
             if (!st.ok()) {

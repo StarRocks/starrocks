@@ -64,6 +64,8 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import javax.validation.constraints.NotNull;
 
+import static java.lang.Long.min;
+
 /**
  * Transaction Manager
  * 1. begin
@@ -531,6 +533,14 @@ public class GlobalTransactionMgr implements Writable {
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             dbTransactionMgr.removeExpiredTxns(currentMillis);
         }
+    }
+
+    public long getMinActiveTxnId() {
+        long result = Long.MAX_VALUE;
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            result = min(result, dbTransactionMgr.getMinActiveTxnId());
+        }
+        return result;
     }
 
     public TransactionState getTransactionState(long dbId, long transactionId) {
