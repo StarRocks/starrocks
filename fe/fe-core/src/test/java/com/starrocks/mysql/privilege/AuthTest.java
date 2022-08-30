@@ -1300,7 +1300,25 @@ public class AuthTest {
         Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
         Assert.assertEquals(false, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
         Assert.assertEquals(1, auth.getRoleNamesByUser(userIdentity).size());
+<<<<<<< HEAD
      }
+=======
+
+        // 9. grant usage on db
+        boolean hasException = false;
+        try {
+            privileges = Lists.newArrayList(AccessPrivilege.USAGE_PRIV);
+            tablePattern = new TablePattern("db1", "*");
+            grantStmt = new GrantStmt(null, selectRoleName, tablePattern, privileges);
+            grantStmt.analyze(analyzer);
+            auth.grant(grantStmt);
+        } catch (DdlException e) {
+            // expect exception;
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
+    }
+>>>>>>> 04f030f5e ([BugFix] validate privilege before grant to role (#10418))
 
     @Test
     public void testResource() {
