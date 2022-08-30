@@ -32,28 +32,13 @@ public:
 
     void TearDown() override { StoragePageCache::release_global_cache(); }
 
-    std::unique_ptr<TabletSchema> create_schema(const std::vector<TabletColumn>& columns,
-                                                int num_short_key_columns = -1) {
-        std::unique_ptr<TabletSchema> res;
-        res = std::make_unique<TabletSchema>();
-        int num_key_columns = 0;
-        for (auto& col : columns) {
-            if (col.is_key()) {
-                num_key_columns++;
-            }
-            res->_cols.push_back(col);
-        }
-        res->_num_key_columns = num_key_columns;
-        res->_num_short_key_columns = num_short_key_columns != -1 ? num_short_key_columns : num_key_columns;
-        return res;
-    }
-
     const std::string kSegmentDir = "/segment_test";
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _metadata_mem_tracker = nullptr;
 };
 
+// NOLINTNEXTLINE
 TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     const int slice_num = 64;
     std::string prefix = "lowcard-";
@@ -69,11 +54,11 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
         data_strs.emplace_back(data);
     }
 
-    TabletColumn c1 = create_int_key(1);
-    TabletColumn c2 = create_with_default_value<OLAP_FIELD_TYPE_VARCHAR>("");
+    ColumnPB c1 = create_int_key_pb(1);
+    ColumnPB c2 = create_with_default_value_pb("VARCHAR", "");
     c2.set_length(128);
 
-    std::unique_ptr<TabletSchema> tablet_schema = create_schema({c1, c2});
+    std::unique_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema({c1, c2});
 
     SegmentWriterOptions opts;
     opts.num_rows_per_block = 10;
@@ -167,6 +152,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     res_chunk->reset();
 }
 
+// NOLINTNEXTLINE
 TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     const int slice_num = 2;
     std::vector<std::string> values;
@@ -185,14 +171,14 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
 
     std::vector<Slice> data_strs;
     for (const auto& data : values) {
-        data_strs.push_back(data);
+        data_strs.emplace_back(data);
     }
 
-    TabletColumn c1 = create_int_key(1);
-    TabletColumn c2 = create_with_default_value<OLAP_FIELD_TYPE_VARCHAR>("");
+    ColumnPB c1 = create_int_key_pb(1);
+    ColumnPB c2 = create_with_default_value_pb("VARCHAR", "");
     c2.set_length(overflow_sz + 10);
 
-    std::unique_ptr<TabletSchema> tablet_schema = create_schema({c1, c2});
+    std::unique_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema({c1, c2});
 
     SegmentWriterOptions opts;
     opts.num_rows_per_block = 1024;
