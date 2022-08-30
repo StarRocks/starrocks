@@ -1,23 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "storage/vectorized/memtable.h"
+#include "storage/memtable.h"
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
 
+#include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
+#include "storage/chunk_helper.h"
+#include "storage/memtable_rowset_writer_sink.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"
+#include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
-#include "storage/rowset/vectorized/rowset_options.h"
-#include "storage/schema.h"
-#include "storage/vectorized/chunk_helper.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 
 namespace starrocks::vectorized {
 
@@ -182,31 +183,32 @@ class MemTableTest : public ::testing::Test {
 public:
     void MySetUp(const string& schema_desc, const string& slot_desc, int nkey, KeysType ktype, const string& root) {
         _root_path = root;
-        FileUtils::remove_all(_root_path);
-        FileUtils::create_dir(_root_path);
+        fs::remove_all(_root_path);
+        fs::create_directories(_root_path);
         _mem_tracker.reset(new MemTracker(-1, "root"));
         _schema = create_tablet_schema(schema_desc, nkey, ktype);
         _slots = create_tuple_desc_slots(slot_desc, _obj_pool);
-        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+        RowsetWriterContext writer_context;
         RowsetId rowset_id;
         rowset_id.init(rand() % 1000000000);
         writer_context.rowset_id = rowset_id;
         writer_context.tablet_id = rand() % 1000000;
         writer_context.tablet_schema_hash = 1111;
         writer_context.partition_id = 10;
-        writer_context.rowset_type = BETA_ROWSET;
         writer_context.rowset_path_prefix = _root_path;
         writer_context.rowset_state = VISIBLE;
         writer_context.tablet_schema = _schema.get();
         writer_context.version.first = 10;
         writer_context.version.second = 10;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
-        _mem_table.reset(new MemTable(1, _schema.get(), _slots, _writer.get(), _mem_tracker.get()));
+        _mem_table_sink.reset(new MemTableRowsetWriterSink(_writer.get()));
+        _vectorized_schema = std::move(MemTable::convert_schema(_schema.get(), _slots));
+        _mem_table.reset(new MemTable(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get()));
     }
 
     void TearDown() override {
         LOG(INFO) << "remove dir " << _root_path;
-        FileUtils::remove_all(_root_path);
+        fs::remove_all(_root_path);
     }
 
     std::string _root_path;
@@ -217,6 +219,8 @@ public:
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     unique_ptr<RowsetWriter> _writer;
     unique_ptr<MemTable> _mem_table;
+    Schema _vectorized_schema;
+    unique_ptr<MemTableRowsetWriterSink> _mem_table_sink;
 };
 
 TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
@@ -236,13 +240,13 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
     RowsetSharedPtr rowset = *_writer->build();
     unique_ptr<Schema> read_schema = create_schema("pk int", 1);
     OlapReaderStatistics stats;
-    vectorized::RowsetReadOptions rs_opts;
+    RowsetReadOptions rs_opts;
     rs_opts.sorted = false;
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(*read_schema, rs_opts);
     ASSERT_TRUE(itr.ok()) << itr.status().to_string();
-    std::shared_ptr<vectorized::Chunk> chunk = vectorized::ChunkHelper::new_chunk(*read_schema, 4096);
+    std::shared_ptr<vectorized::Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(chunk.get());
@@ -283,12 +287,12 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
     RowsetSharedPtr rowset = *_writer->build();
     unique_ptr<Schema> read_schema = create_schema("pk int", 1);
     OlapReaderStatistics stats;
-    vectorized::RowsetReadOptions rs_opts;
+    RowsetReadOptions rs_opts;
     rs_opts.sorted = false;
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(*read_schema, rs_opts);
-    std::shared_ptr<vectorized::Chunk> chunk = vectorized::ChunkHelper::new_chunk(*read_schema, 4096);
+    std::shared_ptr<vectorized::Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(chunk.get());
