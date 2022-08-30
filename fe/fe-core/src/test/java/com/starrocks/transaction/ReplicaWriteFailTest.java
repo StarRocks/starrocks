@@ -9,7 +9,7 @@ import org.junit.Test;
 
 import java.sql.SQLException;
 
-public class TxnWithWriteFailureTest {
+public class ReplicaWriteFailTest {
     @BeforeClass
     public static void setUp() throws Exception {
         Config.enable_new_publish_mechanism = true;
