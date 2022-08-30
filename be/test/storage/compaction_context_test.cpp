@@ -9,7 +9,6 @@
 #include <random>
 
 #include "storage/rowset/rowset.h"
-#include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
 
 namespace starrocks {
@@ -18,20 +17,20 @@ TEST(CompactionContextTest, test_rowset_comparator) {
     std::set<Rowset*, RowsetComparator> sorted_rowsets_set;
 
     std::vector<RowsetSharedPtr> rowsets;
-    TabletSchema tablet_schema;
-    create_tablet_schema(&tablet_schema);
+    auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
 
     RowsetMetaSharedPtr base_rowset_meta = std::make_shared<RowsetMeta>();
     base_rowset_meta->set_start_version(0);
     base_rowset_meta->set_end_version(9);
-    RowsetSharedPtr base_rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset_0", base_rowset_meta);
+    RowsetSharedPtr base_rowset = std::make_shared<Rowset>(tablet_schema.get(), "./rowset_0", base_rowset_meta);
     rowsets.emplace_back(std::move(base_rowset));
 
     for (int i = 1; i <= 10; i++) {
         RowsetMetaSharedPtr rowset_meta = std::make_shared<RowsetMeta>();
         rowset_meta->set_start_version(i * 10);
         rowset_meta->set_end_version((i + 1) * 10 - 1);
-        RowsetSharedPtr rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset" + std::to_string(i), rowset_meta);
+        RowsetSharedPtr rowset =
+                std::make_shared<Rowset>(tablet_schema.get(), "./rowset" + std::to_string(i), rowset_meta);
         rowsets.emplace_back(std::move(rowset));
     }
 
@@ -39,7 +38,8 @@ TEST(CompactionContextTest, test_rowset_comparator) {
         RowsetMetaSharedPtr rowset_meta = std::make_shared<RowsetMeta>();
         rowset_meta->set_start_version(i);
         rowset_meta->set_end_version(i);
-        RowsetSharedPtr rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset" + std::to_string(i), rowset_meta);
+        RowsetSharedPtr rowset =
+                std::make_shared<Rowset>(tablet_schema.get(), "./rowset" + std::to_string(i), rowset_meta);
         rowsets.emplace_back(std::move(rowset));
     }
 
