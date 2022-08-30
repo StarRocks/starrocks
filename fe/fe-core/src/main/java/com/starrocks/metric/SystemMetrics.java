@@ -28,6 +28,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Map;
 
 /**
@@ -56,6 +58,10 @@ public class SystemMetrics {
         String procFile = "/proc/net/snmp";
         if (FeConstants.runningUnitTest) {
             procFile = getClass().getClassLoader().getResource("data/net_snmp_normal").getFile();
+        }
+        if (Files.notExists(Paths.get(procFile))) {
+            LOG.warn("{} doesn't exist", procFile);
+            return;
         }
         try (FileReader fileReader = new FileReader(procFile);
                 BufferedReader br = new BufferedReader(fileReader)) {

@@ -1617,28 +1617,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         tableProperty.buildEnablePersistentIndex();
     }
 
-    public Boolean checkPersistentIndex() {
-        // check key type and length
-        int keyLength = 0;
-        for (Column column : getFullSchema()) {
-            if (!column.isKey()) {
-                continue;
-            }
-            if (column.getPrimitiveType() == PrimitiveType.VARCHAR
-                    || column.getPrimitiveType() == PrimitiveType.CHAR) {
-                LOG.warn("PrimaryKey table using persistent index doesn't support varchar(char) so far");
-                return false;
-            }
-            // calculate key size
-            keyLength += column.getOlapColumnIndexSize();
-        }
-        if (keyLength > 64) {
-            LOG.warn("Primary key size of primaryKey table using persistent index should be no more than 64Bytes");
-            return false;
-        }
-        return true;
-    }
-
     public void setStorageMedium(TStorageMedium storageMedium) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
