@@ -4,9 +4,9 @@ package com.starrocks.sql.parser;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import org.junit.Test;
 

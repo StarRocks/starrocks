@@ -33,13 +33,19 @@ public class AnalyzeInsertTest {
         analyzeFail("insert into t0 values (170141183460469231731687303715884105728)", "Number Overflow. literal");
 
         analyzeFail("insert into tall(ta) values(min('x'))", "Values clause cannot contain aggregations");
+
+        // don't support case when in insert value clause
         analyzeFail("insert into tall(ta) values(case min('x') when 'x' then 'x' end)",
-                "Values clause cannot contain aggregations");
-        analyzeFail("insert into tall(ta) values(min('x') over())", "Values clause cannot contain window function");
+                "the right syntax to use near 'case'");
+
+        // don't support window function in insert value clause
+        analyzeFail("insert into tall(ta) values(min('x') over())", "the right syntax to use near 'over'");
 
         analyzeSuccess("INSERT INTO tp  PARTITION(p1) VALUES(1,2,3)");
 
         analyzeSuccess("insert into t0 with label l1 select * from t0");
         analyzeSuccess("insert into t0 with label `l1` select * from t0");
     }
+
+
 }
