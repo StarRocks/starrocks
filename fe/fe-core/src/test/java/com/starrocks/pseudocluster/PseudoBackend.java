@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -157,6 +158,15 @@ public class PseudoBackend {
     private volatile float writeFailureRate = 0.0f;
     private volatile float publishFailureRate = 0.0f;
 
+    public static final long DEFAULT_TOTA_CAP_B = 100000000000L;
+    public static final long DEFAULT_AVAI_CAP_B = 50000000000L;
+    public static final long DEFAULT_USED_CAP_B = 20000000000L;
+    public static final long DEFAULT_SIZE_ON_DISK_PER_ROWSET_B = 1 << 20;
+
+    private long currentDataUsedCapacityB;
+    private long currentAvailableCapacityB;
+    private long currentTotalCapacityB;
+
     Backend be;
     HeartBeatClient heatBeatClient;
     BeThriftClient backendClient;
@@ -304,16 +314,9 @@ public class PseudoBackend {
         this.be = new Backend(backendId, host, heartBeatPort);
         this.tBackend = new TBackend(host, beThriftPort, httpPort);
 
-        Map<String, DiskInfo> disks = Maps.newHashMap();
-        DiskInfo diskInfo1 = new DiskInfo(runPath + "/storage");
         // TODO: maintain disk info with tablet/rowset count
-        diskInfo1.setTotalCapacityB(100000000000L);
-        diskInfo1.setAvailableCapacityB(50000000000L);
-        diskInfo1.setDataUsedCapacityB(20000000000L);
-        diskInfo1.setPathHash(PATH_HASH);
-        diskInfo1.setStorageMedium(TStorageMedium.SSD);
-        disks.put(diskInfo1.getRootPath(), diskInfo1);
-        be.setDisks(ImmutableMap.copyOf(disks));
+        setInitialCapacity(PseudoBackend.DEFAULT_TOTA_CAP_B, PseudoBackend.DEFAULT_AVAI_CAP_B,
+                PseudoBackend.DEFAULT_USED_CAP_B);
         be.setAlive(true);
         be.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
         be.setBePort(beThriftPort);
@@ -334,6 +337,25 @@ public class PseudoBackend {
 
     public void setShutdown(boolean shutdown) {
         this.shutdown = shutdown;
+    }
+
+    public void setInitialCapacity(long totalCapacityB, long availableCapacityB, long usedCapacityB) {
+        Preconditions.checkState(usedCapacityB < availableCapacityB);
+        Preconditions.checkState(availableCapacityB + usedCapacityB <= totalCapacityB);
+
+        Map<String, DiskInfo> disks = Maps.newHashMap();
+        DiskInfo diskInfo1 = new DiskInfo(runPath + "/storage");
+        diskInfo1.setTotalCapacityB(totalCapacityB);
+        currentTotalCapacityB = totalCapacityB;
+        diskInfo1.setAvailableCapacityB(availableCapacityB);
+        currentAvailableCapacityB = availableCapacityB;
+        diskInfo1.setDataUsedCapacityB(usedCapacityB);
+        currentDataUsedCapacityB = usedCapacityB;
+        diskInfo1.setPathHash(PATH_HASH);
+        diskInfo1.setStorageMedium(TStorageMedium.SSD);
+        disks.put(diskInfo1.getRootPath(), diskInfo1);
+
+        be.setDisks(ImmutableMap.copyOf(disks));
     }
 
     public String getHost() {
@@ -411,9 +433,9 @@ public class PseudoBackend {
             TDisk tdisk = new TDisk();
             tdisk.setRoot_path(entry.getKey());
             tdisk.setPath_hash(entry.getValue().getPathHash());
-            tdisk.setDisk_total_capacity(entry.getValue().getTotalCapacityB());
-            tdisk.setDisk_available_capacity(entry.getValue().getAvailableCapacityB());
-            tdisk.setData_used_capacity(entry.getValue().getDataUsedCapacityB());
+            tdisk.setDisk_total_capacity(currentTotalCapacityB);
+            tdisk.setDisk_available_capacity(currentAvailableCapacityB);
+            tdisk.setData_used_capacity(currentDataUsedCapacityB);
             tdisk.setStorage_medium(entry.getValue().getStorageMedium());
             tdisk.setUsed(true);
             tdisks.put(entry.getKey(), tdisk);
@@ -483,6 +505,7 @@ public class PseudoBackend {
     }
 
     void handleCreateTablet(TAgentTaskRequest request, TFinishTaskRequest finish) throws UserException {
+        // Ignore the initial disk usage of tablet
         Tablet t = tabletManager.createTablet(request.create_tablet_req);
     }
 
@@ -1189,6 +1212,21 @@ public class PseudoBackend {
             loadChannel.cancel();
         }
         return result;
+    }
+
+    /**
+     * We update the disk usage when a txn is published successfully.
+     * Currently, we update it in rowset granularity, i.e. no matter how many bytes we write in a txn,
+     * the cost of disk space is the same.
+     *
+     * @param delta the number of bytes to increase or decrease
+     */
+    public void updateDiskUsage(long delta) {
+        if ((currentAvailableCapacityB - delta) < currentTotalCapacityB * 0.05) {
+            return;
+        }
+        currentDataUsedCapacityB += delta;
+        currentAvailableCapacityB -= delta;
     }
 
     synchronized PTabletWriterAddBatchResult tabletWriterAddChunk(PTabletWriterAddChunkRequest request) {

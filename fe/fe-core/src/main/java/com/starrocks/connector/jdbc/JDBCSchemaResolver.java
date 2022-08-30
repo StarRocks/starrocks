@@ -5,6 +5,8 @@ package com.starrocks.connector.jdbc;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 
@@ -13,6 +15,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 public abstract class JDBCSchemaResolver {
 
@@ -35,6 +38,15 @@ public abstract class JDBCSchemaResolver {
     public ResultSet getTables(Connection connection, String dbName) throws SQLException {
         return connection.getMetaData().getTables(dbName, null, null,
                 new String[] {"TABLE", "VIEW"});
+    }
+
+    public ResultSet getColumns(Connection connection, String dbName, String tblName) throws SQLException {
+        return connection.getMetaData().getColumns(dbName, null, tblName, "%");
+    }
+
+    public Table getTable(long id, String name, List<Column> schema, String dbName,
+                          Map<String, String> properties) throws DdlException {
+        return new JDBCTable(id, name, schema, dbName, properties);
     }
 
     public List<Column> convertToSRTable(ResultSet columnSet) throws SQLException {

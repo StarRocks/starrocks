@@ -60,7 +60,7 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
         Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newHashMap();
 
         try {
-            initPartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions);
+            initPartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions, context);
             classifyConjuncts(operator, columnToPartitionValuesMap);
             computePartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions);
         } catch (Exception e) {
@@ -72,7 +72,8 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
 
     private void initPartitionInfo(LogicalScanOperator operator,
                                    Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-                                   Map<ColumnRefOperator, Set<Long>> columnToNullPartitions)
+                                   Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
+                                   OptimizerContext context)
             throws DdlException, AnalysisException {
         Table table = operator.getTable();
         if (table instanceof HiveMetaStoreTable) {
@@ -91,6 +92,9 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
             // 2. partitionKeys size = 1
             // 3. key.getKeys() is empty
             Map<PartitionKey, Long> partitionKeys = hiveMetaStoreTable.getPartitionKeys();
+            // record partition keys for query dump
+            context.getDumpInfo().getHMSTable(hiveMetaStoreTable.getResourceName(), hiveMetaStoreTable.getDbName(),
+                    hiveMetaStoreTable.getTableName()).setPartitionKeys(partitionKeys);
             for (Map.Entry<PartitionKey, Long> entry : partitionKeys.entrySet()) {
                 PartitionKey key = entry.getKey();
                 long partitionId = entry.getValue();
