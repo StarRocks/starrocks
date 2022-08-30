@@ -144,9 +144,9 @@ ColumnPtr BitmapFunctions::bitmap_and(FunctionContext* context, const starrocks:
 
 // bitmap_to_string
 DEFINE_STRING_UNARY_FN_WITH_IMPL(bitmapToStingImpl, bitmap_ptr) {
-    if (bitmap_ptr->cardinality() > config::max_length_for_bitmap_to_string) {
+    if (bitmap_ptr->cardinality() > config::max_length_for_bitmap_function) {
         std::stringstream ss;
-        ss << "bitmap_to_string not supported size > " << config::max_length_for_bitmap_to_string;
+        ss << "bitmap_to_string not supported size > " << config::max_length_for_bitmap_function;
         throw std::runtime_error(ss.str());
     }
     return bitmap_ptr->to_string();
@@ -295,9 +295,9 @@ ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starr
         for (int row = 0; row < size; ++row) {
             if (!lhs.is_null(row)) {
                 const auto cardinality = lhs.value(row)->cardinality();
-                if (cardinality > config::max_length_for_bitmap_to_array) {
+                if (cardinality > config::max_length_for_bitmap_function) {
                     std::stringstream ss;
-                    ss << "bitmap_to_array not supported size > " << config::max_length_for_bitmap_to_array;
+                    ss << "bitmap_to_array not supported size > " << config::max_length_for_bitmap_function;
                     throw std::runtime_error(ss.str());
                 }
                 data_size += cardinality;
@@ -306,9 +306,9 @@ ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starr
     } else {
         for (int row = 0; row < size; ++row) {
             const auto cardinality = lhs.value(row)->cardinality();
-            if (cardinality > config::max_length_for_bitmap_to_array) {
+            if (cardinality > config::max_length_for_bitmap_function) {
                 std::stringstream ss;
-                ss << "bitmap_to_array not supported size > " << config::max_length_for_bitmap_to_array;
+                ss << "bitmap_to_array not supported size > " << config::max_length_for_bitmap_function;
                 throw std::runtime_error(ss.str());
             }
             data_size += cardinality;

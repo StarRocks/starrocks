@@ -824,8 +824,6 @@ CONF_String(directory_of_inject, "/src/exec,/src/exprs");
 
 // Used by to_base64
 CONF_Int64(max_length_for_to_base64, "200000");
-// Used by bitmap_to_string
-CONF_Int64(max_length_for_bitmap_to_string, "200000");
-// Used by bitmap_to_array
-CONF_Int64(max_length_for_bitmap_to_array, "200000");
+// Used by bitmap functions
+CONF_Int64(max_length_for_bitmap_function, "1000000");
 } // namespace starrocks::config
