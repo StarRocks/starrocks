@@ -97,8 +97,7 @@ starrocks::Schema* ChunkHelperTest::gen_schema(bool is_nullable) {
     add_tablet_column(tablet_schema_pb, 7, false, "VARCHAR", 16, is_nullable);
     add_tablet_column(tablet_schema_pb, 8, false, "CHAR", 16, is_nullable);
 
-    TabletSchema* tablet_schema = new TabletSchema();
-    tablet_schema->init_from_pb(tablet_schema_pb);
+    auto tablet_schema = std::make_shared<TabletSchema>(tablet_schema_pb);
     return new starrocks::Schema(*tablet_schema);
 }
 

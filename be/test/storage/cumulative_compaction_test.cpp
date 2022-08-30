@@ -1,26 +1,37 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "storage/vectorized/cumulative_compaction.h"
+#include "storage/cumulative_compaction.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include <memory>
+
+#include "column/schema.h"
+#include "fs/fs_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
+#include "storage/chunk_helper.h"
+#include "storage/compaction.h"
+#include "storage/compaction_utils.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/compaction.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 
 namespace starrocks::vectorized {
 
-static StorageEngine* k_engine = nullptr;
-
 class CumulativeCompactionTest : public testing::Test {
 public:
+    ~CumulativeCompactionTest() override {
+        if (_engine) {
+            _engine->stop();
+            delete _engine;
+            _engine = nullptr;
+        }
+    }
     void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context) {
         RowsetId rowset_id;
         rowset_id.init(10000);
@@ -28,7 +39,6 @@ public:
         rowset_writer_context->tablet_id = 12345;
         rowset_writer_context->tablet_schema_hash = 1111;
         rowset_writer_context->partition_id = 10;
-        rowset_writer_context->rowset_type = _rowset_type;
         rowset_writer_context->rowset_path_prefix = config::storage_root_path + "/data/0/12345/1111";
         rowset_writer_context->rowset_state = VISIBLE;
         rowset_writer_context->tablet_schema = _tablet_schema.get();
@@ -98,8 +108,8 @@ public:
 
     void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer) {
         std::vector<std::string> test_data;
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*_tablet_schema);
-        auto chunk = vectorized::ChunkHelper::new_chunk(schema, 1024);
+        auto schema = ChunkHelper::convert_schema_to_format_v2(*_tablet_schema);
+        auto chunk = ChunkHelper::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
             auto& cols = chunk->columns();
@@ -112,10 +122,9 @@ public:
     }
 
     void do_compaction() {
-        config::storage_format_version = 2;
         create_tablet_schema(UNIQUE_KEYS);
 
-        RowsetWriterContext rowset_writer_context(kDataFormatUnknown, config::storage_format_version);
+        RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context);
         std::unique_ptr<RowsetWriter> _rowset_writer;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
@@ -155,9 +164,8 @@ public:
             tablet_meta->add_rs_meta(src_rowset->rowset_meta());
         }
 
-        TabletSharedPtr tablet =
-                Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta,
-                                                starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0]);
+        TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta,
+                                                                 starrocks::StorageEngine::instance()->get_stores()[0]);
         tablet->init();
 
         config::cumulative_compaction_skip_window_seconds = -2;
@@ -173,56 +181,49 @@ public:
         Compaction::init(config::max_compaction_concurrency);
 
         config::storage_root_path = std::filesystem::current_path().string() + "/data_test_cumulative_compaction";
-        FileUtils::remove_all(config::storage_root_path);
-        ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
+        fs::remove_all(config::storage_root_path);
+        ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
         std::vector<StorePath> paths;
         paths.emplace_back(config::storage_root_path);
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
-        options.tablet_meta_mem_tracker = _tablet_meta_mem_tracker.get();
+        options.metadata_mem_tracker = _metadata_mem_tracker.get();
         options.compaction_mem_tracker = _compaction_mem_tracker.get();
-        if (k_engine == nullptr) {
-            Status s = starrocks::StorageEngine::open(options, &k_engine);
+        if (_engine == nullptr) {
+            _origin_engine = starrocks::StorageEngine::instance();
+            Status s = starrocks::StorageEngine::open(options, &_engine);
             ASSERT_TRUE(s.ok()) << s.to_string();
         }
 
-        ExecEnv* exec_env = starrocks::ExecEnv::GetInstance();
-        exec_env->set_storage_engine(k_engine);
+        _schema_hash_path = fmt::format("{}/data/0/12345/1111", config::storage_root_path);
+        ASSERT_OK(fs::create_directories(_schema_hash_path));
 
-        std::string data_path = config::storage_root_path + "/data";
-        ASSERT_TRUE(FileUtils::create_dir(data_path).ok());
-        std::string shard_path = data_path + "/0";
-        ASSERT_TRUE(FileUtils::create_dir(shard_path).ok());
-        std::string tablet_path = shard_path + "/12345";
-        ASSERT_TRUE(FileUtils::create_dir(tablet_path).ok());
-        _schema_hash_path = tablet_path + "/1111";
-        ASSERT_TRUE(FileUtils::create_dir(_schema_hash_path).ok());
+        _metadata_mem_tracker = std::make_unique<MemTracker>(-1);
+        _mem_pool = std::make_unique<MemPool>();
 
-        _tablet_meta_mem_tracker.reset(new MemTracker(-1));
-        _mem_pool.reset(new MemPool());
-
-        _compaction_mem_tracker.reset(new MemTracker(-1));
+        _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
     }
 
     void TearDown() override {
-        if (FileUtils::check_exist(config::storage_root_path)) {
-            ASSERT_TRUE(FileUtils::remove_all(config::storage_root_path).ok());
+        if (fs::path_exist(config::storage_root_path)) {
+            ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
     }
 
 protected:
+    StorageEngine* _engine = nullptr;
+    StorageEngine* _origin_engine = nullptr;
     std::unique_ptr<TabletSchema> _tablet_schema;
-    RowsetTypePB _rowset_type = BETA_ROWSET;
     std::string _schema_hash_path;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
 };
 
 TEST_F(CumulativeCompactionTest, test_init_succeeded) {
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta, nullptr);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta, nullptr);
     CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(cumulative_compaction.compact().ok());
 }
@@ -235,7 +236,7 @@ TEST_F(CumulativeCompactionTest, test_candidate_rowsets_empty) {
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
     tablet_meta->set_tablet_schema(schema);
 
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta, nullptr);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta, nullptr);
     tablet->init();
     CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(cumulative_compaction.compact().ok());
@@ -258,18 +259,18 @@ TEST_F(CumulativeCompactionTest, test_read_chunk_size) {
     int64_t total_num_rows = 10000;
     int64_t total_mem_footprint = 0;
     size_t source_num = 10;
-    ASSERT_EQ(config_chunk_size, Compaction::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
-                                                                 total_mem_footprint, source_num));
+    ASSERT_EQ(config_chunk_size, CompactionUtils::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
+                                                                      total_mem_footprint, source_num));
 
     // normal total memory footprint
     total_mem_footprint = 1073741824;
-    ASSERT_EQ(2001, Compaction::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows, total_mem_footprint,
-                                                    source_num));
+    ASSERT_EQ(2001, CompactionUtils::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
+                                                         total_mem_footprint, source_num));
 
     // mem limit is 0
     mem_limit = 0;
-    ASSERT_EQ(config_chunk_size, Compaction::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
-                                                                 total_mem_footprint, source_num));
+    ASSERT_EQ(config_chunk_size, CompactionUtils::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
+                                                                      total_mem_footprint, source_num));
 }
 
 } // namespace starrocks::vectorized
