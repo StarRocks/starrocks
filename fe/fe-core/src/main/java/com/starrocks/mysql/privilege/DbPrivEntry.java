@@ -61,10 +61,6 @@ public class DbPrivEntry extends PrivEntry {
 
     public static DbPrivEntry create(String host, String db, String user, boolean isDomain, PrivBitSet privs)
             throws AnalysisException {
-        if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
-            throw new AnalysisException(
-                    "Db privilege can not contains global or resource or impersonate privileges: " + privs);
-        }
         DbPrivEntry dbPrivEntry = new DbPrivEntry(host, user, isDomain, privs, db);
         dbPrivEntry.analyse();
         return dbPrivEntry;
