@@ -73,7 +73,7 @@ const std::string HEADER_PREFIX = "tabletmeta_";
 DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "get_meta",
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, "
-              "show_meta, check_table_meta_consistency print_lake_metadata print_lake_txn_log");
+              "show_meta, check_table_meta_consistency, print_lake_metadata, print_lake_txn_log");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -82,6 +82,7 @@ DEFINE_int32(schema_hash, 0, "schema_hash for tablet meta");
 DEFINE_string(json_meta_path, "", "absolute json meta file path");
 DEFINE_string(pb_meta_path, "", "pb meta file path");
 DEFINE_string(tablet_file, "", "file to save a set of tablets");
+DEFINE_string(file, "", "segment file path");
 DEFINE_string(file, "", "segment file path");
 
 std::string get_usage(const std::string& progname) {
@@ -565,7 +566,7 @@ int meta_tool_main(int argc, char** argv) {
     } else if (FLAGS_operation == "print_lake_metadata") {
         starrocks::lake::TabletMetadataPB metadata;
         if (!metadata.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse tablet metadata";
+            std::cerr << "Fail to parse tablet metadata\n";
             return -1;
         }
         json2pb::Pb2JsonOptions options;
@@ -573,14 +574,14 @@ int meta_tool_main(int argc, char** argv) {
         std::string json;
         std::string error;
         if (!json2pb::ProtoMessageToJson(metadata, &json, options, &error)) {
-            std::cerr << "Fail to convert protobuf to json: " << error;
+            std::cerr << "Fail to convert protobuf to json: " << error << '\n';
             return -1;
         }
         std::cout << json << '\n';
     } else if (FLAGS_operation == "print_lake_txn_log") {
         starrocks::lake::TxnLogPB txn_log;
         if (!txn_log.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse txn log";
+            std::cerr << "Fail to parse txn log\n";
             return -1;
         }
         json2pb::Pb2JsonOptions options;
@@ -588,7 +589,7 @@ int meta_tool_main(int argc, char** argv) {
         std::string json;
         std::string error;
         if (!json2pb::ProtoMessageToJson(txn_log, &json, options, &error)) {
-            std::cerr << "Fail to convert protobuf to json: " << error;
+            std::cerr << "Fail to convert protobuf to json: " << error << '\n';
             return -1;
         }
         std::cout << json << '\n';
