@@ -41,6 +41,7 @@ public:
 
     void close(RuntimeState* state) override;
 
+    int32_t get_num_builders() const { return _num_right_sinkers; }
     bool is_build_chunk_empty() const { return _build_chunks.empty(); }
     int32_t num_build_chunks() const { return _build_chunks.size(); }
     size_t num_build_rows() const { return _num_build_rows; }
@@ -78,7 +79,7 @@ private:
     std::atomic_int64_t _num_build_rows = 0;
 
     // Join states
-    std::mutex _join_stage_mutex;                                 // Protects join states
+    mutable std::mutex _join_stage_mutex;                         // Protects join states
     std::vector<std::vector<vectorized::ChunkPtr>> _input_chunks; // Input chunks from each sink
     std::vector<vectorized::ChunkPtr> _build_chunks;              // Normalized chunks of _input_chunks
     int _build_chunk_desired_size = 0;
