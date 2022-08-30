@@ -138,10 +138,7 @@ public class Database extends MetaObject implements Writable {
 
     // this function make sure lock can only be obtained if the db has not been dropped
     public boolean readLockAndCheckExist() {
-        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-        Thread formerOwner = rwLock.getOwner();
         this.rwLock.readLock().lock();
-        logSlowLockEventIfNeeded(startMs, "readLock", formerOwner);
         if (exist) {
             return true;
         } else {
@@ -169,13 +166,9 @@ public class Database extends MetaObject implements Writable {
     // this function make sure lock can only be obtained if the db has not been dropped
     public boolean tryReadLockAndCheckExist(long timeout, TimeUnit unit) {
         try {
-            long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-            Thread formerOwner = rwLock.getOwner();
             if (!this.rwLock.readLock().tryLock(timeout, unit)) {
-                logTryLockFailureEvent("readLock");
                 return false;
             }
-            logSlowLockEventIfNeeded(startMs, "tryReadLock", formerOwner);
             if (exist) {
                 return true;
             } else {
@@ -206,10 +199,7 @@ public class Database extends MetaObject implements Writable {
 
     // this function make sure lock can only be obtained if the db has not been dropped
     public boolean writeLockAndCheckExist() {
-        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-        Thread formerOwner = rwLock.getOwner();
         this.rwLock.writeLock().lock();
-        logSlowLockEventIfNeeded(startMs, "writeLock", formerOwner);
         if (exist) {
             return true;
         } else {
@@ -237,13 +227,9 @@ public class Database extends MetaObject implements Writable {
     // this function make sure lock can only be obtained if the db has not been dropped
     public boolean tryWriteLockAndCheckExist(long timeout, TimeUnit unit) {
         try {
-            long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-            Thread formerOwner = rwLock.getOwner();
             if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
-                logTryLockFailureEvent("tryWriteLock");
                 return false;
             }
-            logSlowLockEventIfNeeded(startMs, "tryWriteLock", formerOwner);
             if (exist) {
                 return true;
             } else {
