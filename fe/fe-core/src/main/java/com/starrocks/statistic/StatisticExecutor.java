@@ -13,6 +13,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -198,13 +199,18 @@ public class StatisticExecutor {
         GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
         try {
-            statsJob.collect();
+            ConnectContext context = StatisticUtils.buildConnectContext();
+            context.setQueryId(UUIDUtil.genUUID());
+            GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), context);
+            statsJob.collect(context);
         } catch (Exception e) {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setEndTime(LocalDateTime.now());
             analyzeStatus.setReason(e.getMessage());
             GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
             return analyzeStatus;
+        } finally {
+            GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(analyzeStatus.getId(), false);
         }
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
