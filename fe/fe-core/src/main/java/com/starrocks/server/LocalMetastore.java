@@ -3680,7 +3680,7 @@ public class LocalMetastore implements ConnectorMetadata {
         TableName dbTbl = tblRef.getName();
 
         // check, and save some info which need to be checked again later
-        Map<String, Long> origPartitions = Maps.newHashMap();
+        Map<String, Partition> origPartitions = Maps.newHashMap();
         OlapTable copiedTbl;
         Database db = getDb(dbTbl.getDb());
         if (db == null) {
@@ -3711,11 +3711,11 @@ public class LocalMetastore implements ConnectorMetadata {
                         throw new DdlException("Partition " + partName + " does not exist");
                     }
 
-                    origPartitions.put(partName, partition.getId());
+                    origPartitions.put(partName, partition);
                 }
             } else {
                 for (Partition partition : olapTable.getPartitions()) {
-                    origPartitions.put(partition.getName(), partition.getId());
+                    origPartitions.put(partition.getName(), partition);
                 }
             }
 
@@ -3729,8 +3729,8 @@ public class LocalMetastore implements ConnectorMetadata {
         // tabletIdSet to save all newly created tablet ids.
         Set<Long> tabletIdSet = Sets.newHashSet();
         try {
-            for (Map.Entry<String, Long> entry : origPartitions.entrySet()) {
-                long oldPartitionId = entry.getValue();
+            for (Map.Entry<String, Partition> entry : origPartitions.entrySet()) {
+                long oldPartitionId = entry.getValue().getId();
                 long newPartitionId = getNextId();
                 String newPartitionName = entry.getKey();
 
@@ -3740,6 +3740,15 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(oldPartitionId));
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
 
+<<<<<<< HEAD
+=======
+                if (copiedTbl.isLakeTable()) {
+                    partitionInfo.setStorageInfo(newPartitionId, partitionInfo.getStorageInfo(oldPartitionId));
+                }
+
+                copiedTbl.setDefaultDistributionInfo(entry.getValue().getDistributionInfo());
+
+>>>>>>> 2a7b179d3 (Fix bug truncate partition bucketNum following table not previous partition.)
                 Partition newPartition =
                         createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
                 newPartitions.add(newPartition);
@@ -3769,8 +3778,8 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             // check partitions
-            for (Map.Entry<String, Long> entry : origPartitions.entrySet()) {
-                Partition partition = copiedTbl.getPartition(entry.getValue());
+            for (Map.Entry<String, Partition> entry : origPartitions.entrySet()) {
+                Partition partition = copiedTbl.getPartition(entry.getValue().getId());
                 if (partition == null || !partition.getName().equalsIgnoreCase(entry.getKey())) {
                     throw new DdlException("Partition [" + entry.getKey() + "] is changed");
                 }
