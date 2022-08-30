@@ -8,6 +8,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
@@ -20,7 +21,10 @@ namespace starrocks::lake {
 class GCTest : public ::testing::Test {
 public:
     static void SetUpTestCase() {
-        CHECK_OK(FileSystem::Default()->create_dir_recursive(kTestDir));
+        CHECK_OK(fs::create_directories(join_path(kTestDir, kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(join_path(kTestDir, kTxnLogDirectoryName)));
+        CHECK_OK(fs::create_directories(join_path(kTestDir, kSegmentDirectoryName)));
+
         s_location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
         s_tablet_manager = std::make_unique<lake::TabletManager>(s_location_provider.get(), 16384);
     }
