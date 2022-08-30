@@ -254,18 +254,18 @@ public class ReplayFromDumpTest {
     public void testTPCDS23_1() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds23_1"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" MultiCastDataSinks\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 51\n" +
+                "    EXCHANGE ID: 52\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 72\n" +
+                "    EXCHANGE ID: 73\n" +
                 "    RANDOM\n" +
                 "\n" +
-                "  39:Project\n" +
+                "  40:Project\n" +
                 "  |  <slot 171> : 171: c_customer_sk\n" +
                 "  |  \n" +
-                "  38:NESTLOOP JOIN\n" +
+                "  39:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: CAST(190: sum AS DOUBLE) > CAST(0.5 * 262: max AS DOUBLE)"));
@@ -481,16 +481,16 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("18:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  20:Project\n" +
                 "  |  <slot 33> : bitmap_and(21: expr, 29: bitmap_union)\n" +
                 "  |  \n" +
-                "  17:NESTLOOP JOIN\n" +
+                "  19:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
-                "  |----16:EXCHANGE\n" +
+                "  |----18:EXCHANGE\n" +
                 "  |    \n" +
-                "  10:Project\n" +
+                "  11:Project\n" +
                 "  |  <slot 21> : 18: bitmap_union"));
     }
 

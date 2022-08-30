@@ -85,7 +85,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyLeftProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyLeftRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyProjectRule;
-import com.starrocks.sql.optimizer.rule.transformation.PushDownAssertOneRowProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnClauseRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitCTEAnchor;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitDirectRule;
@@ -271,7 +270,6 @@ public class RuleSet {
         ));
 
         rewriteRules.put(RuleSetType.PRUNE_ASSERT_ROW, ImmutableList.of(
-                new PushDownAssertOneRowProjectRule(),
                 new PruneAssertOneRowRule()
         ));
 
