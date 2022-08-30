@@ -29,7 +29,7 @@ struct TMasterInfo {
     6: optional Types.TPort http_port
     7: optional i64 heartbeat_flags
     8: optional i64 backend_id
-    9: optional i64 min_active_txn_log_id
+    9: optional i64 min_active_txn_log_id = 0
 }
 
 struct TBackendInfo {

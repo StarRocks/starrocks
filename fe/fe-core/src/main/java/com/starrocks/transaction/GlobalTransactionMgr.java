@@ -540,7 +540,7 @@ public class GlobalTransactionMgr implements Writable {
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             result = min(result, dbTransactionMgr.getMinActiveTxnId());
         }
-        return result;
+        return result == Long.MAX_VALUE ? 0 : result;
     }
 
     public TransactionState getTransactionState(long dbId, long transactionId) {
