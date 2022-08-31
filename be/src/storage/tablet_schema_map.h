@@ -58,8 +58,6 @@ public:
     // [thread-safe]
     Stats stats() const;
 
-    void set_mem_tracker(MemTracker* mem_tracker) { _mem_tracker = mem_tracker; }
-
 private:
     constexpr static int kShardSize = 16;
 
@@ -72,7 +70,6 @@ private:
     MapShard* get_shard(SchemaId id) { return &_map_shards[id % kShardSize]; }
     const MapShard* get_shard(SchemaId id) const { return &_map_shards[id % kShardSize]; }
 
-    MemTracker* _mem_tracker = nullptr;
     MapShard _map_shards[kShardSize];
 };
 
