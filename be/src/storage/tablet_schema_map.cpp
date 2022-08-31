@@ -55,18 +55,18 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
         std::unique_lock l(shard->mtx);
         auto it = shard->map.find(id);
         if (it == shard->map.end()) {
-            result = TabletSchema::create(_mem_tracker, schema_pb, this);
+            result = TabletSchema::create(schema_pb, this);
             shard->map.emplace(id, result);
             insert = true;
         } else {
             ptr = it->second.lock();
             if (UNLIKELY(!ptr)) {
-                result = TabletSchema::create(_mem_tracker, schema_pb, this);
+                result = TabletSchema::create(schema_pb, this);
                 it->second = std::weak_ptr<const TabletSchema>(result);
                 insert = true;
             } else {
                 if (UNLIKELY(!check_schema_unique_id(schema_pb, ptr))) {
-                    result = TabletSchema::create(_mem_tracker, schema_pb, nullptr);
+                    result = TabletSchema::create(schema_pb, nullptr);
                 } else {
                     result = ptr;
                 }
