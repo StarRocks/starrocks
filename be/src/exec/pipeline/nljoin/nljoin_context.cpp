@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "exec/pipeline/crossjoin/cross_join_context.h"
+#include "exec/pipeline/nljoin/nljoin_context.h"
 
 #include <algorithm>
 #include <numeric>
@@ -15,11 +15,11 @@
 
 namespace starrocks::pipeline {
 
-void CrossJoinContext::close(RuntimeState* state) {
+void NLJoinContext::close(RuntimeState* state) {
     _build_chunks.clear();
 }
 
-Status CrossJoinContext::_init_runtime_filter(RuntimeState* state) {
+Status NLJoinContext::_init_runtime_filter(RuntimeState* state) {
     vectorized::ChunkPtr one_row_chunk = nullptr;
     size_t num_rows = 0;
     for (auto& chunk_ptr : _build_chunks) {
@@ -46,7 +46,7 @@ Status CrossJoinContext::_init_runtime_filter(RuntimeState* state) {
     return Status::OK();
 }
 
-bool CrossJoinContext::finish_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags) {
+bool NLJoinContext::finish_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags) {
     std::lock_guard guard(_join_stage_mutex);
 
     ++_num_post_probers;
@@ -68,22 +68,17 @@ bool CrossJoinContext::finish_probe(int32_t driver_seq, const std::vector<uint8_
     return is_last;
 }
 
-const std::vector<uint8_t> CrossJoinContext::get_shared_build_match_flag() const {
+const std::vector<uint8_t> NLJoinContext::get_shared_build_match_flag() const {
     DCHECK_EQ(_num_post_probers, _num_left_probers) << "all probers should share their states";
     std::lock_guard guard(_join_stage_mutex);
     return _shared_build_match_flag;
 }
 
-void CrossJoinContext::append_build_chunk(int32_t sinker_id, vectorized::ChunkPtr chunk) {
+void NLJoinContext::append_build_chunk(int32_t sinker_id, vectorized::ChunkPtr chunk) {
     _input_chunks[sinker_id].push_back(chunk);
 }
 
-int CrossJoinContext::get_build_chunk_start(int index) const {
-    DCHECK_LT(index, _build_chunks.size());
-    return _build_chunk_desired_size * index;
-}
-
-Status CrossJoinContext::finish_one_right_sinker(RuntimeState* state) {
+Status NLJoinContext::finish_one_right_sinker(RuntimeState* state) {
     if (_num_right_sinkers - 1 == _num_finished_right_sinkers.fetch_add(1)) {
         RETURN_IF_ERROR(_init_runtime_filter(state));
 
