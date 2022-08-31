@@ -90,6 +90,7 @@ public class LakeTable extends OlapTable {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
+
         tableProperty.setStorageInfo(new StorageInfo(
                 newShardStorageInfo, new StorageCacheInfo(enableCache, cacheTtlS, allowAsyncWriteBack)));
     }
