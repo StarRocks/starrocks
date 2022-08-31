@@ -47,7 +47,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     _type_is_nullable.reserve(column_size);
 
     if (tnode.project_node.__isset.pass_through) {
-        use_pass_through = tnode.project_node.pass_through;
+        _use_pass_through = tnode.project_node.pass_through;
     }
 
     std::map<SlotId, bool> slot_null_mapping;
@@ -322,7 +322,7 @@ pipeline::OpFactories ProjectNode::decompose_to_pipeline(pipeline::PipelineBuild
     // LOCAL_EXCHANGE_SOURCE -> AGG_SINK
     //
     // Higher parallelism after adding local exchange
-    if (use_pass_through) {
+    if (_use_pass_through) {
         size_t dop = down_cast<SourceOperatorFactory*>(operators[0].get())->degree_of_parallelism();
         operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators, dop, true);
     }
