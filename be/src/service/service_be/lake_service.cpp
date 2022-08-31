@@ -212,7 +212,7 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     for (auto tablet_id : request->tablet_ids()) {
         auto task = std::make_shared<AbortTxnTask>(tablet_id, context);
         auto st = thread_pool->submit(std::move(task), ThreadPool::LOW_PRIORITY);
-        LOG_IF(WARNING, !st.ok()) << "Fail to submit abort txm task: " << st;
+        LOG_IF(WARNING, !st.ok()) << "Fail to submit abort txn task: " << st;
     }
 
     context->wait();
