@@ -47,7 +47,7 @@ public class AlterTableStmtTest {
 
     @Before
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
 
         new Expectations() {
             {

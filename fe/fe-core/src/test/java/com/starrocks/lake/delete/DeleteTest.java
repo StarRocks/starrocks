@@ -132,7 +132,7 @@ public class DeleteTest {
     public void setUp() {
         deleteHandler = new DeleteHandler();
         auth = AccessTestUtil.fetchAdminAccess();
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
         db = createDb();
         Backend backend = new Backend(backendId, "127.0.0.1", 1234);
 

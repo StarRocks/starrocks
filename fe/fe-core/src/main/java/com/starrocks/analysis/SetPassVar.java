@@ -83,7 +83,8 @@ public class SetPassVar extends SetVar {
         }
 
         // 2. No user can set password for root expect for root user itself
-        if (userIdent.getQualifiedUser().equals(Auth.ROOT_USER)) {
+        if (userIdent.getQualifiedUser().equals(Auth.ROOT_USER)
+                && !ctx.getQualifiedUser().equals(Auth.ROOT_USER)) {
             throw new SemanticException("Can not set password for root user, except root itself");
         }
 
