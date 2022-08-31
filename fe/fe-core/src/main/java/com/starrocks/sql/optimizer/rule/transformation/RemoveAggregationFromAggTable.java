@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
 // and the aggregation functions are the same as the aggregate type of the target value columns in table
 // then the Aggregation can be remove and the preAggregate should be off for OlapScanOperator
 public class RemoveAggregationFromAggTable extends TransformationRule {
-    private static final List<String> unsupportedFunctionNames =
+    private static final List<String> UNSUPPORTED_FUNCTION_NAMES =
             ImmutableList.of(FunctionSet.BITMAP_UNION,
                     FunctionSet.BITMAP_UNION_COUNT,
                     FunctionSet.HLL_UNION,
@@ -88,7 +88,7 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         // check whether every aggregation function on column is the same as the AggregationType of the column
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
-            if (unsupportedFunctionNames.contains(entry.getValue().getFnName().toLowerCase())) {
+            if (UNSUPPORTED_FUNCTION_NAMES.contains(entry.getValue().getFnName().toLowerCase())) {
                 return false;
             }
             CallOperator callOperator = entry.getValue();
