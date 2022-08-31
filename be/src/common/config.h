@@ -817,5 +817,7 @@ CONF_Int32(cardinality_of_inject, "100");
  * Specify the source code directory,
  * Split by "," strictly.
  */
-CONF_String(directory_of_inject, "/src/exec,/src/exprs");
+CONF_String(directory_of_inject,
+            "/src/exec/pipeline/hashjoin,/src/exec/pipeline/scan,/src/exec/pipeline/aggregate,/src/exec/pipeline/"
+            "crossjoin,/src/exec/pipeline/sort,/src/exec/pipeline/exchange,/src/exec/pipeline/analysis");
 } // namespace starrocks::config
