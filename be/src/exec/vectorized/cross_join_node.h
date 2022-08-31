@@ -9,8 +9,8 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
+
 class CrossJoinNode final : public ExecNode {
 public:
     CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -115,5 +115,5 @@ private:
 
     std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
 };
-} // namespace vectorized
-} // namespace starrocks
+
+} // namespace starrocks::vectorized

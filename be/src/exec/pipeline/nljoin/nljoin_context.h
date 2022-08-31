@@ -19,7 +19,7 @@ namespace starrocks::pipeline {
 
 class RuntimeFilterHub;
 
-struct CrossJoinContextParams {
+struct NLJoinContextParams {
     int32_t num_left_probers;
     int32_t num_right_sinkers;
     int32_t plan_node_id;
@@ -28,9 +28,9 @@ struct CrossJoinContextParams {
     std::vector<vectorized::RuntimeFilterBuildDescriptor*> rf_descs;
 };
 
-class CrossJoinContext final : public ContextWithDependency {
+class NLJoinContext final : public ContextWithDependency {
 public:
-    explicit CrossJoinContext(CrossJoinContextParams params)
+    explicit NLJoinContext(NLJoinContextParams params)
             : _num_left_probers(params.num_left_probers),
               _num_right_sinkers(params.num_right_sinkers),
               _plan_node_id(params.plan_node_id),
@@ -48,8 +48,7 @@ public:
 
     vectorized::Chunk* get_build_chunk(int32_t index) const { return _build_chunks[index].get(); }
 
-    // Start row index of a chunk
-    int get_build_chunk_start(int index) const;
+    int get_build_chunk_size() const { return _build_chunk_desired_size; }
 
     void append_build_chunk(int32_t sinker_id, vectorized::ChunkPtr build_chunk);
 
@@ -68,13 +67,8 @@ private:
     const int32_t _num_left_probers;
     const int32_t _num_right_sinkers;
     const int32_t _plan_node_id;
-    // A CrossJoinLeftOperator waits for all the CrossJoinRightSinkOperators to be finished,
-    // and then reads _build_chunks written by the CrossJoinRightSinkOperators.
-    // _num_finished_right_sinkers is used to ensure CrossJoinLeftOperator can see all the parts
-    // of _build_chunks, when it sees all the CrossJoinRightSinkOperators are finished.
-    std::atomic<int32_t> _num_finished_right_sinkers = 0;
 
-    // finished flags
+    std::atomic<int32_t> _num_finished_right_sinkers = 0;
     std::atomic_bool _all_right_finished = false;
     std::atomic_int64_t _num_build_rows = 0;
 
