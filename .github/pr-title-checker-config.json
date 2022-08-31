@@ -1,0 +1,17 @@
+{
+  "LABEL": {
+    "name": "title needs [type]",
+    "color": "EEEEEE"
+  },
+  "CHECKS": {
+    "prefixes": ["[BugFix] ", "[BugFix]", "[Feature]", "[Refactor]", "[UT]"],
+    "regexp": "\\[.*\\].*",
+    "regexpFlags": "i",
+    "ignoreLabels" : ["ignore-pr-title-check", "pass"]
+  },
+  "MESSAGES": {
+    "success": "All OK",
+    "failure": "Pull request title should add type, e.g. [type] title",
+    "notice": ""
+  }
+}
