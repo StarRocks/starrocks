@@ -1472,14 +1472,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String quotedString;
         if (context.SINGLE_QUOTED_TEXT() != null) {
             quotedString = context.SINGLE_QUOTED_TEXT().getText();
-            return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1)));
+            // For support mysql embedded quotation
+            // In a single-quoted string, two single-quotes are combined into one single-quote
+            quotedString = quotedString.substring(1, quotedString.length() - 1).replace("''", "'");
         } else {
             quotedString = context.DOUBLE_QUOTED_TEXT().getText();
             // For support mysql embedded quotation
             // In a double-quoted string, two double-quotes are combined into one double-quote
-            return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1))
-                    .replace("\"\"", "\""));
+            quotedString = quotedString.substring(1, quotedString.length() - 1).replace("\"\"", "\"");
         }
+        return new StringLiteral(escapeBackSlash(quotedString));
     }
 
     private static String escapeBackSlash(String str) {
