@@ -108,23 +108,23 @@ public class VariableMgr {
 
     // Map variable name to variable context which have enough information to change variable value.
     // This map contains info of all session and global variables.
-    private static final ImmutableMap<String, VarContext> ctxByVarName;
+    private static final ImmutableMap<String, VarContext> CTX_BY_VAR_NAME;
 
-    private static ImmutableMap<String, String> aliases;
+    private static final ImmutableMap<String, String> ALIASES;
 
     // This variable is equivalent to the default value of session variables.
     // Whenever a new session is established, the value in this object is copied to the session-level variable.
-    private static SessionVariable defaultSessionVariable;
+    private static final SessionVariable DEFAULT_SESSION_VARIABLE;
 
     // Global read/write lock to protect access of globalSessionVariable.
-    private static final ReadWriteLock rwlock = new ReentrantReadWriteLock();
-    private static final Lock rlock = rwlock.readLock();
-    private static final Lock wlock = rwlock.writeLock();
+    private static final ReadWriteLock RWLOCK = new ReentrantReadWriteLock();
+    private static final Lock RLOCK = RWLOCK.readLock();
+    private static final Lock WLOCK = RWLOCK.writeLock();
 
     // Form map from variable name to its field in Java class.
     static {
         // Session value
-        defaultSessionVariable = new SessionVariable();
+        DEFAULT_SESSION_VARIABLE = new SessionVariable();
         ImmutableSortedMap.Builder<String, VarContext> ctxBuilder =
                 ImmutableSortedMap.orderedBy(String.CASE_INSENSITIVE_ORDER);
         ImmutableSortedMap.Builder<String, String> aliasBuilder =
@@ -141,8 +141,8 @@ public class VariableMgr {
             }
 
             field.setAccessible(true);
-            ctxBuilder.put(attr.name(), new VarContext(field, defaultSessionVariable, SESSION | attr.flag(),
-                    getValue(defaultSessionVariable, field), attr));
+            ctxBuilder.put(attr.name(), new VarContext(field, DEFAULT_SESSION_VARIABLE, SESSION | attr.flag(),
+                    getValue(DEFAULT_SESSION_VARIABLE, field), attr));
 
             if (!attr.alias().isEmpty()) {
                 aliasBuilder.put(attr.alias(), attr.name());
@@ -165,12 +165,12 @@ public class VariableMgr {
             }
         }
 
-        ctxByVarName = ctxBuilder.build();
-        aliases = aliasBuilder.build();
+        CTX_BY_VAR_NAME = ctxBuilder.build();
+        ALIASES = aliasBuilder.build();
     }
 
     public static SessionVariable getDefaultSessionVariable() {
-        return defaultSessionVariable;
+        return DEFAULT_SESSION_VARIABLE;
     }
 
     // Set value to a variable
@@ -236,7 +236,7 @@ public class VariableMgr {
 
     public static SessionVariable newSessionVariable() {
         try {
-            return (SessionVariable) defaultSessionVariable.clone();
+            return (SessionVariable) DEFAULT_SESSION_VARIABLE.clone();
         } catch (CloneNotSupportedException e) {
             LOG.warn(e);
         }
@@ -287,16 +287,16 @@ public class VariableMgr {
         }
 
         if (!onlySetSessionVar && setVar.getType() == SetType.GLOBAL) {
-            wlock.lock();
+            WLOCK.lock();
             try {
                 setValue(ctx.getObj(), ctx.getField(), value);
                 // write edit log
                 GlobalVarPersistInfo info =
-                        new GlobalVarPersistInfo(defaultSessionVariable, Lists.newArrayList(attr.name()));
+                        new GlobalVarPersistInfo(DEFAULT_SESSION_VARIABLE, Lists.newArrayList(attr.name()));
                 EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
                 editLog.logGlobalVariableV2(info);
             } finally {
-                wlock.unlock();
+                WLOCK.unlock();
             }
         }
 
@@ -306,29 +306,29 @@ public class VariableMgr {
 
     // global variable persistence
     public static void write(DataOutputStream out) throws IOException {
-        defaultSessionVariable.write(out);
+        DEFAULT_SESSION_VARIABLE.write(out);
         // get all global variables
         List<String> varNames = GlobalVariable.getAllGlobalVarNames();
-        GlobalVarPersistInfo info = new GlobalVarPersistInfo(defaultSessionVariable, varNames);
+        GlobalVarPersistInfo info = new GlobalVarPersistInfo(DEFAULT_SESSION_VARIABLE, varNames);
         info.write(out);
     }
 
     public static void read(DataInputStream in) throws IOException, DdlException {
-        wlock.lock();
+        WLOCK.lock();
         try {
-            defaultSessionVariable.readFields(in);
+            DEFAULT_SESSION_VARIABLE.readFields(in);
             if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_90) {
                 GlobalVarPersistInfo info = GlobalVarPersistInfo.read(in);
                 replayGlobalVariableV2(info);
             }
         } finally {
-            wlock.unlock();
+            WLOCK.unlock();
         }
     }
 
     @Deprecated
     public static void replayGlobalVariable(SessionVariable variable) throws DdlException {
-        wlock.lock();
+        WLOCK.lock();
         try {
             for (Field field : SessionVariable.class.getDeclaredFields()) {
                 VarAttr attr = field.getAnnotation(VarAttr.class);
@@ -345,13 +345,13 @@ public class VariableMgr {
                 }
             }
         } finally {
-            wlock.unlock();
+            WLOCK.unlock();
         }
     }
 
     // this method is used to replace the `replayGlobalVariable()`
     public static void replayGlobalVariableV2(GlobalVarPersistInfo info) throws DdlException {
-        wlock.lock();
+        WLOCK.lock();
         try {
             String json = info.getPersistJsonString();
             JSONObject root = new JSONObject(json);
@@ -364,7 +364,7 @@ public class VariableMgr {
                 setValue(varContext.getObj(), varContext.getField(), root.get(varName).toString());
             }
         } finally {
-            wlock.unlock();
+            WLOCK.unlock();
         }
     }
 
@@ -376,11 +376,11 @@ public class VariableMgr {
         }
 
         if (desc.getSetType() == SetType.GLOBAL) {
-            rlock.lock();
+            RLOCK.lock();
             try {
                 fillValue(ctx.getObj(), ctx.getField(), desc);
             } finally {
-                rlock.unlock();
+                RLOCK.unlock();
             }
         } else {
             fillValue(var, ctx.getField(), desc);
@@ -440,11 +440,11 @@ public class VariableMgr {
         }
 
         if (desc.getSetType() == SetType.GLOBAL) {
-            rlock.lock();
+            RLOCK.lock();
             try {
                 return getValue(ctx.getObj(), ctx.getField());
             } finally {
-                rlock.unlock();
+                RLOCK.unlock();
             }
         } else {
             return getValue(var, ctx.getField());
@@ -483,9 +483,9 @@ public class VariableMgr {
     public static List<List<String>> dump(SetType type, SessionVariable sessionVar, PatternMatcher matcher) {
         List<List<String>> rows = Lists.newArrayList();
         // Hold the read lock when session dump, because this option need to access global variable.
-        rlock.lock();
+        RLOCK.lock();
         try {
-            for (Map.Entry<String, VarContext> entry : ctxByVarName.entrySet()) {
+            for (Map.Entry<String, VarContext> entry : CTX_BY_VAR_NAME.entrySet()) {
                 // Filter variable not match to the regex.
                 String name = StringUtils.isBlank(entry.getValue().getVarAttr().show()) ? entry.getKey()
                         : entry.getValue().getVarAttr().show();
@@ -503,7 +503,7 @@ public class VariableMgr {
                 }
 
                 List<String> row = Lists.newArrayList();
-                if (type != SetType.GLOBAL && ctx.getObj() == defaultSessionVariable) {
+                if (type != SetType.GLOBAL && ctx.getObj() == DEFAULT_SESSION_VARIABLE) {
                     // In this condition, we may retrieve session variables for caller.
                     if (sessionVar != null) {
                         row.add(name);
@@ -529,7 +529,7 @@ public class VariableMgr {
                 rows.add(row);
             }
         } finally {
-            rlock.unlock();
+            RLOCK.unlock();
         }
 
         // Sort all variables by variable name.
@@ -613,9 +613,9 @@ public class VariableMgr {
     }
 
     private static VarContext getVarContext(String name) {
-        VarContext ctx = ctxByVarName.get(name);
+        VarContext ctx = CTX_BY_VAR_NAME.get(name);
         if (ctx == null) {
-            ctx = ctxByVarName.get(aliases.get(name));
+            ctx = CTX_BY_VAR_NAME.get(ALIASES.get(name));
         }
         return ctx;
     }

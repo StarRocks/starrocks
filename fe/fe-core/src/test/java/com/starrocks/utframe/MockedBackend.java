@@ -98,7 +98,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * In MockedBackendFactory, there default rpc service for above 3 rpc services.
  */
 public class MockedBackend {
-    private static final AtomicInteger basePort = new AtomicInteger(8000);
+    private static final AtomicInteger BASE_PORT = new AtomicInteger(8000);
 
     private final String host;
     private final int brpcPort;
@@ -114,10 +114,10 @@ public class MockedBackend {
 
     public MockedBackend(String host) throws Exception {
         this.host = host;
-        brpcPort = basePort.getAndIncrement();
-        heartBeatPort = basePort.getAndIncrement();
-        beThriftPort = basePort.getAndIncrement();
-        httpPort = basePort.getAndIncrement();
+        brpcPort = BASE_PORT.getAndIncrement();
+        heartBeatPort = BASE_PORT.getAndIncrement();
+        beThriftPort = BASE_PORT.getAndIncrement();
+        httpPort = BASE_PORT.getAndIncrement();
 
         heatBeatClient = new MockHeatBeatClient(beThriftPort, httpPort, brpcPort);
         thriftClient = new MockBeThriftClient(this);

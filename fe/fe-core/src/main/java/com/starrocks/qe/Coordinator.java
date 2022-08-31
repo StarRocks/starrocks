@@ -143,10 +143,10 @@ public class Coordinator {
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private static final String localIP = FrontendOptions.getLocalHostAddress();
+    private static final String LOCAL_IP = FrontendOptions.getLocalHostAddress();
 
     // Random is used to shuffle instances of partitioned
-    private static final Random instanceRandom = new Random();
+    private static final Random INSTANCE_RANDOM = new Random();
     // parallel execute
     private final TUniqueId nextInstanceId;
     // Overall status of the entire query; set to the first reported fragment error
@@ -410,7 +410,7 @@ public class Coordinator {
             fragmentExecParamsMap.put(fragment.getFragmentId(), new FragmentExecParams(fragment));
         }
 
-        coordAddress = new TNetworkAddress(localIP, Config.rpc_port);
+        coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
 
         int fragmentSize = fragments.size();
         queryProfile = new RuntimeProfile("Execution Profile " + DebugUtil.printId(queryId));
@@ -1734,7 +1734,7 @@ public class Coordinator {
                     // random select some instance
                     // get distinct host,  when parallel_fragment_exec_instance_num > 1, single host may execute several instances
                     List<TNetworkAddress> hosts = Lists.newArrayList(hostSet);
-                    Collections.shuffle(hosts, instanceRandom);
+                    Collections.shuffle(hosts, INSTANCE_RANDOM);
 
                     for (int index = 0; index < exchangeInstances; index++) {
                         FInstanceExecParam instanceParam =
@@ -1753,7 +1753,7 @@ public class Coordinator {
                 // When group by cardinality is smaller than number of backend, only some backends always
                 // process while other has no data to process.
                 // So we shuffle instances to make different backends handle different queries.
-                Collections.shuffle(params.instanceExecParams, instanceRandom);
+                Collections.shuffle(params.instanceExecParams, INSTANCE_RANDOM);
 
                 // TODO: switch to unpartitioned/coord execution if our input fragment
                 // is executed that way (could have been downgraded from distributed)

@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Map;
 
 public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
-    private static final Map<String, Long> rowCountMap = ImmutableMap.<String, Long>builder()
+    private static final Map<String, Long> ROW_COUNT_MAP = ImmutableMap.<String, Long>builder()
             .put("call_center", 42L)
             .put("catalog_page", 30000L)
             .put("catalog_returns", 143996756L)
@@ -75,7 +75,7 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
     public void setUp() throws Exception {
         origin = GlobalStateMgr.getCurrentStatisticStorage();
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTPCDSStatisticStorage());
-        setTPCDSTableStats(rowCountMap);
+        setTPCDSTableStats(ROW_COUNT_MAP);
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setCboCTERuseRatio(1.2);
     }

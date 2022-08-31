@@ -24,7 +24,7 @@ import java.util.Set;
  * Evaluate the selectivity of child.
  */
 public class PredicateReorderRule implements PhysicalOperatorTreeRewriteRule {
-    public static final PredicateReorderVisitor handler = new PredicateReorderVisitor();
+    public static final PredicateReorderVisitor HANDLER = new PredicateReorderVisitor();
 
     private final SessionVariable sessionVariable;
 
@@ -35,7 +35,7 @@ public class PredicateReorderRule implements PhysicalOperatorTreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         if (sessionVariable.isEnablePredicateReorder()) {
-            root.getOp().accept(handler, root, null);
+            root.getOp().accept(HANDLER, root, null);
         }
         return root;
     }

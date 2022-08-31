@@ -41,8 +41,10 @@ import java.util.stream.Collectors;
 
 public class HiveMetaStoreTableUtils {
     private static final Logger LOG = LogManager.getLogger(HiveMetaStoreTableUtils.class);
-    public static final IdGenerator<ConnectorTableId> connectorTableIdIdGenerator = ConnectorTableId.createGenerator();
-    public static final IdGenerator<ConnectorDatabaseId> connectorDbIdIdGenerator = ConnectorDatabaseId.createGenerator();
+    public static final IdGenerator<ConnectorTableId> CONNECTOR_TABLE_ID_ID_GENERATOR =
+            ConnectorTableId.createGenerator();
+    public static final IdGenerator<ConnectorDatabaseId> CONNECTOR_DATABASE_ID_ID_GENERATOR =
+            ConnectorDatabaseId.createGenerator();
 
     public static Map<String, HiveColumnStats> getTableLevelColumnStats(HiveMetaStoreTableInfo hmsTable,
                                                                         List<String> columnNames) throws DdlException {
@@ -105,7 +107,7 @@ public class HiveMetaStoreTableUtils {
     }
 
     public static List<FieldSchema> getAllHiveColumns(Table table) {
-        ImmutableList.Builder<FieldSchema> allColumns =  ImmutableList.builder();
+        ImmutableList.Builder<FieldSchema> allColumns = ImmutableList.builder();
         List<FieldSchema> unHivePartColumns = table.getSd().getCols();
         List<FieldSchema> partHiveColumns = table.getPartitionKeys();
         return allColumns.addAll(unHivePartColumns).addAll(partHiveColumns).build();
@@ -336,7 +338,7 @@ public class HiveMetaStoreTableUtils {
         properties.put(HiveTable.HIVE_METASTORE_URIS, resoureName);
         properties.put(HiveTable.HIVE_RESOURCE, resoureName);
 
-        return new HiveTable(connectorTableIdIdGenerator.getNextId().asInt(), hiveTable.getTableName(),
+        return new HiveTable(CONNECTOR_TABLE_ID_ID_GENERATOR.getNextId().asInt(), hiveTable.getTableName(),
                 fullSchema, properties, hiveTable);
     }
 
@@ -360,12 +362,12 @@ public class HiveMetaStoreTableUtils {
         properties.put(HudiTable.HUDI_TABLE, hmsTable.getTableName());
         properties.put(HudiTable.HUDI_RESOURCE, resourceName);
 
-        return new HudiTable(connectorTableIdIdGenerator.getNextId().asInt(), hudiSchema.getName(),
+        return new HudiTable(CONNECTOR_TABLE_ID_ID_GENERATOR.getNextId().asInt(), hudiSchema.getName(),
                 fullSchema, properties);
     }
 
     public static Database convertToSRDatabase(String dbName) {
-        return new Database(connectorDbIdIdGenerator.getNextId().asInt(), dbName);
+        return new Database(CONNECTOR_DATABASE_ID_ID_GENERATOR.getNextId().asInt(), dbName);
     }
 
     public static long doGetPartitionStatsRowCount(HiveMetaStoreTableInfo hmsTable,

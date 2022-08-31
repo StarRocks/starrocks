@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 
 public class TPCDSPlanTestBase extends PlanTestBase {
-    private static final Map<String, Long> rowCountMap = ImmutableMap.<String, Long>builder()
+    private static final Map<String, Long> ROW_COUNT_MAP = ImmutableMap.<String, Long>builder()
             .put("call_center", 6L)
             .put("catalog_page", 11718L)
             .put("catalog_returns", 144067L)
@@ -43,7 +43,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             .build();
 
     public void setTPCDSFactor(int factor) {
-        rowCountMap.forEach((t, v) -> {
+        ROW_COUNT_MAP.forEach((t, v) -> {
             OlapTable table = getOlapTable(t);
             setTableStatistics(table, v * factor);
         });
@@ -51,7 +51,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
 
     public Map<String, Long> getTPCDSTableStats() {
         Map<String, Long> m = new HashMap<>();
-        rowCountMap.forEach((t, v) -> {
+        ROW_COUNT_MAP.forEach((t, v) -> {
             OlapTable table = getOlapTable(t);
             m.put(t, table.getRowCount());
         });
@@ -59,7 +59,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
     }
 
     public void setTPCDSTableStats(Map<String, Long> m) {
-        rowCountMap.forEach((t, s) -> {
+        ROW_COUNT_MAP.forEach((t, s) -> {
             if (m.containsKey(t)) {
                 long v = m.get(t);
                 OlapTable table = getOlapTable(t);
