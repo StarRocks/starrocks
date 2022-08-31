@@ -45,13 +45,13 @@ import static com.starrocks.catalog.AggregateType.HLL_UNION;
 
 public class CreateTableAnalyzer {
 
-    private static final Logger logger = LoggerFactory.getLogger(CreateTableAnalyzer.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(CreateTableAnalyzer.class);
 
     private static final String DEFAULT_CHARSET_NAME = "utf8";
 
     private static final String DEFAULT_ENGINE_NAME = "olap";
 
-    private static final String elasticsearch = "elasticsearch";
+    private static final String ELASTICSEARCH = "elasticsearch";
 
     public enum EngineType {
         OLAP,
@@ -220,7 +220,7 @@ public class CreateTableAnalyzer {
             try {
                 columnDef.analyze(statement.isOlapOrLakeEngine());
             } catch (AnalysisException e) {
-                logger.error("Column definition analyze failed.", e);
+                LOGGER.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());
             }
 
@@ -284,7 +284,7 @@ public class CreateTableAnalyzer {
             statement.setDistributionDesc(distributionDesc);
             statement.setProperties(properties);
         } else {
-            if (engineName.equals(elasticsearch)) {
+            if (engineName.equals(ELASTICSEARCH)) {
                 EsUtil.analyzePartitionAndDistributionDesc(partitionDesc, distributionDesc);
             } else {
                 if (partitionDesc != null || distributionDesc != null) {

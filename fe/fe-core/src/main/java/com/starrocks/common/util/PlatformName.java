@@ -19,15 +19,15 @@ package com.starrocks.common.util;
 
 public class PlatformName {
 
-    private static final String platformName = System.getProperty("os.name") + "-" +
+    private static final String PLATFORM_NAME = System.getProperty("os.name") + "-" +
             System.getProperty("os.arch") + "-" +
             System.getProperty("sun.arch.data.model");
 
     public static String getPlatformName() {
-        return platformName;
+        return PLATFORM_NAME;
     }
 
     public static void main(String[] args) {
-        System.out.println(platformName);
+        System.out.println(PLATFORM_NAME);
     }
 }

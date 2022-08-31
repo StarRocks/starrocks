@@ -50,7 +50,7 @@ public class MysqlHandshakePacket extends MysqlPacket {
     private static final String CLEAR_PASSWORD_PLUGIN_NAME = "mysql_clear_password";
     public static final String AUTHENTICATION_KERBEROS_CLIENT = "authentication_kerberos_client";
 
-    private static final ImmutableMap<String, Boolean> supportedPlugins = new ImmutableMap.Builder<String, Boolean>()
+    private static final ImmutableMap<String, Boolean> SUPPORTED_PLUGINS = new ImmutableMap.Builder<String, Boolean>()
             .put(NATIVE_AUTH_PLUGIN_NAME, true)
             .put(CLEAR_PASSWORD_PLUGIN_NAME, true)
             .build();
@@ -105,7 +105,7 @@ public class MysqlHandshakePacket extends MysqlPacket {
     }
 
     public boolean checkAuthPluginSameAsStarRocks(String pluginName) {
-        return supportedPlugins.containsKey(pluginName) && supportedPlugins.get(pluginName);
+        return SUPPORTED_PLUGINS.containsKey(pluginName) && SUPPORTED_PLUGINS.get(pluginName);
     }
 
     // If the auth default plugin in client is different from StarRocks
