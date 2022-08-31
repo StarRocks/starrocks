@@ -2,8 +2,6 @@
 
 package com.starrocks.rpc;
 
-import com.baidu.brpc.RpcContext;
-import com.baidu.brpc.client.RpcCallback;
 import com.starrocks.lake.proto.AbortTxnRequest;
 import com.starrocks.lake.proto.AbortTxnResponse;
 import com.starrocks.lake.proto.CompactRequest;
@@ -42,37 +40,27 @@ public class LakeServiceClient {
     }
 
     public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) throws RpcException {
-        RpcCallback<PublishVersionResponse> callback = new EmptyRpcCallback<PublishVersionResponse>();
-        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).publishVersion(request, callback));
+        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).publishVersionAsync(request));
     }
 
     public Future<AbortTxnResponse> abortTxn(AbortTxnRequest request) throws RpcException {
-        RpcCallback<AbortTxnResponse> callback = new EmptyRpcCallback<AbortTxnResponse>();
-        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).abortTxn(request, callback));
+        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).abortTxnAsync(request));
     }
 
     public Future<CompactResponse> compact(CompactRequest request) throws RpcException {
-        RpcCallback<CompactResponse> callback = new EmptyRpcCallback<CompactResponse>();
-        RpcContext rpcContext = RpcContext.getContext();
-        rpcContext.setReadTimeoutMillis(1800000);
-        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).compact(request, callback));
+        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).compactAsync(request));
     }
 
     public Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) throws RpcException {
-        RpcCallback<DeleteTabletResponse> callback = new EmptyRpcCallback<DeleteTabletResponse>();
-        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).deleteTablet(request, callback));
+        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).deleteTablet(request));
     }
 
     public Future<DeleteDataResponse> deleteData(DeleteDataRequest request) throws RpcException {
-        RpcCallback<DeleteDataResponse> callback = new EmptyRpcCallback<DeleteDataResponse>();
-        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).deleteData(request, callback));
+        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).deleteData(request));
     }
 
     public Future<TabletStatResponse> getTabletStats(TabletStatRequest request) throws RpcException {
-        RpcCallback<TabletStatResponse> callback = new EmptyRpcCallback<>();
-        RpcContext rpcContext = RpcContext.getContext();
-        rpcContext.setReadTimeoutMillis(600000);
-        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).getTabletStats(request, callback));
+        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).getTabletStats(request));
     }
 
     private <T> T run(Supplier<T> function) throws RpcException {

@@ -1,8 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.pseudocluster;
 
-import com.baidu.brpc.RpcContext;
-import com.baidu.brpc.client.RpcCallback;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -13,11 +11,8 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
-import com.starrocks.proto.PExecBatchPlanFragmentsRequest;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
-import com.starrocks.proto.PExecPlanFragmentRequest;
 import com.starrocks.proto.PExecPlanFragmentResult;
-import com.starrocks.proto.PFetchDataRequest;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
@@ -30,11 +25,14 @@ import com.starrocks.proto.PTabletWriterCancelRequest;
 import com.starrocks.proto.PTabletWriterCancelResult;
 import com.starrocks.proto.PTabletWriterOpenRequest;
 import com.starrocks.proto.PTabletWriterOpenResult;
-import com.starrocks.proto.PTriggerProfileReportRequest;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.StatusPB;
-import com.starrocks.rpc.PBackendServiceAsync;
+import com.starrocks.rpc.PBackendService;
+import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
+import com.starrocks.rpc.PExecPlanFragmentRequest;
+import com.starrocks.rpc.PFetchDataRequest;
+import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -90,7 +88,6 @@ import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TTransmitDataParams;
 import com.starrocks.thrift.TTransmitDataResult;
 import com.starrocks.thrift.TUniqueId;
-import io.netty.buffer.ByteBuf;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TDeserializer;
@@ -561,79 +558,18 @@ public class PseudoBackend {
 
     }
 
-    private class PseudoPBackendService implements PBackendServiceAsync {
+    private class PseudoPBackendService implements PBackendService {
         private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
         @Override
-        public PExecPlanFragmentResult execPlanFragment(PExecPlanFragmentRequest request) {
-            PExecPlanFragmentResult result = new PExecPlanFragmentResult();
-            StatusPB pStatus = new StatusPB();
-            pStatus.statusCode = 0;
-            result.status = pStatus;
-            return result;
-        }
-
-        @Override
-        public PExecBatchPlanFragmentsResult execBatchPlanFragments(PExecBatchPlanFragmentsRequest request) {
-            PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
-            StatusPB pStatus = new StatusPB();
-            pStatus.statusCode = 0;
-            result.status = pStatus;
-            return result;
-        }
-
-        @Override
-        public PCancelPlanFragmentResult cancelPlanFragment(PCancelPlanFragmentRequest request) {
-            PCancelPlanFragmentResult result = new PCancelPlanFragmentResult();
-            StatusPB pStatus = new StatusPB();
-            pStatus.statusCode = 0;
-            result.status = pStatus;
-            return result;
-        }
-
-        @Override
-        public PFetchDataResult fetchData(PFetchDataRequest request) {
-            PFetchDataResult result = new PFetchDataResult();
-            StatusPB pStatus = new StatusPB();
-            pStatus.statusCode = 0;
-
-            PQueryStatistics pQueryStatistics = new PQueryStatistics();
-            pQueryStatistics.scanRows = 0L;
-            pQueryStatistics.scanBytes = 0L;
-            pQueryStatistics.cpuCostNs = 0L;
-            pQueryStatistics.memCostBytes = 0L;
-
-            result.status = pStatus;
-            result.packetSeq = 0L;
-            result.queryStatistics = pQueryStatistics;
-            result.eos = true;
-            return result;
-        }
-
-        @Override
-        public PTriggerProfileReportResult triggerProfileReport(PTriggerProfileReportRequest request) {
-            return null;
-        }
-
-        @Override
-        public PProxyResult getInfo(PProxyRequest request) {
-            return null;
-        }
-
-        @Override
-        public Future<PExecPlanFragmentResult> execPlanFragment(
-                PExecPlanFragmentRequest request, RpcCallback<PExecPlanFragmentResult> callback) {
+        public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
             TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecPlanFragmentParams params = new TExecPlanFragmentParams();
             PExecPlanFragmentResult result = new PExecPlanFragmentResult();
             result.status = new StatusPB();
             result.status.statusCode = 0;
             try {
-                RpcContext rpcContext = RpcContext.getContext();
-                ByteBuf buf = rpcContext.getRequestBinaryAttachment();
-                byte[] serialRequest = new byte[buf.readableBytes()];
-                buf.readBytes(serialRequest);
-                deserializer.deserialize(params, serialRequest);
+                deserializer.deserialize(params, request.getSerializedRequest());
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);
                 result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
@@ -642,7 +578,7 @@ public class PseudoBackend {
             }
             executor.submit(() -> {
                 try {
-                    execPlanFragmentWithReport(params);
+                    execPlanFragment(params);
                 } catch (Exception e) {
                     LOG.warn("error execPlanFragment", e);
                 }
@@ -651,19 +587,14 @@ public class PseudoBackend {
         }
 
         @Override
-        public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragments(
-                PExecBatchPlanFragmentsRequest request, RpcCallback<PExecBatchPlanFragmentsResult> callback) {
+        public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(PExecBatchPlanFragmentsRequest request) {
             TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecBatchPlanFragmentsParams params = new TExecBatchPlanFragmentsParams();
             PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
             result.status = new StatusPB();
             result.status.statusCode = 0;
             try {
-                RpcContext rpcContext = RpcContext.getContext();
-                ByteBuf buf = rpcContext.getRequestBinaryAttachment();
-                byte[] serialRequest = new byte[buf.readableBytes()];
-                buf.readBytes(serialRequest);
-                deserializer.deserialize(params, serialRequest);
+                deserializer.deserialize(params, request.getSerializedRequest());
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);
                 result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
@@ -672,7 +603,7 @@ public class PseudoBackend {
             }
             executor.submit(() -> {
                 try {
-                    execBatchPlanFragmentsWithReport(params);
+                    execBatchPlanFragments(params);
                 } catch (Exception e) {
                     LOG.warn("error execBatchPlanFragments", e);
                 }
@@ -681,8 +612,7 @@ public class PseudoBackend {
         }
 
         @Override
-        public Future<PCancelPlanFragmentResult> cancelPlanFragment(
-                PCancelPlanFragmentRequest request, RpcCallback<PCancelPlanFragmentResult> callback) {
+        public Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(PCancelPlanFragmentRequest request) {
             return executor.submit(() -> {
                 PCancelPlanFragmentResult result = new PCancelPlanFragmentResult();
                 StatusPB pStatus = new StatusPB();
@@ -693,7 +623,7 @@ public class PseudoBackend {
         }
 
         @Override
-        public Future<PFetchDataResult> fetchData(PFetchDataRequest request, RpcCallback<PFetchDataResult> callback) {
+        public Future<PFetchDataResult> fetchDataAsync(PFetchDataRequest request) {
             return executor.submit(() -> {
                 PFetchDataResult result = new PFetchDataResult();
                 StatusPB pStatus = new StatusPB();
@@ -714,18 +644,17 @@ public class PseudoBackend {
         }
 
         @Override
-        public Future<PTriggerProfileReportResult> triggerProfileReport(
-                PTriggerProfileReportRequest request, RpcCallback<PTriggerProfileReportResult> callback) {
+        public Future<PTriggerProfileReportResult> triggerProfileReport(PTriggerProfileReportRequest request) {
             return null;
         }
 
         @Override
-        public Future<PProxyResult> getInfo(PProxyRequest request, RpcCallback<PProxyResult> callback) {
+        public Future<PProxyResult> getInfo(PProxyRequest request) {
             return null;
         }
     }
 
-    void execPlanFragmentWithReport(TExecPlanFragmentParams params) {
+    void execPlanFragment(TExecPlanFragmentParams params) {
         LOG.info("exec_plan_fragment {}", params.params.fragment_instance_id.toString());
         TReportExecStatusParams report = new TReportExecStatusParams();
         report.setProtocol_version(FrontendServiceVersion.V1);
@@ -777,7 +706,7 @@ public class PseudoBackend {
         }
     }
 
-    void execBatchPlanFragmentsWithReport(TExecBatchPlanFragmentsParams params) {
+    void execBatchPlanFragments(TExecBatchPlanFragmentsParams params) {
         LOG.info("exec_batch_plan_fragments {} #instances:{}", params.common_param.params.query_id.toString(),
                 params.unique_param_per_instance.size());
         for (TExecPlanFragmentParams uniqueParams : params.unique_param_per_instance) {

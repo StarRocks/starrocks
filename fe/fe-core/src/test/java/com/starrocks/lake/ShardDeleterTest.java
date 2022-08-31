@@ -2,12 +2,11 @@
 
 package com.starrocks.lake;
 
-import com.baidu.brpc.client.RpcCallback;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.proto.DeleteTabletRequest;
 import com.starrocks.lake.proto.DeleteTabletResponse;
-import com.starrocks.rpc.LakeServiceAsync;
 import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -38,7 +37,7 @@ public class ShardDeleterTest {
     private StarOSAgent starOSAgent;
 
     @Mocked
-    private LakeServiceAsync lakeService;
+    private LakeService lakeService;
 
     @Mocked
     private Backend be;
@@ -65,7 +64,7 @@ public class ShardDeleterTest {
 
         new MockUp<BrpcProxy>() {
             @Mock
-            public LakeServiceAsync getLakeService(TNetworkAddress address) {
+            public LakeService getLakeService(TNetworkAddress address) {
                 return lakeService;
             }
         };
@@ -92,7 +91,7 @@ public class ShardDeleterTest {
 
         new Expectations() {
             {
-                lakeService.deleteTablet((DeleteTabletRequest) any, (RpcCallback<DeleteTabletResponse>) any).get();
+                lakeService.deleteTablet((DeleteTabletRequest) any).get();
                 minTimes = 0;
                 result = response;
 

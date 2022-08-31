@@ -8,6 +8,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -524,11 +525,15 @@ public class SetTest extends PlanTestBase {
     }
 
     @Test
-    public void testUserVariable() {
+    public void testUserVariable() throws Exception {
         String sql = "set @var = (select v1,v2 from test.t0)";
-        StatementBase statementBase =
-                com.starrocks.sql.parser.SqlParser.parseFirstStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         SetExecutor setExecutor = new SetExecutor(connectContext, (SetStmt) statementBase);
-        Assert.assertThrows("Scalar subquery should output one column", SemanticException.class, () -> setExecutor.execute());
+        try {
+            setExecutor.execute();
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals("Scalar subquery should output one column", e.getMessage());
+        }
     }
 }
