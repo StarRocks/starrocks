@@ -1,383 +1,542 @@
-# 主键模型导入
+# 通过导入实现数据变更
 
-StarRocks 支持通过导入作业，对主键模型的表进行数据变更（插入、更新和删除数据），并且支持部分更新【公测中】。
+StarRocks 的[主键模型](/table_design/Data_model.md#主键模型)支持通过 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/BrokerLoad.md) 或 [Routine Load](/loading/RoutineLoad.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。
+
+StarRocks 还支持部分更新。该特性目前正在公测中。
+
+本文以 CSV 格式的数据文件为例介绍如何通过导入实现数据变更。具体支持的数据文件类型，跟您选择的导入方式有关。
+
+> 说明：对于 CSV 格式的数据，StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
 
 ## 内部实现
 
-目前支持的导入方式有 Stream Load、Broker Load 和 Routine Load。
+StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分 INSERT 和 UPDATE 操作。
 
-> 说明：
->
-> - 暂不支持通过 Spark Load 插入、更新或删除数据。
->
-> - 暂不支持通过 SQL DML 语句（INSERT、UPDATE 和 DELETE）插入、更新或删除数据，将在未来版本中支持。
+在创建导入作业时，StarRocks 支持在导入作业的创建语句或或命令中添加 `__op` 字段，用于指定操作类型。
 
-导入时，所有操作默认为 UPSERT 操作，暂不支持区分 INSERT 和 UPDATE 操作。 值得注意的是，为同时支持 UPSERT 和 DELETE 操作，StarRocks 在 Stream Load 和 Broker Load 作业的创建语法中增加 `op` 字段，用于存储操作类型。在导入时，可以新增一列 `__op`，用于存储操作类型，取值为 `0` 时代表 UPSERT 操作，取值为 `1` 时代表 DELETE 操作。
+> 说明：不需要在创建 StarRocks 表时添加 `__op` 列。
 
-> 说明：建表时无需添加列 `__op`。
+不同的导入方式，定义 `__op` 字段的方法也不相同：
 
-## 通过 Stream Load 或 Broker Load 变更数据
+- 如果使用 Stream Load 导入方式，需要通过 `columns` 参数来定义 `__op` 字段。
 
-Stream Load 和 Broker Load 导入数据的操作方式类似，根据导入的数据文件的操作形式有如下几种情况。这里通过一些例子来展示具体的导入操作：
+- 如果使用 Broker Load 导入方式，需要通过 SET 子句来定义 `__op` 字段。
 
-### 示例 1
+- 如果使用 Routine Load 导入方式，需要通过 `COLUMNS` 参数来定义 `__op` 字段。
 
-当导入的数据文件只有 UPSERT 操作时可以不添加 `__op` 列。可以指定 `__op` 为 UPSERT 操作，也可以不做任何指定，StarRocks 会默认导入为 UPSERT 操作。例如，向表 `t` 中导入如下内容：
+根据要做的数据变更操作，您可以选择添加或者不添加 `__op` 字段。不添加 `__op` 字段的话，默认为 UPSERT 操作。主要涉及的数据变更操作场景如下：
 
-```Plain
-# 要导入的内容：
-0,aaaa
-1,bbbb
-2,\N
-4,dddd
-```
+- 当数据文件只涉及 UPSERT 操作时，可以不添加 `__op` 字段。
 
-- 如果选择 Stream Load 导入方式，执行如下语句：
+- 当数据文件只涉及 DELETE 操作时，必须添加 `__op` 字段，并且指定操作类型为 DELETE。
 
-  ```Bash
-  # 不指定 __op 列的操作类型。
-  curl --location-trusted -u root: -H "label:lineorder" \
-      -H "column_separator:," -T demo.csv \
-      http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
-  # 指定 __op 列的操作类型。
-  curl --location-trusted -u root: -H "label:lineorder" \
-      -H "column_separator:," -H "columns:__op ='upsert'" -T demo.csv \
-      http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
-  ```
+- 当数据文件中同时包含 UPSERT 和 DELETE 操作时，必须添加 `__op` 字段，并且确保数据文件中包含一个代表操作类型的列，取值为 `0` 或 `1`。其中，取值为 `0` 时代表 UPSERT 操作，取值为 `1` 时代表 DELETE 操作。
 
-- 如果选择 Broker Load 导入方式，执行如下语句：
+## 使用说明
 
-  ```SQL
-  # 不指定 __op 列的操作类型。
-  load label demo_db.label1 (
-      data infile("hdfs://localhost:9000/demo.csv")
-      into table demo_tbl1
-      columns terminated by ","
-      format as "csv"
-  ) with broker "broker1";
-    
-  # 指定 __op 列的操作类型。
-  load label demo_db.label2 (
-      data infile("hdfs://localhost:9000/demo.csv")
-      into table demo_tbl1
-      columns terminated by ","
-      format as "csv"
-      set (__op ='upsert')
-  ) with broker "broker1";
-  ```
+- 必须确保待导入的数据文件中每一行的列数都相同。
 
-### 示例 2
+- 所更新的列必须包含主键列。
 
-当导入的数据文件只有 DELETE 操作时，需指定 `__op` 列为 DELETE 操作。例如，要删除如下内容：
+## 前提条件
 
-```Plain
-# 要删除的内容：
-1, bbbb
-4, dddd
-```
+如果使用 Broker Load 导入数据，必须确保您的 StarRocks 集群中已部署 Broker。您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。本文假设您已部署一个名为 `broker1` 的 Broker。
 
-> 说明：DELETE 操作虽然只用到主键列，但同样要提供全部的列，这一点与 UPSERT 操作要求一致。
+如果使用 Routine Load 导入数据，必须确保您的 Apache Kafka® 集群已创建 Topic。本文假设您已部署四个 Topic，分别为 `topic1`、`topic2`、`topic3` 和 `topic4`。
 
-- 如果选择 Stream Load 导入方式，执行如下语句：
-  
-  ```Bash
-  curl --location-trusted -u root: -H "label:lineorder" -H "column_separator:," \
-      -H "columns:__op='delete'" -T demo.csv \
-      http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
-  ```
+## 操作示例
 
-- 如果选择 Broker Load 导入方式，执行如下语句：
+下面通过几个示例来展示具体的导入操作。有关使用 Stream Load、Broker Load 和 Routine Load 导入数据的详细语法和参数介绍，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 和 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)。
 
-  ```SQL
-  load label demo_db.label3 (
-      data infile("hdfs://localhost:9000/demo.csv")
-      into table demo_tbl1
-      columns terminated by ","
-      format as "csv"
-      set (__op ='delete')
-  ) with broker "broker1";  
-  ```
+### UPSERT
 
-### 示例 3
+当数据文件只涉及 UPSERT 操作时，可以不添加 `__op` 字段。
 
-当导入的数据文件中同时包含 UPSERT 和 DELETE 操作时，需要指定额外的 `__op` 来表明操作类型。例如，想要删除 `id` 为 `1`、`4` 的行，并且添加 `id` 为 `5`、`6` 的行：
+如果您添加 `__op` 字段：
 
-```Plain
-1,bbbb,1
-4,dddd,1
-5,eeee,0
-6,ffff,0
-```
+- 可以指定 `__op` 为 UPSERT 操作。
 
-> 说明：DELETE 操作虽然只用到主键列，但同样要提供全部的列，这一点与 UPSERT 操作要求一致。
+- 也可以不做任何指定，StarRocks 默认导入为 UPSERT 操作。
 
-- 如果选择 Stream Load 导入方式，执行如下语句：
-  
-  ```Bash
-  curl --location-trusted -u root: -H "label:lineorder" -H "column_separator:," \
-      -H "columns: c1,c2,c3,pk=c1,col0=c2,__op=c3 " -T demo.csv \
-      http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
-  ```
+#### 数据样例
 
-  其中，指定了 `__op` 为第三列。
+1. 准备 StarRocks 表。
 
-- 如果选择 Broker Load 导入方式，执行如下语句：
+   a. 在数据库 `test_db` 中创建一张名为 `table1` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
 
-  ```Bash
-  load label demo_db.label4 (
-      data infile("hdfs://localhost:9000/demo.csv")
-      into table demo_tbl1
-      columns terminated by ","
-      format as "csv"
-      (c1,c2,c3)
-      set (pk=c1,col0=c2,__op=c3)
-  ) with broker "broker1";
-  ```
+    ```SQL
+    MySQL [test_db]> CREATE TABLE `table1`
+    (
+        `id` int(11) NOT NULL COMMENT "用户 ID",
+        `name` varchar(65533) NOT NULL COMMENT "用户姓名",
+        `score` int(11) NOT NULL COMMENT "用户得分"
+    )
+    ENGINE=OLAP
+    PRIMARY KEY(`id`)
+    DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+    ```
 
-  其中，指定了 `__op` 为第三列。
+   b. 向 `table1` 表中插入一条数据，如下所示：
 
-更多关于 Stream Load 和 Broker Load 的使用方法，可参考 [Stream Load](/loading/StreamLoad.md) 和 [Broker Load](/loading/BrokerLoad.md)。
+    ```SQL
+    MySQL [test_db]> INSERT INTO table1 VALUES
+        (101, 'Lily',80);
+    ```
 
-## 通过 Routine Load 变更数据
+2. 准备数据文件。
 
-可以在 Routine Load 的创建语句中，在 `COLUMNS` 关键字的最后增加一列，指定为 `__op`。在实际的导入操作中，`__op` 列的取值为 `0` 时代表 UPSERT 操作，取值为 `1` 时代表 DELETE 操作。
+   a. 在本地文件系统创建一个 CSV 格式的数据文件 `example1.csv`。文件包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
 
-### 示例 1
+    ```Plain
+    101,Lily,100
+    102,Rose,100
+    ```
 
-导入 CSV 数据。
+   b. 把 `example1.csv` 文件上传到 Kafka 集群的 `topic1` 中。
 
-数据样例：
+#### 导入数据
 
-```Bash
-2020-06-23  2020-06-23 00: 00: 00 beijing haidian 1   -128    -32768  -2147483648    0
-2020-06-23  2020-06-23 00: 00: 01 beijing haidian 0   -127    -32767  -2147483647    1
-2020-06-23  2020-06-23 00: 00: 02 beijing haidian 1   -126    -32766  -2147483646    0
-2020-06-23  2020-06-23 00: 00: 03 beijing haidian 0   -125    -32765  -2147483645    1
-2020-06-23  2020-06-23 00: 00: 04 beijing haidian 1   -124    -32764  -2147483644    0
-```
+通过导入，把 `example1.csv` 文件中 `id` 为 `101` 的数据更新到 `table1` 表中，并且把 `example1.csv` 文件中 `id` 为 `102` 的数据插入到 `table1` 表中。
 
-执行语句：
+- 通过 Stream Load 导入：
+  - 不添加 `__op` 字段：
 
-```SQL
-CREATE ROUTINE LOAD routine_load_basic_types_1631533306858 on primary_table_without_null 
-COLUMNS (k1, k2, k3, k4, k5, v1, v2, v3, __op),
-COLUMNS TERMINATED BY '\t' 
-PROPERTIES (
-    "desired_concurrent_number" = "1",
-    "max_error_number" = "1000",
-    "max_batch_interval" = "5"
-) FROM KAFKA (
-    "kafka_broker_list" = "localhgost:9092",
-    "kafka_topic" = "starrocks-data"
-    "kafka_offsets" = "OFFSET_BEGINNING"
-);
-```
+    ```Bash
+    curl --location-trusted -u root: \
+        -H "label:label1" \
+        -H "column_separator:," \
+        -T example1.csv -XPUT\
+        http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
+    ```
 
-### 示例 2
+  - 添加 `__op` 字段：
 
-导入 JSON 数据，源数据中有字段表示 UPSERT 或者 DELETE 操作。比如下面常见的 Canal 同步到 Apache Kafka® 的数据样例，使用 `type` 字段表示本次操作的类型，支持的取值为 INSERT、UPDATE 和 DELETE。
+    ```Bash
+    curl --location-trusted -u root: \
+        -H "label:label2" \
+        -H "column_separator:," \
+        -H "columns:__op ='upsert'" \
+        -T example1.csv -XPUT\
+        http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
+    ```
 
-> 说明：暂不支持同步 DDL 语句。
+- 通过 Broker Load 导入：
 
-数据样例：
+  - 不添加 `__op` 字段：
 
-```JSON
-{
-    "data": [{
-        "query_id": "3c7ebee321e94773-b4d79cc3f08ca2ac",
-        "conn_id": "34434",
-        "user": "zhaoheng",
-        "start_time": "2020-10-19 20:40:10.578",
-        "end_time": "2020-10-19 20:40:10"
-    }],
-    "database": "center_service_lihailei",
-    "es": 1603111211000,
-    "id": 122,
-    "isDdl": false,
-    "mysqlType": {
-        "query_id": "varchar(64)",
-        "conn_id": "int(11)",
-        "user": "varchar(32)",
-        "start_time": "datetime(3)",
-        "end_time": "datetime"
-    },
-    "old": null,
-    "pkNames": ["query_id"],
-    "sql": "",
-    "sqlType": {
-        "query_id": 12,
-        "conn_id": 4,
-        "user": 12,
-        "start_time": 93,
-        "end_time": 93
-    },
-    "table": "query_record",
-    "ts": 1603111212015,
-    "type": "INSERT"
-}
-```
+    ```SQL
+    LOAD LABEL test_db.label1
+    (
+        data infile("hdfs://<hdfs_host>:<hdfs_port>/example1.csv")
+        into table table1
+        columns terminated by ","
+        format as "csv"
+    )
+    with broker "broker1";
+    ```
 
-执行语句:
+  - 添加 `__op` 字段：
+
+    ```SQL
+    LOAD LABEL test_db.label2
+    (
+        data infile("hdfs://<hdfs_host>:<hdfs_port>/example1.csv")
+        into table table1
+        columns terminated by ","
+        format as "csv"
+        set (__op = 'upsert')
+    )
+    with broker "broker1";
+    ```
+
+- 通过 Routine Load 导入：
+
+  - 不添加 `__op` 字段：
+
+    ```SQL
+    CREATE ROUTINE LOAD test_db.table1 ON table1
+    COLUMNS TERMINATED BY ",",
+    COLUMNS (id, name, score)
+    PROPERTIES
+    (
+        "desired_concurrent_number" = "3",
+        "max_batch_interval" = "20",
+        "max_batch_rows"= "250000",
+        "max_error_number" = "1000"
+    )
+    FROM KAFKA
+    (
+        "kafka_broker_list" ="<kafka_broker_host>:<kafka_broker_port>",
+        "kafka_topic" = "test1",
+        "property.kafka_default_offsets" ="OFFSET_BEGINNING"
+    );
+    ```
+
+  - 添加 `__op` 字段：
+
+    ```SQL
+    CREATE ROUTINE LOAD test_db.table1 ON table1
+    COLUMNS TERMINATED BY ",",
+    COLUMNS (id, name, score, __op ='upsert')
+    PROPERTIES
+    (
+        "desired_concurrent_number" = "3",
+        "max_batch_interval" = "20",
+        "max_batch_rows"= "250000",
+        "max_error_number" = "1000"
+    )
+    FROM KAFKA
+    (
+        "kafka_broker_list" ="<kafka_broker_host>:<kafka_broker_port>",
+        "kafka_topic" = "test1",
+        "property.kafka_default_offsets" ="OFFSET_BEGINNING"
+    );
+    ```
+
+#### 查询数据
+
+导入完成后，查询 `table1` 表的数据，如下所示：
 
 ```SQL
-CREATE ROUTINE LOAD cdc_db.label5 ON cdc_table
-COLUMNS(pk, col0, temp,__op =(CASE temp WHEN "DELETE" THEN 1 ELSE 0 END))
-PROPERTIES
-(
-    "desired_concurrent_number" = "3",
-    "max_batch_interval" = "20",
-    "max_error_number" = "1000",
-    "strict_mode" = "false",
-    "format" = "json",
-    "jsonpaths" = "[\"$.data[0].query_id\",\"$.data[0].conn_id\",\"$.data[0].user\",\"$.data[0].start_time\",\"$.data[0].end_time\",\"$.type\"]"
-)
-FROM KAFKA
-(
-    "kafka_broker_list" = "localhost:9092",
-    "kafka_topic" = "cdc-data",
-    "property.group.id" = "starrocks-group",
-    "property.client.id" = "starrocks-client",
-    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
-);
+MySQL [test_db]> SELECT * FROM table1;
++------+------+-------+
+| id   | name | score |
++------+------+-------+
+|  101 | Lily |   100 |
+|  102 | Rose |   100 |
++------+------+-------+
+2 rows in set (0.02 sec)
 ```
 
-### 示例 3
+从查询结果可以看到，`example1.csv` 文件中 `id` 为 `101` 的数据已经更新到 `table1` 表中，并且 `example1.csv` 文件中 `id` 为 `102` 的数据已经插入到 `table1` 表中。
 
-导入 JSON 数据，可以不指定 `__op`，源数据中有 `op_type` 字段可以表示 UPSERT 或 DELETE 操作。`op_type` 字段的取值只有 `0` 和 `1`。取值为 `0` 时代表 UPSERT 操作，取值为 `1` 时代表 DELETE 操作。
+### DELETE
 
-数据样例：
+当数据文件只涉及 DELETE 操作时，必须添加 `__op` 字段，并且指定操作类型为 DELETE。
 
-```JSON
-{"pk": 1, "col0": "123", "op_type": 0}
-{"pk": 2, "col0": "456", "op_type": 0}
-{"pk": 1, "col0": "123", "op_type": 1}
-```
+#### 数据样例
 
-建表语句:
+1. 准备 StarRocks 表。
 
-```SQL
-CREATE TABLE `demo_tbl2` (
-  `pk` bigint(20) NOT NULL COMMENT "",
-  `col0` varchar(65533) NULL COMMENT ""
-) ENGINE = OLAP 
-PRIMARY KEY(`pk`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`pk`) BUCKETS 3
-```
+   a. 在数据库 `test_db` 中创建一张名为 `table2` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
 
-执行语句：
+   ```SQL
+   MySQL [test_db]> CREATE TABLE `table2`
+   (
+       `id` int(11) NOT NULL COMMENT "用户 ID",
+       `name` varchar(65533) NOT NULL COMMENT "用户姓名",
+       `score` int(11) NOT NULL COMMENT "用户得分"
+   )
+   ENGINE=OLAP
+   PRIMARY KEY(`id`)
+   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   ```
 
-```SQL
-CREATE ROUTINE LOAD demo_db.label6 ON demo_tbl2
-COLUMNS(pk,col0,__op)
-PROPERTIES
-(
-    "desired_concurrent_number" = "3",
-    "max_batch_interval" = "20",
-    "max_error_number" = "1000",
-    "strict_mode" = "false",
-    "format" = "json",
-    "jsonpaths" = "[\"$.pk\",\"$.col0\",\"$.op_type\"]"
-)
-FROM KAFKA
-(
-    "kafka_broker_list" = "localhost:9092",
-    "kafka_topic" = "pk-data",
-    "property.group.id" = "starrocks-group",
-    "property.client.id" = "starrocks-client",
-    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
-);
-```
+   b. 向 `table2` 表中插入数据，如下所示：
 
-查询结果：
+   ```SQL
+   MySQL [test_db]> INSERT INTO table2 VALUES
+       (101, 'Jack', 100),
+       (102, 'Bob', 90);
+   ```
 
-```SQL
-mysql > select * from demo_db.demo_tbl2;
-+------+------+
-| pk   | col0 |
-+------+------+
-|    2 | 456  |
-+------+------+
-```
+2. 准备数据文件。
 
-更多关于 Routine Load 的使用方法，可参考 [Routine Load](/loading/RoutineLoad.md)。
+   a. 在本地文件系统创建一个 CSV 格式的数据文件 `example2.csv`。文件包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
 
-## 部分更新【公测中】
+   ```Plain
+   101,Jack,100
+   ```
 
-> 说明：自 StarRocks v2.2 起，主键模型的表支持部分更新，您可以选择只更新部分指定的列。
+   b. 把 `example2.csv` 文件上传到 Kafka 集群的 `topic2` 中。
 
-以表 `demo` 为例，假设表 `demo` 包含 `id`、`name` 和 `age` 三列。
+#### 导入数据
 
-执行如下语句，创建 `demo` 表：
+通过导入，把 `example2.csv` 文件中 `id` 为 `101` 的数据从 `table2` 表中删除。
 
-```SQL
-create table demo(
-    id int not null,
-    name string null default '',
-    age int not null default '0'
-) primary key(id)
-```
-
-假设只更新表 `demo` 的 `id` 和 `name` 两列，只需要给出这两列的数据即可。如下所示，表中每行都是用逗号分隔的两列数据：
-
-```Plain
-0,aaaa
-1,bbbb
-2,\N
-4,dddd
-```
-
-> 说明：
->
-> - 所更新的列必须包含主键列，`demo` 表中是指 `id` 列。
->
-> - 所有行的列数必须相同，这一点与同普通 CSV 格式文件的要求一致。
-
-根据选择的导入方式，执行相关命令。
-
-- 如果选择 Stream Load 导入方式，执行如下命令：
+- 通过 Stream Load 导入：
 
   ```Bash
   curl --location-trusted -u root: \
-      -H "label:lineorder" -H "column_separator:," \
-      -H "partial_update:true" -H "columns:id,name" \
-      -T demo.csv http://localhost:8030/api/demo/demo/_stream_load
+      -H "label:label3" \
+      -H "column_separator:," \
+      -H "columns:__op='delete'" \
+      -T example2.csv -XPUT\
+      http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
   ```
 
-  > 说明：需要设置 `-H "partial_update:true"`，以指定为部分列更新，并且指定所需更新的列名 `"columns:id,name"`。有关 Stream Load 的具体设置方式，可参考 [Stream Load](/loading/StreamLoad.md)。
-
-- 如果选择 Broker Load 导入方式，执行如下命令：
+- 通过 Broker Load 导入：
 
   ```SQL
-  load label demo.demo (
-      data infile("hdfs://localhost:9000/demo.csv")
-      into table t
+  LOAD LABEL test_db.label3
+  (
+      data infile("hdfs://<hdfs_host>:<hdfs_port>/example2.csv")
+      into table table2
       columns terminated by ","
       format as "csv"
-      (c1, c2)
-      set (id=c1, name=c2)
-  ) with broker "broker1"
-  properties (
-      "partial_update" = "true"
-  );
+      set (__op = 'delete')
+  )
+  with broker "broker1";  
   ```
 
-  > 说明：在 `properties` 中设置 `"partial_update" = "true"`，指定为部分列更新，并且指定所需更新的列名 `set (id=c1, name=c2)`。有关 Broker Load 的具体设置方式，可参考 [Broker Load](/loading/BrokerLoad.md)。
-
-- 如果选择 Routine Load 导入方式，执行如下命令：
+- 通过 Routine Load 导入：
 
   ```SQL
-  CREATE ROUTINE LOAD routine_load_demo on demo 
-  COLUMNS (id, name),
-  COLUMNS TERMINATED BY ','
-  PROPERTIES (
-      "partial_update" = "true"
-  ) FROM KAFKA (
-      "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
-      "kafka_topic" = "my_topic",
-      "kafka_partitions" = "0,1,2,3",
-      "kafka_offsets" = "101,0,0,200"
+  CREATE ROUTINE LOAD test_db.table2 ON table2
+  COLUMNS(id, name, score, __op = 'delete')
+  PROPERTIES
+  (
+      "desired_concurrent_number" = "3",
+      "max_batch_interval" = "20",
+      "max_batch_rows"= "250000",
+      "max_error_number" = "1000"
+  )
+  FROM KAFKA
+  (
+      "kafka_broker_list" ="<kafka_broker_host>:<kafka_broker_port>",
+      "kafka_topic" = "test2",
+      "property.kafka_default_offsets" ="OFFSET_BEGINNING"
   );
   ```
 
-  > 说明：在 `properties` 中设置 `"partial_update" = "true"`，指定为部分列更新，并且指定所需更新的列名 `COLUMNS (id, name)`。有关 Routine Load 的具体设置方式，可参考 [Routine Load](/loading/RoutineLoad.md)。
+#### 查询数据
+
+导入完成后，查询 `table2` 表的数据，如下所示：
+
+```SQL
+MySQL [test_db]> SELECT * FROM table2;
++------+------+-------+
+| id   | name | score |
++------+------+-------+
+|  102 | Bob  |    90 |
++------+------+-------+
+1 row in set (0.00 sec)
+```
+
+从查询结果可以看到，`example2.csv` 文件中 `id` 为 `101` 的数据已经从 `table2` 表中删除。
+
+### UPSERT 和 DELETE
+
+当数据文件中同时包含 UPSERT 和 DELETE 操作时，必须添加 `__op` 字段，并且确保数据文件中包含一个代表操作类型的列，取值为 `0` 或 `1`。其中，取值为 `0` 时代表 UPSERT 操作，取值为 `1` 时代表 DELETE 操作。
+
+#### 数据样例
+
+1. 准备 StarRocks 表。
+
+   a. 在数据库 `test_db` 中创建一张名为 `table3` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
+
+   ```SQL
+   MySQL [test_db]> CREATE TABLE `table3`
+   (
+       `id` int(11) NOT NULL COMMENT "用户 ID",
+       `name` varchar(65533) NOT NULL COMMENT "用户姓名",
+       `score` int(11) NOT NULL COMMENT "用户得分"
+   )
+   ENGINE=OLAP
+   PRIMARY KEY(`id`)
+   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   ```
+
+   b. 向 `table3` 表中插入数据，如下所示：
+
+   ```SQL
+   MySQL [test_db]> INSERT INTO table3 VALUES
+       (101, 'Tom', 100),
+       (102, 'Sam', 90);
+   ```
+
+2. 准备数据文件。
+
+   a. 在本地文件系统创建一个 CSV 格式的数据文件 `example3.csv`。文件包含四列，分别代表用户 ID、用户姓名、用户得分和操作类型，如下所示：
+
+   ```Plain
+   101,Tom,100,1
+   102,Sam,70,0
+   103,Stan,80,0
+   ```
+
+   b. 把 `example3.csv` 文件上传到 Kafka 集群的 `topic3` 中。
+
+#### 导入数据
+
+通过导入，把 `example3.csv` 文件中 `id` 为 `101` 的数据从 `table3` 表中删除，把 `example3.csv` 文件中 `id` 为 `102` 的数据更新到 `table3` 表，并且把 `example3.csv` 文件中 `id` 为 `103` 的数据插入到 `table3` 表：
+
+- 通过 Stream Load 导入：
+
+  ```Bash
+  curl --location-trusted -u root: \
+      -H "label:label4" \
+      -H "column_separator:," \
+      -H "columns: id, name, score, temp, __op = 'temp'" \
+      -T example3.csv -XPUT\
+      http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
+  ```
+
+  > 说明：上述示例中，通过 `columns` 参数把 `example3.csv` 文件中代表组别代码的第四列临时命名为 `temp`，然后定义 `__op` 字段等于临时命名的 `temp` 列。这样，StarRocks 可以根据 `example3.csv` 文件中第四列的取值是 `0` 还是 `1` 来确定执行 UPSERT 还是 DELETE 操作。
+
+- 通过 Broker Load 导入：
+
+  ```Bash
+  LOAD LABEL test_db.label4
+  (
+      data infile("hdfs://<hdfs_host>:<hdfs_port>/example1.csv")
+      into table table1
+      columns terminated by ","
+      format as "csv"
+      (id, name, score, temp)
+      set (__op=temp)
+  )
+  with broker "broker1";
+  ```
+
+- 通过 Routine Load 导入：
+
+  ```SQL
+  CREATE ROUTINE LOAD test_db.table3 ON table3
+  COLUMNS(id, name, score, __op)
+  PROPERTIES
+  (
+      "desired_concurrent_number" = "3",
+      "max_batch_interval" = "20",
+      "max_batch_rows"= "250000",
+      "max_error_number" = "1000"
+  )
+  FROM KAFKA
+  (
+      "kafka_broker_list" = "<kafka_broker_host>:<kafka_broker_port>",
+      "kafka_topic" = "test3",
+      "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+  );
+  ```
+
+#### 查询数据
+
+导入完成后，查询 `table3` 表的数据，如下所示：
+
+```SQL
+MySQL [test_db]> SELECT * FROM table3;
++------+------+-------+
+| id   | name | score |
++------+------+-------+
+|  102 | Sam  |    70 |
+|  103 | Stan |    80 |
++------+------+-------+
+2 rows in set (0.01 sec)
+```
+
+从查询结果可以看到，`example3.csv` 文件中 `id` 为 `101` 的数据已经从 `table3` 表中删除，`example3.csv` 文件中 `id` 为 `102` 的数据已经更新到 `table3` 表中，并且 `example3.csv` 文件中 `id` 为 `103` 的数据已经插入到 `table3` 表中。
+
+## 部分更新【公测中】
+
+自 StarRocks v2.2 起，主键模型表支持部分更新，您可以选择只更新部分指定的列。这里以 CSV 格式的数据文件为例进行说明。
+
+### 数据样例
+
+1. 准备 StarRocks 表。
+
+   a. 在数据库 `test_db` 中创建一张名为 `table4` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
+
+   ```SQL
+   MySQL [test_db]> CREATE TABLE `table4`
+   (
+       `id` int(11) NOT NULL COMMENT "用户 ID",
+       `name` varchar(65533) NOT NULL COMMENT "用户姓名",
+       `score` int(11) NOT NULL COMMENT "用户得分"
+   )
+   ENGINE=OLAP
+   PRIMARY KEY(`id`)
+   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   ```
+
+   b. 向 `table4` 表中插入一条数据，如下所示：
+
+   ```SQL
+   MySQL [test_db]> INSERT INTO table4 VALUES
+       (101, 'Tom',80);
+   ```
+
+2. 准备数据文件。
+
+   a. 在本地文件系统创建一个 CSV 格式的数据文件 `example4.csv`。文件包含两列，分别代表用户 ID 和用户姓名，如下所示：
+
+   ```Plain
+   101,Lily
+   102,Rose
+   103,Alice
+   ```
+
+   b. 把 `example4.csv` 文件上传到 Kafka 集群的 `topic4` 中。
+
+### 导入数据
+
+通过导入，把 `example4.csv` 里的两列数据更新到 `table4` 表的 `id` 和 `name` 两列。
+
+- 通过 Stream Load 导入：
+
+  ```Bash
+  curl --location-trusted -u root: \
+      -H "label:label7" -H "column_separator:," \
+      -H "partial_update:true" \
+      -H "columns:id,name" \
+      -T example4.csv -XPUT\
+      http://<fe_host>:<fe_http_port>/api/test_db/table4/_stream_load
+  ```
+
+  > 说明：使用 Stream Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `columns` 中声明待更新数据的列的名称。
+
+- 通过 Broker Load 导入：
+
+  ```SQL
+  LOAD LABEL test_db.table4
+  (
+      data infile("hdfs://<hdfs_host>:<hdfs_port>/example4.csv")
+      into table table4
+      format as "csv"
+      (id, name)
+  )
+  with broker "broker1"
+  properties
+  (
+      "partial_update" = "true"
+  );
+  ```
+
+  > 说明：使用 Broker Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `column_list` 中声明待更新数据的列的名称。
+
+- 通过 Routine Load 导入：
+
+  ```SQL
+  CREATE ROUTINE LOAD test_db.table4 on table4
+  COLUMNS (id, name),
+  COLUMNS TERMINATED BY ','
+  PROPERTIES
+  (
+      "partial_update" = "true"
+  )
+  FROM KAFKA
+  (
+      "kafka_broker_list" ="<kafka_broker_host>:<kafka_broker_port>",
+      "kafka_topic" = "test4",
+      "property.kafka_default_offsets" ="OFFSET_BEGINNING"
+  );
+  ```
+
+  > 说明：使用 Routine Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `COLUMNS` 中声明待更新数据的列的名称。
+
+### 查询数据
+
+导入完成后，查询 `table4` 表的数据，如下所示：
+
+```SQL
+MySQL [test_db]> SELECT * FROM table4;
++------+-------+-------+
+| id   | name  | score |
++------+-------+-------+
+|  102 | Rose  |     0 |
+|  101 | Lily  |    80 |
+|  103 | Alice |     0 |
++------+-------+-------+
+3 rows in set (0.01 sec)
+```
+
+从查询结果可以看到，`example4.csv` 文件中 `id` 为 `101` 的数据已经更新到 `table4` 表中，并且 `example4.csv` 文件中 `id` 为 `102` 和 `103` 的数据已经插入到 `table4` 表中。
