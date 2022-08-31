@@ -34,73 +34,91 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr,
         return Status::InternalError("invalid config 'lake_gc_metadata_max_versions': value must be no less than 1");
     }
 
+    const auto metadata_root_location = join_path(root_location, kMetadataDirectoryName);
+    const auto txn_log_root_location = join_path(root_location, kTxnLogDirectoryName);
+
     std::unordered_map<int64_t, std::vector<int64_t>> tablet_metadatas;
-    std::unordered_map<int64_t, std::vector<int64_t>> tablet_txn_logs; 
+    std::vector<std::string> txn_logs; 
     std::unordered_map<int64_t, std::unordered_set<int64_t>> locked_tablet_metadatas;
 
     auto start_time =
             std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
                     .count();
-
-    auto iter_st = fs->iterate_dir(join_path(root_location, kMetadataDirectoryName), [&](std::string_view name) {
-        if (is_tablet_metadata(name)) {
-            auto [tablet_id, version] = parse_tablet_metadata_filename(name);
-            tablet_metadatas[tablet_id].emplace_back(version);
-        }
-        if (is_tablet_metadata_lock(name)) {
-            auto [tablet_id, version, expire_time] = parse_tablet_metadata_lock_filename(name);
-            if (start_time < expire_time) {
-                locked_tablet_metadatas[tablet_id].insert(version);
+    {
+        auto iter_st = fs->iterate_dir(metadata_root_location, [&](std::string_view name) {
+            if (is_tablet_metadata(name)) {
+                auto [tablet_id, version] = parse_tablet_metadata_filename(name);
+                tablet_metadatas[tablet_id].emplace_back(version);
             }
-        }
-        // clear txn log
-        if (is_txn_log(name)) {
-            auto [tablet_id, txn_id] = parse_txn_log_filename(name);
-            if (txn_id < min_active_txn_log_id) {
-                tablet_txn_logs[tablet_id].emplace_back(txn_id);
-            }
-        }
-        return true;
-    });
-
-    if (iter_st.is_not_found()) {
-        // ignore this error
-        return Status::OK();
-    }
-
-    if (!iter_st.ok()) {
-        return iter_st;
-    }
-
-    for (auto& [tablet_id, versions] : tablet_metadatas) {
-        if (versions.size() <= max_versions) {
-            continue;
-        }
-        // TODO: batch delete
-        // Keep the latest 10 versions.
-        // If the tablet metadata is locked, the correspoding version will be kept.
-        std::sort(versions.begin(), versions.end());
-        for (size_t i = 0, sz = versions.size() - max_versions; i < sz; i++) {
-            if (locked_tablet_metadatas.count(tablet_id)) {
-                const auto& locked_tablet_metadata = locked_tablet_metadatas[tablet_id];
-                if (locked_tablet_metadata.count(versions[i])) {
-                    continue;
+            if (is_tablet_metadata_lock(name)) {
+                auto [tablet_id, version, expire_time] = parse_tablet_metadata_lock_filename(name);
+                if (start_time < expire_time) {
+                    locked_tablet_metadatas[tablet_id].insert(version);
                 }
             }
-            VLOG(5) << "Deleting " << tablet_metadata_filename(tablet_id, versions[i]);
-            auto st = tablet_mgr->delete_tablet_metadata(tablet_id, versions[i]);
-            LOG_IF(WARNING, !st.ok() && !st.is_not_found())
-                    << "Fail to delete " << tablet_metadata_filename(tablet_id, versions[i]) << ": " << st;
+            return true;
+        });
+
+        if (iter_st.is_not_found()) {
+            // ignore this error
+            return Status::OK();
+        }
+
+        if (!iter_st.ok()) {
+            return iter_st;
+        }
+
+        for (auto& [tablet_id, versions] : tablet_metadatas) {
+            if (versions.size() <= max_versions) {
+                continue;
+            }
+            // TODO: batch delete
+            // Keep the latest 10 versions.
+            // If the tablet metadata is locked, the correspoding version will be kept.
+            std::sort(versions.begin(), versions.end());
+            for (size_t i = 0, sz = versions.size() - max_versions; i < sz; i++) {
+                if (locked_tablet_metadatas.count(tablet_id)) {
+                    const auto& locked_tablet_metadata = locked_tablet_metadatas[tablet_id];
+                    if (locked_tablet_metadata.count(versions[i])) {
+                        continue;
+                    }
+                }
+                VLOG(5) << "Deleting " << tablet_metadata_filename(tablet_id, versions[i]);
+                auto st = tablet_mgr->delete_tablet_metadata(tablet_id, versions[i]);
+                LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                        << "Fail to delete " << tablet_metadata_filename(tablet_id, versions[i]) << ": " << st;
+            }
         }
     }
 
-    // Delete txn logs
-    for (auto& [tablet_id, txn_id_vec] : tablet_txn_logs) {
-        for (auto txn_id : txn_id_vec) {
-            auto st = tablet_mgr->delete_txn_log(tablet_id, txn_id);
-            LOG_IF(WARNING, !st.ok()) << "Fail to delete " << txn_log_filename(tablet_id, txn_id);
+
+    // delete expired txn logs 
+    {
+        auto iter_st = fs->iterate_dir(txn_log_root_location, [&](std::string_view name) {
+            if (is_txn_log(name)) {
+                auto [tablet_id, txn_id] = parse_txn_log_filename(name);
+                if (txn_id < min_active_txn_log_id) {
+                    txn_logs.emplace_back(name);
+                }
+            }
+            return true;
+        });
+        if (iter_st.is_not_found()) {
+            // ignore this error
+            return Status::OK();
+        }
+
+        if (!iter_st.ok()) {
+            return iter_st;
+        }
+
+        for (const auto& filename : txn_logs) {
+            auto location = join_path(txn_log_root_location, filename);
+            auto st = fs->delete_file(location);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << location << ": " << st;
         }
     }
+
     return Status::OK();
 }
 

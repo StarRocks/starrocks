@@ -24,6 +24,7 @@ package com.starrocks.system;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
@@ -60,6 +61,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static java.lang.Math.min;
+
 /**
  * Heartbeat manager run as a daemon at a fix interval.
  * For now, it will send heartbeat to all Frontends, Backends and Brokers
@@ -73,6 +76,8 @@ public class HeartbeatMgr extends LeaderDaemon {
 
     private final GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
 
+    private final SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+
     private static AtomicReference<TMasterInfo> masterInfo = new AtomicReference<>();
 
     public HeartbeatMgr(SystemInfoService nodeMgr, boolean needRegisterMetric) {
@@ -83,6 +88,20 @@ public class HeartbeatMgr extends LeaderDaemon {
         this.heartbeatFlags = new HeartbeatFlags();
     }
 
+    private long computeMinActiveTxnId() {
+        Long a = transactionMgr.getMinActiveTxnId();
+        Long b = schemaChangeHandler.getMinActiveTxnId();
+        if (a == null && b == null) {
+            return 0;
+        } else if (a == null) {
+            return b;
+        } else if (b == null) {
+            return a;
+        } else {
+            return min(a, b);
+        }
+    }
+
     public void setLeader(int clusterId, String token, long epoch) {
         TMasterInfo tMasterInfo = new TMasterInfo(
                 new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port), clusterId, epoch);
@@ -90,7 +109,7 @@ public class HeartbeatMgr extends LeaderDaemon {
         tMasterInfo.setHttp_port(Config.http_port);
         long flags = heartbeatFlags.getHeartbeatFlags();
         tMasterInfo.setHeartbeat_flags(flags);
-        tMasterInfo.setMin_active_txn_log_id(transactionMgr.getMinActiveTxnId());
+        tMasterInfo.setMin_active_txn_log_id(computeMinActiveTxnId());
         masterInfo.set(tMasterInfo);
     }
 
@@ -267,7 +286,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                 long flags = heartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);
                 copiedMasterInfo.setBackend_id(computeNodeId);
-                copiedMasterInfo.setMin_active_txn_log_id(transactionMgr.getMinActiveTxnId());
+                copiedMasterInfo.setMin_active_txn_log_id(computeMinActiveTxnId());
                 THeartbeatResult result = client.heartbeat(copiedMasterInfo);
 
                 ok = true;
