@@ -32,6 +32,8 @@ enum JsonType {
 
 constexpr int kJsonDefaultSize = 128;
 constexpr int kJsonMetaDefaultFormatVersion = 1;
+// Maximum length of JSON string is 16MB
+constexpr size_t kJSONLengthLimit = 16 << 20;
 
 class JsonValue {
 public:
