@@ -27,11 +27,16 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+// for Aggregation on Aggregate type table or index,
+// if group keys contain all aggregate keys, partition keys and distribution keys,
+// and the aggregation functions are the same as the aggregate type of the target value columns in table
+// then the Aggregation can be remove and the preAggregate should be off for OlapScanOperator
 public class RemoveAggregationFromAggTable extends TransformationRule {
-    private static List<String> unsupportedFunctionNames =
+    private static final List<String> unsupportedFunctionNames =
             ImmutableList.of(FunctionSet.BITMAP_UNION,
                     FunctionSet.BITMAP_UNION_COUNT,
                     FunctionSet.HLL_UNION,
@@ -47,7 +52,9 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         OptExpression scanExpression = input.getInputs().get(0);
-        Preconditions.checkState(scanExpression.getOp() instanceof LogicalOlapScanOperator);
+        if (!(scanExpression.getOp() instanceof LogicalOlapScanOperator)) {
+            return false;
+        }
         LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) scanExpression.getOp();
         if (scanOperator.getProjection() != null) {
             return false;
@@ -60,7 +67,8 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
             return false;
         }
         Set<String> keyColumnNames = Sets.newHashSet();
-        for (Column column : materializedIndexMeta.getSchema()) {
+        List<Column> indexSchema = materializedIndexMeta.getSchema();
+        for (Column column : indexSchema) {
             if (column.isKey()) {
                 keyColumnNames.add(column.getName().toLowerCase());
             }
@@ -79,8 +87,27 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
                 .map(String::toLowerCase).collect(Collectors.toList());
 
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
+        // check whether every aggregation function on column is the same as the AggregationType of the column
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
             if (unsupportedFunctionNames.contains(entry.getValue().getFnName().toLowerCase())) {
+                return false;
+            }
+            CallOperator callOperator = entry.getValue();
+            if (callOperator.getChildren().size() != 1) {
+                return false;
+            }
+            ScalarOperator argument = callOperator.getChild(0);
+            if (!(argument instanceof ColumnRefOperator)) {
+                return false;
+            }
+            ColumnRefOperator columnRefOperator = (ColumnRefOperator) argument;
+            Optional<Column> columnOptional = indexSchema.stream()
+                    .filter(column -> column.getName().equalsIgnoreCase(columnRefOperator.getName())).findFirst();
+            if (!columnOptional.isPresent()) {
+                return false;
+            }
+            Column column = columnOptional.get();
+            if (!column.getAggregationType().toString().equalsIgnoreCase(entry.getValue().getFnName())) {
                 return false;
             }
         }
@@ -101,8 +128,6 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
             projectMap.put(entry.getKey(), entry.getValue().getChild(0));
         }
         if (aggregationOperator.getProjection() != null) {
-            // projectMap.putAll(aggregationOperator.getProjection().getColumnRefMap());
-            // use ScalarOperatorVisitor to replace the ColumnRefOperator
             Map<ColumnRefOperator, ScalarOperator> newProjectMap =
                     Maps.newHashMap(aggregationOperator.getProjection().getColumnRefMap());
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectMap);
