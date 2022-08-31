@@ -1245,7 +1245,7 @@ public class DatabaseTransactionMgr {
                 if (table != null) {
                     TransactionStateListener listener = stateListenerFactory.create(this, table);
                     if (listener != null) {
-                        listeners.add(stateListenerFactory.create(this, table));
+                        listeners.add(listener);
                     }
                 }
             }
