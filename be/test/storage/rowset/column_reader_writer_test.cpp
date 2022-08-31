@@ -77,7 +77,7 @@ public:
         c2->set_name("v2");
         c2->set_type("INT");
 
-        _dummy_segment_schema = TabletSchema::create(_metadata_mem_tracker.get(), schema_pb);
+        _dummy_segment_schema = TabletSchema::create(schema_pb);
     }
 
     ~ColumnReaderWriterTest() override = default;
