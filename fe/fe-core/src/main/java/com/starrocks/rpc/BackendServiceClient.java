@@ -206,7 +206,7 @@ public class BackendServiceClient {
     public Future<PProxyResult> getInfo(TNetworkAddress address, PProxyRequest request) throws RpcException {
         RpcCallback<PProxyResult> callback = new EmptyRpcCallback<PProxyResult>();
         RpcContext rpcContext = RpcContext.getContext();
-        rpcContext.setReadTimeoutMillis(request.timeout.intValue());
+        rpcContext.setReadTimeoutMillis(request.timeout.intValue() * 1000);
         try {
             final PBackendServiceAsync service = BrpcProxy.getBackendService(address);
             return service.getInfo(request, callback);
