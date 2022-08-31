@@ -84,7 +84,7 @@ public class SqlWithIdUtils {
             }
         }
         for (Database db : dbMap.values()) {
-            String fullName = db.getFullName();
+            String fullName = db.getOriginName();
             // because SqlParser can't parser cluster
             String dbName = fullName.indexOf(":") > 0 ? fullName.substring(fullName.indexOf(":") + 1) : fullName;
             sql = sql.replaceAll(DATABASE_ID_PREFIX + db.getId() + COMMON_SUFFIX, dbName);

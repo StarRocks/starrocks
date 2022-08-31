@@ -619,7 +619,7 @@ public class DeleteHandler implements Writable {
             return infos;
         }
 
-        String dbName = db.getFullName();
+        String dbName = db.getOriginName();
         List<MultiDeleteInfo> deleteInfos = dbToDeleteInfos.get(dbId);
 
         lock.readLock().lock();

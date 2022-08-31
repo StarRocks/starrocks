@@ -150,7 +150,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     private void updateMeta(ExecPlan execPlan) {
         // update the meta if succeed
         if (!database.writeLockAndCheckExist()) {
-            throw new DmlException("update meta failed. database:" + database.getFullName() + " not exist");
+            throw new DmlException("update meta failed. database:" + database.getOriginName() + " not exist");
         }
         try {
             // check
@@ -544,14 +544,14 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                             partitionProperties, false));
         } catch (Exception e) {
             throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
-                    database.getFullName(), materializedView.getName());
+                    database.getOriginName(), materializedView.getName());
         }
     }
 
     private void dropPartition(Database database, MaterializedView materializedView, String mvPartitionName) {
         String dropPartitionName = materializedView.getPartition(mvPartitionName).getName();
         if (!database.writeLockAndCheckExist()) {
-            throw new DmlException("drop partition failed. database:" + database.getFullName() + " not exist");
+            throw new DmlException("drop partition failed. database:" + database.getOriginName() + " not exist");
         }
         try {
             // check
@@ -569,7 +569,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     new DropPartitionClause(false, dropPartitionName, false, true));
         } catch (Exception e) {
             throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
-                    database.getFullName(), materializedView.getName());
+                    database.getOriginName(), materializedView.getName());
         } finally {
             database.writeUnlock();
         }

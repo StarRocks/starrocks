@@ -379,7 +379,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
                     if (materializedView.isLoadTriggeredRefresh()) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                db.getFullName(), db.getTable(mvId).getName(), Constants.TaskRunPriority.NORMAL.value());
+                                db.getOriginName(), db.getTable(mvId).getName(), Constants.TaskRunPriority.NORMAL.value());
                     }
                 }
             }

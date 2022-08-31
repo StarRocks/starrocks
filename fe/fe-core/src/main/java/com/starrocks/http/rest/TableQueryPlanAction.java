@@ -148,7 +148,7 @@ public class TableQueryPlanAction extends RestBaseAction {
                                     + "is not a OlapTable");
                 }
                 // parse/analysis/plan the sql and acquire tablet distributions
-                handleQuery(ConnectContext.get(), db.getFullName(), tableName, sql, resultMap);
+                handleQuery(ConnectContext.get(), db.getOriginName(), tableName, sql, resultMap);
             } finally {
                 db.readUnlock();
             }

@@ -369,7 +369,7 @@ public class GlobalTransactionMgr implements Writable {
         stopWatch.start();
         if (!db.tryWriteLock(timeoutMillis, TimeUnit.MILLISECONDS)) {
             throw new UserException("get database write lock timeout, database="
-                    + db.getFullName() + ", timeoutMillis=" + timeoutMillis);
+                    + db.getOriginName() + ", timeoutMillis=" + timeoutMillis);
         }
         try {
             waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);

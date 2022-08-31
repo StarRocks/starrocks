@@ -706,7 +706,7 @@ public class PrivilegeChecker {
                 Database db = GlobalStateMgr.getCurrentState().getDb(statement.getDbId());
                 for (Table table : db.getTables()) {
                     TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                            db.getFullName(), table.getName());
+                            db.getOriginName(), table.getName());
                     if (!checkTblPriv(session, tableName, PrivPredicate.SELECT)) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
                                 session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());

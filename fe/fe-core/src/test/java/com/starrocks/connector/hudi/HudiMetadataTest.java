@@ -80,6 +80,6 @@ public class HudiMetadataTest {
         String metastoreUris = "thrift://127.0.0.1:9083";
         HudiMetadata metadata = new HudiMetadata(metastoreUris);
         Database srDb = metadata.getDb("db1");
-        Assert.assertTrue(srDb.getFullName().contains("db1"));
+        Assert.assertTrue(srDb.getOriginName().contains("db1"));
     }
 }

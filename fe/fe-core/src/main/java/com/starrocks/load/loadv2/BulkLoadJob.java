@@ -159,7 +159,7 @@ public abstract class BulkLoadJob extends LoadJob {
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
-        return new AuthorizationInfo(database.getFullName(), getTableNames());
+        return new AuthorizationInfo(database.getOriginName(), getTableNames());
     }
 
     @Override

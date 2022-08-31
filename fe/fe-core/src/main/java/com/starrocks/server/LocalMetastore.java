@@ -315,7 +315,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readFields(dis);
             newChecksum ^= db.getId();
             idToDb.put(db.getId(), db);
-            fullNameToDb.put(db.getFullName(), db);
+            fullNameToDb.put(db.getOriginName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
             db.getMaterializedViews().forEach(Table::onCreate);
         }
@@ -329,7 +329,7 @@ public class LocalMetastore implements ConnectorMetadata {
         dos.writeInt(dbCount);
         for (Map.Entry<Long, Database> entry : idToDb.entrySet()) {
             Database db = entry.getValue();
-            String dbName = db.getFullName();
+            String dbName = db.getOriginName();
             // Don't write information_schema db meta
             if (!InfoSchemaDb.isInfoSchemaDb(dbName)) {
                 checksum ^= entry.getKey();
@@ -368,12 +368,12 @@ public class LocalMetastore implements ConnectorMetadata {
     // For replay edit log, needn't lock metadata
     public void unprotectCreateDb(Database db) {
         idToDb.put(db.getId(), db);
-        fullNameToDb.put(db.getFullName(), db);
+        fullNameToDb.put(db.getOriginName(), db);
         db.writeLock();
         db.setExist(true);
         db.writeUnlock();
         final Cluster cluster = defaultCluster;
-        cluster.addDb(db.getFullName(), db.getId());
+        cluster.addDb(db.getOriginName(), db.getId());
         stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
     }
 
@@ -429,7 +429,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // 3. remove db from globalStateMgr
             idToDb.remove(db.getId());
-            fullNameToDb.remove(db.getFullName());
+            fullNameToDb.remove(db.getOriginName());
             final Cluster cluster = defaultCluster;
             cluster.removeDb(dbName, db.getId());
 
@@ -439,7 +439,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     .stream().map(Task::getId).collect(Collectors.toList());
             taskManager.dropTasks(dropTaskIdList, false);
 
-            DropDbInfo info = new DropDbInfo(db.getFullName(), isForceDrop);
+            DropDbInfo info = new DropDbInfo(db.getOriginName(), isForceDrop);
             editLog.logDropDb(info);
 
             LOG.info("finish drop database[{}], id: {}, is force : {}", dbName, db.getId(), isForceDrop);
@@ -511,26 +511,26 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            if (fullNameToDb.containsKey(db.getFullName())) {
+            if (fullNameToDb.containsKey(db.getOriginName())) {
                 throw new DdlException("Database[" + db.getOriginName() + "] already exist.");
                 // it's ok that we do not put db back to CatalogRecycleBin
                 // cause this db cannot recover anymore
             }
 
-            fullNameToDb.put(db.getFullName(), db);
+            fullNameToDb.put(db.getOriginName(), db);
             idToDb.put(db.getId(), db);
             db.writeLock();
             db.setExist(true);
             db.writeUnlock();
             final Cluster cluster = defaultCluster;
-            cluster.addDb(db.getFullName(), db.getId());
+            cluster.addDb(db.getOriginName(), db.getId());
 
             List<MaterializedView> materializedViews = db.getMaterializedViews();
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             for (MaterializedView materializedView : materializedViews) {
                 MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
                 if (refreshType != MaterializedView.RefreshType.SYNC) {
-                    Task task = TaskBuilder.buildMvTask(materializedView, db.getFullName());
+                    Task task = TaskBuilder.buildMvTask(materializedView, db.getOriginName());
                     TaskBuilder.updateTaskInfo(task, materializedView);
                     taskManager.createTask(task, false);
                 }
@@ -631,7 +631,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.setReplicaQuotaWithLock(stmt.getQuota());
         }
         long quota = stmt.getQuota();
-        DatabaseInfo dbInfo = new DatabaseInfo(db.getFullName(), "", quota, quotaType);
+        DatabaseInfo dbInfo = new DatabaseInfo(db.getOriginName(), "", quota, quotaType);
         editLog.logAlterDb(dbInfo);
     }
 
@@ -673,7 +673,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (fullNameToDb.get(newFullDbName) != null) {
                 throw new DdlException("Database name[" + newFullDbName + "] is already used");
             }
-            cluster.removeDb(db.getFullName(), db.getId());
+            cluster.removeDb(db.getOriginName(), db.getId());
             cluster.addDb(newFullDbName, db.getId());
             // 1. rename db
             db.setNameWithLock(newFullDbName);
@@ -697,7 +697,7 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             Database db = fullNameToDb.get(dbName);
             Cluster cluster = defaultCluster;
-            cluster.removeDb(db.getFullName(), db.getId());
+            cluster.removeDb(db.getOriginName(), db.getId());
             db.setName(newDbName);
             cluster.addDb(newDbName, db.getId());
             fullNameToDb.remove(dbName);
@@ -1464,7 +1464,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
                     if (materializedView != null && materializedView.isLoadTriggeredRefresh()) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                db.getFullName(), materializedView.getName(), Constants.TaskRunPriority.NORMAL.value());
+                                db.getOriginName(), materializedView.getName(), Constants.TaskRunPriority.NORMAL.value());
                     }
                 }
             } catch (MetaNotFoundException e) {
@@ -2446,7 +2446,7 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getOriginName()) == null) {
                 throw new DdlException("Database has been dropped when creating table");
             }
             if (!db.createTableWithLock(hudiTable, false)) {
@@ -2476,7 +2476,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         try {
-            if (getDb(db.getFullName()) == null) {
+            if (getDb(db.getOriginName()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
             if (!db.createTableWithLock(jdbcTable, false)) {
@@ -4015,7 +4015,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 // so we ensure InfoSchemaDb id less than 10000.
                 Preconditions.checkState(db.getId() < NEXT_ID_INIT_VALUE, errMsg);
                 idToDb.put(db.getId(), db);
-                fullNameToDb.put(db.getFullName(), db);
+                fullNameToDb.put(db.getOriginName(), db);
                 cluster.addDb(dbName, db.getId());
                 defaultCluster = cluster;
             }
@@ -4051,7 +4051,7 @@ public class LocalMetastore implements ConnectorMetadata {
         cluster.setBackendIdList(backendList);
         unprotectCreateCluster(cluster);
         for (Database db : idToDb.values()) {
-            cluster.addDb(db.getFullName(), db.getId());
+            cluster.addDb(db.getOriginName(), db.getId());
         }
 
         // no matter default_cluster is created or not,
@@ -4238,7 +4238,7 @@ public class LocalMetastore implements ConnectorMetadata {
             for (long mvId : relatedMvs) {
                 MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
                 if (materializedView.isLoadTriggeredRefresh()) {
-                    refreshMaterializedView(db.getFullName(), db.getTable(mvId).getName(),
+                    refreshMaterializedView(db.getOriginName(), db.getTable(mvId).getName(),
                             Constants.TaskRunPriority.NORMAL.value());
                 }
             }

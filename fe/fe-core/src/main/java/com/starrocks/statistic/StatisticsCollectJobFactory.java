@@ -31,7 +31,7 @@ public class StatisticsCollectJobFactory {
 
             for (Long dbId : dbIds) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-                if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
+                if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getOriginName())) {
                     continue;
                 }
 

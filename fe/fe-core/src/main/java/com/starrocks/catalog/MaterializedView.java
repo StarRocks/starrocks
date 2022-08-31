@@ -351,7 +351,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         }
         // analyze expression, because it converts to sql for serialize
         ConnectContext connectContext = new ConnectContext();
-        connectContext.setDatabase(db.getFullName());
+        connectContext.setDatabase(db.getOriginName());
         // set privilege
         connectContext.setQualifiedUser(Auth.ROOT_USER);
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -362,7 +362,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 new Scope(RelationId.anonymous(),
                         new RelationFields(this.getBaseSchema().stream()
                                 .map(col -> new Field(col.getName(), col.getType(),
-                                        new TableName(db.getFullName(), this.name), null))
+                                        new TableName(db.getOriginName(), this.name), null))
                                 .collect(Collectors.toList()))), connectContext);
     }
 

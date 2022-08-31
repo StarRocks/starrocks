@@ -27,7 +27,7 @@ public class PartitionUtils {
         List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().createTempPartitionsFromPartitions(
                 db, targetTable, postfix, sourcePartitionIds, tmpPartitionIds);
         if (!db.writeLockAndCheckExist()) {
-            throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");
+            throw new DdlException("create and add partition failed. database:{}" + db.getOriginName() + " not exist");
         }
         try {
             // should check whether targetTable exists

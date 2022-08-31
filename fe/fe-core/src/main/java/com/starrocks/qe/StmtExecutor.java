@@ -1111,7 +1111,7 @@ public class StmtExecutor {
         InsertOverwriteJob job = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
                 insertStmt, database.getId(), olapTable.getId());
         if (!database.writeLockAndCheckExist()) {
-            throw new DmlException("database:%s does not exist.", database.getFullName());
+            throw new DmlException("database:%s does not exist.", database.getOriginName());
         }
         try {
             // add an edit log
@@ -1257,7 +1257,7 @@ public class StmtExecutor {
 
             jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
                     label,
-                    database.getFullName(),
+                    database.getOriginName(),
                     targetTable.getId(),
                     EtlJobType.INSERT,
                     createTime,

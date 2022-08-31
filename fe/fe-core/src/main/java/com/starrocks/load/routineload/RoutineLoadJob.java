@@ -381,7 +381,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
         database.readLock();
         try {
-            return database.getFullName();
+            return database.getOriginName();
         } finally {
             database.readUnlock();
         }
@@ -1259,7 +1259,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             row.add(TimeUtils.longToTimeString(createTimestamp));
             row.add(TimeUtils.longToTimeString(pauseTimestamp));
             row.add(TimeUtils.longToTimeString(endTimestamp));
-            row.add(db == null ? String.valueOf(dbId) : db.getFullName());
+            row.add(db == null ? String.valueOf(dbId) : db.getOriginName());
             row.add(tbl == null ? String.valueOf(tableId) : tbl.getName());
             row.add(getState().name());
             row.add(dataSourceType.name());
@@ -1305,7 +1305,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             List<String> row = Lists.newArrayList();
             row.add(name);
             row.add(String.valueOf(id));
-            row.add(db == null ? String.valueOf(dbId) : db.getFullName());
+            row.add(db == null ? String.valueOf(dbId) : db.getOriginName());
             row.add(getStatistic());
             row.add(getTaskStatistic());
             return row;

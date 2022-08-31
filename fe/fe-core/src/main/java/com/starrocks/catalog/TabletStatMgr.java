@@ -98,7 +98,7 @@ public class TabletStatMgr extends LeaderDaemon {
                         } // end for indices
                     } // end for partitions
                     LOG.debug("finished to set row num for table: {} in database: {}",
-                            table.getName(), db.getFullName());
+                            table.getName(), db.getOriginName());
                 }
             } finally {
                 db.writeUnlock();

@@ -220,7 +220,7 @@ public class InsertOverwriteJobRunner {
         try {
             Table table = db.getTable(tableId);
             if (table == null) {
-                throw new DmlException("table:% does not exist in database:%s", tableId, db.getFullName());
+                throw new DmlException("table:% does not exist in database:%s", tableId, db.getOriginName());
             }
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable targetTable = (OlapTable) table;
@@ -319,7 +319,7 @@ public class InsertOverwriteJobRunner {
     private OlapTable checkAndGetTable(Database db, long tableId) {
         Table table = db.getTable(tableId);
         if (table == null) {
-            throw new DmlException("table:% does not exist in database:%s", tableId, db.getFullName());
+            throw new DmlException("table:% does not exist in database:%s", tableId, db.getOriginName());
         }
         Preconditions.checkState(table instanceof OlapTable);
         return  (OlapTable) table;

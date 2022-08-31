@@ -207,7 +207,7 @@ public class AnalyzerUtils {
             if (db == null) {
                 return;
             }
-            dbs.put(db.getFullName(), db);
+            dbs.put(db.getOriginName(), db);
         }
     }
 

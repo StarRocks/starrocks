@@ -124,7 +124,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
             context.put("dbId", dbId);
             context.put("tableId", tableId);
             context.put("columnName", name);
-            context.put("dbName", db.getFullName());
+            context.put("dbName", db.getOriginName());
             context.put("tableName", db.getOriginName() + "." + table.getName());
             context.put("dataSize", getDataSize(column, true));
             context.put("ratio", ratio);

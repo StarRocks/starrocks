@@ -532,7 +532,7 @@ public class DatabaseTransactionMgr {
         }
 
         Span txnSpan = transactionState.getTxnSpan();
-        txnSpan.setAttribute("db", db.getFullName());
+        txnSpan.setAttribute("db", db.getOriginName());
         StringBuilder tableListString = new StringBuilder();
         txnSpan.addEvent("pre_commit_start");
 
@@ -622,7 +622,7 @@ public class DatabaseTransactionMgr {
         }
 
         Span txnSpan = transactionState.getTxnSpan();
-        txnSpan.setAttribute("db", db.getFullName());
+        txnSpan.setAttribute("db", db.getOriginName());
         StringBuilder tableListString = new StringBuilder();
         txnSpan.addEvent("commit_start");
 
@@ -1410,7 +1410,7 @@ public class DatabaseTransactionMgr {
                     Table tbl = db.getTable(tblId);
                     if (tbl != null) {
                         if (!GlobalStateMgr.getCurrentState().getAuth()
-                                .checkTblPriv(ConnectContext.get(), db.getFullName(),
+                                .checkTblPriv(ConnectContext.get(), db.getOriginName(),
                                         tbl.getName(), PrivPredicate.SHOW)) {
                             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
                                     "SHOW TRANSACTION",

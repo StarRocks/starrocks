@@ -50,7 +50,6 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -827,7 +826,7 @@ public class ColocateTableIndex implements Writable {
             } else {
                 // change the table's group from oldGroup to a new colocat group
                 // which is named by dbName + ":" + mvName
-                String groupName = db.getFullName() + ":" + table.getColocateMaterializedViewNames().stream().findAny().get();
+                String groupName = db.getOriginName() + ":" + table.getColocateMaterializedViewNames().stream().findAny().get();
                 groupId = changeGroup(db.getId(), table, oldGroup, groupName, assignedGroupId);
                 table.setColocateGroup(groupName);
                 table.setInColocateMvGroup(true);

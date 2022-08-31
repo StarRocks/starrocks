@@ -960,7 +960,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     public void addTableToColocateGroupIfSet(Long dbId, String rollupIndexName) {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
         if (!colocateTableIndex.isColocateTable(this.id) && colocateMaterializedViewNames.contains(rollupIndexName)) {
-            String dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getFullName();
+            String dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getOriginName();
             String groupName = dbName + ":" + rollupIndexName;
             colocateTableIndex.addTableToGroup(dbId, this, groupName, null);
             setInColocateMvGroup(true);

@@ -149,6 +149,6 @@ public class InsertAnalyzer {
         insertStmt.setTargetTable(table);
         insertStmt.setTargetPartitionIds(targetPartitionIds);
         insertStmt.setTargetColumns(targetColumns);
-        session.getDumpInfo().addTable(database.getFullName(), table);
+        session.getDumpInfo().addTable(database.getOriginName(), table);
     }
 }

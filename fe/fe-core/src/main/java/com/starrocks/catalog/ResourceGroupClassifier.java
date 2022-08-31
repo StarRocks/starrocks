@@ -179,7 +179,7 @@ public class ResourceGroupClassifier implements Writable {
             String str = databaseIds.stream()
                     .map(id ->
                             Optional.ofNullable(GlobalStateMgr.getCurrentState().getDb(id))
-                                    .map(Database::getFullName)
+                                    .map(Database::getOriginName)
                                     .orElse("unknown"))
                     .collect(Collectors.joining(","));
             classifiersStr.append(", db='" + str + "'");

@@ -272,7 +272,7 @@ public class Analyzer {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
         }
 
-        TableName tblName = new TableName(database.getFullName(), table.getName());
+        TableName tblName = new TableName(database.getOriginName(), table.getName());
         // The table must be a base table.
         return new BaseTableRef(tableRef, table, tblName);
     }

@@ -137,7 +137,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         if (database == null) {
             throw new MetaNotFoundException("database " + routineLoadJob.getDbId() + " does not exist");
         }
-        tRoutineLoadTask.setDb(database.getFullName());
+        tRoutineLoadTask.setDb(database.getOriginName());
         Table tbl = database.getTable(routineLoadJob.getTableId());
         if (tbl == null) {
             throw new MetaNotFoundException("table " + routineLoadJob.getTableId() + " does not exist");

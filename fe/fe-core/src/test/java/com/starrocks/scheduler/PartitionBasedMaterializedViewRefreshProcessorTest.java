@@ -135,7 +135,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         };
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv1"));
-        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getOriginName());
 
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
@@ -198,7 +198,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_inactive"));
         materializedView.setActive(false);
-        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getOriginName());
 
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
@@ -239,7 +239,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         };
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
-        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getOriginName());
 
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
@@ -263,7 +263,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         };
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
-        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getOriginName());
 
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());

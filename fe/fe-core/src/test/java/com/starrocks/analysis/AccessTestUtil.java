@@ -198,7 +198,7 @@ public class AccessTestUtil {
                 db.readUnlock();
                 minTimes = 0;
 
-                db.getFullName();
+                db.getOriginName();
                 minTimes = 0;
                 result = name;
             }
@@ -381,7 +381,7 @@ public class AccessTestUtil {
                 db.readUnlock();
                 minTimes = 0;
 
-                db.getFullName();
+                db.getOriginName();
                 minTimes = 0;
                 result = "testDb";
             }

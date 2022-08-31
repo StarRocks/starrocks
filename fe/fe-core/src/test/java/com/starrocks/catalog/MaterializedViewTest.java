@@ -290,7 +290,7 @@ public class MaterializedViewTest {
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
         List<Expr> exprs = Lists.newArrayList();
-        TableName tableName = new TableName(database.getFullName(), "mv_name");
+        TableName tableName = new TableName(database.getOriginName(), "mv_name");
         SlotRef slotRef1 = new SlotRef(tableName, "k1");
         StringLiteral quarterStringLiteral = new StringLiteral("quarter");
         FunctionCallExpr quarterFunctionCallExpr =

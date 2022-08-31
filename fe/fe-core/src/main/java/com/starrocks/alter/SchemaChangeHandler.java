@@ -1023,7 +1023,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             if (ctx != null) {
                 if (!GlobalStateMgr.getCurrentState().getAuth()
-                        .checkTblPriv(ctx, db.getFullName(), alterJob.getTableName(), PrivPredicate.ALTER)) {
+                        .checkTblPriv(ctx, db.getOriginName(), alterJob.getTableName(), PrivPredicate.ALTER)) {
                     continue;
                 }
             }

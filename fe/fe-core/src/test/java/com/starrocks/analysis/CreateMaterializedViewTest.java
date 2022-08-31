@@ -316,7 +316,7 @@ public class CreateMaterializedViewTest {
             partitionRefTableExpr.collect(SlotRef.class, tableSlotRefs);
             SlotRef slotRef = tableSlotRefs.get(0);
             TableName baseTableName = slotRef.getTblNameWithoutAnalyzed();
-            Assert.assertEquals(baseTableName.getDb(), testDb.getFullName());
+            Assert.assertEquals(baseTableName.getDb(), testDb.getOriginName());
             Table baseTable = testDb.getTable(baseTableName.getTbl());
             Assert.assertNotNull(baseTable);
             Assert.assertTrue(baseTableIds.contains(baseTable.getId()));
@@ -459,7 +459,7 @@ public class CreateMaterializedViewTest {
             partitionRefTableExpr.collect(SlotRef.class, slotRefs);
             SlotRef slotRef = slotRefs.get(0);
             TableName baseTableName = slotRef.getTblNameWithoutAnalyzed();
-            Assert.assertEquals(baseTableName.getDb(), testDb.getFullName());
+            Assert.assertEquals(baseTableName.getDb(), testDb.getOriginName());
             Table baseTable = testDb.getTable(baseTableName.getTbl());
             Assert.assertNotNull(baseTable);
             Assert.assertTrue(baseTableIds.contains(baseTable.getId()));
@@ -1413,7 +1413,7 @@ public class CreateMaterializedViewTest {
             currentState.createMaterializedView((CreateMaterializedViewStmt) statementBase);
             waitngRollupJobV2Finish();
             ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
-            String fullGroupName = testDb.getId() +"_" + testDb.getFullName() +":" + "colocateMv";
+            String fullGroupName = testDb.getId() +"_" + testDb.getOriginName() +":" + "colocateMv";
             System.out.println(fullGroupName);
             long tableId = colocateTableIndex.getTableIdByGroup(fullGroupName);
             Assert.assertNotEquals(-1,tableId);

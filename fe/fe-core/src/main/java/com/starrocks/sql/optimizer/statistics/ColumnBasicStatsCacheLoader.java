@@ -151,7 +151,7 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
             }
         } catch (Exception e) {
             LOG.warn("convert TStatisticData to ColumnStatistics failed, db : {}, table : {}, column : {}, errMsg : {}",
-                    db.getFullName(), table.getName(), column.getName(), e.getMessage());
+                    db.getOriginName(), table.getName(), column.getName(), e.getMessage());
         }
 
         return builder.setMinValue(minValue).

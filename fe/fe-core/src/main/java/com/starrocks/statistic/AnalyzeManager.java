@@ -215,7 +215,7 @@ public class AnalyzeManager implements Writable {
         Set<Long> tables = new HashSet<>();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
+            if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getOriginName())) {
                 continue;
             }
 
@@ -300,7 +300,7 @@ public class AnalyzeManager implements Writable {
 
     public void updateLoadRows(TransactionState transactionState) {
         Database db = GlobalStateMgr.getCurrentState().getDb(transactionState.getDbId());
-        if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
+        if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getOriginName())) {
             return;
         }
         TxnCommitAttachment attachment = transactionState.getTxnCommitAttachment();

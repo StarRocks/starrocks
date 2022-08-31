@@ -290,10 +290,6 @@ public class Database extends MetaObject implements Writable {
         return fullQualifiedName;
     }
 
-    public String getFullName() {
-        return fullQualifiedName;
-    }
-
     public void setNameWithLock(String newName) {
         writeLock();
         try {

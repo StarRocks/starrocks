@@ -63,7 +63,7 @@ public class QueryDumpAction extends RestBaseAction {
                 sendResult(request, response, HttpResponseStatus.NOT_FOUND);
                 return;
             }
-            context.setDatabase(db.getFullName());
+            context.setDatabase(db.getOriginName());
         }
         context.setIsQueryDump(true);
 

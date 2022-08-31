@@ -559,7 +559,7 @@ public class ShowExecutor {
                         }
                         // check tbl privs
                         if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalog,
-                                db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
+                                db.getOriginName(), tbl.getName(), PrivPredicate.SHOW)) {
                             continue;
                         }
                         tableMap.put(tbl.getName(), tbl.getMysqlType());
@@ -608,7 +608,7 @@ public class ShowExecutor {
 
                     // check tbl privs
                     if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                            db.getFullName(), table.getName(),
+                            db.getOriginName(), table.getName(),
                             PrivPredicate.SHOW)) {
                         continue;
                     }
@@ -1122,7 +1122,7 @@ public class ShowExecutor {
                     isSync = false;
                     break;
                 }
-                dbName = db.getFullName();
+                dbName = db.getOriginName();
 
                 db.readLock();
                 try {
@@ -1487,7 +1487,7 @@ public class ShowExecutor {
                     }
                     // check tbl privs
                     if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                            db.getFullName(), olapTable.getName(),
+                            db.getOriginName(), olapTable.getName(),
                             PrivPredicate.SHOW)) {
                         continue;
                     }

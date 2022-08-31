@@ -241,7 +241,7 @@ public class CompactionScheduler extends Daemon {
         context.setBeToTablets(beToTablets);
 
         if (LOG.isDebugEnabled()) {
-            LOG.debug("Compacting partition {}.{}.{}", db.getFullName(), table.getName(), partition.getName());
+            LOG.debug("Compacting partition {}.{}.{}", db.getOriginName(), table.getName(), partition.getName());
         }
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;

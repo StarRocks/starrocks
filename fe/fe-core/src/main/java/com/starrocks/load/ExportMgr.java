@@ -215,7 +215,7 @@ public class ExportMgr {
                         continue;
                     }
                     if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(),
-                            db.getFullName(), PrivPredicate.SHOW)) {
+                            db.getOriginName(), PrivPredicate.SHOW)) {
                         continue;
                     }
                 } else {
