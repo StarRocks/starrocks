@@ -781,7 +781,7 @@ public class Auth implements Writable {
     }
 
     public void grantImpersonate(GrantImpersonateStmt stmt) throws DdlException {
-        if (stmt.getAuthorizedUser() != null) {
+        if (stmt.getAuthorizedRoleName() == null) {
             grantImpersonateToUserInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
         } else {
             grantImpersonateToRoleInternal(stmt.getAuthorizedRoleName(), stmt.getSecuredUser(), false);
@@ -790,7 +790,7 @@ public class Auth implements Writable {
 
     public void replayGrantImpersonate(ImpersonatePrivInfo info) {
         try {
-            if (info.getAuthorizedUser() != null) {
+            if (info.getAuthorizedRoleName() == null) {
                 grantImpersonateToUserInternal(info.getAuthorizedUser(), info.getSecuredUser(), true);
             } else {
                 grantImpersonateToRoleInternal(info.getAuthorizedRoleName(), info.getSecuredUser(), true);
@@ -801,7 +801,7 @@ public class Auth implements Writable {
     }
 
     public void revokeImpersonate(RevokeImpersonateStmt stmt) throws DdlException {
-        if (stmt.getAuthorizedUser() != null) {
+        if (stmt.getAuthorizedRoleName() == null) {
             revokeImpersonateFromUserInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
         } else {
             revokeImpersonateFromRoleInternal(stmt.getAuthorizedRoleName(), stmt.getSecuredUser(), false);
@@ -810,7 +810,7 @@ public class Auth implements Writable {
 
     public void replayRevokeImpersonate(ImpersonatePrivInfo info) {
         try {
-            if (info.getAuthorizedUser() != null) {
+            if (info.getAuthorizedRoleName() == null) {
                 revokeImpersonateFromUserInternal(info.getAuthorizedUser(), info.getSecuredUser(), true);
             } else {
                 revokeImpersonateFromRoleInternal(info.getAuthorizedRoleName(), info.getSecuredUser(), true);
@@ -1024,6 +1024,7 @@ public class Auth implements Writable {
                 GlobalStateMgr.getCurrentState().getEditLog().logGrantImpersonate(info);
             }
             LOG.debug("finished to grant impersonate. is replay: {}", isReplay);
+            LOG.info("xxx grant impersonate on {} to {}", authorizedUser, securedUser);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         } finally {
@@ -1049,6 +1050,7 @@ public class Auth implements Writable {
                 GlobalStateMgr.getCurrentState().getEditLog().logGrantImpersonate(info);
             }
             LOG.debug("finished to grant impersonate to role. is replay: {}", isReplay);
+            LOG.info("xxx grant impersonate on {} to {}", authorizedRoleName, securedUser);
         } finally {
             writeUnlock();
         }

@@ -32,6 +32,8 @@ public class ImpersonatePrivInfo implements Writable {
 
     public ImpersonatePrivInfo(String authorizedRoleName, UserIdentity securedUser) {
         this.authorizedRoleName = authorizedRoleName;
+        // Just in case of NPE after rolled back. Worst case scenario, it's meaningless to impersonate as oneself.
+        this.authorizedUser = securedUser;
         this.securedUser = securedUser;
     }
 
