@@ -19,6 +19,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -39,7 +40,13 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+
+import static com.starrocks.fs.hdfs.HdfsFsManager.FS_S3A_ACCESS_KEY;
+import static com.starrocks.fs.hdfs.HdfsFsManager.FS_S3A_CONNECTION_SSL_ENABLED;
+import static com.starrocks.fs.hdfs.HdfsFsManager.FS_S3A_ENDPOINT;
+import static com.starrocks.fs.hdfs.HdfsFsManager.FS_S3A_SECRET_KEY;
 
 public class IcebergScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
@@ -49,6 +56,7 @@ public class IcebergScanNode extends ScanNode {
     private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
 
     private List<TScanRangeLocations> result = new ArrayList<>();
+    private final THdfsProperties tHdfsProperties = new THdfsProperties();
 
     // Exprs in icebergConjuncts converted to Iceberg Expression.
     private List<Expression> icebergPredicates = null;
@@ -81,6 +89,21 @@ public class IcebergScanNode extends ScanNode {
         }
         if (hostToBeId.isEmpty()) {
             throw new UserException("Backend not found. Check if any backend is down or not");
+        }
+    }
+
+    public void setTHdfsProperties(Map<String, String> properties) {
+        if (properties.containsKey(FS_S3A_ACCESS_KEY)) {
+            this.tHdfsProperties.setAccess_key(properties.get(FS_S3A_ACCESS_KEY));
+        }
+        if (properties.containsKey(FS_S3A_SECRET_KEY)) {
+            this.tHdfsProperties.setSecret_key(properties.get(FS_S3A_SECRET_KEY));
+        }
+        if (properties.containsKey(FS_S3A_ENDPOINT)) {
+            this.tHdfsProperties.setEnd_point(properties.get(FS_S3A_ENDPOINT));
+        }
+        if (properties.containsKey(FS_S3A_CONNECTION_SSL_ENABLED)) {
+            this.tHdfsProperties.setSsl_enable(Boolean.parseBoolean(properties.get(FS_S3A_CONNECTION_SSL_ENABLED)));
         }
     }
 
@@ -271,6 +294,7 @@ public class IcebergScanNode extends ScanNode {
         if (srIcebergTable != null) {
             msg.hdfs_scan_node.setTable_name(srIcebergTable.getTable());
         }
+        msg.hdfs_scan_node.setHdfs_properties(tHdfsProperties);
     }
 
     @Override
