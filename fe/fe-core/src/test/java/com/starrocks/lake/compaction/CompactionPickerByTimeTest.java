@@ -34,7 +34,9 @@ public class CompactionPickerByTimeTest {
         List<PartitionStatistics> statisticsList = new ArrayList<>();
 
         final PartitionIdentifier partitionIdentifier = new PartitionIdentifier(1, 2, 3);
-        PartitionStatistics statistics = new PartitionStatistics(partitionIdentifier, 0, 1, MIN_COMPACTION_VERSIONS);
+        PartitionStatistics statistics = new PartitionStatistics(partitionIdentifier);
+        statistics.setLastCompactionVersion(new PartitionVersion(1, 0));
+        statistics.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS, System.currentTimeMillis()));
         statisticsList.add(statistics);
 
         Assert.assertNull(picker.pick(statisticsList));
@@ -46,7 +48,9 @@ public class CompactionPickerByTimeTest {
 
         final PartitionIdentifier partitionIdentifier = new PartitionIdentifier(1, 2, 3);
         long now = System.currentTimeMillis();
-        PartitionStatistics statistics = new PartitionStatistics(partitionIdentifier, now, 1, MIN_COMPACTION_VERSIONS + 1);
+        PartitionStatistics statistics = new PartitionStatistics(partitionIdentifier);
+        statistics.setLastCompactionVersion(new PartitionVersion(1, now));
+        statistics.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS, System.currentTimeMillis()));
         statisticsList.add(statistics);
 
         Assert.assertNull(picker.pick(statisticsList));
@@ -59,12 +63,15 @@ public class CompactionPickerByTimeTest {
         long now = System.currentTimeMillis();
 
         final PartitionIdentifier partitionIdentifier1 = new PartitionIdentifier(1, 2, 3);
-        PartitionStatistics statistics1 = new PartitionStatistics(partitionIdentifier1, now, 1, MIN_COMPACTION_VERSIONS + 1);
+        PartitionStatistics statistics1 = new PartitionStatistics(partitionIdentifier1);
+        statistics1.setLastCompactionVersion(new PartitionVersion(1, now));
+        statistics1.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS + 1, System.currentTimeMillis()));
         statisticsList.add(statistics1);
 
         final PartitionIdentifier partitionIdentifier2 = new PartitionIdentifier(1, 2, 4);
-        PartitionStatistics statistics2 = new PartitionStatistics(partitionIdentifier2, now - MIN_COMPACTION_INTERVAL, 1,
-                MIN_COMPACTION_VERSIONS + 1);
+        PartitionStatistics statistics2 = new PartitionStatistics(partitionIdentifier2);
+        statistics2.setLastCompactionVersion(new PartitionVersion(1, now - MIN_COMPACTION_INTERVAL));
+        statistics2.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS + 1, System.currentTimeMillis()));
         statisticsList.add(statistics2);
 
         Assert.assertSame(statistics2, picker.pick(statisticsList));
@@ -75,7 +82,9 @@ public class CompactionPickerByTimeTest {
         List<PartitionStatistics> statisticsList = new ArrayList<>();
 
         final PartitionIdentifier partitionIdentifier = new PartitionIdentifier(1, 2, 4);
-        PartitionStatistics statistics = new PartitionStatistics(partitionIdentifier, 0, 1, MIN_COMPACTION_VERSIONS + 1);
+        PartitionStatistics statistics = new PartitionStatistics(partitionIdentifier);
+        statistics.setLastCompactionVersion(new PartitionVersion(1, 0));
+        statistics.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS + 1, System.currentTimeMillis()));
         statisticsList.add(statistics);
 
         statistics.setDoingCompaction(true);
@@ -92,7 +101,9 @@ public class CompactionPickerByTimeTest {
         List<PartitionStatistics> statisticsList = new ArrayList<>();
 
         final PartitionIdentifier partitionIdentifier = new PartitionIdentifier(1, 2, 4);
-        PartitionStatistics statistics = new PartitionStatistics(partitionIdentifier, 0, 1, MIN_COMPACTION_VERSIONS + 1);
+        PartitionStatistics statistics = new PartitionStatistics(partitionIdentifier);
+        statistics.setLastCompactionVersion(new PartitionVersion(1, 0));
+        statistics.setCurrentVersion(new PartitionVersion(MIN_COMPACTION_VERSIONS + 1, System.currentTimeMillis()));
         statisticsList.add(statistics);
 
         statistics.setNextCompactionTime(System.currentTimeMillis() + 60 * 1000);

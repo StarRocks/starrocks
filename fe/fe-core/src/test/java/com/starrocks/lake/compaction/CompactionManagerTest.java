@@ -21,22 +21,25 @@ public class CompactionManagerTest {
         PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
 
         for (int i = 1; i <= Config.experimental_lake_compaction_max_version_count - 1; i++) {
-            compactionManager.handleLoadingFinished(partition1, i);
-            compactionManager.handleLoadingFinished(partition2, i);
+            compactionManager.handleLoadingFinished(partition1, i, System.currentTimeMillis());
+            compactionManager.handleLoadingFinished(partition2, i, System.currentTimeMillis());
 
             Assert.assertNull(compactionManager.choosePartitionToCompact());
         }
-        compactionManager.handleLoadingFinished(partition1, Config.experimental_lake_compaction_max_version_count);
+        compactionManager.handleLoadingFinished(partition1, Config.experimental_lake_compaction_max_version_count,
+                System.currentTimeMillis());
         Assert.assertSame(partition1, compactionManager.choosePartitionToCompact());
         Assert.assertNull(compactionManager.choosePartitionToCompact());
 
-        compactionManager.handleLoadingFinished(partition1, Config.experimental_lake_compaction_max_version_count + 1);
+        compactionManager.handleLoadingFinished(partition1, Config.experimental_lake_compaction_max_version_count + 1,
+                System.currentTimeMillis());
         Assert.assertNull(compactionManager.choosePartitionToCompact());
 
         compactionManager.enableCompactionAfter(partition1, 5000);
         Assert.assertNull(compactionManager.choosePartitionToCompact());
 
-        compactionManager.handleLoadingFinished(partition2, Config.experimental_lake_compaction_max_version_count);
+        compactionManager.handleLoadingFinished(partition2, Config.experimental_lake_compaction_max_version_count,
+                System.currentTimeMillis());
         Assert.assertSame(partition2, compactionManager.choosePartitionToCompact());
         Assert.assertNull(compactionManager.choosePartitionToCompact());
         compactionManager.enableCompactionAfter(partition2, 0);

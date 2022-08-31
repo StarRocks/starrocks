@@ -3,20 +3,23 @@
 package com.starrocks.lake.compaction;
 
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 
 class PartitionStatistics {
+    @SerializedName(value = "partition")
     private final PartitionIdentifier partition;
-    private long lastCompactionTime;
-    private long lastCompactionVersion;
-    private long currentVersion;
+    @SerializedName(value = "lastCompactionVersion")
+    private PartitionVersion lastCompactionVersion;
+    @SerializedName(value = "currentVersion")
+    private PartitionVersion currentVersion;
+    @SerializedName(value = "nextCompactionTime")
     private long nextCompactionTime;
+    @SerializedName(value = "doingCompaction")
     private boolean doingCompaction;
 
-    PartitionStatistics(PartitionIdentifier partition, long lastCompactionTime, long lastCompactionVersion, long currentVersion) {
+    PartitionStatistics(PartitionIdentifier partition) {
         this.partition = partition;
-        this.lastCompactionTime = lastCompactionTime;
-        this.lastCompactionVersion = lastCompactionVersion;
-        this.currentVersion = currentVersion;
+        this.lastCompactionVersion = null;
         this.nextCompactionTime = 0;
         this.doingCompaction = false;
     }
@@ -33,28 +36,24 @@ class PartitionStatistics {
         this.doingCompaction = doingCompaction;
     }
 
-    long getCurrentVersion() {
+    PartitionVersion getCurrentVersion() {
         return currentVersion;
     }
 
-    void setCurrentVersion(long currentVersion) {
+    void setCurrentVersion(PartitionVersion currentVersion) {
         this.currentVersion = currentVersion;
     }
 
-    long getLastCompactionVersion() {
+    PartitionVersion getLastCompactionVersion() {
         return lastCompactionVersion;
     }
 
-    void setLastCompactionVersion(long value) {
+    void setLastCompactionVersion(PartitionVersion value) {
         lastCompactionVersion = value;
     }
 
     long getLastCompactionTime() {
-        return lastCompactionTime;
-    }
-
-    void setLastCompactionTime(long firstUpdateTime) {
-        this.lastCompactionTime = firstUpdateTime;
+        return getLastCompactionVersion().getCreateTime();
     }
 
     void setNextCompactionTime(long nextCompactionTime) {
@@ -66,7 +65,7 @@ class PartitionStatistics {
     }
 
     long getDeltaVersions() {
-        return getCurrentVersion() - getLastCompactionVersion();
+        return getCurrentVersion().getVersion() - getLastCompactionVersion().getVersion();
     }
 
     @Override

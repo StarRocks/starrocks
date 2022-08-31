@@ -2,6 +2,8 @@
 
 package com.starrocks.lake.compaction;
 
+import javax.annotation.Nullable;
+
 public class CompactionPickerByTime implements CompactionPicker {
     private final long maxCompactionInterval;
     private final long minCompactionVersionCount;
@@ -12,6 +14,7 @@ public class CompactionPickerByTime implements CompactionPicker {
     }
 
     @Override
+    @Nullable
     public PartitionStatistics pick(Iterable<PartitionStatistics> statistics) {
         long now = System.currentTimeMillis();
         PartitionStatistics target = null;

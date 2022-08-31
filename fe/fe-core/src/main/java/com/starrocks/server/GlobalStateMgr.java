@@ -1186,6 +1186,10 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadShardManager(dis, checksum);
             remoteChecksum = dis.readLong();
+            if (Config.use_staros) {
+                checksum = loadCompactionManager(dis, checksum);
+                remoteChecksum = dis.readLong();
+            }
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1350,6 +1354,12 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadCompactionManager(DataInputStream in, long checksum) throws IOException {
+        compactionManager = CompactionManager.loadCompactionManager(in);
+        checksum ^= compactionManager.getChecksum();
+        return checksum;
+    }
+
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
         // Write image.ckpt
@@ -1414,6 +1424,10 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = shardManager.saveShardManager(dos, checksum);
             dos.writeLong(checksum);
+            if (Config.use_staros) {
+                checksum = compactionManager.saveCompactionManager(dos, checksum);
+                dos.writeLong(checksum);
+            }
         }
 
         long saveImageEndTime = System.currentTimeMillis();

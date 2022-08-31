@@ -2,6 +2,9 @@
 
 package com.starrocks.lake.compaction;
 
+import javax.annotation.Nullable;
+
 public interface CompactionPicker {
+    @Nullable
     PartitionStatistics pick(Iterable<PartitionStatistics> statistics);
 }
