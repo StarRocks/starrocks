@@ -26,10 +26,10 @@ public class UserIdentityTest {
 
     @Test
     public void test() {
-        UserIdentity userIdent = new UserIdentity(SystemInfoService.DEFAULT_CLUSTER + ":cmy", "192.%");
+        UserIdentity userIdent = new UserIdentity("cmy", "192.%");
         userIdent.setIsAnalyzed();
 
-        String str = "'" + SystemInfoService.DEFAULT_CLUSTER + ":cmy" + "'@'192.%'";
+        String str = "'" + "cmy" + "'@'192.%'";
         Assert.assertEquals(str, userIdent.toString());
 
         UserIdentity userIdent2 = UserIdentity.fromString(str);
