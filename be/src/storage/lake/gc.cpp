@@ -26,7 +26,7 @@ static std::string format_time(time_t ts) {
 
 // TODO: txn log GC
 Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, 
-    int64_t min_active_txn_log_id) {
+    int64_t min_active_txn_id) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
 
     const auto max_versions = config::lake_gc_metadata_max_versions;
@@ -96,7 +96,7 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr,
         auto iter_st = fs->iterate_dir(txn_log_root_location, [&](std::string_view name) {
             if (is_txn_log(name)) {
                 auto [tablet_id, txn_id] = parse_txn_log_filename(name);
-                if (txn_id < min_active_txn_log_id) {
+                if (txn_id < min_active_txn_id) {
                     txn_logs.emplace_back(name);
                 }
             }

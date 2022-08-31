@@ -778,7 +778,7 @@ void* metadata_gc_trigger(void* arg) {
         for (const auto& root : roots) {
             // TODO: limit GC concurrency
             st = thread_pool->submit_func([=]() {
-                auto r = metadata_gc(root, tablet_mgr, master_info.min_active_txn_log_id);
+                auto r = metadata_gc(root, tablet_mgr, master_info.min_active_txn_id);
                 LOG_IF(WARNING, !r.ok()) << "Fail to do metadata gc in " << root << ": " << r;
             });
             if (!st.ok()) {

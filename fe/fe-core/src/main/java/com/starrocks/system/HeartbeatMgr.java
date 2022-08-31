@@ -103,7 +103,7 @@ public class HeartbeatMgr extends LeaderDaemon {
         tMasterInfo.setHttp_port(Config.http_port);
         long flags = heartbeatFlags.getHeartbeatFlags();
         tMasterInfo.setHeartbeat_flags(flags);
-        tMasterInfo.setMin_active_txn_log_id(computeMinActiveTxnId());
+        tMasterInfo.setMin_active_txn_id(computeMinActiveTxnId());
         masterInfo.set(tMasterInfo);
     }
 
@@ -280,7 +280,9 @@ public class HeartbeatMgr extends LeaderDaemon {
                 long flags = heartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);
                 copiedMasterInfo.setBackend_id(computeNodeId);
-                copiedMasterInfo.setMin_active_txn_log_id(computeMinActiveTxnId());
+                copiedMasterInfo.setMin_active_txn_id(computeMinActiveTxnId());
+                // for debug
+                LOG.info("min active txn id in HeartBeatMgr is {}", computeMinActiveTxnId());
                 THeartbeatResult result = client.heartbeat(copiedMasterInfo);
 
                 ok = true;
