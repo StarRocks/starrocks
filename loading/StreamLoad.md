@@ -1,181 +1,266 @@
-# Stream load
+# 通过 HTTP Push 从本地文件系统或流式数据源导入数据
 
-StarRocks支持从本地直接导入数据，支持CSV文件格式。数据量在10GB以下。
+StarRocks 提供基于 HTTP 协议的 Stream Load 导入方式，帮助您从本地文件系统或流式数据源导入数据。
 
-Stream Load 是一种同步的导入方式，用户通过发送 HTTP 请求将本地文件或数据流导入到 StarRocks 中。Stream Load 同步执行导入并返回导入结果。用户可直接通过请求的返回值判断导入是否成功。
+Stream Load 是一种同步的导入方式。您提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。
 
----
+Stream Load 适用于以下业务场景：
 
-## 名词解释
+- 导入本地数据文件。
 
-* **Coordinator**：协调节点。负责接收数据并分发数据到其他数据节点，导入完成后返回结果给用户。
+  一般可采用 curl 命令直接提交一个导入作业，将本地数据文件的数据导入到 StarRocks 中。
 
----
+- 导入实时产生的数据流。
+
+  一般可采用 Apache Flink® 等程序提交一个导入作业，持续生成一系列导入任务，将实时产生的数据流持续不断地导入到 StarRocks 中。
+
+另外，Stream Load 支持在导入过程中做数据的转换，具体请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)。
+
+> 注意：Stream Load 操作会同时更新和 StarRocks 原始表相关的物化视图的数据。
+
+## 支持的数据文件格式
+
+Stream Load 支持如下数据文件格式：
+
+- CSV
+- JSON
+
+您可以通过 `streaming_load_max_mb` 参数来设置单个待导入数据文件的大小上限，但一般不建议调大此参数。具体请参见本文档“[参数配置](/loading/StreamLoad.md#参数配置)”章节。
+
+## 使用限制
+
+Stream Load 当前不支持导入某一列为 JSON 的 CSV 文件的数据。
 
 ## 基本原理
 
-Stream Load 中，用户通过HTTP协议提交导入命令。如果提交到FE节点，则FE节点会通过HTTP redirect指令将请求转发给某一个BE节点，用户也可以直接提交导入命令给某一指定BE节点。该BE节点作为Coordinator节点，将数据按表schema划分并分发数据到相关的BE节点。导入的最终结果由 Coordinator节点返回给用户。
+Stream Load 需要您在客户端上通过 HTTP 发送导入作业请求给 FE 节点，FE 节点会通过 HTTP 重定向 (Redirect) 指令将请求转发给某一个 BE 节点。
 
-下图展示了Stream Load的主要流程:
+> 说明：您也可以直接发送导入作业请求给某一个 BE 节点。
 
-![stream load](../assets/4.4.2-1.png)
+接收导入作业请求的 BE 节点作为 Coordinator BE 节点，将数据按表结构划分、并分发数据到相关的 BE 节点。导入作业的结果信息由 Coordinator BE 节点返回给客户端。
 
----
+> 说明：如果把导入作业请求发送给 FE 节点，FE 节点会通过轮询机制选定由哪一个 BE 节点来接收请求，从而实现 StarRocks 集群内的负载均衡。因此，推荐您把导入作业请求发送给 FE 节点，由 FE 节点来选定接收请求的 Coordinator BE 节点。
 
-## 导入示例
+下图展示了 Stream Load 的主要流程：
 
-### 创建导入任务
+[Stream Load 原理图](/assets/4.2-1.png)
 
-Stream Load 通过 HTTP 协议提交和传输数据。这里通过 curl 命令展示如何提交导入。用户也可以通过其他HTTP client进行操作。
+## 导入本地文件
 
-**语法：**
+### 创建导入作业
 
-~~~bash
-curl --location-trusted -u root -H "label:123"  -H "columns: k1, k2, v1" -T testData  http://abc.com:8030/api/test/date/_stream_load
-~~~
+本文以 curl 工具为例，介绍如何使用 Stream Load 从本地文件系统导入 CSV 或 JSON 格式的数据。有关创建导入作业的详细语法和参数说明，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
 
-Header中支持的属性见下文的导入任务参数说明，格式为: -H "key1:value1"。如果同时有多个任务参数，需要用多个 -H 来指示，类似于 \-H "key1:value1" -H "key2:value2"……
+#### 导入 CSV 格式的数据
 
-**示例：**
+##### 数据样例
 
-~~~bash
-curl --location-trusted -u root -T date -H "label:123" \
-    http://abc.com:8030/api/test/date/_stream_load
-~~~
+1. 在数据库 `test_db` 中创建一张名为 `table1` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，主键为 `id` 列，如下所示：
 
-创建导入任务的详细语法可执行HELP STREAM LOAD查看，下面介绍该命令中部分参数的意义。
+    ```SQL
+    MySQL [test_db]> CREATE TABLE `table1`
 
-**说明：**
+    (
 
-* 当前支持HTTP chunked与非chunked上传两种方式，对于非chunked方式，必须要有Content-Length来标示上传内容长度，这样能够保证数据的完整性。
-* 用户最好设置Expect Header字段内容100-continue，这样可以在某些出错场景下避免不必要的数据传输。
+        `id` int(11) NOT NULL COMMENT "用户 ID",
 
-**签名参数：**
+        `name` varchar(65533) NULL COMMENT "用户姓名",
 
-* user/passwd，Stream Load创建导入任务使用的是HTTP协议，可通过 Basic access authentication 进行签名。StarRocks 系统会根据签名来验证用户身份和导入权限。
+        `score` int(11) NOT NULL COMMENT "用户得分"
 
-**导入任务参数：**
+    )
 
-Stream Load 中所有与导入任务相关的参数均设置在 Header 中。下面介绍其中部分参数的意义：
+    ENGINE=OLAP
 
-* **label** :导入任务的标签，相同标签的数据无法多次导入。用户可以通过指定Label的方式来避免一份数据重复导入的问题。当前StarRocks系统会保留最近30分钟内成功完成的任务的Label。
-* **column_separator** ：用于指定导入文件中的列分隔符，默认为\\t。如果是不可见字符，则需要加\\x作为前缀，使用十六进制来表示分隔符。如Hive文件的分隔符\\x01，需要指定为\-H "column_separator:\\x01"
-* **row_delimiter**: 用户指定导入文件中的行分隔符，默认为"\\n"。请注意，curl无法解释传递"\\n"，换行符手动指定为"\\n"时，shell会先传递"\\"，然后传递"n"而不是直接传递换行符"\\n"。Bash支持另一种转义字符串语法，如要传递"\n"和"\t"时，请使用"$'"启动字符串并以"'"结束字符串，eg：`-H $'row_delimiter:\n'`。
-* **columns** ：用于指定导入文件中的列和 table 中的列的对应关系。如果源文件中的列正好对应表中的内容，那么无需指定该参数。如果源文件与表schema不对应，那么需要这个参数来配置数据转换规则。这里有两种形式的列，一种是直接对应于导入文件中的字段，可直接使用字段名表示；一种需要通过计算得出。举几个例子帮助理解：
+    PRIMARY KEY(`id`)
 
-  * 例1：表中有3列"c1, c2, c3"，源文件中的3列依次对应的是"c3,c2,c1"; 那么需要指定\-H "columns: c3, c2, c1"
-  * 例2：表中有3列"c1, c2, c3" ，源文件中前3列一一对应，但是还有多余1列；那么需要指定\-H "columns: c1, c2, c3, temp"，最后1列随意指定名称用于占位即可。
-  * 例3：表中有3个列“year, month, day"，源文件中只有一个时间列，为”2018-06-01 01:02:03“格式；那么可以指定 \-H "columns: col, year = year(col), month=month(col), day=day(col)"完成导入。
+    DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+    ```
 
-* **where**: 用于抽取部分数据。用户如需将不需要的数据过滤掉，那么可以通过设定这个选项来达到。
+2. 在本地文件系统中创建一个 CSV 格式的数据文件 `example1.csv`。文件一共包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
 
-  * 例1：只导入k1列等于20180601的数据，那么可以在导入时指定\-H "where: k1 = 20180601"。
+    ```Plain%20Text
+    1,Lily,23
 
-* **max_filter_ratio**：最大容忍可过滤（数据不规范等原因而过滤）的数据比例。默认零容忍。数据不规范不包括通过 where 条件过滤掉的行。
-* **partitions**: 用于指定这次导入所涉及的partition。如果用户能够确定数据对应的partition，推荐指定该项。不满足这些分区的数据将被过滤掉。比如指定导入到p1、p2分区：\-H "partitions: p1, p2"。
-* **timeout**: 指定导入的超时时间。单位秒，默认是 600 秒。可设置范围为 1 秒 ~ 259200 秒。
-* **strict_mode**: 用户指定此次导入是否开启严格模式，默认为关闭。开启方式为：\-H "strict_mode: true"。
-* **timezone**: 指定本次导入所使用的时区。默认为东八区。该参数会影响所有导入涉及的和时区有关的函数结果。
-* **exec_mem_limit**: 导入内存限制。默认为 2GB。单位是「字节」。
+    2,Rose,23
 
-**返回结果：**
+    3,Alice,24
 
-导入完成后，Stream Load会以Json格式返回这次导入的相关内容，示例如下：
+    4,Julia,25
+    ```
 
-~~~json
-{
-    "TxnId": 1003,
-    "Label": "b6f3bc78-0d2c-45d9-9e4c-faa0a0149bee",
-    "Status": "Success",
-    "ExistingJobStatus": "FINISHED", // optional
-    "Message": "OK",
-    "NumberTotalRows": 1000000,
-    "NumberLoadedRows": 1000000,
-    "NumberFilteredRows": 1,
-    "NumberUnselectedRows": 0,
-    "LoadBytes": 40888898,
-    "LoadTimeMs": 2144,
-    "ErrorURL": "[http://192.168.1.1:8042/api/_load_error_log?file=__shard_0/error_log_insert_stmt_db18266d4d9b4ee5-abb00ddd64bdf005_db18266d4d9b4ee5_abb00ddd64bdf005](http://192.168.1.1:8042/api/_load_error_log?file=__shard_0/error_log_insert_stmt_db18266d4d9b4ee5-abb00ddd64bdf005_db18266d4d9b4ee5_abb00ddd64bdf005)"
-}
-~~~
+##### 命令示例
 
-* TxnId：导入的事务ID。用户可不感知。
-* Status: 导入最后的状态。
-* Success：表示导入成功，数据已经可见。
-* Publish Timeout：表述导入作业已经成功Commit，但是由于某种原因并不能立即可见。用户可以视作已经成功不必重试导入。
-* Label Already Exists：表明该Label已经被其他作业占用，可能是导入成功，也可能是正在导入。
-* 其他：此次导入失败，用户可以指定Label重试此次作业。
-* Message: 导入状态的详细说明。失败时会返回具体的失败原因。
-* NumberTotalRows: 从数据流中读取到的总行数。
-* NumberLoadedRows: 此次导入的数据行数，只有在Success时有效。
-* NumberFilteredRows: 此次导入过滤掉的行数，即数据质量不合格的行。
-* NumberUnselectedRows: 此次导入，通过 where 条件被过滤掉的行数。
-* LoadBytes: 此次导入的源文件数据量大小。
-* LoadTimeMs: 此次导入所用的时间(ms)。
-* ErrorURL: 被过滤数据的具体内容，仅保留前1000条。如果导入任务失败，可以直接用以下方式获取被过滤的数据，并进行分析，以调整导入任务。
+通过如下命令，把 `example1.csv` 文件中的数据导入到 `table1` 表中：
 
-    ~~~bash
-    wget http://192.168.1.1:8042/api/_load_error_log?file=__shard_0/error_log_insert_stmt_db18266d4d9b4ee5-abb00ddd64bdf005_db18266d4d9b4ee5_abb00ddd64bdf005
-    ~~~
+```Bash
+curl --location-trusted -u root: -H "label:123" \
 
-### 取消导入
+    -H "column_separator:," \
 
-用户无法手动取消 Stream Load，Stream Load 在超时或者导入错误后会被系统自动取消。
+    -H "columns: id, name, score" \
 
----
+    -T example1.csv -XPUT \
 
-## 最佳实践
+    http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
+```
 
-### 应用场景
+`example1.csv` 文件中包含三列，跟 `table1` 表的 `id`、`name`、`score` 三列一一对应，并用逗号 (,) 作为列分隔符。因此，需要通过 `column_separator` 参数指定列分隔符为逗号 (,)，并且在 `columns` 参数中按顺序把 `example1.csv` 文件中的三列临时命名为 `id`、`name`、`score`。`columns` 参数中声明的三列，按名称对应 `table1` 表中的三列。
 
-Stream Load 的最佳使用场景是原始文件在内存中或者存储在本地磁盘中。其次由于 Stream Load 是一种同步的导入方式，所以用户如果希望用同步方式获取导入结果，也可以使用这种导入。
+##### 查询数据
 
-### 数据量
+导入完成后，查询 `table1` 表的数据，如下所示：
 
-由于Stream Load是由BE发起的导入并分发数据，建议的导入数据量在 1GB 到 10GB 之间。系统默认的最大Stream Load导入数据量为10GB，所以如果要导入超过10GB的文件需要修改BE的配置项streaming_load_max_mb。比如，待导入文件大小为15G，则可修改BE的该配置项大于15G,例如设置为 `streaming_load_max_mb = 16000` 即可。
+```SQL
+MySQL [test_db]> SELECT * FROM table1;
 
-Stream Load的默认超时为300秒，按照StarRocks目前最大的导入限速来看，导入超过3GB大小的文件就需要修改导入任务默认的超时时间了。
++------+-------+-------+
 
-`导入任务超时时间 = 导入数据量 / 10M/s` （具体的平均导入速度需要用户根据自己的集群情况计算）
+| id   | name  | score |
 
-例如：导入一个 10GB 的文件，timeout应该设为1000s。
++------+-------+-------+
 
-### 完整例子
+|    1 | Lily  |    23 |
 
-**数据情况**：数据在客户端本地磁盘路径 /home/store-sales 中，导入的数据量约为 15GB，希望导入到数据库 bj-sales 的表 store-sales 中。
+|    2 | Rose  |    23 |
 
-**集群情况**：Stream Load 的并发数不受集群大小影响。
+|    3 | Alice |    24 |
 
-* step1: 导入文件大小超过默认的最大导入大小10GB，所以要修改BE的配置文件BE.conf,例如将最大导入大小设置为16000：
+|    4 | Julia |    25 |
 
-`streaming_load_max_mb = 16000`
++------+-------+-------+
 
-* step2: 计算大概的导入时间是否超过默认 timeout 值，导入时间 ≈ 15000 / 10 = 1500s，超过了默认的 timeout 时间，需要修改 FE 的配置FE.conf：
+4 rows in set (0.00 sec)
+```
 
-`stream_load_default_timeout_second = 1500`
+#### 导入 JSON 格式的数据
 
-* step3：创建导入任务
+##### 数据样例
 
-~~~bash
-curl --location-trusted -u user:password -T /home/store_sales \
-    -H "label:abc" [http://abc.com:8000/api/bj_sales/store_sales/_stream_load](http://abc.com:8000/api/bj_sales/store_sales/_stream_load)
-~~~
+1. 在数据库 `test_db` 中创建一张名为 `table2` 的主键模型表。表包含 `id` 和 `city` 两列，主键为 `id` 列，如下所示：
 
-### 代码集成示例
+    ```SQL
+    MySQL [test_db]> CREATE TABLE `table2`
 
-* JAVA开发stream load，参考：[https://github.com/StarRocks/demo/MiscDemo/stream_load](https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load)
-* Spark 集成stream load，参考： [01_sparkStreaming2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/01_sparkStreaming2StarRocks.md)
+    (
 
----
+        `id` int(11) NOT NULL COMMENT "城市 ID",
+
+        `city` varchar(65533) NULL COMMENT "城市名称"
+
+    )
+
+    ENGINE=OLAP
+
+    PRIMARY KEY(`id`)
+
+    DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+    ```
+
+2. 在本地文件系统中创建一个 JSON 格式的数据文件 `example2``.``json`。文件一共包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
+
+    ```JSON
+    {"name": "北京", "code": 2}
+    ```
+
+##### 命令示例
+
+通过如下语句把 `example2.json` 文件中的数据导入到 `table2` 表中：
+
+```Bash
+curl -v --location-trusted -u root: -H "strict_mode: true" \
+
+    -H "format: json" -H "jsonpaths: [\"$.name\", \"$.code\"]" \
+
+    -H "columns: city,tmp_id, id = tmp_id * 100" \
+
+    -T example1.json -XPUT \
+
+    http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
+```
+
+`example2.json` 文件中包含 `name` 和 `code` 两个键，跟 `table2` 表中的列之间的对应关系如下图所示。
+
+[JSON 映射图](/assets/4.2-2.png)
+
+上图所示的对应关系描述如下：
+
+- 提取 `example2.json` 文件中包含的 `name` 和 `code` 两个键，映射到 `jsonpaths` 参数中声明的 `name` 和 `code` 两个字段。
+- 提取 `jsonpaths` 参数中声明的 `name` 和 `code` 两个字段，**按顺序映射**到 `columns` 参数中声明的 `city` 和 `tmp_id` 两个字段。
+- 提取 `columns` 参数声明中的 `city` 和 `id` 两个字段，**按名称映射**到 `table2` 表中的 `city` 和 `id` 两列。
+
+> 说明：上述示例中，在导入过程中先将 `example2.json` 文件中 `code` 键对应的值乘以 100，然后再落入到 `table2` 表的 `id` 中。
+
+有关导入 JSON 数据时 `jsonpaths`、`columns` 和 StarRocks 表中的字段之间的对应关系，请参见 STREAM LOAD 文档中“[使用说明](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md#使用说明)”章节。
+
+##### 查询数据
+
+导入完成后，查询 `table2` 表的数据，如下所示：
+
+```SQL
+MySQL [test_db]> SELECT * FROM table2;
+
++------+--------+
+
+| id   | city   |
+
++------+--------+
+
+| 200  | 北京    |
+
++------+--------+
+
+4 rows in set (0.01 sec)
+```
+
+### 查看导入作业
+
+导入作业结束后，StarRocks 会以 JSON 格式返回本次导入作业的结果信息，具体请参见 STREAM LOAD 文档中“[返回值](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md#返回值)”章节。
+
+Stream Load 不支持通过 SHOW LOAD 语句查看导入作业执行情况。
+
+### 取消导入作业
+
+Stream Load 不支持手动取消导入作业。如果导入作业发生超时或者导入错误，StarRocks 会自动取消该作业。
+
+## 导入数据流
+
+Stream Load 支持通过程序导入数据流，具体操作方法，请参见如下文档：
+
+- Flink 集成 Stream Load，请参见[使用 flink-connector-starrocks 导入至 StarRocks](/loading/Flink-connector-starrocks.md)。
+- Java 集成 Stream Load，请参见 [https://github.com/StarRocks/demo/MiscDemo/stream_load](https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load)。
+- Apache Spark™ 集成 Stream Load，请参见 [01_sparkStreaming2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/01_sparkStreaming2StarRocks.md)。
+
+## 参数配置
+
+这里介绍使用 Stream Load 导入方式需要注意的一些系统参数配置。这些参数作用于所有 Stream Load 导入作业。
+
+- `streaming_load_max_mb`：单个待导入数据文件的大小上限。默认文件大小上限为 10 GB。具体请参见 [BE 配置项](/administration/Configuration.md#be-配置项)。
+
+  建议一次导入的数据量不要超过 10 GB。如果数据文件的大小超过 10 GB，建议您拆分成若干小于 10 GB 的文件分次导入。如果由于业务场景需要，无法拆分数据文件，可以适当调大该参数的取值，从而提高数据文件的大小上限。
+
+  需要注意的是，如果您调大该参数的取值，需要重启 BE 才能生效，并且系统性能有可能会受影响，并且也会增加失败重试时的代价。
+
+  > 说明：导入 JSON 格式的数据时，必须确保单个 JSON 对象的大小不能超过 4 GB。如果待导入的 JSON 文件中单个 JSON 对象的大小超过 4 GB，会提示 "This parser can't support a document that big." 错误。
+
+- `stream_load_default_timeout_second`：导入作业的超时时间。默认超时时间为 600 秒。具体请参见 [FE 动态参数](/administration/Configuration.md#配置-fe-动态参数)。
+
+  如果您创建的导入作业经常发生超时，可以通过该参数适当地调大超时时间。您可以通过如下公式计算导入作业的超时时间：
+
+  **导入作业的超时时间 > 待导入数据量/平均导入速度**
+
+  > 说明：“平均导入速度”是指目前 StarRocks 集群的平均导入速度。由于每个 StarRocks 集群的机器环境不同、且集群允许的并发查询任务数也不同，因此，StarRocks 集群的平均导入速度需要根据历史导入速度进行推测。
+
+  例如，如果待导入数据文件的大小为 10 GB，并且当前 StarRocks 集群的平均导入速度为 10 MB/s，则超时时间应该设置为大于 1024 秒。
+
+Stream Load 还提供 `timeout` 参数来设置当前导入作业的超时时间。具体请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
+
+## 使用说明
+
+如果待导入数据文件中某行数据的某个字段缺失、并且 StarRocks 表中跟该字段对应的列定义为 `NOT NULL`，StarRocks 会在导入该行数据时自动往 StarRocks 表中对应的列补充 `NULL`。您也可以通过 `ifnull()` 函数指定要补充的默认值。
+
+例如，如果上述 `example2.json` 文件中代表城市 ID 的列缺失，您希望 StarRocks 在导入数据时往 StarRocks 表中对应的列中补充 `x`，可以指定 `"columns: city, tmp_id, id = ifnull(tmp_id, 'x')"`。
 
 ## 常见问题
 
-* 数据质量问题报错：ETL-QUALITY-UNSATISFIED; msg:quality not good enough to cancel
-
-可参考章节导入总览/常见问题。
-
-* Label Already Exists
-
-可参考章节导入总览/常见问题。由于 Stream Load 是采用 HTTP 协议提交创建导入任务，一般各个语言的 HTTP Client 均会自带请求重试逻辑。StarRocks 系统在接受到第一个请求后，已经开始操作 Stream Load，但是由于没有及时向 Client 端返回结果，Client 端会发生再次重试创建请求的情况。这时候 StarRocks 系统由于已经在操作第一个请求，所以第二个请求会遇到 Label Already Exists 的情况。排查上述可能的方法：使用 Label 搜索 FE Master 的日志，看是否存在同一个 Label 出现了两次的情况。如果有就说明Client端重复提交了该请求。
-
-建议用户根据当前请求的数据量，计算出大致的导入耗时，并根据导入超时时间改大 Client 端的请求超时时间，避免请求被 Client 端多次提交。
+请参见 [Stream Load 常见问题](/faq/loading/Stream_load_faq.md)。
