@@ -16,8 +16,8 @@ public class TokenNumberListener extends StarRocksBaseListener {
     public void visitTerminal(TerminalNode node) {
         int index = node.getSymbol().getTokenIndex();
         if (index >= maxTokensNum) {
-            throw new OperationNotAllowedException("Sql exceeds %d tokens, please consider modify parse_tokens_limit variable.",
-                    maxTokensNum);
+            throw new OperationNotAllowedException("Statement exceeds maximum length limit, please consider modify " +
+                    "parse_tokens_limit variable.");
         }
     }
 }
