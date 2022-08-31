@@ -1354,7 +1354,7 @@ public class Config extends ConfigBase {
      * Max row count in statistics collect per query
      */
     @ConfField(mutable = true)
-    public static long statistic_collect_max_row_count_per_query = 5000000;
+    public static long statistic_collect_max_row_count_per_query = 5000000000L; //5 billion
 
     /**
      * default bucket size of histogram statistics

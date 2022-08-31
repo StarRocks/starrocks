@@ -43,8 +43,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             if (partition.getRowCount() == 0) {
                 partitionSize = columns.size();
             } else {
-                partitionSize = (int) (Config.statistic_collect_max_row_count_per_query
-                        / (partition.getRowCount() * columns.size()) + 1);
+                partitionSize = (int) (Config.statistic_collect_max_row_count_per_query / partition.getRowCount() + 1);
             }
 
             for (List<String> splitColItem : Lists.partition(columns, partitionSize)) {
