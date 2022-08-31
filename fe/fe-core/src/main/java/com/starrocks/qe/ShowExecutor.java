@@ -325,11 +325,10 @@ public class ShowExecutor {
                 matcher = PatternMatcher.createMysqlPattern(showMaterializedViewStmt.getPattern(),
                         CaseSensibility.TABLE.getCaseSensibility());
             }
-            for (Table materializedView : db.getMaterializedViews()) {
-                if (matcher != null && !matcher.match(materializedView.getName())) {
+            for (MaterializedView mvTable : db.getMaterializedViews()) {
+                if (matcher != null && !matcher.match(mvTable.getName())) {
                     continue;
                 }
-                MaterializedView mvTable = (MaterializedView) materializedView;
                 List<String> resultRow = Lists.newArrayList(String.valueOf(mvTable.getId()), mvTable.getName(), dbName,
                         GlobalStateMgr.getMaterializedViewDdlStmt(mvTable), String.valueOf(mvTable.getRowCount()));
                 rowSets.add(resultRow);
