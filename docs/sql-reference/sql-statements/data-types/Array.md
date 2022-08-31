@@ -1,8 +1,8 @@
-# Arrays
+# ARRAY
 
 ## Background
 
-Arrays, as an extended type of database, are supported in PG, ClickHouse, Snowflake and other systems. They can be widely used in scenarios such as A/B tests, user tag analysis, and crowd profilings. StarRocks supports multidimensional array nesting, array slicing, comparison, and filtering.
+Arrays, as an extended type of database, are supported in PG, ClickHouse, Snowflake and other systems. They can be widely used in scenarios such as A/B tests, user tag analysis, and crowd profiling. StarRocks supports multidimensional array nesting, array slicing, comparison, and filtering.
 
 ## Array usage
 
