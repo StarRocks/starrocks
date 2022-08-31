@@ -330,6 +330,7 @@ vectorized_functions = [
     [50211, 'current_time', 'TIME', [], 'TimeFunctions::curtime'],
     [50220, 'curdate', 'DATE', [], 'TimeFunctions::curdate'],
     [50221, 'current_date', 'DATE', [], 'TimeFunctions::curdate'],
+    [50222, 'today', 'DATE', [], 'TimeFunctions::curdate'],
     [50230, 'from_days', 'DATE', ['INT'], 'TimeFunctions::from_days'],
     [50231, 'to_days', 'INT', ['DATE'], 'TimeFunctions::to_days'],
     [50240, 'str_to_date', 'DATETIME', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str_to_date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
