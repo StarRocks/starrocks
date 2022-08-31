@@ -16,5 +16,5 @@ public enum RuleSetType {
     PRUNE_SET_OPERATOR,
     PRUNE_PROJECT,
     COLLECT_CTE,
-    INLINE_CTE
+    INLINE_CTE,
 }

@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
