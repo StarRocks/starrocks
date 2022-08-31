@@ -818,8 +818,4 @@ CONF_Int32(cardinality_of_inject, "100");
  * Split by "," strictly.
  */
 CONF_String(directory_of_inject, "/src/exec,/src/exprs");
-
-// If the project operator's cpu costs are greater than this threshold,
-// we will try to add pass_through exchange after it to increase parallelism
-CONF_mInt32(project_passthrough_threshold, "100");
 } // namespace starrocks::config
