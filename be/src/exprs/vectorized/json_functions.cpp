@@ -19,6 +19,8 @@
 #include "gutil/strings/substitute.h"
 #include "udf/udf.h"
 #include "util/json.h"
+#include "velocypack/Builder.h"
+#include "velocypack/Iterator.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks::vectorized {
@@ -683,6 +685,36 @@ ColumnPtr JsonFunctions::json_length(FunctionContext* context, const Columns& co
             } else {
                 result.append(1);
             }
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr JsonFunctions::json_keys(FunctionContext* context, const Columns& columns) {
+    auto rows = columns[0]->size();
+    auto json_viewer = ColumnViewer<TYPE_JSON>(columns[0]);
+    ColumnBuilder<TYPE_JSON> result(rows);
+
+    for (size_t row = 0; row < rows; row++) {
+        if (json_viewer.is_null(row) || json_viewer.value(row) == nullptr) {
+            result.append_null();
+            continue;
+        }
+        JsonValue* json_value = json_viewer.value(row);
+        vpack::Slice vslice = json_value->to_vslice();
+        if (!vslice.isObject()) {
+            result.append_null();
+        } else {
+            vpack::Builder builder;
+            {
+                vpack::ArrayBuilder ab(&builder);
+                for (const auto& iter : vpack::ObjectIterator(vslice)) {
+                    std::string key = iter.key.copyString();
+                    ab->add(vpack::Value(key));
+                }
+            }
+            vpack::Slice json_array = builder.slice();
+            result.append(JsonValue(json_array));
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
