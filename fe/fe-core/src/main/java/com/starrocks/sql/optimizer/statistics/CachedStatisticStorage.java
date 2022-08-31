@@ -272,6 +272,40 @@ public class CachedStatisticStorage implements StatisticStorage {
         }
     }
 
+    @Override
+    public List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
+        Preconditions.checkState(table != null);
+
+        // get Statistics Table column info, just return default column statistics
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
+            return getDefaultColumnStatisticList(columns);
+        }
+
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            return getDefaultColumnStatisticList(columns);
+        }
+
+        List<CacheKey> cacheKeys = new ArrayList<>();
+        long tableId = table.getId();
+        for (String column : columns) {
+            cacheKeys.add(new CacheKey(tableId, column));
+        }
+
+        Map<CacheKey, Optional<ColumnStatistic>> result = cachedStatistics.synchronous().getAll(cacheKeys);
+        List<ColumnStatistic> columnStatistics = new ArrayList<>();
+
+        for (String column : columns) {
+            Optional<ColumnStatistic> columnStatistic =
+                    result.getOrDefault(new CacheKey(tableId, column), Optional.empty());
+            if (columnStatistic.isPresent()) {
+                columnStatistics.add(columnStatistic.get());
+            } else {
+                columnStatistics.add(ColumnStatistic.unknown());
+            }
+        }
+        return columnStatistics;
+    }
+
     public void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic) {
         this.cachedStatistics.synchronous().put(new CacheKey(table.getId(), column), Optional.of(columnStatistic));
     }
