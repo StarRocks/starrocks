@@ -51,8 +51,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         long sampleRowCount = Long.parseLong(properties.getOrDefault(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
                 String.valueOf(Config.statistic_sample_collect_rows)));
 
-        int partitionSize = (int) (Config.statistic_collect_max_row_count_per_query
-                / (sampleRowCount * columns.size()) + 1);
+        int partitionSize = (int) (Config.statistic_collect_max_row_count_per_query / sampleRowCount + 1);
 
         for (List<String> splitColItem : Lists.partition(columns, partitionSize)) {
             String sql = buildSampleInsertSQL(db.getId(), table.getId(), splitColItem, sampleRowCount);
