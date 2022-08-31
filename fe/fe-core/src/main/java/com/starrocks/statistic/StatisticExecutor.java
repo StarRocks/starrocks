@@ -198,13 +198,17 @@ public class StatisticExecutor {
         GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
         try {
-            statsJob.collect();
+            ConnectContext context = StatisticUtils.buildConnectContext();
+            GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), context);
+            statsJob.collect(context);
         } catch (Exception e) {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setEndTime(LocalDateTime.now());
             analyzeStatus.setReason(e.getMessage());
             GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
             return analyzeStatus;
+        } finally {
+            GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(analyzeStatus.getId(), false);
         }
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);

@@ -385,16 +385,19 @@ public class Utils {
                         GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, colNames);
                 return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
             } else if (operator instanceof LogicalHiveScanOperator || operator instanceof LogicalHudiScanOperator) {
-                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) scanOperator.getTable();
-                try {
-                    Map<String, HiveColumnStats> hiveColumnStatisticMap =
-                            hiveMetaStoreTable.getTableLevelColumnStats(colNames);
-                    return hiveColumnStatisticMap.values().stream().anyMatch(HiveColumnStats::isUnknown);
-                } catch (Exception e) {
-                    LOG.warn(scanOperator.getTable().getType() + " table {} get column failed. error : {}",
-                            scanOperator.getTable().getName(), e);
-                    return true;
+                if (ConnectContext.get().getSessionVariable().enableHiveColumnStats()) {
+                    HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) scanOperator.getTable();
+                    try {
+                        Map<String, HiveColumnStats> hiveColumnStatisticMap =
+                                hiveMetaStoreTable.getTableLevelColumnStats(colNames);
+                        return hiveColumnStatisticMap.values().stream().anyMatch(HiveColumnStats::isUnknown);
+                    } catch (Exception e) {
+                        LOG.warn(scanOperator.getTable().getType() + " table {} get column failed. error : {}",
+                                scanOperator.getTable().getName(), e);
+                        return true;
+                    }
                 }
+                return true;
             } else if (operator instanceof LogicalIcebergScanOperator) {
                 IcebergTable table = (IcebergTable) scanOperator.getTable();
                 try {

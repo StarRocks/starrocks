@@ -71,23 +71,6 @@ protected:
 
     void TearDown() override { StoragePageCache::release_global_cache(); }
 
-    std::unique_ptr<TabletSchema> create_schema(const std::vector<TabletColumn>& columns,
-                                                int num_short_key_columns = -1) {
-        std::unique_ptr<TabletSchema> res;
-        res.reset(new TabletSchema());
-
-        int num_key_columns = 0;
-        for (auto& col : columns) {
-            if (col.is_key()) {
-                num_key_columns++;
-            }
-            res->_cols.push_back(col);
-        }
-        res->_num_key_columns = num_key_columns;
-        res->_num_short_key_columns = num_short_key_columns != -1 ? num_short_key_columns : num_key_columns;
-        return res;
-    }
-
     void build_segment(SegmentWriterOptions opts, const TabletSchema& build_schema, const TabletSchema& query_schema,
                        size_t nrows, const ValueGenerator& generator, shared_ptr<Segment>* res) {
         static int seg_id = 0;
@@ -126,14 +109,9 @@ protected:
 TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
     size_t num_rows_per_block = 10;
 
-    std::shared_ptr<TabletSchema> tablet_schema(new TabletSchema());
-    tablet_schema->_num_key_columns = 3;
-    tablet_schema->_num_short_key_columns = 2;
-    tablet_schema->_num_rows_per_row_block = num_rows_per_block;
-    tablet_schema->_cols.push_back(create_int_key(1));
-    tablet_schema->_cols.push_back(create_int_key(2));
-    tablet_schema->_cols.push_back(create_int_key(3));
-    tablet_schema->_cols.push_back(create_int_value(4));
+    auto tablet_schema = TabletSchemaHelper::create_tablet_schema(
+            {create_int_key_pb(1), create_int_key_pb(2), create_int_key_pb(3), create_int_value_pb(4)}, 2);
+    tablet_schema->_num_rows_per_row_block = 2;
 
     // segment write
     std::string dname = "/segment_write_size";
@@ -177,8 +155,8 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
 
 TEST_F(SegmentReaderWriterTest, TestBloomFilterIndexUniqueModel) {
     std::unique_ptr<TabletSchema> schema =
-            create_schema({create_int_key(1), create_int_key(2), create_int_key(3),
-                           create_int_value(4, OLAP_FIELD_AGGREGATION_REPLACE, true, "", true)});
+            TabletSchemaHelper::create_tablet_schema({create_int_key_pb(1), create_int_key_pb(2), create_int_key_pb(3),
+                                                      create_int_value_pb(4, "REPLACE", true, "", true)});
 
     // for not base segment
     SegmentWriterOptions opts1;
@@ -194,8 +172,8 @@ TEST_F(SegmentReaderWriterTest, TestBloomFilterIndexUniqueModel) {
 }
 
 TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
-    std::unique_ptr<TabletSchema> tablet_schema =
-            create_schema({create_int_key(1), create_int_key(2), create_int_value(3), create_int_value(4)});
+    std::unique_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
+            {create_int_key_pb(1), create_int_key_pb(2), create_int_value_pb(3), create_int_value_pb(4)});
 
     SegmentWriterOptions opts;
     opts.num_rows_per_block = 10;
@@ -257,9 +235,10 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     EXPECT_EQ(count, num_rows);
 }
 
+// NOLINTNEXTLINE
 TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
-    std::unique_ptr<TabletSchema> tablet_schema =
-            create_schema({create_int_key(1), create_int_key(2), create_int_value(3), create_int_value(4)});
+    std::unique_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
+            {create_int_key_pb(1), create_int_key_pb(2), create_int_value_pb(3), create_int_value_pb(4)});
 
     SegmentWriterOptions opts;
     opts.num_rows_per_block = 10;
@@ -371,12 +350,12 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     std::string s8("hbcdefghijklmnopqrstuvwxyz");
     std::vector<Slice> data_strs{s1, s2, s3, s4, s5, s6, s7, s8};
 
-    TabletColumn c1 = create_int_key(1);
-    TabletColumn c2 = create_int_key(2);
-    TabletColumn c3 = create_with_default_value<OLAP_FIELD_TYPE_VARCHAR>("");
+    ColumnPB c1 = create_int_key_pb(1);
+    ColumnPB c2 = create_int_key_pb(2);
+    ColumnPB c3 = create_with_default_value_pb("VARCHAR", "");
     c3.set_length(65535);
 
-    std::unique_ptr<TabletSchema> tablet_schema = create_schema({c1, c2, c3});
+    std::unique_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema({c1, c2, c3});
 
     SegmentWriterOptions opts;
     opts.num_rows_per_block = 10;

@@ -144,18 +144,18 @@ public class OrderByTest extends PlanTestBase {
                 "(select sum(v5) from t1) as x1, " +
                 "(select sum(v7) from t2) as x2 from t0 order by t0.v3";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  11:SORT\n" +
+        assertContains(plan, "  15:SORT\n" +
                 "  |  order by: <slot 3> 3: v3 ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
-                "  10:Project\n" +
+                "  14:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 3> : 3: v3\n" +
                 "  |  <slot 8> : 8: expr\n" +
                 "  |  <slot 13> : 12: sum\n" +
                 "  |  \n" +
-                "  9:NESTLOOP JOIN");
+                "  13:NESTLOOP JOIN");
     }
 
     @Test
@@ -164,16 +164,16 @@ public class OrderByTest extends PlanTestBase {
                 "(select sum(v5) from t1) as x1, " +
                 "(select sum(v7) from t2) as x2 from t0 group by v2 order by x3";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  12:SORT\n" +
+        assertContains(plan, "  16:SORT\n" +
                 "  |  order by: <slot 4> 4: sum ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  \n" +
-                "  11:Project\n" +
+                "  15:Project\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 4> : 4: sum\n" +
                 "  |  <slot 9> : 9: expr\n" +
                 "  |  <slot 14> : 13: sum\n" +
                 "  |  \n" +
-                "  10:NESTLOOP JOIN");
+                "  14:NESTLOOP JOIN\n");
     }
 }

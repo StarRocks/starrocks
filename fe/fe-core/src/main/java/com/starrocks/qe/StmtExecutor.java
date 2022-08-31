@@ -101,6 +101,7 @@ import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.UseCatalogStmt;
@@ -459,6 +460,8 @@ public class StmtExecutor {
                 handleDropHistogramStmt();
             } else if (parsedStmt instanceof DropStatsStmt) {
                 handleDropStatsStmt();
+            } else if (parsedStmt instanceof KillAnalyzeStmt) {
+                handleKillAnalyzeStmt();
             } else if (parsedStmt instanceof AddSqlBlackListStmt) {
                 handleAddSqlBlackListStmt();
             } else if (parsedStmt instanceof DelSqlBlackListStmt) {
@@ -825,6 +828,11 @@ public class StmtExecutor {
         GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
         GlobalStateMgr.getCurrentAnalyzeMgr().dropHistogramStatsMetaAndData(Sets.newHashSet(table.getId()));
         GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
+    }
+
+    private void handleKillAnalyzeStmt() {
+        KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
+        GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(killAnalyzeStmt.getAnalyzeId(), true);
     }
 
     private void handleAddSqlBlackListStmt() {
