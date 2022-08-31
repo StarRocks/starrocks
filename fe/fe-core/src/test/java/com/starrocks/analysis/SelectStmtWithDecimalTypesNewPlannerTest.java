@@ -143,19 +143,10 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     @Test
     public void testMultiply() throws Exception {
         String sql = "select col_decimal128p20s3 * 3.14 from db1.decimal_table";
-        String expectString =
-                "TExpr(nodes:[TExprNode(node_type:ARITHMETIC_EXPR, type:TTypeDesc(types:[TTypeNode(type:SCALAR," +
-                        " scalar_type:TScalarType(type:DECIMAL128, precision:23, scale:5))]), opcode:MULTIPLY, num_children:2, " +
-                        "output_scale:-1, output_column:-1, has_nullable_child:true, is_nullable:true, is_monotonic:true), " +
-                        "TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:" +
-                        "DECIMAL128, precision:20, scale:3))]), num_children:0, slot_ref:TSlotRef(slot_id:5, tuple_id:0), " +
-                        "output_scale:-1, output_column:-1, has_nullable_child:false, is_nullable:true, is_monotonic:true), " +
-                        "TExprNode(node_type:DECIMAL_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType" +
-                        "(type:DECIMAL128, precision:3, scale:2))]), num_children:0, decimal_literal:TDecimalLiteral(value:3.14, " +
-                        "integer_value:3A 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00), output_scale:-1, has_nullable_child:false, " +
-                        "is_nullable:false, is_monotonic:true)])})";
         String plan = UtFrameUtils.getPlanThriftString(ctx, sql);
-        Assert.assertTrue(plan.contains(expectString));
+        Assert.assertTrue(plan.contains("(type:DECIMAL128, precision:3, scale:2)"));
+        Assert.assertTrue(plan.contains("(type:DECIMAL128, precision:20, scale:3)"));
+        Assert.assertTrue(plan.contains("(type:DECIMAL128, precision:23, scale:5)"));
     }
 
     @Test
