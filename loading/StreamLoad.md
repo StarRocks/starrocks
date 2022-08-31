@@ -1,290 +1,266 @@
-# Stream load
+# 通过 HTTP Push 从本地文件系统或流式数据源导入数据
 
-Stream Load 是一种同步的导入方式，需要通过发送 HTTP 请求将本地文件或数据流导入到 StarRocks 中。StarRocks 会同步执行导入并返回导入的结果状态。您可以通过导入的结果状态来判断导入是否成功。
+StarRocks 提供基于 HTTP 协议的 Stream Load 导入方式，帮助您从本地文件系统或流式数据源导入数据。
 
-Stream Load 适用于导入数据量小于 10 GB 的本地文件、或通过程序导入数据流的业务场景。
+Stream Load 是一种同步的导入方式。您提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。
+
+Stream Load 适用于以下业务场景：
+
+- 导入本地数据文件。
+
+  一般可采用 curl 命令直接提交一个导入作业，将本地数据文件的数据导入到 StarRocks 中。
+
+- 导入实时产生的数据流。
+
+  一般可采用 Apache Flink® 等程序提交一个导入作业，持续生成一系列导入任务，将实时产生的数据流持续不断地导入到 StarRocks 中。
+
+另外，Stream Load 支持在导入过程中做数据的转换，具体请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)。
+
+> 注意：Stream Load 操作会同时更新和 StarRocks 原始表相关的物化视图的数据。
+
+## 支持的数据文件格式
+
+Stream Load 支持如下数据文件格式：
+
+- CSV
+- JSON
+
+您可以通过 `streaming_load_max_mb` 参数来设置单个待导入数据文件的大小上限，但一般不建议调大此参数。具体请参见本文档“[参数配置](/loading/StreamLoad.md#参数配置)”章节。
+
+## 使用限制
+
+Stream Load 当前不支持导入某一列为 JSON 的 CSV 文件的数据。
 
 ## 基本原理
 
-Stream Load 中，用户通过 HTTP 协议提交导入命令。如果提交到 FE 节点，则 FE 节点会通过 HTTP redirect 指令将请求转发给某一个 BE 节点，您也可以直接提交导入命令给某一指定的 BE 节点。该 BE 节点作为 Coordinator 节点，将数据按表结构划分、并分发数据到相关的 BE 节点。导入的最终结果由 Coordinator 节点返回给您。
+Stream Load 需要您在客户端上通过 HTTP 发送导入作业请求给 FE 节点，FE 节点会通过 HTTP 重定向 (Redirect) 指令将请求转发给某一个 BE 节点。
+
+> 说明：您也可以直接发送导入作业请求给某一个 BE 节点。
+
+接收导入作业请求的 BE 节点作为 Coordinator BE 节点，将数据按表结构划分、并分发数据到相关的 BE 节点。导入作业的结果信息由 Coordinator BE 节点返回给客户端。
+
+> 说明：如果把导入作业请求发送给 FE 节点，FE 节点会通过轮询机制选定由哪一个 BE 节点来接收请求，从而实现 StarRocks 集群内的负载均衡。因此，推荐您把导入作业请求发送给 FE 节点，由 FE 节点来选定接收请求的 Coordinator BE 节点。
 
 下图展示了 Stream Load 的主要流程：
 
-![Stream Load 原理图](/assets/4.2.2-3.png)
+[Stream Load 原理图](/assets/4.2-1.png)
 
-## 支持的数据格式
-
-Stream Load 支持导入 CSV 和 JSON 格式的数据：
-
-- 导入 CSV 格式的数据时，单次导入的 CSV 文件的大小不能超过 10 GB。
-- 导入 JSON 格式的数据时，单次导入的 JSON 文件的大小不能超过 4 GB。
-
-## 基本操作
+## 导入本地文件
 
 ### 创建导入作业
 
-这里通过 `curl` 命令展示如何提交导入作业，您也可以通过其他 HTTP 客户端进行操作。有关更多示例和参数说明，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
+本文以 curl 工具为例，介绍如何使用 Stream Load 从本地文件系统导入 CSV 或 JSON 格式的数据。有关创建导入作业的详细语法和参数说明，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
 
-#### 命令示例
+#### 导入 CSV 格式的数据
 
-```Bash
-curl --location-trusted -u root -H "label:123"  -H "columns: k1, k2, v1" -T testData  http://abc.com:8030/api/test/date/_stream_load
-```
+##### 数据样例
 
-> 说明：
+1. 在数据库 `test_db` 中创建一张名为 `table1` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，主键为 `id` 列，如下所示：
 
-- > 当前支持 HTTP 分块上传和非分块上传两种方式。对于非分块方式，必须要用 `Content-Length` 字段来标示上传内容的长度，从而保证数据完整性。
-- > 最好设置 Expect HTTP 请求头中的 `100-continue` 字段，这样可以在某些出错的场景下避免不必要的数据传输。
+    ```SQL
+    MySQL [test_db]> CREATE TABLE `table1`
 
-#### 参数说明
+    (
 
-`user` 和 `passwd` 是用于登录的用户名和密码。Stream Load 创建导入作业使用的是 HTTP 协议，可通过基本认证 (Basic Access Authentication) 进行签名。StarRocks 系统会根据签名来验证登录用户的身份和导入权限。
+        `id` int(11) NOT NULL COMMENT "用户 ID",
 
-Stream Load 中所有与导入作业相关的参数均设置在请求头中。下面介绍上述命令示例中部分参数的含义：
+        `name` varchar(65533) NULL COMMENT "用户姓名",
 
-- `label`：导入作业的标签，相同标签的数据无法多次导入。您可以通过指定标签的方式来避免一份数据重复导入的问题。当前 StarRocks 系统会保留最近 30 分钟内已经成功完成的导入作业的标签。
-- `columns`：用于指定要导入的源文件（以下简称为“源文件”）中的字段与 StarRocks 数据表（以下简称为“目标表”）中的字段之间的对应关系。如果源文件中的字段正好对应目标表的表结构 (Schema)，则无需指定该参数。如果源文件与目标表的表结构不对应，则需要通过该参数来配置数据转换规则。
+        `score` int(11) NOT NULL COMMENT "用户得分"
 
-  这里目标表中的字段分为两种情况：一种是直接对应源文件中的字段，这种情况下可以直接使用字段名表示；一种是不直接对应源文件中的字段，需要通过计算得出。举几个例子：
+    )
 
-  - 例 1：目标表中有 3 个字段，分别为 `c1`、`c2` 和 `c3`，依次对应源文件的 3 个字段 `c3`、`c2` 和 `c1`。这种情况下，需要指定 `-H "columns: c3, c2, c1"`。
-  - 例 2：目标表中有 3 个字段，分别为 `c1`、`c2` 和 `c3` ，与源文件的前 3 个字段 `c1`、`c2` 和 `c3` 一一对应，但是源文件中还余 1 个字段。这种情况下，需要指定 `-H "columns: c1, c2, c3, temp"`，其中，最后余的 1 个字段可随意指定一个名称（比如 `temp`）用于占位即可。
-  - 例 3：目标表中有 3 个字段，分别为 `year`、`month` 和 `day`。源文件只有一个时间字段，为 `2018-06-01 01:02:03` 格式。这种情况下，可以指定 `-H "columns: col, year = year(col), month=month(col), day=day(col)"`。
+    ENGINE=OLAP
 
-#### 返回结果
+    PRIMARY KEY(`id`)
 
-导入完成后，Stream Load 会以 JSON 格式返回本次导入作业的相关信息，示例如下：
+    DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+    ```
 
-```JSON
-{
-    "TxnId": 1003,
-    "Label": "b6f3bc78-0d2c-45d9-9e4c-faa0a0149bee",
-    "Status": "Success",
-    "ExistingJobStatus": "FINISHED", // optional
-    "Message": "OK",
-    "NumberTotalRows": 1000000,
-    "NumberLoadedRows": 999999,
-    "NumberFilteredRows": 1,
-    "NumberUnselectedRows": 0,
-    "LoadBytes": 40888898,
-    "LoadTimeMs": 2144,
-    "ErrorURL": "[http://192.168.1.1:8042/api/_load_error_log?file=__shard_0/error_log_insert_stmt_db18266d4d9b4ee5-abb00ddd64bdf005_db18266d4d9b4ee5_abb00ddd64bdf005](http://192.168.1.1:8042/api/_load_error_log?file=__shard_0/error_log_insert_stmt_db18266d4d9b4ee5-abb00ddd64bdf005_db18266d4d9b4ee5_abb00ddd64bdf005)"
-}
-```
+2. 在本地文件系统中创建一个 CSV 格式的数据文件 `example1.csv`。文件一共包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
 
-返回结果中包括如下参数：
+    ```Plain%20Text
+    1,Lily,23
 
-- `TxnId`：导入作业的事务 ID。用户可不感知。
-- `Status`：导入作业最后的状态。
-  - `Success`：表示导入作业成功，数据已经可见。
-  - `Publish Timeout`：表示导入事务已经成功提交，但是由于某种原因数据并不能立即可见。可以视作已经成功不必重试导入。
-  - `Label Already Exists`：表示该标签已经被其他导入作业占用，可能是导入成功，也可能是正在导入。
-  - `Fail`：表示导入作业失败，您可以指定标签重试此次导入作业。
-- `ExistingJobStatus`：当前导入作业的状态。
-  - `RUNNING`：作业运行中。
-  - `FINISHED`：作业已完成。
-- `Message`：导入作业状态的详细说明。导入作业失败时会返回具体的失败原因。
-- `NumberTotalRows`：从数据流中读取到的总行数。
-- `NumberLoadedRows`：此次导入的数据行数。只有在返回结果中的 `Status` 为 `Success` 时有效。
-- `NumberFilteredRows`：此次导入，因数据质量不合格而过滤掉的行数。
-- `NumberUnselectedRows`：此次导入，通过 WHERE 条件被过滤掉的行数。
-- `LoadBytes`：此次导入的源文件数据量大小。
-- `LoadTimeMs`：此次导入所用的时间。单位是 ms。
-- `ErrorURL`：被过滤数据的具体内容，仅保留前 1000 条。
+    2,Rose,23
 
-如果导入作业失败，可以使用 `wget` 命令获取过滤掉的数据，并进行分析，以调整导入作业。命令示例如下：
+    3,Alice,24
+
+    4,Julia,25
+    ```
+
+##### 命令示例
+
+通过如下命令，把 `example1.csv` 文件中的数据导入到 `table1` 表中：
 
 ```Bash
-wget http://192.168.1.1:8042/api/_load_error_log?file=__shard_0/error_log_insert_stmt_db18266d4d9b4ee5-abb00ddd64bdf005_db18266d4d9b4ee5_abb00ddd64bdf005
+curl --location-trusted -u root: -H "label:123" \
+
+    -H "column_separator:," \
+
+    -H "columns: id, name, score" \
+
+    -T example1.csv -XPUT \
+
+    http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
+
+`example1.csv` 文件中包含三列，跟 `table1` 表的 `id`、`name`、`score` 三列一一对应，并用逗号 (,) 作为列分隔符。因此，需要通过 `column_separator` 参数指定列分隔符为逗号 (,)，并且在 `columns` 参数中按顺序把 `example1.csv` 文件中的三列临时命名为 `id`、`name`、`score`。`columns` 参数中声明的三列，按名称对应 `table1` 表中的三列。
+
+##### 查询数据
+
+导入完成后，查询 `table1` 表的数据，如下所示：
+
+```SQL
+MySQL [test_db]> SELECT * FROM table1;
+
++------+-------+-------+
+
+| id   | name  | score |
+
++------+-------+-------+
+
+|    1 | Lily  |    23 |
+
+|    2 | Rose  |    23 |
+
+|    3 | Alice |    24 |
+
+|    4 | Julia |    25 |
+
++------+-------+-------+
+
+4 rows in set (0.00 sec)
+```
+
+#### 导入 JSON 格式的数据
+
+##### 数据样例
+
+1. 在数据库 `test_db` 中创建一张名为 `table2` 的主键模型表。表包含 `id` 和 `city` 两列，主键为 `id` 列，如下所示：
+
+    ```SQL
+    MySQL [test_db]> CREATE TABLE `table2`
+
+    (
+
+        `id` int(11) NOT NULL COMMENT "城市 ID",
+
+        `city` varchar(65533) NULL COMMENT "城市名称"
+
+    )
+
+    ENGINE=OLAP
+
+    PRIMARY KEY(`id`)
+
+    DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+    ```
+
+2. 在本地文件系统中创建一个 JSON 格式的数据文件 `example2``.``json`。文件一共包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
+
+    ```JSON
+    {"name": "北京", "code": 2}
+    ```
+
+##### 命令示例
+
+通过如下语句把 `example2.json` 文件中的数据导入到 `table2` 表中：
+
+```Bash
+curl -v --location-trusted -u root: -H "strict_mode: true" \
+
+    -H "format: json" -H "jsonpaths: [\"$.name\", \"$.code\"]" \
+
+    -H "columns: city,tmp_id, id = tmp_id * 100" \
+
+    -T example1.json -XPUT \
+
+    http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
+```
+
+`example2.json` 文件中包含 `name` 和 `code` 两个键，跟 `table2` 表中的列之间的对应关系如下图所示。
+
+[JSON 映射图](/assets/4.2-2.png)
+
+上图所示的对应关系描述如下：
+
+- 提取 `example2.json` 文件中包含的 `name` 和 `code` 两个键，映射到 `jsonpaths` 参数中声明的 `name` 和 `code` 两个字段。
+- 提取 `jsonpaths` 参数中声明的 `name` 和 `code` 两个字段，**按顺序映射**到 `columns` 参数中声明的 `city` 和 `tmp_id` 两个字段。
+- 提取 `columns` 参数声明中的 `city` 和 `id` 两个字段，**按名称映射**到 `table2` 表中的 `city` 和 `id` 两列。
+
+> 说明：上述示例中，在导入过程中先将 `example2.json` 文件中 `code` 键对应的值乘以 100，然后再落入到 `table2` 表的 `id` 中。
+
+有关导入 JSON 数据时 `jsonpaths`、`columns` 和 StarRocks 表中的字段之间的对应关系，请参见 STREAM LOAD 文档中“[使用说明](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md#使用说明)”章节。
+
+##### 查询数据
+
+导入完成后，查询 `table2` 表的数据，如下所示：
+
+```SQL
+MySQL [test_db]> SELECT * FROM table2;
+
++------+--------+
+
+| id   | city   |
+
++------+--------+
+
+| 200  | 北京    |
+
++------+--------+
+
+4 rows in set (0.01 sec)
+```
+
+### 查看导入作业
+
+导入作业结束后，StarRocks 会以 JSON 格式返回本次导入作业的结果信息，具体请参见 STREAM LOAD 文档中“[返回值](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md#返回值)”章节。
+
+Stream Load 不支持通过 SHOW LOAD 语句查看导入作业执行情况。
 
 ### 取消导入作业
 
-不支持手动取消 Stream Load 作业。如果 Stream Load 作业发生超时或者导入错误，StarRocks 会自动取消该作业。
+Stream Load 不支持手动取消导入作业。如果导入作业发生超时或者导入错误，StarRocks 会自动取消该作业。
 
-## 导入 JSON 数据
+## 导入数据流
 
-对于文本文件存储的 JSON 数据，可以采用 Stream Load 的方式进行导入。
+Stream Load 支持通过程序导入数据流，具体操作方法，请参见如下文档：
 
-### 命令示例
+- Flink 集成 Stream Load，请参见[使用 flink-connector-starrocks 导入至 StarRocks](/loading/Flink-connector-starrocks.md)。
+- Java 集成 Stream Load，请参见 [https://github.com/StarRocks/demo/MiscDemo/stream_load](https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load)。
+- Apache Spark™ 集成 Stream Load，请参见 [01_sparkStreaming2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/01_sparkStreaming2StarRocks.md)。
 
-```Bash
-curl --location-trusted -u root -H "strict_mode: true" \
--H "columns: category, price, author" -H "label:123" -H "format: json" -H "jsonpaths: [\"$.category\",\"$.price\",\"$.author\"]" -H "strip_outer_array: true" -H "json_root: $.RECORDS" -T testData \
-http://host:port/api/testDb/testTbl/_stream_load
-```
+## 参数配置
 
-### 参数说明
+这里介绍使用 Stream Load 导入方式需要注意的一些系统参数配置。这些参数作用于所有 Stream Load 导入作业。
 
-- `format`：指定要导入的数据的格式。这里设置为 `json`。
-- `jsonpaths`：选择每一个字段的 JSON 路径。
-- `json_root`：选择 JSON 开始解析的字段。
-- `strip_outer_array`：裁剪最外面的 `array` 字段。
-- `strict_mode`：导入过程中对字段类型的转换执行严格过滤。
-- `columns`：对应目标表中的字段的名称。
+- `streaming_load_max_mb`：单个待导入数据文件的大小上限。默认文件大小上限为 10 GB。具体请参见 [BE 配置项](/administration/Configuration.md#be-配置项)。
 
-`jsonpaths` 参数、 `columns` 参数和目标表中的字段名称之间拥有如下关系：
+  建议一次导入的数据量不要超过 10 GB。如果数据文件的大小超过 10 GB，建议您拆分成若干小于 10 GB 的文件分次导入。如果由于业务场景需要，无法拆分数据文件，可以适当调大该参数的取值，从而提高数据文件的大小上限。
 
-- `jsonpaths` 中指定的字段名称与源文件中的字段名称保持一致。
-- `columns` 中指定的字段名称和目标表中的字段名称保持一致。字段按名称匹配，与顺序无关。
-- `columns` 中指定的字段名称和 `jsonpaths` 中指定的字段名称不需要保持一致。字段按顺序匹配，与名称无关。但是建议设置为一致，以方便区分。
+  需要注意的是，如果您调大该参数的取值，需要重启 BE 才能生效，并且系统性能有可能会受影响，并且也会增加失败重试时的代价。
 
-字段之间的关系如下图所示：
+  > 说明：导入 JSON 格式的数据时，必须确保单个 JSON 对象的大小不能超过 4 GB。如果待导入的 JSON 文件中单个 JSON 对象的大小超过 4 GB，会提示 "This parser can't support a document that big." 错误。
 
-![字段关系图](/assets/4.2.2-2.png)
+- `stream_load_default_timeout_second`：导入作业的超时时间。默认超时时间为 600 秒。具体请参见 [FE 动态参数](/administration/Configuration.md#配置-fe-动态参数)。
 
-如上图所示，源文件包含 `name` 和 `code` 两个字段，对应 `jsonpaths` 参数中的 `name` 和 `code`。 `jsonpaths` 参数中的 `name` 和 `code` 跟 `columns` 参数中的 `city` 和 `tmp_id` 按字段顺序匹配。`columns` 参数中的 `city` 和 `id` 跟目标表中的 `city` 和 `id` 按字段名称匹配。StarRocks 系统从源文件中获取 `name` 字段的取值，对应到目标表中的 `city` 字段；从源文件中获取 `code` 字段的取值，对应到 `tmp_id`，然后通过计算得到目标表中 `id` 字段的取值。
+  如果您创建的导入作业经常发生超时，可以通过该参数适当地调大超时时间。您可以通过如下公式计算导入作业的超时时间：
 
-### 导入示例
+  **导入作业的超时时间 > 待导入数据量/平均导入速度**
 
-样例数据：
+  > 说明：“平均导入速度”是指目前 StarRocks 集群的平均导入速度。由于每个 StarRocks 集群的机器环境不同、且集群允许的并发查询任务数也不同，因此，StarRocks 集群的平均导入速度需要根据历史导入速度进行推测。
 
-```JSON
-{"name": "北京", "code": 2}
-```
+  例如，如果待导入数据文件的大小为 10 GB，并且当前 StarRocks 集群的平均导入速度为 10 MB/s，则超时时间应该设置为大于 1024 秒。
 
-执行导入：
+Stream Load 还提供 `timeout` 参数来设置当前导入作业的超时时间。具体请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
 
-```Bash
-curl -v --location-trusted -u root: \
-    -H "format: json" -H "jsonpaths: [\"$.name\", \"$.code\"]" \
-    -H "columns: city,tmp_id, id = tmp_id * 100" \
-    -T jsontest.json \
-    http://127.0.0.1:8030/api/test/testJson/_stream_load
-```
+## 使用说明
 
-导入后结果：
+如果待导入数据文件中某行数据的某个字段缺失、并且 StarRocks 表中跟该字段对应的列定义为 `NOT NULL`，StarRocks 会在导入该行数据时自动往 StarRocks 表中对应的列补充 `NULL`。您也可以通过 `ifnull()` 函数指定要补充的默认值。
 
-```Plain%20Text
-+------+------+
-
-|  id  | city |
-
-+------+------+
-
-|  200 | 北京 |
-
-+------+------+
-```
-
-如果想先对源文件中的数据进行加工，然后再落入目标表中，可以通过更改 `columns` 的取值来实现。
-
-样例数据：
-
-```JSON
-{"k1": 1, "k2": 2}
-```
-
-执行导入：
-
-```Bash
-curl -v --location-trusted -u root: \
-    -H "format: json" -H "jsonpaths: [\"$.k2\", \"$.k1\"]" \
-    -H "columns: k2, tmp_k1, k1 = tmp_k1 * 100" \
-    -T example.json \
-    http://127.0.0.1:8030/api/db1/tbl1/_stream_load
-```
-
-这里导入过程中进行了将 `k1` 乘以 100 的 ETL 操作，并且通过 `jsonpaths` 来进行 `columns` 和源文件数据的对应。
-
-导入后结果：
-
-```Plain%20Text
-+------+------+
-
-|  k1  |  k2  |
-
-+------+------+
-
-|  100 |  2   |
-
-+------+------+
-```
-
-对于缺失的字段，如果字段的定义是 `nullable`，那么会补上 `NULL`，也可以通过 `ifnull()` 函数补充默认值。
-
-样例数据：
-
-```JSON
-[
-    {"k1": 1, "k2": "a"},
-    {"k1": 2},
-    {"k1": 3, "k2": "c"},
-]
-```
-
-> 说明：这里最外层有一对表示 JSON 数组的中括号 (`[]`)，导入时就需要指定 `strip_outer_array` 为 `true`。
-
-执行导入示例 1：
-
-```Bash
-curl -v --location-trusted -u root: \
-    -H "format: json" -H "strip_outer_array: true" \
-    -T example.json \
-    http://127.0.0.1:8030/api/db1/tbl1/_stream_load
-```
-
-导入后结果：
-
-```Plain%20Text
-+------+------+
-
-|  k1  | k2   |
-
-+------+------+
-
-|   1  | a    |
-
-+------+------+
-
-|   2  | NULL |
-
-+------+------+
-
-|   3  | c    |
-
-+------+------+
-```
-
-执行导入示例 2：
-
-```Bash
-curl -v --location-trusted -u root: \
-    -H "format: json" -H "strip_outer_array: true" \
-    -H "jsonpaths: [\"$.k1\", \"$.k2\"]" \
-    -H "columns: k1, tmp_k2, k2 = ifnull(tmp_k2, 'x')" \
-    -T example.json \
-    http://127.0.0.1:8030/api/db1/tbl1/_stream_load
-```
-
-导入后结果：
-
-```Plain%20Text
-+------+------+
-
-|  k1  |  k2  |
-
-+------+------+
-
-|  1   |  a   |
-
-+------+------+
-
-|  2   |  x   |
-
-+------+------+
-
-|  3   |  c   |
-
-+------+------+
-```
-
-## 代码集成
-
-- Java 集成 Stream Load，请参考 [https://github.com/StarRocks/demo/MiscDemo/stream_load](https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load)。
-
-- Apache Spark™ 集成 Stream Load，请参考 [01_sparkStreaming2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/01_sparkStreaming2StarRocks.md)。
+例如，如果上述 `example2.json` 文件中代表城市 ID 的列缺失，您希望 StarRocks 在导入数据时往 StarRocks 表中对应的列中补充 `x`，可以指定 `"columns: city, tmp_id, id = ifnull(tmp_id, 'x')"`。
 
 ## 常见问题
 
-参见 [Stream Load 常见问题](/faq/loading/Stream_load_faq.md)。
+请参见 [Stream Load 常见问题](/faq/loading/Stream_load_faq.md)。
