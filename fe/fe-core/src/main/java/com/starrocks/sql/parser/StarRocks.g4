@@ -109,6 +109,7 @@ statement
     | showAnalyzeStatement                                                                  #showAnalyze
     | showStatsMetaStatement                                                                #showStatsMeta
     | showHistogramMetaStatement                                                            #showHistogramMeta
+    | killAnalyzeStatement                                                                  #killAnalyze
 
     // Work Group Statement
     | createResourceGroupStatement                                                          #createResourceGroup
@@ -709,6 +710,10 @@ showHistogramMetaStatement
     : SHOW HISTOGRAM META (WHERE expression)?
     ;
 
+killAnalyzeStatement
+    : KILL ANALYZE INTEGER_VALUE
+    ;
+
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
 
 createResourceGroupStatement
@@ -812,8 +817,8 @@ dataDesc
     ;
 
 brokerDesc
-    : WITH BROKER name=identifierOrString props=propertyList?
-    | WITH BROKER props=propertyList?
+    : WITH BROKER props=propertyList?
+    | WITH BROKER name=identifierOrString props=propertyList?
     ;
 
 resourceDesc

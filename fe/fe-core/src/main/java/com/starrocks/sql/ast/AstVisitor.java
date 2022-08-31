@@ -513,7 +513,13 @@ public abstract class AstVisitor<R, C> {
     public R visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
+
+    public R visitKillAnalyzeStatement(KillAnalyzeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ----------------- Resource Clause -------------
+
     public R visitCreateResourceStatement(CreateResourceStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -526,6 +532,7 @@ public abstract class AstVisitor<R, C> {
     public R visitShowResourceStatement(ShowResourcesStmt statement, C context) {
         return visitStatement(statement, context);
     }
+
     // ----------------- Catalog Clause -------------
 
     public R visitCreateCatalogStatement(CreateCatalogStmt statement, C context) {

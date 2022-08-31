@@ -285,7 +285,7 @@ public class ColumnFilterConverter {
         }
     }
 
-    private static LiteralExpr convertLiteral(ConstantOperator operator) throws AnalysisException {
+    public static LiteralExpr convertLiteral(ConstantOperator operator) throws AnalysisException {
         Preconditions.checkArgument(!operator.getType().isInvalid());
 
         if (operator.isNull()) {

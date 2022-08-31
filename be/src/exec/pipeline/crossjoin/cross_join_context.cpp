@@ -50,8 +50,9 @@ bool CrossJoinContext::finish_probe(int32_t driver_seq, const std::vector<uint8_
     std::lock_guard guard(_join_stage_mutex);
 
     ++_num_post_probers;
-    VLOG(3) << fmt::format("CrossJoin operator {} finish probe {}/{}: {}", driver_seq, _num_post_probers,
-                           _num_left_probers, fmt::join(build_match_flags, ","));
+    VLOG(3) << fmt::format("CrossJoin operator {} finish probe {}/{}: self_match_flags: {} \n shared_match_flags: {}",
+                           driver_seq, _num_post_probers, _num_left_probers, fmt::join(build_match_flags, ","),
+                           fmt::join(_shared_build_match_flag, ","));
     bool is_last = _num_post_probers == _num_left_probers;
 
     // Merge all build_match_flag from all probers
@@ -69,6 +70,7 @@ bool CrossJoinContext::finish_probe(int32_t driver_seq, const std::vector<uint8_
 
 const std::vector<uint8_t> CrossJoinContext::get_shared_build_match_flag() const {
     DCHECK_EQ(_num_post_probers, _num_left_probers) << "all probers should share their states";
+    std::lock_guard guard(_join_stage_mutex);
     return _shared_build_match_flag;
 }
 

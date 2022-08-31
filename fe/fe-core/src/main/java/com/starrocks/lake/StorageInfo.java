@@ -16,6 +16,7 @@ public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
     // Currently, storage group is table level, so "shardStorageInfo" is null in partition property.
     private ShardStorageInfo shardStorageInfo;
 
+    // TODO: replace StorageCacheInfo with com.staros.proto.CacheInfo.
     @SerializedName(value = "storageCacheInfo")
     private StorageCacheInfo storageCacheInfo;
 
@@ -38,6 +39,10 @@ public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
 
     public ShardStorageInfo getShardStorageInfo() {
         return shardStorageInfo;
+    }
+
+    public StorageCacheInfo getStorageCacheInfo() {
+        return storageCacheInfo;
     }
 
     @Override

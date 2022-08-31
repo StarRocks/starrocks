@@ -7,7 +7,6 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TTablet;
-import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
 import org.apache.logging.log4j.LogManager;
@@ -104,10 +103,6 @@ public class BeTabletManager {
         result.tablets_stats = statMap;
     }
 
-    void getTabletInfo(TTabletInfo info) {
-
-    }
-
     public synchronized Map<Long, TTablet> getAllTabletInfo() {
         Map<Long, TTablet> tabletInfo = Maps.newHashMap();
         for (Tablet tablet : tablets.values()) {
@@ -120,6 +115,7 @@ public class BeTabletManager {
 
     public synchronized void maintenance() {
         for (Tablet tablet : tablets.values()) {
+            tablet.doCompaction();
             tablet.versionGC();
         }
     }

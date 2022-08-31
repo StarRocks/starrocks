@@ -1219,6 +1219,20 @@ public class AuthTest {
         Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
         Assert.assertEquals(false, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
         Assert.assertEquals(1, auth.getRoleNamesByUser(userIdentity).size());
+
+        // 9. grant usage on db
+        boolean hasException = false;
+        try {
+            privileges = Lists.newArrayList(AccessPrivilege.USAGE_PRIV);
+            tablePattern = new TablePattern("db1", "*");
+            grantStmt = new GrantStmt(null, selectRoleName, tablePattern, privileges);
+            grantStmt.analyze(analyzer);
+            auth.grant(grantStmt);
+        } catch (DdlException e) {
+            // expect exception;
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
     }
 
     @Test

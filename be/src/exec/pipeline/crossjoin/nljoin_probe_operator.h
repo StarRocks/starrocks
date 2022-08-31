@@ -80,11 +80,13 @@ private:
     RuntimeState* _runtime_state = nullptr;
     bool _input_finished = false;
     mutable JoinStage _join_stage = JoinStage::Probe;
-    ChunkAccumulator _output_accumulator;
+    mutable ChunkAccumulator _output_accumulator;
 
     // Build states
     int _curr_build_chunk_index = 0;
     vectorized::Chunk* _curr_build_chunk = nullptr;
+    size_t _prev_chunk_start = 0;
+    size_t _prev_chunk_size = 0;
     std::vector<uint8_t> _self_build_match_flag;
 
     // Probe states
@@ -92,6 +94,10 @@ private:
     bool _probe_row_matched = false;
     size_t _probe_row_start = 0;   // Start index of current chunk
     size_t _probe_row_current = 0; // End index of current chunk
+
+    // Counters
+    RuntimeProfile::Counter* _permute_rows_counter = nullptr;
+    RuntimeProfile::Counter* _permute_left_rows_counter = nullptr;
 };
 
 } // namespace starrocks::pipeline

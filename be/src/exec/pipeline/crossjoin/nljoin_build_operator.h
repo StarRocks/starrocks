@@ -23,10 +23,7 @@ public:
 
     ~NLJoinBuildOperator() override = default;
 
-    void close(RuntimeState* state) override {
-        _cross_join_context->unref(state);
-        Operator::close(state);
-    }
+    void close(RuntimeState* state) override;
 
     bool has_output() const override { return false; }
 

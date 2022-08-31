@@ -22,6 +22,7 @@
 #include "serde/protobuf_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
@@ -178,7 +179,10 @@ protected:
     void SetUp() override {
         (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(kTestGroupPath));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
+
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10086)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10087)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10088)));
@@ -210,7 +214,7 @@ protected:
     std::shared_ptr<VChunk> read_segment(int64_t tablet_id, const std::string& filename) {
         // Check segment file
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
-        auto path = fmt::format("{}/{}", kTestGroupPath, filename);
+        auto path = _location_provider->segment_location(tablet_id, filename);
         std::cerr << path << '\n';
 
         ASSIGN_OR_ABORT(auto seg, Segment::open(_mem_tracker.get(), fs, path, 0, _tablet_schema.get()));

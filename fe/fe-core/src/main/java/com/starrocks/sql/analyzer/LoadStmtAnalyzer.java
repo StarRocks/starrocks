@@ -7,7 +7,6 @@ import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.ResourceDesc;
-import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -116,11 +115,6 @@ public class LoadStmtAnalyzer {
                     etlJobType = EtlJobType.HADOOP;
                 }
 
-                if (etlJobType == EtlJobType.SPARK) {
-                    for (DataDescription dataDescription : dataDescriptions) {
-                        CatalogUtils.checkIsLakeTable(label.getDbName(), dataDescription.getTableName());
-                    }
-                }
                 statement.setEtlJobType(etlJobType);
             } catch (AnalysisException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());

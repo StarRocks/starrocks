@@ -11,12 +11,11 @@
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
-#include "gen_cpp/lake_delete.pb.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/tablet_schema.h"
@@ -74,7 +73,9 @@ public:
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(kTestGroupPath));
+        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kTxnLogDirectoryName)));
+        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kSegmentDirectoryName)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
     }
 
@@ -220,7 +221,9 @@ public:
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(kTestGroupPath));
+        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kTxnLogDirectoryName)));
+        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kSegmentDirectoryName)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
     }
 
@@ -388,7 +391,9 @@ public:
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(kTestGroupPath));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
     }
 

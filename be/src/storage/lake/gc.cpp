@@ -34,14 +34,13 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     }
 
     std::unordered_map<int64_t, std::vector<int64_t>> tablet_metadatas;
-    std::vector<string> txn_logs;
     std::unordered_map<int64_t, std::unordered_set<int64_t>> locked_tablet_metadatas;
 
     auto start_time =
             std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
                     .count();
 
-    auto iter_st = fs->iterate_dir(std::string(root_location), [&](std::string_view name) {
+    auto iter_st = fs->iterate_dir(join_path(root_location, kMetadataDirectoryName), [&](std::string_view name) {
         if (is_tablet_metadata(name)) {
             auto [tablet_id, version] = parse_tablet_metadata_filename(name);
             tablet_metadatas[tablet_id].emplace_back(version);
@@ -93,27 +92,40 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
 
     auto now = std::time(nullptr);
 
+    const auto metadata_root_location = join_path(root_location, kMetadataDirectoryName);
+    const auto txn_log_root_location = join_path(root_location, kTxnLogDirectoryName);
+    const auto segment_root_location = join_path(root_location, kSegmentDirectoryName);
+
     std::vector<std::string> tablet_metadatas;
     std::vector<std::string> txn_logs;
     std::unordered_set<std::string> segments;
 
-    auto iter_st = fs->iterate_dir(std::string(root_location), [&](std::string_view name) {
+    // List segment
+    auto iter_st = fs->iterate_dir(segment_root_location, [&](std::string_view name) {
+        segments.emplace(name);
+        return true;
+    });
+    if (!iter_st.ok() && !iter_st.is_not_found()) {
+        return iter_st;
+    }
+
+    // List tablet meatadata
+    iter_st = fs->iterate_dir(metadata_root_location, [&](std::string_view name) {
         if (is_tablet_metadata(name)) {
             tablet_metadatas.emplace_back(name);
-        } else if (is_txn_log(name) || is_txn_vlog(name)) {
-            txn_logs.emplace_back(name);
-        } else if (is_segment(name)) {
-            segments.emplace(name);
         }
         return true;
     });
-
-    if (iter_st.is_not_found()) {
-        // ignore this error
-        return Status::OK();
+    if (!iter_st.ok() && !iter_st.is_not_found()) {
+        return iter_st;
     }
 
-    if (!iter_st.ok()) {
+    // List txn log
+    iter_st = fs->iterate_dir(txn_log_root_location, [&](std::string_view name) {
+        txn_logs.emplace_back(name);
+        return true;
+    });
+    if (!iter_st.ok() && !iter_st.is_not_found()) {
         return iter_st;
     }
 
@@ -128,7 +140,7 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     };
 
     for (const auto& filename : tablet_metadatas) {
-        auto location = join_path(root_location, filename);
+        auto location = join_path(metadata_root_location, filename);
         auto res = tablet_mgr->get_tablet_metadata(location, false);
         if (res.status().is_not_found()) {
             continue;
@@ -143,7 +155,7 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     }
 
     for (const auto& filename : txn_logs) {
-        auto location = join_path(root_location, filename);
+        auto location = join_path(txn_log_root_location, filename);
         auto res = tablet_mgr->get_txn_log(location, false);
         if (res.status().is_not_found()) {
             continue;
@@ -167,7 +179,7 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     }
 
     for (auto& seg : segments) {
-        auto location = join_path(root_location, seg);
+        auto location = join_path(segment_root_location, seg);
         auto res = fs->get_file_modified_time(location);
         if (!res.ok() && !res.status().is_not_found()) {
             LOG(WARNING) << "Fail to get modified time of " << location << ": " << res.status();

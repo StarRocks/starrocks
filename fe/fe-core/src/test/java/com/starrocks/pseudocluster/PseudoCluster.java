@@ -203,7 +203,7 @@ public class PseudoCluster {
         runSql(db, sql, false);
     }
 
-    public void runSqlList(String db, List<String> sqls) throws SQLException {
+    public void runSqlList(String db, List<String> sqls, boolean verbose) throws SQLException {
         Connection connection = getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
@@ -211,7 +211,7 @@ public class PseudoCluster {
                 stmt.execute("use " + db);
             }
             for (String sql : sqls) {
-                runSingleSql(stmt, sql, false);
+                runSingleSql(stmt, sql, verbose);
             }
         } finally {
             stmt.close();
@@ -220,7 +220,7 @@ public class PseudoCluster {
     }
 
     public void runSqls(String db, String... sqls) throws SQLException {
-        runSqlList(db, Arrays.stream(sqls).collect(Collectors.toList()));
+        runSqlList(db, Arrays.stream(sqls).collect(Collectors.toList()), true);
     }
 
     public String getRunDir() {
