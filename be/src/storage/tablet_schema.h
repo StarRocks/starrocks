@@ -37,8 +37,6 @@ namespace starrocks {
 class TabletSchemaMap;
 class MemTracker;
 class SegmentReaderWriterTest;
-class SegmentReaderWriterTest_estimate_segment_size_Test;
-class SegmentReaderWriterTest_TestStringDict_Test;
 
 class TabletColumn {
     struct ExtraFields {
@@ -208,9 +206,8 @@ class TabletSchema {
 public:
     using SchemaId = int64_t;
 
-    static std::shared_ptr<TabletSchema> create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb);
-    static std::shared_ptr<TabletSchema> create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb,
-                                                TabletSchemaMap* schema_map);
+    static std::shared_ptr<TabletSchema> create(const TabletSchemaPB& schema_pb);
+    static std::shared_ptr<TabletSchema> create(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
     static std::shared_ptr<TabletSchema> create(const TabletSchema& tablet_schema,
                                                 const std::vector<int32_t>& column_indexes);
 
@@ -218,11 +215,10 @@ public:
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
     constexpr static SchemaId invalid_id() { return 0; }
 
-    explicit TabletSchema(const TabletSchemaPB& schema_pb) { _init_from_pb(schema_pb); }
+    TabletSchema() = delete;
+    explicit TabletSchema(const TabletSchemaPB& schema_pb);
     // Does NOT take ownership of |schema_map| and |schema_map| must outlive TabletSchema.
-    TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) : _schema_map(schema_map) {
-        _init_from_pb(schema_pb);
-    }
+    TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
 
     ~TabletSchema();
 
