@@ -14,4 +14,8 @@ public interface StatisticStorage {
     void expireColumnStatistics(Table table, List<String> columns);
 
     void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic);
+
+    default List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
+        return getColumnStatistics(table, columns);
+    }
 }
