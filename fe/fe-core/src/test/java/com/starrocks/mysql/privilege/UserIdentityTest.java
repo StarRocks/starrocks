@@ -18,7 +18,6 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.system.SystemInfoService;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -35,7 +34,7 @@ public class UserIdentityTest {
         UserIdentity userIdent2 = UserIdentity.fromString(str);
         Assert.assertEquals(userIdent2.toString(), userIdent.toString());
 
-        String str2 = "'default_cluster:walletdc_write'@['cluster-leida.orp.all']";
+        String str2 = "'walletdc_write'@['cluster-leida.orp.all']";
         userIdent = UserIdentity.fromString(str2);
         Assert.assertNotNull(userIdent);
         Assert.assertTrue(userIdent.isDomain());

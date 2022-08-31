@@ -53,7 +53,6 @@ import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
 import mockit.Expectations;
@@ -181,7 +180,7 @@ public class AuthTest {
 
         // 2. check if cmy from specified ip can access
         List<UserIdentity> currentUser = Lists.newArrayList();
-        Assert.assertTrue(auth.checkPlainPassword( "cmy", "192.168.0.1", "12345",
+        Assert.assertTrue(auth.checkPlainPassword("cmy", "192.168.0.1", "12345",
                 currentUser));
         Assert.assertFalse(auth.checkPlainPassword("cmy", "192.168.0.1",
                 "123456", null));

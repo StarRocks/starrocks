@@ -310,7 +310,7 @@ public class ShowExecutorTest {
         ConnectScheduler scheduler = new ConnectScheduler(10);
         new Expectations(scheduler) {
             {
-                scheduler.listConnection("default_cluster:testUser");
+                scheduler.listConnection("testUser");
                 minTimes = 0;
                 result = Lists.newArrayList(ctx.toThreadInfo());
             }
@@ -318,7 +318,7 @@ public class ShowExecutorTest {
 
         ctx.setConnectScheduler(scheduler);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         new Expectations(ctx) {
             {
@@ -448,7 +448,7 @@ public class ShowExecutorTest {
     @Test
     public void testDescribe() throws DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         DescribeStmt stmt = (DescribeStmt) com.starrocks.sql.parser.SqlParser.parse("desc testTbl",
                 ctx.getSessionVariable().getSqlMode()).get(0);
@@ -520,7 +520,7 @@ public class ShowExecutorTest {
     @Test
     public void testShowCreateDb() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("testDb");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -535,7 +535,7 @@ public class ShowExecutorTest {
     @Test(expected = AnalysisException.class)
     public void testShowCreateNoDb() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("emptyDb");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -567,7 +567,7 @@ public class ShowExecutorTest {
     @Test
     public void testShowColumn() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         ShowColumnStmt stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show columns from testTbl in testDb",
                 ctx.getSessionVariable().getSqlMode()).get(0);
@@ -615,7 +615,7 @@ public class ShowExecutorTest {
     @Test
     public void testShowColumnFromUnknownTable() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
         ShowColumnStmt stmt = new ShowColumnStmt(new TableName("emptyDb", "testTable"), null, null, false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);

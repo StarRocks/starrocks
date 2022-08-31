@@ -324,7 +324,6 @@ public class PseudoBackend {
         setInitialCapacity(PseudoBackend.DEFAULT_TOTA_CAP_B, PseudoBackend.DEFAULT_AVAI_CAP_B,
                 PseudoBackend.DEFAULT_USED_CAP_B);
         be.setAlive(true);
-        be.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
         be.setBePort(beThriftPort);
         be.setBrpcPort(brpcPort);
         be.setHttpPort(httpPort);

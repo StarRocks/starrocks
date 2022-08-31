@@ -83,9 +83,6 @@ public class GlobalStateMgrTestUtil {
         Backend backend1 = createBackend(testBackendId1, "host1", 123, 124, 125);
         Backend backend2 = createBackend(testBackendId2, "host2", 123, 124, 125);
         Backend backend3 = createBackend(testBackendId3, "host3", 123, 124, 125);
-        backend1.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
-        backend2.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
-        backend3.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend1);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend2);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend3);
