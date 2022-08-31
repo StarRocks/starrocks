@@ -25,8 +25,7 @@ static std::string format_time(time_t ts) {
 }
 
 // TODO: txn log GC
-Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, 
-    int64_t min_active_txn_id) {
+Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, int64_t min_active_txn_id) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
 
     const auto max_versions = config::lake_gc_metadata_max_versions;
@@ -38,7 +37,7 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr,
     const auto txn_log_root_location = join_path(root_location, kTxnLogDirectoryName);
 
     std::unordered_map<int64_t, std::vector<int64_t>> tablet_metadatas;
-    std::vector<std::string> txn_logs; 
+    std::vector<std::string> txn_logs;
     std::unordered_map<int64_t, std::unordered_set<int64_t>> locked_tablet_metadatas;
 
     auto start_time =
@@ -91,7 +90,7 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr,
         }
     }
 
-    // delete expired txn logs 
+    // delete expired txn logs
     {
         auto iter_st = fs->iterate_dir(txn_log_root_location, [&](std::string_view name) {
             if (is_txn_log(name)) {

@@ -76,24 +76,24 @@ TEST_F(GCTest, test_metadata_gc) {
         }
     }
 
-    // txn log    
+    // txn log
     int64_t min_active_txn_log_id = 100;
     {
-        for (int i=0; i < 5; i++) {
+        for (int i = 0; i < 5; i++) {
             auto txn_log = std::make_shared<lake::TxnLog>();
             txn_log->set_tablet_id(tablet_id);
             txn_log->set_txn_id(i);
             ASSERT_OK(s_tablet_manager->put_txn_log(txn_log));
         }
         ASSERT_OK(metadata_gc(kTestDir, s_tablet_manager.get(), min_active_txn_log_id));
-        
+
         for (int i = 0; i < 5; i++) {
             auto txn = s_tablet_manager->txn_log_location(tablet_id, i);
             auto st = fs->path_exists(txn);
             ASSERT_TRUE(st.is_not_found()) << st;
         }
     }
-    
+
     {
         for (int i = 100; i < 105; i++) {
             auto txn_log = std::make_shared<lake::TxnLog>();
@@ -105,7 +105,7 @@ TEST_F(GCTest, test_metadata_gc) {
 
         for (int i = 100; i < 105; i++) {
             auto location = s_tablet_manager->txn_log_location(tablet_id, i);
-           ASSERT_OK(fs->path_exists(location));
+            ASSERT_OK(fs->path_exists(location));
         }
     }
 }
