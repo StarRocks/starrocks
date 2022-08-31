@@ -517,6 +517,10 @@ public class PlanTestBase {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lo_count_mv as " +
                 "select LO_ORDERDATE,count(LO_LINENUMBER) from lineorder_flat_for_mv group by LO_ORDERDATE;");
 
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lo_count_key_mv as " +
+                "select LO_ORDERDATE, LO_ORDERKEY, count(LO_LINENUMBER) from lineorder_flat_for_mv" +
+                " group by LO_ORDERDATE, LO_ORDERKEY;");
+
         starRocksAssert.withTable("CREATE TABLE `lineitem_partition` (\n" +
                 "  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n" +
                 "  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n" +
