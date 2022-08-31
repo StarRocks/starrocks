@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/pipeline/crossjoin/nljoin_build_operator.h"
+#include "exec/pipeline/nljoin/nljoin_build_operator.h"
 
 #include "column/chunk.h"
 #include "exec/pipeline/operator.h"
