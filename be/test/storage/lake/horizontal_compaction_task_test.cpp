@@ -78,7 +78,7 @@ public:
             c1->set_is_nullable(false);
         }
 
-        _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
+        _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
@@ -234,7 +234,7 @@ public:
             c1->set_aggregation("REPLACE");
         }
 
-        _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
+        _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
@@ -390,7 +390,7 @@ public:
             c1->set_aggregation("REPLACE");
         }
 
-        _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
+        _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
