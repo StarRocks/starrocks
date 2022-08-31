@@ -23,11 +23,11 @@ import java.util.Map;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 
 public class ScalarOperatorsReuseRule implements PhysicalOperatorTreeRewriteRule {
-    public static final ReuseVisitor handler = new ReuseVisitor();
+    public static final ReuseVisitor HANDLER = new ReuseVisitor();
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        root.getOp().accept(handler, root, taskContext);
+        root.getOp().accept(HANDLER, root, taskContext);
         return root;
     }
 

@@ -3,7 +3,7 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
-#include "exec/pipeline/crossjoin/cross_join_context.h"
+#include "exec/pipeline/nljoin/nljoin_context.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
@@ -23,7 +23,7 @@ public:
                         TJoinOp::type join_op, const std::string& sql_join_conjuncts,
                         const std::vector<ExprContext*>& join_conjuncts, const std::vector<ExprContext*>& conjunct_ctxs,
                         const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
-                        size_t build_column_count, const std::shared_ptr<CrossJoinContext>& cross_join_context);
+                        size_t build_column_count, const std::shared_ptr<NLJoinContext>& cross_join_context);
 
     ~NLJoinProbeOperator() override = default;
 
@@ -75,16 +75,18 @@ private:
     const std::string& _sql_join_conjuncts;
     const std::vector<ExprContext*>& _join_conjuncts;
     const std::vector<ExprContext*>& _conjunct_ctxs;
-    const std::shared_ptr<CrossJoinContext>& _cross_join_context;
+    const std::shared_ptr<NLJoinContext>& _cross_join_context;
 
     RuntimeState* _runtime_state = nullptr;
     bool _input_finished = false;
     mutable JoinStage _join_stage = JoinStage::Probe;
-    ChunkAccumulator _output_accumulator;
+    mutable ChunkAccumulator _output_accumulator;
 
     // Build states
     int _curr_build_chunk_index = 0;
     vectorized::Chunk* _curr_build_chunk = nullptr;
+    size_t _prev_chunk_start = 0;
+    size_t _prev_chunk_size = 0;
     std::vector<uint8_t> _self_build_match_flag;
 
     // Probe states
@@ -92,6 +94,53 @@ private:
     bool _probe_row_matched = false;
     size_t _probe_row_start = 0;   // Start index of current chunk
     size_t _probe_row_current = 0; // End index of current chunk
+
+    // Counters
+    RuntimeProfile::Counter* _permute_rows_counter = nullptr;
+    RuntimeProfile::Counter* _permute_left_rows_counter = nullptr;
+};
+
+class NLJoinProbeOperatorFactory final : public OperatorWithDependencyFactory {
+public:
+    NLJoinProbeOperatorFactory(int32_t id, int32_t plan_node_id, const RowDescriptor& row_descriptor,
+                               const RowDescriptor& left_row_desc, const RowDescriptor& right_row_desc,
+                               const std::string& sql_join_conjuncts, std::vector<ExprContext*>&& join_conjuncts,
+                               std::vector<ExprContext*>&& conjunct_ctxs,
+                               std::shared_ptr<NLJoinContext>&& cross_join_context, TJoinOp::type join_op)
+            : OperatorWithDependencyFactory(id, "cross_join_left", plan_node_id),
+              _join_op(join_op),
+              _row_descriptor(row_descriptor),
+              _left_row_desc(left_row_desc),
+              _right_row_desc(right_row_desc),
+              _sql_join_conjuncts(sql_join_conjuncts),
+              _join_conjuncts(std::move(join_conjuncts)),
+              _conjunct_ctxs(std::move(conjunct_ctxs)),
+              _cross_join_context(std::move(cross_join_context)) {}
+
+    ~NLJoinProbeOperatorFactory() override = default;
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
+
+private:
+    void _init_row_desc();
+
+    const TJoinOp::type _join_op;
+    const RowDescriptor& _row_descriptor;
+    const RowDescriptor& _left_row_desc;
+    const RowDescriptor& _right_row_desc;
+
+    vectorized::Buffer<SlotDescriptor*> _col_types;
+    size_t _probe_column_count = 0;
+    size_t _build_column_count = 0;
+
+    std::string _sql_join_conjuncts;
+    std::vector<ExprContext*> _join_conjuncts;
+    std::vector<ExprContext*> _conjunct_ctxs;
+
+    std::shared_ptr<NLJoinContext> _cross_join_context;
 };
 
 } // namespace starrocks::pipeline

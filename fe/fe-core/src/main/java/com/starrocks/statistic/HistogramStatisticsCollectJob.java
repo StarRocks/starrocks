@@ -46,8 +46,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @Override
-    public void collect() throws Exception {
-        ConnectContext context = StatisticUtils.buildConnectContext();
+    public void collect(ConnectContext context) throws Exception {
         context.getSessionVariable().setNewPlanerAggStage(1);
 
         double sampleRatio = Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
@@ -65,8 +64,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             }
 
             sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, column);
-            System.out.println(sql);
-            collectStatisticSync(sql);
+            collectStatisticSync(sql, context);
         }
     }
 

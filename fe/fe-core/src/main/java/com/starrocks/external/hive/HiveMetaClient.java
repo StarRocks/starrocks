@@ -97,7 +97,7 @@ public class HiveMetaClient {
     private long baseHmsEventId;
 
     // Required for creating an instance of RetryingMetaStoreClient.
-    private static final HiveMetaHookLoader dummyHookLoader = tbl -> null;
+    private static final HiveMetaHookLoader DUMMY_HOOK_LOADER = tbl -> null;
 
     public HiveMetaClient(String uris) throws DdlException {
         HiveConf conf = new HiveConf();
@@ -121,10 +121,10 @@ public class HiveMetaClient {
 
         private AutoCloseClient(HiveConf conf) throws MetaException {
             if (!DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
                         HiveMetaStoreThriftClient.class.getName());
             } else {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
                         DLFProxyMetaStoreClient.class.getName());
             }
         }

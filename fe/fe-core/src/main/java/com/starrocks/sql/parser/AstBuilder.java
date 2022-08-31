@@ -229,6 +229,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
@@ -1854,6 +1855,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new DropHistogramStmt(tableName, columnNames);
     }
 
+    @Override
+    public ParseNode visitKillAnalyzeStatement(StarRocksParser.KillAnalyzeStatementContext context) {
+        return new KillAnalyzeStmt(Long.parseLong(context.INTEGER_VALUE().getText()));
+    }
+
     // ------------------------------------------- Resource Group Statement -------------------------------------------------
 
     public ParseNode visitCreateResourceGroupStatement(StarRocksParser.CreateResourceGroupStatementContext context) {
@@ -3377,13 +3383,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return buildOverClause(functionCallExpr, context.over());
     }
 
-    public static final ImmutableSet<String> WindowFunctionSet = ImmutableSet.of(
+    public static final ImmutableSet<String> WINDOW_FUNCTION_SET = ImmutableSet.of(
             FunctionSet.ROW_NUMBER, FunctionSet.RANK, FunctionSet.DENSE_RANK, FunctionSet.NTILE, FunctionSet.LEAD,
             FunctionSet.LAG, FunctionSet.FIRST_VALUE, FunctionSet.LAST_VALUE);
 
     @Override
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {
-        if (WindowFunctionSet.contains(context.name.getText().toLowerCase())) {
+        if (WINDOW_FUNCTION_SET.contains(context.name.getText().toLowerCase())) {
             return new FunctionCallExpr(context.name.getText().toLowerCase(),
                     new FunctionParams(false, visit(context.expression(), Expr.class)));
         }
