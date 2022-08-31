@@ -214,7 +214,7 @@ public class LoadManager implements Writable {
             LOG.warn("job does not exist when replaying end load job edit log: {}", operation);
             return;
         }
-        job.unprotectReadEndOperation(operation);
+        job.unprotectReadEndOperation(operation, true);
         LOG.info(new LogBuilder(LogKey.LOAD_JOB, operation.getId())
                 .add("operation", operation)
                 .add("msg", "replay end load job")

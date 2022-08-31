@@ -292,7 +292,7 @@ public abstract class BulkLoadJob extends LoadJob {
             // So the callback of txn is executed when log of txn aborted is replayed.
             return;
         }
-        unprotectReadEndOperation((LoadJobFinalOperation) txnState.getTxnCommitAttachment());
+        unprotectReadEndOperation((LoadJobFinalOperation) txnState.getTxnCommitAttachment(), true);
     }
 
     @Override
