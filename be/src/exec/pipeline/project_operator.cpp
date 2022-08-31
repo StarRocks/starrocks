@@ -89,38 +89,6 @@ Status ProjectOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-// TODO: Need a better CPU cost estimation method
-static size_t expression_costs(Expr* expr) {
-    if (expr->is_slotref()) {
-        return 0;
-    }
-    // Default cost is data size
-    size_t costs = 0;
-    for (auto child : expr->children()) {
-        costs += expression_costs(child);
-    }
-
-    size_t expr_cost = expr->type().get_slot_size();
-    if (expr->node_type() == TExprNodeType::BINARY_PRED) {
-        if (expr->op() == TExprOpcode::MULTIPLY || expr->op() == TExprOpcode::DIVIDE) {
-            return costs + expr_cost * expr_cost;
-        }
-    }
-
-    return costs + expr_cost;
-}
-
-size_t ProjectOperatorFactory::cpu_costs() {
-    size_t costs = 0;
-    for (auto ctx : _common_sub_expr_ctxs) {
-        costs += expression_costs(ctx->root());
-    }
-    for (auto ctx : _expr_ctxs) {
-        costs += expression_costs(ctx->root());
-    }
-    return costs;
-}
-
 void ProjectOperatorFactory::close(RuntimeState* state) {
     Expr::close(_expr_ctxs, state);
     Expr::close(_common_sub_expr_ctxs, state);

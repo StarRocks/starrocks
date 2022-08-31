@@ -77,8 +77,6 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    size_t cpu_costs() override;
-
 private:
     std::vector<int32_t> _column_ids;
     std::vector<ExprContext*> _expr_ctxs;

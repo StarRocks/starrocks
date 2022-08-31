@@ -46,6 +46,10 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     _slot_ids.reserve(column_size);
     _type_is_nullable.reserve(column_size);
 
+    if (tnode.project_node.__isset.pass_through) {
+        use_pass_through = tnode.project_node.pass_through;
+    }
+
     std::map<SlotId, bool> slot_null_mapping;
     for (auto const& slot : row_desc().tuple_descriptors()[0]->slots()) {
         slot_null_mapping[slot->id()] = slot->is_nullable();
@@ -303,7 +307,6 @@ pipeline::OpFactories ProjectNode::decompose_to_pipeline(pipeline::PipelineBuild
     operators.emplace_back(std::make_shared<ProjectOperatorFactory>(
             context->next_operator_id(), id(), std::move(_slot_ids), std::move(_expr_ctxs),
             std::move(_type_is_nullable), std::move(_common_sub_slot_ids), std::move(_common_sub_expr_ctxs)));
-    size_t project_cpu_costs = operators.back()->cpu_costs();
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
     if (limit() != -1) {
@@ -319,7 +322,7 @@ pipeline::OpFactories ProjectNode::decompose_to_pipeline(pipeline::PipelineBuild
     // LOCAL_EXCHANGE_SOURCE -> AGG_SINK
     //
     // Higher parallelism after adding local exchange
-    if (project_cpu_costs > config::project_passthrough_threshold) {
+    if (use_pass_through) {
         size_t dop = down_cast<SourceOperatorFactory*>(operators[0].get())->degree_of_parallelism();
         operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators, dop, true);
     }

@@ -32,6 +32,10 @@ public:
             pipeline::PipelineBuilderContext* context) override;
 
 private:
+    // whether add pass through exchange operator after project operator
+    // only used in pipeline engine
+    bool use_pass_through = false;
+
     std::vector<SlotId> _slot_ids;
     std::vector<ExprContext*> _expr_ctxs;
     std::vector<bool> _type_is_nullable;

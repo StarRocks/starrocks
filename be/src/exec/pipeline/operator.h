@@ -220,8 +220,6 @@ public:
     // For some operators, when share some status, need to know the degree_of_parallelism
     virtual OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) = 0;
     virtual bool is_source() const { return false; }
-    // An estimate of the cpu cost.
-    virtual size_t cpu_costs() { return 0; }
     int32_t plan_node_id() const { return _plan_node_id; }
     virtual Status prepare(RuntimeState* state);
     virtual void close(RuntimeState* state);
