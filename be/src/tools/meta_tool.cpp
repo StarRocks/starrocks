@@ -455,8 +455,6 @@ void show_segment_footer(const std::string& file_name) {
 // This function will check the consistency of tablet meta and segment_footer
 // #issue 5415
 void check_meta_consistency(DataDir* data_dir) {
-    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>();
-    starrocks::GlobalTabletSchemaMap::Instance()->set_mem_tracker(mem_tracker.get());
     std::vector<int64_t> tablet_ids;
     int64_t table_id = FLAGS_table_id;
     auto check_meta_func = [data_dir, &tablet_ids, table_id](int64_t tablet_id, int32_t schema_hash,
