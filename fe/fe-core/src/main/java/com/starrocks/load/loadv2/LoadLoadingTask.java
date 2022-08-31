@@ -84,7 +84,7 @@ public class LoadLoadingTask extends LoadTask {
         this.strictMode = strictMode;
         this.txnId = txnId;
         this.failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL);
-        this.retryTime = 2; // 2 times is enough
+        this.retryTime = 1; // load task retry does not satisfy transaction's atomic
         this.timezone = timezone;
         this.timeoutS = timeoutS;
         this.createTimestamp = createTimestamp;
