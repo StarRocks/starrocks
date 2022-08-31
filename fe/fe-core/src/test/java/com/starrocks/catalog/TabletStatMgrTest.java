@@ -2,7 +2,6 @@
 
 package com.starrocks.catalog;
 
-import com.baidu.brpc.client.RpcCallback;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -13,7 +12,7 @@ import com.starrocks.lake.proto.TabletStatRequest;
 import com.starrocks.lake.proto.TabletStatResponse;
 import com.starrocks.lake.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.LakeServiceAsync;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -105,7 +104,7 @@ public class TabletStatMgrTest {
 
     @Test
     public void testUpdateLakeTabletStat(@Mocked SystemInfoService systemInfoService,
-                                         @Mocked LakeServiceAsync lakeServiceAsync) {
+                                         @Mocked LakeService lakeService) {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -153,13 +152,13 @@ public class TabletStatMgrTest {
 
         new MockUp<BrpcProxy>() {
             @Mock
-            public LakeServiceAsync getLakeService(TNetworkAddress addr) {
-                return lakeServiceAsync;
+            public LakeService getLakeService(TNetworkAddress addr) {
+                return lakeService;
             }
 
             @Mock
-            public LakeServiceAsync getLakeService(String host, int port) {
-                return lakeServiceAsync;
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
             }
         };
         new MockUp<Utils>() {
@@ -173,7 +172,7 @@ public class TabletStatMgrTest {
                 systemInfoService.getBackend(anyLong);
                 result = new Backend(1000L, "", 123);
 
-                lakeServiceAsync.getTabletStats((TabletStatRequest) any, (RpcCallback<TabletStatResponse>) any);
+                lakeService.getTabletStats((TabletStatRequest) any);
                 minTimes = 1;
                 maxTimes = 1;
                 result = new Future<TabletStatResponse>() {

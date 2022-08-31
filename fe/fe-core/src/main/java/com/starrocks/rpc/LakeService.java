@@ -2,7 +2,7 @@
 
 package com.starrocks.rpc;
 
-import com.baidu.brpc.protocol.BrpcMeta;
+import com.baidu.jprotobuf.pbrpc.ProtobufRPC;
 import com.starrocks.lake.proto.AbortTxnRequest;
 import com.starrocks.lake.proto.AbortTxnResponse;
 import com.starrocks.lake.proto.CompactRequest;
@@ -24,35 +24,37 @@ import com.starrocks.lake.proto.TabletStatResponse;
 import com.starrocks.lake.proto.UnlockTabletMetadataRequest;
 import com.starrocks.lake.proto.UnlockTabletMetadataResponse;
 
+import java.util.concurrent.Future;
+
 public interface LakeService {
-    @BrpcMeta(serviceName = "LakeService", methodName = "publish_version")
-    PublishVersionResponse publishVersion(PublishVersionRequest request);
+    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_version", onceTalkTimeout = 5000)
+    Future<PublishVersionResponse> publishVersion(PublishVersionRequest request);
 
-    @BrpcMeta(serviceName = "LakeService", methodName = "abort_txn")
-    AbortTxnResponse abortTxn(AbortTxnRequest request);
+    @ProtobufRPC(serviceName = "LakeService", methodName = "abort_txn", onceTalkTimeout = 5000)
+    Future<AbortTxnResponse> abortTxn(AbortTxnRequest request);
 
-    @BrpcMeta(serviceName = "LakeService", methodName = "compact")
-    CompactResponse compact(CompactRequest request);
+    @ProtobufRPC(serviceName = "LakeService", methodName = "compact", onceTalkTimeout = 1800000)
+    Future<CompactResponse> compact(CompactRequest request);
 
-    @BrpcMeta(serviceName = "LakeService", methodName = "delete_tablet")
-    DeleteTabletResponse deleteTablet(DeleteTabletRequest request);
+    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_tablet", onceTalkTimeout = 5000)
+    Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request);
 
-    @BrpcMeta(serviceName = "LakeService", methodName = "delete_data")
-    DeleteDataResponse deleteData(DeleteDataRequest request);
+    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_data", onceTalkTimeout = 5000)
+    Future<DeleteDataResponse> deleteData(DeleteDataRequest request);
 
-    @BrpcMeta(serviceName = "LakeService", methodName = "get_tablet_stats")
-    TabletStatResponse getTabletStats(TabletStatRequest request);
+    @ProtobufRPC(serviceName = "LakeService", methodName = "get_tablet_stats", onceTalkTimeout = 5000)
+    Future<TabletStatResponse> getTabletStats(TabletStatRequest request);
 
-    @BrpcMeta(serviceName = "LakeService", methodName = "drop_table")
-    DropTableResponse dropTable(DropTableRequest request);
+    @ProtobufRPC(serviceName = "LakeService", methodName = "drop_table", onceTalkTimeout = 5000)
+    Future<DropTableResponse> dropTable(DropTableRequest request);
 
-    @BrpcMeta(serviceName = "LakeService", methodName = "publish_log_version")
-    PublishLogVersionResponse publishLogVersion(PublishLogVersionRequest request);
+    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version", onceTalkTimeout = 5000)
+    Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request);
 
-    @BrpcMeta(serviceName = "LakeService", methodName = "lock_tablet_metadata")
-    LockTabletMetadataResponse lockTabletMetadata(LockTabletMetadataRequest request);
+    @ProtobufRPC(serviceName = "LakeService", methodName = "lock_tablet_metadata", onceTalkTimeout = 5000)
+    Future<LockTabletMetadataResponse> lockTabletMetadata(LockTabletMetadataRequest request);
 
-    @BrpcMeta(serviceName = "LakeService", methodName = "unlock_tablet_metadata")
-    UnlockTabletMetadataResponse unlockTabletMetadata(UnlockTabletMetadataRequest request);
+    @ProtobufRPC(serviceName = "LakeService", methodName = "unlock_tablet_metadata", onceTalkTimeout = 5000)
+    Future<UnlockTabletMetadataResponse> unlockTabletMetadata(UnlockTabletMetadataRequest request);
 }
 
