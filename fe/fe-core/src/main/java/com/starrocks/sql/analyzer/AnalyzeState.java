@@ -223,12 +223,5 @@ public class AnalyzeState {
     public List<Expr> getColumnNotInGroupBy() {
         return columnNotInGroupBy;
     }
-
-    // Lambda arguments are different from column names, so their ids start from lambdaID,
-    // which is more than used columns in a query.
-    private int lambdaID = 100000;
-
-    public int getLambdaID() {
-        return lambdaID++;
-    }
+    
 }

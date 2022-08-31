@@ -8,6 +8,7 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -59,7 +60,8 @@ public class AnalyzeExprTest {
 
         // translate arrow expression
         ScalarOperator so =
-                SqlToScalarOperatorTranslator.translate(arrow, new ExpressionMapping(null, Collections.emptyList()));
+                SqlToScalarOperatorTranslator.translate(arrow, new ExpressionMapping(null, Collections.emptyList()),
+                        new ColumnRefFactory());
         Assert.assertEquals(OperatorType.CALL, so.getOpType());
         CallOperator callOperator = (CallOperator) so;
         Assert.assertEquals(expected, callOperator.toString());

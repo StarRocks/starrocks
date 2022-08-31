@@ -64,6 +64,7 @@ import com.starrocks.sql.ast.LambdaArguments;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -142,7 +143,7 @@ public class ExpressionAnalyzer {
             if (itemType == Type.NULL) { // Since Type.NULL cannot be pushed to to BE, hack it here.
                 itemType = Type.INT;
             }
-            scope.putLambdaArgument(new PlaceHolderExpr(visitor.getLambdaID(), expr.isNullable(), itemType));
+            scope.putLambdaArgument(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
         }
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
@@ -162,10 +163,6 @@ public class ExpressionAnalyzer {
     static class Visitor extends AstVisitor<Void, Scope> {
         private final AnalyzeState analyzeState;
         private final ConnectContext session;
-
-        public int getLambdaID() {
-            return analyzeState.getLambdaID();
-        }
 
         public Visitor(AnalyzeState analyzeState, ConnectContext session) {
             this.analyzeState = analyzeState;
@@ -742,7 +739,8 @@ public class ExpressionAnalyzer {
                     new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
                             com.google.common.collect.Lists.newArrayList());
 
-            ScalarOperator format = SqlToScalarOperatorTranslator.translate(node.getChild(1), expressionMapping);
+            ScalarOperator format = SqlToScalarOperatorTranslator.translate(node.getChild(1), expressionMapping,
+                    new ColumnRefFactory());
             if (format.isConstantRef() && !HAS_TIME_PART.matcher(format.toString()).matches()) {
                 return Expr.getBuiltinFunction("str2date", argumentTypes,
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

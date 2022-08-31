@@ -6,12 +6,14 @@ import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
 import java.util.List;
 
 public class LambdaFunctionExpr extends Expr {
+    private LambdaFunctionOperator transformedOp = null;
     public LambdaFunctionExpr(Expr left, Expr right) {
         this.children.add(left);
         this.children.add(right);
@@ -23,6 +25,13 @@ public class LambdaFunctionExpr extends Expr {
         super(rhs);
     }
 
+    public LambdaFunctionOperator getTransformed() {
+        return transformedOp;
+    }
+
+    public void setTransformed(LambdaFunctionOperator op) {
+        transformedOp = op;
+    }
 
     @Override
     protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
