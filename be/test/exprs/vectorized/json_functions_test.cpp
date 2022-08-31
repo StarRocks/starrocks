@@ -822,5 +822,53 @@ INSTANTIATE_TEST_SUITE_P(JsonLengthTest, JsonLengthTestFixture,
                         ));
 // clang-format on
 
+class JsonKeysTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string>> {};
+
+TEST_P(JsonKeysTestFixture, json_keys) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_column = JsonColumn::create();
+
+    std::string param_json = std::get<0>(GetParam());
+    std::string param_result = std::get<1>(GetParam());
+
+    auto json = JsonValue::parse(param_json);
+    ASSERT_TRUE(json.ok());
+    json_column->append(&*json);
+
+    Columns columns{json_column};
+
+    // ctx.get()->impl()->set_constant_columns(columns);
+    Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    ASSERT_OK(st);
+
+    ColumnPtr result = JsonFunctions::json_keys(ctx.get(), columns);
+    ASSERT_TRUE(!!result);
+
+    if (param_result == "NULL") {
+        EXPECT_TRUE(result->is_null(0));
+    } else {
+        const JsonValue* keys = result->get(0).get_json();
+        std::string keys_str = keys->to_string_uncheck();
+        EXPECT_EQ(param_result, keys_str);
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+// clang-format off
+INSTANTIATE_TEST_SUITE_P(JsonKeysTest, JsonKeysTestFixture,
+                         ::testing::Values(std::make_tuple(R"({ "k1": 1, "k2": 2 })", R"(["k1", "k2"])"),
+                                           std::make_tuple(R"({ "k1": "v1" })",  R"(["k1"])"),
+                                           std::make_tuple(R"({ "k1": {"k2": 1} })",  R"(["k1"])"),
+                                           std::make_tuple(R"({ })",  R"([])"),
+                                           std::make_tuple(R"( [] )",  "NULL"),
+                                           std::make_tuple(R"( 1 )",  "NULL"),
+                                           std::make_tuple(R"( "hehe")", "NULL")
+                         ));
+
+// clang-format on
+
 } // namespace vectorized
 } // namespace starrocks
