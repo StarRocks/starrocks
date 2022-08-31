@@ -382,7 +382,7 @@ order by closing_date;
 
 ## 使用 MAX() 窗口函数
 
-`MAX()` 函数返回当前窗口内特定行数内数据的最大值。
+`MAX()` 函数返回当前窗口指定行数内数据的最大值。
 
 语法：
 
@@ -390,7 +390,7 @@ order by closing_date;
 MAX(expression) [OVER (analytic_clause)]
 ~~~
 
-以下示例计算**从第一行到当前行之后一行**的最大值。
+以下示例计算**从第一行到当前行之后一行中**的最大值。
 
 ~~~SQL
 select x, property,
@@ -403,7 +403,7 @@ from int_t
 where property in ('prime','square');
 ~~~
 
-返回：
+返回结果：
 
 ~~~Plain Text
 +---+----------+---------------+
@@ -419,11 +419,21 @@ where property in ('prime','square');
 +---+----------+---------------+
 ~~~
 
-<br/>
+从2.4版本开始，该函数支持设置`rows between n preceding and n following`，即支持计算当前行前n行及后n行中的最大值。比如要计算当前行前3行和后2行中的最大值，语句可写为：
+
+~~~SQL
+select x, property,
+    max(x)
+        over (
+            order by property, x
+            rows between 3 preceding and 2 following) as 'local maximum'
+from int_t
+where property in ('prime','square');
+~~~
 
 ## 使用 MIN() 窗口函数
 
-`MIN()` 函数返回当前窗口内特定行数内数据的最小值。
+`MIN()` 函数返回当前窗口指定行数内数据的最小值。
 
 语法：
 
@@ -431,7 +441,7 @@ where property in ('prime','square');
 MIN(expression) [OVER (analytic_clause)]
 ~~~
 
-以下示例计算**从第一行到当前行之后一行**的最小值。
+以下示例计算**从第一行到当前行之后一行中**的最小值。
 
 ~~~SQL
 select x, property,
@@ -444,7 +454,7 @@ from int_t
 where property in ('prime','square');
 ~~~
 
-返回：
+返回结果：
 
 ~~~Plain Text
 +---+----------+---------------+
@@ -460,7 +470,17 @@ where property in ('prime','square');
 +---+----------+---------------+
 ~~~
 
-<br/>
+从2.4版本开始，该函数支持设置`rows between n preceding and n following`，即支持计算当前行前n行以及后`n`行中的最小值。比如要计算当前行前3行和后2行中的最小值，语句可写为：
+
+~~~SQL
+select x, property,
+    min(x)
+    over (
+          order by property, x desc
+          rows between 3 preceding and 2 following) as 'local minimum'
+from int_t
+where property in ('prime','square');
+~~~
 
 ## 使用 NTILE() 窗口函数
 
