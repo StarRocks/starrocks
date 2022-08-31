@@ -114,7 +114,7 @@ public class CompactionManager {
     }
 
     public synchronized long getChecksum() {
-        return partitionStatisticsHashMap.hashCode();
+        return partitionStatisticsHashMap.size();
     }
 
     public static CompactionManager loadCompactionManager(DataInput in) throws IOException {
