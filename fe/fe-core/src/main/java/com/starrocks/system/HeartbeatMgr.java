@@ -24,7 +24,6 @@ package com.starrocks.system;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
@@ -48,7 +47,6 @@ import com.starrocks.thrift.THeartbeatResult;
 import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.transaction.GlobalTransactionMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
@@ -74,10 +72,6 @@ public class HeartbeatMgr extends LeaderDaemon {
     private final SystemInfoService nodeMgr;
     private final HeartbeatFlags heartbeatFlags;
 
-    private final GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
-
-    private final SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-
     private static AtomicReference<TMasterInfo> masterInfo = new AtomicReference<>();
 
     public HeartbeatMgr(SystemInfoService nodeMgr, boolean needRegisterMetric) {
@@ -89,8 +83,8 @@ public class HeartbeatMgr extends LeaderDaemon {
     }
 
     private long computeMinActiveTxnId() {
-        Long a = transactionMgr.getMinActiveTxnId();
-        Long b = schemaChangeHandler.getMinActiveTxnId();
+        Long a = GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId();
+        Long b = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getMinActiveTxnId();
         if (a == null && b == null) {
             return 0;
         } else if (a == null) {

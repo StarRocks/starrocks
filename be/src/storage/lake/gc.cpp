@@ -91,7 +91,6 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr,
         }
     }
 
-
     // delete expired txn logs 
     {
         auto iter_st = fs->iterate_dir(txn_log_root_location, [&](std::string_view name) {
