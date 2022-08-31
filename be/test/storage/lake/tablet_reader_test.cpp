@@ -34,7 +34,6 @@ using VChunk = starrocks::vectorized::Chunk;
 class DuplicateTabletReaderTest : public testing::Test {
 public:
     DuplicateTabletReaderTest() {
-        _mem_tracker = std::make_unique<MemTracker>(-1);
         _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
         _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
@@ -68,7 +67,7 @@ public:
             c1->set_is_nullable(false);
         }
 
-        _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
+        _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
@@ -83,7 +82,6 @@ public:
 protected:
     constexpr static const char* const kTestGroupPath = "test_duplicate_lake_tablet_reader";
 
-    std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
@@ -179,7 +177,6 @@ TEST_F(DuplicateTabletReaderTest, test_read_success) {
 class AggregateTabletReaderTest : public testing::Test {
 public:
     AggregateTabletReaderTest() {
-        _mem_tracker = std::make_unique<MemTracker>(-1);
         _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
         _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
@@ -214,7 +211,7 @@ public:
             c1->set_aggregation("SUM");
         }
 
-        _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
+        _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
@@ -229,7 +226,6 @@ public:
 protected:
     constexpr static const char* const kTestGroupPath = "test_aggregate_lake_tablet_reader";
 
-    std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
@@ -348,7 +344,6 @@ TEST_F(AggregateTabletReaderTest, test_read_success) {
 class DuplicateTabletReaderWithDeleteTest : public testing::Test {
 public:
     DuplicateTabletReaderWithDeleteTest() {
-        _mem_tracker = std::make_unique<MemTracker>(-1);
         _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
         _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
@@ -382,7 +377,7 @@ public:
             c1->set_is_nullable(false);
         }
 
-        _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
+        _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
@@ -397,7 +392,6 @@ public:
 protected:
     constexpr static const char* const kTestGroupPath = "test_duplicate_lake_tablet_reader_with_delete";
 
-    std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
