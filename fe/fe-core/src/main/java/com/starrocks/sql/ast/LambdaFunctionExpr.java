@@ -11,15 +11,15 @@ import com.starrocks.thrift.TExprNodeType;
 
 import java.util.List;
 
-public class LambdaFunction extends Expr {
-    public LambdaFunction(Expr left, Expr right) {
+public class LambdaFunctionExpr extends Expr {
+    public LambdaFunctionExpr(Expr left, Expr right) {
         this.children.add(left);
         this.children.add(right);
     }
-    public LambdaFunction(List<Expr> arguments) {
+    public LambdaFunctionExpr(List<Expr> arguments) {
         this.children.addAll(arguments);
     }
-    public LambdaFunction(LambdaFunction rhs) {
+    public LambdaFunctionExpr(LambdaFunctionExpr rhs) {
         super(rhs);
     }
 
@@ -53,7 +53,7 @@ public class LambdaFunction extends Expr {
 
     @Override
     public Expr clone() {
-        return new LambdaFunction(this);
+        return new LambdaFunctionExpr(this);
     }
 
     @Override

@@ -39,7 +39,7 @@ import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.LambdaFunction;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -1344,7 +1344,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public boolean hasLambdaFunction() {
         int pos = -1, num = 0;
         for (int i = 0; i < children.size(); ++i) {
-            if (children.get(i) instanceof LambdaFunction) {
+            if (children.get(i) instanceof LambdaFunctionExpr) {
                 num++;
                 pos = i;
             }

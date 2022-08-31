@@ -86,9 +86,7 @@ public class LambdaFunctionOperator extends ScalarOperator {
 
     @Override
     public ColumnRefSet getUsedColumns() {
-        ColumnRefSet used = new ColumnRefSet();
-        used.union(lambdaExpr.getUsedColumns());
-        return used;
+        return lambdaExpr.getUsedColumns();
     }
 
     @Override

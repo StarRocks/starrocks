@@ -61,7 +61,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArguments;
-import com.starrocks.sql.ast.LambdaFunction;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -121,7 +121,7 @@ public class ExpressionAnalyzer {
         }
         int childSize = expression.getChildren().size();
         // move the lambda function to the first if it is at the last.
-        if (expression.getChild(childSize - 1) instanceof LambdaFunction) {
+        if (expression.getChild(childSize - 1) instanceof LambdaFunctionExpr) {
             Expr last = expression.getChild(childSize - 1);
             for (int i = childSize - 1; i > 0; i--) {
                 expression.setChild(i, expression.getChild(i - 1));
@@ -285,7 +285,7 @@ public class ExpressionAnalyzer {
         }
 
         @Override
-        public Void visitLambdaFunction(LambdaFunction node, Scope scope) {
+        public Void visitLambdaFunction(LambdaFunctionExpr node, Scope scope) {
             ExpressionAnalyzer.analyzeExpression(node.getChild(0), this.analyzeState, scope, this.session);
             // construct a new scope to analyze the lambda function
             Scope lambdaScope = scope.getLambdaScope();

@@ -776,7 +776,7 @@ public abstract class AstVisitor<R, C> {
     public R visitLikePredicate(LikePredicate node, C context) {
         return visitExpression(node, context);
     }
-    public R visitLambdaFunction(LambdaFunction node, C context) {
+    public R visitLambdaFunction(LambdaFunctionExpr node, C context) {
         return visitExpression(node, context);
     }
 

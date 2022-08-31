@@ -37,7 +37,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.ast.LambdaFunction;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
@@ -493,7 +493,7 @@ public class ScalarOperatorToExpr {
             final Expr lambdaExpr = buildExpr.build(lambdaOp, context);
             newArguments.add(lambdaExpr);
             newArguments.addAll(arguments);
-            Expr result = new LambdaFunction(newArguments);
+            Expr result = new LambdaFunctionExpr(newArguments);
             result.setType(Type.FUNCTION);
             return result;
         }

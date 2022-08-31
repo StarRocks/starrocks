@@ -8,7 +8,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.LambdaFunction;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -237,7 +237,7 @@ public class ExpressionTest extends PlanTestBase {
 
         Expr lambdaFunc = ScalarOperatorToExpr.buildExecExpression(lambda, context);
 
-        Assert.assertTrue(lambdaFunc instanceof LambdaFunction);
+        Assert.assertTrue(lambdaFunc instanceof LambdaFunctionExpr);
         Assert.assertEquals("<slot 100000> -> <slot 100000> = 1", lambdaFunc.toSql());
     }
 

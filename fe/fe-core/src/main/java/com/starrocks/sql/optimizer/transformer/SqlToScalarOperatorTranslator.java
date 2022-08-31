@@ -44,7 +44,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArguments;
-import com.starrocks.sql.ast.LambdaFunction;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -242,7 +242,7 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
-        public ScalarOperator visitLambdaFunction(LambdaFunction node, Void context) {
+        public ScalarOperator visitLambdaFunction(LambdaFunctionExpr node, Void context) {
             Preconditions.checkArgument(node.getChildren().size() == 2);
             LambdaArguments args = (LambdaArguments) node.getChild(0);
             List<ColumnRefOperator> refs = Lists.newArrayList();

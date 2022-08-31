@@ -231,7 +231,7 @@ import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.LambdaArguments;
-import com.starrocks.sql.ast.LambdaFunction;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
@@ -2940,7 +2940,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         LambdaArguments argument = new LambdaArguments(names);
         Expr expr = (Expr) visit(context.expression());
-        return new LambdaFunction(argument, expr);
+        return new LambdaFunctionExpr(argument, expr);
     }
 
     @Override
