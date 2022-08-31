@@ -598,7 +598,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggOperator.getAggregations().entrySet()) {
                 boolean canApplyDictDecodeOpt = (kv.getValue().getUsedColumns().cardinality() > 0) &&
-                        (PhysicalHashAggregateOperator.couldApplyLowCardAggregateFunction.contains(
+                        (PhysicalHashAggregateOperator.COULD_APPLY_LOW_CARD_AGGREGATE_FUNCTION.contains(
                                 kv.getValue().getFnName()));
                 if (canApplyDictDecodeOpt) {
                     CallOperator oldCall = kv.getValue();

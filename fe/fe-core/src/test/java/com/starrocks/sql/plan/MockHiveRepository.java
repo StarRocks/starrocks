@@ -34,7 +34,7 @@ import static java.lang.Double.POSITIVE_INFINITY;
 
 public class MockHiveRepository extends HiveRepository {
     // repository -> db -> tableName -> table
-    private static final Map<String, Map<String, Map<String, HiveTableInfo>>> mockTableMap = Maps.newHashMap();
+    private static final Map<String, Map<String, Map<String, HiveTableInfo>>> MOCK_TABLE_MAP = Maps.newHashMap();
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     static {
@@ -73,12 +73,12 @@ public class MockHiveRepository extends HiveRepository {
 
     @Override
     public Table getTable(String resourceName, String dbName, String tableName) throws DdlException {
-        return mockTableMap.get(resourceName).get(dbName).get(tableName).table;
+        return MOCK_TABLE_MAP.get(resourceName).get(dbName).get(tableName).table;
     }
 
     @Override
     public ImmutableMap<PartitionKey, Long> getPartitionKeys(HiveMetaStoreTableInfo hmsTable) throws DdlException {
-        List<PartitionKey> partitionKeyList =  mockTableMap.get(hmsTable.getResourceName()).get(hmsTable.getDb()).
+        List<PartitionKey> partitionKeyList =  MOCK_TABLE_MAP.get(hmsTable.getResourceName()).get(hmsTable.getDb()).
                 get(hmsTable.getTable()).partitionKeyList;
         Map<PartitionKey, Long> result = Maps.newHashMap();
         for (PartitionKey pk : partitionKeyList) {
@@ -89,14 +89,14 @@ public class MockHiveRepository extends HiveRepository {
 
     @Override
     public HiveTableStats getTableStats(String resourceName, String dbName, String tableName) throws DdlException {
-        return mockTableMap.get(resourceName).get(dbName).get(tableName).tableStats;
+        return MOCK_TABLE_MAP.get(resourceName).get(dbName).get(tableName).tableStats;
     }
 
     @Override
     public List<HivePartition> getPartitions(HiveMetaStoreTableInfo hmsTable, List<PartitionKey> partitionKeys) {
-        List<PartitionKey> partitionKeyList = mockTableMap.get(hmsTable.getResourceName()).get(hmsTable.getDb()).
+        List<PartitionKey> partitionKeyList = MOCK_TABLE_MAP.get(hmsTable.getResourceName()).get(hmsTable.getDb()).
                 get(hmsTable.getTable()).partitionKeyList;
-        List<HivePartition> partitionList = mockTableMap.get(hmsTable.getResourceName()).get(hmsTable.getDb()).
+        List<HivePartition> partitionList = MOCK_TABLE_MAP.get(hmsTable.getResourceName()).get(hmsTable.getDb()).
                 get(hmsTable.getTable()).partitionList;
 
         List<HivePartition> result = Lists.newArrayList();
@@ -110,7 +110,7 @@ public class MockHiveRepository extends HiveRepository {
     @Override
     public ImmutableMap<String, HiveColumnStats> getTableLevelColumnStats(HiveMetaStoreTableInfo hmsTable)
             throws DdlException {
-        return ImmutableMap.copyOf(mockTableMap.get(hmsTable.getResourceName()).get(hmsTable.getDb()).
+        return ImmutableMap.copyOf(MOCK_TABLE_MAP.get(hmsTable.getResourceName()).get(hmsTable.getDb()).
                 get(hmsTable.getTable()).columnStatsMap);
     }
 
@@ -352,15 +352,15 @@ public class MockHiveRepository extends HiveRepository {
                 ImmutableList.of(new HivePartition(null, ImmutableList.of(), null)),
                 new HiveTableStats(600037902, 45585436421L), lineitemStats));
 
-        mockTableMap.put(resourceName, mockDbTables);
+        MOCK_TABLE_MAP.put(resourceName, mockDbTables);
     }
 
     public static void mockPartitionTable() {
         String resourceName = "hive0";
         String dbName = "partitioned_db";
 
-        mockTableMap.putIfAbsent(resourceName, Maps.newHashMap());
-        Map<String, Map<String, HiveTableInfo>> mockDbTables = mockTableMap.get(resourceName);
+        MOCK_TABLE_MAP.putIfAbsent(resourceName, Maps.newHashMap());
+        Map<String, Map<String, HiveTableInfo>> mockDbTables = MOCK_TABLE_MAP.get(resourceName);
         mockDbTables.putIfAbsent(dbName, Maps.newHashMap());
         Map<String, HiveTableInfo> mockTables = mockDbTables.get(dbName);
 
