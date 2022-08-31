@@ -104,7 +104,7 @@ public class ExpressionAnalyzer {
     private boolean isHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
             // expand this in the future.
-            if (((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.ARRAY_MAP)) {
+            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP)) {
                 return true;
             } else if (((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.TRANSFORM)) {
                 // transform just a alias of array_map
@@ -133,16 +133,13 @@ public class ExpressionAnalyzer {
         for (int i = 1; i < childSize; ++i) {
             Expr expr = expression.getChild(i);
             bottomUpAnalyze(visitor, expr, scope);
-            if (expr instanceof NullLiteral) { //TODO: disable this when support push down null to BE
-                expr.setType(Type.ARRAY_INT); // Since Type.NULL cannot be pushed to to BE, hack it here.
+            if (expr instanceof NullLiteral) {
+                expr.setType(Type.ARRAY_INT); // Let it have item type.
             }
             if (!expr.getType().isArrayType()) {
                 throw new SemanticException("Lambda inputs should be arrays.");
             }
             Type itemType = ((ArrayType) expr.getType()).getItemType();
-            if (itemType == Type.NULL) { // Since Type.NULL cannot be pushed to to BE, hack it here.
-                itemType = Type.INT;
-            }
             scope.putLambdaArgument(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
         }
         // visit LambdaFunction

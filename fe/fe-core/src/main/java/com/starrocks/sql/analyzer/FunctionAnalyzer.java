@@ -60,7 +60,7 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.ARRAY_MAP)) {
+        if (fnName.getFunction().equals(FunctionSet.ARRAY_MAP)) {
             Preconditions.checkState(functionCallExpr.getChildren().size() > 1);
             functionCallExpr.setType(new ArrayType(functionCallExpr.getChild(0).getChild(1).getType()));
         }
