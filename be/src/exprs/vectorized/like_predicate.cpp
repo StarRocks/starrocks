@@ -29,27 +29,54 @@ static const re2::RE2 LIKE_SUBSTRING_RE(R"((?:%+)(((\\%)|(\\_)|([^%_]))+)(?:%+))
 static const re2::RE2 LIKE_ENDS_WITH_RE(R"((?:%+)(((\\%)|(\\_)|([^%_]))+))", re2::RE2::Quiet);
 static const re2::RE2 LIKE_STARTS_WITH_RE(R"((((\\%)|(\\_)|([^%_]))+)(?:%+))", re2::RE2::Quiet);
 static const re2::RE2 LIKE_EQUALS_RE(R"((((\\%)|(\\_)|([^%_]))+))", re2::RE2::Quiet);
-
+static const char* PROMPT_INFO = " so we switch to use re2.";
 // pattern's max length used in hyperscan.
 static const size_t MAX_PATTERN_OF_HYPERSCAN = 16000;
 
-Status LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, LikePredicateState* state,
-                                                   starrocks_udf::FunctionContext* context, const Slice& slice) {
+bool LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, LikePredicateState* state,
+                                                 starrocks_udf::FunctionContext* context, const Slice& slice) {
     if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SINGLEMATCH,
                    HS_MODE_BLOCK, nullptr, &state->database, &state->compile_err) != HS_SUCCESS) {
         std::stringstream error;
-        error << "Invalid regex expression: " << slice.data << ": " << state->compile_err->message;
-        context->set_error(error.str().c_str());
+        error << "Invalid hyperscan expression: " << std::string(slice.data, slice.size) << ": "
+              << state->compile_err->message << PROMPT_INFO;
+        LOG(WARNING) << error.str().c_str();
         hs_free_compile_error(state->compile_err);
-        return Status::InvalidArgument(error.str());
+        return false;
     }
 
     if (hs_alloc_scratch(state->database, &state->scratch) != HS_SUCCESS) {
         std::stringstream error;
-        error << "ERROR: Unable to allocate scratch space.";
-        context->set_error(error.str().c_str());
+        error << "ERROR: Unable to allocate scratch space," << PROMPT_INFO;
+        LOG(WARNING) << error.str().c_str();
         hs_free_database(state->database);
-        return Status::InvalidArgument(error.str());
+        return false;
+    }
+
+    return true;
+}
+
+template <bool full_match>
+Status LikePredicate::compile_with_hyperscan_or_re2(const std::string& pattern, LikePredicateState* state,
+                                                    starrocks_udf::FunctionContext* context, const Slice& slice) {
+    if (!hs_compile_and_alloc_scratch(pattern, state, context, slice)) {
+        RE2::Options opts;
+        opts.set_never_nl(false);
+        opts.set_dot_nl(true);
+        opts.set_log_errors(false);
+
+        state->re2 = std::make_shared<re2::RE2>(pattern, opts);
+        if (!state->re2->ok()) {
+            std::stringstream error;
+            error << "Invalid re2 expression: " << pattern;
+            return Status::InvalidArgument(error.str());
+        }
+
+        if constexpr (full_match) {
+            state->function = &like_fn_with_long_constant_pattern;
+        } else {
+            state->function = &regex_fn_with_long_constant_pattern;
+        }
     }
 
     return Status::OK();
@@ -101,23 +128,7 @@ Status LikePredicate::like_prepare(starrocks_udf::FunctionContext* context,
         state->function = &constant_substring_fn;
     } else {
         auto re_pattern = LikePredicate::template convert_like_pattern<true>(context, pattern);
-        if (re_pattern.size() <= MAX_PATTERN_OF_HYPERSCAN) {
-            RETURN_IF_ERROR(hs_compile_and_alloc_scratch(re_pattern, state, context, pattern));
-        } else {
-            RE2::Options opts;
-            opts.set_never_nl(false);
-            opts.set_dot_nl(true);
-            opts.set_log_errors(false);
-
-            state->re2 = std::make_shared<re2::RE2>(re_pattern, opts);
-            if (!state->re2->ok()) {
-                std::stringstream error;
-                error << "Invalid like expression: " << pattern_str;
-                return Status::InvalidArgument(error.str());
-            }
-
-            state->function = &like_fn_with_long_constant_pattern;
-        }
+        RETURN_IF_ERROR(compile_with_hyperscan_or_re2<true>(re_pattern, state, context, pattern));
     }
 
     return Status::OK();
@@ -178,23 +189,8 @@ Status LikePredicate::regex_prepare(starrocks_udf::FunctionContext* context,
     } else if (RE2::FullMatch(pattern_str, SUBSTRING_RE, &search_string)) {
         state->set_search_string(search_string);
         state->function = &constant_substring_fn;
-    } else if (pattern.size <= MAX_PATTERN_OF_HYPERSCAN) {
-        std::string re_pattern(pattern.data, pattern.size);
-        RETURN_IF_ERROR(hs_compile_and_alloc_scratch(re_pattern, state, context, pattern));
     } else {
-        RE2::Options opts;
-        opts.set_never_nl(false);
-        opts.set_dot_nl(true);
-        opts.set_log_errors(false);
-
-        state->re2 = std::make_shared<re2::RE2>(pattern_str, opts);
-        if (!state->re2->ok()) {
-            std::stringstream error;
-            error << "Invalid regex expression: " << pattern_str;
-            return Status::InvalidArgument(error.str());
-        }
-
-        state->function = &regex_fn_with_long_constant_pattern;
+        RETURN_IF_ERROR(compile_with_hyperscan_or_re2<false>(pattern_str, state, context, pattern));
     }
 
     return Status::OK();

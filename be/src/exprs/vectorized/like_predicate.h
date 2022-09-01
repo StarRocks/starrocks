@@ -156,9 +156,11 @@ private:
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
     struct LikePredicateState;
-    static Status hs_compile_and_alloc_scratch(const std::string&, LikePredicateState*, starrocks_udf::FunctionContext*,
-                                               const Slice& slice);
-
+    static bool hs_compile_and_alloc_scratch(const std::string&, LikePredicateState*, starrocks_udf::FunctionContext*,
+                                             const Slice& slice);
+    template <bool full_match>
+    static Status compile_with_hyperscan_or_re2(const std::string& pattern, LikePredicateState* state,
+                                                starrocks_udf::FunctionContext* context, const Slice& slice);
     struct LikePredicateState {
         char escape_char{'\\'};
 
