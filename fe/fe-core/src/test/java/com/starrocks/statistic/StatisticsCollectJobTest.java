@@ -5,6 +5,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -249,5 +250,31 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                 "cast(column_key as varchar), cast(column_value as varchar) from (select 2 as version, 10002 as db_id, " +
                 "16325 as table_id, `v2` as column_key, count(`v2`) as column_value from test.t0_stats " +
                 "where `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t", sql);
+    }
+
+    @Test
+    public void testSplitColumns() {
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new AnalyzeJob(10002, 16325, null,
+                        StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                        Maps.newHashMap(),
+                        StatsConstants.ScheduleStatus.PENDING,
+                        LocalDateTime.MIN));
+        Assert.assertEquals(1, jobs.size());
+        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
+
+        int splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns", 10L);
+        Assert.assertEquals(5, splitSize);
+
+        splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns",
+                Config.statistic_collect_max_row_count_per_query);
+        Assert.assertEquals(2, splitSize);
+
+        splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns",
+                Config.statistic_collect_max_row_count_per_query + 1);
+        Assert.assertEquals(1, splitSize);
+
+        splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns", 0L);
+        Assert.assertEquals(5, splitSize);
     }
 }
