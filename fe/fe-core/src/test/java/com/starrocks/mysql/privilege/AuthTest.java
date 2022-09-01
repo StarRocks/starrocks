@@ -184,7 +184,6 @@ public class AuthTest {
                 currentUser));
         Assert.assertFalse(auth.checkPlainPassword("cmy", "192.168.0.1",
                 "123456", null));
-        Assert.assertFalse(auth.checkPlainPassword("cmy", "192.168.0.1", "12345", null));
         Assert.assertTrue(currentUser.get(0).equals(userIdentity));
 
         // 3. create another user: zhangsan@"192.%"
@@ -203,7 +202,6 @@ public class AuthTest {
                 "12345", null));
         Assert.assertFalse(auth.checkPlainPassword("zhangsan", "172.168.0.1",
                 "12345", null));
-        Assert.assertFalse(auth.checkPlainPassword("zhangsan", "192.168.0.1", "12345", null));
 
         // 4.1 check if we can create same user
         Config.enable_password_reuse = true;
@@ -254,8 +252,6 @@ public class AuthTest {
                 "12345", null));
         Assert.assertFalse(auth.checkPlainPassword("zhangsan", "10.1.1.1",
                 "123456", null));
-        Assert.assertFalse(auth.checkPlainPassword("zhangsan", "11.1.1.1",
-                "12345", null));
 
         // 7. add duplicated user@['starrocks.domain1']
         try {

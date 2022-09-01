@@ -682,15 +682,15 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertEquals(26, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(25, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
-        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(24).getName());
-        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(25).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(23).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(24).getName());
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("1", resultSet.getString(0));
-        Assert.assertEquals("0", resultSet.getString(24));
-        Assert.assertEquals("5", resultSet.getString(25));
+        Assert.assertEquals("0", resultSet.getString(23));
+        Assert.assertEquals("5", resultSet.getString(24));
 
         Config.integrate_starmgr = false;
     }
