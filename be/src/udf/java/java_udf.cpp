@@ -911,4 +911,12 @@ jobject UDAFFunction::window_update_batch(int state, int peer_group_start, int p
     return res;
 }
 
+Status detect_java_runtime() {
+    const char* p = std::getenv("JAVA_HOME");
+    if (p == nullptr) {
+        return Status::RuntimeError("env 'JAVA_HOME' is not set");
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks::vectorized
