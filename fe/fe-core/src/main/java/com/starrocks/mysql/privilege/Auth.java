@@ -726,7 +726,7 @@ public class Auth implements Writable {
     public void replayGrantRole(PrivInfo privInfo) throws DdlException {
         writeLock();
         try {
-            grantRoleInternal(privInfo.getRole(), privInfo.getUserIdent(), false, true);
+            grantRoleInternal(privInfo.getRole(), privInfo.getUserIdent(), true, true);
         } finally {
             writeUnlock();
         }
