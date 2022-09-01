@@ -1,10 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/pipeline/crossjoin/nljoin_probe_operator.h"
+#include "exec/pipeline/nljoin/nljoin_probe_operator.h"
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "exec/pipeline/crossjoin/cross_join_right_sink_operator.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -13,14 +12,11 @@
 
 namespace starrocks::pipeline {
 
-NLJoinProbeOperator::NLJoinProbeOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                                         int32_t driver_sequence, TJoinOp::type join_op,
-                                         const std::string& sql_join_conjuncts,
-                                         const std::vector<ExprContext*>& join_conjuncts,
-                                         const std::vector<ExprContext*>& conjunct_ctxs,
-                                         const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
-                                         size_t build_column_count,
-                                         const std::shared_ptr<CrossJoinContext>& cross_join_context)
+NLJoinProbeOperator::NLJoinProbeOperator(
+        OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence, TJoinOp::type join_op,
+        const std::string& sql_join_conjuncts, const std::vector<ExprContext*>& join_conjuncts,
+        const std::vector<ExprContext*>& conjunct_ctxs, const std::vector<SlotDescriptor*>& col_types,
+        size_t probe_column_count, size_t build_column_count, const std::shared_ptr<NLJoinContext>& cross_join_context)
         : OperatorWithDependency(factory, id, "nestloop_join_probe", plan_node_id, driver_sequence),
           _join_op(join_op),
           _col_types(col_types),
@@ -153,7 +149,7 @@ vectorized::Chunk* NLJoinProbeOperator::_move_build_chunk_index(int index) {
     DCHECK_GE(index, 0);
     DCHECK_LE(index, _num_build_chunks());
     if (_curr_build_chunk) {
-        _prev_chunk_start = _cross_join_context->get_build_chunk_start(_curr_build_chunk_index);
+        _prev_chunk_start = _cross_join_context->get_build_chunk_size() * _curr_build_chunk_index;
         _prev_chunk_size = _curr_build_chunk->num_rows();
     }
     if (index < _num_build_chunks()) {
@@ -293,7 +289,6 @@ void NLJoinProbeOperator::_permute_probe_row(RuntimeState* state, ChunkPtr chunk
         bool is_probe = i < _probe_column_count;
         SlotDescriptor* slot = _col_types[i];
         ColumnPtr& dst_col = chunk->get_column_by_slot_id(slot->id());
-        // TODO: specialize for null column and const column
         if (is_probe) {
             ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
             dst_col->append_value_multiple_times(*src_col, _probe_row_current, cur_build_chunk_rows);
@@ -429,4 +424,43 @@ Status NLJoinProbeOperator::push_chunk(RuntimeState* state, const vectorized::Ch
     return Status::OK();
 }
 
+void NLJoinProbeOperatorFactory::_init_row_desc() {
+    for (auto& tuple_desc : _left_row_desc.tuple_descriptors()) {
+        for (auto& slot : tuple_desc->slots()) {
+            _col_types.emplace_back(slot);
+            _probe_column_count++;
+        }
+    }
+    for (auto& tuple_desc : _right_row_desc.tuple_descriptors()) {
+        for (auto& slot : tuple_desc->slots()) {
+            _col_types.emplace_back(slot);
+            _build_column_count++;
+        }
+    }
+}
+
+OperatorPtr NLJoinProbeOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    return std::make_shared<NLJoinProbeOperator>(this, _id, _plan_node_id, driver_sequence, _join_op,
+                                                 _sql_join_conjuncts, _join_conjuncts, _conjunct_ctxs, _col_types,
+                                                 _probe_column_count, _build_column_count, _cross_join_context);
+}
+
+Status NLJoinProbeOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorWithDependencyFactory::prepare(state));
+
+    _init_row_desc();
+    RETURN_IF_ERROR(Expr::prepare(_join_conjuncts, state));
+    RETURN_IF_ERROR(Expr::open(_join_conjuncts, state));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+
+    return Status::OK();
+}
+
+void NLJoinProbeOperatorFactory::close(RuntimeState* state) {
+    Expr::close(_join_conjuncts, state);
+    Expr::close(_conjunct_ctxs, state);
+
+    OperatorWithDependencyFactory::close(state);
+}
 } // namespace starrocks::pipeline

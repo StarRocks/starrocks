@@ -81,7 +81,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 
 public class DataDefinitionExecutorFactory {
-    private static final ImmutableMap<Class<? extends StatementBase>, DataDefinitionExecutor> executorMap =
+    private static final ImmutableMap<Class<? extends StatementBase>, DataDefinitionExecutor> EXECUTOR_MAP =
             new ImmutableMap.Builder<Class<? extends StatementBase>, DataDefinitionExecutor>()
                     .put(CreateDbStmt.class, new CreateDbExecutor())
                     .put(DropDbStmt.class, new DropDbExecutor())
@@ -158,7 +158,7 @@ public class DataDefinitionExecutorFactory {
                     .build();
 
     public static ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
-        DataDefinitionExecutor executor = executorMap.get(stmt.getClass());
+        DataDefinitionExecutor executor = EXECUTOR_MAP.get(stmt.getClass());
         if (executor != null) {
             return executor.execute(stmt, context);
         } else {

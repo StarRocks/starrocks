@@ -19,10 +19,10 @@ public class HashJoinImplementationRule extends JoinImplementationRule {
         super(RuleType.IMP_EQ_JOIN_TO_HASH_JOIN);
     }
 
-    private static final HashJoinImplementationRule instance = new HashJoinImplementationRule();
+    private static final HashJoinImplementationRule INSTANCE = new HashJoinImplementationRule();
 
     public static HashJoinImplementationRule getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     @Override

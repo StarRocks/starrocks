@@ -11,10 +11,10 @@ import java.util.function.Supplier;
 // a cache for get datasource
 public class DataSourceCache {
     private final Map<String, HikariDataSource> sources = new ConcurrentHashMap<>();
-    private static final DataSourceCache instance = new DataSourceCache();
+    private static final DataSourceCache INSTANCE = new DataSourceCache();
 
     public static DataSourceCache getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     public HikariDataSource getSource(String driverId, Supplier<HikariDataSource> provider) {

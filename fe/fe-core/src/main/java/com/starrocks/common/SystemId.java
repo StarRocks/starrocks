@@ -52,4 +52,6 @@ public class SystemId {
 
     public static final long MATERIALIZED_VIEWS_ID = 23L;
 
+    public static final long TABLES_CONFIG_ID = 24L;
+
 }

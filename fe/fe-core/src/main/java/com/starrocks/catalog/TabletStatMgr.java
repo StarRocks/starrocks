@@ -21,7 +21,6 @@
 
 package com.starrocks.catalog;
 
-import com.baidu.brpc.RpcContext;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -37,8 +36,7 @@ import com.starrocks.lake.proto.TabletStatRequest.TabletInfo;
 import com.starrocks.lake.proto.TabletStatResponse;
 import com.starrocks.lake.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.EmptyRpcCallback;
-import com.starrocks.rpc.LakeServiceAsync;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -241,11 +239,8 @@ public class TabletStatMgr extends LeaderDaemon {
                 TabletStatRequest request = new TabletStatRequest();
                 request.tabletInfos = entry.getValue();
 
-                RpcContext rpcContext = RpcContext.getContext();
-                rpcContext.setReadTimeoutMillis(600000);
-
-                LakeServiceAsync lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-                Future<TabletStatResponse> responseFuture = lakeService.getTabletStats(request, new EmptyRpcCallback<>());
+                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                Future<TabletStatResponse> responseFuture = lakeService.getTabletStats(request);
                 responseList.add(responseFuture);
             }
 

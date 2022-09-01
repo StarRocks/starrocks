@@ -11,13 +11,13 @@ public enum HdfsFileFormat {
     ORC,
     TEXT;
 
-    private static final ImmutableMap<String, HdfsFileFormat> validInputFormats =
+    private static final ImmutableMap<String, HdfsFileFormat> VALID_INPUT_FORMATS =
             new ImmutableMap.Builder<String, HdfsFileFormat>()
                     .put("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat", PARQUET)
                     .put("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat", ORC)
                     .put("org.apache.hadoop.mapred.TextInputFormat", TEXT)
                     .build();
-    private static final ImmutableMap<String, Boolean> fileFormatSplittableInfos =
+    private static final ImmutableMap<String, Boolean> FILE_FORMAT_SPLITTABLE_INFOS =
             new ImmutableMap.Builder<String, Boolean>()
                     .put("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat", true)
                     .put("org.apache.hudi.hadoop.HoodieParquetInputFormat", true)
@@ -26,11 +26,11 @@ public enum HdfsFileFormat {
                     .build();
 
     public static HdfsFileFormat fromHdfsInputFormatClass(String className) {
-        return validInputFormats.get(className);
+        return VALID_INPUT_FORMATS.get(className);
     }
 
     public static boolean isSplittable(String className) {
-        return fileFormatSplittableInfos.containsKey(className) && fileFormatSplittableInfos.get(className);
+        return FILE_FORMAT_SPLITTABLE_INFOS.containsKey(className) && FILE_FORMAT_SPLITTABLE_INFOS.get(className);
     }
 
     public THdfsFileFormat toThrift() {

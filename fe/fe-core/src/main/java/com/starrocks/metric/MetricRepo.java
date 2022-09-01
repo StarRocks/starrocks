@@ -120,9 +120,9 @@ public final class MetricRepo {
 
     public static List<GaugeMetricImpl<Long>> GAUGE_ROUTINE_LOAD_LAGS;
 
-    private static final ScheduledThreadPoolExecutor metricTimer =
+    private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
-    private static final MetricCalculator metricCalculator = new MetricCalculator();
+    private static final MetricCalculator METRIC_CALCULATOR = new MetricCalculator();
 
     public static synchronized void init() {
         if (isInit) {
@@ -390,7 +390,7 @@ public final class MetricRepo {
         isInit = true;
 
         if (Config.enable_metric_calculator) {
-            metricTimer.scheduleAtFixedRate(metricCalculator, 0, 15 * 1000L, TimeUnit.MILLISECONDS);
+            METRIC_TIMER.scheduleAtFixedRate(METRIC_CALCULATOR, 0, 15 * 1000L, TimeUnit.MILLISECONDS);
         }
     }
 

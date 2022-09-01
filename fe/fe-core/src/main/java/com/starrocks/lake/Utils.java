@@ -13,8 +13,7 @@ import com.starrocks.lake.proto.PublishLogVersionResponse;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.EmptyRpcCallback;
-import com.starrocks.rpc.LakeServiceAsync;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -101,8 +100,8 @@ public class Utils {
             request.txnIds = txnIds;
 
             try {
-                LakeServiceAsync lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-                Future<PublishVersionResponse> future = lakeService.publishVersion(request, new EmptyRpcCallback<>());
+                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                Future<PublishVersionResponse> future = lakeService.publishVersion(request);
                 responseList.add(future);
                 backendList.add(backend);
             } catch (Throwable e) {
@@ -148,8 +147,8 @@ public class Utils {
             request.version = version;
 
             try {
-                LakeServiceAsync lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-                Future<PublishLogVersionResponse> future = lakeService.publishLogVersion(request, new EmptyRpcCallback<>());
+                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                Future<PublishLogVersionResponse> future = lakeService.publishLogVersion(request);
                 responseList.add(future);
                 backendList.add(backend);
             } catch (Throwable e) {
