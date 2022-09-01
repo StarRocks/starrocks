@@ -11,7 +11,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-public class RendezvousHashRing<K, N> {
+public class RendezvousHashRing<K, N> implements HashRing<K, N> {
     HashFunction hashFunction;
     Funnel<K> keyFunnel;
     Funnel<N> nodeFunnel;
@@ -28,6 +28,11 @@ public class RendezvousHashRing<K, N> {
 
     List<VNode> vNodes = new ArrayList<>();
 
+    @Override
+    public String policy() {
+        return "RendezvousHash";
+    }
+
     public RendezvousHashRing(HashFunction hashFunction, Funnel<K> keyFunnel, Funnel<N> nodeFunnel,
                               Collection<N> nodes) {
         this.hashFunction = hashFunction;
@@ -38,11 +43,13 @@ public class RendezvousHashRing<K, N> {
         }
     }
 
+    @Override
     public void addNode(N node) {
         VNode vnode = new VNode(node);
         vNodes.add(vnode);
     }
 
+    @Override
     public void removeNode(N node) {
         for (int i = 0; i < vNodes.size(); i++) {
             if (vNodes.get(i).node.equals(node)) {
@@ -52,6 +59,7 @@ public class RendezvousHashRing<K, N> {
         }
     }
 
+    @Override
     public List<N> get(K key, int distinctNumber) {
         class Affinity implements Comparable<Affinity> {
             float weight;

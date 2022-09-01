@@ -13,6 +13,7 @@ import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.HashRing;
 import com.starrocks.common.util.RendezvousHashRing;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
@@ -84,7 +85,9 @@ public class HDFSBackendSelector implements BackendSelector {
             if (hdfsScanRange.isSetFull_path()) {
                 primitiveSink.putBytes(hdfsScanRange.full_path.getBytes(StandardCharsets.UTF_8));
             } else {
-                primitiveSink.putBytes(basePath.getBytes(StandardCharsets.UTF_8));
+                if (basePath != null) {
+                    primitiveSink.putBytes(basePath.getBytes(StandardCharsets.UTF_8));
+                }
                 if (hdfsScanRange.isSetPartition_id() &&
                         predicates.getIdToPartitionKey().containsKey(hdfsScanRange.getPartition_id())) {
                     PartitionKey partitionKey = predicates.getIdToPartitionKey().get(hdfsScanRange.getPartition_id());
@@ -148,6 +151,13 @@ public class HDFSBackendSelector implements BackendSelector {
         }
     }
 
+    private HashRing makeHashRing() {
+        RendezvousHashRing hashRing =
+                new RendezvousHashRing(Hashing.murmur3_128(), new TScanRangeLocationsFunnel(), new ComputeNodeFunnel(),
+                        assignedScansPerComputeNode.keySet());
+        return hashRing;
+    }
+
     @Override
     public void computeScanRangeAssignment() throws Exception {
         // exclude non-alive or in-blacklist compute nodes.
@@ -193,9 +203,7 @@ public class HDFSBackendSelector implements BackendSelector {
         }
 
         // use consistent hashing to schedule remote scan ranges
-        RendezvousHashRing hashRing =
-                new RendezvousHashRing(Hashing.murmur3_128(), new TScanRangeLocationsFunnel(), new ComputeNodeFunnel(),
-                        assignedScansPerComputeNode.keySet());
+        HashRing hashRing = makeHashRing();
         for (int i = 0; i < remoteScanRangeLocations.size(); ++i) {
             TScanRangeLocations scanRangeLocations = remoteScanRangeLocations.get(i);
             List<ComputeNode> backends = hashRing.get(scanRangeLocations, 3);

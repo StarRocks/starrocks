@@ -15,7 +15,7 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
-public class ConsistentHashRing<K, N> {
+public class ConsistentHashRing<K, N> implements HashRing<K, N> {
     HashFunction hashFunction;
 
     TreeMap<Long, VNode> hashRing = new TreeMap<>();
@@ -40,6 +40,11 @@ public class ConsistentHashRing<K, N> {
         }
     }
 
+    @Override
+    public String policy() {
+        return "ConsistentHash";
+    }
+
     public ConsistentHashRing(HashFunction hashFunction, Funnel<K> keyFunnel, Funnel<N> nodeFunnel,
                               Collection<N> nodes,
                               int virtualNumber) {
@@ -52,6 +57,7 @@ public class ConsistentHashRing<K, N> {
         }
     }
 
+    @Override
     public void addNode(N node) {
         for (int i = 0; i < virtualNumber; i++) {
             VNode vnode = new VNode(node, i);
@@ -62,6 +68,7 @@ public class ConsistentHashRing<K, N> {
         }
     }
 
+    @Override
     public void removeNode(N node) {
         for (int i = 0; i < virtualNumber; i++) {
             VNode vnode = new VNode(node, i);
@@ -87,6 +94,7 @@ public class ConsistentHashRing<K, N> {
         }
     }
 
+    @Override
     public List<N> get(K key, int distinctNumber) {
         List<N> ans = new ArrayList<>();
         Hasher hasher = hashFunction.newHasher();
