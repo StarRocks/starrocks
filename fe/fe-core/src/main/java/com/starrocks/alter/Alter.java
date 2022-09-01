@@ -67,7 +67,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -80,7 +79,6 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
@@ -264,29 +262,16 @@ public class Alter {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         // drop task
         Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+        Task task;
         if (refreshTask != null) {
             taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
+            task = TaskBuilder.rebuildMvTask(materializedView, dbName, refreshTask.getProperties());
+        } else {
+            task = TaskBuilder.buildMvTask(materializedView, dbName);
         }
 
-        Task task = TaskBuilder.buildMvTask(materializedView, dbName);
-        if (newRefreshType == MaterializedView.RefreshType.MANUAL) {
-            task.setType(Constants.TaskType.MANUAL);
-        } else if (newRefreshType == MaterializedView.RefreshType.ASYNC) {
-            if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
-                AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-                IntervalLiteral intervalLiteral = asyncRefreshSchemeDesc.getIntervalLiteral();
-                if (intervalLiteral == null) {
-                    task.setType(Constants.TaskType.EVENT_TRIGGERED);
-                } else {
-                    final IntLiteral step = (IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue();
-                    long startTime = Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime());
-                    TaskSchedule taskSchedule = new TaskSchedule(startTime, step.getLongValue(),
-                            TimeUtils.convertUnitIdentifierToTimeUnit(intervalLiteral.getUnitIdentifier().getDescription()));
-                    task.setSchedule(taskSchedule);
-                    task.setType(Constants.TaskType.PERIODICAL);
-                }
-            }
-        }
+        TaskBuilder.updateTaskInfo(task, refreshSchemeDesc);
+
 
         taskManager.createTask(task, false);
         // for event triggered type, run task

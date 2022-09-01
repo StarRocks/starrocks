@@ -172,7 +172,14 @@ import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+<<<<<<< HEAD
 import com.starrocks.scheduler.persist.TaskSchedule;
+=======
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
+import com.starrocks.sql.ast.AlterDatabaseRename;
+>>>>>>> 43d5e7477 ([Bugfix] Fix bug drop/recover db maintain task (#10626))
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -314,7 +321,7 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getMaterializedViews().stream().forEach(Table::onCreate);
+            db.getMaterializedViews().forEach(Table::onCreate);
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
@@ -437,6 +444,13 @@ public class LocalMetastore implements ConnectorMetadata {
             fullNameToDb.remove(db.getFullName());
             final Cluster cluster = defaultCluster;
             cluster.removeDb(dbName, db.getId());
+
+            // 4. drop mv task
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            List<Long> dropTaskIdList = taskManager.showTasks(dbName)
+                    .stream().map(Task::getId).collect(Collectors.toList());
+            taskManager.dropTasks(dropTaskIdList, false);
+
             DropDbInfo info = new DropDbInfo(db.getFullName(), isForceDrop);
             editLog.logDropDb(info);
 
@@ -515,7 +529,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (fullNameToDb.containsKey(db.getFullName())) {
                 throw new DdlException("Database[" + db.getOriginName() + "] already exist.");
                 // it's ok that we do not put db back to CatalogRecycleBin
-                // cause this db cannot recover any more
+                // cause this db cannot recover anymore
             }
 
             fullNameToDb.put(db.getFullName(), db);
@@ -525,6 +539,18 @@ public class LocalMetastore implements ConnectorMetadata {
             db.writeUnlock();
             final Cluster cluster = defaultCluster;
             cluster.addDb(db.getFullName(), db.getId());
+
+            List<MaterializedView> materializedViews = db.getMaterializedViews();
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            for (MaterializedView materializedView : materializedViews) {
+                MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
+                if (refreshType != MaterializedView.RefreshType.SYNC) {
+                    Task task = TaskBuilder.buildMvTask(materializedView, db.getFullName());
+                    TaskBuilder.updateTaskInfo(task, materializedView);
+                    taskManager.createTask(task, false);
+                }
+            }
+            
 
             // log
             RecoverInfo recoverInfo = new RecoverInfo(db.getId(), -1L, -1L);
@@ -3244,35 +3270,16 @@ public class LocalMetastore implements ConnectorMetadata {
         LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
 
         // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
-        if (createMvSuccess) {
-            createTaskForMaterializedView(dbName, materializedView, optHints);
-        }
+        createTaskForMaterializedView(dbName, materializedView, optHints);
     }
 
     private void createTaskForMaterializedView(String dbName, MaterializedView materializedView,
                                                Map<String, String> optHints) throws DdlException {
         MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
         if (refreshType != MaterializedView.RefreshType.SYNC) {
-            // create task
-            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
-            MaterializedView.AsyncRefreshContext asyncRefreshContext =
-                    materializedView.getRefreshScheme().getAsyncRefreshContext();
 
-            // mapping refresh type to task type
-            if (refreshType == MaterializedView.RefreshType.MANUAL) {
-                task.setType(Constants.TaskType.MANUAL);
-            } else if (refreshType == MaterializedView.RefreshType.ASYNC) {
-                if (asyncRefreshContext.getTimeUnit() == null) {
-                    task.setType(Constants.TaskType.EVENT_TRIGGERED);
-                } else {
-                    long startTime = asyncRefreshContext.getStartTime();
-                    TaskSchedule taskSchedule = new TaskSchedule(startTime,
-                            asyncRefreshContext.getStep(),
-                            TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
-                    task.setSchedule(taskSchedule);
-                    task.setType(Constants.TaskType.PERIODICAL);
-                }
-            }
+            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+            TaskBuilder.updateTaskInfo(task, materializedView);
 
             if (optHints != null) {
                 Map<String, String> taskProperties = task.getProperties();
@@ -3349,13 +3356,19 @@ public class LocalMetastore implements ConnectorMetadata {
         if (materializedView == null) {
             throw new MetaNotFoundException(mvName + " is not a materialized view");
         }
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
-        if (!taskManager.containTask(mvTaskName)) {
-            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
-            taskManager.createTask(task, false);
+
+        MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
+        if (refreshType != MaterializedView.RefreshType.SYNC) {
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
+            if (!taskManager.containTask(mvTaskName)) {
+                Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+                TaskBuilder.updateTaskInfo(task, materializedView);
+                taskManager.createTask(task, false);
+            }
+            taskManager.executeTask(mvTaskName, new ExecuteOption(priority));
         }
-        taskManager.executeTask(mvTaskName, new ExecuteOption(priority));
+
     }
 
     @Override
