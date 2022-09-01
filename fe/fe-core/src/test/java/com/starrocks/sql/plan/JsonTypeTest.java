@@ -64,6 +64,12 @@ public class JsonTypeTest extends PlanTestBase {
         assertPlanContains("select v_json -> '$.k1' from tjson_test ",
                 "json_query(2: v_json, '$.k1')");
 
+        // Test for qualified name.
+        assertPlanContains("select tjson_test.v_json -> '$.k1' from tjson_test ",
+                "json_query(2: v_json, '$.k1')");
+        assertPlanContains("select test.tjson_test.v_json -> '$.k1' from tjson_test ",
+                "json_query(2: v_json, '$.k1')");
+
         // arrow and cast
         assertPlanContains("select cast(parse_json('1') -> '$.k1' as int) ",
                 "json_query(parse_json('1'), '$.k1')");

@@ -225,10 +225,13 @@ public class SelectAnalyzer {
                 outputFields.addAll(fields);
 
             } else {
-                String name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
-
                 analyzeExpression(item.getExpr(), analyzeState, scope);
                 outputExpressionBuilder.add(item.getExpr());
+
+                // The item here has been analyzed, it will contain qualified name information.
+                // For example, If an item originally only has a column name, after analyzeExpression(),
+                // item will have a qualified name.
+                String name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
 
                 if (item.getExpr() instanceof SlotRef) {
                     outputFields.add(new Field(name, item.getExpr().getType(),
@@ -523,12 +526,12 @@ public class SelectAnalyzer {
 
         @Override
         public Expr visitSlot(SlotRef slotRef, Void context) {
-            if (sourceScope.tryResolveFeild(slotRef).isPresent() &&
+            if (sourceScope.tryResolveField(slotRef).isPresent() &&
                     !session.getSessionVariable().getEnableGroupbyUseOutputAlias()) {
                 return slotRef;
             }
 
-            Optional<ResolvedField> resolvedField = outputScope.tryResolveFeild(slotRef);
+            Optional<ResolvedField> resolvedField = outputScope.tryResolveField(slotRef);
             if (resolvedField.isPresent()) {
                 return outputExprs.get(resolvedField.get().getRelationFieldIndex());
             }

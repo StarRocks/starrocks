@@ -7,9 +7,10 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
 
 public class Field {
+    // The name here is a column name, not qualified name.
     private final String name;
     private Type type;
-    //shadow column is not visible, eg. schema change column and materialized column
+    // shadow column is not visible, e.g. schema change column and materialized column
     private final boolean visible;
 
     /**

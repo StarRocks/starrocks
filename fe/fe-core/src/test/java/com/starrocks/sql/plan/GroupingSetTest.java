@@ -12,6 +12,15 @@ public class GroupingSetTest extends PlanTestBase {
         String sql = "select grouping_id(v1, v3), grouping(v2) from t0 group by cube(v1, v2, v3);";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("REPEAT_NODE"));
+
+        // Test for qualified name.
+        sql = "select grouping_id(t0.v1, t0.v3), grouping(t0.v2) from t0 group by cube(t0.v1, t0.v2, t0.v3);";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("REPEAT_NODE"));
+        sql = "select grouping_id(test.t0.v1, test.t0.v3), grouping(test.t0.v2) from t0 " +
+                "group by cube(test.t0.v1, test.t0.v2, test.t0.v3);";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("REPEAT_NODE"));
     }
 
     @Test
@@ -91,6 +100,12 @@ public class GroupingSetTest extends PlanTestBase {
         starRocksAssert.query(sql).analysisError("HAVING clause cannot contain grouping");
 
         sql = "select k10, GROUPING(k10) from baseall group by GROUPING SETS (  (k10), ( ) );";
+        starRocksAssert.query(sql).explainContains("group by: 7: k10, 12: GROUPING_ID, 13: GROUPING");
+
+        // Test for qualified name.
+        sql = "select k10, GROUPING(baseall.k10) from baseall group by GROUPING SETS (  (baseall.k10), ( ) );";
+        starRocksAssert.query(sql).explainContains("group by: 7: k10, 12: GROUPING_ID, 13: GROUPING");
+        sql = "select k10, GROUPING(test.baseall.k10) from baseall group by GROUPING SETS (  (test.baseall.k10), ( ) );";
         starRocksAssert.query(sql).explainContains("group by: 7: k10, 12: GROUPING_ID, 13: GROUPING");
     }
 

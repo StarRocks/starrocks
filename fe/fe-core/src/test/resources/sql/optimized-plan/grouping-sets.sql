@@ -9,6 +9,16 @@ AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1, 2: v2, 4: GROUPING_ID, 5: G
 [end]
 
 [sql]
+select grouping(t0.v1), grouping(t0.v2), grouping_id(v1,v2), v1,v2 from t0 group by grouping sets((t0.v1,t0.v2),(t0.v1),(t0.v2));
+[result]
+AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1, 2: v2, 4: GROUPING_ID, 5: GROUPING, 6: GROUPING, 7: GROUPING]] having [null]
+    EXCHANGE SHUFFLE[1, 2, 4, 5, 6, 7]
+        AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v1, 2: v2, 4: GROUPING_ID, 5: GROUPING, 6: GROUPING, 7: GROUPING]] having [null]
+            REPEAT [[1: v1, 2: v2], [1: v1], [2: v2]]
+                SCAN (columns[1: v1, 2: v2] predicate[null])
+[end]
+
+[sql]
 select grouping(v1), grouping(v2), grouping_id(v1,v2), v1,v2 from t0 group by rollup(v1, v2);
 [result]
 AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1, 2: v2, 4: GROUPING_ID, 5: GROUPING, 6: GROUPING, 7: GROUPING]] having [null]

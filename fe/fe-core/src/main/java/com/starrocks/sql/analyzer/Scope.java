@@ -33,7 +33,7 @@ public class Scope {
         return relationFields;
     }
 
-    public Optional<ResolvedField> tryResolveFeild(SlotRef expression) {
+    public Optional<ResolvedField> tryResolveField(SlotRef expression) {
         return resolveField(expression, 0, RelationId.anonymous());
     }
 
