@@ -81,6 +81,10 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         // 2 For shuffle join
         List<Integer> leftOnPredicateColumns = joinHelper.getLeftOnColumns();
         List<Integer> rightOnPredicateColumns = joinHelper.getRightOnColumns();
+        if (leftOnPredicateColumns.isEmpty() || rightOnPredicateColumns.isEmpty()) {
+            return null;
+        }
+
         Preconditions.checkState(leftOnPredicateColumns.size() == rightOnPredicateColumns.size());
         requiredProperties.add(computeShuffleJoinRequiredProperties(requirementsFromParent, leftOnPredicateColumns,
                 rightOnPredicateColumns));
@@ -136,9 +140,17 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     @Override
     public Void visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, ExpressionContext context) {
-        PhysicalPropertySet rightBroadcastProperty =
-                new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
-        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
+        if (node.getJoinType().isRightJoin() || node.getJoinType().isFullOuterJoin()) {
+            // Right join needs to maintain build_match_flag for right table, which could not be maintained on multiple nodes,
+            // instead it should be gathered to one node
+            PhysicalPropertySet gather =
+                    new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createGatherDistributionSpec()));
+            requiredProperties.add(Lists.newArrayList(gather, gather));
+        } else {
+            PhysicalPropertySet rightBroadcastProperty =
+                    new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
+            requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
+        }
         return null;
     }
 

@@ -9,7 +9,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
@@ -315,7 +314,7 @@ public class JoinTest extends PlanTestBase {
         String query = "select t1.* from t0, t2, t3, t1 where t1.v4 = t2.v7 " +
                 "and t1.v4 = t3.v10 and t3.v10 = t0.v1";
         String explainString = getFragmentPlan(query);
-        Assert.assertFalse(explainString.contains("NESTLOOP JOIN"));
+        Assert.assertFalse(explainString, explainString.contains("NESTLOOP JOIN"));
     }
 
     @Test
@@ -649,13 +648,6 @@ public class JoinTest extends PlanTestBase {
     }
 
     @Test
-    public void testFailedLeftJoin() {
-        String sql = "select * from t0 as x0 left outer join t1 as x1 on (1 = 2) is not null";
-        Assert.assertThrows("No equal on predicate in LEFT OUTER JOIN is not supported", SemanticException.class,
-                () -> getFragmentPlan(sql));
-    }
-
-    @Test
     public void testSemiJoinReorder() throws Exception {
         String sql = "SELECT v2 \n" +
                 "FROM t0 \n" +
@@ -726,7 +718,7 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: 1: v1 != 4: v4, 2: v2 != 5: v5\n");
+                "  |  other join predicates: 1: v1 != 4: v4, 2: v2 != 5: v5\n");
     }
 
     @Test
@@ -929,10 +921,10 @@ public class JoinTest extends PlanTestBase {
         String sql = "select t0.v1 from t0, t1, t2, t3 where t0.v1 + t3.v10 = 2";
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
-        assertContains(plan, "11:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
+        assertContains(plan, "5:NESTLOOP JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: 1: v1 + 10: v10 = 2\n");
+                "  |  other join predicates: 1: v1 + 10: v10 = 2\n");
     }
 
     @Test
@@ -2480,9 +2472,15 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testValueNodeJoin() throws Exception {
-        String sql = "select count(*) from (select test_all_type.t1c as left_int, " +
-                "test_all_type1.t1c as right_int from (select * from test_all_type limit 0) " +
-                "test_all_type cross join (select * from test_all_type limit 0) test_all_type1 cross join (select * from test_all_type limit 0) test_all_type6) t;";
+        String sql = "select count(*) from " +
+                "(" +
+                "select test_all_type.t1c as left_int, test_all_type1.t1c as right_int " +
+                "from (select * from test_all_type limit 0) test_all_type " +
+                "cross join " +
+                "(select * from test_all_type limit 0) test_all_type1 " +
+                "cross join " +
+                "(select * from test_all_type limit 0) test_all_type6" +
+                ") t;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "0:EMPTYSET");
         assertContains(plan, "1:EMPTYSET");
@@ -2533,8 +2531,8 @@ public class JoinTest extends PlanTestBase {
         String sql = "select * from t0 join t2 on t0.v1 < t2.v7";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  other predicates: [1: v1, BIGINT, true] < [4: v7, BIGINT, true]\n" +
+                "  |  join op: INNER JOIN\n" +
+                "  |  other join predicates: [1: v1, BIGINT, true] < [4: v7, BIGINT, true]\n" +
                 "  |  cardinality: 1\n");
 
         sql = "select * from t0 join t2 on t0.v1 + t2.v7 < 2";
@@ -2548,8 +2546,8 @@ public class JoinTest extends PlanTestBase {
         sql = "select * from t0 join t2 on t0.v1 < t2.v7 + t2.v8";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  other predicates: [1: v1, BIGINT, true] < [4: v7, BIGINT, true] + [5: v8, BIGINT, true]\n" +
+                "  |  join op: INNER JOIN\n" +
+                "  |  other join predicates: [1: v1, BIGINT, true] < [4: v7, BIGINT, true] + [5: v8, BIGINT, true]\n" +
                 "  |  cardinality: 1\n");
 
         // avoid push down CrossJoin RF across ExchangeNode

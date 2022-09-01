@@ -151,9 +151,9 @@ set(EXEC_FILES
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/select_operator.cpp
-    pipeline/crossjoin/cross_join_context.cpp
-    pipeline/crossjoin/cross_join_right_sink_operator.cpp
-    pipeline/crossjoin/cross_join_left_operator.cpp
+    pipeline/nljoin/nljoin_context.cpp
+    pipeline/nljoin/nljoin_build_operator.cpp
+    pipeline/nljoin/nljoin_probe_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
     pipeline/sort/local_partition_topn_sink.cpp
     pipeline/sort/local_partition_topn_source.cpp

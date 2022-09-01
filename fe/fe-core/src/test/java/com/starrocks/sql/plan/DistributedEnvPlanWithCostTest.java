@@ -7,6 +7,7 @@ import com.starrocks.planner.AggregationNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.Assert;
@@ -595,8 +596,9 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "Predicates: 24: N_NAME IN ('IRAN', 'CANADA')");
         assertContains(plan, "cardinality: 25");
         // eval char/varchar type predicate cardinality in join node
-        assertContains(plan, " 5:NESTLOOP JOIN\n" +
+        assertContains(plan, "  5:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
+                "  |  other join predicates: ((19: N_NAME = 'CANADA') AND (24: N_NAME = 'IRAN')) OR ((19: N_NAME = 'IRAN') AND (24: N_NAME = 'CANADA'))\n" +
                 "  |  cardinality: 1\n");
 
     }
@@ -629,6 +631,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         // eval predicate cardinality in join node
         assertContains(plan, "3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
+                "  |  other join predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
                 "  |  cardinality: 2");
     }
 
@@ -1194,10 +1197,14 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "    on (subq_0.c0 = ref_1.P_RETAILPRICE )\n" +
                 "where subq_0.c1 <> subq_0.c1\n" +
                 "limit 63;";
-        String plan = getFragmentPlan(sql);
+        ExecPlan execPlan = getExecPlan(sql);
+        String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         // check without error
         assertContains(plan, "  4:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)");
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 18: P_RETAILPRICE = 21: cast\n" +
+                "  |  limit: 63");
     }
 
     @Test
@@ -1234,9 +1241,18 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "where \n" +
                 "  subq_1.c4 >= subq_1.c4;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 06\n" +
-                "    BUCKET_SHUFFLE_HASH_PARTITIONED: 2: O_CUSTKEY");
+        assertContains(plan, "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 09\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  8:Project\n" +
+                "  |  <slot 2> : 2: O_CUSTKEY\n" +
+                "  |  <slot 14> : 14: C_ADDRESS\n" +
+                "  |  \n" +
+                "  7:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 12: C_CUSTKEY = 2: O_CUSTKEY");
     }
 
     @Test
