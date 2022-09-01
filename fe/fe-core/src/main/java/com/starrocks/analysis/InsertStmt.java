@@ -201,10 +201,6 @@ public class InsertStmt extends DmlStmt {
         return isRepartition;
     }
 
-    public String getDb() {
-        return tblName.getDb();
-    }
-
     public boolean isOverwrite() {
         return isOverwrite;
     }
