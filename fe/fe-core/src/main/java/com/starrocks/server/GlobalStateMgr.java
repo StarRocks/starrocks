@@ -1835,7 +1835,7 @@ public class GlobalStateMgr {
         // refresh scheme
         MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
         if (refreshScheme == null) {
-            sb.append("\nREFRESH ").append("MANUAL");
+            sb.append("\nREFRESH ").append("UNKNOWN");
         } else {
             sb.append("\nREFRESH ").append(refreshScheme.getType());
         }
