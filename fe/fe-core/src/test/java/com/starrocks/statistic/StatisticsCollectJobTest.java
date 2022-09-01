@@ -10,6 +10,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import jersey.repackaged.com.google.common.collect.Lists;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -20,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class StatisticsCollectJobTest extends PlanTestBase {
     @BeforeClass
@@ -64,6 +66,42 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1_stats");
         new ArrayList<>(t1.getPartitions()).get(0).updateVisibleVersion(2);
         setTableStatistics(t1, 20000000);
+
+
+        starRocksAssert.withTable("CREATE TABLE `t0_stats_partition` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL COMMENT \"\",\n" +
+                "  `v3` bigint NULL,\n" +
+                "  `v4` date NULL,\n" +
+                "  `v5` datetime NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
+                "PARTITION BY RANGE(`v1`)\n" +
+                "(PARTITION p0 VALUES [(\"0\"), (\"1\")),\n" +
+                "PARTITION p1 VALUES [(\"1\"), (\"2\")),\n" +
+                "PARTITION p2 VALUES [(\"2\"), (\"3\")),\n" +
+                "PARTITION p3 VALUES [(\"3\"), (\"4\")),\n" +
+                "PARTITION p4 VALUES [(\"4\"), (\"5\")),\n" +
+                "PARTITION p5 VALUES [(\"5\"), (\"6\")),\n" +
+                "PARTITION p6 VALUES [(\"6\"), (\"7\")),\n" +
+                "PARTITION p7 VALUES [(\"7\"), (\"8\")),\n" +
+                "PARTITION p8 VALUES [(\"8\"), (\"9\")),\n" +
+                "PARTITION p9 VALUES [(\"9\"), (\"10\")))\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        OlapTable t0p = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats_partition");
+
+        int i = 1;
+        for (Partition p : t0p.getAllPartitions()) {
+            p.updateVisibleVersion(2);
+            p.getBaseIndex().setRowCount(i * 100L);
+            i++;
+        }
     }
 
     @Test
@@ -74,7 +112,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
-        Assert.assertEquals(2, jobs.size());
+        Assert.assertEquals(3, jobs.size());
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumns().toString());
@@ -91,7 +129,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
-        Assert.assertEquals(2, jobs.size());
+        Assert.assertEquals(3, jobs.size());
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumns().toString());
@@ -276,5 +314,47 @@ public class StatisticsCollectJobTest extends PlanTestBase {
 
         splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns", 0L);
         Assert.assertEquals(5, splitSize);
+    }
+
+    @Test
+    public void testFullStatisticsBuildCollectSQLList() {
+        Database database = connectContext.getGlobalStateMgr().getDb("test");
+        OlapTable table = (OlapTable) database.getTable("t0_stats_partition");
+        List<Long> partitionIdList = table.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
+
+        FullStatisticsCollectJob collectJob = new FullStatisticsCollectJob(database, table, partitionIdList,
+                Lists.newArrayList("v1", "v2", "v3", "v4", "v5"),
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap());
+
+        List<String> collectSqlList = collectJob.buildCollectSQLList();
+        Assert.assertEquals(1, collectSqlList.size());
+        assertContains(collectSqlList.get(0), "v1", "v2", "v3", "v4", "v5");
+        assertContains(collectSqlList.get(0), "p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9");
+
+        Config.statistic_collect_max_row_count_per_query = 10;
+        collectSqlList = collectJob.buildCollectSQLList();
+        Assert.assertEquals(50, collectSqlList.size());
+
+        Config.statistic_collect_max_row_count_per_query = 500;
+        collectSqlList = collectJob.buildCollectSQLList();
+        Assert.assertEquals(37, collectSqlList.size());
+        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v1`)"));
+        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v3`)"));
+        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v5`)"));
+        Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition p0"));
+        Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition p1"));
+        Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition p9"));
+
+        Config.statistic_collect_max_row_count_per_query = 1000;
+        collectSqlList = collectJob.buildCollectSQLList();
+        Assert.assertEquals(21, collectSqlList.size());
+        Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition p0"));
+        Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition p1"));
+        Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition p9"));
+        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v1`)"));
+        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v3`)"));
+        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v5`)"));
     }
 }
