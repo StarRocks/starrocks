@@ -121,6 +121,22 @@ message UnlockTabletMetadataResponse {
     optional int32 pad = 1;
 }
 
+message UploadSnapshotsRequest {
+    map<int64, Snapshot> snapshots = 1;
+    optional string broker = 2;
+    map<string, string> broker_properties = 3;
+}
+
+message UploadSnapshotsResponse {
+    // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
+    optional int32 pad = 1;
+}
+
+message Snapshot {
+    optional int64 version = 1;
+    optional string dest_path = 2;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc publish_log_version(PublishLogVersionRequest) returns (PublishLogVersionResponse);
@@ -132,5 +148,6 @@ service LakeService {
     rpc get_tablet_stats(TabletStatRequest) returns (TabletStatResponse);
     rpc lock_tablet_metadata(LockTabletMetadataRequest) returns (LockTabletMetadataResponse);
     rpc unlock_tablet_metadata(UnlockTabletMetadataRequest) returns (UnlockTabletMetadataResponse);
+    rpc upload_snapshots(UploadSnapshotsRequest) returns (UploadSnapshotsResponse);
 }
 

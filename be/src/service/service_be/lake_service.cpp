@@ -14,6 +14,7 @@ DIAGNOSTIC_POP
 #include "fs/fs_util.h"
 #include "gutil/macros.h"
 #include "runtime/exec_env.h"
+#include "runtime/lake_snapshot_loader.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
 #include "util/countdown_latch.h"
@@ -451,6 +452,25 @@ void LakeServiceImpl::unlock_tablet_metadata(::google::protobuf::RpcController* 
         LOG(ERROR) << "Fail to unlock tablet metadata, tablet id: " << request->tablet_id()
                    << ", version: " << request->version();
         cntl->SetFailed("Fail to unlock tablet metadata");
+    }
+}
+
+void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* controller,
+                                       const ::starrocks::lake::UploadSnapshotsRequest* request,
+                                       ::starrocks::lake::UploadSnapshotsResponse* response,
+                                       ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+    // TODO: Support fs upload directly
+    if (!request->has_broker()) {
+        cntl->SetFailed("missing broker");
+        return;
+    }
+
+    auto loader = std::make_unique<LakeSnapshotLoader>(_env);
+    auto st = loader->upload(request);
+    if (!st.ok()) {
+        cntl->SetFailed(st.to_string());
     }
 }
 
