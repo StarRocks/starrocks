@@ -134,6 +134,9 @@ public class CatalogMgr {
         if (Strings.isNullOrEmpty(type)) {
             throw new DdlException("Missing properties 'type'");
         }
+        if (!CreateCatalogStmt.SUPPORTED_CATALOG.contains(type)) {
+            return;
+        }
 
         readLock();
         try {
