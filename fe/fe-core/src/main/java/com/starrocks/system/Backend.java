@@ -300,7 +300,7 @@ public class Backend extends ComputeNode {
             entry.getValue().write(out);
         }
 
-        Text.writeString(out, getOwnerClusterName());
+        Text.writeString(out, SystemInfoService.DEFAULT_CLUSTER);
         out.writeInt(getBackendState().ordinal());
         out.writeInt(getDecommissionType().ordinal());
 
@@ -338,11 +338,11 @@ public class Backend extends ComputeNode {
             disksRef = ImmutableMap.copyOf(disks);
         }
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
-            setOwnerClusterName(Text.readString(in));
+            // ignore clusterName
+            Text.readString(in);
             setBackendState(in.readInt());
             setDecommissionType(in.readInt());
         } else {
-            setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
             setBackendState(BackendState.using.ordinal());
             setDecommissionType(DecommissionType.SystemDecommission.ordinal());
         }

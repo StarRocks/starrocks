@@ -404,7 +404,7 @@ public class ResourceGroupStmtTest {
     @Test
     public void testChooseResourceGroup() throws Exception {
         createResourceGroups();
-        String qualifiedUser = "default_cluster:rg1_user1";
+        String qualifiedUser = "rg1_user1";
         String remoteIp = "192.168.2.4";
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
@@ -420,7 +420,7 @@ public class ResourceGroupStmtTest {
     @Test
     public void testChooseResourceGroupWithDb() throws Exception {
         createResourceGroups();
-        String qualifiedUser = "default_cluster:rg1_user1";
+        String qualifiedUser = "rg1_user1";
         String remoteIp = "192.168.2.4";
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
@@ -460,7 +460,7 @@ public class ResourceGroupStmtTest {
     @Test
     public void testShowVisibleResourceGroups() throws Exception {
         createResourceGroups();
-        String qualifiedUser = "default_cluster:rg1_user1";
+        String qualifiedUser = "rg1_user1";
         String remoteIp = "192.168.2.4";
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));

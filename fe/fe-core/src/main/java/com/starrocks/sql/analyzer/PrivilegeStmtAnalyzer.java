@@ -6,7 +6,6 @@ import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -70,11 +69,10 @@ public class PrivilegeStmtAnalyzer {
                 // Remove it after all old methods migrate to the new framework
                 throw new SemanticException(e.getMessage());
             }
-            String qualifiedRole = ClusterNamespace.getFullName(roleName);
-            if (!session.getGlobalStateMgr().getAuth().doesRoleExist(qualifiedRole)) {
-                throw new SemanticException("role " + qualifiedRole + " not exist!");
+            if (!session.getGlobalStateMgr().getAuth().doesRoleExist(roleName)) {
+                throw new SemanticException("role " + roleName + " not exist!");
             }
-            return qualifiedRole;
+            return roleName;
         }
 
         /**
