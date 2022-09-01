@@ -28,13 +28,16 @@ public class CompactionManager {
     private final List<CompactionPicker> compactionPickers = Lists.newArrayList();
 
     public CompactionManager() {
-        initCompactionPicker();
+        reset();
     }
 
-    void initCompactionPicker() {
+    void reset() {
         compactionPickers.add(new CompactionPickerByCount(Config.experimental_lake_compaction_max_version_count));
         compactionPickers.add(new CompactionPickerByTime(Config.experimental_lake_compaction_max_interval_seconds * 1000,
                 Config.experimental_lake_compaction_min_version_count));
+        for (PartitionStatistics partitionStatistics : partitionStatisticsHashMap.values()) {
+            partitionStatistics.setDoingCompaction(false);
+        }
     }
 
     public synchronized void handleLoadingFinished(PartitionIdentifier partition, long version, long versionTime) {
@@ -120,7 +123,7 @@ public class CompactionManager {
     public static CompactionManager loadCompactionManager(DataInput in) throws IOException {
         String json = Text.readString(in);
         CompactionManager compactionManager = GsonUtils.GSON.fromJson(json, CompactionManager.class);
-        compactionManager.initCompactionPicker();
+        compactionManager.reset();
         return compactionManager;
     }
 
