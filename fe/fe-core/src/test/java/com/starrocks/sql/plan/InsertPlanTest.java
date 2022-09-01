@@ -679,28 +679,13 @@ public class InsertPlanTest extends PlanTestBase {
                     "explain insert into baseall select k1, k2, k3, k4, k5, k6, k10, k11, k7, min(k8), " +
                             "max(k9) from baseall group by k1, k2, k3, k4, k5, k6, k10, k11, k7";
             plan = getInsertExecPlan(sql);
-            assertContains(plan, "OLAP TABLE SINK\n" +
+            assertContains(plan, " OLAP TABLE SINK\n" +
                     "    TUPLE ID: 2\n" +
                     "    RANDOM\n" +
                     "\n" +
-                    "  1:Project\n" +
-                    "  |  <slot 1> : 1: k1\n" +
-                    "  |  <slot 2> : 2: k2\n" +
-                    "  |  <slot 3> : 3: k3\n" +
-                    "  |  <slot 4> : 4: k4\n" +
-                    "  |  <slot 5> : 5: k5\n" +
-                    "  |  <slot 6> : 6: k6\n" +
-                    "  |  <slot 7> : 7: k10\n" +
-                    "  |  <slot 8> : 8: k11\n" +
-                    "  |  <slot 9> : 9: k7\n" +
-                    "  |  <slot 12> : 10: k8\n" +
-                    "  |  <slot 13> : 11: k9\n" +
-                    "  |  \n" +
-                    "  0:OlapScanNode\n" +
-                    "     TABLE: baseall\n" +
-                    "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
-                    "     partitions=1/1\n" +
-                    "     rollup: baseall");
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: min(10: k8), max(11: k9)\n" +
+                    "  |  group by: 1: k1, 2: k2, 3: k3, 4: k4, 5: k5, 6: k6, 7: k10, 8: k11, 9: k7");
         }
         InsertPlanner.enableSingleReplicationShuffle = false;
         FeConstants.runningUnitTest = false;

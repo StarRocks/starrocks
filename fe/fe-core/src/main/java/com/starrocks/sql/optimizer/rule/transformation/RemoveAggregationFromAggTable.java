@@ -106,6 +106,9 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
                 return false;
             }
             Column column = columnOptional.get();
+            if (column.getAggregationType() == null) {
+                return false;
+            }
             if (!column.getAggregationType().toString().equalsIgnoreCase(entry.getValue().getFnName())) {
                 return false;
             }
