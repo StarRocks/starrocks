@@ -90,10 +90,6 @@ public class InsertStmt extends DmlStmt {
         this.targetTable = targetTable;
     }
 
-    public String getDb() {
-        return tblName.getDb();
-    }
-
     public boolean isOverwrite() {
         return isOverwrite;
     }
