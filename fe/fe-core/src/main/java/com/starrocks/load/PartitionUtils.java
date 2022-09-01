@@ -11,6 +11,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.PartitionPersistInfo;
@@ -29,6 +30,14 @@ public class PartitionUtils {
             throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");
         }
         try {
+            // should check whether targetTable exists
+            Table tmpTable = db.getTable(targetTable.getId());
+            if (tmpTable == null) {
+                throw new DdlException("create partition failed because target table does not exist");
+            }
+            if (sourcePartitionIds.stream().anyMatch(id -> targetTable.getPartition(id) == null)) {
+                throw new DdlException("create partition failed because src partitions changed");
+            }
             List<Partition> sourcePartitions = sourcePartitionIds.stream()
                     .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
