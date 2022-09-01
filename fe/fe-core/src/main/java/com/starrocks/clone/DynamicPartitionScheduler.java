@@ -158,6 +158,16 @@ public class DynamicPartitionScheduler extends MasterDaemon {
                         db.getFullName(), olapTable.getName());
                 continue;
             }
+
+            for (Range<PartitionKey> partitionKeyRange : rangePartitionInfo.getIdToRange(false).values()) {
+                if (partitionKeyRange.contains(addPartitionKeyRange.lowerEndpoint()) &&
+                        addPartitionKeyRange.contains(partitionKeyRange.upperEndpoint()) &&
+                        !addPartitionKeyRange.upperEndpoint().equals(partitionKeyRange.upperEndpoint())) {
+                    addPartitionKeyRange = Range.closedOpen(partitionKeyRange.upperEndpoint(),
+                            addPartitionKeyRange.upperEndpoint());
+                }
+            }
+
             for (Range<PartitionKey> partitionKeyRange : rangePartitionInfo.getIdToRange(false).values()) {
                 // only support single column partition now
                 try {
