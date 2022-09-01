@@ -169,7 +169,7 @@ select count(*) from lineorder_flat group by c_city,s_city,c_nation,s_nation;
 --Q10
 select count(*) from (select count(*) from lineorder_flat group by lo_shipmode,lo_orderpriority,p_category,s_nation,c_nation) t;
 --Q11
-select count(*) from (select count(*) from lineorder_flat_distributed group by lo_shipmode,lo_orderpriority,p_category,s_nation,c_nation,p_mfgr) t;
+select count(*) from (select count(*) from lineorder_flat group by lo_shipmode,lo_orderpriority,p_category,s_nation,c_nation,p_mfgr) t;
 --Q12
 select count(*) from (select count(*) from lineorder_flat group by substr(lo_shipmode,2),lower(lo_orderpriority),p_category,s_nation,c_nation,s_region,p_mfgr) t;
 ```
@@ -211,7 +211,7 @@ select count(*) from (select count(*) from lineorder_flat group by substr(lo_shi
 | Q8   | select count(*) from lineorder_flat group by lo_orderdate,s_nation,s_region; | group by 2 个低基数列 (<50) 和 1 个日期列 | 60150         | 550            | 1357            | 2.5                 | 2255       | 4.1                    |
 | Q9   | select count(*) from lineorder_flat group by c_city,s_city,c_nation,s_nation; | group by 4 个低基数列                     | 62500         | 1160           | 5683            | 4.9                 | 4502       | 3.9                    |
 | Q10  | select count(*) from (select count(*) from lineorder_flat group by lo_shipmode,lo_orderpriority,p_category,s_nation,c_nation) t; | group by 5 个低基数列 (<50)               | 546875        | 4430           | 7635            | 1.7                 | 11956      | 2.7                    |
-| Q11  | select count(*) from (select count(*) from lineorder_flat_distributed group by lo_shipmode,lo_orderpriority,p_category,s_nation,c_nation,p_mfgr) t; | group by 6 个低基数列 (<50)               | 546875        | 4250           | 8540            | 2.0                 | 12817      | 3.0                    |
+| Q11  | select count(*) from (select count(*) from lineorder_flat group by lo_shipmode,lo_orderpriority,p_category,s_nation,c_nation,p_mfgr) t; | group by 6 个低基数列 (<50)               | 546875        | 4250           | 8540            | 2.0                 | 12817      | 3.0                    |
 | Q12  | select count(*) from (select count(*) from lineorder_flat group by substr(lo_shipmode,2),lower(lo_orderpriority),p_category,s_nation,c_nation,s_region,p_mfgr) t; | group by 7 个包含函数计算的低基数列 (<50) | 468750        | 4620           | 8538            | 1.8                 | 18582      | 4.0                    |
 | sum  |                                                              |                                           |               | 18560          | 42025           | 2.3                 | 59704      | 3.2                    |
 
