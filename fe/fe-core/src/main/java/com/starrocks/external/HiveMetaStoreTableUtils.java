@@ -35,6 +35,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -45,6 +46,7 @@ public class HiveMetaStoreTableUtils {
             ConnectorTableId.createGenerator();
     public static final IdGenerator<ConnectorDatabaseId> CONNECTOR_DATABASE_ID_ID_GENERATOR =
             ConnectorDatabaseId.createGenerator();
+    protected static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("STRUCT", "BINARY", "MAP", "UNIONTYPE");
 
     public static Map<String, HiveColumnStats> getTableLevelColumnStats(HiveMetaStoreTableInfo hmsTable,
                                                                         List<String> columnNames) throws DdlException {
@@ -153,6 +155,10 @@ public class HiveMetaStoreTableUtils {
             case "BOOLEAN":
                 return primitiveType == PrimitiveType.BOOLEAN;
             case "ARRAY":
+                if (type.equals(Type.UNKNOWN_TYPE)) {
+                    return !HIVE_UNSUPPORTED_TYPES.stream().filter(hiveType.toUpperCase()::contains)
+                            .collect(Collectors.toList()).isEmpty();
+                }
                 if (!type.isArrayType()) {
                     return false;
                 }
