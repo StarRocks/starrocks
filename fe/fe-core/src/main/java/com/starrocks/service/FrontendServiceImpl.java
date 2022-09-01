@@ -348,15 +348,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         db.readLock();
         try {
-            for (Table materializedView : db.getMaterializedViews()) {
+            for (MaterializedView mvTable : db.getMaterializedViews()) {
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
-                        materializedView.getName(), PrivPredicate.SHOW)) {
+                        mvTable.getName(), PrivPredicate.SHOW)) {
                     continue;
                 }
-                if (matcher != null && !matcher.match(materializedView.getName())) {
+                if (matcher != null && !matcher.match(mvTable.getName())) {
                     continue;
                 }
-                MaterializedView mvTable = (MaterializedView) materializedView;
                 List<String> createTableStmt = Lists.newArrayList();
                 GlobalStateMgr.getDdlStmt(mvTable, createTableStmt, null, null, false, true);
                 String ddlSql = createTableStmt.get(0);
