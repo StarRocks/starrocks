@@ -45,7 +45,6 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -308,7 +307,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     Config.max_create_table_timeout_second * 1000L);
             boolean ok = false;
             try {
-                ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
+                ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS) && countDownLatch.getStatus().ok();
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
                 ok = false;
@@ -562,7 +561,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // partition visible version won't update in schema change, so we need make global
         // dictionary invalid after schema change.
         for (Column column : tbl.getColumns()) {
-            if (Type.VARCHAR.equals(column.getType())) {
+            if (column.getType().isVarchar()) {
                 IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getName());
             }
         }

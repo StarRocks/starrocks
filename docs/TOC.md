@@ -59,7 +59,6 @@
       + [CREATE USER](./sql-reference/sql-statements/account-management/CREATE%20USER.md)
       + [DROP ROLE](./sql-reference/sql-statements/account-management/DROP%20ROLE.md)
       + [DROP USER](./sql-reference/sql-statements/account-management/DROP%20USER.md)
-      + [EXECUTE AS](./sql-reference/sql-statements/account-management/EXECUTE%20AS.md)
       + [GRANT](./sql-reference/sql-statements/account-management/GRANT.md)
       + [REVOKE](./sql-reference/sql-statements/account-management/REVOKE.md)
       + [SET PASSWORD](./sql-reference/sql-statements/account-management/SET%20PASSWORD.md)

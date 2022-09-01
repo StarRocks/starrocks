@@ -18,6 +18,7 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.ShowAuthenticationStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -209,6 +210,7 @@ public class StatementPlanner {
                 || statement instanceof RevokeRoleStmt
                 || statement instanceof RefreshTableStmt
                 || statement instanceof ShowAnalyzeStmt
+                || statement instanceof ShowAuthenticationStmt
                 || statement instanceof ShowCatalogsStmt
                 || statement instanceof ShowColumnStmt
                 || statement instanceof ShowDbStmt

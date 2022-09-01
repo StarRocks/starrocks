@@ -3,6 +3,7 @@
 #pragma once
 
 #include <atomic>
+#include <boost/algorithm/string.hpp>
 #include <utility>
 
 #include "column/chunk.h"
@@ -44,6 +45,8 @@ struct HdfsScanStats {
     int64_t group_chunk_read_ns = 0;
     int64_t group_dict_filter_ns = 0;
     int64_t group_dict_decode_ns = 0;
+    // late materialization
+    int64_t skip_read_rows = 0;
 
     int64_t get_cpu_time_ns() const {
         // TODO: make it more accurate
@@ -54,7 +57,6 @@ struct HdfsScanStats {
 
 struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
-
     RuntimeProfile::Counter* rows_read_counter = nullptr;
     RuntimeProfile::Counter* bytes_read_counter = nullptr;
     RuntimeProfile::Counter* scan_timer = nullptr;
@@ -113,6 +115,8 @@ struct HdfsScannerParams {
 
     std::vector<std::string>* hive_column_names;
 
+    bool case_sensitive = false;
+
     HdfsScanProfile* profile = nullptr;
 
     std::atomic<int32_t>* open_limit;
@@ -125,6 +129,10 @@ struct HdfsScannerContext {
         SlotId slot_id;
         std::string col_name;
         SlotDescriptor* slot_desc;
+
+        std::string formated_col_name(bool case_sensitive) {
+            return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
+        }
     };
 
     const TupleDescriptor* tuple_desc;
@@ -147,6 +155,11 @@ struct HdfsScannerContext {
 
     // min max conjunct
     std::vector<ExprContext*> min_max_conjunct_ctxs;
+
+    // runtime filters.
+    const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
+
+    bool case_sensitive = false;
 
     std::string timezone;
 
@@ -191,7 +204,7 @@ public:
     void close(RuntimeState* runtime_state) noexcept;
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
-    void cleanup();
+    void finalize();
 
     int64_t num_bytes_read() const { return _stats.bytes_read; }
     int64_t raw_rows_read() const { return _stats.raw_rows_read; }
@@ -205,7 +218,7 @@ public:
 
     int32_t open_limit() { return _scanner_params.open_limit->load(std::memory_order_relaxed); }
 
-    bool is_open() { return _opened; }
+    bool is_open() { return _is_open; }
 
     bool acquire_pending_token(std::atomic_bool* token) {
         // acquire resource
@@ -234,8 +247,8 @@ public:
     uint64_t exit_pending_queue();
 
 private:
-    bool _opened = false;
-    std::atomic<bool> _closed = false;
+    bool _is_open = false;
+    std::atomic<bool> _is_closed = false;
     bool _keep_priority = false;
     Status _build_scanner_context();
     MonotonicStopWatch _pending_queue_sw;
@@ -256,6 +269,7 @@ protected:
     std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
     // predicate which havs min/max
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
+    std::unique_ptr<RandomAccessFile> _raw_file;
     std::unique_ptr<RandomAccessFile> _file;
 };
 

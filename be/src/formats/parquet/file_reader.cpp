@@ -38,7 +38,8 @@ Status FileReader::init(vectorized::HdfsScannerContext* ctx) {
     if (_is_file_filtered) {
         return Status::OK();
     }
-    RETURN_IF_ERROR(_init_group_reader());
+    _prepare_read_columns();
+    RETURN_IF_ERROR(_init_group_readers());
     return Status::OK();
 }
 
@@ -88,10 +89,6 @@ Status FileReader::_parse_footer() {
     RETURN_IF_ERROR(_file_metadata->init(t_metadata));
 
     return Status::OK();
-}
-
-std::shared_ptr<GroupReader> FileReader::_row_group(int i) {
-    return std::make_shared<GroupReader>(_chunk_size, _file, _file_metadata.get(), i);
 }
 
 Status FileReader::_check_magic(const uint8_t* file_magic) {
@@ -171,9 +168,11 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, vect
                 column_order = column_idx < column_orders.size() ? &column_orders[column_idx] : nullptr;
             }
 
-            Status status = _decode_min_max_column(*field, ctx.timezone, slot->type(), *column_meta, column_order,
-                                                   &(*min_chunk)->columns()[i], &(*max_chunk)->columns()[i]);
-            if (!status.ok()) {
+            bool decode_ok = false;
+            RETURN_IF_ERROR(_decode_min_max_column(*field, ctx.timezone, slot->type(), *column_meta, column_order,
+                                                   &(*min_chunk)->columns()[i], &(*max_chunk)->columns()[i],
+                                                   &decode_ok));
+            if (!decode_ok) {
                 *exist = false;
                 return Status::OK();
             }
@@ -196,9 +195,12 @@ int FileReader::_get_partition_column_idx(const std::string& col_name) const {
 Status FileReader::_decode_min_max_column(const ParquetField& field, const std::string& timezone,
                                           const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
                                           const tparquet::ColumnOrder* column_order, vectorized::ColumnPtr* min_column,
-                                          vectorized::ColumnPtr* max_column) {
+                                          vectorized::ColumnPtr* max_column, bool* decode_ok) {
+    *decode_ok = true;
+
     if (!_can_use_min_max_stats(column_meta, column_order)) {
-        return Status::NotSupported("min max statistics not supported");
+        *decode_ok = false;
+        return Status::OK();
     }
 
     switch (column_meta.type) {
@@ -213,7 +215,7 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
             RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(column_meta.statistics.max, &max_value));
         }
         std::unique_ptr<ColumnConverter> converter;
-        ColumnConverterFactory::create_converter(field, type, timezone, &converter);
+        RETURN_IF_ERROR(ColumnConverterFactory::create_converter(field, type, timezone, &converter));
 
         if (!converter->need_convert) {
             (*min_column)->append_numbers(&min_value, sizeof(int32_t));
@@ -227,7 +229,7 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
             max_scr_column->append_numbers(&max_value, sizeof(int32_t));
             converter->convert(max_scr_column, max_column->get());
         }
-        return Status::OK();
+        break;
     }
     case tparquet::Type::type::INT64: {
         int64_t min_value = 0;
@@ -240,7 +242,7 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
             RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(column_meta.statistics.min, &min_value));
         }
         std::unique_ptr<ColumnConverter> converter;
-        ColumnConverterFactory::create_converter(field, type, timezone, &converter);
+        RETURN_IF_ERROR(ColumnConverterFactory::create_converter(field, type, timezone, &converter));
 
         if (!converter->need_convert) {
             (*min_column)->append_numbers(&min_value, sizeof(int64_t));
@@ -254,7 +256,7 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
             max_scr_column->append_numbers(&max_value, sizeof(int64_t));
             converter->convert(max_scr_column, max_column->get());
         }
-        return Status::OK();
+        break;
     }
     case tparquet::Type::type::BYTE_ARRAY: {
         Slice min_slice;
@@ -267,7 +269,7 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
             RETURN_IF_ERROR(PlainDecoder<Slice>::decode(column_meta.statistics.max, &max_slice));
         }
         std::unique_ptr<ColumnConverter> converter;
-        ColumnConverterFactory::create_converter(field, type, timezone, &converter);
+        RETURN_IF_ERROR(ColumnConverterFactory::create_converter(field, type, timezone, &converter));
 
         if (!converter->need_convert) {
             (*min_column)->append_strings(std::vector<Slice>{min_slice});
@@ -281,11 +283,12 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
             max_scr_column->append_strings(std::vector<Slice>{max_slice});
             converter->convert(max_scr_column, max_column->get());
         }
-        return Status::OK();
+        break;
     }
     default:
-        return Status::NotSupported("min max statistics not supported");
+        *decode_ok = false;
     }
+    return Status::OK();
 }
 
 bool FileReader::_can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
@@ -327,7 +330,7 @@ bool FileReader::_is_integer_type(const tparquet::Type::type& type) {
 void FileReader::_prepare_read_columns() {
     const vectorized::HdfsScannerContext& param = *_scanner_ctx;
     for (auto& materialized_column : param.materialized_columns) {
-        int field_index = _file_metadata->schema().get_column_index(materialized_column.col_name);
+        int field_index = _file_metadata->schema().get_column_index(materialized_column.col_name, param.case_sensitive);
         if (field_index < 0) continue;
 
         auto parquet_type = _file_metadata->schema().get_stored_column_by_idx(field_index)->physical_type;
@@ -340,22 +343,6 @@ void FileReader::_prepare_read_columns() {
         _read_cols.emplace_back(column);
     }
     _is_only_partition_scan = _read_cols.empty();
-}
-
-Status FileReader::_create_and_init_group_reader(int row_group_number) {
-    auto row_group_reader = _row_group(row_group_number);
-    const vectorized::HdfsScannerContext& fd_scanner_ctx = *_scanner_ctx;
-
-    GroupReaderParam param;
-    param.tuple_desc = fd_scanner_ctx.tuple_desc;
-    param.conjunct_ctxs_by_slot = fd_scanner_ctx.conjunct_ctxs_by_slot;
-    param.read_cols = _read_cols;
-    param.timezone = fd_scanner_ctx.timezone;
-    param.stats = fd_scanner_ctx.stats;
-
-    RETURN_IF_ERROR(row_group_reader->init(param));
-    _row_group_readers.emplace_back(row_group_reader);
-    return Status::OK();
 }
 
 bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
@@ -373,8 +360,21 @@ bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
     return false;
 }
 
-Status FileReader::_init_group_reader() {
-    _prepare_read_columns();
+Status FileReader::_init_group_readers() {
+    const vectorized::HdfsScannerContext& fd_scanner_ctx = *_scanner_ctx;
+    GroupReaderParam& param = _group_reader_param;
+    param.tuple_desc = fd_scanner_ctx.tuple_desc;
+    param.conjunct_ctxs_by_slot = fd_scanner_ctx.conjunct_ctxs_by_slot;
+    param.read_cols = _read_cols;
+    param.timezone = fd_scanner_ctx.timezone;
+    param.stats = fd_scanner_ctx.stats;
+    param.shared_buffered_stream = nullptr;
+    param.chunk_size = _chunk_size;
+    param.file = _file;
+    param.file_metadata = _file_metadata.get();
+    param.case_sensitive = fd_scanner_ctx.case_sensitive;
+
+    // select and create row group readers.
     for (size_t i = 0; i < _file_metadata->t_metadata().row_groups.size(); i++) {
         bool selected = _select_row_group(_file_metadata->t_metadata().row_groups[i]);
 
@@ -386,14 +386,35 @@ Status FileReader::_init_group_reader() {
                 continue;
             }
 
-            RETURN_IF_ERROR(_create_and_init_group_reader(i));
+            auto row_group_reader = std::make_shared<GroupReader>(_group_reader_param, i);
+            _row_group_readers.emplace_back(row_group_reader);
             _total_row_count += _file_metadata->t_metadata().row_groups[i].num_rows;
         } else {
             continue;
         }
     }
-
     _row_group_size = _row_group_readers.size();
+
+    // if coalesce read enabled, we have to
+    // 1. allocate shared buffered input stream and
+    // 2. collect io ranges of every row group reader.
+    // 3. set io ranges to the stream.
+    if (config::parquet_coalesce_read_enable) {
+        _sb_stream = std::make_shared<SharedBufferedInputStream>(_file);
+        std::vector<SharedBufferedInputStream::IORange> ranges;
+        for (auto& r : _row_group_readers) {
+            int64_t end_offset = 0;
+            r->collect_io_ranges(&ranges, &end_offset);
+            r->set_end_offset(end_offset);
+        }
+        _sb_stream->set_io_ranges(ranges);
+        param.shared_buffered_stream = _sb_stream.get();
+    }
+
+    // initialize row group readers.
+    for (auto& r : _row_group_readers) {
+        RETURN_IF_ERROR(r->init());
+    }
     return Status::OK();
 }
 
@@ -416,6 +437,7 @@ Status FileReader::get_next(vectorized::ChunkPtr* chunk) {
                 _scan_row_count += (*chunk)->num_rows();
             }
             if (status.is_end_of_file()) {
+                _row_group_readers[_cur_row_group_idx]->close();
                 _cur_row_group_idx++;
                 return Status::OK();
             }

@@ -121,6 +121,8 @@ public:
         return _need_partition_boundary_for_unbounded_preceding_rows_frame;
     }
 
+    Status check_has_error();
+
 #ifdef NDEBUG
     static constexpr int32_t BUFFER_CHUNK_NUMBER = 1000;
 #else

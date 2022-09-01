@@ -88,6 +88,7 @@ import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.ShowAuthenticationStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -604,6 +605,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String comment =
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+
         // process properties
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -612,8 +614,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        //process refresh
-        RefreshSchemeDesc refreshSchemeDesc = null;
+        // process refresh
+        RefreshSchemeDesc refreshSchemeDesc;
         if (context.refreshSchemeDesc() == null) {
             refreshSchemeDesc = new SyncRefreshSchemeDesc();
         } else {
@@ -1061,6 +1063,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         QueryRelation queryRelation = (QueryRelation) visit(context.queryBody());
+        // Regenerate cteID when generating plan
         return new CTERelation(
                 RelationId.of(queryRelation).hashCode(),
                 ((Identifier) visit(context.name)).getValue(),
@@ -1647,6 +1650,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean allowRevert = context.WITH() == null;
         // we only support WITH NO REVERT for now
         return new ExecuteAsStmt(toUser, allowRevert);
+    }
+
+    @Override
+    public ParseNode visitShowAllAuthentication(StarRocksParser.ShowAllAuthenticationContext context) {
+        return new ShowAuthenticationStmt(null, true);
+    }
+
+    @Override
+    public ParseNode visitShowAuthenticationForUser(StarRocksParser.ShowAuthenticationForUserContext context) {
+        if (context.user() != null) {
+            UserIdentity user = ((UserIdentifier) visit(context.user())).getUserIdentity();
+            return new ShowAuthenticationStmt(user, false);
+        } else {
+            return new ShowAuthenticationStmt(null, false);
+        }
     }
 
     @Override

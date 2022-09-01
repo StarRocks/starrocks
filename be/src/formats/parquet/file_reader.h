@@ -10,6 +10,7 @@
 #include "formats/parquet/group_reader.h"
 #include "gen_cpp/parquet_types.h"
 #include "runtime/runtime_state.h"
+#include "util/buffered_stream.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -42,14 +43,8 @@ private:
 
     void _prepare_read_columns();
 
-    // init row group reader.
-    Status _init_group_reader();
-
-    // create and inti group reader
-    Status _create_and_init_group_reader(int row_group_number);
-
-    // create row group reader
-    std::shared_ptr<GroupReader> _row_group(int i);
+    // init row group readers.
+    Status _init_group_readers();
 
     // filter row group by min/max conjuncts
     StatusOr<bool> _filter_group(const tparquet::RowGroup& row_group);
@@ -80,7 +75,7 @@ private:
     static Status _decode_min_max_column(const ParquetField& field, const std::string& timezone,
                                          const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
                                          const tparquet::ColumnOrder* column_order, vectorized::ColumnPtr* min_column,
-                                         vectorized::ColumnPtr* max_column);
+                                         vectorized::ColumnPtr* max_column, bool* decode_ok);
     static bool _can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
                                        const tparquet::ColumnOrder* column_order);
     // statistics.min_value max_value
@@ -113,6 +108,8 @@ private:
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;
     vectorized::HdfsScannerContext* _scanner_ctx;
+    std::shared_ptr<SharedBufferedInputStream> _sb_stream = nullptr;
+    GroupReaderParam _group_reader_param;
 };
 
 } // namespace starrocks::parquet

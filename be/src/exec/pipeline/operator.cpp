@@ -48,12 +48,17 @@ Status Operator::prepare(RuntimeState* state) {
     _finishing_timer = ADD_TIMER(_common_metrics, "SetFinishingTime");
     _finished_timer = ADD_TIMER(_common_metrics, "SetFinishedTime");
     _close_timer = ADD_TIMER(_common_metrics, "CloseTime");
+    _prepare_timer = ADD_TIMER(_common_metrics, "PrepareTime");
 
     _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
     _pull_chunk_num_counter = ADD_COUNTER(_common_metrics, "PullChunkNum", TUnit::UNIT);
     _pull_row_num_counter = ADD_COUNTER(_common_metrics, "PullRowNum", TUnit::UNIT);
     return Status::OK();
+}
+
+void Operator::set_prepare_time(int64_t cost_ns) {
+    _prepare_timer->set(cost_ns);
 }
 
 void Operator::set_precondition_ready(RuntimeState* state) {

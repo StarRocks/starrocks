@@ -4,9 +4,11 @@ namespace cpp starrocks
 namespace java com.starrocks.thrift
 
 enum TWorkGroupType {
+  // Not suppported.
   WG_REALTIME,
   WG_NORMAL,
-  WG_DEFAULT
+  WG_DEFAULT,
+  WG_SHORT_QUERY
 }
 
 struct TWorkGroup {

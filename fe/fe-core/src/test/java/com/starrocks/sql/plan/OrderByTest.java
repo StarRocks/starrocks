@@ -137,4 +137,5 @@ public class OrderByTest extends PlanTestBase {
                 "  |  limit: 10");
         connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
     }
+
 }

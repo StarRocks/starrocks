@@ -21,6 +21,8 @@
 
 #include "util/bfd_parser.h"
 
+#include <bfd.h>
+
 #include <memory>
 #include <utility>
 

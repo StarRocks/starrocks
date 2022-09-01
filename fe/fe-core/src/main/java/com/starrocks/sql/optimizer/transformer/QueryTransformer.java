@@ -49,10 +49,10 @@ class QueryTransformer {
     private final ColumnRefFactory columnRefFactory;
     private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
-    private final Map<Integer, ExpressionMapping> cteContext;
+    private final CTETransformerContext cteContext;
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                            Map<Integer, ExpressionMapping> cteContext) {
+                            CTETransformerContext cteContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
@@ -71,13 +71,14 @@ class QueryTransformer {
         if (queryBlock.hasOrderByClause()) {
             if (!queryBlock.hasAggregation()) {
                 //requires both output and source fields to be visible if there are no aggregations
-                builder = projectForOrderWithoutAggregation(
-                        builder, queryBlock.getOutputExpr(), builder.getFieldMappings(), queryBlock.getOrderScope());
+                builder = projectForOrder(builder, queryBlock.getOutputExpr(), builder.getFieldMappings(),
+                        queryBlock.getOrderScope(), false);
             } else {
                 //requires output fields, groups and translated aggregations to be visible for queries with aggregation
-                builder = projectForOrderWithAggregation(builder,
+                builder = projectForOrder(builder,
                         Iterables.concat(queryBlock.getOutputExpr(), queryBlock.getOrderSourceExpressions()),
-                        queryBlock.getOrderScope());
+                        builder.getFieldMappings(),
+                        queryBlock.getOrderScope(), true);
             }
 
             builder = window(builder, queryBlock.getOrderByAnalytic());
@@ -110,50 +111,37 @@ class QueryTransformer {
         return outputs;
     }
 
-    private OptExprBuilder planFrom(Relation node, Map<Integer, ExpressionMapping> cteContext) {
+    private OptExprBuilder planFrom(Relation node, CTETransformerContext cteContext) {
         // This must be a copy of the context, because the new Relation may contain cte with the same name,
         // and the internal cte with the same name will overwrite the original mapping
-        Map<Integer, ExpressionMapping> newCTEContext = Maps.newHashMap(cteContext);
+        CTETransformerContext newCteContext = new CTETransformerContext(cteContext);
         return new RelationTransformer(columnRefFactory, session,
-                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())), newCTEContext).visit(
+                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())), newCteContext).visit(
                 node).getRootBuilder();
     }
 
-    private OptExprBuilder projectForOrderWithoutAggregation(OptExprBuilder subOpt, Iterable<Expr> outputExpression,
-                                                             List<ColumnRefOperator> sourceExpression, Scope scope) {
+    private OptExprBuilder projectForOrder(OptExprBuilder subOpt, Iterable<Expr> expressions,
+                                           List<ColumnRefOperator> sourceExpression, Scope scope,
+                                           boolean withAggregation) {
         ExpressionMapping outputTranslations = new ExpressionMapping(scope);
 
         List<ColumnRefOperator> fieldMappings = new ArrayList<>();
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
+        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
 
-        for (Expr expression : outputExpression) {
-            ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
-                    subOpt.getExpressionMapping(), projections, columnRefFactory);
-            fieldMappings.add(columnRef);
-            outputTranslations.put(expression, columnRef);
-        }
-
-        for (ColumnRefOperator expression : sourceExpression) {
-            projections.put(expression, expression);
-            fieldMappings.add(expression);
-        }
-
-        LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
-        outputTranslations.setFieldMappings(fieldMappings);
-        return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
-    }
-
-    private OptExprBuilder projectForOrderWithAggregation(OptExprBuilder subOpt, Iterable<Expr> expressions,
-                                                          Scope scope) {
-        ExpressionMapping outputTranslations = new ExpressionMapping(scope);
-
-        List<ColumnRefOperator> fieldMappings = new ArrayList<>();
-        Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
         for (Expr expression : expressions) {
+            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, expression, cteContext);
             ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
                     subOpt.getExpressionMapping(), projections, columnRefFactory);
             fieldMappings.add(columnRef);
             outputTranslations.put(expression, columnRef);
+        }
+
+        if (!withAggregation) {
+            for (ColumnRefOperator expression : sourceExpression) {
+                projections.put(expression, expression);
+                fieldMappings.add(expression);
+            }
         }
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);

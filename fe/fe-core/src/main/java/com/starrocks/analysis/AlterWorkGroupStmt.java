@@ -56,7 +56,7 @@ public class AlterWorkGroupStmt extends DdlStmt {
             AlterProperties alterProperties = (AlterProperties) cmd;
             WorkGroupAnalyzer.analyzeProperties(changedProperties, alterProperties.properties);
             if (changedProperties.getWorkGroupType() != null) {
-                throw new SemanticException("type of WorkGroup is immutable");
+                throw new SemanticException("type of ResourceGroup is immutable");
             }
             if (changedProperties.getCpuCoreLimit() == null &&
                     changedProperties.getMemLimit() == null &&

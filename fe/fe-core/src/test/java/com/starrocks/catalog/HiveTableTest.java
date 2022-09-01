@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
+import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
@@ -130,5 +131,13 @@ public class HiveTableTest {
         properties.remove("hive.metastore.uris");
         new HiveTable(1000, "hive_table", columns, properties);
         Assert.fail("No exception throws.");
+    }
+
+    @Test
+    public void testHiveColumnConvert() {
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("BINARY", Type.VARCHAR));
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("UNIONTYPE", Type.UNKNOWN_TYPE));
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("MAP", Type.UNKNOWN_TYPE));
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("STRUCT", Type.UNKNOWN_TYPE));
     }
 }

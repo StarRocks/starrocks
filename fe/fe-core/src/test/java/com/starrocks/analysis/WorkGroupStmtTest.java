@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -241,8 +242,8 @@ public class WorkGroupStmtTest {
     }
 
     @Test
-    public void testCreateDResourceGroupWithUnknownProperty() throws Exception {
-        String sql = "create resource group rg_unknown\n" +
+    public void testCreateDResourceGroupWithIllegalProperty() throws Exception {
+        String unknownPropertySql = "create resource group rg_unknown\n" +
                 "to\n" +
                 "    (user='rg1_user3', source_ip='192.168.4.1/24'),\n" +
                 "    (user='rg1_user4')\n" +
@@ -253,12 +254,34 @@ public class WorkGroupStmtTest {
                 "    'type' = 'normal', \n" +
                 "    'unknown' = 'unknown'" +
                 ");";
-        try {
-            starRocksAssert.executeWorkGroupDdlSql(sql);
-            Assert.fail("should throw error");
-        } catch (Exception e) {
-            Assert.assertEquals("Unknown property: unknown", e.getMessage());
-        }
+        Assert.assertThrows("Unknown property: unknown",
+                SemanticException.class, () -> starRocksAssert.executeWorkGroupDdlSql(unknownPropertySql));
+
+        String illegalTypeSql = "create resource group rg_unknown\n" +
+                "to\n" +
+                "    (user='rg1_user3', source_ip='192.168.4.1/24'),\n" +
+                "    (user='rg1_user4')\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '10',\n" +
+                "    'mem_limit' = '20%',\n" +
+                "    'concurrency_limit' = '11',\n" +
+                "    'type' = 'illegal-type'" +
+                ");";
+        Assert.assertThrows("Only support 'normal' and 'short_query' type",
+                SemanticException.class, () -> starRocksAssert.executeWorkGroupDdlSql(illegalTypeSql));
+
+        String illegalDefaultTypeSql = "create resource group rg_unknown\n" +
+                "to\n" +
+                "    (user='rg1_user3', source_ip='192.168.4.1/24'),\n" +
+                "    (user='rg1_user4')\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '10',\n" +
+                "    'mem_limit' = '20%',\n" +
+                "    'concurrency_limit' = '11',\n" +
+                "    'type' = 'default'" +
+                ");";
+        Assert.assertThrows("Only support 'normal' and 'short_query' type",
+                SemanticException.class, () -> starRocksAssert.executeWorkGroupDdlSql(illegalDefaultTypeSql));
     }
 
     @Test
@@ -552,5 +575,74 @@ public class WorkGroupStmtTest {
         for (String[] c : cases) {
             Assert.assertThrows(c[1], SemanticException.class, () -> starRocksAssert.executeWorkGroupDdlSql(c[0]));
         }
+    }
+
+    @Test
+    public void testShortQueryResourceGroup() throws Exception {
+        String createRtRg1ReplaceSql = "create resource group if not exists or replace rg1\n" +
+                "to\n" +
+                "     (`db`='db1')\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '25',\n" +
+                "    'mem_limit' = '80%',\n" +
+                "    'concurrency_limit' = '10',\n" +
+                "    'type' = 'short_query'\n" +
+                ");";
+
+        String createNormalRg1ReplaceSql = "create resource group if not exists or replace rg1\n" +
+                "to\n" +
+                "     (`db`='db1')\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '25',\n" +
+                "    'mem_limit' = '80%',\n" +
+                "    'concurrency_limit' = '10',\n" +
+                "    'type' = 'normal'\n" +
+                ");";
+
+        String createRtRg2ReplaceSql = "create resource group if not exists or replace rg2\n" +
+                "to\n" +
+                "     (`db`='db1')\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '25',\n" +
+                "    'mem_limit' = '80%',\n" +
+                "    'concurrency_limit' = '10',\n" +
+                "    'type' = 'short_query'\n" +
+                ");";
+
+        String createNormalRg2ReplaceSql = "create resource group if not exists or replace rg2\n" +
+                "to\n" +
+                "     (`db`='db1')\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '25',\n" +
+                "    'mem_limit' = '80%',\n" +
+                "    'concurrency_limit' = '10',\n" +
+                "    'type' = 'normal'\n" +
+                ");";
+
+        String alterRg1ToNormalTypeSql = "ALTER resource group rg1\n" +
+                "WITH ('type' = 'normal')";
+
+        // Create realtime rg1.
+        starRocksAssert.executeWorkGroupDdlSql(createRtRg1ReplaceSql);
+
+        // Fail to modify type.
+        Assert.assertThrows("type of ResourceGroup is immutable",
+                SemanticException.class, () -> starRocksAssert.executeWorkGroupDdlSql(alterRg1ToNormalTypeSql));
+
+        // Create normal rg2 and fail to replace it with realtime rg2.
+        starRocksAssert.executeWorkGroupDdlSql(createNormalRg2ReplaceSql);
+        Assert.assertThrows("There can be only one short_query RESOURCE_GROUP (rg1)",
+                DdlException.class, () -> starRocksAssert.executeWorkGroupDdlSql(createRtRg2ReplaceSql));
+
+        // Replace realtime rg1 with normal rg1, and create realtime rg2.
+        starRocksAssert.executeWorkGroupDdlSql(createNormalRg1ReplaceSql);
+        starRocksAssert.executeWorkGroupDdlSql(createRtRg2ReplaceSql);
+
+        // Replace realtime rg2 with normal rg2, and create realtime rg1.
+        starRocksAssert.executeWorkGroupDdlSql(createNormalRg2ReplaceSql);
+        starRocksAssert.executeWorkGroupDdlSql(createRtRg1ReplaceSql);
+
+        starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
+        starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg2");
     }
 }

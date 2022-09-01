@@ -145,8 +145,7 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size
     return _status;
 }
 Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, RuntimeState* state,
-                                                                             size_t* num_read_chunks, int worker_id,
-                                                                             workgroup::WorkGroupPtr running_wg) {
+                                                                             workgroup::WorkGroup* running_wg) {
     if (!_status.ok()) {
         return _status;
     }
@@ -155,7 +154,7 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(siz
     for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         {
             if (_chunk_token == nullptr && (_chunk_token = _buffer_limiter->pin(1)) == nullptr) {
-                return Status::OK();
+                return _status;
             }
 
             SCOPED_RAW_TIMER(&time_spent);
@@ -165,13 +164,11 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(siz
             if (!_status.ok()) {
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
-                    ++(*num_read_chunks);
                     _chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)));
                 }
                 break;
             }
 
-            ++(*num_read_chunks);
             if (!_chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)))) {
                 break;
             }
@@ -182,8 +179,7 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(siz
         }
 
         if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(workgroup::TypeHdfsScanExecutor,
-                                                                               worker_id, running_wg)) {
+            running_wg->scan_sched_entity()->in_queue()->should_yield(running_wg, time_spent)) {
             break;
         }
     }

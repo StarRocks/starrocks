@@ -795,6 +795,7 @@ public class StmtExecutor {
             statisticExecutor.collectStatisticSync(db.getId(), table.getId(), analyzeStmt.getColumnNames(),
                     analyzeStmt.isSample(), job.getSampleCollectRows());
             GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, job.getColumns());
+            GlobalStateMgr.getCurrentStatisticStorage().getColumnStatisticsSync(table, job.getColumns());
         } catch (Exception e) {
             job.setReason(e.getMessage());
             throw e;

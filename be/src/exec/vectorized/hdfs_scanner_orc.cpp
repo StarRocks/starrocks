@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "exec/exec_node.h"
+#include "formats/orc/orc_chunk_reader.h"
 #include "fs/fs.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "storage/chunk_helper.h"
@@ -14,8 +15,8 @@ namespace starrocks::vectorized {
 class ORCHdfsFileStream : public orc::InputStream {
 public:
     // |file| must outlive ORCHdfsFileStream
-    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, HdfsScanStats* stats)
-            : _file(std::move(file)), _length(length), _stats(stats), _cache_buffer(0), _cache_offset(0) {}
+    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length)
+            : _file(std::move(file)), _length(length), _cache_buffer(0), _cache_offset(0) {}
 
     ~ORCHdfsFileStream() override = default;
 
@@ -74,18 +75,14 @@ public:
     }
 
     void doRead(void* buf, uint64_t length, uint64_t offset) {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
         if (buf == nullptr) {
             throw orc::ParseError("Buffer is null");
         }
-
         Status status = _file->read_at_fully(offset, buf, length);
         if (!status.ok()) {
             auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
             throw orc::ParseError(msg);
         }
-        _stats->bytes_read += length;
     }
 
     const std::string& getName() const override { return _file->filename(); }
@@ -93,7 +90,6 @@ public:
 private:
     RandomAccessFile* _file;
     uint64_t _length;
-    HdfsScanStats* _stats;
     std::vector<char> _cache_buffer;
     uint64_t _cache_offset;
 };
@@ -374,8 +370,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 }
 
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
-    auto input_stream =
-            std::make_unique<ORCHdfsFileStream>(_file.get(), _scanner_params.scan_ranges[0]->file_length, &_stats);
+    auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _scanner_params.scan_ranges[0]->file_length);
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     std::unique_ptr<orc::Reader> reader;
     try {
@@ -388,7 +383,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
 
     std::unordered_set<std::string> known_column_names;
-    OrcChunkReader::build_column_name_set(&known_column_names, _scanner_params.hive_column_names, reader->getType());
+    OrcChunkReader::build_column_name_set(&known_column_names, _scanner_params.hive_column_names, reader->getType(),
+                                          _scanner_params.case_sensitive);
     _scanner_ctx.set_columns_from_file(known_column_names);
     ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
@@ -402,8 +398,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     int src_slot_index = 0;
     bool has_conjunct_ctxs_by_slot = (_conjunct_ctxs_by_slot.size() != 0);
     for (const auto& it : _scanner_params.materialize_slots) {
-        const std::string& name = it->col_name();
-        if (known_column_names.find(name) == known_column_names.end()) continue;
+        auto col_name = OrcChunkReader::format_column_name(it->col_name(), _scanner_params.case_sensitive);
+        if (known_column_names.find(col_name) == known_column_names.end()) continue;
         if (has_conjunct_ctxs_by_slot && _conjunct_ctxs_by_slot.find(it->id()) == _conjunct_ctxs_by_slot.end()) {
             _lazy_load_ctx.lazy_load_slots.emplace_back(it);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
@@ -437,6 +433,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         _orc_reader->set_conjuncts_and_runtime_filters(conjuncts, _scanner_params.runtime_filter_collector);
     }
     _orc_reader->set_hive_column_names(_scanner_params.hive_column_names);
+    _orc_reader->set_case_sensitive(_scanner_params.case_sensitive);
     if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0) {
         _orc_reader->set_lazy_load_context(&_lazy_load_ctx);
     }

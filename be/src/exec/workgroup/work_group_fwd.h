@@ -4,18 +4,23 @@
 
 #include <memory>
 
+namespace starrocks::pipeline {
+class DriverQueue;
+}
+
 namespace starrocks::workgroup {
 
 class WorkGroup;
+class ScanTaskQueue;
+
+template <typename Q>
+class WorkGroupSchedEntity;
+using WorkGroupDriverSchedEntity = WorkGroupSchedEntity<pipeline::DriverQueue>;
+using WorkGroupScanSchedEntity = WorkGroupSchedEntity<ScanTaskQueue>;
+
 class WorkGroupManager;
 class ScanExecutor;
 
 using WorkGroupPtr = std::shared_ptr<WorkGroup>;
-
-// Two types of scan executor: OlapScan and HdfsScan
-enum ScanExecutorType {
-    TypeOlapScanExecutor,
-    TypeHdfsScanExecutor,
-};
 
 } // namespace starrocks::workgroup

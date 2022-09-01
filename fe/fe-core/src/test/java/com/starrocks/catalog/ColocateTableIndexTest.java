@@ -125,5 +125,50 @@ public class ColocateTableIndexTest {
         Assert.assertTrue(infos.get(1).get(1).contains("group2"));
         Assert.assertEquals(String.format("%d*", table2_1.getId()), infos.get(1).get(2));
         LOG.info("after drop db2: {}", infos);
-      }
+    }
+
+    @Test
+    public void testCleanUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        int n = colocateTableIndex.getAllGroupIds().size();
+
+        // create goodDb
+        String createDbStmtStr = "create database goodDb;";
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().createDb(createDbStmt);
+        Database goodDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:goodDb");
+        // create goodtable
+        String sql = "CREATE TABLE " +
+                "goodDb.goodTable (k1 int, k2 int, k3 varchar(32))\n" +
+                "PRIMARY KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1)\n" +
+                "BUCKETS 4\n" +
+                "PROPERTIES(\"colocate_with\"=\"goodGroup\", \"replication_num\" = \"1\");\n";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        OlapTable table = (OlapTable)goodDb.getTable("goodTable");
+        ColocateTableIndex.GroupId goodGroup = GlobalStateMgr.getCurrentColocateIndex().getGroup(table.getId());
+        Assert.assertEquals(n + 1, colocateTableIndex.getAllGroupIds().size());
+
+        // create a bad db
+        long badDbId = 100;
+        table.id = 101;
+        table.name = "goodTableOfBadDb";
+        colocateTableIndex.addTableToGroup(
+                badDbId, table, "badGroupOfBadDb", new ColocateTableIndex.GroupId(badDbId, 102));
+        // create a bad table in good db
+        table.id = 200;
+        table.name = "badTable";
+        colocateTableIndex.addTableToGroup(
+                goodDb.getId(), table, "badGroupOfBadTable", new ColocateTableIndex.GroupId(goodDb.getId(), 201));
+
+        Assert.assertEquals(n + 3, colocateTableIndex.getAllGroupIds().size());
+
+        colocateTableIndex.cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
+
+        Assert.assertEquals(n + 1, colocateTableIndex.getAllGroupIds().size());
+    }
+
 }

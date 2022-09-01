@@ -55,15 +55,14 @@ public:
 
     Status buffer_next_batch_chunks_blocking(size_t chunk_size, RuntimeState* state) override;
     Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, RuntimeState* state,
-                                                           size_t* num_read_chunks, int worker_id,
-                                                           workgroup::WorkGroupPtr running_wg) override;
+                                                           workgroup::WorkGroup* running_wg) override;
 
 private:
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round,
     // if it runs in the worker thread owned by other workgroup, which has running drivers.
-    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000L;
+    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 5'000'000L;
 
     static constexpr int UPDATE_AVG_ROW_BYTES_FREQUENCY = 8;
 

@@ -70,13 +70,14 @@ Status HiveDataSource::open(RuntimeState* state) {
 Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (hdfs_scan_node.__isset.min_max_conjuncts) {
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, hdfs_scan_node.min_max_conjuncts, &_min_max_conjunct_ctxs));
+        RETURN_IF_ERROR(Expr::create_expr_trees(&_pool, hdfs_scan_node.min_max_conjuncts, &_min_max_conjunct_ctxs));
     }
 
     if (hdfs_scan_node.__isset.partition_conjuncts) {
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, hdfs_scan_node.partition_conjuncts, &_partition_conjunct_ctxs));
+        RETURN_IF_ERROR(Expr::create_expr_trees(&_pool, hdfs_scan_node.partition_conjuncts, &_partition_conjunct_ctxs));
         _has_partition_conjuncts = true;
     }
+
     RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_min_max_conjunct_ctxs, state));
@@ -142,6 +143,9 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
 
     if (hdfs_scan_node.__isset.hive_column_names) {
         _hive_column_names = hdfs_scan_node.hive_column_names;
+    }
+    if (hdfs_scan_node.__isset.case_sensitive) {
+        _case_sensitive = hdfs_scan_node.case_sensitive;
     }
 }
 
@@ -227,7 +231,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     HdfsScannerParams scanner_params;
     scanner_params.runtime_filter_collector = _runtime_filters;
     scanner_params.scan_ranges = {&scan_range};
-    scanner_params.fs = _pool->add(fs.release());
+    scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
@@ -241,24 +245,29 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
+    scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.open_limit = nullptr;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;
     if (format == THdfsFileFormat::PARQUET) {
-        scanner = _pool->add(new HdfsParquetScanner());
+        scanner = _pool.add(new HdfsParquetScanner());
     } else if (format == THdfsFileFormat::ORC) {
-        scanner = _pool->add(new HdfsOrcScanner());
+        scanner = _pool.add(new HdfsOrcScanner());
     } else if (format == THdfsFileFormat::TEXT) {
-        scanner = _pool->add(new HdfsTextScanner());
+        scanner = _pool.add(new HdfsTextScanner());
     } else {
         std::string msg = fmt::format("unsupported hdfs file format: {}", format);
         LOG(WARNING) << msg;
         return Status::NotSupported(msg);
     }
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
-    RETURN_IF_ERROR(scanner->open(state));
+    Status st = scanner->open(state);
+    if (!st.ok()) {
+        auto msg = fmt::format("file = {}", native_file_path);
+        return st.clone_and_append(msg);
+    }
     _scanner = scanner;
     return Status::OK();
 }

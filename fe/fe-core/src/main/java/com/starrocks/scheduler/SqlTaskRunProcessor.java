@@ -35,7 +35,8 @@ public class SqlTaskRunProcessor implements TaskRunProcessor {
                     .setTimestamp(System.currentTimeMillis())
                     .setClientIp(context.getRemoteIp())
                     .setUser(ctx.getQualifiedUser())
-                    .setDb(ctx.getDatabase());
+                    .setDb(ctx.getDatabase())
+                    .setCatalog(ctx.getCurrentCatalog());
             ctx.getPlannerProfile().reset();
             String definition = context.getDefinition();
             StatementBase sqlStmt = SqlParser.parse(definition, ctx.getSessionVariable().getSqlMode()).get(0);

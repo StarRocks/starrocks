@@ -2,9 +2,49 @@
 
 #include "exec/vectorized/hdfs_scanner.h"
 
+#include <boost/algorithm/string.hpp>
+
+#include "column/column_helper.h"
 #include "exec/exec_node.h"
 
 namespace starrocks::vectorized {
+
+class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
+public:
+    explicit CountedSeekableInputStream(std::shared_ptr<io::SeekableInputStream> stream,
+                                        vectorized::HdfsScanStats* stats)
+            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(stream), _stats(stats) {}
+
+    ~CountedSeekableInputStream() override = default;
+
+    StatusOr<int64_t> read(void* data, int64_t size) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _stream->read(data, size));
+        _stats->bytes_read += nread;
+        return nread;
+    }
+
+    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, data, size));
+        _stats->bytes_read += nread;
+        return nread;
+    }
+
+    Status read_at_fully(int64_t offset, void* data, int64_t size) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        RETURN_IF_ERROR(_stream->read_at_fully(offset, data, size));
+        _stats->bytes_read += size;
+        return Status::OK();
+    }
+
+private:
+    std::shared_ptr<io::SeekableInputStream> _stream;
+    vectorized::HdfsScanStats* _stats;
+};
 
 Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _runtime_state = runtime_state;
@@ -28,9 +68,8 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
         }
     }
 
-    // min/max conjuncts.
-    RETURN_IF_ERROR(
-            Expr::clone_if_not_exists(_scanner_params.min_max_conjunct_ctxs, runtime_state, &_min_max_conjunct_ctxs));
+    // No need to clone. It's cloned from outside.
+    _min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
 
     Status status = do_init(runtime_state, scanner_params);
     return status;
@@ -80,6 +119,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.scan_ranges = _scanner_params.scan_ranges;
     ctx.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
+    ctx.case_sensitive = _scanner_params.case_sensitive;
     ctx.timezone = _runtime_state->timezone();
     ctx.stats = &_stats;
 
@@ -105,15 +145,17 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
 }
 
 Status HdfsScanner::open(RuntimeState* runtime_state) {
-    if (_opened) {
+    if (_is_open) {
         return Status::OK();
     }
     CHECK(_file == nullptr) << "File has already been opened";
-    ASSIGN_OR_RETURN(_file, _scanner_params.fs->new_random_access_file(_scanner_params.path));
+    ASSIGN_OR_RETURN(_raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path));
+    _file = std::make_unique<RandomAccessFile>(
+            std::make_shared<CountedSeekableInputStream>(_raw_file->stream(), &_stats), _raw_file->filename());
     _build_scanner_context();
     auto status = do_open(runtime_state);
     if (status.ok()) {
-        _opened = true;
+        _is_open = true;
         if (_scanner_params.open_limit != nullptr) {
             _scanner_params.open_limit->fetch_add(1, std::memory_order_relaxed);
         }
@@ -125,21 +167,22 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
 void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     DCHECK(!has_pending_token());
     bool expect = false;
-    if (!_closed.compare_exchange_strong(expect, true)) return;
+    if (!_is_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
     Expr::close(_conjunct_ctxs, runtime_state);
-    Expr::close(_min_max_conjunct_ctxs, runtime_state);
     for (auto& it : _conjunct_ctxs_by_slot) {
         Expr::close(it.second, runtime_state);
     }
+
     do_close(runtime_state);
     _file.reset(nullptr);
-    if (_opened && _scanner_params.open_limit != nullptr) {
+    _raw_file.reset(nullptr);
+    if (_is_open && _scanner_params.open_limit != nullptr) {
         _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
     }
 }
 
-void HdfsScanner::cleanup() {
+void HdfsScanner::finalize() {
     if (_runtime_state != nullptr) {
         close(_runtime_state);
     }
@@ -197,7 +240,8 @@ void HdfsScanner::update_counter() {
 
 void HdfsScannerContext::set_columns_from_file(const std::unordered_set<std::string>& names) {
     for (auto& column : materialized_columns) {
-        if (names.find(column.col_name) == names.end()) {
+        auto col_name = column.formated_col_name(case_sensitive);
+        if (names.find(col_name) == names.end()) {
             not_existed_slots.push_back(column.slot_desc);
             SlotId slot_id = column.slot_id;
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {

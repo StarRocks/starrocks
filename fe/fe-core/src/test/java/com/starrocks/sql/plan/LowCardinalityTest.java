@@ -269,6 +269,7 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testDecodeNodeRewrite10() throws Exception {
         String sql = "select upper(S_ADDRESS) as a, count(*) from supplier group by a";
         String plan = getFragmentPlan(sql);
+        System.out.println("plan = " + plan);
         Assert.assertTrue(plan.contains("  3:Decode\n" +
                 "  |  <dict id 12> : <string id 9>"));
         Assert.assertTrue(plan.contains("<function id 12> : DictExpr(11: S_ADDRESS,[upper(<place-holder>)])"));
@@ -461,8 +462,10 @@ public class LowCardinalityTest extends PlanTestBase {
 
         sql = "select max(upper(S_ADDRESS)) from supplier";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("Decode"));
-        Assert.assertTrue(plan.contains(" <function id 12>"));
+        Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 13> : <string id 10>\n" +
+                "  |  string functions:\n" +
+                "  |  <function id 13> : DictExpr(11: S_ADDRESS,[upper(<place-holder>)])"));
 
         sql = "select max(\"CONST\") from supplier";
         plan = getFragmentPlan(sql);
@@ -895,6 +898,21 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  4:Decode\n" +
                 "  |  <dict id 14> : <string id 9>\n" +
                 "  |  <dict id 15> : <string id 10>"));
+
+        sql = "select max(upper(S_ADDRESS)) from supplier_nullable";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  5:Decode\n" +
+                "  |  <dict id 14> : <string id 10>\n" +
+                "  |  string functions:\n" +
+                "  |  <function id 14> : DictExpr(11: S_ADDRESS,[upper(<place-holder>)])\n" +
+                "  |  "));
+
+        sql = "select max(if(S_ADDRESS='kks', upper(S_COMMENT), S_COMMENT)), " +
+                "min(upper(S_COMMENT)) from supplier_nullable " +
+                "group by upper(S_COMMENT)";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
 
     }

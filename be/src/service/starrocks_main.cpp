@@ -167,6 +167,9 @@ int main(int argc, char** argv) {
 #endif
 
     Aws::SDKOptions aws_sdk_options;
+    if (starrocks::config::aws_sdk_logging_trace_enabled) {
+        aws_sdk_options.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Trace;
+    }
     Aws::InitAPI(aws_sdk_options);
 
     std::vector<starrocks::StorePath> paths;

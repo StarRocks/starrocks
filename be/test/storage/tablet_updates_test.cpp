@@ -922,11 +922,14 @@ void TabletUpdatesTest::test_apply(bool enable_persistent_index) {
         ASSERT_EQ(version, _tablet->updates()->max_version());
         ASSERT_EQ(version, _tablet->updates()->version_history_count());
     }
-    ASSERT_EQ(N, read_tablet(_tablet, rowsets.size()));
+    ASSERT_EQ(N, read_tablet(_tablet, rowsets.size() + 1));
 
     // Ensure the persistent meta is correct.
     auto max_version = rowsets.size() + 1;
     auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
+    // `enable_persistent_index` is not persistent in this case
+    // so we reset the `enable_persistent_index` after load
+    tablet1->set_enable_persistent_index(enable_persistent_index);
     EXPECT_EQ(max_version, tablet1->updates()->max_version());
     EXPECT_EQ(max_version, tablet1->updates()->version_history_count());
     for (int i = 2; i <= max_version; i++) {
@@ -1220,9 +1223,23 @@ void TabletUpdatesTest::test_compaction_with_empty_rowset(bool enable_persistent
         keys5.push_back(i * 3 + 2);
     }
     ASSERT_TRUE(_tablet->rowset_commit(5, create_rowset(_tablet, keys5)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    {
+        // used for wait merely
+        std::vector<RowsetSharedPtr> dummy_rowsets;
+        ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(5, &dummy_rowsets).ok());
+    }
     ASSERT_TRUE(_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    // Wait until compaction applied.
+    while (true) {
+        std::vector<RowsetSharedPtr> dummy_rowsets;
+        EditVersion full_version;
+        ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(5, &dummy_rowsets, &full_version).ok());
+        if (full_version.minor() == 1) {
+            break;
+        }
+        std::cerr << "waiting for compaction applied\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
 }
 
 TEST_F(TabletUpdatesTest, compaction_with_empty_rowset) {

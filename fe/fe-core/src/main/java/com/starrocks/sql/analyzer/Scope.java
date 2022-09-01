@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.ast.CTERelation;
 
 import java.util.List;
@@ -53,7 +54,12 @@ public class Scope {
         if (matchFields.size() > 1) {
             throw new SemanticException("Column '%s' is ambiguous", expression.getColumnName());
         } else if (matchFields.size() == 1) {
-            return Optional.of(asResolvedField(matchFields.get(0), fieldIndexOffset));
+            if (matchFields.get(0).getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE)) {
+                throw new SemanticException("Datatype of external table column [" + matchFields.get(0).getName()
+                        + "] is not supported!");
+            } else {
+                return Optional.of(asResolvedField(matchFields.get(0), fieldIndexOffset));
+            }
         } else {
             if (parent != null
                     //Correlated subqueries currently only support accessing properties in the first level outer layer

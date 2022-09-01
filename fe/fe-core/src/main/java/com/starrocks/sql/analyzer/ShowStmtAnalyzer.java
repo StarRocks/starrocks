@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.ShowAuthenticationStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -10,7 +11,9 @@ import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -101,5 +104,23 @@ public class ShowStmtAnalyzer {
             }
             return db;
         }
+
+        @Override
+        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            UserIdentity user = statement.getUserIdent();
+            if (user != null) {
+                try {
+                    user.analyze(context.getClusterName());
+                } catch (AnalysisException e) {
+                    SemanticException exception = new SemanticException("failed to show authentication for " + user.toString());
+                    exception.initCause(e);
+                    throw exception;
+                }
+            } else if (! statement.isAll()) {
+                statement.setUserIdent(context.getCurrentUserIdentity());
+            }
+            return null;
+        }
+
     }
 }
