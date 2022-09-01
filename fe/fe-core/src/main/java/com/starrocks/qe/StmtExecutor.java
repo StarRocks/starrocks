@@ -781,22 +781,18 @@ public class StmtExecutor {
             analyzeStatus = statisticExecutor.collectStatistics(
                     new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
                             StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                            analyzeStmt.getProperties()));
-
-            //Could populate column statistic cache after Analyze table manually
-            GlobalStateMgr.getCurrentAnalyzeMgr().refreshHistogramStatisticsCache(db.getId(), table.getId(),
-                    analyzeStmt.getColumnNames(), false);
+                            analyzeStmt.getProperties()),
+                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                    false);
         } else {
             analyzeStatus = statisticExecutor.collectStatistics(
                     StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
                             analyzeStmt.getColumnNames(),
                             analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
                                     StatsConstants.AnalyzeType.FULL,
-                            StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()));
-
-            //Could populate column statistic cache after Analyze table manually
-            GlobalStateMgr.getCurrentAnalyzeMgr()
-                    .refreshBasicStatisticsCache(db.getId(), table.getId(), analyzeStatus.getColumns(), false);
+                            StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
+                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                    false);
         }
         ShowResultSet resultSet = analyzeStatus.toShowResult();
         if (isProxy) {
