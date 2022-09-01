@@ -9,9 +9,18 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class MaterializedViewRuleTest extends PlanTestBase {
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lo_count_key_mv as " +
+                "select LO_ORDERDATE, LO_ORDERKEY, count(LO_LINENUMBER) from lineorder_flat_for_mv" +
+                " group by LO_ORDERDATE, LO_ORDERKEY;");
+    }
+
     @Test
     public void testMaterializedViewWithCountSelection() throws Exception {
         String sql = "select LO_ORDERDATE,count(LO_LINENUMBER) from lineorder_flat_for_mv group by LO_ORDERDATE;";
