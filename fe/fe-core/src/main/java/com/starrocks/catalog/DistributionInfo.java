@@ -63,6 +63,10 @@ public abstract class DistributionInfo implements Writable {
         throw new NotImplementedException("not implemented");
     }
 
+    public String getDistributionKey() {
+        return "";
+    }
+
     public DistributionDesc toDistributionDesc() {
         throw new NotImplementedException();
     }
