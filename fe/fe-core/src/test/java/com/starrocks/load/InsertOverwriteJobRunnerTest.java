@@ -102,8 +102,7 @@ public class InsertOverwriteJobRunnerTest {
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, insertStmt, database.getId(), olapTable.getId());
-        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob,
-                connectContext, executor, database, olapTable);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
         Assert.assertFalse(runner.isFinished());
     }
 }
