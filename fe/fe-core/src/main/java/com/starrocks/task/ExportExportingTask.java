@@ -39,6 +39,7 @@ import com.starrocks.load.ExportJob;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -69,6 +70,24 @@ public class ExportExportingTask extends LeaderTask {
 
     @Override
     protected void exec() {
+
+        boolean hasRebootBe = false;
+        for (Long beId : job.getBeStartTimeMap().keySet()) {
+            Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+            if (be.getLastStartTime() > job.getBeStartTimeMap().get(beId)) {
+                hasRebootBe = true;
+                LOG.info("be has rebooted during exec export job. job: {}, be: {}", job, beId);
+            }
+        }
+        if (hasRebootBe) {
+            try {
+				job.cancel(ExportFailMsg.CancelType.BE_REBOOT, "be has rebooted during exec export job.");
+			} catch (UserException e) {
+				LOG.warn("try to cancel a completed job. job: {}", job);
+			}
+            return;
+        }
+
         if (job.getState() != ExportJob.JobState.EXPORTING) {
             return;
         }
