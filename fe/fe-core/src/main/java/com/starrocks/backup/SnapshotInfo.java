@@ -167,26 +167,23 @@ public class SnapshotInfo implements Writable {
 
     @Override
     public boolean equals(Object o) {
-        if (o == null) {
-            return false;
-        }
-
-        if (!(o instanceof SnapshotInfo)) {
-            return false;
-        }
-
         if (this == o) {
             return true;
         }
 
-        SnapshotInfo snapshotInfo = (SnapshotInfo) o;
-        return dbId == snapshotInfo.dbId &&
-                tblId == snapshotInfo.tblId &&
-                partitionId == snapshotInfo.partitionId &&
-                indexId == snapshotInfo.indexId &&
-                tabletId == snapshotInfo.tabletId &&
-                beId == snapshotInfo.beId &&
-                schemaHash == snapshotInfo.schemaHash;
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        SnapshotInfo that = (SnapshotInfo) o;
+        return dbId == that.dbId &&
+                tblId == that.tblId &&
+                partitionId == that.partitionId &&
+                indexId == that.indexId &&
+                tabletId == that.tabletId &&
+                beId == that.beId &&
+                schemaHash == that.schemaHash &&
+                path.equals(that.path);
     }
 
     @Override

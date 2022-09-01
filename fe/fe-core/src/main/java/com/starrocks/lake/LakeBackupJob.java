@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -183,43 +184,43 @@ public class LakeBackupJob extends BackupJob {
     }
 
     @Override
+    @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
     protected void waitingAllSnapshotsFinished() {
         try {
             Iterator<Map.Entry<Long, Future<LockTabletMetadataResponse>>> entries = lockResponses.entrySet().iterator();
             while (entries.hasNext()) {
-                Map.Entry<Long, Future<LockTabletMetadataResponse>> entry = entries.next();
-                entry.getValue().get(1000, TimeUnit.MILLISECONDS);
-                unfinishedTaskIds.remove(entry.getKey());
-                entries.remove();
+                try {
+                    Map.Entry<Long, Future<LockTabletMetadataResponse>> entry = entries.next();
+                    entry.getValue().get(1000, TimeUnit.MILLISECONDS);
+                    unfinishedTaskIds.remove(entry.getKey());
+                    entries.remove();
+                } catch (TimeoutException e) {
+                    // Maybe there are many snapshot tasks, so we ignore timeout exception.
+                }
             }
             super.waitingAllSnapshotsFinished();
-        } catch (TimeoutException e) {
-            LOG.error("Response timeout: ", e);
-        } catch (InterruptedException e) {
-            LOG.error("InterruptedException: ", e);
-            Thread.currentThread().interrupt();
-        } catch (Throwable e) {
+        } catch (InterruptedException | ExecutionException e) {
             status = new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
         }
     }
 
     @Override
+    @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
     protected void waitingAllUploadingFinished() {
         try {
             Iterator<Map.Entry<Long, Future<UploadSnapshotsResponse>>> entries = uploadResponses.entrySet().iterator();
             while (entries.hasNext()) {
-                Map.Entry<Long, Future<UploadSnapshotsResponse>> entry = entries.next();
-                entry.getValue().get(1000, TimeUnit.MILLISECONDS);
-                unfinishedTaskIds.remove(entry.getKey());
-                entries.remove();
+                try {
+                    Map.Entry<Long, Future<UploadSnapshotsResponse>> entry = entries.next();
+                    entry.getValue().get(1000, TimeUnit.MILLISECONDS);
+                    unfinishedTaskIds.remove(entry.getKey());
+                    entries.remove();
+                } catch (TimeoutException e) {
+                    // Maybe there are many upload tasks, so we ignore timeout exception.
+                }
             }
             super.waitingAllUploadingFinished();
-        } catch (TimeoutException e) {
-            LOG.error("Response timeout: ", e);
-        } catch (InterruptedException e) {
-            LOG.error("InterruptedException: ", e);
-            Thread.currentThread().interrupt();
-        } catch (Throwable e) {
+        } catch (InterruptedException | ExecutionException e) {
             status = new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
         }
     }

@@ -5,6 +5,8 @@ package com.starrocks.lake;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.backup.SnapshotInfo;
 
+import java.util.Objects;
+
 public class LakeTableSnapshotInfo extends SnapshotInfo {
     @SerializedName(value = "version")
     private long version;
@@ -21,28 +23,24 @@ public class LakeTableSnapshotInfo extends SnapshotInfo {
 
     @Override
     public boolean equals(Object o) {
-        if (o == null) {
-            return false;
-        }
-
-        if (!(o instanceof LakeTableSnapshotInfo)) {
-            return false;
-        }
-
         if (this == o) {
             return true;
+        }
+
+        if (o == null || getClass() != o.getClass()) {
+            return false;
         }
 
         if (!super.equals(o)) {
             return false;
         }
 
-        LakeTableSnapshotInfo snapshotInfo = (LakeTableSnapshotInfo) o;
-        return this.version == snapshotInfo.version;
+        LakeTableSnapshotInfo that = (LakeTableSnapshotInfo) o;
+        return version == that.version;
     }
 
     @Override
     public int hashCode() {
-        return super.hashCode();
+        return Objects.hash(super.hashCode(), version);
     }
 }
