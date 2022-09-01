@@ -44,8 +44,6 @@ public class InsertOverwriteJobRunner {
     private ConnectContext context;
     private long dbId;
     private long tableId;
-    // private Database db;
-    // private OlapTable targetTable;
     private String postfix;
 
     private long createPartitionElapse;
