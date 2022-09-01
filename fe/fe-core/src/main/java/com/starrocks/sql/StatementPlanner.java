@@ -50,17 +50,17 @@ public class StatementPlanner {
         if (stmt instanceof QueryStatement) {
             OptimizerTraceUtil.logQueryStatement(session, "after parse:\n%s", (QueryStatement) stmt);
         }
-        Analyzer.analyze(stmt, session);
-        PrivilegeChecker.check(stmt, session);
-        if (stmt instanceof QueryStatement) {
-            OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
-        }
 
-        if (stmt instanceof QueryStatement) {
-            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
-            QueryStatement queryStmt = (QueryStatement) stmt;
-            try {
-                lock(dbs);
+        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
+        try {
+            lock(dbs);
+            Analyzer.analyze(stmt, session);
+            PrivilegeChecker.check(stmt, session);
+
+            if (stmt instanceof QueryStatement) {
+                OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
+                QueryStatement queryStmt = (QueryStatement) stmt;
+
                 session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
                 TResultSinkType resultSinkType =
                         queryStmt.hasOutFileClause() ? TResultSinkType.FILE : TResultSinkType.MYSQL_PROTOCAL;
@@ -68,18 +68,11 @@ public class StatementPlanner {
                 setOutfileSink(queryStmt, plan);
 
                 return plan;
-            } finally {
-                unLock(dbs);
-            }
-        } else if (stmt instanceof InsertStmt) {
-            InsertStmt insertStmt = (InsertStmt) stmt;
-            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, insertStmt);
-            try {
-                lock(dbs);
+            } else if (stmt instanceof InsertStmt) {
                 return new InsertPlanner().plan((InsertStmt) stmt, session);
-            } finally {
-                unLock(dbs);
             }
+        } finally {
+            unLock(dbs);
         }
         return null;
     }
