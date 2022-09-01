@@ -1289,7 +1289,10 @@ public class DatabaseTransactionMgr {
             for (Long tableId : transactionState.getTableIdList()) {
                 Table table = db.getTable(tableId);
                 if (table != null) {
-                    listeners.add(stateListenerFactory.create(this, table));
+                    TransactionStateListener listener = stateListenerFactory.create(this, table);
+                    if (listener != null) {
+                        listeners.add(listener);
+                    }
                 }
             }
         } finally {
