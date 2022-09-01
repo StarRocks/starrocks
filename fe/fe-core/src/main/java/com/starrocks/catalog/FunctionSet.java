@@ -131,6 +131,18 @@ public class FunctionSet {
     public static final String UTC_TIMESTAMP = "utc_timestamp";
     public static final String DATE_TRUNC = "date_trunc";
 
+    // stddev and variance
+    public static final String STDDEV = "stddev";
+    public static final String STDDEV_POP = "stddev_pop";
+    public static final String STDDEV_SAMP = "stddev_samp";
+    public static final String VARIANCE = "variance";
+    public static final String VAR_POP = "var_pop";
+    public static final String VARIANCE_POP = "variance_pop";
+    public static final String VAR_SAMP = "var_samp";
+    public static final String VARIANCE_SAMP = "variance_samp";
+    public static final String STD = "std";
+    public static final String STDDEV_VAL = "stddev_val";
+
     // string functions
     public static final String SUBSTRING = "substring";
     public static final String STARTS_WITH = "starts_with";
@@ -257,6 +269,18 @@ public class FunctionSet {
                     .add("uuid")
                     .add("sleep")
                     .build();
+
+    public static final Set<String> varianceFunctions = ImmutableSet.<String>builder()
+            .add(FunctionSet.VAR_POP)
+            .add(FunctionSet.VAR_SAMP)
+            .add(FunctionSet.VARIANCE)
+            .add(FunctionSet.VARIANCE_POP)
+            .add(FunctionSet.VARIANCE_SAMP)
+            .add(FunctionSet.STD)
+            .add(FunctionSet.STDDEV)
+            .add(FunctionSet.STDDEV_POP)
+            .add(FunctionSet.STDDEV_SAMP)
+            .add(FunctionSet.STDDEV_VAL).build();
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();

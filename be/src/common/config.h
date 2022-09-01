@@ -45,9 +45,9 @@ CONF_String(priority_networks, "");
 //// tcmalloc gc parameter
 ////
 // Min memory for TCmalloc, when used memory is smaller than this, do not returned to OS.
-CONF_mInt64(tc_use_memory_min, "10737418240");
+CONF_mInt64(tc_use_memory_min, "0");
 // free memory rate.[0-100]
-CONF_mInt64(tc_free_memory_rate, "20");
+CONF_mInt64(tc_free_memory_rate, "0");
 // tcmalloc gc period, default 60, it should be between [1, 180]
 CONF_mInt64(tc_gc_period, "60");
 
@@ -295,6 +295,7 @@ CONF_mInt32(update_compaction_trace_threshold, "20");
 // the columns will be divided into groups for vertical compaction.
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
+CONF_Bool(enable_check_string_lengths, "true");
 // Max row source mask memory bytes, default is 200M.
 // Should be smaller than compaction_mem_limit.
 // When the row source mask buffer exceeds this, it will be persisted to a temporary file on the disk.
@@ -705,5 +706,9 @@ CONF_mBool(dependency_librdkafka_debug_enable, "false");
 // Other debug context: generic, metadata, feature, queue, protocol, security, interceptor, plugin
 // admin, eos, mock, assigner, conf
 CONF_String(dependency_librdkafka_debug, "all");
+
+// Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
+// The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
+CONF_Int32(internal_service_async_thread_num, "10");
 
 } // namespace starrocks::config

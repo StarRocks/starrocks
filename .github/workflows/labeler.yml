@@ -1,0 +1,32 @@
+name: Labels
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - unlabeled
+
+jobs:
+  autolabel:
+    runs-on: ubuntu-latest
+    steps: 
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            src:
+              - 'docs/**'
+
+      - name: add document label
+        if: steps.changes.outputs.src == 'true'
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: documentation
+
+      - uses: actions-ecosystem/action-add-labels@v1
+        if: ${{ contains(github.event.pull_request.title, 'cherry-pick') || contains(github.event.pull_request.title, 'backport') }}
+        with:
+          github_token: ${{ secrets.PAT }}
+          labels: automerge

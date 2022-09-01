@@ -371,7 +371,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             if (tableInfo != null) {
                 Table table = tableInfo.getTable();
                 nameToTableInfo.remove(dbId, table.getName());
-                if (table.getType() == TableType.OLAP && !Catalog.isCheckpointThread()) {
+                if (table.getType() == TableType.OLAP) {
                     Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, true);
                 }
             }

@@ -2569,7 +2569,7 @@ public class Catalog {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
-            Frontend fe = checkFeExist(host, editLogPort);
+            Frontend fe = unprotectCheckFeExist(host, editLogPort);
             if (fe != null) {
                 throw new DdlException("frontend already exists " + fe);
             }
@@ -2594,7 +2594,7 @@ public class Catalog {
             // So we should remove those nodes before joining the group,
             // or it will throws NodeConflictException (New or moved node:xxxx, is configured with the socket address:
             // xxx. It conflicts with the socket already used by the member: xxxx)
-            bdbha.removeNodeIfExist(host, editLogPort);
+            bdbha.removeNodeIfExist(host, editLogPort, nodeName);
 
             editLog.logAddFrontend(fe);
         } finally {
@@ -2610,7 +2610,7 @@ public class Catalog {
             throw new DdlException("Failed to acquire catalog lock. Try again");
         }
         try {
-            Frontend fe = checkFeExist(host, port);
+            Frontend fe = unprotectCheckFeExist(host, port);
             if (fe == null) {
                 throw new DdlException("frontend does not exist[" + host + ":" + port + "]");
             }
@@ -2635,6 +2635,15 @@ public class Catalog {
     }
 
     public Frontend checkFeExist(String host, int port) {
+        tryLock(true);
+        try {
+            return unprotectCheckFeExist(host, port);
+        } finally {
+            unlock();
+        }
+    }
+
+    public Frontend unprotectCheckFeExist(String host, int port) {
         for (Frontend fe : frontends.values()) {
             if (fe.getHost().equals(host) && fe.getEditLogPort() == port) {
                 return fe;
@@ -5188,7 +5197,7 @@ public class Catalog {
     public void replayAddFrontend(Frontend fe) {
         tryLock(true);
         try {
-            Frontend existFe = checkFeExist(fe.getHost(), fe.getEditLogPort());
+            Frontend existFe = unprotectCheckFeExist(fe.getHost(), fe.getEditLogPort());
             if (existFe != null) {
                 LOG.warn("fe {} already exist.", existFe);
                 if (existFe.getRole() != fe.getRole()) {
@@ -7044,7 +7053,7 @@ public class Catalog {
         TableName dbTbl = tblRef.getName();
 
         // check, and save some info which need to be checked again later
-        Map<String, Long> origPartitions = Maps.newHashMap();
+        Map<String, Partition> origPartitions = Maps.newHashMap();
         OlapTable copiedTbl;
         Database db = getDb(dbTbl.getDb());
         if (db == null) {
@@ -7075,11 +7084,11 @@ public class Catalog {
                         throw new DdlException("Partition " + partName + " does not exist");
                     }
 
-                    origPartitions.put(partName, partition.getId());
+                    origPartitions.put(partName, partition);
                 }
             } else {
                 for (Partition partition : olapTable.getPartitions()) {
-                    origPartitions.put(partition.getName(), partition.getId());
+                    origPartitions.put(partition.getName(), partition);
                 }
             }
 
@@ -7093,8 +7102,8 @@ public class Catalog {
         // tabletIdSet to save all newly created tablet ids.
         Set<Long> tabletIdSet = Sets.newHashSet();
         try {
-            for (Map.Entry<String, Long> entry : origPartitions.entrySet()) {
-                long oldPartitionId = entry.getValue();
+            for (Map.Entry<String, Partition> entry : origPartitions.entrySet()) {
+                long oldPartitionId = entry.getValue().getId();
                 long newPartitionId = getNextId();
                 String newPartitionName = entry.getKey();
 
@@ -7103,6 +7112,8 @@ public class Catalog {
                 partitionInfo.setIsInMemory(newPartitionId, partitionInfo.getIsInMemory(oldPartitionId));
                 partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(oldPartitionId));
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
+
+                copiedTbl.setDefaultDistributionInfo(entry.getValue().getDistributionInfo());
 
                 Partition newPartition =
                         createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
@@ -7133,8 +7144,8 @@ public class Catalog {
             }
 
             // check partitions
-            for (Map.Entry<String, Long> entry : origPartitions.entrySet()) {
-                Partition partition = copiedTbl.getPartition(entry.getValue());
+            for (Map.Entry<String, Partition> entry : origPartitions.entrySet()) {
+                Partition partition = copiedTbl.getPartition(entry.getValue().getId());
                 if (partition == null || !partition.getName().equalsIgnoreCase(entry.getKey())) {
                     throw new DdlException("Partition [" + entry.getKey() + "] is changed");
                 }

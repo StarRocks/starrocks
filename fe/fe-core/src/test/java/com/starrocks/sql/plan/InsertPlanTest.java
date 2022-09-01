@@ -684,4 +684,21 @@ public class InsertPlanTest extends PlanTestBase {
         InsertPlanner.enableSingleReplicationShuffle = false;
         FeConstants.runningUnitTest = false;
     }
+
+    @Test
+    public void testInsertAggLimit() throws Exception {
+        FeConstants.runningUnitTest = true;
+        InsertPlanner.enableSingleReplicationShuffle = true;
+        {
+            // KesType is AGG_KEYS
+            String sql = "explain insert into baseall select * from baseall limit 1";
+            String plan = getInsertExecPlan(sql);
+            assertContains(plan, "STREAM DATA SINK\n" +
+                    "    EXCHANGE ID: 01\n" +
+                    "    UNPARTITIONED");
+
+            InsertPlanner.enableSingleReplicationShuffle = false;
+            FeConstants.runningUnitTest = false;
+        }
+    }
 }

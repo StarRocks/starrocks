@@ -131,7 +131,7 @@ void calculate_metrics(void* arg_this) {
     std::map<std::string, int64_t> lst_net_send_bytes;
     std::map<std::string, int64_t> lst_net_receive_bytes;
 
-    Daemon* daemon = static_cast<Daemon*>(arg_this);
+    auto* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
         StarRocksMetrics::instance()->metrics()->trigger_hook();
 
@@ -176,6 +176,19 @@ void calculate_metrics(void* arg_this) {
             StarRocksMetrics::instance()->system_metrics()->get_network_traffic(&lst_net_send_bytes,
                                                                                 &lst_net_receive_bytes);
         }
+
+        auto* mem_metrics = StarRocksMetrics::instance()->system_metrics()->memory_metrics();
+
+        LOG(INFO) << fmt::format(
+                "Current memory statistics: process({}), query_pool({}), load({}), "
+                "tablet_meta({}), compaction({}), schema_change({}), column_pool({}), "
+                "page_cache({}), update({}), chunk_allocator({}), clone({}), consistency({})",
+                mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
+                mem_metrics->load_mem_bytes.value(), mem_metrics->tablet_meta_mem_bytes.value(),
+                mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
+                mem_metrics->column_pool_mem_bytes.value(), mem_metrics->storage_page_cache_mem_bytes.value(),
+                mem_metrics->update_mem_bytes.value(), mem_metrics->chunk_allocator_mem_bytes.value(),
+                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value());
 
         sleep(15); // 15 seconds
     }

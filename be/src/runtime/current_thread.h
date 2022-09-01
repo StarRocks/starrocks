@@ -237,22 +237,15 @@ private:
         } else {                                                                        \
             return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE"); \
         }                                                                               \
+    }                                                                                   \
+    catch (std::runtime_error const& e) {                                               \
+        return Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));        \
     }
 
-#define TRY_CATCH_BAD_ALLOC(stmt)                                                           \
-    do {                                                                                    \
-        try {                                                                               \
-            SCOPED_SET_CATCHED(true);                                                       \
-            { stmt; }                                                                       \
-        } catch (std::bad_alloc const&) {                                                   \
-            MemTracker* exceed_tracker = tls_exceed_mem_tracker;                            \
-            tls_exceed_mem_tracker = nullptr;                                               \
-            if (LIKELY(exceed_tracker != nullptr)) {                                        \
-                return Status::MemoryLimitExceeded(exceed_tracker->err_msg(""));            \
-            } else {                                                                        \
-                return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE"); \
-            }                                                                               \
-        }                                                                                   \
+#define TRY_CATCH_BAD_ALLOC(stmt)               \
+    do {                                        \
+        TRY_CATCH_ALLOC_SCOPE_START() { stmt; } \
+        TRY_CATCH_ALLOC_SCOPE_END()             \
     } while (0)
 
 } // namespace starrocks
