@@ -955,9 +955,31 @@ struct TSetConfigResponse {
     1: required Status.TStatus status
 }
 
+struct TGetTablesConfigRequest {
+
+}
+
+struct TGetTablesConfigResponse {
+    1: optional list<TTableConfigInfo> tables_config_infos
+}
+
+struct TTableConfigInfo {
+    1: optional string table_schema
+    2: optional string table_name
+    3: optional string primary_key
+    4: optional string partition_key
+    5: optional string distribute_key
+    6: optional string distribute_type
+    7: optional i32 distribute_bucket
+    8: optional string sort_key
+    9: optional string properties
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
+
+    TGetTablesConfigResponse getTablesConfig(1: TGetTablesConfigRequest request)
 
     TGetUserPrivsResult getUserPrivs(1:TGetUserPrivsParams params)
     TGetDBPrivsResult getDBPrivs(1:TGetDBPrivsParams params)
