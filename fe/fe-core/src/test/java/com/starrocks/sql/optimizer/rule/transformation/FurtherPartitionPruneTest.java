@@ -14,7 +14,7 @@ import java.util.stream.Stream;
 
 import static org.junit.Assert.assertTrue;
 
-public class FurtherPartitionPruneTest extends PlanTestBase {
+class FurtherPartitionPruneTest extends PlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -78,6 +78,16 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE `less_than_tbl` " +
+                "( `k1` date, `k2` datetime, `k3` char(20), `k4` varchar(20), `k5` boolean) " +
+                "ENGINE=OLAP DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) " +
+                "PARTITION BY RANGE(`k1`) " +
+                "( PARTITION `p202006` VALUES LESS THAN (\"2020-07-01\"), " +
+                "PARTITION `p202007` VALUES LESS THAN (\"2020-08-01\"), " +
+                "PARTITION `p202008` VALUES LESS THAN (\"2020-09-01\")," +
+                "PARTITION `p202009` VALUES LESS THAN (\"2020-10-01\") ) " +
+                "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3 " +
+                "PROPERTIES ( \"replication_num\" = \"1\", \"storage_format\" = \"v2\" );;");
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -117,6 +127,8 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
 
     private static Stream<Arguments> emptyPartitionSqlList() {
         List<String> sqlList = Lists.newArrayList();
+        sqlList.add("select * from tbl_int where k1 is null");
+        sqlList.add("select * from tbl_int where k1 is null or k1 <=> null");
         sqlList.add("select * from tbl_int where (k1 = 1 or k1 > s1) and k1 is null");
         sqlList.add("select * from ptest where d2 in (null, '2021-01-01')");
         sqlList.add("select * from ptest where (d2 < '1000-01-01') or (d2 in (null, '2021-01-01'))");
@@ -147,6 +159,13 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
 
     private static Stream<Arguments> onePartitionSqlList() {
         List<String> sqlList = Lists.newArrayList();
+        sqlList.add("select * from less_than_tbl where k1 is null");
+        sqlList.add("select * from less_than_tbl where k1 is null or k1 <=> null");
+        sqlList.add("select * from less_than_tbl where k1 = 1 and k1 is null");
+        sqlList.add("select * from less_than_tbl where k1 = '2020-06-30' and k1 is null");
+        sqlList.add("select * from less_than_tbl where k1 > '2020-06-30' and k1 is null");
+        sqlList.add("select * from less_than_tbl where k1 != '2020-06-30' and k1 is null");
+
         sqlList.add(
                 "select * from ptest where (d2 between '1999-01-01' and '1999-12-01' or d2 between '2020-07-01' " +
                         "and '2020-08-01') and d2 < '2020-04-01'");
@@ -190,9 +209,12 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
 
     public static Stream<Arguments> twoPartitionsSqlList() {
         List<String> sqlList = Lists.newArrayList();
+        sqlList.add("select * from less_than_tbl where k1 = '2020-07-30' or k1 is null");
+        sqlList.add("select * from less_than_tbl where k1 < '2020-07-30' or k1 is null");
+        sqlList.add("select * from less_than_tbl where k1 < '2020-07-30' or k1 <=> null");
+
         sqlList.add("select * from tbl_int where k1 between 0 and 99 or k1 between 300 and 399");
         sqlList.add("select * from tbl_int where (k1 between 0 and 99 or k1 between 300 and 399) and s1 > upper(s2)");
-
         sqlList.add("select * from tbl_int where k1 <= 100 or k1 > 400");
         sqlList.add("select * from tbl_int where k1 < 100 or k1 >= 300");
         sqlList.add("select * from tbl_int where k1 = 0 or k1 >= 300");
@@ -242,6 +264,8 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
 
     public static Stream<Arguments> threePartitionsSqlList() {
         List<String> sqlList = Lists.newArrayList();
+        sqlList.add("select * from less_than_tbl where k1 < '2020-07-30' or k1 > '2020-09-30' or k1 is null");
+        sqlList.add("select * from less_than_tbl where k1 < '2020-07-30' or k1 > '2020-09-30' or k1 <=> null");
         sqlList.add("select s1 from tbl_int where k1 <= 100 or k1 >= 300");
         sqlList.add("select s1 from tbl_int where k1 > 300 or k1 < 200");
         sqlList.add("select s1 from tbl_int where k1 != 0 and (k1 < 100 or (k1 > 150 and k1 <= 200))");
@@ -276,6 +300,7 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
 
     public static Stream<Arguments> fourPartitionsSqlList() {
         List<String> sqlList = Lists.newArrayList();
+        sqlList.add("select * from less_than_tbl where k1 is not null");
         sqlList.add("select * from tbl_int where k1 is not null");
         sqlList.add("select * from tbl_int where k1 < 200 or floor(k1) < 10");
         sqlList.add("select * from tbl_int where k1 < 200 or k1 < k1 + 1");

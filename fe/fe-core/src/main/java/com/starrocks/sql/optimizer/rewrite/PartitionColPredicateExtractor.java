@@ -177,7 +177,7 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
         if (isColumnOrPrune(first) || predicate.isNotNull()) {
             return ConstantOperator.createBoolean(true);
         } else {
-            return ConstantOperator.createBoolean(false);
+            return predicate;
         }
     }
 
