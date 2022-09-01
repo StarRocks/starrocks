@@ -7,7 +7,6 @@ import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -92,7 +91,13 @@ public class PartitionColPredicateEvaluator {
             ConstantOperator constantOperator = (ConstantOperator) predicate.getChild(1);
             LiteralExpr literalExpr;
             try {
-                literalExpr = ColumnFilterConverter.convertLiteral(constantOperator);
+                if (constantOperator.isNull()) {
+                    Type columnType  = Type.fromPrimitiveType(partitionColumn.getPrimitiveType());
+                    literalExpr = LiteralExpr.createInfinity(columnType, false);
+                } else {
+                    literalExpr = ColumnFilterConverter.convertLiteral(constantOperator);
+
+                }
             } catch (AnalysisException e) {
                 return createAllTrueBitSet();
             }
@@ -101,15 +106,8 @@ public class PartitionColPredicateEvaluator {
             Range<PartitionKey> predicateRange;
             switch (type) {
                 case EQ:
-                    predicateRange = Range.closed(conditionKey, conditionKey);
-                    break;
                 case EQ_FOR_NULL:
-                    BitSet res = new BitSet();
-                    if (literalExpr instanceof NullLiteral) {
-                        return res;
-                    } else {
-                        predicateRange = Range.closed(conditionKey, conditionKey);
-                    }
+                    predicateRange = Range.closed(conditionKey, conditionKey);
                     break;
                 case GE:
                     predicateRange = Range.atLeast(conditionKey);
@@ -190,7 +188,15 @@ public class PartitionColPredicateEvaluator {
 
         @Override
         public BitSet visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
-            return new BitSet(candidateNum);
+            PartitionKey conditionKey = new PartitionKey();
+            Type columnType = Type.fromPrimitiveType(partitionColumn.getPrimitiveType());
+            try {
+                conditionKey.pushColumn(LiteralExpr.createInfinity(columnType, false), partitionColumn.getPrimitiveType());
+            } catch (AnalysisException e) {
+                return createAllTrueBitSet();
+            }
+            Range<PartitionKey> predicateRange = Range.closed(conditionKey, conditionKey);
+            return evaluateRangeHitSet(predicateRange);
         }
 
         private BitSet evaluateRangeHitSet(Range<PartitionKey> predicateRange) {
