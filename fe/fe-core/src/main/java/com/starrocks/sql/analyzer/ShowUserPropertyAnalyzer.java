@@ -3,7 +3,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.ShowUserPropertyStmt;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
 
 public class ShowUserPropertyAnalyzer {
@@ -13,7 +12,7 @@ public class ShowUserPropertyAnalyzer {
         if (Strings.isNullOrEmpty(user)) {
             statment.setUser(context.getQualifiedUser());
         } else {
-            statment.setUser(ClusterNamespace.getFullName(user));
+            statment.setUser(user);
         }
         statment.setPattern(Strings.emptyToNull(statment.getPatter()));
     }
