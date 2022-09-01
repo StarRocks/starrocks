@@ -196,9 +196,13 @@ public class AnalyzerUtils {
         private void getDB(TableName tableName) {
             String dbName = tableName.getDb();
             if (Strings.isNullOrEmpty(dbName)) {
+                if (Strings.isNullOrEmpty(session.getDatabase())) {
+                    return;
+                }
                 dbName = session.getDatabase();
             } else {
-                if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+                if (tableName.getCatalog() != null &&
+                        !CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
                     return;
                 }
             }
