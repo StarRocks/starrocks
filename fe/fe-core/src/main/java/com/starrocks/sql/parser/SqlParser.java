@@ -59,7 +59,7 @@ public class SqlParser {
     }
 
     public static void setParserProperty(StarRocksParser parser, SessionVariable sessionVariable) {
-        parser.sqlMode = sessionVariable.getSqlMode();
+        StarRocksParser.sqlMode = sessionVariable.getSqlMode();
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();

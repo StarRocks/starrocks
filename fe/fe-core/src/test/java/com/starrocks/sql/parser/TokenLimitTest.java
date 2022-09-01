@@ -9,7 +9,7 @@ import static com.starrocks.sql.plan.PlanTestBase.assertContains;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
-public class TokenLimitTest {
+class TokenLimitTest {
 
     @Test
     void tokensExceedLimitTest() {
