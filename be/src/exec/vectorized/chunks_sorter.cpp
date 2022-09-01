@@ -121,6 +121,25 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
             }
         }
         middle_num -= least_num;
+
+        size_t tmp_least = 0;
+        size_t tmp_middle = 0;
+        for (size_t i = 0; i < dats_segment_size; ++i) {
+            DataSegment& segment = data_segments[i];
+            size_t rows = segment.chunk->num_rows();
+
+            for (size_t j = 0; j < rows; ++j) {
+                if (filter_array[i][j] == DataSegment::BEFORE_LAST_RESULT) {
+                    tmp_least++;
+                } else if (filter_array[i][j] == DataSegment::IN_LAST_RESULT) {
+                    tmp_middle++;
+                }
+            }
+        }
+        if (tmp_middle != middle_num || tmp_least != least_num) {
+            std::cout << "LOG:" << tmp_least << "," << least_num << "," << tmp_middle << ","
+                      << middle_num << std::endl;
+        }
     }
 
     return Status::OK();

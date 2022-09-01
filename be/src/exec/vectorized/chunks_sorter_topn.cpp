@@ -193,6 +193,9 @@ void ChunksSorterTopn::_set_permutation_before(Permutation& permutation, size_t 
 
 void ChunksSorterTopn::_set_permutation_complete(std::pair<Permutation, Permutation>& permutations, size_t size,
                                                  std::vector<std::vector<uint8_t>>& filter_array) {
+    size_t first_size = permutations.first.capacity();
+    size_t second_size = permutations.second.capacity();
+
     for (uint32_t i = 0; i < size; ++i) {
         size_t nums = filter_array[i].size();
         for (uint32_t j = 0; j < nums; ++j) {
@@ -204,6 +207,11 @@ void ChunksSorterTopn::_set_permutation_complete(std::pair<Permutation, Permutat
                 permutations.second.emplace_back(tmp);
             }
         }
+    }
+
+    if (permutations.second.size() != second_size) {
+        std::cout << "INVALID_SIZE:" << first_size << "," << permutations.first.size() << "," << second_size << ","
+                  << permutations.second.size() << std::endl;
     }
 }
 
