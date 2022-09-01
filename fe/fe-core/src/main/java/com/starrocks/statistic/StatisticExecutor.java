@@ -176,7 +176,7 @@ public class StatisticExecutor {
         return statistics;
     }
 
-    public AnalyzeStatus collectStatistics(StatisticsCollectJob statsJob) {
+    public AnalyzeStatus collectStatistics(StatisticsCollectJob statsJob, boolean refreshAsync) {
         Database db = statsJob.getDb();
         Table table = statsJob.getTable();
         List<String> columns = statsJob.getColumns();
@@ -198,6 +198,7 @@ public class StatisticExecutor {
             GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), context);
             statsJob.collect(context);
         } catch (Exception e) {
+            LOG.warn("Collect statistics error ", e);
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setEndTime(LocalDateTime.now());
             analyzeStatus.setReason(e.getMessage());
@@ -218,14 +219,14 @@ public class StatisticExecutor {
                 GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(histogramStatsMeta);
                 GlobalStateMgr.getCurrentAnalyzeMgr().refreshHistogramStatisticsCache(
                         histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
-                        Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+                        Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
             }
         } else {
             BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
                     statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties());
             GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
             GlobalStateMgr.getCurrentAnalyzeMgr().refreshBasicStatisticsCache(
-                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
+                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), refreshAsync);
         }
         return analyzeStatus;
     }
