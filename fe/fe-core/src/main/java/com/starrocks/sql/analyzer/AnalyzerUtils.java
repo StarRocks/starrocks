@@ -22,8 +22,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -131,11 +129,7 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
-            Database db = session.getGlobalStateMgr().getDb(node.getDb());
-            if (db == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
-            }
-            this.dbs.put(node.getDb(), db);
+            getDB(node.getTableName());
             return visit(node.getQueryStatement());
         }
 
@@ -197,20 +191,28 @@ public class AnalyzerUtils {
         }
 
         private void getDB(TableName tableName) {
-            String dbName = tableName.getDb();
+            String catalog = Strings.isNullOrEmpty(tableName.getCatalog()) ? session.getCurrentCatalog() : tableName.getCatalog();
+            String dbName = Strings.isNullOrEmpty(tableName.getDb()) ? session.getDatabase() : tableName.getDb();
+
+            if (Strings.isNullOrEmpty(catalog)) {
+                return;
+            }
+
             if (Strings.isNullOrEmpty(dbName)) {
-                dbName = session.getDatabase();
+                return;
+            }
+
+            if (!CatalogMgr.isInternalCatalog(catalog)) {
+                return;
             } else {
-                if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-                    dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
-                } else {
-                    return;
-                }
+                dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
             }
 
             Database db = session.getGlobalStateMgr().getDb(dbName);
-
-            dbs.put(dbName, db);
+            if (db == null) {
+                return;
+            }
+            dbs.put(db.getFullName(), db);
         }
     }
 
