@@ -51,7 +51,8 @@ class LocalTabletsChannel : public TabletsChannel {
     using CommittedRowsetInfo = vectorized::CommittedRowsetInfo;
 
 public:
-    LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
+    LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                        std::shared_ptr<MemTracker> mem_tracker);
     ~LocalTabletsChannel() override;
 
     LocalTabletsChannel(const LocalTabletsChannel&) = delete;
@@ -68,7 +69,7 @@ public:
 
     void cancel() override;
 
-    MemTracker* mem_tracker() { return _mem_tracker; }
+    MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
 private:
     using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
@@ -161,7 +162,7 @@ private:
 
     TabletsChannelKey _key;
 
-    MemTracker* _mem_tracker;
+    std::shared_ptr<MemTracker> _mem_tracker;
 
     // initialized in open function
     int64_t _txn_id = -1;
@@ -188,7 +189,7 @@ private:
 std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
 
 LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                         MemTracker* mem_tracker)
+                                         std::shared_ptr<MemTracker> mem_tracker)
         : TabletsChannel(),
           _load_channel(load_channel),
           _key(key),
@@ -455,7 +456,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.global_dicts = &_global_dicts;
         options.parent_span = _load_channel->get_span();
 
-        auto res = AsyncDeltaWriter::open(options, _mem_tracker);
+        auto res = AsyncDeltaWriter::open(options, _mem_tracker.get());
         RETURN_IF_ERROR(res.status());
         auto writer = std::move(res).value();
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
@@ -554,7 +555,7 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
 }
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                          MemTracker* mem_tracker) {
+                                                          std::shared_ptr<MemTracker> mem_tracker) {
     return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker);
 }
 

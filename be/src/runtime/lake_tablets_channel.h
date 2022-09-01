@@ -11,6 +11,6 @@ class MemTracker;
 struct TabletsChannelKey;
 
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                         MemTracker* mem_tracker);
+                                                         std::shared_ptr<MemTracker> mem_tracker);
 
 } // namespace starrocks

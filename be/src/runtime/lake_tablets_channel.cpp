@@ -38,7 +38,8 @@ class LakeTabletsChannel : public TabletsChannel {
     using AsyncDeltaWriter = lake::AsyncDeltaWriter;
 
 public:
-    LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
+    LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                       std::shared_ptr<MemTracker> mem_tracker);
     ~LakeTabletsChannel() override;
 
     DISALLOW_COPY_AND_MOVE(LakeTabletsChannel);
@@ -52,7 +53,7 @@ public:
 
     void cancel() override;
 
-    MemTracker* mem_tracker() { return _mem_tracker; }
+    MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
 private:
     using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
@@ -117,7 +118,7 @@ private:
 
     TabletsChannelKey _key;
 
-    MemTracker* _mem_tracker;
+    std::shared_ptr<MemTracker> _mem_tracker;
 
     // initialized in open function
     int64_t _txn_id = -1;
@@ -139,7 +140,8 @@ private:
     std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
 };
 
-LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker)
+LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                                       std::shared_ptr<MemTracker> mem_tracker)
         : TabletsChannel(), _load_channel(load_channel), _key(key), _mem_tracker(mem_tracker) {}
 
 LakeTabletsChannel::~LakeTabletsChannel() = default;
@@ -329,7 +331,8 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
     for (const PTabletWithPartition& tablet : params.tablets()) {
-        auto writer = AsyncDeltaWriter::create(tablet.tablet_id(), _txn_id, tablet.partition_id(), slots, _mem_tracker);
+        auto writer =
+                AsyncDeltaWriter::create(tablet.tablet_id(), _txn_id, tablet.partition_id(), slots, _mem_tracker.get());
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
     }
@@ -398,7 +401,7 @@ StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::
 }
 
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                         MemTracker* mem_tracker) {
+                                                         std::shared_ptr<MemTracker> mem_tracker) {
     return std::make_shared<LakeTabletsChannel>(load_channel, key, mem_tracker);
 }
 

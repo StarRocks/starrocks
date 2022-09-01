@@ -91,6 +91,10 @@ public:
 
     Span get_span() { return _span; }
 
+#ifdef BE_TEST
+    std::shared_ptr<MemTracker> shared_mem_tracker() { return _mem_tracker; }
+#endif
+
 private:
     void _add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                     PTabletWriterAddBatchResult* response);
@@ -106,7 +110,7 @@ private:
     std::shared_ptr<OlapTableSchemaParam> _schema;
     std::unique_ptr<RowDescriptor> _row_desc;
 
-    std::unique_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<MemTracker> _mem_tracker;
     std::atomic<time_t> _last_updated_time;
 
     // lock protect the tablets channel map

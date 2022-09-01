@@ -192,7 +192,7 @@ protected:
         _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), UniqueId::gen_uid(), string(), 1000,
                                                       std::move(load_mem_tracker));
         TabletsChannelKey key{UniqueId::gen_uid().to_proto(), 99999};
-        _tablets_channel = new_lake_tablets_channel(_load_channel.get(), key, _load_channel->mem_tracker());
+        _tablets_channel = new_lake_tablets_channel(_load_channel.get(), key, _load_channel->shared_mem_tracker());
     }
 
     void TearDown() override {
