@@ -27,16 +27,10 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.spark_project.jetty.util.ConcurrentHashSet;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -46,7 +40,6 @@ import java.util.Map;
 import java.util.Set;
 
 public class Role implements Writable {
-    private static final Logger LOG = LogManager.getLogger(Role.class);
     // operator is responsible for operating cluster, such as add/drop node
     public static String OPERATOR_ROLE = "operator";
     // admin is like DBA, who has all privileges except for NODE privilege held by operator
@@ -65,9 +58,6 @@ public class Role implements Writable {
 
     // newly added in 2.3
     private Set<UserIdentity> impersonateUsers = Sets.newConcurrentHashSet();
-    // I'm hiding the impersonate users of a role in a UserIdentity, the name of which is IMPERSONATE_USERS_HIDDEN_KEY
-    // the host is a gson. This is really horribly ugly. We'll refactor it in the next-generation privilege framework.
-    private static String IMPERSONATE_USERS_HIDDEN_KEY = "*** IMPERSONATE_USERS_HIDDEN_KEY ***";
     // users which this role
     private Set<UserIdentity> users = Sets.newConcurrentHashSet();
 
@@ -119,6 +109,10 @@ public class Role implements Writable {
 
     public Set<UserIdentity> getImpersonateUsers() {
         return impersonateUsers;
+    }
+
+    public void setImpersonateUsers(Set<UserIdentity> impersonateUsers) {
+        this.impersonateUsers = impersonateUsers;
     }
 
     public void merge(Role other) {
@@ -175,19 +169,10 @@ public class Role implements Writable {
             entry.getKey().write(out);
             entry.getValue().write(out);
         }
-        out.writeInt(users.size() + 1);  // extra user is used to hide impersonate info
+        out.writeInt(users.size());
         for (UserIdentity userIdentity : users) {
             userIdentity.write(out);
         }
-        UserIdentity hiddenImpersonateInfo = new UserIdentity(
-                IMPERSONATE_USERS_HIDDEN_KEY, GsonUtils.GSON.toJson(impersonateUsers));
-        try {
-            hiddenImpersonateInfo.analyze();
-        } catch (AnalysisException e) {
-            LOG.warn("failed to write hidden impersonate info when trying to analyze, {}", hiddenImpersonateInfo, e);
-            throw new IOException(e);
-        }
-        hiddenImpersonateInfo.write(out);
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -209,12 +194,7 @@ public class Role implements Writable {
         size = in.readInt();
         for (int i = 0; i < size; i++) {
             UserIdentity userIdentity = UserIdentity.read(in);
-            if (i == size - 1 &&
-                    userIdentity.getQualifiedUser().equals(ClusterNamespace.getFullName(IMPERSONATE_USERS_HIDDEN_KEY))) {
-                GsonUtils.GSON.fromJson(userIdentity.getHost(), ConcurrentHashSet.class);
-            } else {
-                users.add(userIdentity);
-            }
+            users.add(userIdentity);
         }
     }
 
