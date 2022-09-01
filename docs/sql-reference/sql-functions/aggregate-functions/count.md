@@ -3,11 +3,11 @@
 
 ## Description
 
-Returns the total number of rows that meet the specified conditions.
+Returns the total number of rows specified by an expression.
 
-StarRocks supports three variations of this function:
+This function has three variations:
 
-- `COUNT(*)` counts all rows in a table, no matter wheter they contain null values.
+- `COUNT(*)` counts all rows in a table, no matter whether they contain NULL values.
 
 - `COUNT(expr)` counts the number of rows with non-NULL values in a specific column.
 
@@ -32,7 +32,7 @@ COUNT(DISTINCT expr [,expr,...])`
 
 ## Return value
 
-Returns a numeric value. If no rows can be found, 0 is returned. This function skips NULL values.
+Returns a numeric value. If no rows can be found, 0 is returned. This function ignores NULL values.
 
 ## Examples
 
@@ -75,7 +75,7 @@ Example 2：Count the number of values in the `id` column.
     +-----------+
 ~~~
 
-Example 3: Count the number of values in the `category` column while skipping NULL values.
+Example 3: Count the number of values in the `category` column while ignoring NULL values.
 
 ~~~Plain
 select count(category) from test;
@@ -97,7 +97,7 @@ select count(distinct category) from test;
 +-------------------------+
 ~~~
 
-Example 5：Count the number of combinations between `category` and `supplier`.
+Example 5：Count the number of combinations that can be formed by `category` and `supplier`.
 
 ~~~Plain
 select count(distinct category, supplier) from test;
