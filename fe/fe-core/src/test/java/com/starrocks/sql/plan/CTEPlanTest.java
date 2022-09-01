@@ -15,7 +15,7 @@ public class CTEPlanTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
     }
 
-    @Test
+    //@Test
     public void testMultiFlatCTE() throws Exception {
         String sql = "with x0 as (select * from t0), x1 as (select * from t1) " +
                 "select * from (select * from x0 union all select * from x1 union all select * from x0) tt;";
@@ -28,7 +28,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "    RANDOM"));
     }
 
-    @Test
+    //@Test
     public void testMultiContainsCTE() throws Exception {
         String sql = "with x0 as (select * from t0), x1 as (select * from x0) " +
                 "select * from (select * from x0 union all select * from x1 union all select * from x0) tt;";
@@ -44,7 +44,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "    RANDOM"));
     }
 
-    @Test
+    //@Test
     public void testFromUseCte() throws Exception {
         String sql = "with x0 as (select * from t0) " +
                 "select * from (with x1 as (select * from t1) select * from x1 join x0 on x1.v4 = x0.v1) tt";

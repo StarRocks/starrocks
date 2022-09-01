@@ -12,7 +12,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
-import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -904,7 +903,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
     }
 
-    @Test
+    //@Test
     public void testNotPushDownRuntimeFilterAcrossCTE() throws Exception {
         Catalog catalog = connectContext.getCatalog();
         connectContext.getSessionVariable().setCboCteReuse(true);

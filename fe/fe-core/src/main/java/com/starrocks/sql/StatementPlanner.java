@@ -29,11 +29,7 @@ import java.util.stream.Collectors;
 
 public class StatementPlanner {
     public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
-        com.starrocks.sql.analyzer.Analyzer analyzer =
-                new com.starrocks.sql.analyzer.Analyzer(session.getCatalog(), session);
-        Relation relation = analyzer.analyze(stmt);
 
-        PrivilegeChecker.check(stmt, session.getCatalog().getAuth(), session);
 
         if (stmt instanceof QueryStmt) {
             QueryStmt queryStmt = (QueryStmt) stmt;
@@ -44,6 +40,12 @@ public class StatementPlanner {
             try {
                 lock(dbs);
                 session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
+
+                com.starrocks.sql.analyzer.Analyzer analyzer =
+                        new com.starrocks.sql.analyzer.Analyzer(session.getCatalog(), session);
+                Relation relation = analyzer.analyze(stmt);
+
+                PrivilegeChecker.check(stmt, session.getCatalog().getAuth(), session);
                 ExecPlan plan = createQueryPlan(relation, session);
 
                 setOutfileSink(queryStmt, plan);
@@ -59,6 +61,11 @@ public class StatementPlanner {
 
             try {
                 lock(dbs);
+                com.starrocks.sql.analyzer.Analyzer analyzer =
+                        new com.starrocks.sql.analyzer.Analyzer(session.getCatalog(), session);
+                Relation relation = analyzer.analyze(stmt);
+
+                PrivilegeChecker.check(stmt, session.getCatalog().getAuth(), session);
                 return createInsertPlan(relation, session);
             } finally {
                 unLock(dbs);
