@@ -23,6 +23,8 @@ import com.starrocks.lake.proto.TabletStatRequest;
 import com.starrocks.lake.proto.TabletStatResponse;
 import com.starrocks.lake.proto.UnlockTabletMetadataRequest;
 import com.starrocks.lake.proto.UnlockTabletMetadataResponse;
+import com.starrocks.lake.proto.UploadSnapshotsRequest;
+import com.starrocks.lake.proto.UploadSnapshotsResponse;
 
 import java.util.concurrent.Future;
 
@@ -56,5 +58,8 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "unlock_tablet_metadata", onceTalkTimeout = 5000)
     Future<UnlockTabletMetadataResponse> unlockTabletMetadata(UnlockTabletMetadataRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "upload_snapshots", onceTalkTimeout = 5000)
+    Future<UploadSnapshotsResponse> uploadSnapshots(UploadSnapshotsRequest request);
 }
 

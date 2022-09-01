@@ -51,7 +51,7 @@ import java.util.Set;
 public class Backend extends ComputeNode {
 
     public enum BackendState {
-        using, /* backend is belong to a cluster*/
+        using, /* backend belongs to a cluster*/
         offline,
         free /* backend is not belong to any clusters */
     }
