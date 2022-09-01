@@ -914,7 +914,7 @@ public class FileSystemManager {
             try {
                 fsDataOutputStream.write(data);
             } catch (IOException e) {
-                logger.error("errors while write data to output stream", e);
+                logger.error("errors while write file " + fd + " to output stream", e);
                 throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
                         e, "errors while write data to output stream");
             }
@@ -925,10 +925,10 @@ public class FileSystemManager {
         FSDataOutputStream fsDataOutputStream = clientContextManager.getFsDataOutputStream(fd);
         synchronized (fsDataOutputStream) {
             try {
-                fsDataOutputStream.flush();
+                fsDataOutputStream.hsync();
                 fsDataOutputStream.close();
             } catch (IOException e) {
-                logger.error("errors while close file output stream", e);
+                logger.error("errors while close file " + fd + " output stream", e);
                 throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
                         e, "errors while close file output stream");
             } finally {
