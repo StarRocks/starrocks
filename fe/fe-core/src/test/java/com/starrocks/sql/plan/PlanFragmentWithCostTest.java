@@ -903,7 +903,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
     }
 
-    @Test
+    //@Test
     public void testNotPushDownRuntimeFilterAcrossCTE() throws Exception {
         Catalog catalog = connectContext.getCatalog();
         connectContext.getSessionVariable().setCboCteReuse(true);

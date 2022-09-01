@@ -285,7 +285,13 @@ public class SelectStmt extends QueryStmt {
             if (tblRef instanceof InlineViewRef) {
                 // Inline view reference
                 QueryStmt inlineStmt = ((InlineViewRef) tblRef).getViewStmt();
-                inlineStmt.withClause_ = this.withClause_;
+
+                if (inlineStmt.withClause_ == null) {
+                    inlineStmt.withClause_ = this.withClause_;
+                } else {
+                    inlineStmt.withClause_.getViews().addAll(this.withClause_.getViews());
+                }
+
                 inlineStmt.getDbs(context, dbs);
             } else if (tblRef instanceof FunctionTableRef) {
                 //FunctionTableRef dbName is empty
