@@ -382,7 +382,6 @@ void AlterTableTaskWorkerPool::_alter_tablet(const TAlterTabletReqV2& agent_task
             // Following are unused for LakeTablet but they are defined as required thrift fields, have to init them.
             tablet_info.__set_schema_hash(0);
             tablet_info.__set_version(0);
-            tablet_info.__set_version_hash(0);
             tablet_info.__set_row_count(0);
             tablet_info.__set_data_size(0);
             tablet_info.__set_version_count(1);
