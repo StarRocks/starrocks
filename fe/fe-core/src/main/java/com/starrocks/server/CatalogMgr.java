@@ -135,7 +135,7 @@ public class CatalogMgr {
             throw new DdlException("Missing properties 'type'");
         }
         if (!CreateCatalogStmt.SUPPORTED_CATALOG.contains(type)) {
-        // if catalog type is not supported, skip it
+            // if catalog type is not supported, skip it
             LOG.warn("Replay catalog encounter unknown catalog type: " + type);
             return;
         }
