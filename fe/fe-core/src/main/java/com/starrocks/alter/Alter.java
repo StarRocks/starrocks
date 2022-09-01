@@ -270,7 +270,7 @@ public class Alter {
             task = TaskBuilder.buildMvTask(materializedView, dbName);
         }
 
-        TaskBuilder.mappingTaskTypeAndSetRefreshInfo(task, refreshSchemeDesc);
+        TaskBuilder.updateTaskInfo(task, refreshSchemeDesc);
 
 
         taskManager.createTask(task, false);

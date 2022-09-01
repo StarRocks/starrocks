@@ -66,7 +66,7 @@ public class TaskBuilder {
         return task;
     }
 
-    public static void mappingTaskTypeAndSetRefreshInfo(Task task, RefreshSchemeDesc refreshSchemeDesc)
+    public static void updateTaskInfo(Task task, RefreshSchemeDesc refreshSchemeDesc)
             throws DdlException {
         MaterializedView.RefreshType refreshType = refreshSchemeDesc.getType();
         if (refreshType == MaterializedView.RefreshType.MANUAL) {
@@ -89,7 +89,7 @@ public class TaskBuilder {
         }
     }
 
-    public static void mappingTaskTypeAndSetRefreshInfo(Task task, MaterializedView materializedView)
+    public static void updateTaskInfo(Task task, MaterializedView materializedView)
             throws DdlException {
 
         MaterializedView.AsyncRefreshContext asyncRefreshContext =

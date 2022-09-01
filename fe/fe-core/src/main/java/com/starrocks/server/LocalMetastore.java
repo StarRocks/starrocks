@@ -532,7 +532,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
                 if (refreshType != MaterializedView.RefreshType.SYNC) {
                     Task task = TaskBuilder.buildMvTask(materializedView, db.getFullName());
-                    TaskBuilder.mappingTaskTypeAndSetRefreshInfo(task, materializedView);
+                    TaskBuilder.updateTaskInfo(task, materializedView);
                     taskManager.createTask(task, false);
                 }
             }
@@ -3303,7 +3303,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (refreshType != MaterializedView.RefreshType.SYNC) {
 
             Task task = TaskBuilder.buildMvTask(materializedView, dbName);
-            TaskBuilder.mappingTaskTypeAndSetRefreshInfo(task, materializedView);
+            TaskBuilder.updateTaskInfo(task, materializedView);
 
             if (optHints != null) {
                 Map<String, String> taskProperties = task.getProperties();
@@ -3387,7 +3387,7 @@ public class LocalMetastore implements ConnectorMetadata {
             final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
             if (!taskManager.containTask(mvTaskName)) {
                 Task task = TaskBuilder.buildMvTask(materializedView, dbName);
-                TaskBuilder.mappingTaskTypeAndSetRefreshInfo(task, materializedView);
+                TaskBuilder.updateTaskInfo(task, materializedView);
                 taskManager.createTask(task, false);
             }
             taskManager.executeTask(mvTaskName, new ExecuteOption(priority));
