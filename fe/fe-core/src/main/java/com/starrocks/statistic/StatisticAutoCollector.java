@@ -52,7 +52,7 @@ public class StatisticAutoCollector extends LeaderDaemon {
                             ScheduleStatus.PENDING,
                             LocalDateTime.MIN));
             for (StatisticsCollectJob statsJob : allJobs) {
-                statisticExecutor.collectStatistics(statsJob);
+                STATISTIC_EXECUTOR.collectStatistics(statsJob, true);
             }
         } else {
             List<AnalyzeJob> allAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList();

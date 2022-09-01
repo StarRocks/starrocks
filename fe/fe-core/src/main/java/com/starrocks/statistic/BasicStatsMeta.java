@@ -15,6 +15,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -73,6 +74,11 @@ public class BasicStatsMeta implements Writable {
     }
 
     public List<String> getColumns() {
+        // Just for compatibility, there are no columns in the old code,
+        // and the columns may be null after deserialization.
+        if (columns == null) {
+            return Collections.emptyList();
+        }
         return columns;
     }
 
