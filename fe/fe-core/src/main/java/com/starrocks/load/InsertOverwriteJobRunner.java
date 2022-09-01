@@ -204,8 +204,13 @@ public class InsertOverwriteJobRunner {
 
     private void createTempPartitions() throws DdlException {
         long createPartitionStartTimestamp = System.currentTimeMillis();
-        Database db = getAndWriteLockDatabase(dbId);
-        OlapTable targetTable = checkAndGetTable(db, tableId);
+        Database db = getAndReadLockDatabase(dbId);
+        OlapTable targetTable = null;
+        try {
+            targetTable = checkAndGetTable(db, tableId);
+        } finally {
+            db.readUnlock();
+        }
         PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
                 job.getSourcePartitionIds(), job.getTmpPartitionIds());
         createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
