@@ -8,20 +8,30 @@ import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+import com.google.common.hash.Funnel;
+import com.google.common.hash.Hashing;
+import com.google.common.hash.PrimitiveSink;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.RendezvousHashRing;
+import com.starrocks.planner.HdfsScanNode;
+import com.starrocks.planner.HudiScanNode;
+import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Hybrid backend selector for hive table.
@@ -44,10 +54,53 @@ public class HDFSBackendSelector implements BackendSelector {
     private final List<TScanRangeLocations> locations;
     private final Coordinator.FragmentScanRangeAssignment assignment;
     private final Map<TNetworkAddress, Long> addressToBackendId;
-    private final List<Long> scanRangesBytes;
     private final List<Long> remoteScanRangesBytes = Lists.newArrayList();
     private final ImmutableCollection<ComputeNode> computeNodes;
     private boolean forceScheduleLocal;
+
+    class HdfsScanRangeHasher {
+        String basePath;
+        HDFSScanNodePredicates predicates;
+
+        public HdfsScanRangeHasher() {
+            if (scanNode instanceof HdfsScanNode) {
+                HdfsScanNode node = (HdfsScanNode) scanNode;
+                predicates = node.getScanNodePredicates();
+                basePath = node.getHiveTable().getHdfsPath();
+            } else if (scanNode instanceof IcebergScanNode) {
+                IcebergScanNode node = (IcebergScanNode) scanNode;
+                predicates = node.getScanNodePredicates();
+            } else if (scanNode instanceof HudiScanNode) {
+                HudiScanNode node = (HudiScanNode) scanNode;
+                predicates = node.getScanNodePredicates();
+                basePath = node.getHudiTable().getHudiBasePath();
+            } else {
+                Preconditions.checkState(false);
+            }
+        }
+
+        public void acceptScanRangeLocations(TScanRangeLocations tScanRangeLocations, PrimitiveSink primitiveSink) {
+            THdfsScanRange hdfsScanRange = tScanRangeLocations.scan_range.hdfs_scan_range;
+            if (hdfsScanRange.isSetFull_path()) {
+                primitiveSink.putBytes(hdfsScanRange.full_path.getBytes(StandardCharsets.UTF_8));
+            } else {
+                primitiveSink.putBytes(basePath.getBytes(StandardCharsets.UTF_8));
+                if (hdfsScanRange.isSetPartition_id() &&
+                        predicates.getIdToPartitionKey().containsKey(hdfsScanRange.getPartition_id())) {
+                    PartitionKey partitionKey = predicates.getIdToPartitionKey().get(hdfsScanRange.getPartition_id());
+                    primitiveSink.putInt(partitionKey.hashCode());
+                }
+                if (hdfsScanRange.isSetRelative_path()) {
+                    primitiveSink.putBytes(hdfsScanRange.relative_path.getBytes(StandardCharsets.UTF_8));
+                }
+            }
+            if (hdfsScanRange.isSetOffset()) {
+                primitiveSink.putLong(hdfsScanRange.getOffset());
+            }
+        }
+    }
+
+    private HdfsScanRangeHasher hdfsScanRangeHasher;
 
     public HDFSBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
                                Coordinator.FragmentScanRangeAssignment assignment,
@@ -60,18 +113,48 @@ public class HDFSBackendSelector implements BackendSelector {
         this.computeNodes = computeNodes;
         this.forceScheduleLocal = forceScheduleLocal;
         this.addressToBackendId = addressToBackendId;
-        this.scanRangesBytes =
-                locations.stream().map(x -> x.scan_range.hdfs_scan_range.length).collect(Collectors.toList());
+        this.hdfsScanRangeHasher = new HdfsScanRangeHasher();
+    }
+
+    private ComputeNode selectLeastScanBytesComputeNode(Collection<ComputeNode> backends) {
+        if (backends == null || backends.isEmpty()) {
+            return null;
+        }
+
+        ComputeNode node = null;
+        long minAssignedScanRanges = Long.MAX_VALUE;
+        for (ComputeNode backend : backends) {
+            long assignedScanRanges = assignedScansPerComputeNode.get(backend);
+            if (assignedScanRanges < minAssignedScanRanges) {
+                minAssignedScanRanges = assignedScanRanges;
+                node = backend;
+            }
+        }
+        return node;
+    }
+
+    class ComputeNodeFunnel implements Funnel<ComputeNode> {
+        @Override
+        public void funnel(ComputeNode computeNode, PrimitiveSink primitiveSink) {
+            primitiveSink.putBytes(computeNode.getHost().getBytes(StandardCharsets.UTF_8));
+            primitiveSink.putInt(computeNode.getHeartbeatPort());
+        }
+    }
+
+    class TScanRangeLocationsFunnel implements Funnel<TScanRangeLocations> {
+        @Override
+        public void funnel(TScanRangeLocations tScanRangeLocations, PrimitiveSink primitiveSink) {
+            hdfsScanRangeHasher.acceptScanRangeLocations(tScanRangeLocations, primitiveSink);
+        }
     }
 
     @Override
     public void computeScanRangeAssignment() throws Exception {
-        Preconditions.checkArgument(locations.size() == scanRangesBytes.size());
+        // exclude non-alive or in-blacklist compute nodes.
         for (ComputeNode computeNode : computeNodes) {
             if (!computeNode.isAlive() || SimpleScheduler.isInBlacklist(computeNode.getId())) {
                 continue;
             }
-
             assignedScansPerComputeNode.put(computeNode, 0L);
             hostToBackends.put(computeNode.getHost(), computeNode);
         }
@@ -79,78 +162,57 @@ public class HDFSBackendSelector implements BackendSelector {
             throw new UserException("Backend not found. Check if any backend is down or not");
         }
 
-        // total scans / alive bes
-        long avgScanBytes = -1;
-        if (!forceScheduleLocal) {
-            int numBes = assignedScansPerComputeNode.size();
-            long totalBytes = 0L;
-            for (long scanRangeBytes : scanRangesBytes) {
-                totalBytes += scanRangeBytes;
-            }
-            avgScanBytes = totalBytes / numBes + (totalBytes % numBes == 0 ? 0 : 1);
-        }
-
+        // schedule scan ranges to co-located backends.
+        // and put rest scan ranges into remote scan ranges.
         List<TScanRangeLocations> remoteScanRangeLocations = Lists.newArrayList();
-        for (int i = 0; i < locations.size(); ++i) {
-            TScanRangeLocations scanRangeLocations = locations.get(i);
-            long minAssignedScanRanges = Long.MAX_VALUE;
-            ComputeNode node = null;
-            for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
-                Collection<ComputeNode> backends = hostToBackends.get(location.getServer().getHostname());
-                if (backends == null || backends.isEmpty()) {
-                    continue;
-                }
-                for (ComputeNode backend : backends) {
-                    long assignedScanRanges = assignedScansPerComputeNode.get(backend);
-                    if (!forceScheduleLocal && assignedScanRanges >= avgScanBytes) {
+        if (forceScheduleLocal) {
+            for (int i = 0; i < locations.size(); ++i) {
+                TScanRangeLocations scanRangeLocations = locations.get(i);
+                Collection<ComputeNode> backends = new ArrayList<>();
+                // select all backends that are co-located with this scan range.
+                for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
+                    Collection<ComputeNode> servers = hostToBackends.get(location.getServer().getHostname());
+                    if (servers == null || servers.isEmpty()) {
                         continue;
                     }
-                    if (assignedScanRanges < minAssignedScanRanges) {
-                        minAssignedScanRanges = assignedScanRanges;
-                        node = backend;
-                    }
+                    backends.addAll(servers);
+                }
+                ComputeNode node = selectLeastScanBytesComputeNode(backends);
+                if (node == null) {
+                    remoteScanRangeLocations.add(scanRangeLocations);
+                } else {
+                    recordScanRangeAssignment(node, scanRangeLocations);
                 }
             }
-            if (node == null) {
-                remoteScanRangeLocations.add(scanRangeLocations);
-                remoteScanRangesBytes.add(scanRangesBytes.get(i));
-                continue;
-            }
-            long scansToAdd = scanRangesBytes.get(i);
-            recordScanRangeAssignment(node, scanRangeLocations, scansToAdd);
+        } else {
+            remoteScanRangeLocations = locations;
         }
 
         if (remoteScanRangeLocations.isEmpty()) {
             return;
         }
 
-        Preconditions.checkArgument(remoteScanRangeLocations.size() == remoteScanRangesBytes.size());
+        // use consistent hashing to schedule remote scan ranges
+        RendezvousHashRing hashRing =
+                new RendezvousHashRing(Hashing.murmur3_128(), new TScanRangeLocationsFunnel(), new ComputeNodeFunnel(),
+                        assignedScansPerComputeNode.keySet());
         for (int i = 0; i < remoteScanRangeLocations.size(); ++i) {
             TScanRangeLocations scanRangeLocations = remoteScanRangeLocations.get(i);
-            long minAssignedScanRanges = Long.MAX_VALUE;
-            ComputeNode node = null;
-            for (Map.Entry<ComputeNode, Long> entry : assignedScansPerComputeNode.entrySet()) {
-                ComputeNode backend = entry.getKey();
-                long assignedScanRanges = entry.getValue();
-                if (assignedScanRanges < minAssignedScanRanges) {
-                    minAssignedScanRanges = assignedScanRanges;
-                    node = backend;
-                }
-            }
+            List<ComputeNode> backends = hashRing.get(scanRangeLocations, 3);
+            ComputeNode node = selectLeastScanBytesComputeNode(backends);
             if (node == null) {
                 throw new RuntimeException("Failed to find backend to execute");
             }
-            long scansToAdd = remoteScanRangesBytes.get(i);
-            recordScanRangeAssignment(node, scanRangeLocations, scansToAdd);
+            recordScanRangeAssignment(node, scanRangeLocations);
         }
     }
 
-    private void recordScanRangeAssignment(ComputeNode node, TScanRangeLocations scanRangeLocations,
-                                           long addedScans) {
+    private void recordScanRangeAssignment(ComputeNode node, TScanRangeLocations scanRangeLocations) {
         TNetworkAddress address = new TNetworkAddress(node.getHost(), node.getBePort());
         addressToBackendId.put(address, node.getId());
 
         // update statistic
+        long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
         assignedScansPerComputeNode.put(node, assignedScansPerComputeNode.get(node) + addedScans);
 
         // add in assignment

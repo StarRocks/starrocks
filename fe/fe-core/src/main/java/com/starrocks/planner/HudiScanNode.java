@@ -33,6 +33,10 @@ public class HudiScanNode extends ScanNode {
         return scanNodePredicates;
     }
 
+    public HudiTable getHudiTable() {
+        return hudiTable;
+    }
+
     @Override
     protected String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
