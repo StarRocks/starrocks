@@ -81,10 +81,10 @@ public class ExportExportingTask extends LeaderTask {
         }
         if (hasRebootBe) {
             try {
-				job.cancel(ExportFailMsg.CancelType.BE_REBOOT, "be has rebooted during exec export job.");
-			} catch (UserException e) {
-				LOG.warn("try to cancel a completed job. job: {}", job);
-			}
+                job.cancel(ExportFailMsg.CancelType.BE_REBOOT, "be has rebooted during exec export job.");
+            } catch (UserException e) {
+                LOG.warn("try to cancel a completed job. job: {}", job);
+            }
             return;
         }
 
