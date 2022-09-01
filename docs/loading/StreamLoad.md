@@ -170,7 +170,7 @@ MySQL [test_db]> SELECT * FROM table2;
 +------+--------+
 | id   | city   |
 +------+--------+
-| 200  | Beijin    |
+| 200  | Beijing|
 +------+--------+
 4 rows in set (0.01 sec)
 ```
