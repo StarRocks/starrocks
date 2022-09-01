@@ -180,13 +180,12 @@ Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& p
 
 void ChunksSorterTopn::_set_permutation_before(Permutation& permutation, size_t size,
                                                std::vector<std::vector<uint8_t>>& filter_array) {
-    uint32_t first_size = 0;
     for (uint32_t i = 0; i < size; ++i) {
         size_t nums = filter_array[i].size();
         for (uint32_t j = 0; j < nums; ++j) {
             if (filter_array[i][j] == DataSegment::BEFORE_LAST_RESULT) {
-                permutation[first_size] = {i, j};
-                ++first_size;
+                PermutationItem item{i, j};
+                permutation.emplace_back(item);
             }
         }
     }
@@ -194,18 +193,15 @@ void ChunksSorterTopn::_set_permutation_before(Permutation& permutation, size_t 
 
 void ChunksSorterTopn::_set_permutation_complete(std::pair<Permutation, Permutation>& permutations, size_t size,
                                                  std::vector<std::vector<uint8_t>>& filter_array) {
-    uint32_t first_size, second_size;
-    first_size = second_size = 0;
-
     for (uint32_t i = 0; i < size; ++i) {
         size_t nums = filter_array[i].size();
         for (uint32_t j = 0; j < nums; ++j) {
             if (filter_array[i][j] == DataSegment::BEFORE_LAST_RESULT) {
-                permutations.first[first_size] = {i, j};
-                ++first_size;
+                PermutationItem tmp{i, j};
+                permutations.first.emplace_back(tmp);
             } else if (filter_array[i][j] == DataSegment::IN_LAST_RESULT) {
-                permutations.second[second_size] = {i, j};
-                ++second_size;
+                PermutationItem tmp{i, j};
+                permutations.second.emplace_back(tmp);
             }
         }
     }
@@ -253,7 +249,7 @@ Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state, std::pair<Pe
         timer.stop();
         {
             ScopedTimer<MonotonicStopWatch> timer(_build_timer);
-            permutations.first.resize(least_num);
+            permutations.first.reserve(least_num);
             // BEFORE's size is enough, so we ignore IN.
             if (least_num >= rows_to_sort) {
                 // use filter_array to set permutations.first.
@@ -265,7 +261,7 @@ Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state, std::pair<Pe
                 // and these equals row maybe exist in the second part
 
                 // BEFORE's size < rows_to_sort, we need set permutations.first and permutations.second.
-                permutations.second.resize(middle_num);
+                permutations.second.reserve(middle_num);
 
                 // use filter_array to set permutations.first and permutations.second.
                 _set_permutation_complete(permutations, segments.size(), filter_array);
