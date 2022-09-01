@@ -21,12 +21,12 @@
 
 package com.starrocks.catalog;
 
+
+
 import com.google.common.collect.Lists;
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -35,6 +35,8 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.AfterClass;

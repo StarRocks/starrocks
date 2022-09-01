@@ -97,7 +97,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         return asyncLoad(key, executor);
     }
 
-    public List<TStatisticData> queryHistogramStatistics(long tableId, List<String> column) throws Exception {
+    public List<TStatisticData> queryHistogramStatistics(long tableId, List<String> column) {
         return statisticExecutor.queryHistogram(tableId, column);
     }
 
@@ -116,7 +116,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         }
 
         List<Bucket> buckets = convertBuckets(statisticData.histogram, column.getType());
-        Map<Double, Long> mcv = convertMCV(statisticData.histogram, column.getType());
+        Map<String, Long> mcv = convertMCV(statisticData.histogram);
         return new Histogram(buckets, mcv);
     }
 
@@ -137,14 +137,14 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
             double high;
             if (type.isDate()) {
                 low = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(0).getAsString(), DateUtils.DATEKEY_FORMATTER_UNIX));
+                        bucketJsonArray.get(0).getAsString(), DateUtils.DATE_FORMATTER_UNIX));
                 high = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(1).getAsString(), DateUtils.DATEKEY_FORMATTER_UNIX));
+                        bucketJsonArray.get(1).getAsString(), DateUtils.DATE_FORMATTER_UNIX));
             } else if (type.isDatetime()) {
                 low = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(0).getAsString(), DateUtils.DATETIMEKEY_FORMATTER_UNIX));
+                        bucketJsonArray.get(0).getAsString(), DateUtils.DATE_TIME_FORMATTER_UNIX));
                 high = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(1).getAsString(), DateUtils.DATETIMEKEY_FORMATTER_UNIX));
+                        bucketJsonArray.get(1).getAsString(), DateUtils.DATE_TIME_FORMATTER_UNIX));
             } else {
                 low = Double.parseDouble(bucketJsonArray.get(0).getAsString());
                 high = Double.parseDouble(bucketJsonArray.get(1).getAsString());
@@ -158,7 +158,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         return buckets;
     }
 
-    private Map<Double, Long> convertMCV(String histogramString, Type type) {
+    private Map<String, Long> convertMCV(String histogramString) {
         JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
         JsonElement jsonElement = jsonObject.get("mcv");
         if (jsonElement.isJsonNull()) {
@@ -166,22 +166,10 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         }
 
         JsonArray histogramObj = (JsonArray) jsonElement;
-        Map<Double, Long> mcv = new HashMap<>();
+        Map<String, Long> mcv = new HashMap<>();
         for (int i = 0; i < histogramObj.size(); ++i) {
             JsonArray bucketJsonArray = histogramObj.get(i).getAsJsonArray();
-
-            double key;
-            if (type.isDate()) {
-                key = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(0).getAsString(), DateUtils.DATEKEY_FORMATTER_UNIX));
-            } else if (type.isDatetime()) {
-                key = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(0).getAsString(), DateUtils.DATETIMEKEY_FORMATTER_UNIX));
-            } else {
-                key = Double.parseDouble(bucketJsonArray.get(0).getAsString());
-            }
-
-            mcv.put(key, Long.parseLong(bucketJsonArray.get(1).getAsString()));
+            mcv.put(bucketJsonArray.get(0).getAsString(), Long.parseLong(bucketJsonArray.get(1).getAsString()));
         }
         return mcv;
     }

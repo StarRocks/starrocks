@@ -44,6 +44,7 @@ import com.starrocks.load.FailMsg;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -68,6 +69,7 @@ import java.util.UUID;
 public class BrokerLoadJob extends BulkLoadJob {
 
     private static final Logger LOG = LogManager.getLogger(BrokerLoadJob.class);
+    private ConnectContext context;
 
     // only for log replay
     public BrokerLoadJob() {
@@ -75,12 +77,13 @@ public class BrokerLoadJob extends BulkLoadJob {
         this.jobType = EtlJobType.BROKER;
     }
 
-    public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, OriginStatement originStmt)
+    public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, OriginStatement originStmt, ConnectContext context)
             throws MetaNotFoundException {
         super(dbId, label, originStmt);
         this.timeoutSecond = Config.broker_load_default_timeout_second;
         this.brokerDesc = brokerDesc;
         this.jobType = EtlJobType.BROKER;
+        this.context = context;
     }
 
     @Override
@@ -192,7 +195,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 LoadLoadingTask task = new LoadLoadingTask(db, table, brokerDesc,
                         brokerFileGroups, getDeadlineMs(), loadMemLimit,
                         strictMode, transactionId, this, timezone, timeoutSecond, createTimestamp, partialUpdate,
-                        sessionVariables);
+                        sessionVariables, context);
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
                 task.init(loadId, attachment.getFileStatusByTable(aggKey), attachment.getFileNumByTable(aggKey));

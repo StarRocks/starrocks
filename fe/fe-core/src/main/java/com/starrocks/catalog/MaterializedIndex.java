@@ -38,11 +38,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
+import javax.annotation.Nullable;
 
-/**
- * The OlapTraditional table is a materialized table which stored as rowcolumnar file or columnar file
- */
 public class MaterializedIndex extends MetaObject implements Writable, GsonPostProcessable {
     public enum IndexState {
         NORMAL,
@@ -97,33 +94,65 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     // this is for keeping tablet order
     private List<Tablet> tablets;
 
-    // for push after rollup index finished
-    @SerializedName(value = "rollupIndexId")
-    private long rollupIndexId;
-    @SerializedName(value = "rollupFinishedVersion")
-    private long rollupFinishedVersion;
+    // If this is an index of LakeTable and the index state is SHADOW, all transactions
+    // whose txn id is less than 'visibleTxnId' will ignore this index when sending
+    // PublishVersionRequest requests to BE nodes.
+    private long visibleTxnId;
 
     public MaterializedIndex() {
-        this.state = IndexState.NORMAL;
-        this.idToTablets = new HashMap<>();
-        this.tablets = new ArrayList<>();
+        this(0, IndexState.NORMAL);
     }
 
-    public MaterializedIndex(long id, IndexState state) {
+    public MaterializedIndex(long id) {
+        this(id, IndexState.NORMAL);
+    }
+
+    public MaterializedIndex(long id, @Nullable IndexState state) {
+        this(id, state, 0);
+    }
+
+    /**
+     * Construct a new instance of {@link MaterializedIndex}.
+     * <p>
+     * {@code visibleTxnId} will be ignored if {@code state} is not {@code IndexState.SHADOW}
+     *
+     * @param id           the id of the index
+     * @param state        the state of the index
+     * @param visibleTxnId the minimum transaction id that can see this index.
+     */
+    public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId) {
         this.id = id;
-
-        this.state = state;
-        if (this.state == null) {
-            this.state = IndexState.NORMAL;
-        }
-
+        this.state = state == null ? IndexState.NORMAL : state;
         this.idToTablets = new HashMap<>();
         this.tablets = new ArrayList<>();
-
         this.rowCount = 0;
+        this.visibleTxnId = (this.state == IndexState.SHADOW) ? visibleTxnId : 0;
+    }
 
-        this.rollupIndexId = -1L;
-        this.rollupFinishedVersion = -1L;
+    /**
+     * Checks whether {@code this} {@link MaterializedIndex} is visible to a transaction.
+     * <p>
+     * If this {@link MaterializedIndex} is not visible to a transaction,
+     * {@link com.starrocks.transaction.PublishVersionDaemon} will not send {@link com.starrocks.lake.proto.PublishVersionRequest}
+     * to tablets of this index.
+     * <p>
+     * Only used for {@link com.starrocks.lake.LakeTable} now.
+     *
+     * @param txnId the id of a transaction created by {@link com.starrocks.transaction.DatabaseTransactionMgr}
+     * @return true iff this index is visible to the transaction, false otherwise.
+     */
+    public boolean visibleForTransaction(long txnId) {
+        return state == IndexState.NORMAL || visibleTxnId <= txnId;
+    }
+
+    /**
+     * Update the value of visibleTxnId.
+     *
+     * @param visibleTxnId the new value of visibleTxnId.
+     */
+    public void setVisibleTxnId(long visibleTxnId) {
+        Preconditions.checkState(state == IndexState.SHADOW);
+        this.visibleTxnId = visibleTxnId;
     }
 
     public List<Tablet> getTablets() {
@@ -183,24 +212,6 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         this.rowCount = rowCount;
     }
 
-    public void setRollupIndexInfo(long rollupIndexId, long rollupFinishedVersion) {
-        this.rollupIndexId = rollupIndexId;
-        this.rollupFinishedVersion = rollupFinishedVersion;
-    }
-
-    public long getRollupIndexId() {
-        return rollupIndexId;
-    }
-
-    public long getRollupFinishedVersion() {
-        return rollupFinishedVersion;
-    }
-
-    public void clearRollupIndexInfo() {
-        this.rollupIndexId = -1L;
-        this.rollupFinishedVersion = -1L;
-    }
-
     public long getDataSize() {
         long dataSize = 0;
         for (Tablet tablet : getTablets()) {
@@ -219,7 +230,6 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
             return tablets.size();
         } else {
             Preconditions.checkState(t instanceof LocalTablet);
-
             long replicaCount = 0;
             for (Tablet tablet : getTablets()) {
                 LocalTablet localTablet = (LocalTablet) tablet;
@@ -255,8 +265,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
             tablet.write(out);
         }
 
-        out.writeLong(rollupIndexId);
-        out.writeLong(rollupFinishedVersion);
+        out.writeLong(-1L); // For rollback compatibility of field rollupIndexId
+        out.writeLong(-1L); // For rollback compatibility of field rollupFinishedVersion
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -275,8 +285,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
             idToTablets.put(tablet.getId(), tablet);
         }
 
-        rollupIndexId = in.readLong();
-        rollupFinishedVersion = in.readLong();
+        in.readLong(); // For backward compatibility of field rollupIndexId
+        in.readLong(); // For backward compatibility of field rollupFinishedVersion
     }
 
     public static MaterializedIndex read(DataInput in) throws IOException {
@@ -293,28 +303,9 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         if (!(obj instanceof MaterializedIndex)) {
             return false;
         }
-
-        MaterializedIndex table = (MaterializedIndex) obj;
-
-        // Check idToTablets
-        if (table.idToTablets == null) {
-            return false;
-        }
-        if (idToTablets.size() != table.idToTablets.size()) {
-            return false;
-        }
-        for (Entry<Long, Tablet> entry : idToTablets.entrySet()) {
-            long key = entry.getKey();
-            if (!table.idToTablets.containsKey(key)) {
-                return false;
-            }
-            if (!entry.getValue().equals(table.idToTablets.get(key))) {
-                return false;
-            }
-        }
-
-        return (state.equals(table.state))
-                && (rowCount == table.rowCount);
+        MaterializedIndex other = (MaterializedIndex) obj;
+        return idToTablets.equals(other.idToTablets) && state.equals(other.state) && (rowCount == other.rowCount) &&
+                (visibleTxnId == other.visibleTxnId);
     }
 
     @Override
@@ -325,15 +316,12 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
         buffer.append("row count: ").append(rowCount).append("; ");
         buffer.append("tablets size: ").append(tablets.size()).append("; ");
-        //
+        buffer.append("visibleTxnId: ").append(visibleTxnId).append("; ");
         buffer.append("tablets: [");
         for (Tablet tablet : tablets) {
             buffer.append("tablet: ").append(tablet.toString()).append(", ");
         }
         buffer.append("]; ");
-
-        buffer.append("rollup index id: ").append(rollupIndexId).append("; ");
-        buffer.append("rollup finished version: ").append(rollupFinishedVersion).append("; ");
 
         return buffer.toString();
     }

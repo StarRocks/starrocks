@@ -7,8 +7,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
@@ -17,32 +15,24 @@ import java.util.Optional;
 
 /*
  * Recorder CTE node info, contains:
- * 1. produce groupExpression(for get statistics)
- * 2. consume inline plan costs(for CTE inline)
- * 3. produce costs(for CTE inline)
- * 4. consume node nums(for CTE inline)
- * 5. consume required columns(for column prune)
- * 6. predicates/limit(for push down rule)
+ * 1. produce statistics
+ * 2. consume node num(for CTE inline)
+ * 3. consume required columns(for column prune)
+ * 4. predicates/limit(for push down rule)
  *
  * Should update context when CTE node was update or
  * before CTE optimize(push down predicate/limit or inline CTE)
  *
  * */
 public class CTEContext {
-    private static final Logger LOG = LogManager.getLogger(CTEContext.class);
+    private static final int MIN_EVERY_CTE_REFS = 3;
 
-    // All CTE produce, OptExpression should bind GroupExpression
-    private Map<Integer, OptExpression> produces;
-
-    // All CTE consume inline costs
-    private Map<Integer, List<Double>> consumeInlineCosts;
-
-    // All Cte produce costs
-    private Map<Integer, Double> produceCosts;
+    // All CTE produce
+    private List<Integer> produces;
 
     private Map<Integer, Statistics> produceStatistics;
 
-    // Nums of CTE consume
+    // Num of CTE consume
     private Map<Integer, Integer> consumeNums;
 
     // Consume required columns
@@ -52,36 +42,24 @@ public class CTEContext {
 
     private Map<Integer, List<Long>> consumeLimits;
 
-    // Evaluate the complexity of the produce plan.
-    // Why need this?
-    // * Join will produce GlobalRuntimeFilter, will let us can't
-    //   calculate the exact join cost
-    // * Multi-Equivalence predicate will case inaccurate rows selectivity
-    //
-    // So in some simpler cases, the effect of directly reuse cte may be worse.
-    // We want to keep complexity score between 0~2
-    private Map<Integer, Double> produceComplexityScores;
-
     private boolean enableCTE;
 
     private final List<Integer> forceCTEList;
 
     private double inlineCTERatio = 2.0;
 
+    private int maxCTELimit = 10;
+
     public CTEContext() {
         forceCTEList = Lists.newArrayList();
     }
 
     public void reset() {
-        produces = Maps.newHashMap();
+        produces = Lists.newArrayList();
         consumeNums = Maps.newHashMap();
         requiredColumns = Maps.newHashMap();
         consumePredicates = Maps.newHashMap();
         consumeLimits = Maps.newHashMap();
-
-        consumeInlineCosts = Maps.newHashMap();
-        produceCosts = Maps.newHashMap();
-        produceComplexityScores = Maps.newHashMap();
 
         produceStatistics = Maps.newHashMap();
     }
@@ -94,29 +72,17 @@ public class CTEContext {
         this.inlineCTERatio = ratio;
     }
 
-    public void addCTEProduce(int cteId, OptExpression produce) {
-        this.produces.put(cteId, produce);
+    public void addCTEProduce(int cteId) {
+        this.produces.add(cteId);
+    }
+
+    public void setMaxCTELimit(int maxCTELimit) {
+        this.maxCTELimit = maxCTELimit;
     }
 
     public void addCTEConsume(int cteId) {
         int i = this.consumeNums.getOrDefault(cteId, 0);
         this.consumeNums.put(cteId, i + 1);
-    }
-
-    public void addCTEProduceComplexityScores(int cteId, double score) {
-        produceComplexityScores.put(cteId, score);
-    }
-
-    public void addCTEProduceCost(int cteId, double cost) {
-        produceCosts.put(cteId, cost);
-    }
-
-    public void addCTEConsumeInlineCost(int cteId, double cost) {
-        if (consumeInlineCosts.containsKey(cteId)) {
-            consumeInlineCosts.get(cteId).add(cost);
-        } else {
-            consumeInlineCosts.put(cteId, Lists.newArrayList(cost));
-        }
     }
 
     public void addCTEStatistics(int cteId, Statistics statistics) {
@@ -130,11 +96,11 @@ public class CTEContext {
         return Optional.empty();
     }
 
-    public Map<Integer, OptExpression> getAllCTEProduce() {
+    public List<Integer> getAllCTEProduce() {
         return produces;
     }
 
-    public int getCTEConsumeNums(int cteId) {
+    public int getCTEConsumeNum(int cteId) {
         if (!consumeNums.containsKey(cteId)) {
             return 0;
         }
@@ -160,7 +126,7 @@ public class CTEContext {
     }
 
     public boolean needOptimizeCTE() {
-        return consumeNums.values().stream().reduce(Integer::max).orElse(0) > 0 || produces.size() > 0;
+        return consumeNums.values().stream().reduce(Integer::max).orElse(0) > 0 || !produces.isEmpty();
     }
 
     public boolean needPushPredicate() {
@@ -179,9 +145,9 @@ public class CTEContext {
     public boolean needPushLimit() {
         for (Map.Entry<Integer, Integer> entry : consumeNums.entrySet()) {
             int cteId = entry.getKey();
-            int nums = entry.getValue();
+            int num = entry.getValue();
 
-            if (consumeLimits.getOrDefault(cteId, Collections.emptyList()).size() >= nums) {
+            if (consumeLimits.getOrDefault(cteId, Collections.emptyList()).size() >= num) {
                 return true;
             }
         }
@@ -191,11 +157,18 @@ public class CTEContext {
 
     /*
      * Inline CTE consume sense:
+     * 0. All CTEConsumer been pruned
      * 1. Disable CTE reuse, must inline all CTE
      * 2. CTE consume only use once, it's meanings none CTE data reuse
-     * 3. CTE ratio is zero
+     * 3. CTE ratio less zero
+     * 4. limit CTE num strategy
      */
     public boolean needInline(int cteId) {
+        // 0. All CTEConsumer been pruned
+        if (!consumeNums.containsKey(cteId)) {
+            return true;
+        }
+
         if (forceCTEList.contains(cteId)) {
             return false;
         }
@@ -206,11 +179,27 @@ public class CTEContext {
             return true;
         }
 
-        return inlineCTERatio < 0;
+        // 3. CTE ratio less zero, force inline
+        if (inlineCTERatio < 0) {
+            return true;
+        }
+
+        if (inlineCTERatio == 0) {
+            return false;
+        }
+
+        // 4. limit cte num strategy
+        // when actual CTE > maxCTELimit
+        // actual CTE refs > every CTE refs: force CTE
+        // actual CTE refs < every CTE refs: force inline
+        if (produces.size() > maxCTELimit) {
+            return consumeNums.get(cteId) < MIN_EVERY_CTE_REFS;
+        }
+        return false;
     }
 
     public boolean hasInlineCTE() {
-        for (int cteId : produces.keySet()) {
+        for (int cteId : produces) {
             if (needInline(cteId)) {
                 return true;
             }
@@ -224,6 +213,28 @@ public class CTEContext {
     }
 
     public boolean isForceCTE(int cteId) {
-        return inlineCTERatio == 0 || this.forceCTEList.contains(cteId);
+        // 1. rewrite to CTE rule, force CTE
+        if (this.forceCTEList.contains(cteId)) {
+            return true;
+        }
+
+        // 2. ratio is zero, force CTE reuse
+        if (inlineCTERatio == 0) {
+            return true;
+        }
+
+        if (inlineCTERatio < 0) {
+            return false;
+        }
+
+        // 3. limit cte num strategy
+        // when actual CTE > maxCTELimit
+        // actual CTE refs > CTE num * every CTE refs: force CTE
+        // actual CTE refs < CTE num * every CTE refs: force inline
+        if (produces.size() > maxCTELimit) {
+            return consumeNums.get(cteId) >= MIN_EVERY_CTE_REFS;
+        }
+
+        return false;
     }
 }

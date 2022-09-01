@@ -21,11 +21,8 @@ public class MemoStatusChecker {
         long groupNum = getGroupsNum();
         Assert.assertEquals(groupNum, memo.getGroups().size());
 
-        long logicalMExprNum = getLogicalMExprNum();
-        Assert.assertEquals(logicalMExprNum, getLogicalGroupExprsSize());
-
-        long physicalMExprNum = getPhysicalMExprNum();
-        Assert.assertEquals(physicalMExprNum, getPhysicalGroupExprsSize());
+        Assert.assertEquals(getLogicalMExprNum(), getLogicalGroupExprsSize());
+        Assert.assertEquals(getPhysicalMExprNum(), getPhysicalGroupExprsSize());
 
         long planNum = getPlanNum();
         Assert.assertEquals(planNum, getPlanCount(memo.getRootGroup()));

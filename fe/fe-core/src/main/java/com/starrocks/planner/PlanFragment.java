@@ -25,11 +25,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
-import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.thrift.TExplainLevel;
@@ -258,8 +256,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     /**
      * Finalize plan tree and create stream sink, if needed.
      */
-    public void finalize(Analyzer analyzer, boolean validateFileFormats)
-            throws UserException {
+    public void createDataSink(TResultSinkType resultSinkType) {
         if (sink != null) {
             return;
         }
@@ -278,34 +275,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             }
             // add ResultSink
             // we're streaming to an result sink
-            sink = new ResultSink(planRoot.getId(), TResultSinkType.MYSQL_PROTOCAL);
-        }
-    }
-
-    public void finalizeForStatistic(boolean isStatistic) {
-        if (sink != null) {
-            return;
-        }
-        if (destNode != null) {
-            // we're streaming to an exchange node
-            DataStreamSink streamSink = new DataStreamSink(destNode.getId());
-            streamSink.setPartition(outputPartition);
-            streamSink.setMerge(destNode.isMerge());
-            streamSink.setFragment(this);
-            sink = streamSink;
-        } else {
-            if (planRoot == null) {
-                // only output expr, no FROM clause
-                // "select 1 + 2"
-                return;
-            }
-            // add ResultSink
-            // we're streaming to an result sink
-            if (isStatistic) {
-                sink = new ResultSink(planRoot.getId(), TResultSinkType.STATISTIC);
-            } else {
-                sink = new ResultSink(planRoot.getId(), TResultSinkType.MYSQL_PROTOCAL);
-            }
+            sink = new ResultSink(planRoot.getId(), resultSinkType);
         }
     }
 

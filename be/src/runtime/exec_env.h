@@ -125,7 +125,8 @@ public:
     MemTracker* process_mem_tracker() { return _mem_tracker; }
     MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker; }
     MemTracker* load_mem_tracker() { return _load_mem_tracker; }
-    MemTracker* tablet_meta_mem_tracker() { return _tablet_meta_mem_tracker; }
+    MemTracker* metadata_mem_tracker() { return _metadata_mem_tracker; }
+    MemTracker* tablet_schema_mem_tacker() { return _tablet_schema_mem_tracker; }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker; }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker; }
     MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker; }
@@ -163,8 +164,6 @@ public:
 
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
     void set_store_paths(const std::vector<StorePath>& paths) { _store_paths = paths; }
-    StorageEngine* storage_engine() { return _storage_engine; }
-    void set_storage_engine(StorageEngine* storage_engine);
 
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
@@ -216,7 +215,8 @@ private:
     MemTracker* _load_mem_tracker = nullptr;
 
     // The memory for tablet meta
-    MemTracker* _tablet_meta_mem_tracker = nullptr;
+    MemTracker* _metadata_mem_tracker = nullptr;
+    MemTracker* _tablet_schema_mem_tracker = nullptr;
 
     // The memory used for compaction
     MemTracker* _compaction_mem_tracker = nullptr;

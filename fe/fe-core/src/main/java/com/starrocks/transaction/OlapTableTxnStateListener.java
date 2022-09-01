@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 
 public class OlapTableTxnStateListener implements TransactionStateListener {
     private static final Logger LOG = LogManager.getLogger(OlapTableTxnStateListener.class);
-    private static final List<ClearTransactionTask> clearTransactionTasks = Lists.newArrayList();
+    private static final List<ClearTransactionTask> CLEAR_TRANSACTION_TASKS = Lists.newArrayList();
 
     private final DatabaseTransactionMgr dbTxnMgr;
     private final OlapTable table;
@@ -122,6 +122,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                     // save the error replica ids for current tablet
                     // this param is used for log
                     Set<Long> errorBackendIdsForTablet = Sets.newHashSet();
+                    StringBuilder failedReplicaInfoSB = new StringBuilder();
                     int successReplicaNum = 0;
                     for (long tabletBackend : tabletBackends) {
                         Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletBackend);
@@ -136,8 +137,12 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                             // if the backend load success but the backend has some errors previously, then it is not a normal replica
                             // ignore it but not log it
                             // for example, a replica is in clone state
-                            if (replica.getLastFailedVersion() < 0) {
+                            long lfv = replica.getLastFailedVersion();
+                            if (lfv < 0) {
                                 ++successReplicaNum;
+                            } else {
+                                failedReplicaInfoSB.append(
+                                        String.format("[be:%d V:%d LFV:%d]", tabletBackend, replica.getVersion(), lfv));
                             }
                         } else {
                             errorBackendIdsForTablet.add(tabletBackend);
@@ -154,10 +159,12 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                             errorBackends.add(backend.getId() + ":" + backend.getHost());
                         }
 
-                        LOG.warn("Fail to load files. tablet_id: {}, txn_id: {}, backends: {}",
+                        String failedReplicaInfo = failedReplicaInfoSB.toString();
+                        LOG.warn("Fail to load files. tablet_id: {}, txn_id: {}, backends: {} failed replicas: {}",
                                 tablet.getId(), txnState.getTransactionId(),
-                                Joiner.on(",").join(errorBackends));
-                        throw new TabletQuorumFailedException(tablet.getId(), txnState.getTransactionId(), errorBackends);
+                                Joiner.on(",").join(errorBackends), failedReplicaInfo);
+                        throw new TabletQuorumFailedException(tablet.getId(), txnState.getTransactionId(), errorBackends,
+                                failedReplicaInfo);
                     }
                 }
             }
@@ -213,18 +220,18 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         // for aborted transaction, we don't know which backends are involved, so we have to send clear task to all backends.
         List<Long> allBeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
         AgentBatchTask batchTask = null;
-        synchronized (clearTransactionTasks) {
+        synchronized (CLEAR_TRANSACTION_TASKS) {
             for (Long beId : allBeIds) {
                 ClearTransactionTask task = new ClearTransactionTask(beId, txnState.getTransactionId(), Lists.newArrayList());
-                clearTransactionTasks.add(task);
+                CLEAR_TRANSACTION_TASKS.add(task);
             }
             // try to group send tasks, not sending every time a txn is aborted. to avoid too many task rpc.
-            if (clearTransactionTasks.size() > allBeIds.size() * 2) {
+            if (CLEAR_TRANSACTION_TASKS.size() > allBeIds.size() * 2) {
                 batchTask = new AgentBatchTask();
-                for (ClearTransactionTask clearTransactionTask : clearTransactionTasks) {
+                for (ClearTransactionTask clearTransactionTask : CLEAR_TRANSACTION_TASKS) {
                     batchTask.addTask(clearTransactionTask);
                 }
-                clearTransactionTasks.clear();
+                CLEAR_TRANSACTION_TASKS.clear();
             }
         }
         if (batchTask != null) {

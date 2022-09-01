@@ -55,6 +55,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
@@ -130,6 +131,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
 
 public class LeaderImpl {
     private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
@@ -490,6 +493,12 @@ public class LeaderImpl {
             // rollup may be dropped
             throw new MetaNotFoundException("tablet " + tabletId + " does not exist");
         }
+
+        // lake tablet not need to compare schemaHash
+        if (tabletMeta.isLakeTablet()) {
+            return;
+        }
+
         if (!tabletMeta.containsSchemaHash(schemaHash)) {
             throw new MetaNotFoundException("tablet[" + tabletId
                     + "] schemaHash is not equal to index's switchSchemaHash. "
@@ -521,17 +530,22 @@ public class LeaderImpl {
             }
             throw new MetaNotFoundException("Could not find rollup index.");
         }
-        LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
-        if (tablet == null) {
-            LOG.warn("could not find tablet {} in rollup index {} ", tabletId, indexId);
-            return null;
+
+        Tablet tablet = index.getTablet(tabletId);
+        if (tablet instanceof LakeTablet) {
+            return new Replica(tabletId, backendId, -1, NORMAL);
+        } else {
+            if (tablet == null) {
+                LOG.warn("could not find tablet {} in rollup index {} ", tabletId, indexId);
+                return null;
+            }
+            Replica replica = ((LocalTablet) tablet).getReplicaByBackendId(backendId);
+            if (replica == null) {
+                LOG.warn("could not find replica with backend {} in tablet {} in rollup index {} ",
+                        backendId, tabletId, indexId);
+            }
+            return replica;
         }
-        Replica replica = tablet.getReplicaByBackendId(backendId);
-        if (replica == null) {
-            LOG.warn("could not find replica with backend {} in tablet {} in rollup index {} ",
-                    backendId, tabletId, indexId);
-        }
-        return replica;
     }
 
     private void finishClearAlterTask(AgentTask task, TFinishTaskRequest request) {
@@ -932,8 +946,8 @@ public class LeaderImpl {
                     indexMeta.setPartition_id(partition.getId());
                     indexMeta.setIndex_state(index.getState().toThrift());
                     indexMeta.setRow_count(index.getRowCount());
-                    indexMeta.setRollup_index_id(index.getRollupIndexId());
-                    indexMeta.setRollup_finished_version(index.getRollupFinishedVersion());
+                    indexMeta.setRollup_index_id(-1L);
+                    indexMeta.setRollup_finished_version(-1L);
                     TSchemaMeta schemaMeta = new TSchemaMeta();
                     MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByIndexId(index.getId());
                     schemaMeta.setSchema_version(materializedIndexMeta.getSchemaVersion());

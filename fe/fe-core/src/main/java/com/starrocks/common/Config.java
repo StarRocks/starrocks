@@ -475,6 +475,15 @@ public class Config extends ConfigBase {
     @ConfField
     public static int http_backlog_num = 1024;
 
+    @ConfField
+    public static int http_max_initial_line_length = 4096;
+
+    @ConfField
+    public static int http_max_header_size = 8192;
+
+    @ConfField
+    public static int http_max_chunk_size = 8192;
+
     /**
      * Cluster name will be shown as the title of web page
      */
@@ -1107,6 +1116,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static int tablet_sched_checker_interval_seconds = 20;
 
+    @ConfField(mutable = true)
+    public static int tablet_sched_max_migration_task_sent_once = 1000;
+
     @Deprecated
     @ConfField(mutable = true)
     public static int report_queue_size = 100;
@@ -1364,7 +1376,7 @@ public class Config extends ConfigBase {
      * Max row count in statistics collect per query
      */
     @ConfField(mutable = true)
-    public static long statistic_collect_max_row_count_per_query = 5000000;
+    public static long statistic_collect_max_row_count_per_query = 5000000000L; //5 billion
 
     /**
      * default bucket size of histogram statistics

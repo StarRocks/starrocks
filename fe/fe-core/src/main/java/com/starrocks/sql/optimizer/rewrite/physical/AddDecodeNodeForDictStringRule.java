@@ -36,7 +36,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -598,7 +598,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggOperator.getAggregations().entrySet()) {
                 boolean canApplyDictDecodeOpt = (kv.getValue().getUsedColumns().cardinality() > 0) &&
-                        (PhysicalHashAggregateOperator.couldApplyLowCardAggregateFunction.contains(
+                        (PhysicalHashAggregateOperator.COULD_APPLY_LOW_CARD_AGGREGATE_FUNCTION.contains(
                                 kv.getValue().getFnName()));
                 if (canApplyDictDecodeOpt) {
                     CallOperator oldCall = kv.getValue();
@@ -731,11 +731,16 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             return visitPhysicalJoin(optExpression, context);
         }
 
+        @Override
+        public OptExpression visitPhysicalNestLoopJoin(OptExpression optExpression, DecodeContext context) {
+            return visitPhysicalJoin(optExpression, context);
+        }
+
         public OptExpression visitPhysicalJoin(OptExpression optExpression, DecodeContext context) {
             visitProjectionBefore(optExpression, context);
             context.needEncode = true;
 
-            PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) optExpression.getOp();
+            PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) optExpression.getOp();
             joinOperator.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns);
 
             DecodeContext mergeContext = new DecodeContext(context.globalDictCache,
@@ -1146,7 +1151,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         // which are consistent with BE implementations.
         private boolean checkTypeCanPushDown(ScalarOperator scalarOperator) {
             Type leftType = scalarOperator.getChild(0).getType();
-            return !leftType.isFloatingPointType() && !leftType.isJsonType() && !leftType.isTime();
+            return !leftType.isFloatingPointType() && !leftType.isComplexType() && !leftType.isJsonType() &&
+                    !leftType.isTime();
         }
     }
 }

@@ -58,7 +58,7 @@ public class GrantRevokeImpersonateStmtTest {
         // suppose current user exists
         new Expectations(userPrivTable) {
             {
-                userPrivTable.doesUserExist((UserIdentity)any);
+                userPrivTable.doesUserExist((UserIdentity) any);
                 minTimes = 0;
                 result = true;
             }
@@ -74,15 +74,16 @@ public class GrantRevokeImpersonateStmtTest {
         RevokeImpersonateStmt stmt2 = (RevokeImpersonateStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "revoke IMPERSONATE on user2 from user1", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt2, ctx);
-        Assert.assertEquals("REVOKE IMPERSONATE ON 'default_cluster:user2'@'%' FROM 'default_cluster:user1'@'%'", stmt2.toString());
-     }
+        Assert.assertEquals("REVOKE IMPERSONATE ON 'default_cluster:user2'@'%' FROM 'default_cluster:user1'@'%'",
+                stmt2.toString());
+    }
 
     @Test(expected = SemanticException.class)
     public void testUserNotExist() throws Exception {
         // suppose current user doesn't exist, check for exception
         new Expectations(userPrivTable) {
             {
-                userPrivTable.doesUserExist((UserIdentity)any);
+                userPrivTable.doesUserExist((UserIdentity) any);
                 minTimes = 0;
                 result = false;
             }

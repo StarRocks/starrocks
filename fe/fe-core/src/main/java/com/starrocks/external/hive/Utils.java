@@ -161,7 +161,7 @@ public class Utils {
     public static int[] getPrecisionAndScale(String typeStr) throws DdlException {
         Matcher matcher = Pattern.compile(DECIMAL_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         if (matcher.find()) {
-            return new int[]{Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2))};
+            return new int[] {Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2))};
         }
         throw new DdlException("Failed to get precision and scale at " + typeStr);
     }

@@ -5,7 +5,6 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include "column/chunk.h"
 #include "column/schema.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
@@ -21,10 +20,15 @@
 
 namespace starrocks::vectorized {
 
-static StorageEngine* k_engine = nullptr;
-
 class BaseCompactionTest : public testing::Test {
 public:
+    ~BaseCompactionTest() override {
+        if (_engine) {
+            _engine->stop();
+            delete _engine;
+            _engine = nullptr;
+        }
+    }
     void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context) {
         RowsetId rowset_id;
         rowset_id.init(10000);
@@ -77,8 +81,7 @@ public:
         column_3->set_is_bf_column(false);
         column_3->set_aggregation("SUM");
 
-        _tablet_schema.reset(new TabletSchema);
-        _tablet_schema->init_from_pb(tablet_schema_pb);
+        _tablet_schema = std::make_unique<TabletSchema>(tablet_schema_pb);
     }
 
     void create_tablet_meta(TabletMeta* tablet_meta) {
@@ -180,9 +183,8 @@ public:
             tablet_meta->add_rs_meta(src_rowset->rowset_meta());
         }
 
-        TabletSharedPtr tablet =
-                Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta,
-                                                starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0]);
+        TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta,
+                                                                 starrocks::StorageEngine::instance()->get_stores()[0]);
         tablet->init();
         tablet->calculate_cumulative_point();
 
@@ -203,21 +205,19 @@ public:
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
-        if (k_engine == nullptr) {
-            Status s = starrocks::StorageEngine::open(options, &k_engine);
+        if (_engine == nullptr) {
+            _origin_engine = StorageEngine::instance();
+            Status s = starrocks::StorageEngine::open(options, &_engine);
             ASSERT_TRUE(s.ok()) << s.to_string();
         }
-
-        ExecEnv* exec_env = starrocks::ExecEnv::GetInstance();
-        exec_env->set_storage_engine(k_engine);
 
         _schema_hash_path = fmt::format("{}/data/0/12345/1111", config::storage_root_path);
         ASSERT_OK(fs::create_directories(_schema_hash_path));
 
-        _mem_pool.reset(new MemPool());
+        _mem_pool = std::make_unique<MemPool>();
 
-        _compaction_mem_tracker.reset(new MemTracker(-1));
-        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
+        _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
+        _metadata_mem_tracker = std::make_unique<MemTracker>();
     }
 
     void TearDown() override {
@@ -227,16 +227,18 @@ public:
     }
 
 protected:
+    StorageEngine* _engine = nullptr;
+    StorageEngine* _origin_engine = nullptr;
     std::unique_ptr<TabletSchema> _tablet_schema;
     std::string _schema_hash_path;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker;
 };
 
 TEST_F(BaseCompactionTest, test_init_succeeded) {
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta, nullptr);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta, nullptr);
     BaseCompaction base_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(base_compaction.compact().ok());
 }
@@ -248,7 +250,7 @@ TEST_F(BaseCompactionTest, test_input_rowsets_LE_1) {
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
     tablet_meta->set_tablet_schema(schema);
 
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta, nullptr);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta, nullptr);
     tablet->init();
     BaseCompaction base_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(base_compaction.compact().ok());
@@ -296,7 +298,7 @@ TEST_F(BaseCompactionTest, test_input_rowsets_EQ_2) {
         tablet_meta->add_rs_meta(src_rowset->rowset_meta());
     }
 
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta, nullptr);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta, nullptr);
     tablet->init();
     tablet->calculate_cumulative_point();
 

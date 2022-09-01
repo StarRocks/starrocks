@@ -4,14 +4,14 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowAuthenticationStmt;
-import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowTableStatusStmt;
-import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.ShowColumnStmt;
+import com.starrocks.sql.ast.ShowTableStatusStmt;
+import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -91,17 +91,17 @@ public class AnalyzeShowTest {
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
 
         String sql = "SHOW AUTHENTICATION;";
-        ShowAuthenticationStmt stmt = (ShowAuthenticationStmt)analyzeSuccess(sql);
+        ShowAuthenticationStmt stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assert.assertFalse(stmt.isAll());
         Assert.assertEquals("root", stmt.getUserIdent().getQualifiedUser());
 
         sql = "SHOW ALL AUTHENTICATION;";
-        stmt = (ShowAuthenticationStmt)analyzeSuccess(sql);
+        stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assert.assertTrue(stmt.isAll());
         Assert.assertNull(stmt.getUserIdent());
 
         sql = "SHOW AUTHENTICATION FOR xx";
-        stmt = (ShowAuthenticationStmt)analyzeSuccess(sql);
+        stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assert.assertFalse(stmt.isAll());
         Assert.assertEquals("default_cluster:xx", stmt.getUserIdent().getQualifiedUser());
     }

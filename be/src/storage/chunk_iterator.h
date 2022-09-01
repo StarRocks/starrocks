@@ -101,7 +101,7 @@ public:
         if (_is_init_output_schema) {
             return _output_schema;
         } else {
-            return _schema;
+            return encoded_schema();
         }
     }
 

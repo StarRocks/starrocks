@@ -45,7 +45,8 @@ Status TabletMeta::create(MemTracker* mem_tracker, const TCreateTabletReq& reque
                            shard_id, request.tablet_schema, next_unique_id,
                            request.__isset.enable_persistent_index ? request.enable_persistent_index : false,
                            col_ordinal_to_unique_id, tablet_uid,
-                           request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK),
+                           request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK,
+                           request.__isset.compression_type ? request.compression_type : TCompressionType::LZ4_FRAME),
             DeleterWithMemTracker<TabletMeta>(mem_tracker));
     mem_tracker->consume((*tablet_meta)->mem_usage());
     return Status::OK();
@@ -61,7 +62,8 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
                        uint64_t shard_id, const TTabletSchema& tablet_schema, uint32_t next_unique_id,
                        bool enable_persistent_index,
                        const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                       const TabletUid& tablet_uid, TTabletType::type tabletType)
+                       const TabletUid& tablet_uid, TTabletType::type tabletType,
+                       TCompressionType::type compression_type)
         : _tablet_uid(0, 0) {
     TabletMetaPB tablet_meta_pb;
     tablet_meta_pb.set_table_id(table_id);
@@ -79,7 +81,7 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
     tablet_meta_pb.set_in_restore_mode(false);
 
     TabletSchemaPB* schema = tablet_meta_pb.mutable_schema();
-    convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema);
+    convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema, compression_type);
 
     init_from_pb(&tablet_meta_pb);
 }

@@ -77,6 +77,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
+import jersey.repackaged.com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -318,8 +319,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CLEAR_ROLLUP_INFO: {
-                    ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    globalStateMgr.getLoadInstance().replayClearRollupInfo(info, globalStateMgr);
+                    // Nothing to do
                     break;
                 }
                 case OperationType.OP_RENAME_ROLLUP: {
@@ -799,8 +799,9 @@ public class EditLog {
                     BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeManager().replayAddBasicStatsMeta(basicStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
-                    // statistic, and the follower's should expire cache here.
-                    globalStateMgr.getAnalyzeManager().expireBasicStatisticsCache(basicStatsMeta);
+                    // statistic, and the follower's should refresh cache here.
+                    globalStateMgr.getAnalyzeManager().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
+                            basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
                     break;
                 }
                 case OperationType.OP_REMOVE_BASIC_STATS_META: {
@@ -813,7 +814,9 @@ public class EditLog {
                     globalStateMgr.getAnalyzeManager().replayAddHistogramStatsMeta(histogramStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
                     // statistic, and the follower's should expire cache here.
-                    globalStateMgr.getAnalyzeManager().expireHistogramStatisticsCache(histogramStatsMeta);
+                    globalStateMgr.getAnalyzeManager().refreshHistogramStatisticsCache(
+                            histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
+                            Lists.newArrayList(histogramStatsMeta.getColumn()), true);
                     break;
                 }
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {

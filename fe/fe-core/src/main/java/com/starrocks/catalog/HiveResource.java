@@ -87,4 +87,17 @@ public class HiveResource extends Resource {
             }
         }
     }
+
+    public String getDdlStmt() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE EXTERNAL RESOURCE \"");
+        sb.append(name);
+        sb.append("\" PROPERTIES (");
+        sb.append("\"type\" = \"");
+        sb.append(type);
+        sb.append("\", \"hive.metastore.uris\" = \"");
+        sb.append(metastoreURIs);
+        sb.append("\");");
+        return sb.toString();
+    }
 }

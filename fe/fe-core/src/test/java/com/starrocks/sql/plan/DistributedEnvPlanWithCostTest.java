@@ -1,3 +1,4 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
@@ -6,7 +7,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.Assert;
@@ -148,7 +149,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql = "insert into test_all_type select * from test_all_type limit 5";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:1: t1a | 2: t1b | 3: t1c | 4: t1d | 5: t1e | 6: t1f | 7: t1g | 8: id_datetime | 9: id_date | 10: id_decimal\n" +
+                " OUTPUT EXPRS:1: t1a | 2: t1b | 3: t1c | 4: t1d | 5: t1e | 6: t1f | 7: t1g " +
+                "| 8: id_datetime | 9: id_date | 10: id_decimal\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
@@ -176,7 +178,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "insert into test_all_type select * from test_all_type";
         plan = getFragmentPlan(sql);
         assertContains(plan, "PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:1: t1a | 2: t1b | 3: t1c | 4: t1d | 5: t1e | 6: t1f | 7: t1g | 8: id_datetime | 9: id_date | 10: id_decimal\n" +
+                " OUTPUT EXPRS:1: t1a | 2: t1b | 3: t1c | 4: t1d | 5: t1e | 6: t1f | 7: t1g " +
+                "| 8: id_datetime | 9: id_date | 10: id_decimal\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
@@ -193,7 +196,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "insert into test_all_type(t1a,t1b) select t1a,t1b from test_all_type limit 5";
         plan = getFragmentPlan(sql);
         assertContains(plan, "PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:1: t1a | 2: t1b | 11: expr | 12: expr | 13: expr | 14: expr | 15: expr | 16: expr | 17: expr | 18: expr\n" +
+                " OUTPUT EXPRS:1: t1a | 2: t1b | 11: expr | 12: expr | 13: expr | 14: expr " +
+                "| 15: expr | 16: expr | 17: expr | 18: expr\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
@@ -263,7 +267,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testCountStarWithNotEquals() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql =
-                "select count(*) from lineorder_new_l where LO_ORDERDATE > '1994-01-01' and LO_ORDERDATE < '1995-01-01' and LO_ORDERDATE != '1994-04-11'";
+                "select count(*) from lineorder_new_l where LO_ORDERDATE > '1994-01-01' " +
+                        "and LO_ORDERDATE < '1995-01-01' and LO_ORDERDATE != '1994-04-11'";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "3:AGGREGATE (merge finalize)");
         assertContains(plan, "1:AGGREGATE (update serialize)");
@@ -274,7 +279,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testLeftAntiJoinWithoutColumnStatistics() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql =
-                "SELECT SUM(l_extendedprice) FROM lineitem LEFT ANTI JOIN dates_n ON l_suppkey=d_datekey AND d_daynuminmonth=10;";
+                "SELECT SUM(l_extendedprice) FROM lineitem " +
+                        "LEFT ANTI JOIN dates_n ON l_suppkey=d_datekey AND d_daynuminmonth=10;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "6:AGGREGATE (update serialize)");
         assertContains(plan, "8:AGGREGATE (merge finalize)");
@@ -498,7 +504,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     @Test
     public void testJoinOnExpression() throws Exception {
         String sql =
-                "SELECT COUNT(*)  FROM lineitem JOIN [shuffle] orders ON l_orderkey = o_orderkey + 1  GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
+                "SELECT COUNT(*)  FROM lineitem JOIN [shuffle] orders ON l_orderkey = o_orderkey + 1 " +
+                        "GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
         String plan = getCostExplain(sql);
         assertContains(plan, "6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
@@ -511,7 +518,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  2:EXCHANGE\n" +
                 "     cardinality: 600000000");
         sql =
-                "SELECT COUNT(*)  FROM lineitem JOIN orders ON l_orderkey * 2 = o_orderkey + 1  GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
+                "SELECT COUNT(*)  FROM lineitem JOIN orders ON l_orderkey * 2 = o_orderkey + 1 " +
+                        "GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
         plan = getCostExplain(sql);
         Assert.assertTrue(
                 plan.contains("equal join conjunct: [29: multiply, BIGINT, true] = [30: add, BIGINT, true]\n" +
@@ -601,8 +609,10 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "Predicates: 24: N_NAME IN ('IRAN', 'CANADA')");
         assertContains(plan, "cardinality: 25");
         // eval char/varchar type predicate cardinality in join node
-        assertContains(plan, " 5:NESTLOOP JOIN\n" +
+        assertContains(plan, "  5:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
+                "  |  other join predicates: ((19: N_NAME = 'CANADA') AND (24: N_NAME = 'IRAN')) " +
+                "OR ((19: N_NAME = 'IRAN') AND (24: N_NAME = 'CANADA'))\n" +
                 "  |  cardinality: 1\n");
 
     }
@@ -635,6 +645,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         // eval predicate cardinality in join node
         assertContains(plan, "3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
+                "  |  other join predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) " +
+                "OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
                 "  |  cardinality: 2");
     }
 
@@ -855,13 +867,13 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         plan = getCostExplain(sql);
         assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE");
 
-        sql =
-                "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', 'others')) a from orders group by 1";
+        sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', " +
+                "if (`O_ORDERKEY` = 1, 'ARGENTINA', 'others')) a from orders group by 1";
         plan = getCostExplain(sql);
         assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE");
 
-        sql =
-                "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', if(`O_ORDERKEY` = 2, 'BRAZIL', 'Others'))) a from orders group by 1";
+        sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', " +
+                "if(`O_ORDERKEY` = 2, 'BRAZIL', 'Others'))) a from orders group by 1";
         plan = getCostExplain(sql);
         assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 4.0] ESTIMATE");
     }
@@ -1167,7 +1179,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testStringMinMaxPredicate() throws Exception {
-        String sql = "select C_CUSTKEY, Min(C_NAME) as min, Max(C_NAME) as max from customer group by C_CUSTKEY having min > '123'";
+        String sql = "select C_CUSTKEY, Min(C_NAME) as min, Max(C_NAME) as max " +
+                "from customer group by C_CUSTKEY having min > '123'";
         String costPlan = getCostExplain(sql);
 
         assertContains(costPlan, "* min-->[-Infinity, Infinity, 0.0, 25.0, 7500000.0] ESTIMATE\n" +
@@ -1200,10 +1213,14 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "    on (subq_0.c0 = ref_1.P_RETAILPRICE )\n" +
                 "where subq_0.c1 <> subq_0.c1\n" +
                 "limit 63;";
-        String plan = getFragmentPlan(sql);
+        ExecPlan execPlan = getExecPlan(sql);
+        String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         // check without error
         assertContains(plan, "  4:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)");
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 18: P_RETAILPRICE = 21: cast\n" +
+                "  |  limit: 63");
     }
 
     @Test
@@ -1240,9 +1257,18 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "where \n" +
                 "  subq_1.c4 >= subq_1.c4;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 06\n" +
-                "    BUCKET_SHUFFLE_HASH_PARTITIONED: 2: O_CUSTKEY");
+        assertContains(plan, "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 09\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  8:Project\n" +
+                "  |  <slot 2> : 2: O_CUSTKEY\n" +
+                "  |  <slot 14> : 14: C_ADDRESS\n" +
+                "  |  \n" +
+                "  7:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 12: C_CUSTKEY = 2: O_CUSTKEY");
     }
 
     @Test

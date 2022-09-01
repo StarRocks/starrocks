@@ -2,19 +2,44 @@
 
 package com.starrocks.rpc;
 
-import com.baidu.brpc.client.RpcClient;
-import com.baidu.brpc.client.RpcClientOptions;
-import com.baidu.brpc.loadbalance.LoadBalanceStrategy;
-import com.baidu.brpc.protocol.Options;
+import com.baidu.bjf.remoting.protobuf.utils.JDKCompilerHelper;
+import com.baidu.bjf.remoting.protobuf.utils.compiler.JdkCompiler;
+import com.baidu.jprotobuf.pbrpc.client.ProtobufRpcProxy;
+import com.baidu.jprotobuf.pbrpc.transport.RpcClient;
+import com.baidu.jprotobuf.pbrpc.transport.RpcClientOptions;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.JdkUtils;
 import com.starrocks.thrift.TNetworkAddress;
 
 import java.util.concurrent.ConcurrentHashMap;
 
 public class BrpcProxy {
-    private final ConcurrentHashMap<TNetworkAddress, PBackendServiceAsync> backendServiceMap;
-    private final ConcurrentHashMap<TNetworkAddress, LakeServiceAsync> lakeServiceMap;
+    private final RpcClient rpcClient;
+    // TODO: Eviction
+    private final ConcurrentHashMap<TNetworkAddress, PBackendService> backendServiceMap;
+    private final ConcurrentHashMap<TNetworkAddress, LakeService> lakeServiceMap;
 
-    protected BrpcProxy() {
+    static {
+        int javaRuntimeVersion = JdkUtils.getJavaVersionAsInteger(System.getProperty("java.version"));
+        JDKCompilerHelper
+                .setCompiler(new JdkCompiler(JdkCompiler.class.getClassLoader(), String.valueOf(javaRuntimeVersion)));
+    }
+
+    public BrpcProxy() {
+        final RpcClientOptions rpcOptions = new RpcClientOptions();
+        // If false, different methods to a service endpoint use different connection pool,
+        // which will create too many connections.
+        // If true, all the methods to a service endpoint use the same connection pool.
+        rpcOptions.setShareThreadPoolUnderEachProxy(true);
+        rpcOptions.setShareChannelPool(true);
+        rpcOptions.setMaxTotoal(Config.brpc_connection_pool_size);
+        // After the RPC request sending, the connection will be closed,
+        // if the number of total connections is greater than MaxIdleSize.
+        // Therefore, MaxIdleSize shouldn't less than MaxTotal for the async requests.
+        rpcOptions.setMaxIdleSize(Config.brpc_connection_pool_size);
+        rpcOptions.setMaxWait(Config.brpc_idle_wait_max_time);
+
+        rpcClient = new RpcClient(rpcOptions);
         backendServiceMap = new ConcurrentHashMap<>();
         lakeServiceMap = new ConcurrentHashMap<>();
     }
@@ -30,52 +55,38 @@ public class BrpcProxy {
         BrpcProxy.SingletonHolder.INSTANCE = proxy;
     }
 
-    public static PBackendServiceAsync getBackendService(TNetworkAddress address) {
+    public static PBackendService getBackendService(TNetworkAddress address) {
         return getInstance().getBackendServiceImpl(address);
     }
 
-    public static LakeServiceAsync getLakeService(TNetworkAddress address) {
+    public static LakeService getLakeService(TNetworkAddress address) {
         return getInstance().getLakeServiceImpl(address);
     }
 
-    public static LakeServiceAsync getLakeService(String host, int port) {
+    public static LakeService getLakeService(String host, int port) {
         return getInstance().getLakeServiceImpl(new TNetworkAddress(host, port));
     }
 
-    protected PBackendServiceAsync getBackendServiceImpl(TNetworkAddress address) {
+    protected PBackendService getBackendServiceImpl(TNetworkAddress address) {
         return backendServiceMap.computeIfAbsent(address, this::createBackendService);
     }
 
-    protected LakeServiceAsync getLakeServiceImpl(TNetworkAddress address) {
+    protected LakeService getLakeServiceImpl(TNetworkAddress address) {
         return lakeServiceMap.computeIfAbsent(address, this::createLakeService);
     }
 
-    private PBackendServiceAsync createBackendService(TNetworkAddress address) {
-        RpcClientOptions clientOption = new RpcClientOptions();
-        clientOption.setProtocolType(Options.ProtocolType.PROTOCOL_BAIDU_STD_VALUE);
-        clientOption.setWriteTimeoutMillis(1000);
-        clientOption.setReadTimeoutMillis(5000);
-        clientOption.setMaxTotalConnections(1000);
-        clientOption.setMinIdleConnections(10);
-        clientOption.setLoadBalanceType(LoadBalanceStrategy.LOAD_BALANCE_FAIR);
-        clientOption.setCompressType(Options.CompressType.COMPRESS_TYPE_NONE);
-        String serviceurl = "list://" + address.getHostname() + ":" + address.getPort();
-        RpcClient rpcClient = new RpcClient(serviceurl, clientOption);
-        return com.baidu.brpc.client.BrpcProxy.getProxy(rpcClient, PBackendServiceAsync.class);
+    private PBackendService createBackendService(TNetworkAddress address) {
+        ProtobufRpcProxy<PBackendService> proxy = new ProtobufRpcProxy<>(rpcClient, PBackendService.class);
+        proxy.setHost(address.getHostname());
+        proxy.setPort(address.getPort());
+        return proxy.proxy();
     }
 
-    private LakeServiceAsync createLakeService(TNetworkAddress address) {
-        RpcClientOptions clientOption = new RpcClientOptions();
-        clientOption.setProtocolType(Options.ProtocolType.PROTOCOL_BAIDU_STD_VALUE);
-        clientOption.setWriteTimeoutMillis(1000);
-        clientOption.setReadTimeoutMillis(5000);
-        clientOption.setMaxTotalConnections(1000);
-        clientOption.setMinIdleConnections(10);
-        clientOption.setLoadBalanceType(LoadBalanceStrategy.LOAD_BALANCE_FAIR);
-        clientOption.setCompressType(Options.CompressType.COMPRESS_TYPE_NONE);
-        String serviceurl = "list://" + address.getHostname() + ":" + address.getPort();
-        RpcClient rpcClient = new RpcClient(serviceurl, clientOption);
-        return com.baidu.brpc.client.BrpcProxy.getProxy(rpcClient, LakeServiceAsync.class);
+    private LakeService createLakeService(TNetworkAddress address) {
+        ProtobufRpcProxy<LakeService> proxy = new ProtobufRpcProxy<>(rpcClient, LakeService.class);
+        proxy.setHost(address.getHostname());
+        proxy.setPort(address.getPort());
+        return proxy.proxy();
     }
 
     private static class SingletonHolder {

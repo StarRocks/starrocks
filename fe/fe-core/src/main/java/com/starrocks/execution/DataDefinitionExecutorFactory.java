@@ -3,21 +3,16 @@
 package com.starrocks.execution;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt;
-import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterUserStmt;
-import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelAlterSystemStmt;
-import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.CancelExportStmt;
 import com.starrocks.analysis.CancelLoadStmt;
-import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFileStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
@@ -25,26 +20,19 @@ import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
-import com.starrocks.analysis.CreateTableLikeStmt;
-import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFileStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
-import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
-import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.RevokeStmt;
@@ -52,7 +40,6 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.SyncStmt;
-import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
@@ -62,26 +49,39 @@ import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
+import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RecoverDbStmt;
+import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
 
 public class DataDefinitionExecutorFactory {
-    private static final ImmutableMap<Class<? extends StatementBase>, DataDefinitionExecutor> executorMap =
+    private static final ImmutableMap<Class<? extends StatementBase>, DataDefinitionExecutor> EXECUTOR_MAP =
             new ImmutableMap.Builder<Class<? extends StatementBase>, DataDefinitionExecutor>()
                     .put(CreateDbStmt.class, new CreateDbExecutor())
                     .put(DropDbStmt.class, new DropDbExecutor())
@@ -158,7 +158,7 @@ public class DataDefinitionExecutorFactory {
                     .build();
 
     public static ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
-        DataDefinitionExecutor executor = executorMap.get(stmt.getClass());
+        DataDefinitionExecutor executor = EXECUTOR_MAP.get(stmt.getClass());
         if (executor != null) {
             return executor.execute(stmt, context);
         } else {

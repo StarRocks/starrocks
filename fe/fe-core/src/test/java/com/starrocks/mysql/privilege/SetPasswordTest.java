@@ -34,7 +34,6 @@ import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;

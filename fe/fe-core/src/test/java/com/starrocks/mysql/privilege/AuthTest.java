@@ -48,11 +48,11 @@ import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
@@ -65,9 +65,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
-import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -696,7 +694,7 @@ public class AuthTest {
         currentUser2.clear();
         auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "10.1.1.1", "12345", currentUser2);
         Assert.assertEquals(1, currentUser2.size());
-        Assert.assertTrue(auth.checkDbPriv(currentUser2.get(0),"db3",
+        Assert.assertTrue(auth.checkDbPriv(currentUser2.get(0), "db3",
                 PrivPredicate.DROP));
 
         try {
@@ -1221,7 +1219,21 @@ public class AuthTest {
         Assert.assertEquals(false, auth.checkDbPriv(userIdentity, dbName, PrivPredicate.LOAD));
         Assert.assertEquals(false, auth.checkResourcePriv(userIdentity, resouceName, PrivPredicate.USAGE));
         Assert.assertEquals(1, auth.getRoleNamesByUser(userIdentity).size());
-     }
+
+        // 9. grant usage on db
+        boolean hasException = false;
+        try {
+            privileges = Lists.newArrayList(AccessPrivilege.USAGE_PRIV);
+            tablePattern = new TablePattern("db1", "*");
+            grantStmt = new GrantStmt(null, selectRoleName, tablePattern, privileges);
+            grantStmt.analyze(analyzer);
+            auth.grant(grantStmt);
+        } catch (DdlException e) {
+            // expect exception;
+            hasException = true;
+        }
+        Assert.assertTrue(hasException);
+    }
 
     @Test
     public void testResource() {
@@ -1732,7 +1744,7 @@ public class AuthTest {
         String createUserSql = String.format("CREATE USER 'testUser' IDENTIFIED BY '%s'", password);
 
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
-//        createUserStmt.analyze(analyzer);
+        // createUserStmt.analyze(analyzer);
         auth.createUser(createUserStmt);
         UserIdentity user = createUserStmt.getUserIdent();
 
@@ -1754,7 +1766,7 @@ public class AuthTest {
         // enable_auth_check is false, allow bad password
         auth.validatePassword(badPassword);
 
-       // enable_password_reuse is true for a good password
+        // enable_password_reuse is true for a good password
         Config.enable_validate_password = true;
         auth.validatePassword(goodPassword);
     }
@@ -1791,25 +1803,25 @@ public class AuthTest {
     private static final Logger LOG = LogManager.getLogger(AuthTest.class);
     @Test
     public void testManyUsersAndTables() throws Exception {
-        int BIG_NUMBER = 500;
-        int BIG_NUMBER2 = BIG_NUMBER / 2;
-        int LOG_INTERVAL = BIG_NUMBER / 50;
-        String DB = "db1";
+        int bigNumber = 500;
+        int bigNumber2 = bigNumber / 2;
+        int logInterval = bigNumber / 50;
+        String db = "db1";
         LOG.info("before add privilege: table {} entries, user {} entries",
                 auth.getTablePrivTable().size(), auth.getUserPrivTable().size());
         Assert.assertEquals(1, auth.getAuthInfo(null).size());
 
         // 1. create N user with select privilege to N/2 table
         // 1.1 create user
-        for (int i = 0; i != BIG_NUMBER; i++) {
-            String createUserSql = String.format("CREATE USER 'user_%d_of_%d' IDENTIFIED BY '12345'", i, BIG_NUMBER);
+        for (int i = 0; i != bigNumber; i++) {
+            String createUserSql = String.format("CREATE USER 'user_%d_of_%d' IDENTIFIED BY '12345'", i, bigNumber);
             CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
         }
-        Assert.assertEquals(1 + BIG_NUMBER, auth.getAuthInfo(null).size());
+        Assert.assertEquals(1 + bigNumber, auth.getAuthInfo(null).size());
 
         // check the last user
-        String lastUserName = String.format("user_%d_of_%d", BIG_NUMBER - 1, BIG_NUMBER);
+        String lastUserName = String.format("user_%d_of_%d", bigNumber - 1, bigNumber);
         UserIdentity lastUserIdentity = new UserIdentity(lastUserName, "%");
         lastUserIdentity.analyze();
         // information_schema
@@ -1819,15 +1831,15 @@ public class AuthTest {
 
         // 1.2 grant N/2 table privilege
         long start = System.currentTimeMillis();
-        for (int i = 0; i != BIG_NUMBER; i++) {
-            if (i % LOG_INTERVAL == 0) {
+        for (int i = 0; i != bigNumber; i++) {
+            if (i % logInterval == 0) {
                 LOG.info("added {} user..", i);
             }
-            String userName = String.format("user_%d_of_%d", i, BIG_NUMBER);
+            String userName = String.format("user_%d_of_%d", i, bigNumber);
             UserIdentity userIdentity = new UserIdentity(userName, "%");
             userIdentity.analyze();
-            for (int j = 0; j != BIG_NUMBER2; j++) {
-                String tableName = String.format("table_%d_of_%d", j, BIG_NUMBER2);
+            for (int j = 0; j != bigNumber2; j++) {
+                String tableName = String.format("table_%d_of_%d", j, bigNumber2);
                 TablePattern tablePattern = new TablePattern("db1", tableName);
                 tablePattern.analyze();
                 PrivBitSet privileges = AccessPrivilege.SELECT_PRIV.toPrivilege();
@@ -1838,15 +1850,15 @@ public class AuthTest {
         LOG.info("add privilege: {} entries, total {} ms",  auth.getTablePrivTable().size(), end - start);
 
         start = System.currentTimeMillis();
-        for (int i = 0; i != BIG_NUMBER; i++) {
+        for (int i = 0; i != bigNumber; i++) {
             // 1.1 create user
-            String userName = String.format("user_%d_of_%d", i, BIG_NUMBER);
+            String userName = String.format("user_%d_of_%d", i, bigNumber);
             UserIdentity userIdentity = new UserIdentity(userName, "%");
             userIdentity.analyze();
-            for (int j = 0; j != BIG_NUMBER2; j++) {
-                String tableName = String.format("table_%d_of_%d", j, BIG_NUMBER2);
+            for (int j = 0; j != bigNumber2; j++) {
+                String tableName = String.format("table_%d_of_%d", j, bigNumber2);
                 Assert.assertTrue(auth.checkTblPriv(
-                        userIdentity, DB, tableName, PrivPredicate.SELECT));
+                        userIdentity, db, tableName, PrivPredicate.SELECT));
             }
         }
         end = System.currentTimeMillis();
@@ -1855,7 +1867,7 @@ public class AuthTest {
         // check the last user
         // infomation_schema
         Assert.assertEquals(1, auth.getDBPrivEntries(lastUserIdentity).size());
-        Assert.assertEquals(BIG_NUMBER / 2 + infomationSchemaTableCnt, auth.getTablePrivEntries(lastUserIdentity).size());
+        Assert.assertEquals(bigNumber / 2 + infomationSchemaTableCnt, auth.getTablePrivEntries(lastUserIdentity).size());
         Assert.assertEquals(1, auth.getAuthInfo(lastUserIdentity).size());
     }
 
@@ -1891,17 +1903,18 @@ public class AuthTest {
     @Test
     public void testMultiUserMatch() throws Exception {
         Assert.assertEquals(1, auth.getUserPrivTable().size());
-        String PASSWORD_STR = "12345";
+        String passwordStr = "12345";
 
         // create four entries
-        String userHostPatterns[][] = {
+        String[][] userHostPatterns = {
                 {"user_1", "10.1.1.1"},
                 {"user_1", "%"},
                 {"user_zzz", "%"},
                 {"user_zzz", "10.1.1.1"},
         };
-        for (String[] userHost: userHostPatterns) {
-            String createUserSql = String.format("CREATE USER '%s'@'%s' IDENTIFIED BY '%s'", userHost[0], userHost[1], PASSWORD_STR);
+        for (String[] userHost : userHostPatterns) {
+            String createUserSql = String.format("CREATE USER '%s'@'%s' IDENTIFIED BY '%s'",
+                    userHost[0], userHost[1], passwordStr);
             CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
         }
@@ -1909,7 +1922,7 @@ public class AuthTest {
 
         // check if login match
         // remote_user, remote_ip, expect_user_identity
-        String userHostAndMatchedUserHosts[][] = {
+        String[][] userHostAndMatchedUserHosts = {
                 // login as user_1 from 10.1.1.1, expected identified as user_1@10.1.1.1
                 {"user_1", "10.1.1.1", "user_1", "10.1.1.1"},
                 // login as user_1 from 10.1.1.2, expected identified as user_1@%, fuzzy matching
@@ -1925,14 +1938,14 @@ public class AuthTest {
             String expectQualifiedUser = SystemInfoService.DEFAULT_CLUSTER + ":" + userHostAndMatchedUserHost[2];
             String expectHost = userHostAndMatchedUserHost[3];
 
-            auth.checkPlainPassword(remoteUser, remoteIp, PASSWORD_STR, identities);
+            auth.checkPlainPassword(remoteUser, remoteIp, passwordStr, identities);
             Assert.assertEquals(1, identities.size());
             Assert.assertEquals(expectQualifiedUser, identities.get(0).getQualifiedUser());
             Assert.assertEquals(expectHost, identities.get(0).getHost());
 
             identities.clear();
             byte[] seed = "dJSH\\]mcwKJlLH[bYunm".getBytes(StandardCharsets.UTF_8);
-            byte[] scramble = MysqlPassword.scramble(seed, PASSWORD_STR);
+            byte[] scramble = MysqlPassword.scramble(seed, passwordStr);
             auth.checkPassword(remoteUser, remoteIp, scramble, seed, identities);
             Assert.assertEquals(1, identities.size());
             Assert.assertEquals(expectQualifiedUser, identities.get(0).getQualifiedUser());
@@ -1943,7 +1956,7 @@ public class AuthTest {
         // full iterator
         Iterator<PrivEntry> iter = auth.getUserPrivTable().getFullReadOnlyIterator();
         List<String> userHostResult = new ArrayList<>();
-        while(iter.hasNext()) {
+        while (iter.hasNext()) {
             PrivEntry entry = iter.next();
             if (entry.getOrigUser() != "root") {
                 userHostResult.add(String.format("%s@%s", entry.getOrigUser(), entry.getOrigHost()));
@@ -1962,7 +1975,7 @@ public class AuthTest {
         user.analyze();
         iter = auth.getUserPrivTable().getReadOnlyIteratorByUser(user);
         userHostResult.clear();
-        while(iter.hasNext()) {
+        while (iter.hasNext()) {
             PrivEntry entry = iter.next();
             userHostResult.add(String.format("%s@%s", entry.getOrigUser(), entry.getOrigHost()));
         }
@@ -1997,7 +2010,7 @@ public class AuthTest {
         // check if user_1@10.1.1.1 can see two table
         List<UserIdentity> identities = new ArrayList<>();
         auth.checkPlainPassword(
-                SystemInfoService.DEFAULT_CLUSTER + ":user_1", "10.1.1.1", PASSWORD_STR, identities);
+                SystemInfoService.DEFAULT_CLUSTER + ":user_1", "10.1.1.1", passwordStr, identities);
         Assert.assertEquals(1, identities.size());
         user = identities.get(0);
         Assert.assertEquals("10.1.1.1", user.getHost());
@@ -2009,64 +2022,64 @@ public class AuthTest {
         // check if user_1@10.1.1.2 can see one table
         identities.clear();
         auth.checkPlainPassword(
-                SystemInfoService.DEFAULT_CLUSTER + ":user_1", "10.1.1.2", PASSWORD_STR, identities);
+                SystemInfoService.DEFAULT_CLUSTER + ":user_1", "10.1.1.2", passwordStr, identities);
         Assert.assertEquals(1, identities.size());
         user = identities.get(0);
         Assert.assertEquals("%", user.getHost());
         Assert.assertTrue(auth.checkTblPriv(user, db, "table1", PrivPredicate.SELECT));
         Assert.assertFalse(auth.checkTblPriv(user, db, "table2", PrivPredicate.SELECT));
-     }
+    }
 
-     @Test
-     public void testGrantRevokeImpersonate() throws Exception {
-         // 1. prepare
-         // 1.1create harry, gregory, albert
-         UserIdentity harry = new UserIdentity("Harry", "%");
-         harry.analyze();
-         UserIdentity gregory = new UserIdentity("Gregory", "%");
-         gregory.analyze();
-         UserIdentity albert = new UserIdentity("Albert", "%");
-         albert.analyze();
-         String createUserSql = "CREATE USER '%s' IDENTIFIED BY '12345'";
-         String[] userNames = {"Harry", "Gregory", "Albert"};
-         for (String userName : userNames) {
-             CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils
-                     .parseStmtWithNewParser(String.format(createUserSql, userName), ctx);
-             auth.createUser(createUserStmt);
-         }
+    @Test
+    public void testGrantRevokeImpersonate() throws Exception {
+        // 1. prepare
+        // 1.1create harry, gregory, albert
+        UserIdentity harry = new UserIdentity("Harry", "%");
+        harry.analyze();
+        UserIdentity gregory = new UserIdentity("Gregory", "%");
+        gregory.analyze();
+        UserIdentity albert = new UserIdentity("Albert", "%");
+        albert.analyze();
+        String createUserSql = "CREATE USER '%s' IDENTIFIED BY '12345'";
+        String[] userNames = {"Harry", "Gregory", "Albert"};
+        for (String userName : userNames) {
+            CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils
+                    .parseStmtWithNewParser(String.format(createUserSql, userName), ctx);
+            auth.createUser(createUserStmt);
+        }
 
 
-         // 1.2 before test
-         Assert.assertFalse(auth.canImpersonate(harry, gregory));
-         Assert.assertFalse(auth.canImpersonate(harry, albert));
+        // 1.2 before test
+        Assert.assertFalse(auth.canImpersonate(harry, gregory));
+        Assert.assertFalse(auth.canImpersonate(harry, albert));
 
-         // 2. grant impersonate to gregory on harry
-         // 2.1 grant
-         GrantImpersonateStmt grantStmt = new GrantImpersonateStmt(harry, gregory);
-         com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
-         auth.grantImpersonate(grantStmt);
-         // 2.2 assert
-         Assert.assertTrue(auth.canImpersonate(harry, gregory));
-         Assert.assertFalse(auth.canImpersonate(harry, albert));
+        // 2. grant impersonate to gregory on harry
+        // 2.1 grant
+        GrantImpersonateStmt grantStmt = new GrantImpersonateStmt(harry, gregory);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+        auth.grantImpersonate(grantStmt);
+        // 2.2 assert
+        Assert.assertTrue(auth.canImpersonate(harry, gregory));
+        Assert.assertFalse(auth.canImpersonate(harry, albert));
 
-         // 3. grant impersonate to albert on harry
-         // 3.1 grant
-         grantStmt = new GrantImpersonateStmt(harry, albert);
-         com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
-         auth.grantImpersonate(grantStmt);
-         // 3.2 assert
-         Assert.assertTrue(auth.canImpersonate(harry, gregory));
-         Assert.assertTrue(auth.canImpersonate(harry, albert));
+        // 3. grant impersonate to albert on harry
+        // 3.1 grant
+        grantStmt = new GrantImpersonateStmt(harry, albert);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+        auth.grantImpersonate(grantStmt);
+        // 3.2 assert
+        Assert.assertTrue(auth.canImpersonate(harry, gregory));
+        Assert.assertTrue(auth.canImpersonate(harry, albert));
 
-         // 4. revoke impersonate from albert on harry
-         // 4.1 revoke
-         RevokeImpersonateStmt revokeStmt = new RevokeImpersonateStmt(harry, gregory);
-         com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
-         auth.revokeImpersonate(revokeStmt);
-         // 4.2 assert
-         Assert.assertFalse(auth.canImpersonate(harry, gregory));
-         Assert.assertTrue(auth.canImpersonate(harry, albert));
-     }
+        // 4. revoke impersonate from albert on harry
+        // 4.1 revoke
+        RevokeImpersonateStmt revokeStmt = new RevokeImpersonateStmt(harry, gregory);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+        auth.revokeImpersonate(revokeStmt);
+        // 4.2 assert
+        Assert.assertFalse(auth.canImpersonate(harry, gregory));
+        Assert.assertTrue(auth.canImpersonate(harry, albert));
+    }
 
     @Test
     public void testShowGrants() throws Exception {
@@ -2132,7 +2145,7 @@ public class AuthTest {
         infos = auth.getGrantsSQLs(null);
         Assert.assertEquals(4, infos.size()); // the other is root
         Set<String> nameSet = new HashSet<>();
-        for (List<String> line: infos) {
+        for (List<String> line : infos) {
             nameSet.add(line.get(0));
         }
         Assert.assertTrue(nameSet.contains(emptyPrivilegeUser.toString()));
@@ -2153,7 +2166,7 @@ public class AuthTest {
         List<ImpersonatePrivInfo> infos = new ArrayList<>();
         new Expectations(editLog) {
             {
-                editLog.logGrantImpersonate((ImpersonatePrivInfo)any);
+                editLog.logGrantImpersonate((ImpersonatePrivInfo) any);
                 minTimes = 0;
                 result = new Delegate() {
                     void recordInfo(ImpersonatePrivInfo info) {
@@ -2162,7 +2175,7 @@ public class AuthTest {
                 };
             }
             {
-                editLog.logRevokeImpersonate((ImpersonatePrivInfo)any);
+                editLog.logRevokeImpersonate((ImpersonatePrivInfo) any);
                 minTimes = 0;
                 result = new Delegate() {
                     void recordInfo(ImpersonatePrivInfo info) {
@@ -2171,7 +2184,7 @@ public class AuthTest {
                 };
             }
             {
-                editLog.logCreateUser((PrivInfo)any);
+                editLog.logCreateUser((PrivInfo) any);
                 minTimes = 0;
             }
         };
@@ -2234,4 +2247,4 @@ public class AuthTest {
         auth.createUser(createUserStmt);
         Assert.assertNotNull(auth.getUserProperties("default_cluster:'12345'@'%'"));
     }
- }
+}

@@ -14,7 +14,6 @@ import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.HashDistributionDesc;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
@@ -44,6 +43,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
@@ -317,13 +317,24 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         return false;
     }
 
+    private boolean needToRefreshNonPartitionTable() {
+        for (OlapTable olapTable : snapshotBaseTables.values()) {
+            if (needToRefreshTable(olapTable)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private Set<String> getPartitionsToRefreshForMaterializedView() {
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
 
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
-            needRefreshMvPartitionNames.addAll(materializedView.getPartitionNames());
+            if (needToRefreshNonPartitionTable()) {
+                needRefreshMvPartitionNames.addAll(materializedView.getPartitionNames());
+            }
         } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             Expr partitionExpr = getPartitionExpr();
             Pair<OlapTable, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);

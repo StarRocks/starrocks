@@ -667,7 +667,7 @@ public class FileScanNode extends LoadScanNode {
             TScanRangeLocations newLocations = null;
             try {
                 // Get new alive be and broker here, and params is not used, so set null
-                newLocations = newLocations(null, brokerDesc.getName(), true);
+                newLocations = newLocations(null, brokerDesc.getName(), brokerDesc.hasBroker());
             } catch (UserException e) {
                 LOG.warn("new locations failed.", e);
                 // Just return, retry by LoadTask

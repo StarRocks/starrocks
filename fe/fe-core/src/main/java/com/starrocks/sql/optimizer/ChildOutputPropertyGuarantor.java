@@ -26,33 +26,36 @@ import java.util.Arrays;
 import java.util.List;
 
 public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, ExpressionContext> {
-    private PhysicalPropertySet requirements;
-    // children best group expression
-    private List<GroupExpression> childrenBestExprList;
-    // required properties for children.
-    private List<PhysicalPropertySet> requiredChildrenProperties;
-    // children output property
-    private List<PhysicalPropertySet> childrenOutputProperties;
-    private double curTotalCost;
     private final OptimizerContext context;
+    private final GroupExpression groupExpression;
 
-    public ChildOutputPropertyGuarantor(TaskContext taskContext) {
+    private final PhysicalPropertySet requirements;
+    // children best group expression
+    private final List<GroupExpression> childrenBestExprList;
+    // required properties for children.
+    private final List<PhysicalPropertySet> requiredChildrenProperties;
+    // children output property
+    private final List<PhysicalPropertySet> childrenOutputProperties;
+
+    private double curTotalCost;
+
+    public ChildOutputPropertyGuarantor(TaskContext taskContext,
+                                        GroupExpression groupExpression,
+                                        PhysicalPropertySet requirements,
+                                        List<GroupExpression> childrenBestExprList,
+                                        List<PhysicalPropertySet> requiredChildrenProperties,
+                                        List<PhysicalPropertySet> childrenOutputProperties,
+                                        double curTotalCost) {
         this.context = taskContext.getOptimizerContext();
-    }
-
-    public double enforceLegalChildOutputProperty(
-            PhysicalPropertySet requirements,
-            GroupExpression groupExpression,
-            List<GroupExpression> childrenBestExprList,
-            List<PhysicalPropertySet> requiredChildrenProperties,
-            List<PhysicalPropertySet> childrenOutputProperties,
-            double curTotalCost) {
+        this.groupExpression = groupExpression;
         this.requirements = requirements;
         this.childrenBestExprList = childrenBestExprList;
         this.requiredChildrenProperties = requiredChildrenProperties;
         this.childrenOutputProperties = childrenOutputProperties;
         this.curTotalCost = curTotalCost;
+    }
 
+    public double enforceLegalChildOutputProperty() {
         groupExpression.getOp().accept(this, new ExpressionContext(groupExpression));
         return this.curTotalCost;
     }
@@ -298,7 +301,8 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         PhysicalPropertySet rightChildOutputProperty = childrenOutputProperties.get(1);
 
         // 1. Distribution is broadcast
-        if (rightChildOutputProperty.getDistributionProperty().isBroadcast()) {
+        DistributionProperty rightDistribute = rightChildOutputProperty.getDistributionProperty();
+        if (rightDistribute.isBroadcast() || rightDistribute.isGather()) {
             return visitOperator(node, context);
         }
         // 2. Distribution is shuffle

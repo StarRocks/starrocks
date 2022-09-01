@@ -28,16 +28,16 @@ import java.util.Map;
 // with specified name.
 public class VariableVarConverters {
 
-    public static final Map<String, VariableVarConverterI> converters = Maps.newHashMap();
+    public static final Map<String, VariableVarConverterI> CONVERTERS = Maps.newHashMap();
 
     static {
         SqlModeConverter sqlModeConverter = new SqlModeConverter();
-        converters.put(SessionVariable.SQL_MODE, sqlModeConverter);
+        CONVERTERS.put(SessionVariable.SQL_MODE, sqlModeConverter);
     }
 
     public static String convert(String varName, String value) throws DdlException {
-        if (converters.containsKey(varName)) {
-            return converters.get(varName).convert(value);
+        if (CONVERTERS.containsKey(varName)) {
+            return CONVERTERS.get(varName).convert(value);
         }
         return value;
     }

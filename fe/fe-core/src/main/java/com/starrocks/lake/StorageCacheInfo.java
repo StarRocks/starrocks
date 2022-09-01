@@ -13,9 +13,13 @@ public class StorageCacheInfo {
     @SerializedName(value = "cacheTtlS")
     private long cacheTtlS = 0;
 
-    public StorageCacheInfo(boolean enableCache, long cacheTtlS) {
+    @SerializedName(value = "allowAsyncWriteBack")
+    private boolean allowAsyncWriteBack = false;
+
+    public StorageCacheInfo(boolean enableCache, long cacheTtlS, boolean allowAsyncWriteBack) {
         this.enableCache = enableCache;
         this.cacheTtlS = cacheTtlS;
+        this.allowAsyncWriteBack = allowAsyncWriteBack;
     }
 
     public boolean isEnableCache() {
@@ -24,5 +28,9 @@ public class StorageCacheInfo {
 
     public long getCacheTtlS() {
         return cacheTtlS;
+    }
+
+    public boolean isAllowAsyncWriteBack() {
+        return allowAsyncWriteBack;
     }
 }

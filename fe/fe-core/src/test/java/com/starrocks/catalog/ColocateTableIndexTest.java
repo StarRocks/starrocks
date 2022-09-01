@@ -2,23 +2,19 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.DropDbStmt;
-import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.collections.map.HashedMap;
-import org.apache.commons.lang3.StringUtils;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -63,11 +59,11 @@ public class ColocateTableIndexTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         List<List<String>> infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
-        // group1->table1_1
+        // group1->table1To1
         Assert.assertEquals(1, infos.size());
         Map<String, List<String>> map = groupByName(infos);
-        Table table1_1 = GlobalStateMgr.getCurrentState().getDb("db1").getTable("table1_1");
-        Assert.assertEquals(String.format("%d", table1_1.getId()), map.get("group1").get(2));
+        Table table1To1 = GlobalStateMgr.getCurrentState().getDb("db1").getTable("table1_1");
+        Assert.assertEquals(String.format("%d", table1To1.getId()), map.get("group1").get(2));
         LOG.info("after create db1.table1_1: {}", infos);
 
         // create table1_2->group1
@@ -78,12 +74,12 @@ public class ColocateTableIndexTest {
                 "PROPERTIES(\"colocate_with\"=\"group1\", \"replication_num\" = \"1\");\n";
         createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        // group1 -> table1_1, table1_2
+        // group1 -> table1To1, table1To2
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
         Assert.assertEquals(1, infos.size());
         map = groupByName(infos);
-        Table table1_2 = GlobalStateMgr.getCurrentState().getDb("db1").getTable("table1_2");
-        Assert.assertEquals(String.format("%d, %d", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
+        Table table1To2 = GlobalStateMgr.getCurrentState().getDb("db1").getTable("table1_2");
+        Assert.assertEquals(String.format("%d, %d", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
         LOG.info("after create db1.table1_2: {}", infos);
 
         // create db2
@@ -103,9 +99,9 @@ public class ColocateTableIndexTest {
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
         Assert.assertEquals(2, infos.size());
         map = groupByName(infos);
-        Assert.assertEquals(String.format("%d, %d", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
-        Table table2_1 = GlobalStateMgr.getCurrentState().getDb("db2").getTable("table2_1");
-        Assert.assertEquals(String.format("%d", table2_1.getId()), map.get("group2").get(2));
+        Assert.assertEquals(String.format("%d, %d", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
+        Table table2To1 = GlobalStateMgr.getCurrentState().getDb("db2").getTable("table2_1");
+        Assert.assertEquals(String.format("%d", table2To1.getId()), map.get("group2").get(2));
         LOG.info("after create db2.table2_1: {}", infos);
 
         // drop db1.table1_1
@@ -117,8 +113,8 @@ public class ColocateTableIndexTest {
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
         map = groupByName(infos);
         Assert.assertEquals(2, infos.size());
-        Assert.assertEquals(String.format("%d*, %d", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
-        Assert.assertEquals(String.format("%d", table2_1.getId()), map.get("group2").get(2));
+        Assert.assertEquals(String.format("%d*, %d", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
+        Assert.assertEquals(String.format("%d", table2To1.getId()), map.get("group2").get(2));
         LOG.info("after drop db1.table1_1: {}", infos);
 
         // drop db1.table1_2
@@ -130,8 +126,8 @@ public class ColocateTableIndexTest {
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
         map = groupByName(infos);
         Assert.assertEquals(2, infos.size());
-        Assert.assertEquals(String.format("%d*, %d*", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
-        Assert.assertEquals(String.format("%d", table2_1.getId()), map.get("group2").get(2));
+        Assert.assertEquals(String.format("%d*, %d*", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
+        Assert.assertEquals(String.format("%d", table2To1.getId()), map.get("group2").get(2));
         LOG.info("after drop db1.table1_2: {}", infos);
 
         // drop db2
@@ -143,8 +139,8 @@ public class ColocateTableIndexTest {
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
         map = groupByName(infos);
         Assert.assertEquals(2, infos.size());
-        Assert.assertEquals(String.format("%d*, %d*", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
-        Assert.assertEquals(String.format("%d*", table2_1.getId()), map.get("group2").get(2));
+        Assert.assertEquals(String.format("%d*, %d*", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
+        Assert.assertEquals(String.format("%d*", table2To1.getId()), map.get("group2").get(2));
         LOG.info("after drop db2: {}", infos);
 
         // create & drop db2 again
@@ -159,7 +155,7 @@ public class ColocateTableIndexTest {
                 "PROPERTIES(\"colocate_with\"=\"group3\", \"replication_num\" = \"1\");\n";
         createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Table table2_3 = GlobalStateMgr.getCurrentState().getDb("db2").getTable("table2_3");
+        Table table2To3 = GlobalStateMgr.getCurrentState().getDb("db2").getTable("table2_3");
         sql = "DROP DATABASE db2;";
         dropDbStmt = (DropDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
@@ -167,9 +163,9 @@ public class ColocateTableIndexTest {
         map = groupByName(infos);
         LOG.info("after create & drop db2: {}", infos);
         Assert.assertEquals(3, infos.size());
-        Assert.assertEquals(String.format("%d*, %d*", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
-        Assert.assertEquals(String.format("%d*", table2_1.getId()), map.get("group2").get(2));
-        Assert.assertEquals(String.format("%d*", table2_3.getId()), map.get("group3").get(2));
+        Assert.assertEquals(String.format("%d*, %d*", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
+        Assert.assertEquals(String.format("%d*", table2To1.getId()), map.get("group2").get(2));
+        Assert.assertEquals(String.format("%d*", table2To3.getId()), map.get("group3").get(2));
     }
 
     @Test
@@ -191,7 +187,7 @@ public class ColocateTableIndexTest {
                 "PROPERTIES(\"colocate_with\"=\"goodGroup\", \"replication_num\" = \"1\");\n";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        OlapTable table = (OlapTable)goodDb.getTable("goodTable");
+        OlapTable table = (OlapTable) goodDb.getTable("goodTable");
         ColocateTableIndex.GroupId goodGroup = GlobalStateMgr.getCurrentColocateIndex().getGroup(table.getId());
 
 

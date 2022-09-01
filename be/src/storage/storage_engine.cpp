@@ -63,6 +63,7 @@
 namespace starrocks {
 
 StorageEngine* StorageEngine::_s_instance = nullptr;
+StorageEngine* StorageEngine::_p_instance = nullptr;
 
 static Status _validate_options(const EngineOptions& options) {
     if (options.store_paths.empty()) {
@@ -85,12 +86,16 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _available_storage_medium_type_count(0),
           _is_all_cluster_id_exist(true),
 
-          _tablet_manager(new TabletManager(options.tablet_meta_mem_tracker, config::tablet_map_shard_size)),
-          _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size)),
+          _tablet_manager(new TabletManager(options.metadata_mem_tracker, config::tablet_map_shard_size)),
+          _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size, options.store_paths.size())),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
           _compaction_manager(new CompactionManager()) {
+#ifdef BE_TEST
+    _p_instance = _s_instance;
+    _s_instance = this;
+#endif
     if (_s_instance == nullptr) {
         _s_instance = this;
     }
@@ -103,7 +108,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 StorageEngine::~StorageEngine() {
 #ifdef BE_TEST
     if (_s_instance == this) {
-        _s_instance = nullptr;
+        _s_instance = _p_instance;
     }
 #endif
 }
@@ -155,7 +160,6 @@ Status StorageEngine::_open() {
 
     RETURN_IF_ERROR_WITH_WARN(_check_file_descriptor_number(), "check fd number failed");
 
-    starrocks::ExecEnv::GetInstance()->set_storage_engine(this);
     RETURN_IF_ERROR_WITH_WARN(_update_manager->init(), "init update_manager failed");
 
     auto dirs = get_stores<false>();
@@ -784,12 +788,12 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     // clean unused rowset metas in KVStore
     _clean_unused_rowset_metas();
 
-    _do_manual_compact();
+    do_manual_compact(false);
 
     return res;
 }
 
-void StorageEngine::_do_manual_compact() {
+void StorageEngine::do_manual_compact(bool force_compact) {
     auto data_dirs = get_stores();
     for (auto data_dir : data_dirs) {
         uint64_t live_sst_files_size_before = 0;
@@ -797,7 +801,7 @@ void StorageEngine::_do_manual_compact() {
             LOG(WARNING) << "data dir " << data_dir->path() << " get_live_sst_files_size failed";
             continue;
         }
-        if (live_sst_files_size_before > config::meta_threshold_to_manual_compact) {
+        if (force_compact || live_sst_files_size_before > config::meta_threshold_to_manual_compact) {
             Status s = data_dir->get_meta()->compact();
             if (!s.ok()) {
                 LOG(WARNING) << "data dir " << data_dir->path() << " manual compact meta failed: " << s;

@@ -16,44 +16,47 @@ statement
     : queryStatement                                                                        #query
 
     // Database Statement
-    | alterDbQuotaStmt                                                                      #alterDbQuota
+    | useDatabaseStatement                                                                  #useDb
+    | useCatalogStatement                                                                   #useCatalog
+    | showDatabasesStatement                                                                #showDatabases
+    | alterDbQuotaStmtatement                                                               #alterDbQuota
     | createDbStatement                                                                     #createDb
     | dropDbStatement                                                                       #dropDb
     | showCreateDbStatement                                                                 #showCreateDb
     | alterDatabaseRename                                                                   #databaseRename
     | recoverDbStmt                                                                         #revoverDb
     | showDataStmt                                                                          #showData
-    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // Table Statement
     | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
-    | alterTableStatement                                                                   #alterTable
-    | dropTableStatement                                                                    #dropTable
-    | showTableStatement                                                                    #showTables
-    | showCreateTableStatement                                                              #showCreateTable
-    | showColumnStatement                                                                   #showColumn
-    | showTableStatusStatement                                                              #showTableStatus
-    | createIndexStatement                                                                  #createIndex
-    | dropIndexStatement                                                                    #dropIndex
-    | refreshTableStatement                                                                 #refreshTable
-    | showAlterStatement                                                                    #showAlter
-    | showDeleteStatement                                                                   #showDelete
-    | descTableStatement                                                                    #descTable
     | createTableLikeStatement                                                              #createTableLike
-    | showIndexStatement                                                                    #showIndex
+    | showCreateTableStatement                                                              #showCreateTable
+    | dropTableStatement                                                                    #dropTable
     | recoverTableStatement                                                                 #recoverTable
     | truncateTableStatement                                                                #truncateTable
-    | showTabletStatement                                                                   #showTablet
+    | showTableStatement                                                                    #showTables
+    | descTableStatement                                                                    #descTable
+    | showTableStatusStatement                                                              #showTableStatus
+    | showColumnStatement                                                                   #showColumn
+    | refreshTableStatement                                                                 #refreshTable
+    | alterTableStatement                                                                   #alterTable
     | cancelAlterTableStatement                                                             #cancelAlterTable
-    | showPartitionsStatement                                                               #showPartitions
-    | recoverPartitionStatement                                                             #recoverPartition
-    | showOpenTableStatement                                                                #showOpenTable
+    | showAlterStatement                                                                    #showAlter
 
     // View Statement
     | createViewStatement                                                                   #createView
     | alterViewStatement                                                                    #alterView
     | dropViewStatement                                                                     #dropView
+
+    // Partition Statement
+    | showPartitionsStatement                                                               #showPartitions
+    | recoverPartitionStatement                                                             #recoverPartition
+
+    // Index Statement
+    | createIndexStatement                                                                  #createIndex
+    | dropIndexStatement                                                                    #dropIndex
+    | showIndexStatement                                                                    #showIndex
 
     // Task Statement
     | submitTaskStatement                                                                   #submitTask
@@ -106,12 +109,19 @@ statement
     | showAnalyzeStatement                                                                  #showAnalyze
     | showStatsMetaStatement                                                                #showStatsMeta
     | showHistogramMetaStatement                                                            #showHistogramMeta
+    | killAnalyzeStatement                                                                  #killAnalyze
 
     // Work Group Statement
     | createResourceGroupStatement                                                          #createResourceGroup
     | dropResourceGroupStatement                                                            #dropResourceGroup
     | alterResourceGroupStatement                                                           #alterResourceGroup
     | showResourceGroupStatement                                                            #showResourceGroup
+
+    // Extenal Resource Statement
+    | createResourceStatement                                                               #createResource
+    | alterResourceStatement                                                                #alterResource
+    | dropResourceStatement                                                                 #dropResource
+    | showResourceStatement                                                                 #showResource
 
     //UDF
     | showFunctionsStatement                                                                #showFunctions
@@ -125,9 +135,6 @@ statement
     | cancelLoadStatement                                                                   #cancelLoad
 
     // Other statement
-    | USE qualifiedName                                                                     #useDb
-    | USE CATALOG identifierOrString                                                        #useCatalog
-    | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
     | showProcesslistStatement                                                              #showProcesslist
     | showUserPropertyStatement                                                             #showUserProperty
@@ -138,7 +145,13 @@ statement
     | showBrokerStatement                                                                   #showBroker
     | showCollationStatement                                                                #showCollation
     | setStatement                                                                          #setStmt
+
+    //Show Statement
     | showWarningStatement                                                                  #showWarning
+    | showTabletStatement                                                                   #showTablet
+    | showDeleteStatement                                                                   #showDelete
+    | showOpenTableStatement                                                                #showOpenTable
+    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -163,7 +176,16 @@ statement
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
-alterDbQuotaStmt
+
+useDatabaseStatement
+    : USE qualifiedName
+    ;
+
+useCatalogStatement
+    : USE CATALOG identifierOrString
+    ;
+
+alterDbQuotaStmtatement
     : ALTER DATABASE identifier SET DATA QUOTA identifier
     | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
     ;
@@ -194,11 +216,6 @@ showDataStmt
     : SHOW DATA
     | SHOW DATA FROM qualifiedName
     ;
-
-showDynamicPartitionStatement
-    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
-    ;
-
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
@@ -693,6 +710,10 @@ showHistogramMetaStatement
     : SHOW HISTOGRAM META (WHERE expression)?
     ;
 
+killAnalyzeStatement
+    : KILL ANALYZE INTEGER_VALUE
+    ;
+
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
 
 createResourceGroupStatement
@@ -714,6 +735,22 @@ alterResourceGroupStatement
 showResourceGroupStatement
     : SHOW RESOURCE GROUP identifier
     | SHOW RESOURCE GROUPS ALL?
+    ;
+
+createResourceStatement
+    : CREATE EXTERNAL? RESOURCE resourceName=identifierOrString properties?
+    ;
+
+alterResourceStatement
+    : ALTER RESOURCE resourceName=identifierOrString SET properties
+    ;
+
+dropResourceStatement
+    : DROP RESOURCE resourceName=identifierOrString
+    ;
+
+showResourceStatement
+    : SHOW RESOURCES
     ;
 
 classifier
@@ -780,8 +817,8 @@ dataDesc
     ;
 
 brokerDesc
-    : WITH BROKER name=identifierOrString props=propertyList?
-    | WITH BROKER props=propertyList?
+    : WITH BROKER props=propertyList?
+    | WITH BROKER name=identifierOrString props=propertyList?
     ;
 
 resourceDesc
@@ -878,6 +915,10 @@ setExprOrDefault
 showAuthenticationStatement
     : SHOW ALL AUTHENTICATION                                   #showAllAuthentication
     | SHOW AUTHENTICATION (FOR user)?                           #showAuthenticationForUser
+    ;
+
+showDynamicPartitionStatement
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -1500,7 +1541,7 @@ nonReserved
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
-    | RESOURCE | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
+    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE
     | STRING | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION

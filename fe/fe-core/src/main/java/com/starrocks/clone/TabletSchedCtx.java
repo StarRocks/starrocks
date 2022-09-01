@@ -503,7 +503,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     public List<Replica> getHealthyReplicas() {
         List<Replica> candidates = Lists.newArrayList();
         for (Replica replica : tablet.getImmutableReplicas()) {
-            if (replica.isBad()) {
+            if (replica.isBad() || replica.getState() == ReplicaState.DECOMMISSION) {
                 continue;
             }
 
@@ -550,7 +550,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 continue;
             }
 
-            long srcPathHash = slot.takeSlot(srcReplica.getPathHash());
+            long srcPathHash;
+            try {
+                srcPathHash = slot.takeSlot(srcReplica.getPathHash());
+            } catch (SchedException e) {
+                LOG.info("take slot from replica {}(belonged backend {}) failed, {}", srcReplica.getId(),
+                        srcReplica.getBackendId(), e.getMessage());
+                continue;
+            }
             if (srcPathHash != -1) {
                 setSrc(srcReplica);
                 return;
@@ -737,8 +744,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.decommissionedReplicaPreviousState = replica.getState();
     }
 
-    public void deleteReplica(Replica replica) {
-        tablet.deleteReplicaByBackendId(replica.getBackendId());
+    public boolean deleteReplica(Replica replica) {
+        return tablet.deleteReplicaByBackendId(replica.getBackendId());
     }
 
     // database lock should be held.
@@ -831,7 +838,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 olapTable.getCopiedIndexes(),
                 olapTable.isInMemory(),
                 olapTable.enablePersistentIndex(),
-                olapTable.getPartitionInfo().getTabletType(partitionId));
+                olapTable.getPartitionInfo().getTabletType(partitionId),
+                olapTable.getCompressionType());
         createReplicaTask.setIsRecoverTask(true);
         taskTimeoutMs = Config.tablet_sched_min_clone_task_timeout_sec * 1000;
 

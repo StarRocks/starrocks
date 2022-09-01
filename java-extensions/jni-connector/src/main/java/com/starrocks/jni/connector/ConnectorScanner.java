@@ -12,10 +12,14 @@ import java.util.Map;
  * 3. {@link ConnectorScanner#getNext()}
  *
  * The constructor of inherited subclasses need to accept the following parameters in order:
- * 1. int: the chunk size, this parameter need to be initialized using the parent constructor
+ * 1. int: the chunk size
  * 2. Map<String, String>: the custom parameters
  *
- * BE will call the methods as follows (described in pseudocode):
+ * {@link ConnectorScanner#initOffHeapTableWriter(String[], int, Map)} need be called to initialize
+ * {@link ConnectorScanner#tableSize} and {@link ConnectorScanner#types}
+ * before calling {@link ConnectorScanner#getNext()} (maybe in constructor or {@link ConnectorScanner#open()})
+ *
+ * BE will call these methods as follows (described in pseudocode):
  * open();
  * do {
  *     int rows = getNext();

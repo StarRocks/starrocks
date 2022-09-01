@@ -46,14 +46,14 @@ public class ResourceGroupAnalyzer {
                 String key = ((SlotRef) lhs).getColumnName();
                 String value = ((StringLiteral) rhs).getValue();
                 if (key.equalsIgnoreCase(ResourceGroup.USER)) {
-                    if (!ResourceGroupClassifier.UseRolePattern.matcher(value).matches()) {
+                    if (!ResourceGroupClassifier.USE_ROLE_PATTERN.matcher(value).matches()) {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.USER,
                                         eqPred.toSql()));
                     }
                     classifier.setUser(value);
                 } else if (key.equalsIgnoreCase(ResourceGroup.ROLE)) {
-                    if (!ResourceGroupClassifier.UseRolePattern.matcher(value).matches()) {
+                    if (!ResourceGroupClassifier.USE_ROLE_PATTERN.matcher(value).matches()) {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.ROLE,
                                         eqPred.toSql()));
@@ -188,11 +188,11 @@ public class ResourceGroupAnalyzer {
                 try {
                     resourceGroup.setResourceGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
                     if (resourceGroup.getResourceGroupType() != TWorkGroupType.WG_NORMAL &&
-                            resourceGroup.getResourceGroupType() != TWorkGroupType.WG_REALTIME) {
-                        throw new SemanticException("Only support 'normal' and 'realtime' type");
+                            resourceGroup.getResourceGroupType() != TWorkGroupType.WG_SHORT_QUERY) {
+                        throw new SemanticException("Only support 'normal' and 'short_query' type");
                     }
                 } catch (Exception ignored) {
-                    throw new SemanticException("Only support 'normal' and 'realtime' type");
+                    throw new SemanticException("Only support 'normal' and 'short_query' type");
                 }
                 continue;
             }

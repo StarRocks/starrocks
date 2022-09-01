@@ -2,7 +2,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.sql.optimizer.base.SetQualifier;
 
 import java.util.ArrayList;
 import java.util.List;

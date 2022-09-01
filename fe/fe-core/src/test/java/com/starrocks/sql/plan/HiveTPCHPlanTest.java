@@ -1,3 +1,5 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.DdlException;
@@ -61,7 +63,10 @@ public class HiveTPCHPlanTest extends HivePlanTestBase {
 
     @Test
     public void testTPCH8() {
+        int oldValue = connectContext.getSessionVariable().getMaxTransformReorderJoins();
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
         runFileUnitTest("external/hive/tpch/q8");
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(oldValue);
     }
 
     @Test

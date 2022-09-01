@@ -26,7 +26,6 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Resource;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;

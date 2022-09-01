@@ -26,6 +26,7 @@ package starrocks;
 option java_package = "com.starrocks.proto";
 
 import "olap_common.proto";
+import "types.proto";
 
 // Please keep the defined value less than 256, bacause this enum will be casted to uint8_t
 // in some cases.
@@ -66,6 +67,7 @@ message TabletSchemaPB {
     optional uint32 next_column_unique_id = 7; // OLAPHeaderMessage.next_column_unique_id
     optional bool DEPRECATED_is_in_memory = 8 [default=false];
     optional int64 deprecated_id = 9; // deprecated
+    optional CompressionTypePB compression_type = 10 [default=LZ4_FRAME];
     optional int64 id = 50;
 }
 

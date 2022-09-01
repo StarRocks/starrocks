@@ -21,7 +21,6 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;

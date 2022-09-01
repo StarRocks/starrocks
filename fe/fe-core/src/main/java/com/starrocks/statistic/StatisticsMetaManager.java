@@ -5,9 +5,6 @@ package com.starrocks.statistic;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
@@ -24,6 +21,9 @@ import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.logging.log4j.LogManager;
@@ -99,15 +99,15 @@ public class StatisticsMetaManager extends LeaderDaemon {
         return lossTableCount < 3;
     }
 
-    private static final List<String> keyColumnNames = ImmutableList.of(
+    private static final List<String> KEY_COLUMN_NAMES = ImmutableList.of(
             "table_id", "column_name", "db_id"
     );
 
-    private static final List<String> fullStatisticsKeyColumns = ImmutableList.of(
+    private static final List<String> FULL_STATISTICS_KEY_COLUMNS = ImmutableList.of(
             "table_id", "partition_id", "column_name"
     );
 
-    private static final List<String> histogramKeyColumns = ImmutableList.of(
+    private static final List<String> HISTOGRAM_KEY_COLUMNS = ImmutableList.of(
             "table_id", "column_name"
     );
 
@@ -122,9 +122,9 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 tableName,
                 StatisticUtils.buildStatsColumnDef(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME),
                 "olap",
-                new KeysDesc(KeysType.UNIQUE_KEYS, keyColumnNames),
+                new KeysDesc(KeysType.UNIQUE_KEYS, KEY_COLUMN_NAMES),
                 null,
-                new HashDistributionDesc(10, keyColumnNames),
+                new HashDistributionDesc(10, KEY_COLUMN_NAMES),
                 properties,
                 null,
                 "");
@@ -151,9 +151,9 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 tableName,
                 StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
                 "olap",
-                new KeysDesc(KeysType.PRIMARY_KEYS, fullStatisticsKeyColumns),
+                new KeysDesc(KeysType.PRIMARY_KEYS, FULL_STATISTICS_KEY_COLUMNS),
                 null,
-                new HashDistributionDesc(10, fullStatisticsKeyColumns),
+                new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
                 properties,
                 null,
                 "");
@@ -180,9 +180,9 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 tableName,
                 StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
                 "olap",
-                new KeysDesc(KeysType.PRIMARY_KEYS, histogramKeyColumns),
+                new KeysDesc(KeysType.PRIMARY_KEYS, HISTOGRAM_KEY_COLUMNS),
                 null,
-                new HashDistributionDesc(10, histogramKeyColumns),
+                new HashDistributionDesc(10, HISTOGRAM_KEY_COLUMNS),
                 properties,
                 null,
                 "");

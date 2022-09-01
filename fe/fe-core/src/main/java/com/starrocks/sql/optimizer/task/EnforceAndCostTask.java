@@ -3,7 +3,6 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
@@ -102,6 +101,12 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (groupExpression.isUnused()) {
             return;
         }
+
+        if (!checkCTEPropertyValid(groupExpression, context.getRequiredProperty())) {
+            // prune CTE invalid plan
+            return;
+        }
+
         // Init costs and get required properties for children
         initRequiredProperties();
 
@@ -158,23 +163,16 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
             // Successfully optimize all child group
             if (curChildIndex == groupExpression.getInputs().size()) {
-                if (!checkCTEPropertyValid(groupExpression, context.getRequiredProperty())) {
-                    break;
-                }
-
                 // before we compute the property, here need to make sure that the plan is legal
-                ChildOutputPropertyGuarantor childOutputPropertyGuarantor = new ChildOutputPropertyGuarantor(context);
-                curTotalCost = childOutputPropertyGuarantor
-                        .enforceLegalChildOutputProperty(context.getRequiredProperty(), groupExpression,
-                                childrenBestExprList, requiredProperties, childrenOutputProperties, curTotalCost);
+                ChildOutputPropertyGuarantor childOutputPropertyGuarantor = new ChildOutputPropertyGuarantor(context,
+                        groupExpression,
+                        context.getRequiredProperty(),
+                        childrenBestExprList,
+                        requiredProperties,
+                        childrenOutputProperties,
+                        curTotalCost);
+                curTotalCost = childOutputPropertyGuarantor.enforceLegalChildOutputProperty();
 
-                // compute the output property
-                OutputPropertyDeriver outputPropertyDeriver = new OutputPropertyDeriver();
-                Pair<PhysicalPropertySet, Double> outputPropertyWithCost = outputPropertyDeriver
-                        .getOutputPropertyWithCost(context.getRequiredProperty(), groupExpression,
-                                childrenOutputProperties, curTotalCost);
-                PhysicalPropertySet outputProperty = outputPropertyWithCost.first;
-                curTotalCost = outputPropertyWithCost.second;
                 if (curTotalCost > context.getUpperBoundCost()) {
                     break;
                 }
@@ -185,6 +183,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                     return;
                 }
 
+                // compute the output property
+                OutputPropertyDeriver outputPropertyDeriver = new OutputPropertyDeriver(groupExpression,
+                        context.getRequiredProperty(), childrenOutputProperties);
+                PhysicalPropertySet outputProperty = outputPropertyDeriver.getOutputProperty();
                 recordCostsAndEnforce(outputProperty, requiredProperties);
             }
             // Reset child idx and total cost
@@ -399,8 +401,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
             // and shuffle join two types outputProperty.
             groupExpression.setOutputPropertySatisfyRequiredProperty(outputProperty, requiredProperty);
         }
-        this.groupExpression.getGroup().setBestExpression(groupExpression,
-                curTotalCost, requiredProperty);
+        this.groupExpression.getGroup().setBestExpression(groupExpression, curTotalCost, requiredProperty);
         if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
             // record the output/input properties when child group could satisfy this group expression required property
             groupExpression.addValidOutputInputProperties(requiredProperty, inputProperties);

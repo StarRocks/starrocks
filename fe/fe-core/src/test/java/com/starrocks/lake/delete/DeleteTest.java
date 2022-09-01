@@ -2,7 +2,6 @@
 
 package com.starrocks.lake.delete;
 
-import com.baidu.brpc.client.RpcCallback;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
@@ -38,7 +37,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.LakeServiceAsync;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -86,7 +85,7 @@ public class DeleteTest {
     @Mocked
     private SystemInfoService systemInfoService;
     @Mocked
-    private LakeServiceAsync lakeServiceAsync;
+    private LakeService lakeService;
 
     private Database db;
     private Auth auth;
@@ -163,13 +162,13 @@ public class DeleteTest {
 
         new MockUp<BrpcProxy>() {
             @Mock
-            public LakeServiceAsync getLakeService(String host, int port) {
-                return lakeServiceAsync;
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
             }
         };
         new Expectations() {
             {
-                lakeServiceAsync.deleteData((DeleteDataRequest) any, (RpcCallback<DeleteDataResponse>) any);
+                lakeService.deleteData((DeleteDataRequest) any);
                 result = new Future<DeleteDataResponse>() {
                     @Override
                     public boolean cancel(boolean mayInterruptIfRunning) {
@@ -232,13 +231,13 @@ public class DeleteTest {
     public void testBeDeleteFail() throws DdlException, QueryStateException {
         new MockUp<BrpcProxy>() {
             @Mock
-            public LakeServiceAsync getLakeService(String host, int port) {
-                return lakeServiceAsync;
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
             }
         };
         new Expectations() {
             {
-                lakeServiceAsync.deleteData((DeleteDataRequest) any, (RpcCallback<DeleteDataResponse>) any);
+                lakeService.deleteData((DeleteDataRequest) any);
                 result = new Future<DeleteDataResponse>() {
                     @Override
                     public boolean cancel(boolean mayInterruptIfRunning) {

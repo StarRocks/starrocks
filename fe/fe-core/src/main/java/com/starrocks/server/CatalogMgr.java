@@ -38,6 +38,8 @@ import java.util.Map;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
+
 public class CatalogMgr {
     private static final Logger LOG = LogManager.getLogger(CatalogMgr.class);
     private final Map<String, Catalog> catalogs = new HashMap<>();
@@ -165,6 +167,13 @@ public class CatalogMgr {
         } finally {
             writeUnLock();
         }
+    }
+
+    public boolean existSameUrlCatalog(String url) {
+        long hasSameUriCatalogNum =  catalogs.entrySet().stream()
+                .filter(entry -> entry.getValue().getConfig().getOrDefault(HIVE_METASTORE_URIS, "").equals(url))
+                .count();
+        return hasSameUriCatalogNum > 1;
     }
 
     public long loadCatalogs(DataInputStream dis, long checksum) throws IOException, DdlException {

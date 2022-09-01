@@ -15,7 +15,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -63,8 +62,8 @@ public class PlanTestBase {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
-        String DB_NAME = "test";
-        starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+        String dbName = "test";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(1));
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
@@ -1152,6 +1151,7 @@ public class PlanTestBase {
 
         Pattern regex = Pattern.compile("\\[plan-(\\d+)]");
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            int nth = 0;
             while ((tempStr = reader.readLine()) != null) {
                 if (tempStr.startsWith("/*")) {
                     isComment = true;
@@ -1173,7 +1173,8 @@ public class PlanTestBase {
                     isEnumerate = true;
                     planEnumerate = new StringBuilder();
                     mode = "enum";
-                    connectContext.getSessionVariable().setUseNthExecPlan(Integer.parseInt(m.group(1)));
+                    nth = Integer.parseInt(m.group(1));
+                    connectContext.getSessionVariable().setUseNthExecPlan(nth);
                     continue;
                 }
 
@@ -1243,16 +1244,15 @@ public class PlanTestBase {
                                 }
                             }
                             if (isDebug) {
-                                debugSQL(writer, hasResult, hasFragment, isDump, hasFragmentStatistics,
-                                        sql.toString(),
-                                        pair.first, fra, dumpStr, statistic, comment.toString());
+                                debugSQL(writer, hasResult, hasFragment, isDump, hasFragmentStatistics, nth,
+                                        sql.toString(), pair.first, fra, dumpStr, statistic, comment.toString());
                             }
                             if (isEnumerate) {
                                 checkWithIgnoreTabletList(planEnumerate.toString().trim(), pair.first.trim());
                                 connectContext.getSessionVariable().setUseNthExecPlan(0);
                             }
                         } catch (Error error) {
-                            collector.addError(new Throwable("\n" + sql, error));
+                            collector.addError(new Throwable(nth + " plan " + "\n" + sql, error));
                         }
 
                         hasResult = false;
@@ -1302,18 +1302,24 @@ public class PlanTestBase {
     }
 
     private void debugSQL(BufferedWriter writer, boolean hasResult, boolean hasFragment, boolean hasDump,
-                          boolean hasStatistics, String sql, String plan, String fragment, String dump,
+                          boolean hasStatistics, int nthPlan, String sql, String plan, String fragment, String dump,
                           String statistic,
                           String comment) {
         try {
             if (!comment.trim().isEmpty()) {
                 writer.append(comment).append("\n");
             }
-            writer.append("[sql]\n");
-            writer.append(sql.trim());
+            if (nthPlan == 1) {
+                writer.append("[sql]\n");
+                writer.append(sql.trim());
+            }
 
             if (hasResult) {
                 writer.append("\n[result]\n");
+                writer.append(plan);
+            }
+            if (nthPlan > 0) {
+                writer.append("\n[plan-").append(String.valueOf(nthPlan)).append("]\n");
                 writer.append(plan);
             }
 
@@ -1332,7 +1338,7 @@ public class PlanTestBase {
                 writer.append(dump.trim());
             }
 
-            writer.append("\n[end]\n\n");
+            // writer.append("\n[end]\n\n");
             writer.flush();
         } catch (IOException e) {
             e.printStackTrace();

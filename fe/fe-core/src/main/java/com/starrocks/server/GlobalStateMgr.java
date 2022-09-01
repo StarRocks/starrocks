@@ -34,36 +34,24 @@ import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.AddPartitionClause;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
-import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelAlterSystemStmt;
-import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.ColumnRenameClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.CreateTableLikeStmt;
-import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
-import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.PartitionRenameClause;
-import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
-import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
-import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.BrokerMgr;
@@ -211,9 +199,21 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
+import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.RecoverDbStmt;
+import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -226,6 +226,7 @@ import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.LeaderTaskExecutor;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
@@ -925,7 +926,6 @@ public class GlobalStateMgr {
 
         // set this after replay thread stopped. to avoid replay thread modify them.
         isReady.set(false);
-        canRead.set(false);
 
         // setup for journal
         try {
@@ -984,7 +984,6 @@ public class GlobalStateMgr {
 
             MetricRepo.init();
 
-            canRead.set(true);
             isReady.set(true);
 
             String msg = "leaer finished to replay journal, can write now.";
@@ -1816,6 +1815,70 @@ public class GlobalStateMgr {
         localMetastore.replayRecoverPartition(info);
     }
 
+    public static String getMaterializedViewDdlStmt(MaterializedView mv) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE MATERIALIZED VIEW `").append(mv.getName()).append("`");
+        if (!Strings.isNullOrEmpty(mv.getComment())) {
+            sb.append("\nCOMMENT \"").append(mv.getComment()).append("\"");
+        }
+
+        // partition
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (!(partitionInfo instanceof SinglePartitionInfo)) {
+            sb.append("\n").append(partitionInfo.toSql(mv, null));
+        }
+
+        // distribution
+        DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
+        sb.append("\n").append(distributionInfo.toSql());
+
+        // refresh schema
+        MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
+        sb.append("\nREFRESH ").append(refreshScheme.getType());
+        if (refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
+            MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
+            if (asyncRefreshContext.isDefineStartTime()) {
+                sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
+                                .format(DateUtils.DATE_TIME_FORMATTER))
+                        .append("\")");
+            }
+            if (asyncRefreshContext.getTimeUnit() != null) {
+                sb.append(" EVERY(INTERVAL ").append(asyncRefreshContext.getStep()).append(" ")
+                        .append(asyncRefreshContext.getTimeUnit()).append(")");
+            }
+        }
+
+        // properties
+        sb.append("\nPROPERTIES (\n");
+
+        // replicationNum
+        Short replicationNum = mv.getDefaultReplicationNum();
+        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
+        sb.append(replicationNum).append("\"");
+
+        // storageMedium
+        String storageMedium = mv.getStorageMedium();
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                .append("\" = \"");
+        sb.append(storageMedium).append("\"");
+
+        // storageCooldownTime
+        Map<String, String> properties = mv.getTableProperty().getProperties();
+        if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
+            sb.append("\n");
+        } else {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
+                    .append("\" = \"");
+            sb.append(TimeUtils.longToTimeString(
+                    Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)))).append("\"");
+            sb.append("\n");
+        }
+        sb.append(")");
+        sb.append("\nAS ").append(mv.getViewDefineSql());
+        sb.append(";");
+        return sb.toString();
+    }
+
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
                                   List<String> createRollupStmt, boolean separatePartition,
                                   boolean hidePassword) {
@@ -1825,74 +1888,15 @@ public class GlobalStateMgr {
     public static void getDdlStmt(String dbName, Table table, List<String> createTableStmt,
                                   List<String> addPartitionStmt,
                                   List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
-        StringBuilder sb = new StringBuilder();
-
         // 1. create table
         // 1.1 materialized view
         if (table.getType() == TableType.MATERIALIZED_VIEW) {
             MaterializedView mv = (MaterializedView) table;
-            sb.append("CREATE MATERIALIZED VIEW `").append(table.getName()).append("`");
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
-
-            // partition
-            PartitionInfo partitionInfo = mv.getPartitionInfo();
-            if (!(partitionInfo instanceof SinglePartitionInfo)) {
-                sb.append("\n").append(partitionInfo.toSql(mv, null));
-            }
-
-            // distribution
-            DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
-            sb.append("\n").append(distributionInfo.toSql());
-
-            // refresh schema
-            MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
-            sb.append("\nREFRESH ").append(refreshScheme.getType());
-            if (refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
-                MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-                if (asyncRefreshContext.isDefineStartTime()) {
-                    sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
-                                    .format(DateUtils.DATE_TIME_FORMATTER))
-                            .append("\")");
-                }
-                if (asyncRefreshContext.getTimeUnit() != null) {
-                    sb.append(" EVERY(INTERVAL ").append(asyncRefreshContext.getStep()).append(" ")
-                            .append(asyncRefreshContext.getTimeUnit()).append(")");
-                }
-            }
-
-            // properties
-            sb.append("\nPROPERTIES (\n");
-
-            // replicationNum
-            Short replicationNum = mv.getDefaultReplicationNum();
-            sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
-            sb.append(replicationNum).append("\"");
-
-            // storageMedium
-            String storageMedium = mv.getStorageMedium();
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
-                    .append("\" = \"");
-            sb.append(storageMedium).append("\"");
-
-            // storageCooldownTime
-            Map<String, String> properties = mv.getTableProperty().getProperties();
-            if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
-                sb.append("\n");
-            } else {
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
-                        .append("\" = \"");
-                sb.append(TimeUtils.longToTimeString(
-                        Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)))).append("\"");
-                sb.append("\n");
-            }
-            sb.append(")");
-            sb.append("\nAS ").append(mv.getViewDefineSql());
-            sb.append(";");
-            createTableStmt.add(sb.toString());
+            createTableStmt.add(getMaterializedViewDdlStmt(mv));
             return;
         }
+
+        StringBuilder sb = new StringBuilder();
         // 1.2 view
         if (table.getType() == TableType.VIEW) {
             View view = (View) table;
@@ -2053,6 +2057,17 @@ public class GlobalStateMgr {
                     .append("\" = \"");
             sb.append(olapTable.enablePersistentIndex()).append("\"");
 
+            // compression type
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
+                    .append("\" = \"");
+            if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME) {
+                sb.append("LZ4").append("\"");
+            } else if (olapTable.getCompressionType() == TCompressionType.LZ4) {
+                sb.append("LZ4").append("\"");
+            } else {
+                sb.append(olapTable.getCompressionType()).append("\"");
+            }
+
             // storage media
             Map<String, String> properties = olapTable.getTableProperty().getProperties();
             if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
@@ -2153,9 +2168,12 @@ public class GlobalStateMgr {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hiveTable.getHiveDb()).append("\",\n");
+            sb.append("\"database\" = \"").append(hiveTable.getDbName()).append("\",\n");
             sb.append("\"table\" = \"").append(hiveTable.getTableName()).append("\",\n");
-            sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\",\n");
+            sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
+            if (!hiveTable.getHiveProperties().isEmpty()) {
+                sb.append(",\n");
+            }
             sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
@@ -2166,7 +2184,7 @@ public class GlobalStateMgr {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hudiTable.getDb()).append("\",\n");
+            sb.append("\"database\" = \"").append(hudiTable.getDbName()).append("\",\n");
             sb.append("\"table\" = \"").append(hudiTable.getTable()).append("\",\n");
             sb.append("\"resource\" = \"").append(hudiTable.getResourceName()).append("\"");
             sb.append("\n)");

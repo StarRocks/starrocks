@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.DdlStmt;
 
 import java.util.Map;

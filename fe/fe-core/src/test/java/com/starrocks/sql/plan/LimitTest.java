@@ -503,8 +503,8 @@ public class LimitTest extends PlanTestBase {
                 "  1:EXCHANGE\n" +
                 "     limit: 10"));
 
-        sql =
-                "select v1 from (select * from t0 limit 10) x0 left outer join (select * from t1 limit 5) x1 on x0.v1 = x1.v4 limit 7";
+        sql = "select v1 from (select * from t0 limit 10) x0 left outer " +
+                "join (select * from t1 limit 5) x1 on x0.v1 = x1.v4 limit 7";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("5:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
@@ -536,7 +536,7 @@ public class LimitTest extends PlanTestBase {
         Assert.assertTrue(plan, plan.contains("  3:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: 2: v2 != 5: v5\n" +
+                "  |  other join predicates: 2: v2 != 5: v5\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +
@@ -546,9 +546,9 @@ public class LimitTest extends PlanTestBase {
         sql = "select * from t0 inner join t1 on t0.v2 != t1.v5 limit 10";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan, plan.contains("3:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: 2: v2 != 5: v5\n" +
+                "  |  other join predicates: 2: v2 != 5: v5\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +

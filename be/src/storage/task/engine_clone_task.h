@@ -31,7 +31,7 @@
 
 namespace starrocks {
 
-void run_clone_task(std::shared_ptr<TAgentTaskRequest> agent_task_req, TaskWorkerPool* clone_task_worker_pool);
+void run_clone_task(std::shared_ptr<CloneAgentTaskRequest> agent_task_req);
 
 // base class for storage engine
 // add "Engine" as task prefix to prevent duplicate name with agent task

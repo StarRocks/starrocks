@@ -385,16 +385,19 @@ public class Utils {
                         GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, colNames);
                 return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
             } else if (operator instanceof LogicalHiveScanOperator || operator instanceof LogicalHudiScanOperator) {
-                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) scanOperator.getTable();
-                try {
-                    Map<String, HiveColumnStats> hiveColumnStatisticMap =
-                            hiveMetaStoreTable.getTableLevelColumnStats(colNames);
-                    return hiveColumnStatisticMap.values().stream().anyMatch(HiveColumnStats::isUnknown);
-                } catch (Exception e) {
-                    LOG.warn(scanOperator.getTable().getType() + " table {} get column failed. error : {}",
-                            scanOperator.getTable().getName(), e);
-                    return true;
+                if (ConnectContext.get().getSessionVariable().enableHiveColumnStats()) {
+                    HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) scanOperator.getTable();
+                    try {
+                        Map<String, HiveColumnStats> hiveColumnStatisticMap =
+                                hiveMetaStoreTable.getTableLevelColumnStats(colNames);
+                        return hiveColumnStatisticMap.values().stream().anyMatch(HiveColumnStats::isUnknown);
+                    } catch (Exception e) {
+                        LOG.warn(scanOperator.getTable().getType() + " table {} get column failed. error : {}",
+                                scanOperator.getTable().getName(), e);
+                        return true;
+                    }
                 }
+                return true;
             } else if (operator instanceof LogicalIcebergScanOperator) {
                 IcebergTable table = (IcebergTable) scanOperator.getTable();
                 try {
@@ -476,6 +479,22 @@ public class Utils {
             }
         }
         return true;
+    }
+
+    public static boolean containsEqualBinaryPredicate(ScalarOperator predicate) {
+        if (predicate instanceof BinaryPredicateOperator) {
+            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
+            return binaryPredicate.getBinaryType().isEquivalence();
+        }
+        if (predicate instanceof CompoundPredicateOperator) {
+            CompoundPredicateOperator compoundPredicate = (CompoundPredicateOperator) predicate;
+            if (compoundPredicate.isAnd()) {
+                return isEqualBinaryPredicate(compoundPredicate.getChild(0)) ||
+                        isEqualBinaryPredicate(compoundPredicate.getChild(1));
+            }
+            return false;
+        }
+        return false;
     }
 
     public static boolean isEqualBinaryPredicate(ScalarOperator predicate) {

@@ -230,6 +230,21 @@ public:
     HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~HudiTableDescriptor() override = default;
     bool has_partition() const override { return true; }
+    const bool& is_mor_table() const;
+    const std::string& get_base_path() const;
+    const std::string& get_instant_time() const;
+    const std::string& get_hive_column_names() const;
+    const std::string& get_hive_column_types() const;
+    const std::string& get_input_format() const;
+    const std::string& get_serde_lib() const;
+
+private:
+    bool _is_mor_table;
+    std::string _hudi_instant_time;
+    std::string _hive_column_names;
+    std::string _hive_column_types;
+    std::string _input_format;
+    std::string _serde_lib;
 };
 
 // ===========================================

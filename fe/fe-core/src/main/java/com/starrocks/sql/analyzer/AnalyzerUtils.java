@@ -10,7 +10,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
@@ -28,6 +27,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -300,7 +300,6 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
-
     public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
         new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
@@ -367,5 +366,4 @@ public class AnalyzerUtils {
             return null;
         }
     }
-
 }

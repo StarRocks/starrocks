@@ -286,12 +286,13 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator join, ExpressionContext context) {
+            final double nestLoopPunishment = 1000000.0;
             Statistics leftStatistics = context.getChildStatistics(0);
             Statistics rightStatistics = context.getChildStatistics(1);
 
             double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
             double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-            return CostEstimate.of(leftSize * rightSize,
+            return CostEstimate.of(leftSize * rightSize + nestLoopPunishment,
                     rightSize * StatsConstants.CROSS_JOIN_COST_PENALTY * 2, 0);
         }
 
@@ -318,7 +319,8 @@ public class CostModel {
             // memory cost
             Statistics cteStatistics = context.getChildStatistics(0);
             double ratio = ConnectContext.get().getSessionVariable().getCboCTERuseRatio();
-            return CostEstimate.of(0, cteStatistics.getComputeSize() * ratio, 0);
+            double produceSize = cteStatistics.getOutputSize(context.getChildOutputColumns(0));
+            return CostEstimate.of(produceSize * node.getConsumeNum() * 0.5, produceSize * (1 + ratio), 0);
         }
 
         @Override

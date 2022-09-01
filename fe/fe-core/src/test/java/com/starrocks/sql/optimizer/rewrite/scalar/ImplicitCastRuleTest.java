@@ -40,10 +40,10 @@ public class ImplicitCastRuleTest {
         ));
 
         new Expectations(op) {{
-            op.getFunction();
-            minTimes = 0;
-            result = fn;
-        }};
+                op.getFunction();
+                minTimes = 0;
+                result = fn;
+            }};
 
         ImplicitCastRule rule = new ImplicitCastRule();
         ScalarOperator result = rule.apply(op, null);
