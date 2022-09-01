@@ -19,7 +19,7 @@ public class JDBCResourceTest {
 
     @Before
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
         FeConstants.runningUnitTest = true;
     }
 
