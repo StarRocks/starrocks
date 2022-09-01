@@ -4,7 +4,21 @@
 
 #include <type_traits>
 
+<<<<<<< HEAD
 #include "jni_md.h"
+=======
+#include "column/column_helper.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/statusor.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "exprs/vectorized/cast_expr.h"
+#include "runtime/primitive_type.h"
+#include "runtime/types.h"
+#include "udf/java/java_udf.h"
+#include "util/defer_op.h"
+>>>>>>> cd7ef46cf ([Enhancement] detect JAVA_HOME before call JVM functions (#10680))
 
 namespace starrocks::vectorized {
 
@@ -37,7 +51,11 @@ Status JDBCScanner::reset_jni_env() {
 }
 
 Status JDBCScanner::open(RuntimeState* state) {
+<<<<<<< HEAD
     RETURN_IF_ERROR(reset_jni_env());
+=======
+    RETURN_IF_ERROR(detect_java_runtime());
+>>>>>>> cd7ef46cf ([Enhancement] detect JAVA_HOME before call JVM functions (#10680))
 
     _init_profile();
 
