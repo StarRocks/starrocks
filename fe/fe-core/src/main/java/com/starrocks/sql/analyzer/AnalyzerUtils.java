@@ -20,8 +20,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -128,12 +126,8 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
-            Database db = session.getGlobalStateMgr().getDb(node.getDb());
-            if (db == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
-            }
-            this.dbs.put(node.getDb(), db);
-            return visit(node.getQueryStatement());
+            getDB(node.getTableName());
+            return null;
         }
 
         @Override
@@ -194,17 +188,22 @@ public class AnalyzerUtils {
         }
 
         private void getDB(TableName tableName) {
-            String dbName = tableName.getDb();
+            String catalog = Strings.isNullOrEmpty(tableName.getCatalog()) ? session.getCurrentCatalog() : tableName.getCatalog();
+            String dbName = Strings.isNullOrEmpty(tableName.getDb()) ? session.getDatabase() : tableName.getDb();
+
+            if (Strings.isNullOrEmpty(catalog)) {
+                return;
+            }
+
             if (Strings.isNullOrEmpty(dbName)) {
-                dbName = session.getDatabase();
-            } else {
-                if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-                    return;
-                }
+                return;
+            }
+
+            if (!CatalogMgr.isInternalCatalog(catalog)) {
+                return;
             }
 
             Database db = session.getGlobalStateMgr().getDb(dbName);
-
             dbs.put(db.getFullName(), db);
         }
     }
