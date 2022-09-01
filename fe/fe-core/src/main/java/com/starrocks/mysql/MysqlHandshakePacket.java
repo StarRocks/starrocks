@@ -25,7 +25,6 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -119,9 +118,8 @@ public class MysqlHandshakePacket extends MysqlPacket {
 
     // If user use kerberos for authentication, fe need to resend the handshake request.
     public void buildKrb5AuthRequest(MysqlSerializer serializer, String remoteIp, String user) throws Exception {
-        String fullUserName = SystemInfoService.DEFAULT_CLUSTER + ":" + user;
         Password password = GlobalStateMgr.getCurrentState().getAuth().getUserPrivTable()
-                .getPasswordByApproximate(fullUserName, remoteIp);
+                .getPasswordByApproximate(user, remoteIp);
         if (password == null) {
             String msg = String.format("Can not find password with [user: %s, remoteIp: %s].", user, remoteIp);
             LOG.error(msg);

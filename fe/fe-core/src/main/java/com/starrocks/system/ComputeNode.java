@@ -292,14 +292,6 @@ public class ComputeNode implements IComputable, Writable {
                 isAlive.get() + "]";
     }
 
-    public String getOwnerClusterName() {
-        return ownerClusterName;
-    }
-
-    public void setOwnerClusterName(String name) {
-        ownerClusterName = name;
-    }
-
     public void clearClusterName() {
         ownerClusterName = "";
     }

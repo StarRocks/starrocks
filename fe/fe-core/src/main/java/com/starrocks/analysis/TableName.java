@@ -167,12 +167,7 @@ public class TableName implements Writable {
             stringBuilder.append("`").append(catalog).append("`.");
         }
         if (db != null) {
-            String dbName = ClusterNamespace.getNameFromFullName(db);
-            if (dbName == null) {
-                stringBuilder.append("`").append(db).append("`.");
-            } else {
-                stringBuilder.append("`").append(dbName).append("`.");
-            }
+            stringBuilder.append("`").append(db).append("`.");
         }
         stringBuilder.append("`").append(tbl).append("`");
         return stringBuilder.toString();

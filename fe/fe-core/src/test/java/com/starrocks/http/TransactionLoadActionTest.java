@@ -59,7 +59,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     
     @After
     public void tearDown() {
-        GlobalStateMgr.getCurrentSystemInfo().dropBackend(new Backend(1234, CLUSTER_NAME, HTTP_PORT));
+        GlobalStateMgr.getCurrentSystemInfo().dropBackend(new Backend(1234, "localhost", HTTP_PORT));
     }
 
     @BeforeClass

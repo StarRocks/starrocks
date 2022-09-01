@@ -25,7 +25,6 @@ import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
@@ -81,9 +80,9 @@ public class ShowTableStmt extends ShowStmt {
         SelectList selectList = new SelectList();
         ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
         SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_NAME"),
-                NAME_COL_PREFIX + ClusterNamespace.getNameFromFullName(db));
+                NAME_COL_PREFIX + db);
         selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, NAME_COL_PREFIX + ClusterNamespace.getNameFromFullName(db)),
+        aliasMap.put(new SlotRef(null, NAME_COL_PREFIX + db),
                 item.getExpr().clone(null));
         if (isVerbose) {
             item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_TYPE"), TYPE_COL);
@@ -121,7 +120,7 @@ public class ShowTableStmt extends ShowStmt {
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
         builder.addColumn(
-                new Column(NAME_COL_PREFIX + ClusterNamespace.getNameFromFullName(db), ScalarType.createVarchar(20)));
+                new Column(NAME_COL_PREFIX + db, ScalarType.createVarchar(20)));
         if (isVerbose) {
             builder.addColumn(new Column(TYPE_COL, ScalarType.createVarchar(20)));
         }

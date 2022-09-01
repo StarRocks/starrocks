@@ -86,7 +86,6 @@ abstract public class StarRocksHttpTestCase {
 
     private static HttpServer httpServer;
 
-    public static final String CLUSTER_NAME = "default_cluster";
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
 
