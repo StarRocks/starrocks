@@ -769,4 +769,16 @@ jobject UDAFFunction::window_update_batch(jobject state, int peer_group_start, i
     return res;
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::vectorized
+=======
+Status detect_java_runtime() {
+    const char* p = std::getenv("JAVA_HOME");
+    if (p == nullptr) {
+        return Status::RuntimeError("env 'JAVA_HOME' is not set");
+    }
+    return Status::OK();
+}
+
+} // namespace starrocks::vectorized
+>>>>>>> cd7ef46cf ([Enhancement] detect JAVA_HOME before call JVM functions (#10680))

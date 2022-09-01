@@ -357,4 +357,7 @@ struct JavaUDAFContext {
     std::unique_ptr<UDAFFunction> _func;
 };
 
+// Check whether java runtime can work
+Status detect_java_runtime();
+
 } // namespace starrocks::vectorized
