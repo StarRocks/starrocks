@@ -35,7 +35,6 @@ import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
@@ -177,7 +176,6 @@ public class PseudoBackend {
         disks.put(diskInfo1.getRootPath(), diskInfo1);
         be.setDisks(ImmutableMap.copyOf(disks));
         be.setAlive(true);
-        be.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
         be.setBePort(beThriftPort);
         be.setBrpcPort(brpcPort);
         be.setHttpPort(httpPort);

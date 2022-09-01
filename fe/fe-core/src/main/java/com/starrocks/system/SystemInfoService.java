@@ -148,7 +148,6 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
         cluster.addComputeNode(computeNode.getId());
-        computeNode.setOwnerClusterName(DEFAULT_CLUSTER);
         computeNode.setBackendState(BackendState.using);
     }
 
@@ -194,7 +193,6 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
         cluster.addBackend(backend.getId());
-        backend.setOwnerClusterName(DEFAULT_CLUSTER);
         backend.setBackendState(BackendState.using);
     }
 
@@ -293,7 +291,11 @@ public class SystemInfoService {
         if (null != cluster) {
             cluster.removeComputeNode(dropComputeNode.getId());
         } else {
+<<<<<<< HEAD
             LOG.error("Cluster " + dropComputeNode.getOwnerClusterName() + " no exist.");
+=======
+            LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
+>>>>>>> b1e02d126 ([Refactor] Remove default_cluster related code (#10607))
         }
         // log
         GlobalStateMgr.getCurrentState().getEditLog()
@@ -406,7 +408,11 @@ public class SystemInfoService {
 
             cluster.removeBackend(droppedBackend.getId());
         } else {
+<<<<<<< HEAD
             LOG.error("Cluster " + droppedBackend.getOwnerClusterName() + " no exist.");
+=======
+            LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
+>>>>>>> b1e02d126 ([Refactor] Remove default_cluster related code (#10607))
         }
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logDropBackend(droppedBackend);
@@ -754,20 +760,6 @@ public class SystemInfoService {
         return ImmutableList.copyOf(backends);
     }
 
-    public ImmutableMap<Long, Backend> getBackendsInCluster(String cluster) {
-        if (Strings.isNullOrEmpty(cluster)) {
-            return idToBackendRef;
-        }
-
-        Map<Long, Backend> retMaps = Maps.newHashMap();
-        for (Backend backend : idToBackendRef.values().asList()) {
-            if (cluster.equals(backend.getOwnerClusterName())) {
-                retMaps.put(backend.getId(), backend);
-            }
-        }
-        return ImmutableMap.copyOf(retMaps);
-    }
-
     public long getBackendReportVersion(long backendId) {
         AtomicLong atomicLong;
         if ((atomicLong = idToReportVersionRef.get(backendId)) == null) {
@@ -909,7 +901,6 @@ public class SystemInfoService {
 
     public void replayAddComputeNode(ComputeNode newComputeNode) {
         // update idToComputeNode
-        newComputeNode.setOwnerClusterName(DEFAULT_CLUSTER);
         newComputeNode.setBackendState(BackendState.using);
         Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
         copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
@@ -931,7 +922,6 @@ public class SystemInfoService {
     public void replayAddBackend(Backend newBackend) {
         // update idToBackend
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            newBackend.setOwnerClusterName(DEFAULT_CLUSTER);
             newBackend.setBackendState(BackendState.using);
         }
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
@@ -999,7 +989,11 @@ public class SystemInfoService {
                 GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
             }
         } else {
+<<<<<<< HEAD
             LOG.error("Cluster " + backend.getOwnerClusterName() + " no exist.");
+=======
+            LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
+>>>>>>> b1e02d126 ([Refactor] Remove default_cluster related code (#10607))
         }
     }
 
@@ -1024,7 +1018,6 @@ public class SystemInfoService {
         memoryBe.setLastStartTime(be.getLastStartTime());
         memoryBe.setDisks(be.getDisks());
         memoryBe.setBackendState(be.getBackendState());
-        memoryBe.setOwnerClusterName(be.getOwnerClusterName());
         memoryBe.setDecommissionType(be.getDecommissionType());
     }
 

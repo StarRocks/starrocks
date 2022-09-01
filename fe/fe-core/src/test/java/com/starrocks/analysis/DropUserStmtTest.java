@@ -43,11 +43,19 @@ public class DropUserStmtTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws UserException, AnalysisException {
         DropUserStmt stmt = new DropUserStmt(new UserIdentity("user", "%"));
         stmt.analyze(analyzer);
         Assert.assertEquals("DROP USER 'default_cluster:user'@'%'", stmt.toString());
         Assert.assertEquals("default_cluster:user", stmt.getUserIdentity().getQualifiedUser());
+=======
+    public void testNormal() throws Exception {
+        String dropSql = "DROP USER 'user'";
+        DropUserStmt stmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
+        Assert.assertEquals("DROP USER 'user'@'%'", stmt.toString());
+        Assert.assertEquals("user", stmt.getUserIdentity().getQualifiedUser());
+>>>>>>> b1e02d126 ([Refactor] Remove default_cluster related code (#10607))
     }
 
     @Test(expected = AnalysisException.class)

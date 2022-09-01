@@ -80,7 +80,11 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
+<<<<<<< HEAD
 import com.starrocks.system.SystemInfoService;
+=======
+import com.starrocks.system.BackendCoreStat;
+>>>>>>> b1e02d126 ([Refactor] Remove default_cluster related code (#10607))
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.codec.binary.Hex;
@@ -295,7 +299,6 @@ public class UtFrameUtils {
         disks.put(diskInfo1.getRootPath(), diskInfo1);
         be.setDisks(ImmutableMap.copyOf(disks));
         be.setAlive(true);
-        be.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
         be.setBePort(backend.getBeThriftPort());
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
