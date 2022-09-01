@@ -11,7 +11,6 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.proc.BaseProcResult;
