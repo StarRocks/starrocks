@@ -669,24 +669,25 @@ public class MaterializedViewRule extends Rule {
             }
         }
 
+        /*
+        If all the columns in the query are key column and materialized view is AGG_KEYS.
+        We should skip this query for given materialized view.
+        ISSUE-6984: https://github.com/StarRocks/starrocks/issues/6984
+        */
+        if (candidateIndexMeta.getKeysType() == KeysType.AGG_KEYS && !queryExprList.stream()
+                .filter(queryExpr -> {
+                    String fnName = queryExpr.getFnName();
+                    return !(fnName.equals(FunctionSet.COUNT) || fnName.equals(FunctionSet.SUM))
+                            || !keyColumns.containsAll(queryExpr.getUsedColumns());
+                }).findAny().isPresent()) {
+            return false;
+        }
+
         for (CallOperator queryExpr : queryExprList) {
             boolean match = false;
             for (CallOperator mvExpr : mvColumnExprList) {
                 if (isMVMatchAggFunctions(indexId, queryExpr, mvExpr, mvColumnExprList, keyColumns, aggregateColumns)) {
                     match = true;
-                    /*
-                    If all the columns in the query are key column and materialized view is AGG_KEYS.
-                    We should skip this query for given materialized view.
-                    ISSUE-6984: https://github.com/StarRocks/starrocks/issues/6984
-                    */
-                    if (candidateIndexMeta.getKeysType() == KeysType.AGG_KEYS && !queryExprList.stream()
-                            .filter(queryExpr0 -> {
-                                String fnName = queryExpr.getFnName();
-                                return !(fnName.equals(FunctionSet.COUNT) || fnName.equals(FunctionSet.SUM))
-                                        || !keyColumns.containsAll(queryExpr.getUsedColumns());
-                            }).findAny().isPresent()) {
-                        return false;
-                    }
                     break;
                 }
             }
