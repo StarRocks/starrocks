@@ -25,7 +25,7 @@ import java.util.regex.Pattern;
 
 public class Utils {
     public static final String DECIMAL_PATTERN = "^decimal\\((\\d+),(\\d+)\\)";
-    public static final String ARRAY_PATTERN = "^array<([0-9a-z<>(),]+)>";
+    public static final String ARRAY_PATTERN = "^array<([0-9a-z<>(),:]+)>";
     public static final String CHAR_PATTERN = "^char\\(([0-9]+)\\)";
     public static final String VARCHAR_PATTERN = "^varchar\\(([0-9,-1]+)\\)";
 
