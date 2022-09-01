@@ -1082,6 +1082,7 @@ public class DatabaseTransactionMgr {
             transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, callback, reason);
         }
 
+<<<<<<< HEAD
         // send clear txn task to BE to clear the transactions on BE.
         // This is because parts of a txn may succeed in some BE, and these parts of txn should be cleared
         // explicitly, or it will be remained on BE forever
@@ -1089,6 +1090,36 @@ public class DatabaseTransactionMgr {
         // last defense)
         if (txnOperated && transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
             clearBackendTransactions(transactionState);
+=======
+        if (!txnOperated || transactionState.getTransactionStatus() != TransactionStatus.ABORTED) {
+            return;
+        }
+
+        LOG.info("transaction:[{}] successfully rollback", transactionState);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            return;
+        }
+        List<TransactionStateListener> listeners = Lists.newArrayListWithCapacity(transactionState.getTableIdList().size());
+        db.readLock();
+        try {
+            for (Long tableId : transactionState.getTableIdList()) {
+                Table table = db.getTable(tableId);
+                if (table != null) {
+                    TransactionStateListener listener = stateListenerFactory.create(this, table);
+                    if (listener != null) {
+                        listeners.add(listener);
+                    }
+                }
+            }
+        } finally {
+            db.readUnlock();
+        }
+
+        for (TransactionStateListener listener : listeners) {
+            listener.postAbort(transactionState);
+>>>>>>> d014b5bcb ([BugFix] NPE when abort txn on HiveTable (#10640))
         }
     }
 
