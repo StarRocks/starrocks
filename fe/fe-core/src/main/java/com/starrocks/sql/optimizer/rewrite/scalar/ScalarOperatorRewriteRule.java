@@ -6,12 +6,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
 public interface ScalarOperatorRewriteRule {
-
     boolean isBottomUp();
 
     boolean isTopDown();
-
-    boolean isOneShot();
 
     ScalarOperator apply(ScalarOperator root, ScalarOperatorRewriteContext context);
 }

@@ -19,11 +19,6 @@ public class BaseScalarOperatorRewriteRule extends ScalarOperatorVisitor<ScalarO
     }
 
     @Override
-    public boolean isOneShot() {
-        return false;
-    }
-
-    @Override
     public ScalarOperator apply(ScalarOperator root, ScalarOperatorRewriteContext context) {
         return root.accept(this, context);
     }

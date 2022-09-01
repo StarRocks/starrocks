@@ -9,12 +9,9 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
@@ -91,7 +88,9 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -111,7 +110,6 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     private final ExpressionMapping outer;
     private final CTETransformerContext cteContext;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
-    private final SubqueryTransformer subqueryTransformer;
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this(columnRefFactory, session,
@@ -125,7 +123,6 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         this.session = session;
         this.outer = outer;
         this.cteContext = cteContext;
-        this.subqueryTransformer = new SubqueryTransformer(session);
     }
 
     // transform relation to plan with session variable sql_select_limit
@@ -570,31 +567,28 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         ScalarOperator onPredicateWithoutRewrite = null;
         ScalarOperator onPredicate = null;
         if (node.getOnPredicate() != null) {
-            // Step1: Transform subquery to apply operator
-            // In this step, all the subqueries will be preserved, such as `1 < 2 or exists(select * from t2)`
-            Pair<OptExprBuilder, OptExprBuilder> pair =
-                    processOnClauseSubquery(node, leftOpt, rightOpt, expressionMapping);
-            leftOpt = pair.first;
-            rightOpt = pair.second;
-
-            // Step2: Transform predicate Expr to predicate ScalarOperator
-            // In this step, subquery Expr will be directly mapped to the column ref according the expressionMapping, created in the step1
-            // And, the constant part of predicate will be evaluated during transformation, for example,
-            // `1 < 2 or exists(select * from t2)` will be transformed to `true`
             onPredicateWithoutRewrite = SqlToScalarOperatorTranslator.translateWithoutRewrite(node.getOnPredicate(),
                     expressionMapping, columnRefFactory);
             onPredicate =
                     SqlToScalarOperatorTranslator.translate(node.getOnPredicate(), expressionMapping, columnRefFactory);
 
-            // Step3: Since the predicate may be simplified during the step2, so the subTree created by step1
-            // can also be eliminated according the output predicate of step2
-            leftOpt = subqueryTransformer.eliminateUnusedApplyNodesFrom(leftOpt, onPredicate);
-            rightOpt = subqueryTransformer.eliminateUnusedApplyNodesFrom(rightOpt, onPredicate);
-
-            // Step4: For exists and in subquery of semi or anti mode, the in and exists predicate itself should be removed
-            // from the predicate
-            onPredicate = subqueryTransformer.eliminateInOrExistsPredicateFrom(onPredicate,
-                    node.getOnPredicate(), expressionMapping);
+            List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicate);
+            List<ScalarOperator> newConjuncts = Lists.newArrayList();
+            for (ScalarOperator conjunct : conjuncts) {
+                if (isJoinLeftRelatedSubquery(node, leftOpt, rightOpt, conjunct)) {
+                    leftOpt = SubqueryTransformer.translate(session, cteContext, columnRefFactory,
+                            leftOpt, conjunct, true);
+                    conjunct =
+                            SubqueryTransformer.rewriteScalarOperator(conjunct, leftOpt.getExpressionMapping());
+                } else {
+                    rightOpt = SubqueryTransformer.translate(session, cteContext, columnRefFactory,
+                            rightOpt, conjunct, true);
+                    conjunct =
+                            SubqueryTransformer.rewriteScalarOperator(conjunct, rightOpt.getExpressionMapping());
+                }
+                newConjuncts.add(conjunct);
+            }
+            onPredicate = Utils.compoundAnd(newConjuncts);
         }
 
         // There are two cases where join on predicate is null
@@ -619,8 +613,14 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
          * We need to extract the equivalence conditions to meet query analysis and
          * avoid hash joins without equivalence conditions
          */
-        if (onPredicate.isConstant() && onPredicate.getType().isBoolean()
-                && !node.getJoinOp().isCrossJoin() && !node.getJoinOp().isInnerJoin()) {
+        if (onPredicate.isConstant() && onPredicate.getType().
+
+                isBoolean()
+                && !node.getJoinOp().
+
+                isCrossJoin() && !node.getJoinOp().
+
+                isInnerJoin()) {
             List<BinaryPredicateOperator> eqPredicate = JoinHelper.getEqualsPredicate(
                     new ColumnRefSet(leftPlan.getOutputColumn()),
                     new ColumnRefSet(rightPlan.getOutputColumn()),
@@ -635,7 +635,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         if (node.getJoinOp().isLeftSemiAntiJoin()) {
             outputExpressionMapping = new ExpressionMapping(node.getScope(),
                     Lists.newArrayList(leftOpt.getFieldMappings()));
-        } else if (node.getJoinOp().isRightSemiAntiJoin()) {
+        } else if (node.getJoinOp().
+
+                isRightSemiAntiJoin()) {
             outputExpressionMapping = new ExpressionMapping(node.getScope(),
                     Lists.newArrayList(rightOpt.getFieldMappings()));
         } else {
@@ -700,87 +702,71 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 null, null);
     }
 
-    private Pair<OptExprBuilder, OptExprBuilder> processOnClauseSubquery(JoinRelation node, OptExprBuilder leftOpt,
-                                                                         OptExprBuilder rightOpt,
-                                                                         ExpressionMapping expressionMapping) {
-        if (node.getOnPredicate() == null) {
-            return Pair.create(leftOpt, rightOpt);
+    private boolean isJoinLeftRelatedSubquery(JoinRelation node, OptExprBuilder joinLeftOpt,
+                                              OptExprBuilder joinRightOpt, ScalarOperator joinOnConjunct) {
+        List<SubqueryOperator> subqueries = Utils.collect(joinOnConjunct, SubqueryOperator.class);
+        Preconditions.checkState(subqueries.size() <= 1,
+                "Not support ON Clause conjunct contains more than one subquery");
+        if (subqueries.isEmpty()) {
+            // TODO(hcf) optimize
+            return true;
         }
-        List<Expr> joinOnConjuncts = Expr.extractConjuncts(node.getOnPredicate());
-        OptExprBuilder newLeftOpt = leftOpt;
-        OptExprBuilder newRightOpt = rightOpt;
-        for (Expr joinOnConjunct : joinOnConjuncts) {
-            Subquery subquery = joinOnConjunct.getSubquery();
-            if (subquery == null) {
-                continue;
-            }
-            QueryStatement subqueryStmt = subquery.getQueryStatement();
-            SelectRelation selectRelation = (SelectRelation) subqueryStmt.getQueryRelation();
-            RelationId subqueryRelationId = selectRelation.getRelation().getScope().getRelationId();
-            List<FieldId> correlatedFieldIds = selectRelation.getColumnReferences().values().stream()
-                    .filter(field -> !Objects.equals(subqueryRelationId, field.getRelationId()))
-                    .collect(Collectors.toList());
+        SubqueryOperator subquery = subqueries.get(0);
+        QueryStatement subqueryStmt = subquery.getQueryStatement();
+        SelectRelation selectRelation = (SelectRelation) subqueryStmt.getQueryRelation();
+        RelationId subqueryRelationId = selectRelation.getRelation().getScope().getRelationId();
+        List<FieldId> correlatedFieldIds = selectRelation.getColumnReferences().values().stream()
+                .filter(field -> !Objects.equals(subqueryRelationId, field.getRelationId()))
+                .collect(Collectors.toList());
 
-            /*
-             * Apply comprises two children, R and E(r) respectively
-             *         ApplyOperator
-             *       /              \
-             *   Outer:R        Inner: E(r)
-             * Since join node has two relation, we should to determine which one(left or right or both)
-             * is the outer relation of ApplyOperator
-             * usingLeftRelation = true, then the left relation of join will be the outer relation of apply
-             * usingLeftRelation = false, then the right relation of join will be the outer relation of apply
-             * TODO, both of the left and right relations should be taken into account, and it is not supported yet
-             */
-            final boolean usingLeftRelation;
+        /*
+         * Apply comprises two children, R and E(r) respectively
+         *         ApplyOperator
+         *       /              \
+         *   Outer:R        Inner: E(r)
+         * Since join node has two relation, we should to determine which one(left or right or both)
+         * is the outer relation of ApplyOperator
+         * usingLeftRelation = true, then the left relation of join will be the outer relation of apply
+         * usingLeftRelation = false, then the right relation of join will be the outer relation of apply
+         * TODO, both of the left and right relations should be taken into account, and it is not supported yet
+         */
+        final boolean usingLeftRelation;
 
-            List<SlotRef> slotRefs = Lists.newArrayList();
-            joinOnConjunct.collect(SlotRef.class, slotRefs);
-            RelationFields leftRelationFields = node.getLeft().getRelationFields();
-            RelationFields rightRelationFields = node.getRight().getRelationFields();
-            boolean isJoinLeftNonCorrelated =
-                    slotRefs.stream().anyMatch(slotRef -> !leftRelationFields.resolveFields(slotRef).isEmpty());
-            boolean isJoinRightNonCorrelated =
-                    slotRefs.stream().anyMatch(slotRef -> !rightRelationFields.resolveFields(slotRef).isEmpty());
+        ColumnRefSet usedColumns = joinOnConjunct.getUsedColumns();
 
-            if (correlatedFieldIds.isEmpty()) {
-                Preconditions.checkState(!(isJoinLeftNonCorrelated && isJoinRightNonCorrelated),
-                        "Not support ON Clause un-correlated subquery referencing columns of more than one table");
-                usingLeftRelation = isJoinLeftNonCorrelated;
-            } else {
-                boolean isJoinLeftCorrelated = false;
-                boolean isJoinRightCorrelated = false;
-                for (FieldId correlatedFieldId : correlatedFieldIds) {
-                    Field field = node.getRelationFields().getAllFields().get(correlatedFieldId.getFieldIndex());
-                    if (node.getLeft().getRelationFields().getAllFields().contains(field)) {
-                        isJoinLeftCorrelated = true;
-                    }
-                    if (node.getRight().getRelationFields().getAllFields().contains(field)) {
-                        isJoinRightCorrelated = true;
-                    }
+        ColumnRefSet joinLeftColumns = new ColumnRefSet(joinLeftOpt.getFieldMappings());
+        ColumnRefSet joinRightColumns = new ColumnRefSet(joinRightOpt.getFieldMappings());
+        boolean isJoinLeftNonCorrelated = usedColumns.bitSet.stream().anyMatch(joinLeftColumns::contains);
+        boolean isJoinRightNonCorrelated = usedColumns.bitSet.stream().anyMatch(joinRightColumns::contains);
+
+        if (correlatedFieldIds.isEmpty()) {
+            Preconditions.checkState(!(isJoinLeftNonCorrelated && isJoinRightNonCorrelated),
+                    "Not support ON Clause un-correlated subquery referencing columns of more than one table");
+            usingLeftRelation = isJoinLeftNonCorrelated;
+        } else {
+            boolean isJoinLeftCorrelated = false;
+            boolean isJoinRightCorrelated = false;
+            for (FieldId correlatedFieldId : correlatedFieldIds) {
+                Field field = node.getRelationFields().getAllFields().get(correlatedFieldId.getFieldIndex());
+                if (node.getLeft().getRelationFields().getAllFields().contains(field)) {
+                    isJoinLeftCorrelated = true;
                 }
-                Preconditions.checkState(isJoinLeftCorrelated || isJoinRightCorrelated);
-                Preconditions.checkState(!(isJoinLeftCorrelated && isJoinRightCorrelated),
-                        "Not support ON Clause correlated subquery referencing columns of more than one table");
-                if (joinOnConjunct instanceof InPredicate) {
-                    // We DO NOT support this kind of in-predicate like below
-                    // select * from t0 join t1 on t0.v1 in (select t2.v7 from t2 where t1.v5 = t2.v8)
-                    Preconditions.checkState(!(isJoinLeftCorrelated && isJoinRightNonCorrelated ||
-                                    isJoinRightCorrelated && isJoinLeftNonCorrelated),
-                            "Not support ON Clause correlated in-subquery referencing columns of more than one table");
+                if (node.getRight().getRelationFields().getAllFields().contains(field)) {
+                    isJoinRightCorrelated = true;
                 }
-                usingLeftRelation = isJoinLeftCorrelated;
             }
-            if (usingLeftRelation) {
-                newLeftOpt = subqueryTransformer.handleSubqueries(columnRefFactory, newLeftOpt,
-                        joinOnConjunct, cteContext);
-                expressionMapping.putAll(newLeftOpt.getExpressionMapping());
-            } else {
-                newRightOpt = subqueryTransformer.handleSubqueries(columnRefFactory, newRightOpt,
-                        joinOnConjunct, cteContext);
-                expressionMapping.putAll(newRightOpt.getExpressionMapping());
+            Preconditions.checkState(isJoinLeftCorrelated || isJoinRightCorrelated);
+            Preconditions.checkState(!(isJoinLeftCorrelated && isJoinRightCorrelated),
+                    "Not support ON Clause correlated subquery referencing columns of more than one table");
+            if (joinOnConjunct instanceof InPredicateOperator) {
+                // We DO NOT support this kind of in-predicate like below
+                // select * from t0 join t1 on t0.v1 in (select t2.v7 from t2 where t1.v5 = t2.v8)
+                Preconditions.checkState(!(isJoinLeftCorrelated && isJoinRightNonCorrelated ||
+                                isJoinRightCorrelated && isJoinLeftNonCorrelated),
+                        "Not support ON Clause correlated in-subquery referencing columns of more than one table");
             }
+            usingLeftRelation = isJoinLeftCorrelated;
         }
-        return Pair.create(newLeftOpt, newRightOpt);
+        return usingLeftRelation;
     }
 }

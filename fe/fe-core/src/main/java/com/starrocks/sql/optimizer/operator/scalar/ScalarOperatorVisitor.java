@@ -85,4 +85,8 @@ public abstract class ScalarOperatorVisitor<R, C> {
     public R visitCloneOperator(CloneOperator operator, C context) {
         return visit(operator, context);
     }
+
+    public R visitSubqueryOperator(SubqueryOperator operator, C context) {
+        return visit(operator, context);
+    }
 }

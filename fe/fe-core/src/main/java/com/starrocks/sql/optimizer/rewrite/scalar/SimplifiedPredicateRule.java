@@ -16,6 +16,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
@@ -260,6 +261,10 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
         if (predicate.getChildren().size() != 2) {
+            return predicate;
+        }
+
+        if (predicate.getChild(1) instanceof SubqueryOperator) {
             return predicate;
         }
 

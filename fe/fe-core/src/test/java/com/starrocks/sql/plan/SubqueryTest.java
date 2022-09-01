@@ -77,8 +77,8 @@ public class SubqueryTest extends PlanTestBase {
                 + "WHERE v1 = 1;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  14:Project\n" +
-                "  |  <slot 8> : 8: expr\n" +
-                "  |  <slot 13> : 12: avg\n" +
+                "  |  <slot 9> : 9: count\n" +
+                "  |  <slot 14> : 13: avg\n" +
                 "  |  \n" +
                 "  13:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
@@ -92,7 +92,7 @@ public class SubqueryTest extends PlanTestBase {
                 "    UNPARTITIONED\n" +
                 "\n" +
                 "  16:AGGREGATE (update finalize)\n" +
-                "  |  output: avg(15: v8)");
+                "  |  output: avg(16: v8)");
     }
 
     @Test
@@ -277,7 +277,7 @@ public class SubqueryTest extends PlanTestBase {
         assertContains(plan, "30:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: v1 = 16: v1\n" +
+                "  |  equal join conjunct: 1: v1 = 18: v1\n" +
                 "  |  \n" +
                 "  |----29:EXCHANGE");
     }
@@ -313,8 +313,8 @@ public class SubqueryTest extends PlanTestBase {
         assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 6: v9 = 14: v4\n" +
-                "  |  equal join conjunct: 21: cast = 15: cast");
+                "  |  equal join conjunct: 6: v9 = 15: v4\n" +
+                "  |  equal join conjunct: 22: cast = 16: cast");
     }
 
     @Test
@@ -407,7 +407,7 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 3> : 3: v3\n" +
                     "  |  \n" +
                     "  6:SELECT\n" +
-                    "  |  predicates: 2: v2 > 7: expr\n" +
+                    "  |  predicates: 2: v2 > 7: v5\n" +
                     "  |  \n" +
                     "  5:Project\n" +
                     "  |  <slot 1> : 1: v1\n" +
@@ -437,7 +437,7 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 3> : 3: v3\n" +
                     "  |  \n" +
                     "  6:SELECT\n" +
-                    "  |  predicates: 2: v2 > 7: expr\n" +
+                    "  |  predicates: 2: v2 > 7: v5\n" +
                     "  |  \n" +
                     "  5:Project\n" +
                     "  |  <slot 1> : 1: v1\n" +
@@ -496,16 +496,16 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 1> : 1: v1\n" +
                     "  |  <slot 2> : 2: v2\n" +
                     "  |  <slot 3> : 3: v3\n" +
-                    "  |  <slot 7> : 9: anyValue\n" +
-                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1))\n" +
+                    "  |  <slot 4> : 10: anyValue\n" +
+                    "  |  <slot 11> : assert_true((9: countRows IS NULL) OR (9: countRows <= 1))\n" +
                     "  |  \n" +
                     "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 1: v1 = 4: v4");
+                    "  |  equal join conjunct: 1: v1 = 5: v4");
             assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                    "  |  output: count(1), any_value(5: v5)\n" +
-                    "  |  group by: 4: v4");
+                    "  |  output: count(1), any_value(6: v5)\n" +
+                    "  |  group by: 5: v4");
         }
     }
 
@@ -524,7 +524,7 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 4> : 4: sum\n" +
                     "  |  \n" +
                     "  8:SELECT\n" +
-                    "  |  predicates: 4: sum > 8: expr\n" +
+                    "  |  predicates: 4: sum > 8: v5\n" +
                     "  |  \n" +
                     "  7:Project\n" +
                     "  |  <slot 1> : 1: v1\n" +
@@ -636,7 +636,7 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 5: v5 = 8: v2\n" +
-                    "  |  other predicates: ifnull(10: count, 0) = 5: v5");
+                    "  |  other predicates: 5: v5 = ifnull(10: count, 0)");
         }
         {
             String sql = "select * from t0 " +
@@ -645,7 +645,7 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  8:NESTLOOP JOIN\n" +
                     "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  other join predicates: 1: v1 = 11: expr + 6: v6");
+                    "  |  other join predicates: 1: v1 = 11: ifnull + 6: v6");
             assertContains(plan, "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
@@ -673,7 +673,7 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  8:NESTLOOP JOIN\n" +
                     "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  other join predicates: 11: expr + 3: v3 = 5: v5");
+                    "  |  other join predicates: 11: ifnull + 3: v3 = 5: v5");
             assertContains(plan, "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
@@ -701,7 +701,7 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  13:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 16: expr = 6: v6");
+                    "  |  equal join conjunct: 16: max = 6: v6");
             assertContains(plan, "  9:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
@@ -780,7 +780,7 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v1 = 4: v4\n" +
-                    "  |  equal join conjunct: 14: expr = 6: v6");
+                    "  |  equal join conjunct: 14: v8 = 6: v6");
             assertContains(plan, "  9:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
@@ -1153,8 +1153,7 @@ public class SubqueryTest extends PlanTestBase {
     public void testOnClauseNotSupportedCases() {
         assertExceptionMessage("select * from t0 " +
                         "join t1 on (select v1 from t0 where t0.v2 = t1.v5) = (select v4 from t1 where t0.v2 = t1.v5)",
-                "only support one subquery in ((SELECT v1 FROM test.t0 WHERE v2 = v5)) = " +
-                        "((SELECT v4 FROM test.t1 WHERE v2 = v5))");
+                "Not support ON Clause conjunct contains more than one subquery");
 
         assertExceptionMessage("select * from t0 " +
                         "join t1 on t0.v1 + t1.v4 = (select count(*) from t0)",
@@ -1319,7 +1318,7 @@ public class SubqueryTest extends PlanTestBase {
                 "    UNPARTITIONED\n" +
                 "\n" +
                 "  2:Project\n" +
-                "  |  <slot 7> : 1\n" +
+                "  |  <slot 8> : 1\n" +
                 "  |  \n" +
                 "  1:OlapScanNode");
     }

@@ -49,14 +49,12 @@ class QueryTransformer {
     private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
-    private final SubqueryTransformer subqueryTransformer;
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
                             CTETransformerContext cteContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
-        this.subqueryTransformer = new SubqueryTransformer(session);
     }
 
     public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer) {
@@ -131,9 +129,14 @@ class QueryTransformer {
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
 
         for (Expr expression : expressions) {
-            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, expression, cteContext);
             ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
                     subOpt.getExpressionMapping(), projections, columnRefFactory);
+            ScalarOperator scalarOperator = projections.get(columnRef);
+            subOpt = SubqueryTransformer.translate(session, cteContext, columnRefFactory,
+                    subOpt, scalarOperator, false);
+            scalarOperator =
+                    SubqueryTransformer.rewriteScalarOperator(scalarOperator, subOpt.getExpressionMapping());
+            projections.put(columnRef, scalarOperator);
             fieldMappings.add(columnRef);
             outputTranslations.put(expression, columnRef);
         }
@@ -160,9 +163,14 @@ class QueryTransformer {
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
 
         for (Expr expression : expressions) {
-            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, expression, cteContext);
             ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
                     subOpt.getExpressionMapping(), projections, columnRefFactory);
+            ScalarOperator scalarOperator = projections.get(columnRef);
+            subOpt = SubqueryTransformer.translate(session, cteContext, columnRefFactory,
+                    subOpt, scalarOperator, false);
+            scalarOperator =
+                    SubqueryTransformer.rewriteScalarOperator(scalarOperator, subOpt.getExpressionMapping());
+            projections.put(columnRef, scalarOperator);
             outputTranslations.put(expression, columnRef);
         }
 
@@ -175,25 +183,12 @@ class QueryTransformer {
             return subOpt;
         }
 
-        // Step1: Transform subquery to apply operator
-        // In this step, all the subqueries will be preserved, such as `1 < 2 or exists(select * from t2)`
-        subOpt = subqueryTransformer.handleSubqueries(columnRefFactory, subOpt, predicate, cteContext);
-
-        // Step2: Transform predicate Expr to predicate ScalarOperator
-        // In this step, subquery Expr will be directly mapped to the column ref according the expressionMapping, created in the step1
-        // And, the constant part of predicate will be evaluated during transformation, for example,
-        // `1 < 2 or exists(select * from t2)` will be transformed to `true`
         ScalarOperator scalarPredicate =
-                SqlToScalarOperatorTranslator.translate(predicate, subOpt.getExpressionMapping(), correlation);
+                SqlToScalarOperatorTranslator.translate(predicate, subOpt.getExpressionMapping(), correlation,
+                        columnRefFactory);
 
-        // Step3: Since the predicate may be simplified during the step2, so the subTree created by step1
-        // can also be eliminated according the output predicate of step2
-        subOpt = subqueryTransformer.eliminateUnusedApplyNodesFrom(subOpt, scalarPredicate);
-
-        // Step4: For exists and in subquery of semi or anti mode, the in and exists predicate itself should be removed
-        // from the predicate
-        scalarPredicate = subqueryTransformer.eliminateInOrExistsPredicateFrom(scalarPredicate, predicate,
-                subOpt.getExpressionMapping());
+        subOpt = SubqueryTransformer.translate(session, cteContext, columnRefFactory, subOpt, scalarPredicate, true);
+        scalarPredicate = SubqueryTransformer.rewriteScalarOperator(scalarPredicate, subOpt.getExpressionMapping());
 
         if (scalarPredicate == null) {
             return subOpt;
