@@ -118,7 +118,7 @@ DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 10;
 
 ### How to determine the number of buckets
 
-In a StarRocks system, a partitioned bucket is a unit of actual physical file organization. Since 2.4, StarRocks supports parallel scan of a tablet. A tablet related to a query can be segmented and scanned by multiple threads in parallel, so that the number of tablets can not limit query performance. As a result, you can  set a proper number of buckets  more easily. First, you need to estimate data volume in each partition. And then you can figure out the number of buckets by allocating every 10 GB raw data to one tablet.  
+In a StarRocks system, a partitioned bucket is a unit of actual physical file organization. Since 2.4, StarRocks supports parallel scan of a tablet. A tablet related to a query can be segmented，and it can be scanned by multiple threads in parallel. So that the number of tablets can not limit query performance. As a result, you can set the number of buckets more easily. First, you need to estimate data volume in each partition. And then you can figure out a proper number of buckets by allocating every 10 GB raw data to one tablet.  
 
 > Notes:
 >
