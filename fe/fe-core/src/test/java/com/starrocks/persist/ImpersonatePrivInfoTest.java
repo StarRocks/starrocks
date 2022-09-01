@@ -114,7 +114,7 @@ public class ImpersonatePrivInfoTest {
         LOG.info("========= load follower's image finished. start to replay");
         // 3.2 follower replay: grant role auror to harry
         PrivInfo privInfo = (PrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
-        newAuth.replayGrant(privInfo);
+        newAuth.replayGrantRole(privInfo);
         // 3.3 follower replay: grant impersonate to role auror
         ImpersonatePrivInfo impersonatePrivInfo = (ImpersonatePrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
         newAuth.replayGrantImpersonate(impersonatePrivInfo);
@@ -122,12 +122,12 @@ public class ImpersonatePrivInfoTest {
         Assert.assertTrue(newAuth.canImpersonate(harry, gregory));
         // 3.5 follower replay: grant role auror to neville
         privInfo = (PrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
-        newAuth.replayGrant(privInfo);
+        newAuth.replayGrantRole(privInfo);
         // 3.6 follower verify can impersonate
         Assert.assertTrue(newAuth.canImpersonate(neville, gregory));
         // 3.7 follower replay: revoke auror from neville
         privInfo = (PrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
-        newAuth.replayRevoke(privInfo);
+        newAuth.replayRevokeRole(privInfo);
         // 3.8 follower verify can't impersonate
         Assert.assertFalse(newAuth.canImpersonate(neville, gregory));
         LOG.info("========= finished replay ");

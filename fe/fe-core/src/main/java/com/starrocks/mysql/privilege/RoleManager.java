@@ -257,7 +257,7 @@ public class RoleManager implements Writable {
         Map<String, Set<UserIdentity>> ret = new HashMap<>();
         for (Map.Entry<String, Role> entry : roles.entrySet()) {
             Set<UserIdentity> users = entry.getValue().getImpersonateUsers();
-            if (users.size() > 0) {
+            if (!users.isEmpty()) {
                 ret.put(entry.getKey(), users);
             }
         }
