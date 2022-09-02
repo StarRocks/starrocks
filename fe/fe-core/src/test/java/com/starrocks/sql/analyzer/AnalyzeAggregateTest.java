@@ -1,7 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -140,22 +143,48 @@ public class AnalyzeAggregateTest {
 
     @Test
     public void testForQualifiedName() {
-        analyzeSuccess("select grouping_id(t0.v1, t0.v3), grouping(t0.v2) from t0 group by cube(t0.v1, t0.v2, t0.v3);");
-        analyzeSuccess("select grouping_id(test.t0.v1, test.t0.v3), grouping(test.t0.v2) from t0 " +
-                "group by cube(test.t0.v1, test.t0.v2, test.t0.v3);");
+        QueryRelation query = ((QueryStatement) analyzeSuccess("select grouping_id(t0.v1, t0.v3), " +
+                "grouping(t0.v2) from t0 group by cube(t0.v1, t0.v2, t0.v3);"))
+                .getQueryRelation();
+        Assert.assertEquals("grouping(v1, v3), grouping(v2)",
+                String.join(", ", query.getColumnOutputNames()));
 
-        analyzeSuccess("select grouping(t0.v1), grouping(t0.v2), grouping_id(t0.v1,t0.v2), " +
-                "v1,v2 from t0 group by grouping sets((t0.v1,t0.v2),(t0.v1),(t0.v2))");
-        analyzeSuccess("select grouping(test.t0.v1), grouping(test.t0.v2), grouping_id(test.t0.v1,test.t0.v2), " +
-                "v1,v2 from t0 group by grouping sets((test.t0.v1,test.t0.v2),(test.t0.v1),(test.t0.v2))");
+        query = ((QueryStatement) analyzeSuccess("select grouping_id(test.t0.v1, test.t0.v3), grouping(test.t0.v2) from t0 " +
+                "group by cube(test.t0.v1, test.t0.v2, test.t0.v3);"))
+                .getQueryRelation();
+        Assert.assertEquals("grouping(v1, v3), grouping(v2)",
+                String.join(", ", query.getColumnOutputNames()));
 
-        analyzeSuccess("select t0.v1, t0.v2, grouping_id(t0.v1, t0.v2), " +
-                "SUM(t0.v3) from t0 group by cube(t0.v1, t0.v2)");
-        analyzeSuccess("select test.t0.v1, test.t0.v2, grouping_id(test.t0.v1, test.t0.v2), " +
-                "SUM(test.t0.v3) from t0 group by cube(test.t0.v1, test.t0.v2)");
+        query = ((QueryStatement) analyzeSuccess("select grouping(t0.v1), grouping(t0.v2), grouping_id(t0.v1,t0.v2), " +
+                "v1,v2 from t0 group by grouping sets((t0.v1,t0.v2),(t0.v1),(t0.v2))"))
+                .getQueryRelation();
+        Assert.assertEquals("grouping(v1), grouping(v2), grouping(v1, v2), v1, v2",
+                String.join(", ", query.getColumnOutputNames()));
 
-        analyzeSuccess("select grouping(v1), grouping(v2), grouping_id(v1,v2), " +
-                "v1,v2 from t0 group by grouping sets((v1,v2),(v1),(v2))");
+        query = ((QueryStatement) analyzeSuccess("select grouping(test.t0.v1), grouping(test.t0.v2), " +
+                "grouping_id(test.t0.v1,test.t0.v2), v1,v2 from t0 " +
+                "group by grouping sets((test.t0.v1,test.t0.v2),(test.t0.v1),(test.t0.v2))"))
+                .getQueryRelation();
+        Assert.assertEquals("grouping(v1), grouping(v2), grouping(v1, v2), v1, v2",
+                String.join(", ", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select t0.v1, t0.v2, grouping_id(t0.v1, t0.v2), " +
+                "SUM(t0.v3) from t0 group by cube(t0.v1, t0.v2)"))
+                .getQueryRelation();
+        Assert.assertEquals("v1, v2, grouping(v1, v2), sum(v3)",
+                String.join(", ", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select test.t0.v1, test.t0.v2, grouping_id(test.t0.v1, test.t0.v2), " +
+                "SUM(test.t0.v3) from t0 group by cube(test.t0.v1, test.t0.v2)"))
+                .getQueryRelation();
+        Assert.assertEquals("v1, v2, grouping(v1, v2), sum(v3)",
+                String.join(", ", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select grouping(v1), grouping(v2), grouping_id(v1,v2), " +
+                "v1,v2 from t0 group by grouping sets((v1,v2),(v1),(v2))"))
+                .getQueryRelation();
+        Assert.assertEquals("grouping(v1), grouping(v2), grouping(v1, v2), v1, v2",
+                String.join(", ", query.getColumnOutputNames()));
     }
 
     @Test
