@@ -28,10 +28,14 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.UserException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TUniqueId;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -44,8 +48,10 @@ import java.util.Set;
  * The state of insert load job is always finished, so it will never be scheduled by JobScheduler.
  */
 public class InsertLoadJob extends LoadJob {
+    private static final Logger LOG = LogManager.getLogger(LoadJob.class);
 
     private long tableId;
+    private long estimateScanRow;
 
     // only for log replay
     public InsertLoadJob() {
@@ -53,6 +59,18 @@ public class InsertLoadJob extends LoadJob {
         this.jobType = EtlJobType.INSERT;
     }
 
+    public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp, long estimateScanRow) 
+            throws MetaNotFoundException {
+        super(dbId, label);
+        this.tableId = tableId;
+        this.createTimestamp = createTimestamp;
+        this.loadStartTimestamp = createTimestamp;
+        this.state = JobState.LOADING;
+        this.jobType = EtlJobType.INSERT;
+        this.estimateScanRow = estimateScanRow;
+    }
+
+    // only used for test
     public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp, String failMsg,
                          String trackingUrl) throws MetaNotFoundException {
         super(dbId, label);
@@ -74,12 +92,53 @@ public class InsertLoadJob extends LoadJob {
         this.loadingStatus.setTrackingUrl(trackingUrl);
     }
 
+    public void setLoadFinishOrCancel(String failMsg, String trackingUrl) throws UserException {
+        writeLock();
+        try {
+            this.finishTimestamp = System.currentTimeMillis();
+            if (Strings.isNullOrEmpty(failMsg)) {
+                this.state = JobState.FINISHED;
+                this.progress = 100;
+            } else {
+                this.state = JobState.CANCELLED;
+                this.failMsg = new FailMsg(CancelType.LOAD_RUN_FAIL, failMsg);
+                this.progress = 0;
+            }
+            this.timeoutSecond = Config.insert_load_default_timeout_second;
+            this.authorizationInfo = gatherAuthInfo();
+            this.loadingStatus.setTrackingUrl(trackingUrl);
+        } finally {
+            writeUnlock();
+        }
+        // persistent
+        GlobalStateMgr.getCurrentState().getEditLog().logEndLoadJob(
+                new LoadJobFinalOperation(this.id, this.loadingStatus, this.progress, 
+                this.loadStartTimestamp, this.finishTimestamp, this.state, this.failMsg));
+    }
+
     public AuthorizationInfo gatherAuthInfo() throws MetaNotFoundException {
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
         return new AuthorizationInfo(database.getFullName(), getTableNames());
+    }
+
+    @Override
+    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId, 
+            long scannedRows, boolean isDone, long scannedBytes) {
+        writeLock();
+        try {
+            super.updateProgess(beId, loadId, fragmentId, scannedRows, isDone, scannedBytes);
+            if (!loadingStatus.getLoadStatistic().getLoadFinish()) {
+                progress = (int) ((double) loadingStatus.getLoadStatistic().totalRows() / (estimateScanRow + 1) * 100);
+                if (progress >= 100) {
+                    progress = 99;
+                }
+            }
+        } finally {
+            writeUnlock();
+        }
     }
 
     @Override

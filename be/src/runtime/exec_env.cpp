@@ -47,6 +47,7 @@
 #include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"
+#include "runtime/profile_report_worker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
@@ -198,6 +199,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _runtime_filter_worker = new RuntimeFilterWorker(this);
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
+    _profile_report_worker = new ProfileReportWorker(this);
 
     _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
@@ -385,6 +387,10 @@ void ExecEnv::_destroy() {
     if (_runtime_filter_worker) {
         delete _runtime_filter_worker;
         _runtime_filter_worker = nullptr;
+    }
+    if (_profile_report_worker) {
+        delete _profile_report_worker;
+        _profile_report_worker = nullptr;
     }
     if (_heartbeat_flags) {
         delete _heartbeat_flags;
