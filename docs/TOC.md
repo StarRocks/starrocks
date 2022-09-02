@@ -49,7 +49,6 @@
     + [Iceberg catalog](./using_starrocks/catalog/iceberg_catalog.md)
     + [Hudi catalog](./using_starrocks/catalog/hudi_catalog.md)
     + [Query external data](./using_starrocks/catalog/query_external_data.md)
-  + [Array](./using_starrocks/Array.md)
   + [Window functions](./using_starrocks/Window_function.md)
   + [Java UDFs](./using_starrocks/JAVA_UDF.md)
   + [Cost-based optimizer](./using_starrocks/Cost_based_optimizer.md)
