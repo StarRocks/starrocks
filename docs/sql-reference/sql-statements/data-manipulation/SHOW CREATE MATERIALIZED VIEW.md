@@ -4,7 +4,7 @@
 
 Shows the definition of a specific materialized view.
 
-## Sytax
+## Syntax
 
 ```SQL
 SHOW CREATE MATERIALIZED VIEW [database.]mv_name
@@ -18,16 +18,16 @@ Parameters in brackets [] is optional.
 | ------------- | ------------ | ------------------------------------------ |
 | mv_name       | yes          | The name of the materialized view to show. |
 
-## Return
+## Returns
 
 | **Return**               | **Description**                          |
 | ------------------------ | ---------------------------------------- |
 | Materialized View        | The name of the materialized view.       |
 | Create Materialized View | The definition of the materialized view. |
 
-## Example
+## Examples
 
-### Example 1: Show the definition of a specific materialized view
+Example 1: Show the definition of a specific materialized view
 
 ```Plain
 MySQL > SHOW CREATE MATERIALIZED VIEW lo_mv1\G

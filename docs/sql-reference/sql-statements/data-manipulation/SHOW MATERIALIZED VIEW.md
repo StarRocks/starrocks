@@ -4,7 +4,7 @@
 
 Shows all or one specific materialized view.
 
-## Sytax
+## Syntax
 
 ```SQL
 SHOW MATERIALIZED VIEW
@@ -25,7 +25,7 @@ Parameters in brackets [] is optional.
 | mv_name         | no           | The name of the materialized view to show.                   |
 | mv_name_matcher | no           | The matcher used to filter materialized views.               |
 
-## Return
+## Returns
 
 | **Return**    | **Description**                                              |
 | ------------- | ------------------------------------------------------------ |
@@ -35,9 +35,9 @@ Parameters in brackets [] is optional.
 | text          | The statement used to create the materialized view.          |
 | rows          | The rows of data in the materialized view.                   |
 
-## Example
+## Examples
 
-### Example 1: Show a specific materialized view
+Example 1: Show a specific materialized view
 
 ```Plain
 MySQL > SHOW MATERIALIZED VIEW WHERE NAME = "lo_mv1"\G
@@ -58,7 +58,7 @@ AS SELECT `wlc_test`.`lineorder`.`lo_orderkey` AS `lo_orderkey`, `wlc_test`.`lin
 1 row in set (0.42 sec)
 ```
 
-### Example 2: Show specific materialized views by matching the name
+Example 2: Show specific materialized views by matching the name
 
 ```Plain
 MySQL > SHOW MATERIALIZED VIEW WHERE NAME LIKE "lo_mv%"\G
