@@ -9,6 +9,7 @@ import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.common.util.PlainHashRing;
 import com.starrocks.common.util.RendezvousHashRing;
+import com.starrocks.common.util.StaticPartitionedHashRing;
 import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -118,6 +119,14 @@ public class HashRingTest {
     public void testRendezvousHashRing() {
         List<String> nodes = generateNodes(kNodeSize);
         RendezvousHashRing hashRing = new RendezvousHashRing<>(Hashing.murmur3_128(), funnel, funnel, nodes);
+        testWithHashRing(hashRing, nodes);
+    }
+
+    @Test
+    public void testStaticPartitionedHashRing() {
+        List<String> nodes = generateNodes(kNodeSize);
+        StaticPartitionedHashRing hashRing =
+                new StaticPartitionedHashRing<>(Hashing.murmur3_128(), funnel, nodes, 100);
         testWithHashRing(hashRing, nodes);
     }
 

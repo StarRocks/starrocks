@@ -9,6 +9,7 @@ public interface HashRing<K, N> {
 
     void removeNode(N node);
 
+    // To get `distinctNumber` distinct nodes with high affinity with `key`
     List<N> get(K key, int distinctNumber);
 
     String policy();
