@@ -1634,7 +1634,7 @@ public class GlobalStateMgr {
             replayJournalInner(cursor, false);
         } catch (InterruptedException | JournalInconsistentException e) {
             LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
-                    replayedJournalId.get(),
+                    replayedJournalId.get() + 1,
                     e);
             // TODO exit gracefully
             Util.stdoutWithTime(e.getMessage());
