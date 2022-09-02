@@ -23,7 +23,7 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
     Funnel<N> nodeFunnel;
     int virtualNumber;
     long vNodeHashDelta;
-    final boolean vNodeEvenDistributed = false;
+    final boolean vNodeEvenlyDistributed = false;
 
     class VNode {
         N node;
@@ -38,7 +38,7 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
             Hasher hasher = hashFunction.newHasher();
             hasher.putObject(node, nodeFunnel);
             long hash = 0;
-            if (vNodeEvenDistributed) {
+            if (vNodeEvenlyDistributed) {
                 long baseHash = hasher.hash().asLong();
                 hash = baseHash + vNodeHashDelta * index;
             } else {
