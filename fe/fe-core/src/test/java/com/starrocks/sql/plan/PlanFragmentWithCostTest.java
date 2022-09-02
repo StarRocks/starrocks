@@ -516,13 +516,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan.contains(" * GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 4.0] ESTIMATE\n" +
                 "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 4.0] ESTIMATE"));
 
-        // Test for qualified name.
-        sql = "select t0.v1, t0.v2, grouping_id(t0.v1, t0.v2), SUM(t0.v3) from t0 group by cube(t0.v1, t0.v2)";
-        Assert.assertEquals(getCostExplain(sql), plan);
-        sql = "select test.t0.v1, test.t0.v2, grouping_id(test.t0.v1, test.t0.v2), " +
-                "SUM(test.t0.v3) from t0 group by cube(test.t0.v1, test.t0.v2)";
-        Assert.assertEquals(getCostExplain(sql), plan);
-
         sql = "select v1, v2, grouping_id(v1,v2), SUM(v3) from t0 group by rollup(v1, v2)";
         plan = getCostExplain(sql);
         // check scan node

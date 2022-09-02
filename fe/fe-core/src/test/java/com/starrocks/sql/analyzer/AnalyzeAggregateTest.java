@@ -139,6 +139,23 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
+    public void testForQualifiedName() {
+        analyzeSuccess("select grouping_id(t0.v1, t0.v3), grouping(t0.v2) from t0 group by cube(t0.v1, t0.v2, t0.v3);");
+        analyzeSuccess("select grouping_id(test.t0.v1, test.t0.v3), grouping(test.t0.v2) from t0 " +
+                "group by cube(test.t0.v1, test.t0.v2, test.t0.v3);");
+
+        analyzeSuccess("select grouping(t0.v1), grouping(t0.v2), grouping_id(t0.v1,t0.v2), " +
+                "v1,v2 from t0 group by grouping sets((t0.v1,t0.v2),(t0.v1),(t0.v2))");
+        analyzeSuccess("select grouping(test.t0.v1), grouping(test.t0.v2), grouping_id(test.t0.v1,test.t0.v2), " +
+                "v1,v2 from t0 group by grouping sets((test.t0.v1,test.t0.v2),(test.t0.v1),(test.t0.v2))");
+
+        analyzeSuccess("select t0.v1, t0.v2, grouping_id(t0.v1, t0.v2), " +
+                "SUM(t0.v3) from t0 group by cube(t0.v1, t0.v2)");
+        analyzeSuccess("select test.t0.v1, test.t0.v2, grouping_id(test.t0.v1, test.t0.v2), " +
+                "SUM(test.t0.v3) from t0 group by cube(test.t0.v1, test.t0.v2)");
+    }
+
+    @Test
     public void testAnyValueFunction() {
         analyzeSuccess("select v1, any_value(v2) from t0 group by v1");
     }

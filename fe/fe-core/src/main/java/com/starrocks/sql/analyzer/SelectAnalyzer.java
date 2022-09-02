@@ -225,13 +225,11 @@ public class SelectAnalyzer {
                 outputFields.addAll(fields);
 
             } else {
+                // The name here only refer to column name.
+                String name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
+
                 analyzeExpression(item.getExpr(), analyzeState, scope);
                 outputExpressionBuilder.add(item.getExpr());
-
-                // The item here has been analyzed, it will contain qualified name information.
-                // For example, If an item originally only has a column name, after analyzeExpression(),
-                // item will have a qualified name.
-                String name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
 
                 if (item.getExpr() instanceof SlotRef) {
                     outputFields.add(new Field(name, item.getExpr().getType(),
