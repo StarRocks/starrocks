@@ -111,6 +111,8 @@ public class AlterTableEvent extends MetastoreTableEvent {
     @Override
     protected void process() throws MetastoreNotificationException {
         if (!existInCache()) {
+            LOG.warn("Table [{}.{}.{}] doesn't exist in cache on event id: [{}]",
+                    cache.getResourceName(), getDbName(), getTblName(), getEventId());
             return;
         }
 

@@ -25,7 +25,6 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,7 +49,7 @@ public class MysqlHandshakePacket extends MysqlPacket {
     private static final String CLEAR_PASSWORD_PLUGIN_NAME = "mysql_clear_password";
     public static final String AUTHENTICATION_KERBEROS_CLIENT = "authentication_kerberos_client";
 
-    private static final ImmutableMap<String, Boolean> supportedPlugins = new ImmutableMap.Builder<String, Boolean>()
+    private static final ImmutableMap<String, Boolean> SUPPORTED_PLUGINS = new ImmutableMap.Builder<String, Boolean>()
             .put(NATIVE_AUTH_PLUGIN_NAME, true)
             .put(CLEAR_PASSWORD_PLUGIN_NAME, true)
             .build();
@@ -105,7 +104,7 @@ public class MysqlHandshakePacket extends MysqlPacket {
     }
 
     public boolean checkAuthPluginSameAsStarRocks(String pluginName) {
-        return supportedPlugins.containsKey(pluginName) && supportedPlugins.get(pluginName);
+        return SUPPORTED_PLUGINS.containsKey(pluginName) && SUPPORTED_PLUGINS.get(pluginName);
     }
 
     // If the auth default plugin in client is different from StarRocks
@@ -119,9 +118,8 @@ public class MysqlHandshakePacket extends MysqlPacket {
 
     // If user use kerberos for authentication, fe need to resend the handshake request.
     public void buildKrb5AuthRequest(MysqlSerializer serializer, String remoteIp, String user) throws Exception {
-        String fullUserName = SystemInfoService.DEFAULT_CLUSTER + ":" + user;
         Password password = GlobalStateMgr.getCurrentState().getAuth().getUserPrivTable()
-                .getPasswordByApproximate(fullUserName, remoteIp);
+                .getPasswordByApproximate(user, remoteIp);
         if (password == null) {
             String msg = String.format("Can not find password with [user: %s, remoteIp: %s].", user, remoteIp);
             LOG.error(msg);

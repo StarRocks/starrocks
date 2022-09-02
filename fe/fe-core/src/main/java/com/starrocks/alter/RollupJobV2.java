@@ -235,7 +235,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 tbl.getCopiedIndexes(),
                                 tbl.isInMemory(),
                                 tbl.enablePersistentIndex(),
-                                tabletType);
+                                tabletType, tbl.getCompressionType());
                         createReplicaTask.setBaseTablet(tabletIdMap.get(rollupTabletId), baseSchemaHash);
                         if (this.storageFormat != null) {
                             createReplicaTask.setStorageFormat(this.storageFormat);
@@ -487,6 +487,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("rollup job finished: {}", jobId);
         this.span.end();
+    }
+
+    @Override
+    protected void runFinishedRewritingJob() {
+        // nothing to do
     }
 
     private void onFinished(OlapTable tbl) {

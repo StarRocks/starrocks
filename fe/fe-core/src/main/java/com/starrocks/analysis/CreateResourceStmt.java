@@ -22,17 +22,9 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Resource.ResourceType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.PrintableMap;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
-import java.util.Arrays;
 import java.util.Map;
 
 // CREATE [EXTERNAL] RESOURCE resource_name
@@ -63,41 +55,13 @@ public class CreateResourceStmt extends DdlStmt {
     public ResourceType getResourceType() {
         return resourceType;
     }
+    public boolean isExternal() {
+        return isExternal;
+    }
 
     // only used for UT
     public void setResourceType(ResourceType type) {
         this.resourceType = type;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-
-        // check auth
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-        }
-
-        // check name
-        FeNameFormat.checkResourceName(resourceName);
-
-        // check type in properties
-        if (properties == null || properties.isEmpty()) {
-            throw new AnalysisException("Resource properties can't be null");
-        }
-        String type = properties.get(TYPE);
-        if (type == null) {
-            throw new AnalysisException("Resource type can't be null");
-        }
-        resourceType = ResourceType.fromString(type);
-        if (resourceType == ResourceType.UNKNOWN) {
-            throw new AnalysisException("Unrecognized resource type: " + type + ". " + "Only " +
-                    Arrays.toString(Arrays.stream(ResourceType.values())
-                            .filter(t -> t != ResourceType.UNKNOWN).toArray()) + " are supported.");
-        }
-        if (!isExternal) {
-            throw new AnalysisException(resourceType + " resource type must be external.");
-        }
     }
 
     @Override
@@ -110,6 +74,18 @@ public class CreateResourceStmt extends DdlStmt {
         sb.append("RESOURCE '").append(resourceName).append("' ");
         sb.append("PROPERTIES(").append(new PrintableMap<>(properties, " = ", true, false)).append(")");
         return sb.toString();
+    }
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateResourceStatement(this, context);
+    }
+    @Override
+    public String toString() {
+        return toSql();
     }
 }
 

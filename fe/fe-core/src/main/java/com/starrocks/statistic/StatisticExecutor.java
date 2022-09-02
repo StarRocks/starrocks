@@ -180,7 +180,7 @@ public class StatisticExecutor {
         return statistics;
     }
 
-    public AnalyzeStatus collectStatistics(StatisticsCollectJob statsJob) {
+    public AnalyzeStatus collectStatistics(StatisticsCollectJob statsJob, boolean refreshAsync) {
         Database db = statsJob.getDb();
         Table table = statsJob.getTable();
         List<String> columns = statsJob.getColumns();
@@ -198,28 +198,39 @@ public class StatisticExecutor {
         GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
         try {
-            statsJob.collect();
+            ConnectContext context = StatisticUtils.buildConnectContext();
+            GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), context);
+            statsJob.collect(context);
         } catch (Exception e) {
+            LOG.warn("Collect statistics error ", e);
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setEndTime(LocalDateTime.now());
             analyzeStatus.setReason(e.getMessage());
             GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
             return analyzeStatus;
+        } finally {
+            GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(analyzeStatus.getId(), false);
         }
-        GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
         analyzeStatus.setEndTime(LocalDateTime.now());
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         if (statsJob.getType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             for (String columnName : statsJob.getColumns()) {
-                GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(new HistogramStatsMeta(db.getId(),
+                HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),
                         table.getId(), columnName, statsJob.getType(), analyzeStatus.getEndTime(),
-                        statsJob.getProperties()));
+                        statsJob.getProperties());
+                GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(histogramStatsMeta);
+                GlobalStateMgr.getCurrentAnalyzeMgr().refreshHistogramStatisticsCache(
+                        histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
+                        Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
             }
         } else {
-            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), table.getId(),
-                    statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties()));
+            BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
+                    statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties());
+            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
+            GlobalStateMgr.getCurrentAnalyzeMgr().refreshBasicStatisticsCache(
+                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), refreshAsync);
         }
         return analyzeStatus;
     }

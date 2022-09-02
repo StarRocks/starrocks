@@ -35,7 +35,7 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
     <module name="SuppressWarningsFilter"/>
     <module name="BeforeExecutionExclusionFileFilter">
         <property name="fileNamePattern"
-                  value="(.*[\\/]starrocks[\\/](analysis)|(planner)[\\/].*$)|Log4jConfig.java|FunctionSet.java|HiveMetaStoreThriftClient.java"/>
+                  value="(.*[\\/]starrocks[\\/](analysis)|(planner)[\\/].*$)|Log4jConfig.java|FunctionSet.java|HiveMetaStoreThriftClient.java|Platform.java|.*[\\/]udf-extensions[\\/].*"/>
     </module>
 
     <module name="FileTabCharacter">
@@ -185,6 +185,7 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
             <message key="name.invalidPattern"
                      value="Parameter name ''{0}'' must match pattern ''{1}''."/>
         </module>
+        <module name="ConstantName"/>
         <module name="LambdaParameterName">
             <property name="format" value="^[a-z]([a-zA-Z0-9]*)?$"/>
             <message key="name.invalidPattern"

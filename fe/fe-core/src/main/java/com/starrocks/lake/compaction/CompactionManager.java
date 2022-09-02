@@ -33,7 +33,7 @@ public class CompactionManager {
             statistics = new PartitionStatistics(partition, now, version - 1, version);
             partitionStatisticsHashMap.put(partition, statistics);
         } else {
-            Preconditions.checkState(version == statistics.getCurrentVersion() + 1);
+            Preconditions.checkState(version > statistics.getCurrentVersion());
             statistics.setCurrentVersion(version);
         }
         if (LOG.isDebugEnabled()) {
@@ -49,7 +49,7 @@ public class CompactionManager {
             statistics = new PartitionStatistics(partition, now, version, version);
             partitionStatisticsHashMap.put(partition, statistics);
         } else {
-            Preconditions.checkState(version == statistics.getCurrentVersion() + 1);
+            Preconditions.checkState(version > statistics.getCurrentVersion());
             statistics.setCurrentVersion(version);
             statistics.setLastCompactionVersion(version);
             statistics.setLastCompactionTime(now);

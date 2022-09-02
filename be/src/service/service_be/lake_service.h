@@ -54,6 +54,11 @@ public:
                                 ::starrocks::lake::UnlockTabletMetadataResponse* response,
                                 ::google::protobuf::Closure* done) override;
 
+    void upload_snapshots(::google::protobuf::RpcController* controller,
+                          const ::starrocks::lake::UploadSnapshotsRequest* request,
+                          ::starrocks::lake::UploadSnapshotsResponse* response,
+                          ::google::protobuf::Closure* done) override;
+
 private:
     ExecEnv* _env;
 };

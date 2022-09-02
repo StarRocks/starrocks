@@ -62,6 +62,16 @@ public class HashDistributionInfo extends DistributionInfo {
         return bucketNum;
     }
 
+    @Override
+    public String getDistributionKey() {
+        List<String> colNames = Lists.newArrayList();
+        for (Column column : distributionColumns) {
+            colNames.add("`" + column.getName() + "`");
+        }
+        String colList = Joiner.on(", ").join(colNames);
+        return colList;
+    }
+
     public void write(DataOutput out) throws IOException {
         super.write(out);
         int columnCount = distributionColumns.size();

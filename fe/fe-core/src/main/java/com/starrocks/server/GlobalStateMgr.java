@@ -134,6 +134,7 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionDispatchDaemon;
@@ -226,6 +227,7 @@ import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.LeaderTaskExecutor;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
@@ -1831,10 +1833,14 @@ public class GlobalStateMgr {
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
         sb.append("\n").append(distributionInfo.toSql());
 
-        // refresh schema
+        // refresh scheme
         MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
-        sb.append("\nREFRESH ").append(refreshScheme.getType());
-        if (refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
+        if (refreshScheme == null) {
+            sb.append("\nREFRESH ").append("UNKNOWN");
+        } else {
+            sb.append("\nREFRESH ").append(refreshScheme.getType());
+        }
+        if (refreshScheme != null && refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
             MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
             if (asyncRefreshContext.isDefineStartTime()) {
                 sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
@@ -2046,6 +2052,23 @@ public class GlobalStateMgr {
                     .append("\" = \"");
             sb.append(olapTable.isInMemory()).append("\"");
 
+            // enable storage cache && cache ttl
+            if (table.isLakeTable()) {
+                Map<String, String> storageProperities = ((LakeTable) olapTable).getProperties();
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)
+                        .append("\" = \"");
+                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)
+                        .append("\" = \"");
+                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
+                        .append("\" = \"");
+                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
+            }
+
             // storage type
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT)
                     .append("\" = \"");
@@ -2055,6 +2078,17 @@ public class GlobalStateMgr {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
                     .append("\" = \"");
             sb.append(olapTable.enablePersistentIndex()).append("\"");
+
+            // compression type
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
+                    .append("\" = \"");
+            if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME) {
+                sb.append("LZ4").append("\"");
+            } else if (olapTable.getCompressionType() == TCompressionType.LZ4) {
+                sb.append("LZ4").append("\"");
+            } else {
+                sb.append(olapTable.getCompressionType()).append("\"");
+            }
 
             // storage media
             Map<String, String> properties = olapTable.getTableProperty().getProperties();

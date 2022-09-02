@@ -58,7 +58,7 @@ public class DropMaterializedViewStmtTest {
 
     @Before
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
         MockedAuth.mockedAuth(auth);
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         analyzer = new Analyzer(globalStateMgr, connectContext);

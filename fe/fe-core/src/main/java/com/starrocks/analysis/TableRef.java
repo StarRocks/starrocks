@@ -24,6 +24,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -71,7 +72,9 @@ import java.util.List;
  */
 public class TableRef implements ParseNode, Writable {
     private static final Logger LOG = LogManager.getLogger(TableRef.class);
+    @SerializedName(value = "name")
     protected TableName name;
+    @SerializedName(value = "partitionNames")
     private PartitionNames partitionNames = null;
     private List<Long> tabletIds = Lists.newArrayList();
 
@@ -81,6 +84,7 @@ public class TableRef implements ParseNode, Writable {
     // analysis. By convention, for table refs with multiple implicit aliases, aliases_[0]
     // contains the fully-qualified implicit alias to ensure that aliases_[0] always
     // uniquely identifies this table ref regardless of whether it has an explicit alias.
+    @SerializedName(value = "aliases")
     protected String[] aliases_;
 
     // Indicates whether this table ref is given an explicit alias,

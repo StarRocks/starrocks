@@ -125,4 +125,10 @@ public class AnalyzeAlterTableStatementTest {
                 .contains("cannot be alter by 'ALTER TABLE', because 'mv1_partition_by_column' is a materialized view");
 
     }
+
+    @Test
+    public void testRollup() {
+        analyzeSuccess("alter table t0 drop rollup test1");
+        analyzeSuccess("alter table t0 drop rollup test1, test2");
+    }
 }

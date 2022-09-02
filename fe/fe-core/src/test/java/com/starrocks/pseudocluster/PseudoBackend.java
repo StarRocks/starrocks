@@ -1,8 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
-import com.baidu.brpc.RpcContext;
-import com.baidu.brpc.client.RpcCallback;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -14,11 +13,8 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
-import com.starrocks.proto.PExecBatchPlanFragmentsRequest;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
-import com.starrocks.proto.PExecPlanFragmentRequest;
 import com.starrocks.proto.PExecPlanFragmentResult;
-import com.starrocks.proto.PFetchDataRequest;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
@@ -31,13 +27,12 @@ import com.starrocks.proto.PTabletWriterCancelRequest;
 import com.starrocks.proto.PTabletWriterCancelResult;
 import com.starrocks.proto.PTabletWriterOpenRequest;
 import com.starrocks.proto.PTabletWriterOpenResult;
-import com.starrocks.proto.PTriggerProfileReportRequest;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.StatusPB;
-import com.starrocks.rpc.PBackendServiceAsync;
+import com.starrocks.rpc.PBackendService;
+import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
@@ -98,7 +93,6 @@ import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TTransmitDataParams;
 import com.starrocks.thrift.TTransmitDataResult;
 import com.starrocks.thrift.TUniqueId;
-import io.netty.buffer.ByteBuf;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TDeserializer;
@@ -162,6 +156,15 @@ public class PseudoBackend {
 
     private volatile float writeFailureRate = 0.0f;
     private volatile float publishFailureRate = 0.0f;
+
+    public static final long DEFAULT_TOTA_CAP_B = 100000000000L;
+    public static final long DEFAULT_AVAI_CAP_B = 50000000000L;
+    public static final long DEFAULT_USED_CAP_B = 20000000000L;
+    public static final long DEFAULT_SIZE_ON_DISK_PER_ROWSET_B = 1 << 20;
+
+    private long currentDataUsedCapacityB;
+    private long currentAvailableCapacityB;
+    private long currentTotalCapacityB;
 
     Backend be;
     HeartBeatClient heatBeatClient;
@@ -310,18 +313,10 @@ public class PseudoBackend {
         this.be = new Backend(backendId, host, heartBeatPort);
         this.tBackend = new TBackend(host, beThriftPort, httpPort);
 
-        Map<String, DiskInfo> disks = Maps.newHashMap();
-        DiskInfo diskInfo1 = new DiskInfo(runPath + "/storage");
         // TODO: maintain disk info with tablet/rowset count
-        diskInfo1.setTotalCapacityB(100000000000L);
-        diskInfo1.setAvailableCapacityB(50000000000L);
-        diskInfo1.setDataUsedCapacityB(20000000000L);
-        diskInfo1.setPathHash(PATH_HASH);
-        diskInfo1.setStorageMedium(TStorageMedium.SSD);
-        disks.put(diskInfo1.getRootPath(), diskInfo1);
-        be.setDisks(ImmutableMap.copyOf(disks));
+        setInitialCapacity(PseudoBackend.DEFAULT_TOTA_CAP_B, PseudoBackend.DEFAULT_AVAI_CAP_B,
+                PseudoBackend.DEFAULT_USED_CAP_B);
         be.setAlive(true);
-        be.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
         be.setBePort(beThriftPort);
         be.setBrpcPort(brpcPort);
         be.setHttpPort(httpPort);
@@ -340,6 +335,25 @@ public class PseudoBackend {
 
     public void setShutdown(boolean shutdown) {
         this.shutdown = shutdown;
+    }
+
+    public void setInitialCapacity(long totalCapacityB, long availableCapacityB, long usedCapacityB) {
+        Preconditions.checkState(usedCapacityB < availableCapacityB);
+        Preconditions.checkState(availableCapacityB + usedCapacityB <= totalCapacityB);
+
+        Map<String, DiskInfo> disks = Maps.newHashMap();
+        DiskInfo diskInfo1 = new DiskInfo(runPath + "/storage");
+        diskInfo1.setTotalCapacityB(totalCapacityB);
+        currentTotalCapacityB = totalCapacityB;
+        diskInfo1.setAvailableCapacityB(availableCapacityB);
+        currentAvailableCapacityB = availableCapacityB;
+        diskInfo1.setDataUsedCapacityB(usedCapacityB);
+        currentDataUsedCapacityB = usedCapacityB;
+        diskInfo1.setPathHash(PATH_HASH);
+        diskInfo1.setStorageMedium(TStorageMedium.SSD);
+        disks.put(diskInfo1.getRootPath(), diskInfo1);
+
+        be.setDisks(ImmutableMap.copyOf(disks));
     }
 
     public String getHost() {
@@ -417,9 +431,9 @@ public class PseudoBackend {
             TDisk tdisk = new TDisk();
             tdisk.setRoot_path(entry.getKey());
             tdisk.setPath_hash(entry.getValue().getPathHash());
-            tdisk.setDisk_total_capacity(entry.getValue().getTotalCapacityB());
-            tdisk.setDisk_available_capacity(entry.getValue().getAvailableCapacityB());
-            tdisk.setData_used_capacity(entry.getValue().getDataUsedCapacityB());
+            tdisk.setDisk_total_capacity(currentTotalCapacityB);
+            tdisk.setDisk_available_capacity(currentAvailableCapacityB);
+            tdisk.setData_used_capacity(currentDataUsedCapacityB);
             tdisk.setStorage_medium(entry.getValue().getStorageMedium());
             tdisk.setUsed(true);
             tdisks.put(entry.getKey(), tdisk);
@@ -489,6 +503,7 @@ public class PseudoBackend {
     }
 
     void handleCreateTablet(TAgentTaskRequest request, TFinishTaskRequest finish) throws UserException {
+        // Ignore the initial disk usage of tablet
         Tablet t = tabletManager.createTablet(request.create_tablet_req);
     }
 
@@ -767,7 +782,7 @@ public class PseudoBackend {
 
     }
 
-    private class PseudoPBackendService implements PBackendServiceAsync {
+    private class PseudoPBackendService implements PBackendService {
         private final ExecutorService executor;
 
         PseudoPBackendService() {
@@ -783,49 +798,15 @@ public class PseudoBackend {
         }
 
         @Override
-        public PExecPlanFragmentResult execPlanFragment(PExecPlanFragmentRequest request) {
-            throw new RuntimeException("not implemented");
-        }
-
-        @Override
-        public PExecBatchPlanFragmentsResult execBatchPlanFragments(PExecBatchPlanFragmentsRequest request) {
-            throw new RuntimeException("not implemented");
-        }
-
-        @Override
-        public PCancelPlanFragmentResult cancelPlanFragment(PCancelPlanFragmentRequest request) {
-            throw new RuntimeException("not implemented");
-        }
-
-        @Override
-        public PFetchDataResult fetchData(PFetchDataRequest request) {
-            throw new RuntimeException("not implemented");
-        }
-
-        @Override
-        public PTriggerProfileReportResult triggerProfileReport(PTriggerProfileReportRequest request) {
-            throw new RuntimeException("not implemented");
-        }
-
-        @Override
-        public PProxyResult getInfo(PProxyRequest request) {
-            return null;
-        }
-
-        @Override
-        public Future<PExecPlanFragmentResult> execPlanFragment(
-                PExecPlanFragmentRequest request, RpcCallback<PExecPlanFragmentResult> callback) {
+        public Future<PExecPlanFragmentResult> execPlanFragmentAsync(
+                com.starrocks.rpc.PExecPlanFragmentRequest request) {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
             }
             TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecPlanFragmentParams params = new TExecPlanFragmentParams();
             try {
-                RpcContext rpcContext = RpcContext.getContext();
-                ByteBuf buf = rpcContext.getRequestBinaryAttachment();
-                byte[] serialRequest = new byte[buf.readableBytes()];
-                buf.readBytes(serialRequest);
-                deserializer.deserialize(params, serialRequest);
+                deserializer.deserialize(params, request.getSerializedRequest());
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);
                 PExecPlanFragmentResult result = new PExecPlanFragmentResult();
@@ -849,20 +830,17 @@ public class PseudoBackend {
             return CompletableFuture.completedFuture(result);
         }
 
+
         @Override
-        public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragments(
-                PExecBatchPlanFragmentsRequest request, RpcCallback<PExecBatchPlanFragmentsResult> callback) {
+        public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
+                PExecBatchPlanFragmentsRequest request) {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
             }
             TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecBatchPlanFragmentsParams params = new TExecBatchPlanFragmentsParams();
             try {
-                RpcContext rpcContext = RpcContext.getContext();
-                ByteBuf buf = rpcContext.getRequestBinaryAttachment();
-                byte[] serialRequest = new byte[buf.readableBytes()];
-                buf.readBytes(serialRequest);
-                deserializer.deserialize(params, serialRequest);
+                deserializer.deserialize(params, request.getSerializedRequest());
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);
                 PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
@@ -870,6 +848,7 @@ public class PseudoBackend {
                 result.status.errorMsgs = Lists.newArrayList(e.getMessage());
                 return CompletableFuture.completedFuture(result);
             }
+
             String queryid = DebugUtil.printId(params.common_param.params.query_id);
             final QueryProgress progress = queryProgresses.computeIfAbsent(queryid, k -> new QueryProgress(k));
             progress.addFragment(params.unique_param_per_instance.size());
@@ -896,8 +875,7 @@ public class PseudoBackend {
         }
 
         @Override
-        public Future<PCancelPlanFragmentResult> cancelPlanFragment(
-                PCancelPlanFragmentRequest request, RpcCallback<PCancelPlanFragmentResult> callback) {
+        public Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(PCancelPlanFragmentRequest request) {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
             }
@@ -911,7 +889,13 @@ public class PseudoBackend {
         }
 
         @Override
-        public Future<PFetchDataResult> fetchData(PFetchDataRequest request, RpcCallback<PFetchDataResult> callback) {
+        public Future<PTriggerProfileReportResult> triggerProfileReport(
+                com.starrocks.rpc.PTriggerProfileReportRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PFetchDataResult> fetchDataAsync(com.starrocks.rpc.PFetchDataRequest request) {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
             }
@@ -934,14 +918,9 @@ public class PseudoBackend {
             return progress.getFetchDataResult();
         }
 
-        @Override
-        public Future<PTriggerProfileReportResult> triggerProfileReport(
-                PTriggerProfileReportRequest request, RpcCallback<PTriggerProfileReportResult> callback) {
-            return null;
-        }
 
         @Override
-        public Future<PProxyResult> getInfo(PProxyRequest request, RpcCallback<PProxyResult> callback) {
+        public Future<PProxyResult> getInfo(PProxyRequest request) {
             return null;
         }
     }
@@ -1127,7 +1106,8 @@ public class PseudoBackend {
         PseudoOlapTableSink sink = new PseudoOlapTableSink(cluster, tDataSink);
         if (!sink.open()) {
             sink.cancel();
-            throw new Exception(String.format("open sink failed, backend:%s txn:%d", be.getId(), sink.txnId));
+            throw new Exception(
+                    String.format("open sink failed, backend:%s txn:%d %s", be.getId(), sink.txnId, sink.getErrorMessage()));
         }
         if (!sink.close()) {
             sink.cancel();
@@ -1148,16 +1128,22 @@ public class PseudoBackend {
                 this.indexId = indexId;
             }
 
-            void open(PTabletWriterOpenRequest request) {
+            void open(PTabletWriterOpenRequest request) throws Exception {
                 tablets = request.tablets;
+                for (PTabletWithPartition tabletWithPartition : tablets) {
+                    Tablet tablet = tabletManager.getTablet(tabletWithPartition.tabletId);
+                    if (tablet == null) {
+                        LOG.warn("tablet not found {}", tabletWithPartition.tabletId);
+                        throw new Exception("tablet not found " + tabletWithPartition.tabletId);
+                    }
+                    if (tablet.getRowsetCount() >= Tablet.maxVersions) {
+                        throw new Exception(String.format("Too many versions. tablet_id: %d, version_count: %d, limit: %d",
+                                tablet.id, tablet.getRowsetCount(), Tablet.maxVersions));
+                    }
+                }
             }
 
             void cancel() {
-            }
-
-            void buildAndCommitRowset(long txnId, Tablet tablet) throws UserException {
-                Rowset rowset = new Rowset(txnId, genRowsetId());
-                txnManager.commit(txnId, tablet.partitionId, tablet, rowset);
             }
 
             void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
@@ -1167,7 +1153,8 @@ public class PseudoBackend {
                         LOG.warn("tablet not found {}", tabletWithPartition.tabletId);
                         continue;
                     }
-                    buildAndCommitRowset(txnId, tablet);
+                    Rowset rowset = new Rowset(txnId, genRowsetId(), 100, 100000);
+                    txnManager.commit(txnId, tablet.partitionId, tablet, rowset);
                     PTabletInfo info = new PTabletInfo();
                     info.tabletId = tablet.id;
                     info.schemaHash = tablet.schemaHash;
@@ -1184,7 +1171,7 @@ public class PseudoBackend {
             this.id = id;
         }
 
-        void open(PTabletWriterOpenRequest request, PTabletWriterOpenResult result) {
+        void open(PTabletWriterOpenRequest request, PTabletWriterOpenResult result) throws Exception {
             this.txnId = request.txnId;
             if (indexToTabletsChannel.containsKey(request.indexId)) {
                 return;
@@ -1202,8 +1189,8 @@ public class PseudoBackend {
         void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
             TabletsChannel tabletsChannel = indexToTabletsChannel.get(request.indexId);
             if (tabletsChannel == null) {
-                result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
-                result.status.errorMsgs.add("cannot find the tablets channel associated with the index id");
+                result.status =
+                        statusPB(TStatusCode.INTERNAL_ERROR, "cannot find the tablets channel associated with the index id");
             } else {
                 tabletsChannel.close(request, result);
             }
@@ -1219,7 +1206,13 @@ public class PseudoBackend {
         result.status.errorMsgs = new ArrayList<>();
         String loadIdString = String.format("%d-%d", request.id.hi, request.id.lo);
         LoadChannel loadChannel = loadChannels.computeIfAbsent(loadIdString, k -> new LoadChannel(request.id));
-        loadChannel.open(request, result);
+        try {
+            loadChannel.open(request, result);
+        } catch (Exception e) {
+            loadChannel.cancel();
+            loadChannels.remove(loadIdString);
+            result.status = statusPB(TStatusCode.INTERNAL_ERROR, e.getMessage());
+        }
         return result;
     }
 
@@ -1231,6 +1224,21 @@ public class PseudoBackend {
             loadChannel.cancel();
         }
         return result;
+    }
+
+    /**
+     * We update the disk usage when a txn is published successfully.
+     * Currently, we update it in rowset granularity, i.e. no matter how many bytes we write in a txn,
+     * the cost of disk space is the same.
+     *
+     * @param delta the number of bytes to increase or decrease
+     */
+    public void updateDiskUsage(long delta) {
+        if ((currentAvailableCapacityB - delta) < currentTotalCapacityB * 0.05) {
+            return;
+        }
+        currentDataUsedCapacityB += delta;
+        currentAvailableCapacityB -= delta;
     }
 
     synchronized PTabletWriterAddBatchResult tabletWriterAddChunk(PTabletWriterAddChunkRequest request) {
@@ -1246,9 +1254,8 @@ public class PseudoBackend {
                 if (random.nextFloat() < writeFailureRate) {
                     channel.cancel();
                     loadChannels.remove(loadIdString);
-                    result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
-                    result.status.errorMsgs.add("inject error writeFailureRate:" + writeFailureRate);
-                    LOG.info("inject write failure txn:{} backend:{}", request.txnId, be.getId());
+                    result.status = statusPB(TStatusCode.INTERNAL_ERROR, "inject error writeFailureRate:" + writeFailureRate);
+                    LOG.warn("inject write failure txn:{} backend:{}", request.txnId, be.getId());
                     return result;
                 }
                 try {
@@ -1257,12 +1264,10 @@ public class PseudoBackend {
                     LOG.warn("error close load channel", e);
                     channel.cancel();
                     loadChannels.remove(loadIdString);
-                    result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
-                    result.status.errorMsgs.add(e.getMessage());
+                    result.status = statusPB(TStatusCode.INTERNAL_ERROR, e.getMessage());
                 }
             } else {
-                result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
-                result.status.errorMsgs.add("no associated load channel");
+                result.status = statusPB(TStatusCode.INTERNAL_ERROR, "no associated load channel");
             }
         }
         return result;

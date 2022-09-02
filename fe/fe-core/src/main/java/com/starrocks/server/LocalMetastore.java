@@ -150,7 +150,6 @@ import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -190,6 +189,7 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
@@ -317,7 +317,7 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getMaterializedViews().stream().forEach(Table::onCreate);
+            db.getMaterializedViews().forEach(Table::onCreate);
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
@@ -369,6 +369,9 @@ public class LocalMetastore implements ConnectorMetadata {
     public void unprotectCreateDb(Database db) {
         idToDb.put(db.getId(), db);
         fullNameToDb.put(db.getFullName(), db);
+        db.writeLock();
+        db.setExist(true);
+        db.writeUnlock();
         final Cluster cluster = defaultCluster;
         cluster.addDb(db.getFullName(), db.getId());
         stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
@@ -419,6 +422,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 } else {
                     stateMgr.onEraseDatabase(db.getId());
                 }
+                db.setExist(false);
             } finally {
                 db.writeUnlock();
             }
@@ -428,6 +432,13 @@ public class LocalMetastore implements ConnectorMetadata {
             fullNameToDb.remove(db.getFullName());
             final Cluster cluster = defaultCluster;
             cluster.removeDb(dbName, db.getId());
+
+            // 4. drop mv task
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            List<Long> dropTaskIdList = taskManager.showTasks(dbName)
+                    .stream().map(Task::getId).collect(Collectors.toList());
+            taskManager.dropTasks(dropTaskIdList, false);
+
             DropDbInfo info = new DropDbInfo(db.getFullName(), isForceDrop);
             editLog.logDropDb(info);
 
@@ -467,6 +478,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 } else {
                     stateMgr.onEraseDatabase(db.getId());
                 }
+                db.setExist(false);
             } finally {
                 db.writeUnlock();
             }
@@ -492,7 +504,6 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Database[" + recoverStmt.getDbName() + "] already exist.");
         }
 
-
         Database db = recycleBin.recoverDatabase(recoverStmt.getDbName());
 
         // add db to globalStateMgr
@@ -503,13 +514,28 @@ public class LocalMetastore implements ConnectorMetadata {
             if (fullNameToDb.containsKey(db.getFullName())) {
                 throw new DdlException("Database[" + db.getOriginName() + "] already exist.");
                 // it's ok that we do not put db back to CatalogRecycleBin
-                // cause this db cannot recover any more
+                // cause this db cannot recover anymore
             }
 
             fullNameToDb.put(db.getFullName(), db);
             idToDb.put(db.getId(), db);
+            db.writeLock();
+            db.setExist(true);
+            db.writeUnlock();
             final Cluster cluster = defaultCluster;
             cluster.addDb(db.getFullName(), db.getId());
+
+            List<MaterializedView> materializedViews = db.getMaterializedViews();
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            for (MaterializedView materializedView : materializedViews) {
+                MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
+                if (refreshType != MaterializedView.RefreshType.SYNC) {
+                    Task task = TaskBuilder.buildMvTask(materializedView, db.getFullName());
+                    TaskBuilder.updateTaskInfo(task, materializedView);
+                    taskManager.createTask(task, false);
+                }
+            }
+
 
             // log
             RecoverInfo recoverInfo = new RecoverInfo(db.getId(), -1L, -1L);
@@ -980,8 +1006,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             copiedTable.getPartitionInfo().setDataProperty(partitionId, dataProperty);
             copiedTable.getPartitionInfo().setTabletType(partitionId, partitionDesc.getTabletType());
-            copiedTable.getPartitionInfo()
-                    .setReplicationNum(partitionId, partitionDesc.getReplicationNum());
+            copiedTable.getPartitionInfo().setReplicationNum(partitionId, partitionDesc.getReplicationNum());
             copiedTable.getPartitionInfo().setIsInMemory(partitionId, partitionDesc.isInMemory());
             copiedTable.getPartitionInfo().setStorageInfo(partitionId, partitionDesc.getStorageInfo());
 
@@ -1434,6 +1459,17 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
             tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
+            try {
+                for (Long mvId : olapTable.getRelatedMaterializedViews()) {
+                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
+                    if (materializedView != null && materializedView.isLoadTriggeredRefresh()) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
+                                db.getFullName(), materializedView.getName(), Constants.TaskRunPriority.NORMAL.value());
+                    }
+                }
+            } catch (MetaNotFoundException e) {
+                throw new DdlException("fail to refresh materialized views when dropping partition", e);
+            }
         }
 
         // log
@@ -1698,7 +1734,8 @@ public class LocalMetastore implements ConnectorMetadata {
                         table.getIndexes(),
                         table.getPartitionInfo().getIsInMemory(partition.getId()),
                         table.enablePersistentIndex(),
-                        TTabletType.TABLET_TYPE_LAKE);
+                        TTabletType.TABLET_TYPE_LAKE,
+                        table.getCompressionType());
                 tasks.add(task);
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -1722,7 +1759,8 @@ public class LocalMetastore implements ConnectorMetadata {
                             table.getIndexes(),
                             table.getPartitionInfo().getIsInMemory(partition.getId()),
                             table.enablePersistentIndex(),
-                            table.getPartitionInfo().getTabletType(partition.getId()));
+                            table.getPartitionInfo().getTabletType(partition.getId()),
+                            table.getCompressionType());
                     tasks.add(task);
                 }
             }
@@ -1896,50 +1934,45 @@ public class LocalMetastore implements ConnectorMetadata {
         if (stmt.isExternal()) {
             olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
-        } else {
-            if (stmt.isLakeEngine()) {
-                olapTable = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo,
-                        distributionInfo, indexes);
+        } else if (stmt.isLakeEngine()) {
+            olapTable = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
 
-                // storage cache property
-                boolean enableStorageCache = PropertyAnalyzer.analyzeBooleanProp(
-                        properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
-                long storageCacheTtlS = 0;
-                try {
-                    storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(
-                            properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
-                } catch (AnalysisException e) {
-                    throw new DdlException(e.getMessage());
-                }
-                if (storageCacheTtlS < -1) {
-                    throw new DdlException("Storage cache ttl should not be less than -1");
-                }
-                if (!enableStorageCache && storageCacheTtlS != 0) {
-                    throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
-                }
-                if (enableStorageCache && storageCacheTtlS == 0) {
-                    storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
-                }
-
-                // set to false if absent
-                boolean allowAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
-                        properties, PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, false);
-
-                if (!enableStorageCache && allowAsyncWriteBack) {
-                    throw new DdlException("storage allow_async_write_back can't be enabled when cache is disabled");
-                }
-
-                // get service shard storage info from StarMgr
-                ShardStorageInfo shardStorageInfo = stateMgr.getStarOSAgent().getServiceShardStorageInfo();
-
-                ((LakeTable) olapTable)
-                        .setStorageInfo(shardStorageInfo, enableStorageCache, storageCacheTtlS, allowAsyncWriteBack);
-            } else {
-                Preconditions.checkState(stmt.isOlapEngine());
-                olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
-                        distributionInfo, indexes);
+            // storage cache property
+            boolean enableStorageCache =
+                    PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
+            long storageCacheTtlS = 0;
+            try {
+                storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
             }
+            if (storageCacheTtlS < -1) {
+                throw new DdlException("Storage cache ttl should not be less than -1");
+            }
+            if (!enableStorageCache && storageCacheTtlS != 0) {
+                throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
+            }
+            if (enableStorageCache && storageCacheTtlS == 0) {
+                storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
+            }
+
+            // set to false if absent
+            boolean allowAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
+                    properties, PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, false);
+
+            if (!enableStorageCache && allowAsyncWriteBack) {
+                throw new DdlException("storage allow_async_write_back can't be enabled when cache is disabled");
+            }
+
+            // get service shard storage info from StarMgr
+            ShardStorageInfo shardStorageInfo = stateMgr.getStarOSAgent().getServiceShardStorageInfo();
+
+            ((LakeTable) olapTable).setStorageInfo(shardStorageInfo, enableStorageCache, storageCacheTtlS, allowAsyncWriteBack);
+        } else {
+            Preconditions.checkState(stmt.isOlapEngine());
+            olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
         }
+
         olapTable.setComment(stmt.getComment());
 
         // set base index id
@@ -1990,13 +2023,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         false);
         olapTable.setEnablePersistentIndex(enablePersistentIndex);
-
-        if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS && olapTable.enablePersistentIndex()) {
-            if (!olapTable.checkPersistentIndex()) {
-                throw new DdlException("PrimaryKey table using persistent index don't support varchar(char) as key so far," +
-                        " and key length should be no more than 64 Bytes");
-            }
-        }
 
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         try {
@@ -2111,6 +2137,15 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
         olapTable.setStorageFormat(storageFormat);
+
+        // get compression type
+        TCompressionType compressionType = TCompressionType.LZ4_FRAME;
+        try {
+            compressionType = PropertyAnalyzer.analyzeCompressionType(properties);
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+        olapTable.setCompressionType(compressionType);
 
         // a set to record every new tablet created when create table
         // if failed in any step, use this set to do clear things
@@ -3253,35 +3288,16 @@ public class LocalMetastore implements ConnectorMetadata {
         LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
 
         // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
-        if (createMvSuccess) {
-            createTaskForMaterializedView(dbName, materializedView, optHints);
-        }
+        createTaskForMaterializedView(dbName, materializedView, optHints);
     }
 
     private void createTaskForMaterializedView(String dbName, MaterializedView materializedView,
                                                Map<String, String> optHints) throws DdlException {
         MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
         if (refreshType != MaterializedView.RefreshType.SYNC) {
-            // create task
-            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
-            MaterializedView.AsyncRefreshContext asyncRefreshContext =
-                    materializedView.getRefreshScheme().getAsyncRefreshContext();
 
-            // mapping refresh type to task type
-            if (refreshType == MaterializedView.RefreshType.MANUAL) {
-                task.setType(Constants.TaskType.MANUAL);
-            } else if (refreshType == MaterializedView.RefreshType.ASYNC) {
-                if (asyncRefreshContext.getTimeUnit() == null) {
-                    task.setType(Constants.TaskType.EVENT_TRIGGERED);
-                } else {
-                    long startTime = asyncRefreshContext.getStartTime();
-                    TaskSchedule taskSchedule = new TaskSchedule(startTime,
-                            asyncRefreshContext.getStep(),
-                            TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
-                    task.setSchedule(taskSchedule);
-                    task.setType(Constants.TaskType.PERIODICAL);
-                }
-            }
+            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+            TaskBuilder.updateTaskInfo(task, materializedView);
 
             if (optHints != null) {
                 Map<String, String> taskProperties = task.getProperties();
@@ -3358,13 +3374,19 @@ public class LocalMetastore implements ConnectorMetadata {
         if (materializedView == null) {
             throw new MetaNotFoundException(mvName + " is not a materialized view");
         }
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
-        if (!taskManager.containTask(mvTaskName)) {
-            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
-            taskManager.createTask(task, false);
+
+        MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
+        if (refreshType != MaterializedView.RefreshType.SYNC) {
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
+            if (!taskManager.containTask(mvTaskName)) {
+                Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+                TaskBuilder.updateTaskInfo(task, materializedView);
+                taskManager.createTask(task, false);
+            }
+            taskManager.executeTask(mvTaskName, new ExecuteOption(priority));
         }
-        taskManager.executeTask(mvTaskName, new ExecuteOption(priority));
+
     }
 
     @Override
@@ -4079,7 +4101,7 @@ public class LocalMetastore implements ConnectorMetadata {
         TableName dbTbl = tblRef.getName();
 
         // check, and save some info which need to be checked again later
-        Map<String, Long> origPartitions = Maps.newHashMap();
+        Map<String, Partition> origPartitions = Maps.newHashMap();
         OlapTable copiedTbl;
         Database db = getDb(dbTbl.getDb());
         if (db == null) {
@@ -4110,11 +4132,11 @@ public class LocalMetastore implements ConnectorMetadata {
                         throw new DdlException("Partition " + partName + " does not exist");
                     }
 
-                    origPartitions.put(partName, partition.getId());
+                    origPartitions.put(partName, partition);
                 }
             } else {
                 for (Partition partition : olapTable.getPartitions()) {
-                    origPartitions.put(partition.getName(), partition.getId());
+                    origPartitions.put(partition.getName(), partition);
                 }
             }
 
@@ -4128,8 +4150,8 @@ public class LocalMetastore implements ConnectorMetadata {
         // tabletIdSet to save all newly created tablet ids.
         Set<Long> tabletIdSet = Sets.newHashSet();
         try {
-            for (Map.Entry<String, Long> entry : origPartitions.entrySet()) {
-                long oldPartitionId = entry.getValue();
+            for (Map.Entry<String, Partition> entry : origPartitions.entrySet()) {
+                long oldPartitionId = entry.getValue().getId();
                 long newPartitionId = getNextId();
                 String newPartitionName = entry.getKey();
 
@@ -4142,6 +4164,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (copiedTbl.isLakeTable()) {
                     partitionInfo.setStorageInfo(newPartitionId, partitionInfo.getStorageInfo(oldPartitionId));
                 }
+
+                copiedTbl.setDefaultDistributionInfo(entry.getValue().getDistributionInfo());
 
                 Partition newPartition =
                         createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
@@ -4169,8 +4193,8 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             // check partitions
-            for (Map.Entry<String, Long> entry : origPartitions.entrySet()) {
-                Partition partition = copiedTbl.getPartition(entry.getValue());
+            for (Map.Entry<String, Partition> entry : origPartitions.entrySet()) {
+                Partition partition = copiedTbl.getPartition(entry.getValue().getId());
                 if (partition == null || !partition.getName().equalsIgnoreCase(entry.getKey())) {
                     throw new DdlException("Partition [" + entry.getKey() + "] is changed");
                 }

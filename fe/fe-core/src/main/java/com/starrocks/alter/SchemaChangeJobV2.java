@@ -284,7 +284,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     copiedShadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
                                     tbl.isInMemory(),
                                     tbl.enablePersistentIndex(),
-                                    tbl.getPartitionInfo().getTabletType(partitionId));
+                                    tbl.getPartitionInfo().getTabletType(partitionId),
+                                    tbl.getCompressionType());
                             createReplicaTask.setBaseTablet(
                                     partitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId),
                                     originSchemaHash);
@@ -596,6 +597,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 }
             }
         }
+    }
+
+    @Override
+    protected void runFinishedRewritingJob() {
+        // nothing to do
     }
 
     private void onFinished(OlapTable tbl) {

@@ -25,6 +25,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
@@ -147,7 +148,7 @@ public class PrivInfo implements Writable {
 
         if (!Strings.isNullOrEmpty(role)) {
             out.writeBoolean(true);
-            Text.writeString(out, role);
+            Text.writeString(out, ClusterNamespace.getFullName(role));
         } else {
             out.writeBoolean(false);
         }
@@ -184,7 +185,7 @@ public class PrivInfo implements Writable {
         }
 
         if (in.readBoolean()) {
-            role = Text.readString(in);
+            role = ClusterNamespace.getNameFromFullName(Text.readString(in));
         }
 
     }

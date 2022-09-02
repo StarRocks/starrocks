@@ -290,8 +290,13 @@ public class HeartbeatMgr extends LeaderDaemon {
                     }
 
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
-                    return new BackendHbResponse(computeNodeId, bePort, httpPort, brpcPort, starletPort,
+                    BackendHbResponse backendHbResponse = new BackendHbResponse(
+                            computeNodeId, bePort, httpPort, brpcPort, starletPort,
                             System.currentTimeMillis(), version, cpuCores);
+                    if (tBackendInfo.isSetReboot_time()) {
+                        backendHbResponse.setRebootTime(tBackendInfo.getReboot_time());
+                    }
+                    return backendHbResponse;
                 } else {
                     return new BackendHbResponse(computeNodeId,
                             result.getStatus().getError_msgs().isEmpty() ? "Unknown error"

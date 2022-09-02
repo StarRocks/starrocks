@@ -101,6 +101,7 @@ import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.UseCatalogStmt;
@@ -411,7 +412,13 @@ public class StmtExecutor {
                             throw e;
                         }
                         if (!context.getMysqlChannel().isSend()) {
-                            LOG.warn("retry {} times. stmt: {}", (i + 1), parsedStmt.getOrigStmt().originStmt);
+                            String originStmt;
+                            if (parsedStmt.getOrigStmt() != null) {
+                                originStmt = parsedStmt.getOrigStmt().originStmt;
+                            } else {
+                                originStmt = this.originStmt.originStmt;
+                            }
+                            LOG.warn("retry {} times. stmt: {}", (i + 1), originStmt);
                         } else {
                             throw e;
                         }
@@ -459,6 +466,8 @@ public class StmtExecutor {
                 handleDropHistogramStmt();
             } else if (parsedStmt instanceof DropStatsStmt) {
                 handleDropStatsStmt();
+            } else if (parsedStmt instanceof KillAnalyzeStmt) {
+                handleKillAnalyzeStmt();
             } else if (parsedStmt instanceof AddSqlBlackListStmt) {
                 handleAddSqlBlackListStmt();
             } else if (parsedStmt instanceof DelSqlBlackListStmt) {
@@ -778,14 +787,18 @@ public class StmtExecutor {
             analyzeStatus = statisticExecutor.collectStatistics(
                     new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
                             StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                            analyzeStmt.getProperties()));
+                            analyzeStmt.getProperties()),
+                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                    false);
         } else {
             analyzeStatus = statisticExecutor.collectStatistics(
                     StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
                             analyzeStmt.getColumnNames(),
                             analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
                                     StatsConstants.AnalyzeType.FULL,
-                            StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()));
+                            StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
+                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                    false);
         }
         ShowResultSet resultSet = analyzeStatus.toShowResult();
         if (isProxy) {
@@ -817,6 +830,11 @@ public class StmtExecutor {
         GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
         GlobalStateMgr.getCurrentAnalyzeMgr().dropHistogramStatsMetaAndData(Sets.newHashSet(table.getId()));
         GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
+    }
+
+    private void handleKillAnalyzeStmt() {
+        KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
+        GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(killAnalyzeStmt.getAnalyzeId(), true);
     }
 
     private void handleAddSqlBlackListStmt() {

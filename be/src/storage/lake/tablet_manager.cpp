@@ -191,7 +191,8 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             }
         }
         RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
-                mutable_new_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema()));
+                mutable_new_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema(),
+                req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     } else {
         std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
         uint32_t next_unique_id = req.tablet_schema.columns.size();
@@ -199,9 +200,9 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             col_idx_to_unique_id[col_idx] = col_idx;
         }
         RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
-                req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema()));
+                req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema(),
+                req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     }
-
     return put_tablet_metadata(tablet_metadata_pb);
 }
 
@@ -212,12 +213,11 @@ StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
 Status TabletManager::delete_tablet(int64_t tablet_id) {
     std::vector<std::string> objects;
     // TODO: construct prefix in LocationProvider or a common place
-    const auto tablet_metadata_prefix = fmt::format("tbl_{:016X}_", tablet_id);
-    const auto txnlog_prefix = fmt::format("txn_{:016X}_", tablet_id);
-    auto root_path = _location_provider->root_location(tablet_id);
+    const auto tablet_prefix = fmt::format("{:016X}_", tablet_id);
+    auto root_path = _location_provider->metadata_root_location(tablet_id);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     auto scan_cb = [&](std::string_view name) {
-        if (HasPrefixString(name, tablet_metadata_prefix) || HasPrefixString(name, txnlog_prefix)) {
+        if (HasPrefixString(name, tablet_prefix)) {
             objects.emplace_back(join_path(root_path, name));
         }
         return true;
@@ -226,6 +226,10 @@ Status TabletManager::delete_tablet(int64_t tablet_id) {
     if (!st.ok() && !st.is_not_found()) {
         return st;
     }
+
+    root_path = _location_provider->txn_log_root_location(tablet_id);
+    // It's ok to ignore the error here.
+    (void)fs->iterate_dir(root_path, scan_cb);
 
     for (const auto& obj : objects) {
         erase_metacache(obj);
@@ -301,12 +305,10 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_
     // TODO: construct prefix in LocationProvider
     std::string prefix;
     if (filter_tablet) {
-        prefix = fmt::format("tbl_{:016X}_", tablet_id);
-    } else {
-        prefix = "tbl_";
+        prefix = fmt::format("{:016X}_", tablet_id);
     }
 
-    auto root = _location_provider->root_location(tablet_id);
+    auto root = _location_provider->metadata_root_location(tablet_id);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root));
     auto scan_cb = [&](std::string_view name) {
         if (HasPrefixString(name, prefix)) {
@@ -407,12 +409,10 @@ StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_
     // TODO: construct prefix in LocationProvider
     std::string prefix;
     if (filter_tablet) {
-        prefix = fmt::format("txn_{:016X}_", tablet_id);
-    } else {
-        prefix = "txn_";
+        prefix = fmt::format("{:016X}_", tablet_id);
     }
 
-    auto root = _location_provider->root_location(tablet_id);
+    auto root = _location_provider->txn_log_root_location(tablet_id);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root));
     auto scan_cb = [&](std::string_view name) {
         if (HasPrefixString(name, prefix)) {

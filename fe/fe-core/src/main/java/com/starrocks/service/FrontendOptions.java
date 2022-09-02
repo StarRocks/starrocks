@@ -58,7 +58,7 @@ public class FrontendOptions {
     private static final String ROLE_FILE_PATH = "/image/ROLE";
 
     @VisibleForTesting
-    static final List<String> priorityCidrs = Lists.newArrayList();
+    static final List<String> PRIORITY_CIDRS = Lists.newArrayList();
     private static InetAddress localAddr = InetAddress.getLoopbackAddress();
     private static boolean useFqdn = false;
 
@@ -175,7 +175,7 @@ public class FrontendOptions {
             if (addr instanceof Inet4Address) {
                 if (addr.isLoopbackAddress()) {
                     loopBack = addr;
-                } else if (!priorityCidrs.isEmpty()) {
+                } else if (!PRIORITY_CIDRS.isEmpty()) {
                     if (isInPriorNetwork(addr.getHostAddress())) {
                         localAddr = addr;
                         hasMatchedIp = true;
@@ -188,7 +188,7 @@ public class FrontendOptions {
             }
         }
         //if all ips not match the priority_networks then print the warning log
-        if (!priorityCidrs.isEmpty() && !hasMatchedIp) {
+        if (!PRIORITY_CIDRS.isEmpty() && !hasMatchedIp) {
             LOG.warn("ip address range configured for priority_networks does not include the current IP address");
         }
         // nothing found, use loopback addr
@@ -249,13 +249,13 @@ public class FrontendOptions {
 
         String[] cidrList = priorCidrs.split(PRIORITY_CIDR_SEPARATOR);
         List<String> priorNetworks = Lists.newArrayList(cidrList);
-        priorityCidrs.addAll(priorNetworks);
+        PRIORITY_CIDRS.addAll(priorNetworks);
     }
 
     @VisibleForTesting
     static boolean isInPriorNetwork(String ip) {
         ip = ip.trim();
-        for (String cidr : priorityCidrs) {
+        for (String cidr : PRIORITY_CIDRS) {
             cidr = cidr.trim();
             if (!cidr.contains("/")) {
                 // it is not valid CIDR, compare ip directly.

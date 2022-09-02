@@ -109,12 +109,19 @@ statement
     | showAnalyzeStatement
     | showStatsMetaStatement
     | showHistogramMetaStatement
+    | killAnalyzeStatement
 
     // Work Group Statement
     | createResourceGroupStatement
     | dropResourceGroupStatement
     | alterResourceGroupStatement
     | showResourceGroupStatement
+
+    // Extenal Resource Statement
+    | createResourceStatement
+    | alterResourceStatement
+    | dropResourceStatement
+    | showResourceStatement
 
     //UDF
     | showFunctionsStatement
@@ -299,7 +306,7 @@ dropTableStatement
 alterTableStatement
     : ALTER TABLE qualifiedName alterClause (',' alterClause)*
     | ALTER TABLE qualifiedName ADD ROLLUP rollupItem (',' rollupItem)*
-    | ALTER TABLE qualifiedName DROP ROLLUP identifierList
+    | ALTER TABLE qualifiedName DROP ROLLUP identifier (',' identifier)*
     ;
 
 createIndexStatement
@@ -740,6 +747,10 @@ showHistogramMetaStatement
     : SHOW HISTOGRAM META (WHERE expression)?
     ;
 
+killAnalyzeStatement
+    : KILL ANALYZE INTEGER_VALUE
+    ;
+
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
 
 createResourceGroupStatement
@@ -761,6 +772,22 @@ alterResourceGroupStatement
 showResourceGroupStatement
     : SHOW RESOURCE GROUP identifier
     | SHOW RESOURCE GROUPS ALL?
+    ;
+
+createResourceStatement
+    : CREATE EXTERNAL? RESOURCE resourceName=identifierOrString properties?
+    ;
+
+alterResourceStatement
+    : ALTER RESOURCE resourceName=identifierOrString SET properties
+    ;
+
+dropResourceStatement
+    : DROP RESOURCE resourceName=identifierOrString
+    ;
+
+showResourceStatement
+    : SHOW RESOURCES
     ;
 
 classifier
@@ -827,8 +854,8 @@ dataDesc
     ;
 
 brokerDesc
-    : WITH BROKER name=identifierOrString props=propertyList?
-    | WITH BROKER props=propertyList?
+    : WITH BROKER props=propertyList?
+    | WITH BROKER name=identifierOrString props=propertyList?
     ;
 
 resourceDesc
@@ -1585,7 +1612,7 @@ nonReserved
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
-    | RESOURCE | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
+    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE
     | STRING | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION

@@ -84,7 +84,7 @@ public:
 
     Status delete_segment(int64_t tablet_id, std::string_view segment_name);
 
-    // Transform a txn log into versioned txn log(i.e., rename `txn_{tablet_id}_{txn_id}` to `vtxn_{tablet_id}_{log_version}`)
+    // Transform a txn log into versioned txn log(i.e., rename `{tablet_id}_{txn_id}.log` to `{tablet_id}_{log_version}.vlog`)
     Status publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version);
 
     Status put_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
