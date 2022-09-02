@@ -59,8 +59,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto txns = request->txn_ids().data();
             auto txns_size = request->txn_ids().size();
 
-            auto st = _env->lake_tablet_manager()->publish_version(tablet_id, base_version, new_version, txns,
-                                                                            txns_size);
+            auto st =
+                    _env->lake_tablet_manager()->publish_version(tablet_id, base_version, new_version, txns, txns_size);
             if (!st.ok()) {
                 LOG(WARNING) << "Fail to publish version for tablet " << tablet_id << ": " << st;
                 std::lock_guard l(response_mtx);
