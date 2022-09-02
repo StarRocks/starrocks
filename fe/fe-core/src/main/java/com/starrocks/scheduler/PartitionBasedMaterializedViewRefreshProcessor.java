@@ -148,7 +148,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
     private void updateMeta(ExecPlan execPlan) {
         // update the meta if succeed
-        database.writeLock();
+        if (!database.writeLockAndCheckExist()) {
+            throw new DmlException("update meta failed. database:" + database.getFullName() + " not exist");
+        }
         try {
             MaterializedView.AsyncRefreshContext refreshContext =
                     materializedView.getRefreshScheme().getAsyncRefreshContext();
@@ -170,13 +172,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
                 // remove partition info of not-exist partition for snapshot table from version map
                 OlapTable snapshotOlapTable = snapshotBaseTables.get(tableId);
-                Iterator<String> infoKeyIterator = currentTablePartitionInfo.keySet().iterator();
-                while (infoKeyIterator.hasNext()) {
-                    String partitionName = infoKeyIterator.next();
-                    if (!snapshotOlapTable.getPartitionNames().contains(partitionName)) {
-                        infoKeyIterator.remove();
-                    }
-                }
+                currentTablePartitionInfo.keySet().removeIf(partitionName ->
+                        !snapshotOlapTable.getPartitionNames().contains(partitionName));
             }
             ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
                     new ChangeMaterializedViewRefreshSchemeLog(materializedView);
@@ -547,7 +544,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
     private void dropPartition(Database database, MaterializedView materializedView, String mvPartitionName) {
         String dropPartitionName = materializedView.getPartition(mvPartitionName).getName();
-        database.writeLock();
+        if (!database.writeLockAndCheckExist()) {
+            throw new DmlException("drop partition failed. database:" + database.getFullName() + " not exist");
+        }
         try {
             GlobalStateMgr.getCurrentState().dropPartition(
                     database, materializedView,

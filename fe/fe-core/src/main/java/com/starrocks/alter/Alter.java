@@ -127,7 +127,9 @@ public class Alter {
         // check db quota
         db.checkQuota();
 
-        db.writeLock();
+        if (!db.writeLockAndCheckExist()) {
+            throw new DdlException("create materialized failed. database:" + db.getFullName() + " not exist");
+        }
         try {
             Table table = db.getTable(tableName);
             if (table.getType() != TableType.OLAP) {
@@ -158,8 +160,9 @@ public class Alter {
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-
-        db.writeLock();
+        if (!db.writeLockAndCheckExist()) {
+            throw new DdlException("drop materialized failed. database:" + db.getFullName() + " not exist");
+        }
         try {
             Table table = null;
             if (stmt.getTblName() != null) {
@@ -222,8 +225,10 @@ public class Alter {
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
+        if (!db.writeLockAndCheckExist()) {
+            throw new DdlException("alter materialized failed. database:" + db.getFullName() + " not exist");
+        }
         MaterializedView materializedView = null;
-        db.writeLock();
         try {
             final Table table = db.getTable(oldMvName);
             if (table instanceof MaterializedView) {
