@@ -367,22 +367,6 @@ public final class AggregateInfo extends AggregateInfoBase {
     }
 
     /**
-     * Append ids of all slots that are being referenced in the process
-     * of performing the aggregate computation described by this AggregateInfo.
-     */
-    public void getRefdSlots(List<SlotId> ids) {
-        Preconditions.checkState(outputTupleDesc_ != null);
-        if (groupingExprs_ != null) {
-            Expr.getIds(groupingExprs_, null, ids);
-        }
-        Expr.getIds(aggregateExprs_, null, ids);
-        // The backend assumes that the entire aggTupleDesc is materialized
-        for (int i = 0; i < outputTupleDesc_.getSlots().size(); ++i) {
-            ids.add(outputTupleDesc_.getSlots().get(i).getId());
-        }
-    }
-
-    /**
      * Substitute all the expressions (grouping expr, aggregate expr) and update our
      * substitution map according to the given substitution map:
      * - smap typically maps from tuple t1 to tuple t2 (example: the smap of an

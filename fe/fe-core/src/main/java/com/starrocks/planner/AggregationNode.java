@@ -28,7 +28,6 @@ import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TAggregationNode;
@@ -223,15 +222,6 @@ public class AggregationNode extends PlanNode {
             output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts)).append("\n");
         }
         return output.toString();
-    }
-
-    @Override
-    public void getMaterializedIds(Analyzer analyzer, List<SlotId> ids) {
-        super.getMaterializedIds(analyzer, ids);
-
-        // we indirectly reference all grouping slots (because we write them)
-        // so they're all materialized.
-        aggInfo.getRefdSlots(ids);
     }
 
     @Override

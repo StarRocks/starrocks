@@ -28,7 +28,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
@@ -622,19 +621,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             }
         }
         return false;
-    }
-
-    /**
-     * Appends ids of slots that need to be materialized for this tree of nodes.
-     * By default, only slots referenced by conjuncts need to be materialized
-     * (the rationale being that only conjuncts need to be evaluated explicitly;
-     * exprs that are turned into scan predicates, etc., are evaluated implicitly).
-     */
-    public void getMaterializedIds(Analyzer analyzer, List<SlotId> ids) {
-        for (PlanNode childNode : children) {
-            childNode.getMaterializedIds(analyzer, ids);
-        }
-        Expr.getIds(getConjuncts(), null, ids);
     }
 
     // Convert this plan node into msg (excluding children), which requires setting
