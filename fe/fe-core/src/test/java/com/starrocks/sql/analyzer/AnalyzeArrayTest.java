@@ -29,7 +29,7 @@ public class AnalyzeArrayTest {
 
     @Test
     public void testArray() {
-        analyzeFail("select [1,2,3][1:2]", "Array slice is not currently supported");
+        analyzeFail("select [1,2,3][1:2]");
         analyzeSuccess("select []");
         analyzeSuccess("select [][-1]");
         analyzeSuccess("select [1,2,3][v1] from t0");

@@ -16,6 +16,7 @@ import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
+import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
@@ -37,6 +38,7 @@ import java.time.LocalDateTime;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
 public class AnalyzeStmtTest {
@@ -189,6 +191,37 @@ public class AnalyzeStmtTest {
     }
 
     @Test
+    public void testHistogramSampleRatio() {
+        OlapTable t0 = (OlapTable) starRocksAssert.getCtx().getGlobalStateMgr()
+                .getDb("db").getTable("tbl");
+        for (Partition partition : t0.getAllPartitions()) {
+            partition.getBaseIndex().setRowCount(10000);
+        }
+
+        String sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
+                "properties(\"histogram_sample_ratio\"=\"0.1\")";
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("1", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
+
+        for (Partition partition : t0.getAllPartitions()) {
+            partition.getBaseIndex().setRowCount(400000);
+        }
+
+        sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
+                "properties(\"histogram_sample_ratio\"=\"0.2\")";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("0.5", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
+
+        for (Partition partition : t0.getAllPartitions()) {
+            partition.getBaseIndex().setRowCount(20000000);
+        }
+        sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
+                "properties(\"histogram_sample_ratio\"=\"0.9\")";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("0.5", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
+    }
+
+    @Test
     public void testDropStats() {
         String sql = "drop stats t0";
         DropStatsStmt dropStatsStmt = (DropStatsStmt) analyzeSuccess(sql);
@@ -198,5 +231,16 @@ public class AnalyzeStmtTest {
                 StatisticSQLBuilder.buildDropStatisticsSQL(10004L, StatsConstants.AnalyzeType.SAMPLE));
         Assert.assertEquals("DELETE FROM column_statistics WHERE TABLE_ID = 10004",
                 StatisticSQLBuilder.buildDropStatisticsSQL(10004L, StatsConstants.AnalyzeType.FULL));
+    }
+
+    @Test
+    public void testKillAnalyze() {
+        String sql = "kill analyze 1";
+        KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) analyzeSuccess(sql);
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(1, getConnectContext());
+        Assert.assertThrows(SemanticException.class, () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(2, true));
+        GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true);
+        Assert.assertThrows(SemanticException.class, () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true));
     }
 }

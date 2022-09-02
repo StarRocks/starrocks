@@ -139,7 +139,7 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert withResource(String sql) throws Exception {
-        CreateResourceStmt createResourceStmt = (CreateResourceStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        CreateResourceStmt createResourceStmt = (CreateResourceStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (!GlobalStateMgr.getCurrentState().getResourceMgr().containsResource(createResourceStmt.getResourceName())) {
             GlobalStateMgr.getCurrentState().getResourceMgr().createResource(createResourceStmt);
         }

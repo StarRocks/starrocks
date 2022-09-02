@@ -44,7 +44,6 @@ import org.apache.hudi.common.model.FileSlice;
 import org.apache.hudi.common.model.HoodieBaseFile;
 import org.apache.hudi.common.model.HoodieFileFormat;
 import org.apache.hudi.common.model.HoodieLogFile;
-import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
@@ -98,7 +97,7 @@ public class HiveMetaClient {
     private long baseHmsEventId;
 
     // Required for creating an instance of RetryingMetaStoreClient.
-    private static final HiveMetaHookLoader dummyHookLoader = tbl -> null;
+    private static final HiveMetaHookLoader DUMMY_HOOK_LOADER = tbl -> null;
 
     public HiveMetaClient(String uris) throws DdlException {
         HiveConf conf = new HiveConf();
@@ -122,10 +121,10 @@ public class HiveMetaClient {
 
         private AutoCloseClient(HiveConf conf) throws MetaException {
             if (!DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
                         HiveMetaStoreThriftClient.class.getName());
             } else {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
                         DLFProxyMetaStoreClient.class.getName());
             }
         }
@@ -335,7 +334,7 @@ public class HiveMetaClient {
             List<String> logs = fileSlice.getLogFiles().map(HoodieLogFile::getFileName).collect(Collectors.toList());
             fileDescs.add(new HdfsFileDesc(fileName, "", fileLength,
                     ImmutableList.of(), ImmutableList.copyOf(logs), HdfsFileFormat.isSplittable(sd.getInputFormat()),
-                    getTextFileFormatDesc(sd), metaClient.getTableType() == HoodieTableType.MERGE_ON_READ));
+                    getTextFileFormatDesc(sd)));
         }
         return fileDescs;
     }
@@ -547,6 +546,7 @@ public class HiveMetaClient {
             }
             stats.setNumDistinctValues(distinctCnt.size());
             stats.setNumNulls(numNulls);
+            stats.setType(HiveColumnStats.StatisticType.ESTIMATE);
             result.put(column.getName(), stats);
         }
 
@@ -684,7 +684,7 @@ public class HiveMetaClient {
                 List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
                 fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
                         ImmutableList.copyOf(fileBlockDescs), ImmutableList.of(),
-                        isSplittable, getTextFileFormatDesc(sd), false));
+                        isSplittable, getTextFileFormatDesc(sd)));
             }
         } catch (FileNotFoundException ignored) {
             // hive empty partition may not create directory

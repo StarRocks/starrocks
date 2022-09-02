@@ -4,7 +4,6 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.DmlStmt;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -22,6 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -246,6 +246,33 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
         try {
             taskRun.executeTaskRun();
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail("refresh failed");
+        }
+    }
+
+    @Test
+    public void testMvWithoutPartitionRefreshTwice() {
+        final AtomicInteger taskRunCounter = new AtomicInteger();
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                taskRunCounter.incrementAndGet();
+            }
+        };
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+
+        try {
+            for (int i = 0; i < 2; i++) {
+                taskRun.executeTaskRun();
+            }
+            Assert.assertEquals(1, taskRunCounter.get());
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail("refresh failed");

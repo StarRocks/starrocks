@@ -12,12 +12,6 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType PT, typename = guard::Guard>
-inline constexpr PrimitiveType ImmediateHistogramResultPT = PT;
-
-template <PrimitiveType PT>
-inline constexpr PrimitiveType ImmediateHistogramResultPT<PT, BinaryPTGuard<PT>> = TYPE_DOUBLE;
-
 template <typename T>
 struct Bucket {
 public:
@@ -157,8 +151,14 @@ public:
                 int scale = ctx->get_arg_type(0)->scale;
                 int precision = ctx->get_arg_type(0)->precision;
                 for (int i = 0; i < buckets.size(); ++i) {
-                    bucket_json += toBucketJson(DecimalV3Cast::to_string<T>(buckets[i].lower, scale, precision),
-                                                DecimalV3Cast::to_string<T>(buckets[i].upper, scale, precision),
+                    bucket_json += toBucketJson(DecimalV3Cast::to_string<T>(buckets[i].lower, precision, scale),
+                                                DecimalV3Cast::to_string<T>(buckets[i].upper, precision, scale),
+                                                buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
+                                   ",";
+                }
+            } else if constexpr (pt_is_binary<PT>) {
+                for (int i = 0; i < buckets.size(); ++i) {
+                    bucket_json += toBucketJson(buckets[i].lower.to_string(), buckets[i].upper.to_string(),
                                                 buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
                                    ",";
                 }

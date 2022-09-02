@@ -3,6 +3,7 @@ package com.starrocks.pseudocluster;
 
 import com.baidu.brpc.RpcContext;
 import com.baidu.brpc.client.RpcCallback;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -104,6 +105,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.transport.TTransportException;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -154,11 +156,22 @@ public class PseudoBackend {
     private final Map<TTaskType, Set<Long>> taskSignatures = new EnumMap(TTaskType.class);
     private volatile boolean stopped = false;
 
+    private volatile boolean shutdown = false;
+
     private TreeMap<Long, Runnable> maintenanceTasks = new TreeMap<>(Long::compare);
     private Thread maintenanceWorkerThread;
 
     private volatile float writeFailureRate = 0.0f;
     private volatile float publishFailureRate = 0.0f;
+
+    public static final long DEFAULT_TOTA_CAP_B = 100000000000L;
+    public static final long DEFAULT_AVAI_CAP_B = 50000000000L;
+    public static final long DEFAULT_USED_CAP_B = 20000000000L;
+    public static final long DEFAULT_SIZE_ON_DISK_PER_ROWSET_B = 1 << 20;
+
+    private long currentDataUsedCapacityB;
+    private long currentAvailableCapacityB;
+    private long currentTotalCapacityB;
 
     Backend be;
     HeartBeatClient heatBeatClient;
@@ -307,16 +320,9 @@ public class PseudoBackend {
         this.be = new Backend(backendId, host, heartBeatPort);
         this.tBackend = new TBackend(host, beThriftPort, httpPort);
 
-        Map<String, DiskInfo> disks = Maps.newHashMap();
-        DiskInfo diskInfo1 = new DiskInfo(runPath + "/storage");
         // TODO: maintain disk info with tablet/rowset count
-        diskInfo1.setTotalCapacityB(100000000000L);
-        diskInfo1.setAvailableCapacityB(50000000000L);
-        diskInfo1.setDataUsedCapacityB(20000000000L);
-        diskInfo1.setPathHash(PATH_HASH);
-        diskInfo1.setStorageMedium(TStorageMedium.SSD);
-        disks.put(diskInfo1.getRootPath(), diskInfo1);
-        be.setDisks(ImmutableMap.copyOf(disks));
+        setInitialCapacity(PseudoBackend.DEFAULT_TOTA_CAP_B, PseudoBackend.DEFAULT_AVAI_CAP_B,
+                PseudoBackend.DEFAULT_USED_CAP_B);
         be.setAlive(true);
         be.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
         be.setBePort(beThriftPort);
@@ -335,8 +341,35 @@ public class PseudoBackend {
         addMaintenanceTask(nextScheduleTime(tabletCheckIntervalMs), this::tabletMaintenance);
     }
 
+    public void setShutdown(boolean shutdown) {
+        this.shutdown = shutdown;
+    }
+
+    public void setInitialCapacity(long totalCapacityB, long availableCapacityB, long usedCapacityB) {
+        Preconditions.checkState(usedCapacityB < availableCapacityB);
+        Preconditions.checkState(availableCapacityB + usedCapacityB <= totalCapacityB);
+
+        Map<String, DiskInfo> disks = Maps.newHashMap();
+        DiskInfo diskInfo1 = new DiskInfo(runPath + "/storage");
+        diskInfo1.setTotalCapacityB(totalCapacityB);
+        currentTotalCapacityB = totalCapacityB;
+        diskInfo1.setAvailableCapacityB(availableCapacityB);
+        currentAvailableCapacityB = availableCapacityB;
+        diskInfo1.setDataUsedCapacityB(usedCapacityB);
+        currentDataUsedCapacityB = usedCapacityB;
+        diskInfo1.setPathHash(PATH_HASH);
+        diskInfo1.setStorageMedium(TStorageMedium.SSD);
+        disks.put(diskInfo1.getRootPath(), diskInfo1);
+
+        be.setDisks(ImmutableMap.copyOf(disks));
+    }
+
     public String getHost() {
         return host;
+    }
+
+    public String getHostHeartbeatPort() {
+        return host + ":" + heartBeatPort;
     }
 
     public long getId() {
@@ -353,6 +386,10 @@ public class PseudoBackend {
 
     public Tablet getTablet(long tabletId) {
         return tabletManager.getTablet(tabletId);
+    }
+
+    public List<Tablet> getTabletsByTable(long tableId) {
+        return tabletManager.getTabletsByTable(tableId);
     }
 
     public void setWriteFailureRate(float rate) {
@@ -377,11 +414,16 @@ public class PseudoBackend {
         request.setTablets(tabletManager.getAllTabletInfo());
         request.setTablet_max_compaction_score(100);
         request.setBackend(tBackend);
+        reportVersion.incrementAndGet();
         request.setReport_version(reportVersion.get());
-        TMasterResult result;
         try {
-            result = frontendService.report(request);
-            LOG.info("report {} tablets", request.tablets.size());
+            if (!shutdown) {
+                TMasterResult result = frontendService.report(request);
+                LOG.info("report {} tablets", request.tablets.size());
+                if (result.status.status_code != TStatusCode.OK) {
+                    LOG.warn("Report tablets failed, status:" + result.status.error_msgs.get(0));
+                }
+            }
         } catch (TException e) {
             LOG.error("report tablets error", e);
         }
@@ -397,9 +439,9 @@ public class PseudoBackend {
             TDisk tdisk = new TDisk();
             tdisk.setRoot_path(entry.getKey());
             tdisk.setPath_hash(entry.getValue().getPathHash());
-            tdisk.setDisk_total_capacity(entry.getValue().getTotalCapacityB());
-            tdisk.setDisk_available_capacity(entry.getValue().getAvailableCapacityB());
-            tdisk.setData_used_capacity(entry.getValue().getDataUsedCapacityB());
+            tdisk.setDisk_total_capacity(currentTotalCapacityB);
+            tdisk.setDisk_available_capacity(currentAvailableCapacityB);
+            tdisk.setData_used_capacity(currentDataUsedCapacityB);
             tdisk.setStorage_medium(entry.getValue().getStorageMedium());
             tdisk.setUsed(true);
             tdisks.put(entry.getKey(), tdisk);
@@ -407,10 +449,14 @@ public class PseudoBackend {
         request.setDisks(tdisks);
         request.setBackend(tBackend);
         request.setReport_version(reportVersion.get());
-        TMasterResult result;
         try {
-            result = frontendService.report(request);
-            LOG.info("report {} disks", request.disks.size());
+            if (!shutdown) {
+                TMasterResult result = frontendService.report(request);
+                LOG.info("report {} disks", request.disks.size());
+                if (result.status.status_code != TStatusCode.OK) {
+                    LOG.warn("Report disks failed, status:" + result.status.error_msgs.get(0));
+                }
+            }
         } catch (TException e) {
             LOG.error("report disk error", e);
         }
@@ -432,10 +478,14 @@ public class PseudoBackend {
             }
         }
         request.setTasks(tasks);
-        TMasterResult result;
         try {
-            result = frontendService.report(request);
-            LOG.info("report {} tasks", request.tasks.size());
+            if (!shutdown) {
+                TMasterResult result = frontendService.report(request);
+                LOG.info("report {} tasks", request.tasks.size());
+                if (result.status.status_code != TStatusCode.OK) {
+                    LOG.warn("Report tasks failed, status:" + result.status.error_msgs.get(0));
+                }
+            }
         } catch (TException e) {
             LOG.error("report tasks error", e);
         }
@@ -461,6 +511,7 @@ public class PseudoBackend {
     }
 
     void handleCreateTablet(TAgentTaskRequest request, TFinishTaskRequest finish) throws UserException {
+        // Ignore the initial disk usage of tablet
         Tablet t = tabletManager.createTablet(request.create_tablet_req);
     }
 
@@ -476,10 +527,6 @@ public class PseudoBackend {
 
     void handleClone(TAgentTaskRequest request, TFinishTaskRequest finish) throws Exception {
         TCloneReq task = request.clone_req;
-        Tablet destTablet = tabletManager.getTablet(task.tablet_id);
-        if (destTablet == null) {
-            throw new Exception("clone failed dest tablet " + task.tablet_id + " on " + be.getId() + " not found");
-        }
         if (task.src_backends.size() != 1) {
             throw new Exception("bad src backends size " + task.src_backends.size());
         }
@@ -495,11 +542,15 @@ public class PseudoBackend {
         if (srcTablet == null) {
             throw new Exception("clone failed src tablet " + task.tablet_id + " on " + srcBackend.be.getId() + " not found");
         }
-        // currently, only incremental clone is supported
-        String oldInfo = destTablet.versionInfo();
-        destTablet.cloneFrom(srcTablet);
-        System.out.printf("clone tablet:%d src:%s dest:%s %s->%s\n", task.tablet_id, srcBackend.be.getId(), be.getId(),
-                oldInfo, destTablet.versionInfo());
+        Tablet destTablet = tabletManager.getTablet(task.tablet_id);
+        if (destTablet == null) {
+            destTablet = new Tablet(task.tablet_id, srcTablet.tableId, srcTablet.partitionId, srcTablet.schemaHash,
+                    srcTablet.enablePersistentIndex);
+            destTablet.fullCloneFrom(srcTablet, srcBackend.getId());
+            tabletManager.addClonedTablet(destTablet);
+        } else {
+            destTablet.cloneFrom(srcTablet, srcBackend.getId());
+        }
         finish.finish_tablet_infos = Lists.newArrayList(destTablet.getTabletInfo());
     }
 
@@ -529,7 +580,8 @@ public class PseudoBackend {
 
     void handleTask(TAgentTaskRequest request) {
         TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(tBackend,
-                request.getTask_type(), request.getSignature(), new TStatus(TStatusCode.OK));
+                request.getTask_type(), request.getSignature(),
+                new TStatus(TStatusCode.OK));
         long v = reportVersion.incrementAndGet();
         finishTaskRequest.setReport_version(v);
         try {
@@ -600,6 +652,9 @@ public class PseudoBackend {
 
         @Override
         public THeartbeatResult heartbeat(TMasterInfo masterInfo) throws TException {
+            if (shutdown) {
+                throw new TTransportException(TTransportException.NOT_OPEN, "backend " + getId() + " shutdown");
+            }
             TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
             backendInfo.setBrpc_port(brpcPort);
             return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
@@ -624,7 +679,10 @@ public class PseudoBackend {
         }
 
         @Override
-        public TAgentResult submit_tasks(List<TAgentTaskRequest> tasks) {
+        public TAgentResult submit_tasks(List<TAgentTaskRequest> tasks) throws TException {
+            if (shutdown) {
+                throw new TTransportException(TTransportException.NOT_OPEN, "backend " + getId() + " shutdown");
+            }
             synchronized (taskSignatures) {
                 for (TAgentTaskRequest task : tasks) {
                     Set<Long> signatures = taskSignatures.computeIfAbsent(task.getTask_type(), k -> new HashSet<>());
@@ -701,7 +759,10 @@ public class PseudoBackend {
         }
 
         @Override
-        public TTabletStatResult get_tablet_stat() {
+        public TTabletStatResult get_tablet_stat() throws TException {
+            if (shutdown) {
+                throw new TTransportException(TTransportException.NOT_OPEN, "backend " + getId() + " shutdown");
+            }
             TTabletStatResult stats = new TTabletStatResult();
             tabletManager.getTabletStat(stats);
             return stats;
@@ -777,6 +838,9 @@ public class PseudoBackend {
         @Override
         public Future<PExecPlanFragmentResult> execPlanFragment(
                 PExecPlanFragmentRequest request, RpcCallback<PExecPlanFragmentResult> callback) {
+            if (shutdown) {
+                throw new RuntimeException("backend " + getId() + " shutdown");
+            }
             TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecPlanFragmentParams params = new TExecPlanFragmentParams();
             try {
@@ -811,6 +875,9 @@ public class PseudoBackend {
         @Override
         public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragments(
                 PExecBatchPlanFragmentsRequest request, RpcCallback<PExecBatchPlanFragmentsResult> callback) {
+            if (shutdown) {
+                throw new RuntimeException("backend " + getId() + " shutdown");
+            }
             TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
             final TExecBatchPlanFragmentsParams params = new TExecBatchPlanFragmentsParams();
             try {
@@ -854,6 +921,9 @@ public class PseudoBackend {
         @Override
         public Future<PCancelPlanFragmentResult> cancelPlanFragment(
                 PCancelPlanFragmentRequest request, RpcCallback<PCancelPlanFragmentResult> callback) {
+            if (shutdown) {
+                throw new RuntimeException("backend " + getId() + " shutdown");
+            }
             return executor.submit(() -> {
                 PCancelPlanFragmentResult result = new PCancelPlanFragmentResult();
                 StatusPB pStatus = new StatusPB();
@@ -865,6 +935,9 @@ public class PseudoBackend {
 
         @Override
         public Future<PFetchDataResult> fetchData(PFetchDataRequest request, RpcCallback<PFetchDataResult> callback) {
+            if (shutdown) {
+                throw new RuntimeException("backend " + getId() + " shutdown");
+            }
             String fid = DebugUtil.printId(request.finstId);
             String queryId = resultSinkInstanceToQueryId.get(fid);
             if (queryId == null) {
@@ -1077,7 +1150,8 @@ public class PseudoBackend {
         PseudoOlapTableSink sink = new PseudoOlapTableSink(cluster, tDataSink);
         if (!sink.open()) {
             sink.cancel();
-            throw new Exception(String.format("open sink failed, backend:%s txn:%d", be.getId(), sink.txnId));
+            throw new Exception(
+                    String.format("open sink failed, backend:%s txn:%d %s", be.getId(), sink.txnId, sink.getErrorMessage()));
         }
         if (!sink.close()) {
             sink.cancel();
@@ -1098,16 +1172,22 @@ public class PseudoBackend {
                 this.indexId = indexId;
             }
 
-            void open(PTabletWriterOpenRequest request) {
+            void open(PTabletWriterOpenRequest request) throws Exception {
                 tablets = request.tablets;
+                for (PTabletWithPartition tabletWithPartition : tablets) {
+                    Tablet tablet = tabletManager.getTablet(tabletWithPartition.tabletId);
+                    if (tablet == null) {
+                        LOG.warn("tablet not found {}", tabletWithPartition.tabletId);
+                        throw new Exception("tablet not found " + tabletWithPartition.tabletId);
+                    }
+                    if (tablet.getRowsetCount() >= Tablet.maxVersions) {
+                        throw new Exception(String.format("Too many versions. tablet_id: %d, version_count: %d, limit: %d",
+                                tablet.id, tablet.getRowsetCount(), Tablet.maxVersions));
+                    }
+                }
             }
 
             void cancel() {
-            }
-
-            void buildAndCommitRowset(long txnId, Tablet tablet) throws UserException {
-                Rowset rowset = new Rowset(txnId, genRowsetId());
-                txnManager.commit(txnId, tablet.partitionId, tablet, rowset);
             }
 
             void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
@@ -1117,7 +1197,8 @@ public class PseudoBackend {
                         LOG.warn("tablet not found {}", tabletWithPartition.tabletId);
                         continue;
                     }
-                    buildAndCommitRowset(txnId, tablet);
+                    Rowset rowset = new Rowset(txnId, genRowsetId(), 100, 100000);
+                    txnManager.commit(txnId, tablet.partitionId, tablet, rowset);
                     PTabletInfo info = new PTabletInfo();
                     info.tabletId = tablet.id;
                     info.schemaHash = tablet.schemaHash;
@@ -1134,7 +1215,7 @@ public class PseudoBackend {
             this.id = id;
         }
 
-        void open(PTabletWriterOpenRequest request, PTabletWriterOpenResult result) {
+        void open(PTabletWriterOpenRequest request, PTabletWriterOpenResult result) throws Exception {
             this.txnId = request.txnId;
             if (indexToTabletsChannel.containsKey(request.indexId)) {
                 return;
@@ -1152,8 +1233,8 @@ public class PseudoBackend {
         void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
             TabletsChannel tabletsChannel = indexToTabletsChannel.get(request.indexId);
             if (tabletsChannel == null) {
-                result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
-                result.status.errorMsgs.add("cannot find the tablets channel associated with the index id");
+                result.status =
+                        statusPB(TStatusCode.INTERNAL_ERROR, "cannot find the tablets channel associated with the index id");
             } else {
                 tabletsChannel.close(request, result);
             }
@@ -1169,7 +1250,13 @@ public class PseudoBackend {
         result.status.errorMsgs = new ArrayList<>();
         String loadIdString = String.format("%d-%d", request.id.hi, request.id.lo);
         LoadChannel loadChannel = loadChannels.computeIfAbsent(loadIdString, k -> new LoadChannel(request.id));
-        loadChannel.open(request, result);
+        try {
+            loadChannel.open(request, result);
+        } catch (Exception e) {
+            loadChannel.cancel();
+            loadChannels.remove(loadIdString);
+            result.status = statusPB(TStatusCode.INTERNAL_ERROR, e.getMessage());
+        }
         return result;
     }
 
@@ -1181,6 +1268,21 @@ public class PseudoBackend {
             loadChannel.cancel();
         }
         return result;
+    }
+
+    /**
+     * We update the disk usage when a txn is published successfully.
+     * Currently, we update it in rowset granularity, i.e. no matter how many bytes we write in a txn,
+     * the cost of disk space is the same.
+     *
+     * @param delta the number of bytes to increase or decrease
+     */
+    public void updateDiskUsage(long delta) {
+        if ((currentAvailableCapacityB - delta) < currentTotalCapacityB * 0.05) {
+            return;
+        }
+        currentDataUsedCapacityB += delta;
+        currentAvailableCapacityB -= delta;
     }
 
     synchronized PTabletWriterAddBatchResult tabletWriterAddChunk(PTabletWriterAddChunkRequest request) {
@@ -1196,9 +1298,8 @@ public class PseudoBackend {
                 if (random.nextFloat() < writeFailureRate) {
                     channel.cancel();
                     loadChannels.remove(loadIdString);
-                    result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
-                    result.status.errorMsgs.add("inject error writeFailureRate:" + writeFailureRate);
-                    LOG.info("inject write failure txn:{} backend:{}", request.txnId, be.getId());
+                    result.status = statusPB(TStatusCode.INTERNAL_ERROR, "inject error writeFailureRate:" + writeFailureRate);
+                    LOG.warn("inject write failure txn:{} backend:{}", request.txnId, be.getId());
                     return result;
                 }
                 try {
@@ -1207,12 +1308,10 @@ public class PseudoBackend {
                     LOG.warn("error close load channel", e);
                     channel.cancel();
                     loadChannels.remove(loadIdString);
-                    result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
-                    result.status.errorMsgs.add(e.getMessage());
+                    result.status = statusPB(TStatusCode.INTERNAL_ERROR, e.getMessage());
                 }
             } else {
-                result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
-                result.status.errorMsgs.add("no associated load channel");
+                result.status = statusPB(TStatusCode.INTERNAL_ERROR, "no associated load channel");
             }
         }
         return result;

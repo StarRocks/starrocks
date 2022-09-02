@@ -207,7 +207,7 @@ public class PlanFragmentBuilder {
     private ExecPlan finalizeFragments(ExecPlan execPlan, TResultSinkType resultSinkType) {
         List<PlanFragment> fragments = execPlan.getFragments();
         for (PlanFragment fragment : fragments) {
-            fragment.finalize(resultSinkType);
+            fragment.createDataSink(resultSinkType);
         }
         Collections.reverse(fragments);
         // compute local_rf_waiting_set for each PlanNode.
@@ -701,7 +701,7 @@ public class PlanFragmentBuilder {
                     new HudiScanNode(context.getNextNodeId(), tupleDescriptor, "HudiScanNode");
             hudiScanNode.computeStatistics(optExpression.getStatistics());
             try {
-                HDFSScanNodePredicates scanNodePredicates = hudiScanNode.getPredictsExpr();
+                HDFSScanNodePredicates scanNodePredicates = hudiScanNode.getScanNodePredicates();
                 scanNodePredicates.setSelectedPartitionIds(predicates.getSelectedPartitionIds());
                 scanNodePredicates.setIdToPartitionKey(predicates.getIdToPartitionKey());
 
@@ -743,7 +743,7 @@ public class PlanFragmentBuilder {
                     new HdfsScanNode(context.getNextNodeId(), tupleDescriptor, "HdfsScanNode");
             hdfsScanNode.computeStatistics(optExpression.getStatistics());
             try {
-                HDFSScanNodePredicates scanNodePredicates = hdfsScanNode.getPredictsExpr();
+                HDFSScanNodePredicates scanNodePredicates = hdfsScanNode.getScanNodePredicates();
                 scanNodePredicates.setSelectedPartitionIds(predicates.getSelectedPartitionIds());
                 scanNodePredicates.setIdToPartitionKey(predicates.getIdToPartitionKey());
 
@@ -799,33 +799,8 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
                 icebergScanNode.getScanRangeLocations();
-                /*
-                 * populates 'minMaxTuple' with slots for statistics values,
-                 * and populates 'minMaxConjuncts' with conjuncts pointing into the 'minMaxTuple'
-                 */
-                List<ScalarOperator> minMaxConjuncts = node.getMinMaxConjuncts();
-                TupleDescriptor minMaxTuple = context.getDescTbl().createTupleDescriptor();
-                for (ScalarOperator minMaxConjunct : minMaxConjuncts) {
-                    for (ColumnRefOperator columnRefOperator : Utils.extractColumnRef(minMaxConjunct)) {
-                        SlotDescriptor slotDescriptor =
-                                context.getDescTbl()
-                                        .addSlotDescriptor(minMaxTuple, new SlotId(columnRefOperator.getId()));
-                        Column column = node.getMinMaxColumnRefMap().get(columnRefOperator);
-                        slotDescriptor.setColumn(column);
-                        slotDescriptor.setIsNullable(column.isAllowNull());
-                        slotDescriptor.setIsMaterialized(true);
-                        context.getColRefToExpr()
-                                .put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDescriptor));
-                    }
-                }
-                minMaxTuple.computeMemLayout();
-                icebergScanNode.setMinMaxTuple(minMaxTuple);
-                ScalarOperatorToExpr.FormatterContext minMaxFormatterContext =
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
-                for (ScalarOperator minMaxConjunct : minMaxConjuncts) {
-                    icebergScanNode.getMinMaxConjuncts().
-                            add(ScalarOperatorToExpr.buildExecExpression(minMaxConjunct, minMaxFormatterContext));
-                }
+                HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
             } catch (UserException e) {
                 LOG.warn("Iceberg scan node get scan range locations failed : " + e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);

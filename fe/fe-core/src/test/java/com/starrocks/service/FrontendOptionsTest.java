@@ -41,7 +41,7 @@ public class FrontendOptionsTest {
     @Test
     public void cidrTest() {
 
-        List<String> priorityCidrs = FrontendOptions.priorityCidrs;
+        List<String> priorityCidrs = FrontendOptions.PRIORITY_CIDRS;
         priorityCidrs.add("192.168.5.136/32");
 
         FrontendOptions frontendOptions = new FrontendOptions();
@@ -92,10 +92,10 @@ public class FrontendOptionsTest {
     }
 
     @Test
-    public void enableFQDNTest() throws UnknownHostException, 
-                                        NoSuchFieldException, 
-                                        SecurityException, 
-                                        IllegalArgumentException, 
+    public void enableFQDNTest() throws UnknownHostException,
+                                        NoSuchFieldException,
+                                        SecurityException,
+                                        IllegalArgumentException,
                                         IllegalAccessException {
         mockNet();
         Field field = FrontendOptions.class.getDeclaredField("localAddr");
@@ -103,28 +103,28 @@ public class FrontendOptionsTest {
         field.set(null, addr);
         Field field1 = FrontendOptions.class.getDeclaredField("useFqdn");
         field1.setAccessible(true);
-        
+
         field1.set(null, true);
         Assert.assertTrue(FrontendOptions.getLocalHostAddress().equals("sandbox"));
         field1.set(null, false);
         Assert.assertTrue(FrontendOptions.getLocalHostAddress().equals("127.0.0.10"));
     }
 
-    @Test 
+    @Test
     public void testChooseHostType() throws UnknownHostException {
         mockNet();
         useFqdn = true;
-        FrontendOptions.init(new String[]{"-host_type", "ip"});
+        FrontendOptions.init(new String[] {"-host_type", "ip"});
         Assert.assertTrue(!useFqdn);
         useFqdn = false;
-        FrontendOptions.init(new String[]{"-host_type", "fqdn"});
+        FrontendOptions.init(new String[] {"-host_type", "fqdn"});
         Assert.assertTrue(useFqdn);
         useFqdn = false;
-        FrontendOptions.init(new String[]{});
+        FrontendOptions.init(new String[] {});
         Assert.assertTrue(useFqdn);
     }
 
-    
+
     private void mkdir(boolean hasFqdn, String metaPath) {
         File dir = new File(metaPath);
         if (!dir.exists()) {
@@ -146,7 +146,7 @@ public class FrontendOptionsTest {
             fw.write(line4);
             fw.write(line1);
             if (hasFqdn) {
-                fw.write(line2);    
+                fw.write(line2);
             }
             fw.flush();
             fw.close();
@@ -156,7 +156,7 @@ public class FrontendOptionsTest {
     }
 
     private void deleteDir(File dir) {
-        
+
         if (!dir.exists()) {
             return;
         }
@@ -178,14 +178,14 @@ public class FrontendOptionsTest {
         // fqdn
         mkdir(true, metaPath);
         useFqdnFile = false;
-        FrontendOptions.init(new String[]{});
+        FrontendOptions.init(new String[] {});
         Assert.assertTrue(useFqdnFile);
         File dir = new File(metaPath);
         deleteDir(dir);
         // ip
         mkdir(false, metaPath);
         useFqdnFile = true;
-        FrontendOptions.init(new String[]{});
+        FrontendOptions.init(new String[] {});
         Assert.assertTrue(!useFqdnFile);
         dir = new File(metaPath);
         deleteDir(dir);
@@ -290,7 +290,7 @@ public class FrontendOptionsTest {
         FrontendOptions.saveStartType();
         String roleFilePath = Config.meta_dir + "/image/ROLE";
         File roleFile = new File(roleFilePath);
-        
+
         Properties prop = new Properties();
         String hostType;
         try (FileInputStream in = new FileInputStream(roleFile)) {

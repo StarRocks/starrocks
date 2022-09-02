@@ -32,10 +32,10 @@ public class JoinCommutativityWithOutInnerRule extends TransformationRule {
                         Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 
-    private static final JoinCommutativityWithOutInnerRule instance = new JoinCommutativityWithOutInnerRule();
+    private static final JoinCommutativityWithOutInnerRule INSTANCE = new JoinCommutativityWithOutInnerRule();
 
     public static JoinCommutativityWithOutInnerRule getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     public boolean check(final OptExpression input, OptimizerContext context) {

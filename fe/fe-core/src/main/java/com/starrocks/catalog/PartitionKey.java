@@ -29,6 +29,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
@@ -223,6 +224,36 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         builder.append("]; ");
 
         return builder.toString();
+    }
+
+    public static PartitionKey fromString(String partitionKey) {
+        String[] partitionKeyArray = partitionKey.split(";");
+        String types = partitionKeyArray[0];
+        String keys = partitionKeyArray[1];
+
+        String typeContent = types.substring(types.indexOf("[") + 1, types.indexOf("]"));
+        String keyContent = keys.substring(keys.indexOf("[") + 1, keys.indexOf("]"));
+        if (typeContent.isEmpty() || keyContent.isEmpty()) {
+            return new PartitionKey();
+        }
+
+        String[] typeArray = typeContent.split(",");
+        String[] keyArray = keyContent.split(",");
+        Preconditions.checkState(typeArray.length == keyArray.length);
+
+        List<LiteralExpr> keyList = Lists.newArrayList();
+        List<PrimitiveType> typeList = Lists.newArrayList();
+        for (int index = 0; index < typeArray.length; ++index) {
+            PrimitiveType type = PrimitiveType.valueOf(typeArray[index].toUpperCase());
+            LiteralExpr expr = NullLiteral.create(Type.fromPrimitiveType(type));
+            try {
+                expr = LiteralExpr.create(keyArray[index], Type.fromPrimitiveType(type));
+            } catch (AnalysisException ignored) {
+            }
+            typeList.add(type);
+            keyList.add(expr);
+        }
+        return new PartitionKey(keyList, typeList);
     }
 
     @Override

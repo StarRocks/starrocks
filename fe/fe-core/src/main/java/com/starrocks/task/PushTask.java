@@ -37,6 +37,7 @@ import com.starrocks.thrift.TPriority;
 import com.starrocks.thrift.TPushReq;
 import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TResourceInfo;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -69,6 +70,8 @@ public class PushTask extends AgentTask {
     private TDescriptorTable tDescriptorTable;
     private boolean useVectorized;
     private String timezone;
+
+    private TTabletType tabletType;
 
     public PushTask(TResourceInfo resourceInfo, long backendId, long dbId, long tableId, long partitionId,
                     long indexId, long tabletId, long replicaId, int schemaHash, long version,
@@ -107,7 +110,7 @@ public class PushTask extends AgentTask {
     public PushTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
                     long replicaId, int schemaHash, int timeoutSecond, long loadJobId, TPushType pushType,
                     TPriority priority, long transactionId, long signature, TBrokerScanRange tBrokerScanRange,
-                    TDescriptorTable tDescriptorTable, boolean useVectorized, String timezone) {
+                    TDescriptorTable tDescriptorTable, boolean useVectorized, String timezone, TTabletType tabletType) {
         this(null, backendId, dbId, tableId, partitionId, indexId,
                 tabletId, replicaId, schemaHash, -1, timeoutSecond, loadJobId, pushType, null,
                 priority, TTaskType.REALTIME_PUSH, transactionId, signature);
@@ -115,6 +118,7 @@ public class PushTask extends AgentTask {
         this.tDescriptorTable = tDescriptorTable;
         this.useVectorized = useVectorized;
         this.timezone = timezone;
+        this.tabletType = tabletType;
     }
 
     public TPushReq toThrift() {
@@ -176,6 +180,7 @@ public class PushTask extends AgentTask {
                 request.setBroker_scan_range(tBrokerScanRange);
                 request.setDesc_tbl(tDescriptorTable);
                 request.setUse_vectorized(useVectorized);
+                request.setTablet_type(tabletType);
                 break;
             case CANCEL_DELETE:
                 request.setTransaction_id(transactionId);

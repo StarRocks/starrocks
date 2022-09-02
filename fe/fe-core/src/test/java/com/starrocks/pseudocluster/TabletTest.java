@@ -10,7 +10,7 @@ public class TabletTest {
         Tablet ret = new Tablet(1, 1, 1, 1, true);
         long txnId = 1;
         for (Integer v : versions) {
-            ret.commitRowset(new Rowset(txnId, "rowset" + txnId), v);
+            ret.commitRowset(new Rowset(txnId, "rowset" + txnId, 100, 100000), v);
             txnId++;
         }
         return ret;
@@ -21,7 +21,7 @@ public class TabletTest {
         Tablet src = buildTabletWithVersions(2, 3, 4, 5, 6);
         Tablet dest = buildTabletWithVersions(2, 4, 6);
         Assert.assertEquals(Lists.newArrayList(3L, 5L, 7L), dest.getMissingVersions());
-        dest.cloneFrom(src);
+        dest.cloneFrom(src, 0);
         Assert.assertEquals(6, dest.maxContinuousVersion());
     }
 
@@ -30,7 +30,7 @@ public class TabletTest {
         Tablet src = buildTabletWithVersions(2, 3, 4, 5, 6);
         Tablet dest = buildTabletWithVersions(2, 3, 4);
         Assert.assertEquals(Lists.newArrayList(5L), dest.getMissingVersions());
-        dest.cloneFrom(src);
+        dest.cloneFrom(src, 0);
         Assert.assertEquals(6, dest.maxContinuousVersion());
     }
 
@@ -47,7 +47,7 @@ public class TabletTest {
         }
         Tablet dest = buildTabletWithVersions(2, 3, 4);
         Assert.assertEquals(Lists.newArrayList(5L), dest.getMissingVersions());
-        dest.cloneFrom(src);
+        dest.cloneFrom(src, 0);
         Assert.assertEquals(6, dest.minVersion());
     }
 
@@ -58,7 +58,7 @@ public class TabletTest {
         try {
             Tablet ret = new Tablet(1, 1, 1, 1, true);
             for (int i = 2; i < 16; i++) {
-                ret.commitRowset(new Rowset(i, "rowset" + i), i);
+                ret.commitRowset(new Rowset(i, "rowset" + i, 100, 100000), i);
                 Thread.sleep(100);
             }
             long oldMinVersion = ret.minVersion();
@@ -67,6 +67,29 @@ public class TabletTest {
             Assert.assertTrue(oldMinVersion < newMinVersion);
         } finally {
             Tablet.versionExpireSec = oldVersionExpireSec;
+        }
+    }
+
+    @Test
+    public void testCompaction() throws Exception {
+        long oldCompactionIntervalMs = Tablet.compactionIntervalMs;
+        Tablet.compactionIntervalMs = 100;
+        try {
+            Tablet ret = new Tablet(1, 1, 1, 1, true);
+            for (int i = 2; i < 16; i++) {
+                ret.commitRowset(new Rowset(i, "rowset" + i, 100, 100000), i);
+            }
+            Assert.assertEquals(15, ret.getVersionCount());
+            Assert.assertEquals(14, ret.getRowsetCount());
+            ret.lastCompactionMs = 0;
+            ret.doCompaction();
+            Assert.assertEquals(16, ret.getVersionCount());
+            Assert.assertEquals(1, ret.getRowsetCount());
+            ret.doCompaction();
+            Assert.assertEquals(16, ret.getVersionCount());
+            Assert.assertEquals(1, ret.getRowsetCount());
+        } finally {
+            Tablet.compactionIntervalMs = oldCompactionIntervalMs;
         }
     }
 

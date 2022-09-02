@@ -39,6 +39,7 @@ struct TBackendInfo {
     5: optional string version
     6: optional i32 num_hardware_cores
     7: optional Types.TPort starlet_port
+    8: optional i64 reboot_time
 }
 
 struct THeartbeatResult {

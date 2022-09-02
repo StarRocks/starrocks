@@ -137,4 +137,9 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select v1 + 1 as v from t0 group by cube(v)");
         analyzeSuccess("select v1 + 1 as v from t0 group by rollup(v)");
     }
+
+    @Test
+    public void testAnyValueFunction() {
+        analyzeSuccess("select v1, any_value(v2) from t0 group by v1");
+    }
 }

@@ -273,7 +273,7 @@ TabletColumn::TabletColumn(const TabletColumn& rhs)
     }
 }
 
-TabletColumn::TabletColumn(TabletColumn&& rhs)
+TabletColumn::TabletColumn(TabletColumn&& rhs) noexcept
         : _col_name(std::move(rhs._col_name)),
           _unique_id(rhs._unique_id),
           _length(rhs._length),
@@ -311,7 +311,7 @@ TabletColumn& TabletColumn::operator=(const TabletColumn& rhs) {
     return *this;
 }
 
-TabletColumn& TabletColumn::operator=(TabletColumn&& rhs) {
+TabletColumn& TabletColumn::operator=(TabletColumn&& rhs) noexcept {
     TabletColumn tmp(std::move(rhs));
     swap(&tmp);
     return *this;
@@ -404,19 +404,12 @@ bool TabletColumn::is_format_v2_column() const {
  * TabletSchema
  ******************************************************************/
 
-std::shared_ptr<TabletSchema> TabletSchema::create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb) {
-    auto schema = std::shared_ptr<TabletSchema>(new TabletSchema(schema_pb),
-                                                DeleterWithMemTracker<TabletSchema>(mem_tracker));
-    mem_tracker->consume(schema->mem_usage());
-    return schema;
+std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaPB& schema_pb) {
+    return std::make_shared<TabletSchema>(schema_pb);
 }
 
-std::shared_ptr<TabletSchema> TabletSchema::create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb,
-                                                   TabletSchemaMap* schema_map) {
-    auto schema = std::shared_ptr<TabletSchema>(new TabletSchema(schema_pb, schema_map),
-                                                DeleterWithMemTracker<TabletSchema>(mem_tracker));
-    mem_tracker->consume(schema->mem_usage());
-    return schema;
+std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) {
+    return std::make_shared<TabletSchema>(schema_pb, schema_map);
 }
 
 std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_tablet_schema,
@@ -435,9 +428,7 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
         auto* tablet_column = partial_tablet_schema_pb.add_column();
         src_tablet_schema.column(referenced_column_id).to_schema_pb(tablet_column);
     }
-    auto partial_tablet_schema = std::make_shared<TabletSchema>();
-    partial_tablet_schema->init_from_pb(partial_tablet_schema_pb);
-    return partial_tablet_schema;
+    return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
 }
 
 void TabletSchema::_init_schema() const {
@@ -454,17 +445,29 @@ vectorized::Schema* TabletSchema::schema() const {
     return _schema.get();
 }
 
+TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb) {
+    _init_from_pb(schema_pb);
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_schema_mem_tacker(), mem_usage())
+}
+
+TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) : _schema_map(schema_map) {
+    _init_from_pb(schema_pb);
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_schema_mem_tacker(), mem_usage())
+}
+
 TabletSchema::~TabletSchema() {
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->tablet_schema_mem_tacker(), mem_usage())
     if (_schema_map != nullptr) {
         _schema_map->erase(_id);
     }
 }
 
-void TabletSchema::init_from_pb(const TabletSchemaPB& schema) {
+void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     _id = schema.has_id() ? schema.id() : invalid_id();
     _keys_type = static_cast<uint8_t>(schema.keys_type());
     _num_key_columns = 0;
     _cols.clear();
+    _compression_type = schema.compression_type();
     for (auto& column_pb : schema.column()) {
         TabletColumn column;
         column.init_from_pb(column_pb);
@@ -501,6 +504,7 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
         tablet_schema_pb->set_bf_fpp(_bf_fpp);
     }
     tablet_schema_pb->set_next_column_unique_id(_next_column_unique_id);
+    tablet_schema_pb->set_compression_type(_compression_type);
 }
 
 bool TabletSchema::contains_format_v1_column() const {

@@ -87,10 +87,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     }
 
     private final String mvName;
-    private SelectStmt selectStmt;
     private final Map<String, String> properties;
 
-    private QueryStatement queryStatement;
+    private final QueryStatement queryStatement;
     /**
      * origin stmt: select k1, k2, v1, sum(v2) from base_table group by k1, k2, v1
      * mvColumnItemList: [k1: {name: k1, isKey: true, aggType: null, isAggregationTypeImplicit: false},
@@ -106,12 +105,6 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
     //if process is replaying log, isReplay is true, otherwise is false, avoid replay process error report, only in Rollup or MaterializedIndexMeta is true
     private boolean isReplay = false;
-
-    public CreateMaterializedViewStmt(String mvName, SelectStmt selectStmt, Map<String, String> properties) {
-        this.mvName = mvName;
-        this.selectStmt = selectStmt;
-        this.properties = properties;
-    }
 
     public CreateMaterializedViewStmt(String mvName, QueryStatement queryStatement, Map<String, String> properties) {
         this.mvName = mvName;
@@ -133,10 +126,6 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
     public String getMVName() {
         return mvName;
-    }
-
-    public SelectStmt getSelectStmt() {
-        return selectStmt;
     }
 
     public List<MVColumnItem> getMVColumnItemList() {
@@ -182,14 +171,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     public Map<String, Expr> parseDefineExprWithoutAnalyze(String originalSql) throws AnalysisException {
         Map<String, Expr> result = Maps.newHashMap();
         SelectList selectList = null;
-        if (selectStmt != null) {
-            selectList = selectStmt.getSelectList();
-
-        } else if (queryStatement != null) {
-            QueryRelation queryRelation = queryStatement.getQueryRelation();
-            if (queryRelation instanceof SelectRelation) {
-                selectList = ((SelectRelation) queryRelation).getSelectList();
-            }
+        QueryRelation queryRelation = queryStatement.getQueryRelation();
+        if (queryRelation instanceof SelectRelation) {
+            selectList = ((SelectRelation) queryRelation).getSelectList();
         }
         if (selectList == null) {
             LOG.warn("parse defineExpr may not correctly for sql [{}] ", originalSql);
@@ -288,6 +272,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                                                     ConnectContext context) {
             QueryStatement queryStatement = statement.getQueryStatement();
             com.starrocks.sql.analyzer.Analyzer.analyze(statement.getQueryStatement(), context);
+
+            // forbid explain query
+            if (queryStatement.isExplain()) {
+                throw new IllegalArgumentException("Materialized view does not support explain query");
+            }
 
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
                 throw new SemanticException("Materialized view query statement only support select");

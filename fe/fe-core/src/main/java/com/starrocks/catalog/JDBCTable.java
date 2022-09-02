@@ -108,13 +108,17 @@ public class JDBCTable extends Table {
             tJDBCTable.setJdbc_passwd(resource.getProperty(JDBCResource.PASSWORD));
         } else {
             String uri = properties.get(JDBCResource.URI);
-            String driverName = uri.replace("//", "");
+            String driverName = uri.replace("//", "").replace("/", "_");
             tJDBCTable.setJdbc_driver_name(driverName);
             tJDBCTable.setJdbc_driver_url(properties.get(JDBCResource.DRIVER_URL));
             tJDBCTable.setJdbc_driver_checksum(properties.get(JDBCResource.CHECK_SUM));
             tJDBCTable.setJdbc_driver_class(properties.get(JDBCResource.DRIVER_CLASS));
 
-            tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI) + "/" + dbName);
+            if (dbName.isEmpty()) {
+                tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI));
+            } else {
+                tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI) + "/" + dbName);
+            }
             tJDBCTable.setJdbc_table(jdbcTable);
             tJDBCTable.setJdbc_user(properties.get(JDBCResource.USER));
             tJDBCTable.setJdbc_passwd(properties.get(JDBCResource.PASSWORD));

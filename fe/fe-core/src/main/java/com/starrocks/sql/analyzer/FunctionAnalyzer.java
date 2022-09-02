@@ -206,7 +206,7 @@ public class FunctionAnalyzer {
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.NDV)
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.APPROX_COUNT_DISTINCT))
                 && !arg.getType().canApplyToNumeric()) {
-            throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
+            throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
         }
 
         if ((fnName.getFunction().equalsIgnoreCase(FunctionSet.BITMAP_UNION_INT) && !arg.getType().isIntegerType())) {

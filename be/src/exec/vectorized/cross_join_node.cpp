@@ -11,10 +11,10 @@
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
-#include "exec/pipeline/crossjoin/cross_join_context.h"
-#include "exec/pipeline/crossjoin/cross_join_left_operator.h"
-#include "exec/pipeline/crossjoin/cross_join_right_sink_operator.h"
 #include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/nljoin/nljoin_build_operator.h"
+#include "exec/pipeline/nljoin/nljoin_context.h"
+#include "exec/pipeline/nljoin/nljoin_probe_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr_context.h"
@@ -24,6 +24,7 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
+
 CrossJoinNode::CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs) {}
 
@@ -619,7 +620,7 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
 
     // step 1: construct pipeline end with cross join left operator(cross join left maybe not sink operator).
 
-    CrossJoinContextParams context_params;
+    NLJoinContextParams context_params;
     context_params.num_left_probers = left_source->degree_of_parallelism();
     context_params.num_right_sinkers = right_source->degree_of_parallelism();
     context_params.plan_node_id = _id;
@@ -627,18 +628,18 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     context_params.rf_hub = context->fragment_context()->runtime_filter_hub();
     context_params.rf_descs = std::move(_build_runtime_filters);
 
-    auto cross_join_context = std::make_shared<CrossJoinContext>(std::move(context_params));
+    auto cross_join_context = std::make_shared<NLJoinContext>(std::move(context_params));
 
     // cross_join_right as sink operator
     auto right_factory =
-            std::make_shared<CrossJoinRightSinkOperatorFactory>(context->next_operator_id(), id(), cross_join_context);
+            std::make_shared<NLJoinBuildOperatorFactory>(context->next_operator_id(), id(), cross_join_context);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(right_factory.get(), context, rc_rf_probe_collector);
     right_ops.emplace_back(std::move(right_factory));
     context->add_pipeline(right_ops);
 
     // communication with CrossJoioRight through shared_datas.
-    auto left_factory = std::make_shared<CrossJoinLeftOperatorFactory>(
+    auto left_factory = std::make_shared<NLJoinProbeOperatorFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
             _sql_join_conjuncts, std::move(_join_conjuncts), std::move(_conjunct_ctxs), std::move(cross_join_context),
             _join_op);

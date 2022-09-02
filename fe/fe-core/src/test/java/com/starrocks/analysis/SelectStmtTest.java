@@ -97,14 +97,6 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testAnyValueFunctions() throws Exception {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        String selectStmtStr =
-                "SELECT db1.tbl1.k1, any_value(db1.tbl1.k2) FROM db1.tbl1 GROUP BY db1.tbl1.k1";
-        UtFrameUtils.parseAndAnalyzeStmt(selectStmtStr, ctx);
-    }
-
-    @Test
     public void testEqualExprNotMonotonic() throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         String sql = "select k1 from db1.baseall where (k1=10) = true";

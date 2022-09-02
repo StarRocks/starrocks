@@ -2,6 +2,8 @@
 
 package com.starrocks.system;
 
+import com.google.common.collect.ImmutableMap;
+
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -15,6 +17,24 @@ public class BackendCoreStat {
         if (numOfHardwareCoresPerBe.putIfAbsent(be, numOfCores) == null) {
             cachedAvgNumOfHardwareCores.set(-1);
         }
+    }
+
+    public static void reset() {
+        numOfHardwareCoresPerBe.clear();
+        cachedAvgNumOfHardwareCores.set(-1);
+    }
+
+    public static ImmutableMap<Long, Integer> getNumOfHardwareCoresPerBe() {
+        return ImmutableMap.copyOf(numOfHardwareCoresPerBe);
+    }
+
+    public static Integer getCachedAvgNumOfHardwareCores() {
+        return cachedAvgNumOfHardwareCores.get();
+    }
+
+    // used for mock env
+    public static void setCachedAvgNumOfHardwareCores(int cores) {
+        cachedAvgNumOfHardwareCores = new AtomicInteger(cores);
     }
 
     public static void setDefaultCoresOfBe(int cores) {

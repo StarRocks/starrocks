@@ -3,7 +3,6 @@ package com.starrocks.sql.parser;
 
 import com.clearspring.analytics.util.Lists;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
@@ -37,7 +36,7 @@ public class SqlParser {
                 statements.add(statement);
             } catch (ParsingException parsingException) {
                 StatementBase statement = parseWithOldParser(sql, sqlMode, 0);
-                if (StatementPlanner.supportedByNewPlanner(statement) || statement instanceof QueryStmt) {
+                if (StatementPlanner.supportedByNewPlanner(statement)) {
                     throw parsingException;
                 }
                 statements.add(statement);

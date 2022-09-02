@@ -14,7 +14,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryRelation;
@@ -105,11 +104,7 @@ public class SubqueryTransformer {
     }
 
     public Expr rewriteJoinOnPredicate(Expr predicate) {
-        if (predicate.getSubquery() == null) {
-            return predicate;
-        }
-
-        List<Expr> conjuncts = AnalyzerUtils.extractConjuncts(predicate);
+        List<Expr> conjuncts = Expr.extractConjuncts(predicate);
         List<Expr> newConjuncts = Lists.newArrayListWithCapacity(conjuncts.size());
         for (Expr conjunct : conjuncts) {
             List<InPredicate> inPredicates = Lists.newArrayList();
@@ -138,7 +133,7 @@ public class SubqueryTransformer {
             }
         }
 
-        return AnalyzerUtils.compoundAnd(newConjuncts);
+        return Expr.compoundAnd(newConjuncts);
     }
 
     private static class SubqueryContext {
