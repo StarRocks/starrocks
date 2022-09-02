@@ -49,7 +49,11 @@ void NLJoinProbeOperator::close(RuntimeState* state) {
 }
 
 bool NLJoinProbeOperator::is_ready() const {
-    return _cross_join_context->is_right_finished();
+    bool res = _cross_join_context->is_right_finished();
+    if (res) {
+        _init_build_match();
+    }
+    return res;
 }
 
 bool NLJoinProbeOperator::_is_curr_probe_chunk_finished() const {
@@ -376,7 +380,7 @@ StatusOr<vectorized::ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* sta
         break;
     case RightJoin: {
         DCHECK(_is_right_join());
-        VLOG(3) << fmt::format("operator {} permute right_join", _driver_sequence);
+        VLOG(3) << fmt::format("Driver {} permute right_join", _driver_sequence);
         RETURN_IF_ERROR(_permute_right_join(state));
         _advance_join_stage(JoinStage::PostRightJoin);
         break;
@@ -406,15 +410,14 @@ StatusOr<vectorized::ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* sta
     return _output_accumulator.pull();
 }
 
-void NLJoinProbeOperator::_init_build_match() {
-    if (_is_right_join() && _cross_join_context->is_right_finished() &&
-        _self_build_match_flag.size() < _cross_join_context->num_build_rows()) {
+void NLJoinProbeOperator::_init_build_match() const {
+    if (_is_right_join() && _self_build_match_flag.size() < _cross_join_context->num_build_rows()) {
+        VLOG(3) << "init build_match_flags " << _cross_join_context->num_build_rows();
         _self_build_match_flag.resize(_cross_join_context->num_build_rows(), 0);
     }
 }
 
 Status NLJoinProbeOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    _init_build_match();
     _probe_chunk = chunk;
     _probe_row_start = 0;
     _probe_row_current = 0;
