@@ -48,11 +48,11 @@ public class Scope {
         return new Scope(lambdaInputs, this);
     }
 
-    public void putLambdaArgument(PlaceHolderExpr expr) {
+    public void putLambdaInput(PlaceHolderExpr expr) {
         lambdaInputs.add(expr);
     }
 
-    public void clearLambdaArguments() {
+    public void clearLambdaInputs() {
         lambdaInputs.clear();
     }
 

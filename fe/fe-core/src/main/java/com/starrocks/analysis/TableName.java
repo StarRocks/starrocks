@@ -40,8 +40,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class TableName implements Writable, GsonPreProcessable, GsonPostProcessable {
-    // as `select` is a key world, which cannot used in SQL, here it denotes a mock table for lambda function.
-    public static final String LAMBDA_FUNC_TABLE = "select";
+    public static final String LAMBDA_FUNC_TABLE = "__LAMBDA_TABLE";
     private String catalog;
     @SerializedName(value = "tbl")
     private String tbl;

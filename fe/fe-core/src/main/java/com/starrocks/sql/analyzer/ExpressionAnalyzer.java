@@ -129,7 +129,7 @@ public class ExpressionAnalyzer {
             }
             expression.setChild(0, last);
         }
-        // the first child is lambdaFunction, following lambda arguments
+        // the first child is lambdaFunction, following input arrays
         for (int i = 1; i < childSize; ++i) {
             Expr expr = expression.getChild(i);
             bottomUpAnalyze(visitor, expr, scope);
@@ -140,7 +140,7 @@ public class ExpressionAnalyzer {
                 throw new SemanticException("Lambda inputs should be arrays.");
             }
             Type itemType = ((ArrayType) expr.getType()).getItemType();
-            scope.putLambdaArgument(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
+            scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
         }
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
@@ -304,7 +304,7 @@ public class ExpressionAnalyzer {
             Scope lambdaScope = scope.getLambdaScope();
             ExpressionAnalyzer.analyzeExpression(node.getChild(0), this.analyzeState, lambdaScope, this.session);
             node.setType(Type.FUNCTION);
-            scope.clearLambdaArguments();
+            scope.clearLambdaInputs();
             return null;
         }
 
