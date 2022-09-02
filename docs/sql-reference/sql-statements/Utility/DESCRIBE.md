@@ -14,13 +14,13 @@ DESC[RIBE] [db_name.]table_name [ALL];
 
 ## Examples
 
-Example 1: Show Base table schema
+Example 1: Show the schema of a bases table.
 
 ```sql
 DESC table_name;
 ```
 
-Example 2: Show the schema of all indexes in the table
+Example 2: Show the indexes in a table.
 
 ```sql
 DESC db1.table_name ALL;
