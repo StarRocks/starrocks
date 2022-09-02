@@ -30,19 +30,19 @@ public:
     // the slot ids of lambda expression may be originally from the arguments of this lambda function
     // or its parent lambda functions, or captured columns, remove the first one.
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
-        slot_ids->assign(captured_slot_ids_.begin(), captured_slot_ids_.end());
-        return captured_slot_ids_.size();
+        slot_ids->assign(_captured_slot_ids.begin(), _captured_slot_ids.end());
+        return _captured_slot_ids.size();
     }
 
     int get_lambda_arguments_ids(std::vector<SlotId>* ids) {
-        ids->assign(arguments_ids_.begin(), arguments_ids_.end());
-        return arguments_ids_.size();
+        ids->assign(_arguments_ids.begin(), _arguments_ids.end());
+        return _arguments_ids.size();
     }
 
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
 
 private:
-    std::vector<SlotId> captured_slot_ids_;
-    std::vector<SlotId> arguments_ids_;
+    std::vector<SlotId> _captured_slot_ids;
+    std::vector<SlotId> _arguments_ids;
 };
 } // namespace starrocks::vectorized

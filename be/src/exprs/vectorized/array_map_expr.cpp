@@ -31,7 +31,7 @@ inline bool offsets_equal(UInt32Column::Ptr array1, UInt32Column::Ptr array2) {
 
 // The input array column maybe nullable, so first remove the wrap of nullable property.
 // The result of lambda expressions does not change the offsets of the current array and the null map.
-ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* ptr) {
+ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> inputs;
     NullColumnPtr input_null_map = nullptr;
     std::shared_ptr<ArrayColumn> input_array = nullptr;
@@ -42,7 +42,7 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* ptr) {
     // make sure all inputs have the same offsets.
     // TODO(fzh): support several arrays with different offsets and set null for non-equal size of arrays.
     for (int i = 1; i < _children.size(); ++i) {
-        ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[i], ptr);
+        ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[i], chunk);
         // the column is a null literal.
         if (child_col->only_null()) {
             return child_col;
@@ -82,26 +82,26 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* ptr) {
     }
 
     // construct a new chunk to evaluate the lambda expression.
-    auto _cur_chunk = std::make_shared<vectorized::Chunk>();
+    auto cur_chunk = std::make_shared<vectorized::Chunk>();
     // put all arguments into the new chunk
     vector<SlotId> arguments_ids;
     auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
     int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
     DCHECK(argument_num == inputs.size());
     for (int i = 0; i < argument_num; ++i) {
-        _cur_chunk->append_column(inputs[i], arguments_ids[i]); // column ref
+        cur_chunk->append_column(inputs[i], arguments_ids[i]); // column ref
     }
     // put captured columns into the new chunks aligning with the first array's offsets
     vector<SlotId> slot_ids;
     _children[0]->get_slot_ids(&slot_ids);
     for (auto id : slot_ids) {
         DCHECK(id > 0);
-        auto captured = ptr->get_column_by_slot_id(id);
+        auto captured = chunk->get_column_by_slot_id(id);
         auto aligned_col = captured->clone_empty();
-        _cur_chunk->append_column(
+        cur_chunk->append_column(
                 ColumnHelper::duplicate_column(captured, std::move(aligned_col), input_array->offsets_column()), id);
     }
-    auto column = EVALUATE_NULL_IF_ERROR(context, _children[0], _cur_chunk.get());
+    auto column = EVALUATE_NULL_IF_ERROR(context, _children[0], cur_chunk.get());
 
     // construct the result array
     DCHECK(column != nullptr);

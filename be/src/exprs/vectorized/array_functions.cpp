@@ -959,8 +959,9 @@ ColumnPtr ArrayFunctions::array_contains_all([[maybe_unused]] FunctionContext* c
     return ArrayHasImpl<false>::evaluate(*arg0, *arg1);
 }
 
+// cannot be called anymore
 ColumnPtr ArrayFunctions::array_map([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    return columns[0];
+    return nullptr;
 }
 
 class ArrayArithmeticImpl {
