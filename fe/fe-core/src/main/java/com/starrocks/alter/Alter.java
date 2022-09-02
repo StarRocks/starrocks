@@ -132,6 +132,9 @@ public class Alter {
         }
         try {
             Table table = db.getTable(tableName);
+            if (table == null) {
+                throw new DdlException("create materialized failed. table:" + tableName + " not exist");
+            }
             if (table.getType() != TableType.OLAP) {
                 throw new DdlException("Do not support alter non-OLAP table[" + tableName + "]");
             }
@@ -352,6 +355,10 @@ public class Alter {
             final MaterializedView.MvRefreshScheme newMvRefreshScheme = new MaterializedView.MvRefreshScheme();
 
             oldMaterializedView = (MaterializedView) db.getTable(id);
+            if (oldMaterializedView == null) {
+                LOG.warn("Ignore change materialized view refresh scheme log because table:" + id + "is null");
+                return;
+            }
             final MaterializedView.MvRefreshScheme oldRefreshScheme = oldMaterializedView.getRefreshScheme();
             newMvRefreshScheme.setAsyncRefreshContext(oldRefreshScheme.getAsyncRefreshContext());
             newMvRefreshScheme.setLastRefreshTime(oldRefreshScheme.getLastRefreshTime());
