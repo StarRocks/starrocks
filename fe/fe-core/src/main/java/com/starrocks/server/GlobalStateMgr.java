@@ -1688,7 +1688,9 @@ public class GlobalStateMgr {
                     cursor.skipNext();
                     continue;
                 }
-                throw e;  // handled in outer loop
+                // handled in outer loop
+                LOG.warn("catch exception when replaying {}," replayedJournalId.incrementAndGet(), e);
+                throw e;
             }
 
             replayedJournalId.incrementAndGet();
