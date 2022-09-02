@@ -55,7 +55,6 @@ public class HDFSBackendSelector implements BackendSelector {
     private final List<TScanRangeLocations> locations;
     private final Coordinator.FragmentScanRangeAssignment assignment;
     private final Map<TNetworkAddress, Long> addressToBackendId;
-    private final List<Long> remoteScanRangesBytes = Lists.newArrayList();
     private final ImmutableCollection<ComputeNode> computeNodes;
     private boolean forceScheduleLocal;
     private final int kCandidateNumber = 3;
