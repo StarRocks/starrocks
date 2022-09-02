@@ -12,11 +12,11 @@ A Hudi catalog is an external catalog, which enables you to query data from Hudi
 - StarRocks supports querying Hudi data in the following formats: Parquet, ORC, gzip, Zstd, LZ4, or Snappy.
 - StarRocks supports querying Hudi data in the following types: BOOLEAN, INT, DATE, TimeMillis, TimeMicros, LONG, FLOAT, DOUBLE, STRING, ARRAY, and DECIMAL. Note that an error occurs when you query Hudi data in unsupported data types. The following data types are not supported: FIXED, ENUM, UNION, MAP,  and BYTES.
 - StarRocks supports querying Copy On Write tables. Merge On Read tables are not supported. For the differences between these two types of tables, see [Table & Query Types](https://hudi.apache.org/docs/table_types).
-- You can use the [DESCRIBE](/docs/sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hudi table in StarRocks 2.4 and later versions.
+- You can use the [DESC](/docs/sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hudi table in StarRocks 2.4 and later versions.
 
 ## Before you begin
 
-Before you create a Hudi catalog, make sure that you have configured your StarRocks cluster to meet the requirements of the data storage system, metadata service, and authenticating service of your Hive cluster. StarRocks supports two data storage systems for Hudi: HDFS and Amazon S3. StarRocks supports one metadata service for Hive: Hive metastore. The configurations that need to be performed are the same as that before you create a Hive catalog, so for information about the configurations, see [Hive catalog](../catalog/hive_catalog.md#before-you-begin).
+Before you create a Hudi catalog, make sure that you have configured your StarRocks cluster to meet the requirements of the data storage system, metadata service, and authenticating service of your Hudi cluster. StarRocks supports two data storage systems for Hudi: HDFS and Amazon S3. StarRocks supports one metadata service for Hudi: Hive metastore. The configurations that need to be performed are the same as that before you create a Hive catalog. For information about the configurations, see [Hive catalog](../catalog/hive_catalog.md#before-you-begin).
 
 ## Create a Hudi catalog
 
@@ -48,11 +48,11 @@ The parameter description is as follows:
 
 ## Caching strategy of Hudi metadata
 
-StarRocks develops a query execution plan based on the metadata of Hive tables. Therefore, the response time of Hive metastore directly affects the time consumed by a query. To reduce the impact, StarRocks provides caching strategies, based on which StarRocks can cache and update the metadata of Hive tables, such as partition statistics and file information of partitions. Currently, StarRocks only supports the asynchronous update strategy.
+StarRocks develops a query execution plan based on the metadata of Hudi tables. Therefore, the response time of Hive metastore directly affects the time consumed by a query. To reduce the impact, StarRocks provides caching strategies, based on which StarRocks can cache and update the metadata of Hudi tables, such as partition statistics and file information of partitions. Currently, StarRocks only supports the asynchronous update strategy.
 
 ### How it works
 
-If a query hits a partition of a Hive table, StarRocks asynchronously caches the metadata of the partition. If another query hits the partition again and the time interval from the last update exceeds the default time interval, StarRock asynchronously updates the metadata cached in StarRocks. Otherwise, the cached metadata will not be updated. This process of update is called lazy update.
+If a query hits a partition of a Hudi table, StarRocks asynchronously caches the metadata of the partition. If another query hits the partition again and the time interval from the last update exceeds the default time interval, StarRock asynchronously updates the metadata cached in StarRocks. Otherwise, the cached metadata will not be updated. This process of update is called lazy update.
 
 You can set the default time interval by the `hive_meta_cache_refresh_interval_s` parameter. The parameter value defaults to `7200`. Unit: seconds. You can set this parameter in the **fe.conf** file of each FE, and then restart each FE to make the parameter value take effect.
 
@@ -60,22 +60,22 @@ If a query hits a partition and the time interval from the last update exceeds t
 
 ### Examples
 
-For example, there is a Hive table named `table1`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. A query hit `p1`, and StarRocks cached the metadata of `p1`. If the default time interval to update the metadata cached in StarRocks is 1 hour, there are the following two situations for subsequent updates:
+For example, there is a Hudi table named `table1`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. A query hit `p1`, and StarRocks cached the metadata of `p1`. If the default time interval to update the metadata cached in StarRocks is 1 hour, there are the following two situations for subsequent updates:
 
 - If another query hits `p1` again and the current time from the last update is more than 1 hour, StarRock asynchronously updates the cached metadata of `p1`.
 - If another query hits `p1` again and the current time from the last update is less than 1 hour, StarRock does not asynchronously update the cached metadata of `p1`.
 
 ### Manual update
 
-To query the latest Hive data, make sure that the metadata cached in StarRocks is updated to the latest. If the time interval from the last update does not exceed the default time interval, you can manually update the cached metadata before sending a query.
+To query the latest Hudi data, make sure that the metadata cached in StarRocks is updated to the latest. If the time interval from the last update does not exceed the default time interval, you can manually update the cached metadata before sending a query.
 
-- Execute the following statement to synchronize the schema changes (such as adding columns or removing partitions) of a Hive table to StarRocks.
+- Execute the following statement to synchronize the schema changes (such as adding columns or removing partitions) of a Hudi table to StarRocks.
 
     ```SQL
     REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name;
     ```
 
-- Execute the following statement to synchronize the data changes (such as data ingestion) of a Hive table to StarRocks.
+- Execute the following statement to synchronize the data changes (such as data ingestion) of a Hudi table to StarRocks.
 
     ```SQL
     REFRESH EXTERNAL TABLE [external_catalog.][db_name.]table_name

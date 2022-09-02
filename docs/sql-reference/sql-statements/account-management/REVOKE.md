@@ -38,7 +38,7 @@ You can use the REVOKE statement to perform the following operations:
 
 ### privilege_list
 
-The privileges that can be revoke from a user or a role. If you want to revoke multiple privileges at a time, separate the privileges with commas (`,`). The following privileges are supported:
+The privileges that can be revoke from a user or a role. If you want to revoke multiple privileges at a time, separate the privileges with commas (`,`). You can revoke the following privileges:
 
 - `NODE_PRIV`: the privilege to manage cluster nodes such as enabling nodes and disabling nodes. This privilege can only be granted to the root user.
 - `ADMIN_PRIV`: all privileges except `NODE_PRIV`.

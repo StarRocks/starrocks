@@ -11,7 +11,7 @@ A Hive catalog is an external catalog, which enables you to query data from Hive
 
 - StarRocks supports querying Hive data in the following formats: Parquet, ORC, and CSV.
 - StarRocks support querying Hive data in the following types: INT, INTEGER, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY. Note that an error occurs if you query Hive data in unsupported data types. The following data types are not supported: TINYINT, SMALLINT, NUMERIC, DATE, INTERVAL, BOOLEAN, BINARY, MAP, STRUCT, and UNION.
-- You can use the [DESCRIBE](/docs/sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hive table in StarRocks 2.4 and later versions.
+- You can use the [DESC](/docs/sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hive table in StarRocks 2.4 and later versions.
 
 ## Before you begin
 
@@ -23,7 +23,7 @@ If you use HDFS as the data storage system, configure your StarRocks cluster as 
 
 - (Optional) Set the username that is used to access your HDFS and Hive metastore. By default, StarRocks uses the username of the FE process to access your HDFS and Hive metastore. You can also set the username via the `HADOOP_USERNAME` parameter in the **be/conf/hadoop_env.sh** file of each BE and then restart each BE to make the parameter setting take effect.
 
-> Note: You can set only one username for a StarRocks cluster.
+    > Note: You can set only one username for a StarRocks cluster.
 
 - When you query Hive data, the FEs and BEs use the HDFS client to access HDFS. In general, StarRocks starts the HDFS client using the default configurations. However, in the following cases, you need to configure your StarRocks cluster:
   - If your HDFS cluster runs in HA mode, add the **hdfs-site.xml** file of your HA cluster to the **$FE_HOME/conf path** of each FE and the **$BE_HOME/conf** path of each BE.
@@ -219,7 +219,7 @@ Configure the following parameters in the **$FE_HOME/conf/fe.conf** file of each
 
 ## What to do next
 
-After you complete the preceding configurations, you can use the Hive catalog to query Hive data. For more information, see [Query external data](https://starrocks.feishu.cn/docx/doxcnM89rre189K02BMFVuGYifh).
+After you complete the preceding configurations, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
 
 ## References
 

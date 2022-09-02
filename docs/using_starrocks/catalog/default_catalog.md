@@ -1,6 +1,6 @@
 # Default catalog
 
-This topic describes an overview of the default catalog, and how to query the internal data of StarRocks by using the default catalog.
+This topic describes what the default catalog is, and how to query the internal data of StarRocks by using the default catalog.
 
 StarRocks 2.3 and later provide an internal catalog to manage the internal data of StarRocks. Each StarRocks cluster has only one internal catalog named `default_catalog`. Currently, you cannot modify the name of the internal catalog or create a new internal catalog.
 

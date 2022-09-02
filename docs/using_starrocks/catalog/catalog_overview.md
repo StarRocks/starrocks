@@ -15,7 +15,7 @@ Catalogs enable you to manage internal and external data in one system. They off
 
 ![figure1](/docs/assets/3.8.1.png)
 
-- **Internal catalog**: manages internal data of StarRocks. For example, if you execute the CREATE DATABASE or CREATE TABLE statements to create a database or a table, the database or table is stored in the internal catalog. Each StarRocks cluster has only one internal catalog named [default catalog](../catalog/catalog_overview.md).
+- **Internal catalog**: manages internal data of StarRocks. For example, if you execute the CREATE DATABASE or CREATE TABLE statements to create a database or a table, the database or table is stored in the internal catalog. Each StarRocks cluster has only one internal catalog named [default catalog](../catalog/default_catalog.md).
 
 - **External catalog**: manages the access information of external data sources, such as the type of external data source. You can query external data by using external catalogs without the need to create external tables or load data into StarRocks. Currently, you can create the following three types of external catalogs:
   - [Hive catalog](../catalog/hive_catalog.md): used to query data from Hive.
