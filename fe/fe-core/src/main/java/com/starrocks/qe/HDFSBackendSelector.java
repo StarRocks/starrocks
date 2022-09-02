@@ -140,7 +140,7 @@ public class HDFSBackendSelector implements BackendSelector {
         @Override
         public void funnel(ComputeNode computeNode, PrimitiveSink primitiveSink) {
             primitiveSink.putBytes(computeNode.getHost().getBytes(StandardCharsets.UTF_8));
-            primitiveSink.putInt(computeNode.getHeartbeatPort());
+            primitiveSink.putInt(computeNode.getBePort());
         }
     }
 
