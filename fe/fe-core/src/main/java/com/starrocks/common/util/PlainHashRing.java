@@ -44,6 +44,9 @@ public class PlainHashRing<K, N> implements HashRing<K, N> {
         List<N> ans = new ArrayList<>();
         Hasher hasher = hashFunction.newHasher();
         long hash = hasher.putObject(key, keyFunnel).hash().asLong();
+        if (hash == Long.MIN_VALUE) {
+            hash += 1;
+        }
         int index = (int) (Math.abs(hash) % nodes.size());
         distinctNumber = Math.min(distinctNumber, nodes.size());
         for (int i = 0; i < distinctNumber; i++) {
