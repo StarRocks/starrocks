@@ -21,7 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
@@ -46,7 +45,6 @@ public class CreateRoleStmt extends DdlStmt {
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
         FeNameFormat.checkRoleName(role, false /* can not be admin */, "Can not create role");
-        role = ClusterNamespace.getFullName(role);
 
         // check if current user has GRANT priv on GLOBAL level.
         if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {

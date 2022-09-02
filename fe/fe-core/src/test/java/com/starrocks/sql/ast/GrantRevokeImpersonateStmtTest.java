@@ -68,13 +68,13 @@ public class GrantRevokeImpersonateStmtTest {
         GrantImpersonateStmt stmt = (GrantImpersonateStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "grant IMPERSONATE on user2 to user1", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("GRANT IMPERSONATE ON 'default_cluster:user2'@'%' TO 'default_cluster:user1'@'%'", stmt.toString());
+        Assert.assertEquals("GRANT IMPERSONATE ON 'user2'@'%' TO 'user1'@'%'", stmt.toString());
 
         // revoke
         RevokeImpersonateStmt stmt2 = (RevokeImpersonateStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "revoke IMPERSONATE on user2 from user1", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt2, ctx);
-        Assert.assertEquals("REVOKE IMPERSONATE ON 'default_cluster:user2'@'%' FROM 'default_cluster:user1'@'%'",
+        Assert.assertEquals("REVOKE IMPERSONATE ON 'user2'@'%' FROM 'user1'@'%'",
                 stmt2.toString());
     }
 

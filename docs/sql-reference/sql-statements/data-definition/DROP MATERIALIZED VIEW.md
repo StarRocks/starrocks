@@ -7,7 +7,7 @@ This statement is used to delete a materialized view. Synchronization syntax.
 Syntax:
 
 ```sql
-DROP MATERIALIZED VIEW [IF EXISTS] mv_name ON table_name
+DROP MATERIALIZED VIEW [IF EXISTS] mv_name
 ```
 
 1. IF EXISTS
@@ -15,9 +15,6 @@ If the materialized view does not exist, don't throw an error. If this keyword i
 
 2. mv_name
 The name of the materialized view to be deleted. Required.
-
-3. table_name
-The name of the table to which the materialized view to be deleted belongs. Required.
 
 ## example
 
@@ -44,7 +41,7 @@ mysql> desc all_type_table all;
 1. Drop the materialized view named k1_sumk2 onthe table all_type_table.
 
     ```sql
-    drop materialized view k1_sumk2 on all_type_table;
+    drop materialized view k1_sumk2;
     ```
 
     The structure of table whose materialized view is deleted is as follows.
@@ -66,8 +63,8 @@ mysql> desc all_type_table all;
 2. Drop a non-existing materialized view on the table all_type_table.
 
     ```sql
-    drop materialized view k1_k2 on all_type_table;
-    ERROR 1064 (HY000): errCode = 2, detailMessage = Materialized view [k1_k2] does not exist in table [all_type_table]
+    drop materialized view k1_k2;
+    ERROR 1064 (HY000): Materialized view k1_k2 is not find
     ```
 
     The delete request reports an error.

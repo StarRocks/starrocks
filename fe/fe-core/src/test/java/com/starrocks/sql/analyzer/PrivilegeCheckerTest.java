@@ -453,7 +453,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testSetUserProperty() throws Exception {
-        starRocksAssert.getCtx().setQualifiedUser("default_cluster:test");
+        starRocksAssert.getCtx().setQualifiedUser("test");
         String sql = "SET PROPERTY FOR 'test' 'max_user_connections' = 'value', 'test' = '400'";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         Assert.assertThrows(SemanticException.class,
@@ -680,7 +680,7 @@ public class PrivilegeCheckerTest {
         db1TablePattern.analyze();
 
         // Here we hack `create role` statement because it was still in old framework
-        auth.createRole(new CreateRoleStmt("default_cluster:test_role"));
+        auth.createRole(new CreateRoleStmt("test_role"));
 
         String sql = "grant test_role to test;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());

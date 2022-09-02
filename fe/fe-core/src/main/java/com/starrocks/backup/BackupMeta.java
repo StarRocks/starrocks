@@ -22,9 +22,11 @@
 package com.starrocks.backup;
 
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.io.Writable;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,10 +41,11 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-public class BackupMeta implements Writable {
+public class BackupMeta implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(BackupMeta.class);
 
     // tbl name -> tbl
+    @SerializedName(value = "tblNameMap")
     private Map<String, Table> tblNameMap = Maps.newHashMap();
     // tbl id -> tbl
     private Map<Long, Table> tblIdMap = Maps.newHashMap();
@@ -119,6 +122,14 @@ public class BackupMeta implements Writable {
             Table tbl = Table.read(in);
             tblNameMap.put(tbl.getName(), tbl);
             tblIdMap.put(tbl.getId(), tbl);
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        tblIdMap = Maps.newHashMap();
+        for (Map.Entry<String, Table> entry : tblNameMap.entrySet()) {
+            tblIdMap.put(entry.getValue().getId(), entry.getValue());
         }
     }
 }

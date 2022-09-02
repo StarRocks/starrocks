@@ -1706,4 +1706,7 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String metadata_journal_skip_bad_journal_ids = "";
+
+    @ConfField(mutable = true)
+    public static boolean recursive_dir_search_enabled = false;
 }

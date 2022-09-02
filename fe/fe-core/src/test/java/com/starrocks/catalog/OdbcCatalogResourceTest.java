@@ -63,7 +63,7 @@ public class OdbcCatalogResourceTest {
         properties.put("port", port);
         properties.put("user", user);
         properties.put("password", passwd);
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
     }
 
     @Test

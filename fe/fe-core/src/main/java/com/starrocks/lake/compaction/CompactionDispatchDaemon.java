@@ -2,7 +2,6 @@
 
 package com.starrocks.lake.compaction;
 
-import com.baidu.brpc.RpcContext;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -20,8 +19,7 @@ import com.starrocks.lake.Utils;
 import com.starrocks.lake.proto.CompactRequest;
 import com.starrocks.lake.proto.CompactResponse;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.EmptyRpcCallback;
-import com.starrocks.rpc.LakeServiceAsync;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
@@ -156,10 +154,8 @@ public class CompactionDispatchDaemon extends LeaderDaemon {
             request.txnId = txnId;
             request.version = currentVersion;
 
-            RpcContext rpcContext = RpcContext.getContext();
-            rpcContext.setReadTimeoutMillis(1800000);
-            LakeServiceAsync service = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-            Future<CompactResponse> responseFuture = service.compact(request, new EmptyRpcCallback<>());
+            LakeService service = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            Future<CompactResponse> responseFuture = service.compact(request);
             responseList.add(responseFuture);
         }
 
