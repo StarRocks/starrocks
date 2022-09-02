@@ -7,16 +7,21 @@ import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
+import com.starrocks.common.util.PlainHashRing;
 import com.starrocks.common.util.RendezvousHashRing;
 import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class HashRingTest {
+    final int kNodeSize = 5;
+    final int kKeySize = 2000;
+    final int kVirtualNumber = 10;
     Funnel<String> funnel = new Funnel<String>() {
         @Override
         public void funnel(String from, PrimitiveSink into) {
@@ -41,17 +46,34 @@ public class HashRingTest {
     }
 
     public void testWithHashRing(HashRing<String, String> hashRing, List<String> nodes) {
-        System.out.printf("test policy: %s\n", hashRing.policy());
-        List<String> keys = generateKeys(2000);
+        List<String> keys = generateKeys(kKeySize);
+        System.out.println("======================================");
+        System.out.printf("Test Policy: %s. # of Keys = %d, # of Hosts = %d\n", hashRing.policy(),
+                keys.size(), nodes.size());
+
         Map<String, String> assign = new HashMap<>();
+        Map<String, Integer> hostLoad = new HashMap<>();
         for (String key : keys) {
             List<String> hosts = hashRing.get(key, 1);
-            assign.put(key, hosts.get(0));
+            String host = hosts.get(0);
+            assign.put(key, host);
+            hostLoad.put(host, hostLoad.getOrDefault(host, 0) + 1);
         }
+
+        List<Integer> loads = new ArrayList<>(hostLoad.values());
+        float avg = keys.size() * 1.0f / nodes.size();
+        Collections.sort(loads);
+        double t = 0;
+        for (Integer x : loads) {
+            t = (x - avg) * (x - avg);
+        }
+        t = Math.sqrt(t / keys.size());
+
+        System.out.printf("Load: min = %d, max = %d, median = %d, stddev = %.2f\n", loads.get(0),
+                loads.get(loads.size() - 1), loads.get(loads.size() / 2), t);
 
         // test to remove 0
         {
-            System.out.printf("# of Keys = %d, # of Hosts = %d, remove Host0\n", keys.size(), nodes.size());
             hashRing.removeNode("Host0");
             int changed = 0;
             for (String key : keys) {
@@ -63,11 +85,11 @@ public class HashRingTest {
                 }
             }
             float moveRatio = changed * 1.0f / keys.size();
-            System.out.printf("Remove Host0: move ratio = %.2f\n", moveRatio);
+            float perfectRatio = 1.0f / nodes.size();
+            System.out.printf("Remove Host0: move ratio = %.2f, perfect ratio = %.2f\n", moveRatio, perfectRatio);
         }
         // test to add 100
         {
-            System.out.printf("# of Keys = %d, # of Hosts = %d, Add Host100\n", keys.size(), nodes.size());
             hashRing.addNode("Host100");
             int changed = 0;
             for (String key : keys) {
@@ -79,21 +101,30 @@ public class HashRingTest {
                 }
             }
             float moveRatio = changed * 1.0f / keys.size();
-            System.out.printf("Add Host100: move ratio = %.2f\n", moveRatio);
+            float perfectRatio = 1.0f / nodes.size();
+            System.out.printf("Add Host100: move ratio = %.2f, perfect ratio = %.2f\n", moveRatio, perfectRatio);
         }
     }
 
     @Test
     public void testConsistentHashRing() {
-        List<String> nodes = generateNodes(10);
-        ConsistentHashRing hashRing = new ConsistentHashRing(Hashing.murmur3_128(), funnel, funnel, nodes, 10);
+        List<String> nodes = generateNodes(kNodeSize);
+        ConsistentHashRing hashRing =
+                new ConsistentHashRing(Hashing.murmur3_128(), funnel, funnel, nodes, kVirtualNumber);
         testWithHashRing(hashRing, nodes);
     }
 
     @Test
     public void testRendezvousHashRing() {
-        List<String> nodes = generateNodes(10);
+        List<String> nodes = generateNodes(kNodeSize);
         RendezvousHashRing hashRing = new RendezvousHashRing<>(Hashing.murmur3_128(), funnel, funnel, nodes);
+        testWithHashRing(hashRing, nodes);
+    }
+
+    @Test
+    public void testPlainHashRing() {
+        List<String> nodes = generateNodes(kNodeSize);
+        PlainHashRing hashRing = new PlainHashRing(Hashing.murmur3_128(), funnel, nodes);
         testWithHashRing(hashRing, nodes);
     }
 }
