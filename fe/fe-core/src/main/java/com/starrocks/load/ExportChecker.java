@@ -23,9 +23,11 @@ package com.starrocks.load;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
 import com.starrocks.task.ExportExportingTask;
 import com.starrocks.task.ExportPendingTask;
 import com.starrocks.task.LeaderTask;
@@ -137,6 +139,10 @@ public final class ExportChecker extends LeaderDaemon {
         List<ExportJob> jobs = GlobalStateMgr.getCurrentState().getExportMgr().getExportJobs(JobState.EXPORTING);
         LOG.debug("exporting export job num: {}", jobs.size());
         for (ExportJob job : jobs) {
+            boolean needContiue = checkBeStatus(job);
+            if (needContiue) {
+                continue;
+            }
             try {
                 LeaderTask task = new ExportExportingTask(job);
                 if (executors.get(JobState.EXPORTING).submit(task)) {
@@ -146,5 +152,33 @@ public final class ExportChecker extends LeaderDaemon {
                 LOG.warn("run export exporing job error", e);
             }
         }
+    }
+
+    private boolean checkBeStatus(ExportJob job) {
+
+        boolean hasRebootBe = false;
+        String errMsg = "";
+        for (Long beId : job.getBeStartTimeMap().keySet()) {
+            Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+            if (!be.isAvailable()) {
+                hasRebootBe = true;
+                errMsg = "be not available during exec export job. be:" + beId;
+                LOG.warn(errMsg + " job: {}", job);
+            }
+            if (be.getLastStartTime() > job.getBeStartTimeMap().get(beId)) {
+                hasRebootBe = true;
+                errMsg = "be has rebooted during exec export job. be:" + beId;
+                LOG.warn(errMsg + " job: {}", job);
+            }
+        }
+        if (hasRebootBe) {
+            try {
+                job.cancel(ExportFailMsg.CancelType.BE_STATUS_ERR, errMsg);
+            } catch (UserException e) {
+                LOG.warn("try to cancel a completed job. job: {}", job);
+            }
+            return true;
+        }
+        return false;
     }
 }
