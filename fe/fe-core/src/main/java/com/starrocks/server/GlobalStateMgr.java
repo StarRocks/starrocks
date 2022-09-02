@@ -1689,7 +1689,7 @@ public class GlobalStateMgr {
                     continue;
                 }
                 // handled in outer loop
-                LOG.warn("catch exception when replaying {}," replayedJournalId.incrementAndGet(), e);
+                LOG.warn("catch exception when replaying {},", replayedJournalId.get() + 1, e);
                 throw e;
             }
 
