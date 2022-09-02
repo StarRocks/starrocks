@@ -2,7 +2,7 @@
 
 ## 功能
 
-创建函数。
+创建函数。更多函数创建方式，参见[Java UDF](/using_starrocks/JAVA_UDF.md)。
 
 ## 语法
 
