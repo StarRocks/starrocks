@@ -2,86 +2,69 @@
 
 ## 功能
 
-该语句用于删除物化视图，删除物化视图为同步操作。
+删除物化视图。创建物化视图是一个异步的过程，该语句只能用来删除已经构建完成的物化视图或不存在的物化视图。如要删除创建中的物化视图，请参考 [物化视图 - 删除物化视图](../using_starrocks/Materialized_view.md#删除物化视图)。
+
+> **注意**
+>
+> 只有拥有基表所在数据库 `DROP_PRIV` 权限的用户才可以删除对应物化视图。
 
 ## 语法
 
-```sql
-DROP MATERIALIZED VIEW [IF EXISTS] [db_name.]mv_name;
+```SQL
+DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name;
 ```
 
-说明：
+注：方括号 [] 中内容可省略不写。
 
-**IF EXISTS**
+## 参数
 
-如果物化视图不存在，不要抛出错误。如果不声明此关键字，物化视图不存在则报错。
-
-**mv_name**
-
-待删除的物化视图的名称。必填项。
-
-**db_name**
-
-待删除的物化视图所属的数据库名。选填项。如果不指定该参数，则默认使用当前数据库。
+| **参数**  | **必选** | **说明**                                                     |
+| --------- | -------- | ------------------------------------------------------------ |
+| IF EXISTS | 否       | 如果声明该参数，删除不存在的物化视图系统不会报错。如果不声明该参数，删除不存在的物化视图系统会报错。 |
+| mv_name   | 是       | 待删除的物化视图的名称。                                     |
 
 ## 示例
 
-表结构为
+### 示例一：删除存在的物化视图
 
-```SQL
-mysql> desc all_type_table all;
-+----------------+-------+----------+------+-------+---------+-------+
-| IndexName      | Field | Type     | Null | Key   | Default | Extra |
-+----------------+-------+----------+------+-------+---------+-------+
-| all_type_table | k1    | TINYINT  | Yes  | true  | N/A     |       |
-|                | k2    | SMALLINT | Yes  | false | N/A     | NONE  |
-|                | k3    | INT      | Yes  | false | N/A     | NONE  |
-|                | k4    | BIGINT   | Yes  | false | N/A     | NONE  |
-|                | k5    | LARGEINT | Yes  | false | N/A     | NONE  |
-|                | k6    | FLOAT    | Yes  | false | N/A     | NONE  |
-|                | k7    | DOUBLE   | Yes  | false | N/A     | NONE  |
-|                |       |          |      |       |         |       |
-| k1_sumk2       | k1    | TINYINT  | Yes  | true  | N/A     |       |
-|                | k2    | SMALLINT | Yes  | false | N/A     | SUM   |
-+----------------+-------+----------+------+-------+---------+-------+
+1. 查看当前数据库中存在的物化视图。
+
+```Plain
+MySQL > SHOW MATERIALIZED VIEW\G
+*************************** 1. row ***************************
+           id: 470740
+         name: order_mv1
+database_name: default_cluster:sr_hub
+         text: SELECT `sr_hub`.`orders`.`dt` AS `dt`, `sr_hub`.`orders`.`order_id` AS `order_id`, `sr_hub`.`orders`.`user_id` AS `user_id`, sum(`sr_hub`.`orders`.`cnt`) AS `total_cnt`, sum(`sr_hub`.`orders`.`revenue`) AS `total_revenue`, count(`sr_hub`.`orders`.`state`) AS `state_count` FROM `sr_hub`.`orders` GROUP BY `sr_hub`.`orders`.`dt`, `sr_hub`.`orders`.`order_id`, `sr_hub`.`orders`.`user_id`
+         rows: 0
+1 rows in set (0.00 sec)
 ```
 
-1. 删除表 all_type_table 的名为 k1_sumk2 的物化视图
+1. 删除物化视图 `order_mv1`。
 
-    ```sql
-    drop materialized view k1_sumk2 from all_type_table;
-    ```
+```Plain
+DROP MATERIALIZED VIEW order_mv1;
+```
 
-    物化视图被删除后的表结构
+1. 删除后重新查看当前数据库中存在的物化视图将不会显示该物化视图。
 
-    ```SQL
-    +----------------+-------+----------+------+-------+---------+-------+
-    | IndexName      | Field | Type     | Null | Key   | Default | Extra |
-    +----------------+-------+----------+------+-------+---------+-------+
-    | all_type_table | k1    | TINYINT  | Yes  | true  | N/A     |       |
-    |                | k2    | SMALLINT | Yes  | false | N/A     | NONE  |
-    |                | k3    | INT      | Yes  | false | N/A     | NONE  |
-    |                | k4    | BIGINT   | Yes  | false | N/A     | NONE  |
-    |                | k5    | LARGEINT | Yes  | false | N/A     | NONE  |
-    |                | k6    | FLOAT    | Yes  | false | N/A     | NONE  |
-    |                | k7    | DOUBLE   | Yes  | false | N/A     | NONE  |
-    +----------------+-------+----------+------+-------+---------+-------+
-    ```
+```Plain
+MySQL > SHOW MATERIALIZED VIEW;
+Empty set (0.01 sec)
+```
 
-2. 删除表 all_type_table 中一个不存在的物化视图。
+### 示例二：删除不存在的物化视图
 
-    ```sql
-    drop materialized view k1_k2 from all_type_table;
-    ERROR 1064 (HY000): errCode = 2, detailMessage = Materialized view [k1_k2] does not exist in table [all_type_table]
-    ```
+- 当未声明 `IF EXISTS` 参数时，删除一个不属于当前数据库的物化视图 `k1_k2` 会报错。
 
-    删除请求直接报错
+```Plain
+MySQL > DROP MATERIALIZED VIEW k1_k2;
+ERROR 1064 (HY000): Materialized view k1_k2 is not find
+```
 
-3. 删除表 all_type_table 中的物化视图 k1_k2，不存在不报错。
+- 当声明 `IF EXISTS` 参数时，删除一个不属于当前数据库的物化视图 `k1_k2` 不会报错。
 
-    ```sql
-    drop materialized view if exists k1_k2 from all_type_table;
-    Query OK, 0 rows affected (0.00 sec)
-    ```
-
-    存在则删除，不存在则不报错。
+```Plain
+MySQL > DROP MATERIALIZED VIEW IF EXISTS k1_k2;
+Query OK, 0 rows affected (0.00 sec)
+```
