@@ -39,6 +39,14 @@ PARALLEL_TEST(JsonColumnTest, test_parse) {
         ASSERT_TRUE(json.value().to_string().ok());
         ASSERT_EQ(json_str, json.value().to_string().value());
     }
+    {
+        // Exceed length limitation
+        Slice slice;
+        slice.data = json_str.data();
+        slice.size = kJSONLengthLimit + 1;
+        auto maybe_json = JsonValue::parse_json_or_string(slice);
+        ASSERT_FALSE(maybe_json.ok());
+    }
 }
 
 PARALLEL_TEST(JsonColumnTest, test_to_string) {

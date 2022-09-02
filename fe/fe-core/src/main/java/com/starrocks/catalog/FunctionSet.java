@@ -318,6 +318,18 @@ public class FunctionSet {
             .add(FunctionSet.FIRST_VALUE_REWRITE)
             .build();
 
+    public static final Set<String> varianceFunctions = ImmutableSet.<String>builder()
+            .add(FunctionSet.VAR_POP)
+            .add(FunctionSet.VAR_SAMP)
+            .add(FunctionSet.VARIANCE)
+            .add(FunctionSet.VARIANCE_POP)
+            .add(FunctionSet.VARIANCE_SAMP)
+            .add(FunctionSet.STD)
+            .add(FunctionSet.STDDEV)
+            .add(FunctionSet.STDDEV_POP)
+            .add(FunctionSet.STDDEV_SAMP)
+            .add(FunctionSet.STDDEV_VAL).build();
+
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
     }
