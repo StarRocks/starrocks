@@ -67,6 +67,10 @@ public class SqlParser {
     }
 
     @Deprecated
+    /**
+     * We need not only sqlMode but also other parameters to define the property of parser.
+     * Please consider use {@link #parse(String, SessionVariable)}
+     */
     public static List<StatementBase> parse(String originSql, long sqlMode) {
         SessionVariable sessionVariable = new SessionVariable();
         sessionVariable.setSqlMode(sqlMode);
