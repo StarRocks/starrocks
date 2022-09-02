@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 
+#include "gen_cpp/AgentService_types.h"
 #include "gutil/macros.h"
 
 namespace starrocks {
@@ -67,5 +68,10 @@ private:
     class Impl;
     std::unique_ptr<Impl> _impl;
 };
+
+bool register_task_info(TTaskType::type task_type, int64_t signature);
+std::vector<uint8_t> batch_register_task_info(const std::vector<const TAgentTaskRequest*>& tasks);
+void remove_task_info(TTaskType::type task_type, int64_t signature);
+std::map<TTaskType::type, std::set<int64_t>> count_all_tasks();
 
 } // end namespace starrocks
