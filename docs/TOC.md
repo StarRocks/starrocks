@@ -25,7 +25,7 @@
   + [Broker Load](./loading/BrokerLoad.md)
   + [Routine Load](./loading/RoutineLoad.md)
   + [Spark Load](./loading/SparkLoad.md)
-  + [Load Data using INSERT](./loading/InsertInto.md)
+  + [Load data using INSERT](./loading/InsertInto.md)
   + [Load data into tables of Primary Key model](./loading/Load_to_Primary_Key_tables.md)
   + [ETL in loading](./loading/Etl_in_loading.md)
   + [JSON loading](./loading/Json_loading.md)
