@@ -5,8 +5,8 @@
 You can use the GRANT statement to perform the following operations:
 
 - Grant specific privileges to a user or a role.
-- Grant a role to a user. This operation is supported only in StarRock 2.4 and later versions.
-- Grant a user the privilege to perform operations as another user. This operation is supported only in StarRock 2.4 and later versions.
+- Grant a role to a user. This feature is supported only in StarRock 2.4 and later versions.
+- Grant a user the privilege to impersonate another user to perform operations. This feature is supported only in StarRock 2.4 and later versions.
 
 ## Syntax
 
@@ -22,7 +22,7 @@ You can use the GRANT statement to perform the following operations:
     GRANT privilege_list ON RESOURCE 'resource_name' TO {user_identity | ROLE 'role_name'};
     ```
 
-- Grant user `a` the privilege to perform operations as user `b`.
+- Grant user `a` the privilege to impersonate user `b` to perform operations.
 
     ```SQL
     GRANT IMPERSONATE ON user_identity_b TO user_identity_a;
@@ -38,37 +38,37 @@ You can use the GRANT statement to perform the following operations:
 
 ### privilege_list
 
-- The privileges that can be granted to a user or a role. If you want to grant multiple privileges at a time, separate the privileges with commas (`,`). The following privileges are supported:
+The privileges that can be granted to a user or a role. If you want to grant multiple privileges at a time, separate the privileges with commas (`,`). The following privileges are supported:
 
-  - `NODE_PRIV`: the privilege to manage cluster nodes such as enabling nodes and disabling nodes. This privilege can only be granted to the root user.
-  - `ADMIN_PRIV`: all privileges except `NODE_PRIV`.
-  - `GRANT_PRIV`: the privilege of performing operations such as creating users and roles, deleting users and roles, granting privileges, revoking privileges, and setting passwords for accounts.
-  - `SELECT_PRIV`: the read privilege on databases and tables.
-  - `LOAD_PRIV`: the privilege to load data into databases and tables.
-  - `ALTER_PRIV`: the privilege to change schemas of databases and tables.
-  - `CREATE_PRIV`: the privilege to create databases and tables.
-  - `DROP_PRIV`: the privilege to delete databases and tables.
-  - `USAGE_PRIV`: the privilege to use resources.
+- `NODE_PRIV`: the privilege to manage cluster nodes such as enabling nodes and disabling nodes. This privilege can only be granted to the root user.
+- `ADMIN_PRIV`: all privileges except `NODE_PRIV`.
+- `GRANT_PRIV`: the privilege of performing operations such as creating users and roles, deleting users and roles, granting privileges, revoking privileges, and setting passwords for accounts.
+- `SELECT_PRIV`: the read privilege on databases and tables.
+- `LOAD_PRIV`: the privilege to load data into databases and tables.
+- `ALTER_PRIV`: the privilege to change schemas of databases and tables.
+- `CREATE_PRIV`: the privilege to create databases and tables.
+- `DROP_PRIV`: the privilege to delete databases and tables.
+- `USAGE_PRIV`: the privilege to use resources.
 
-- The preceding privileges can be classified into the following three categories:
+The preceding privileges can be classified into the following three categories:
 
-  - Node privilege: `NODE_PRIV`
-  - Database and table privilege: `SELECT_PRIV`, `LOAD_PRIV`, `ALTER_PRIV`, `CREATE_PRIV`, and `DROP_PRIV`
-  - Resource privilege: `USAGE_PRIV`
+- Node privilege: `NODE_PRIV`
+- Database and table privilege: `SELECT_PRIV`, `LOAD_PRIV`, `ALTER_PRIV`, `CREATE_PRIV`, and `DROP_PRIV`
+- Resource privilege: `USAGE_PRIV`
 
 ### db_name[.tbl_name]
 
-- The database and table. This parameter supports the following three formats:
+The database and table. This parameter supports the following three formats:
 
-  - `*.*`: indicates all databases and tables.
-  - `db.*`: indicates a specific database and all tables in this database.
-  - `db.tbl`: indicates a specific table in a specific database.
+- `*.*`: indicates all databases and tables.
+- `db.*`: indicates a specific database and all tables in this database.
+- `db.tbl`: indicates a specific table in a specific database.
 
 > Note: When you use the `db.*` or `db.tbl` format, you can specify a database or a table that does not exist.
 
 ### resource_name
 
- The resource name. This parameter supports the following two formats:
+The resource name. This parameter supports the following two formats:
 
 - `*`: indicates all the resources.
 - `resource`: indicates a specific resource.
@@ -127,7 +127,7 @@ Example 7: Grant `my_role` to user `jack`.
 GRANT 'my_role' TO 'jack'@'%';
 ```
 
-Example 8: Grant user `jack` the privilege to perform operations as user `rose`.
+Example 8: Grant user `jack` the privilege to impersonate user `rose` to perform operations.
 
 ```SQL
 GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';

@@ -4,26 +4,24 @@
 
 View the schema of a table stored in your StarRocks cluster or external data sources, such as Apache Hive™, Apache Iceberg, or Apache Hudi. Note that you can only use this statement to view the schema of a table in external data sources in StarRocks 2.4 and later versions.
 
-Syntax：
+## Syntax
 
 ```sql
 DESC[RIBE] [db_name.]table_name [ALL];
 ```
 
-Note：
-
-If ALL is specified, the schema of all indexes(rollup) of the table is displayed
+> Note：If ALL is specified, the schema of all indexes(rollup) of the table is displayed
 
 ## Examples
 
-1. Show Base table schema
+Example 1: Show Base table schema
 
-    ```sql
-    DESC table_name;
-    ```
+```sql
+DESC table_name;
+```
 
-2. Show the schema of all indexes in the table
+Example 2: Show the schema of all indexes in the table
 
-    ```sql
-    DESC db1.table_name ALL;
-    ```
+```sql
+DESC db1.table_name ALL;
+```
