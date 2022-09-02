@@ -101,7 +101,18 @@ All import methods support CSV data format. The `Broker Load` also supports parq
 
 5. **Insert into**
 
+<<<<<<< HEAD
     Similar to the `Insert` statement in MySQL, StarRocks provides `INSERT INTO tbl SELECT ... ;` to read data from a StarRocks table and import it to another table, and `INSERT INTO tbl VALUES(...) ;` to insert a single piece of data.
+=======
+| Loading method     | Protocol | Business scenario                                            | Data volume per load job                                     | Data source                                                  | Data file format      | Loading mode |
+| ------------------ | -------- | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | --------------------- | ------------ |
+| Stream Load        | HTTP     | Load data files from local file systems or load data streams by using programs. | 10 GB or less                                                | <ul><li>Local files</li><li>Data streams</li></ul>                                |<ul><li>CSV</li><li>JSON</li></ul>          | Synchronous  |
+| Broker Load        | MySQL    | Load data from HDFS or cloud storage.                        | Dozens of GB to hundreds of GB                               |<ul><li>HDFS</li><li>Amazon S3</li><li>Google GCP</li><li>Alibaba Cloud OSS</li><li>Tencent Cloud COS</li></ul>|<ul><li>CSV</li><li>Parquet</li><li>ORC</li></ul>| Asynchronous |
+| Routine Load       | MySQL    | Load data in real time from Apache Kafka®.                   | MBs to GBs of data as mini-batches                           | Kafka                                                        |<ul><li>CSV</li><li>JSON</li></ul>          | Asynchronous |
+| Spark Load         | MySQL    |<ul><li>Migrate large amounts of data from HDFS or Hive by using Apache Spark™ clusters.</li><li>Load data while using a global data dictionary for deduplication.</li></ul>| Dozens of GB to TBs                                          |<ul><li>HDFS</li><li>Hive</li></ul>                                               |<ul><li>CSV</li><li>Parquet</li></ul>       | Asynchronous |
+| INSERT INTO SELECT | MySQL    |<ul><li>Load data from external tables.</li><li>Load data between StarRocks tables.</li></ul>| Not fixed (The data volume varies based on the memory size.) |<ul><li>StarRocks tables</li><li>External tables</li></ul>                         | StarRocks tables      | Synchronous  |
+| INSERT INTO VALUES | MySQL    |<ul><li>Insert small amounts of data as individual records.</li><li>Load data by using APIs such as JDBC.</li></ul>| In small quantities                                          |<ul><li>Programs</li><li>ETL tools</li></ul>                                      | SQL                   | Synchronous  |
+>>>>>>> 89e34bdac (Modify li&ul in BrokerLoad & Loading_intro (#10766))
 
 ### Synchronous and Asynchronous
 
