@@ -293,18 +293,6 @@ public class SlotRef extends Expr {
         return desc.getId().equals(slotId);
     }
 
-    @Override
-    public void getIds(List<TupleId> tupleIds, List<SlotId> slotIds) {
-        Preconditions.checkState(type.isValid());
-        Preconditions.checkState(desc != null);
-        if (slotIds != null) {
-            slotIds.add(desc.getId());
-        }
-        if (tupleIds != null) {
-            tupleIds.add(desc.getParent().getId());
-        }
-    }
-
     public Table getTable() {
         Preconditions.checkState(desc != null);
         Table table = desc.getParent().getTable();
