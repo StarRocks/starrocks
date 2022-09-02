@@ -126,7 +126,7 @@ public class HashRingTest {
     public void testStaticPartitionedHashRing() {
         List<String> nodes = generateNodes(kNodeSize);
         StaticPartitionedHashRing hashRing =
-                new StaticPartitionedHashRing<>(Hashing.murmur3_128(), funnel, nodes, 100);
+                new StaticPartitionedHashRing<>(Hashing.murmur3_128(), funnel, nodes, kNodeSize * 20);
         testWithHashRing(hashRing, nodes);
     }
 

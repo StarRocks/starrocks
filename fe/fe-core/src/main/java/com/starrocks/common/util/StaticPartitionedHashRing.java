@@ -27,7 +27,7 @@ public class StaticPartitionedHashRing<K, N extends Comparable<N>> implements Ha
 
     @Override
     public String policy() {
-        return "StaticPartitionedConsistentHash";
+        return "StaticPartitionedHash";
     }
 
     public StaticPartitionedHashRing(HashFunction hashFunction, Funnel<K> keyFunnel,
