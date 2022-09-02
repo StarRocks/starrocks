@@ -185,10 +185,11 @@
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
+        + [ARRAY](./sql-reference/sql-statements/data-types/ARRAY.md)
     + Auxiliary Commands
       + [DESC](./sql-reference/sql-statements/Utility/DESCRIBE.md)
   + Function Reference
-    + Date Functions
+    + Date functions
       + [convert_tz](./sql-reference/sql-functions/date-time-functions/convert_tz.md)
       + [curdate](./sql-reference/sql-functions/date-time-functions/curdate.md)
       + [current_timestamp](./sql-reference/sql-functions/date-time-functions/current_timestamp.md)
@@ -223,7 +224,7 @@
       + [week](./sql-reference/sql-functions/date-time-functions/week.md)
       + [weekofyear](./sql-reference/sql-functions/date-time-functions/weekofyear.md)
       + [year](./sql-reference/sql-functions/date-time-functions/year.md)
-    + Geographic Functions
+    + Geographic functions
       + [st_astext](./sql-reference/sql-functions/spatial-functions/st_astext.md)
       + [st_circle](./sql-reference/sql-functions/spatial-functions/st_circle.md)
       + [st_contains](./sql-reference/sql-functions/spatial-functions/st_contains.md)
@@ -234,7 +235,7 @@
       + [st_polygon](./sql-reference/sql-functions/spatial-functions/st_polygon.md)
       + [st_x](./sql-reference/sql-functions/spatial-functions/st_x.md)
       + [st_y](./sql-reference/sql-functions/spatial-functions/st_y.md)
-    + String Functions
+    + String functions
       + [append_trailing_char_if_absent](./sql-reference/sql-functions/string-functions/append_trailing_char_if_absent.md)
       + [ascii](./sql-reference/sql-functions/string-functions/ascii.md)
       + [char_length](./sql-reference/sql-functions/string-functions/char_length.md)
@@ -267,7 +268,7 @@
       + [starts_with](./sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](./sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](./sql-reference/sql-functions/string-functions/strright.md)
-    + JSON Functions
+    + JSON functions
       + [Overview of JSON functions and operators](./sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md)
       + JSON constructor functions
         + [JSON_ARRAY](./sql-reference/sql-functions/json-functions/json-constructor-functions/json_array.md)
@@ -280,7 +281,7 @@
         + [JSON_EACH](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
         + [CAST](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/cast.md)
       + [JSON operators](./sql-reference/sql-functions/json-functions/json-operators.md)
-    + Aggregate Functions
+    + Aggregate functions
       + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
       + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [avg](./sql-reference/sql-functions/aggregate-functions/avg.md)
@@ -290,6 +291,7 @@
       + [max](./sql-reference/sql-functions/aggregate-functions/max.md)
       + [min](./sql-reference/sql-functions/aggregate-functions/min.md)
       + [percentile_approx](./sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
+      + [percentile_cont](./sql-reference/sql-functions/aggregate-functions/percentile_cont.md)
       + [retention](./sql-reference/sql-functions/aggregate-functions/retention.md)
       + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
       + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
@@ -298,7 +300,7 @@
       + [square](./sql-reference/sql-functions/aggregate-functions/square.md)
       + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
-    + Bitmap Functions
+    + Bitmap functions
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](./sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
       + [bitmap_contains](./sql-reference/sql-functions/bitmap-functions/bitmap_contains.md)
@@ -317,12 +319,13 @@
       + [bitmap_xor](./sql-reference/sql-functions/bitmap-functions/bitmap_xor.md)
       + [to_bitmap](./sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
       + [base64_to_bitmap](./sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
-    + Array Functions
+    + Array functions
       + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
       + [array_append](./sql-reference/sql-functions/array-functions/array_append.md)
       + [array_avg](./sql-reference/sql-functions/array-functions/array_avg.md)
       + [array_concat](./sql-reference/sql-functions/array-functions/array_concat.md)
       + [array_contains](./sql-reference/sql-functions/array-functions/array_contains.md)
+      + [array_contains_all](./sql-reference/sql-functions/array-functions/array_contains_all.md)
       + [array_difference](./sql-reference/sql-functions/array-functions/array_difference.md)
       + [array_distinct](./sql-reference/sql-functions/array-functions/array_distinct.md)
       + [array_intersect](./sql-reference/sql-functions/array-functions/array_intersect.md)
