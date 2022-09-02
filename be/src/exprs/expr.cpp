@@ -335,7 +335,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::DICT_EXPR:
         *expr = pool->add(new vectorized::DictMappingExpr(texpr_node));
         break;
-    case TExprNodeType::LAMBDA_FUNCTION:
+    case TExprNodeType::LAMBDA_FUNCTION_EXPR:
         *expr = pool->add(new vectorized::LambdaFunction(texpr_node));
         break;
     case TExprNodeType::CLONE_EXPR:

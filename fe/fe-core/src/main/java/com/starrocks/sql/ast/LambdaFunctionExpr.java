@@ -57,7 +57,7 @@ public class LambdaFunctionExpr extends Expr {
 
     @Override
     protected void toThrift(TExprNode msg) {
-        msg.setNode_type(TExprNodeType.LAMBDA_FUNCTION);
+        msg.setNode_type(TExprNodeType.LAMBDA_FUNCTION_EXPR);
     }
 
     @Override

@@ -76,7 +76,7 @@ public:
         TExprNode tlambda_func;
         tlambda_func.opcode = TExprOpcode::ADD;
         tlambda_func.child_type = TPrimitiveType::INT;
-        tlambda_func.node_type = TExprNodeType::LAMBDA_FUNCTION;
+        tlambda_func.node_type = TExprNodeType::LAMBDA_FUNCTION_EXPR;
         tlambda_func.num_children = 2;
         tlambda_func.__isset.opcode = true;
         tlambda_func.__isset.child_type = true;
