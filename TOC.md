@@ -96,6 +96,7 @@
       + [CREATE USER](/sql-reference/sql-statements/account-management/CREATE%20USER.md)
       + [DROP ROLE](/sql-reference/sql-statements/account-management/DROP%20ROLE.md)
       + [DROP USER](/sql-reference/sql-statements/account-management/DROP%20USER.md)
+      + [EXECUTE AS](/sql-reference/sql-statements/account-management/EXECUTE%20AS.md)
       + [GRANT](/sql-reference/sql-statements/account-management/GRANT.md)
       + [REVOKE](/sql-reference/sql-statements/account-management/REVOKE.md)
       + [SET PASSWORD](/sql-reference/sql-statements/account-management/SET%20PASSWORD.md)
@@ -227,7 +228,7 @@
         + [JSON](/sql-reference/sql-statements/data-types/JSON.md)
         + [ARRAY](/sql-reference/sql-statements/data-types/Array.md)
     + 辅助命令
-      + [DESCRIBE](/sql-reference/sql-statements/Utility/DESCRIBE.md)
+      + [DESC](/sql-reference/sql-statements/Utility/DESCRIBE.md)
   + 函数参考
     + 日期函数
       + [convert_tz](/sql-reference/sql-functions/date-time-functions/convert_tz.md)

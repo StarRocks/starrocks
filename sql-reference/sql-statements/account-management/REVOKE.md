@@ -2,21 +2,37 @@
 
 ## 功能
 
-撤销某用户或某角色的指定权限。
+您可以使用该语句进行如下操作：
+
+- 撤销某用户或某角色的指定权限。
+- 撤销先前授予某用户的指定角色。注意仅 StarRocks 2.4 及以上版本支持该功能。
+- 撤销一个用户 IMPERSONATE 另一个用户的权限。注意仅 StarRocks 2.4 及以上版本支持该功能。
 
 ## 语法
 
 - 撤销某用户或某角色对数据库和表的指定权限。当撤销某角色的指定权限时，该角色必须存在。
 
-```SQL
-REVOKE privilege_list ON db_name[.tbl_name] FROM {user_identity | ROLE 'role_name'};
-```
+    ```SQL
+    REVOKE privilege_list ON db_name[.tbl_name] FROM {user_identity | ROLE 'role_name'};
+    ```
 
 - 撤销某用户或某角色对资源的指定权限。当撤销某角色的指定权限时，该角色必须存在。
 
-```SQL
-REVOKE privilege_list ON RESOURCE 'resource_name' FROM {user_identity | ROLE 'role_name'};
-```
+    ```SQL
+    REVOKE privilege_list ON RESOURCE 'resource_name' FROM {user_identity | ROLE 'role_name'};
+    ```
+
+- 撤销用户 `a` 以用户 `b` 的身份执行命令的权限。
+
+    ```SQL
+    REVOKE IMPERSONATE ON user_identity_b FROM user_identity_a;
+    ```
+
+- 撤销先前授予某用户的指定角色。该指定角色必须存在。
+
+    ```SQL
+    REVOKE 'role_name' FROM user_identity;
+    ```
 
 ## 参数说明
 
@@ -69,8 +85,20 @@ REVOKE privilege_list ON RESOURCE 'resource_name' FROM {user_identity | ROLE 'ro
 REVOKE SELECT_PRIV ON db1.* FROM 'jack'@'192.%';
 ```
 
-示例二：撤销用户 `jack` 对资源 `spark_resource` 的使用权限。
+示例二：撤销用户 `jack` 对资源 spark_resource 的使用权限。
 
 ```SQL
 REVOKE USAGE_PRIV ON RESOURCE 'spark_resource' FROM 'jack'@'192.%';
+```
+
+示例三：撤销先前授予用户 `jack` 的 `my_role` 角色。
+
+```SQL
+REVOKE 'my_role' FROM 'jack'@'%';
+```
+
+示例四：撤销用户 `jack` 以用户 `rose` 的身份执行命令的权限。
+
+```SQL
+REVOKE IMPERSONATE ON 'rose'@'%' FROM 'jack'@'%';
 ```

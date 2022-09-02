@@ -2,21 +2,37 @@
 
 ## 功能
 
-将指定权限授予某用户或某角色。
+您可以使用该语句进行如下操作：
+
+- 将指定权限授予某用户或某角色。
+- 将指定角色授予某用户。注意仅 StarRocks 2.4 及以上版本支持该功能。
+- 授予用户 `a` IMPERSONATE 用户 `b` 的权限。授予后，用户 `a` 即可执行 [EXECUTE AS](../account-management/EXECUTE%20AS.md) 语句以用户 `b` 的身份执行操作。注意仅 StarRocks 2.4 及以上版本支持该功能。
 
 ## 语法
 
 - 将数据库和表的指定权限授予某用户或某角色。如果授予的角色不存在，那么系统会自动创建该角色。
 
-```SQL
-GRANT privilege_list ON db_name[.tbl_name] TO {user_identity | ROLE 'role_name'}；
-```
+    ```SQL
+    GRANT privilege_list ON db_name[.tbl_name] TO {user_identity | ROLE 'role_name'}；
+    ```
 
 - 将资源的指定权限授予某用户或某角色。如果授予的角色不存在，那么系统会自动创建该角色。
 
-```SQL
-GRANT privilege_list ON RESOURCE 'resource_name' TO {user_identity | ROLE 'role_name'};
-```
+    ```SQL
+    GRANT privilege_list ON RESOURCE 'resource_name' TO {user_identity | ROLE 'role_name'};
+    ```
+
+- 授予用户 `a` 以用户 `b` 的身份执行操作的权限。
+
+    ```SQL
+    GRANT IMPERSONATE ON user_identity_b TO user_identity_a;
+    ```
+
+- 将指定角色的权限授予某用户。指定角色必须存在。
+
+    ```SQL
+    GRANT 'role_name' TO user_identity;
+    ```
 
 ## 参数说明
 
@@ -61,7 +77,7 @@ GRANT privilege_list ON RESOURCE 'resource_name' TO {user_identity | ROLE 'role_
 
 ### user_identity
 
-该参数由两部分组成：`user_name` 和 `host`。 `user_name` 表示用户名。`host` 表示用户的主机地址，可以不指定，也可以指定为域名。如不指定，host 默认值为 `%`，表示该用户可以从任意 host 连接 StarRocks。如指定 `host` 为域名，权限的生效时间可能会有 1 分钟左右的延迟。`user_identity` 必须是使用 [CREATE USER](../account-management/CREATE%20USER.md) 语句创建的。
+该参数由两部分组成：`user_name` 和 `host`。 `user_name` 表示用户名。`host` 表示用户的主机地址，可以不指定，也可以指定为域名。如不指定，host 默认值为 `%`，表示该用户可以从任意 host 连接 StarRocks。如指定 `host` 为域名，权限的生效时间可能会有 1 分钟左右的延迟。`user_identity` 必须是使用 CREATE USER 语句创建的。
 
 ### role_name
 
@@ -93,14 +109,26 @@ GRANT SELECT_PRIV,ALTER_PRIV,LOAD_PRIV ON db1.tbl1 TO 'jack'@'192.8.%';
 GRANT USAGE_PRIV ON RESOURCE * TO 'jack'@'%';
 ```
 
-示例五：将资源 `spark_resource` 的使用权限授予用户 `jack`。
+示例五：将资源 spark_resource 的使用权限授予用户 `jack`。
 
 ```SQL
 GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO 'jack'@'%';
 ```
 
-示例六：将资源 `spark_resource` 的使用权限授予角色 `my_role` 。
+示例六：将资源 spark_resource 的使用权限授予角色 `my_role` 。
 
 ```SQL
 GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO ROLE 'my_role';
+```
+
+示例七：将角色 `my_role` 授予用户 `jack`。
+
+```SQL
+GRANT 'my_role' TO 'jack'@'%';
+```
+
+示例八：授予用户 `jack` 以用户 `rose` 的身份执行操作的权限。
+
+```SQL
+GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 ```

@@ -1,10 +1,10 @@
-# DESCRIBE
+# DESC
 
-## 描述
+## 功能
 
-该语句用于展示指定 table 的 schema 信息。
+查看 StarRocks 中的表结构或外部数据源中的表结构，例如 Apache Hive™, Apache Iceberg, 和 Apache Hudi。仅 StarRocks 2.4 及以上版本支持查看外部数据的表结构。
 
-语法：
+## 语法
 
 ```sql
 DESC[RIBE] [db_name.]table_name [ALL];
@@ -12,18 +12,18 @@ DESC[RIBE] [db_name.]table_name [ALL];
 
 说明：
 
-"[]" 中的内容可省略。如果指定 ALL，则显示该 table 的所有字段，索引及物化视图信息。
+如果指定 ALL，则显示该 table 的所有字段，索引及物化视图信息。
 
 ## 示例
 
-1. 查看表字段信息  
+示例一：查看表字段信息。
 
-    ```sql
-    DESC table_name;
-    ```
+ ```sql
+DESC table_name;
+```
 
-2. 查看表的字段，索引及物化视图信息
+示例二：查看表的字段，索引及物化视图信息。
 
-    ```sql
-    DESC db1.table_name ALL;
-    ```
+```sql
+DESC db1.table_name ALL;
+```

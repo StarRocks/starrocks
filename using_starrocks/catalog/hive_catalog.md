@@ -11,7 +11,7 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 
 - StarRocks 支持查询如下格式的 Hive 数据：Parquet、ORC 和 CSV。
 - StarRocks 支持查询如下类型的 Hive 数据：INT、INTEGER、BIGINT、TIMESTAMP、STRING、VARCHAR、CHAR、DOUBLE、FLOAT、DECIMAL 和 ARRAY。注意查询命中不支持的数据类型会报错，不支持的数据类型包括：TINYINT、SMALLINT、NUMERIC、DATE、INTERVAL、BOOLEAN、BINARY 、MAP、 STRUCT 和 UNION。
-- StarRocks 2.4 及以上版本支持使用 [DESCRIBE](/sql-reference/sql-statements/Utility/DESCRIBE.md) 语句查看 Hive 表结构。查看时，不支持的数据类型会显示成`unknown`。
+- StarRocks 2.4 及以上版本支持使用 [DESC](/sql-reference/sql-statements/Utility/DESCRIBE.md) 语句查看 Hive 表结构。查看时，不支持的数据类型会显示成`unknown`。
 
 ## 前提条件
 

@@ -12,7 +12,7 @@ Hudi catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 - StarRocks 支持查询如下格式的 Hudi 数据：Parquet、ORC、gzip、Zstd、LZ4 和 Snappy。
 - StarRocks 支持查询如下类型的 Hudi 数据：BOOLEAN、INT、DATE、TimeMillis、TimeMicros、LONG、FLOAT、DOUBLE、STRING、ARRAY 和 DECIMAL。注意查询命中不支持的数据类型（FIXED、ENUM、UNION、MAP 和 BYTES）会报错。
 - StarRocks 支持查询 Copy on write 表。暂不支持查询 Merge on read 表。有关这两种表的详细信息，请参见 [Table & Query Types](https://hudi.apache.org/docs/table_types)。
-- StarRocks 2.4 及以上版本支持创建 Hudi catalog，以及使用 [DESCRIBE](/sql-reference/sql-statements/Utility/DESCRIBE.md) 语句查看 Hudi 表结构。查看时，不支持的数据类型会显示成`unknown`。
+- StarRocks 2.4 及以上版本支持创建 Hudi catalog，以及使用 [DESC](/sql-reference/sql-statements/Utility/DESCRIBE.md) 语句查看 Hudi 表结构。查看时，不支持的数据类型会显示成`unknown`。
 
 ## 前提条件
 
