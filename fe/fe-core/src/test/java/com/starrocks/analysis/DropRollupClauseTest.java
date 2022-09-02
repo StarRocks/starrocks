@@ -27,7 +27,7 @@ public class DropRollupClauseTest {
 
     @BeforeClass
     public static void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
     }
 
     @Test

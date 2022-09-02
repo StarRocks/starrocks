@@ -988,7 +988,7 @@ public class MVRewriteTest {
         String plan = starRocksAssert.withMaterializedView(createMVSQL).query(union).explainQuery();
         Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
                 "     TABLE: emps\n" +
-                "     PREAGGREGATION: ON\n" +
+                "     PREAGGREGATION: OFF. Reason: Predicates include the value column\n" +
                 "     PREDICATES: 4: deptno > 300\n" +
                 "     partitions=1/1\n" +
                 "     rollup: emps_mv"));

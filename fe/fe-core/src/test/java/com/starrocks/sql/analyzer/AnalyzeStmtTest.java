@@ -70,14 +70,14 @@ public class AnalyzeStmtTest {
     public void testShowUserProperty() {
         String sql = "SHOW PROPERTY FOR 'jack' LIKE '%load_cluster%'";
         ShowUserPropertyStmt showUserPropertyStmt = (ShowUserPropertyStmt) analyzeSuccess(sql);
-        Assert.assertEquals("default_cluster:jack", showUserPropertyStmt.getUser());
+        Assert.assertEquals("jack", showUserPropertyStmt.getUser());
     }
 
     @Test
     public void testSetUserProperty() {
         String sql = "SET PROPERTY FOR 'tom' 'max_user_connections' = 'value', 'test' = 'true'";
         SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt) analyzeSuccess(sql);
-        Assert.assertEquals("default_cluster:tom", setUserPropertyStmt.getUser());
+        Assert.assertEquals("tom", setUserPropertyStmt.getUser());
     }
 
     @Test

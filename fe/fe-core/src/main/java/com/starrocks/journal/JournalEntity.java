@@ -25,7 +25,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.backup.BackupJob;
+import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.BrokerMgr;
@@ -281,7 +281,7 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             case OperationType.OP_BACKUP_JOB: {
-                data = BackupJob.read(in);
+                data = AbstractJob.read(in);
                 isRead = true;
                 break;
             }

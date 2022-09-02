@@ -557,11 +557,11 @@ public class Database extends MetaObject implements Writable {
         return views;
     }
 
-    public List<Table> getMaterializedViews() {
-        List<Table> materializedViews = new ArrayList<>();
+    public List<MaterializedView> getMaterializedViews() {
+        List<MaterializedView> materializedViews = new ArrayList<>();
         for (Table table : idToTable.values()) {
             if (TableType.MATERIALIZED_VIEW == table.getType()) {
-                materializedViews.add(table);
+                materializedViews.add((MaterializedView) table);
             }
         }
         return materializedViews;

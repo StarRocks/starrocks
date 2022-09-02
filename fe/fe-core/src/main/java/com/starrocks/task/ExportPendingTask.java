@@ -28,7 +28,7 @@ import com.starrocks.lake.proto.LockTabletMetadataRequest;
 import com.starrocks.load.ExportFailMsg;
 import com.starrocks.load.ExportJob;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.LakeServiceAsync;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TAgentResult;
@@ -133,7 +133,7 @@ public class ExportPendingTask extends LeaderTask {
 
     private Status lockTabletMetadata(TInternalScanRange internalScanRange, Backend backend) {
         try {
-            LakeServiceAsync lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
             LockTabletMetadataRequest request = new LockTabletMetadataRequest();
             request.tabletId = internalScanRange.getTablet_id();
             request.version = Long.parseLong(internalScanRange.getVersion());
