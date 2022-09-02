@@ -497,7 +497,7 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
         _total_kv_size += (key_size + kIndexValueSize) * kvs.size();
     } else {
         _total_kv_size +=
-                std::accumulate(kvs.begin(), kvs.end(), 0, [](size_t s, const auto& e) { return s + e.size; });
+                std::accumulate(kvs.begin(), kvs.end(), (size_t)0, [](size_t s, const auto& e) { return s + e.size; });
     }
     _total_bytes += pos_after - pos_before;
     auto iter = _shard_info_by_length.find(_cur_key_size);
@@ -1819,7 +1819,7 @@ Status ShardByLengthMutableIndex::flush_to_immutable_index(const std::string& pa
     for (const auto& [key_size, shard_info] : _shard_info_by_key_size) {
         const auto [shard_offset, shard_size] = shard_info;
         const auto size = std::accumulate(std::next(_shards.begin(), shard_offset),
-                                          std::next(_shards.begin(), shard_offset + shard_size), 0,
+                                          std::next(_shards.begin(), shard_offset + shard_size), (size_t)0,
                                           [](size_t s, const auto& e) { return s + e->size(); });
         if (size != 0) {
             size_t total_kv_pairs_usage = 0;
@@ -1841,16 +1841,17 @@ Status ShardByLengthMutableIndex::flush_to_immutable_index(const std::string& pa
 }
 
 size_t ShardByLengthMutableIndex::size() {
-    return std::accumulate(_shards.begin(), _shards.end(), 0, [](size_t s, const auto& e) { return s + e->size(); });
+    return std::accumulate(_shards.begin(), _shards.end(), (size_t)0,
+                           [](size_t s, const auto& e) { return s + e->size(); });
 }
 
 size_t ShardByLengthMutableIndex::capacity() {
-    return std::accumulate(_shards.begin(), _shards.end(), 0,
+    return std::accumulate(_shards.begin(), _shards.end(), (size_t)0,
                            [](size_t s, const auto& e) { return s + e->capacity(); });
 }
 
 size_t ShardByLengthMutableIndex::memory_usage() {
-    return std::accumulate(_shards.begin(), _shards.end(), 0,
+    return std::accumulate(_shards.begin(), _shards.end(), (size_t)0,
                            [](size_t s, const auto& e) { return s + e->memory_usage(); });
 }
 
@@ -2928,7 +2929,7 @@ Status PersistentIndex::_merge_compaction() {
         auto [l0_shard_offset, l0_shard_size] = shard_info;
         const auto l0_kv_pairs_size = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
                                                       std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
-                                                      0, [](size_t s, const auto& e) { return s + e->size(); });
+                                                      (size_t)0, [](size_t s, const auto& e) { return s + e->size(); });
         size_t l0_kv_pairs_usage = 0;
         if (key_size == 0) {
             l0_kv_pairs_usage = dynamic_cast<SliceMutableIndex*>(_l0->_shards[0].get())->_total_kv_pairs_usage;
@@ -2951,10 +2952,10 @@ Status PersistentIndex::_merge_compaction() {
         const auto [l1_shard_offset, l1_shard_size] = iter->second;
         const auto l1_kv_pairs_size = std::accumulate(std::next(_l1->_shards.begin(), l1_shard_offset),
                                                       std::next(_l1->_shards.begin(), l1_shard_offset + l1_shard_size),
-                                                      0, [](size_t s, const auto& e) { return s + e.size; });
+                                                      (size_t)0, [](size_t s, const auto& e) { return s + e.size; });
         const auto l1_kv_pairs_usage = std::accumulate(std::next(_l1->_shards.begin(), l1_shard_offset),
                                                        std::next(_l1->_shards.begin(), l1_shard_offset + l1_shard_size),
-                                                       0, [](size_t s, const auto& e) { return s + e.bytes; });
+                                                       (size_t)0, [](size_t s, const auto& e) { return s + e.bytes; });
         if (l0_kv_pairs_size == 0 && l1_kv_pairs_size != 0) {
             for (auto i = 0; i < l1_shard_size; i++) {
                 RETURN_IF_ERROR(writer->write_shard_as_rawbuff(_l1->_shards[l1_shard_offset + i], _l1.get()));
