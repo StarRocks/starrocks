@@ -22,6 +22,8 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
     Funnel<K> keyFunnel;
     Funnel<N> nodeFunnel;
     int virtualNumber;
+    long vNodeHashDelta;
+    final boolean vNodeEvenDistributed = false;
 
     class VNode {
         N node;
@@ -35,8 +37,15 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
         long hashValue() {
             Hasher hasher = hashFunction.newHasher();
             hasher.putObject(node, nodeFunnel);
-            hasher.putInt(index);
-            return hasher.hash().asLong();
+            long hash = 0;
+            if (vNodeEvenDistributed) {
+                long baseHash = hasher.hash().asLong();
+                hash = baseHash + vNodeHashDelta * index;
+            } else {
+                hasher.putInt(index);
+                hash = hasher.hash().asLong();
+            }
+            return hash;
         }
     }
 
@@ -52,6 +61,7 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
         this.keyFunnel = keyFunnel;
         this.nodeFunnel = nodeFunnel;
         this.virtualNumber = virtualNumber;
+        vNodeHashDelta = (Long.MAX_VALUE / virtualNumber) * 2;
         for (N node : nodes) {
             addNode(node);
         }

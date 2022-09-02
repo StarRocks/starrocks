@@ -21,7 +21,7 @@ import java.util.Map;
 public class HashRingTest {
     final int kNodeSize = 5;
     final int kKeySize = 2000;
-    final int kVirtualNumber = 10;
+    final int kVirtualNumber = 100;
     Funnel<String> funnel = new Funnel<String>() {
         @Override
         public void funnel(String from, PrimitiveSink into) {
