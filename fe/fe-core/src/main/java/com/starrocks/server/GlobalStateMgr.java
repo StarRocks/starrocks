@@ -1901,10 +1901,14 @@ public class GlobalStateMgr {
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
         sb.append("\n").append(distributionInfo.toSql());
 
-        // refresh schema
+        // refresh scheme
         MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
-        sb.append("\nREFRESH ").append(refreshScheme.getType());
-        if (refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
+        if (refreshScheme == null) {
+            sb.append("\nREFRESH ").append("UNKNOWN");
+        } else {
+            sb.append("\nREFRESH ").append(refreshScheme.getType());
+        }
+        if (refreshScheme != null && refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
             MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
             if (asyncRefreshContext.isDefineStartTime()) {
                 sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
