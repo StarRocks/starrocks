@@ -139,8 +139,8 @@ public final class ExportChecker extends LeaderDaemon {
         List<ExportJob> jobs = GlobalStateMgr.getCurrentState().getExportMgr().getExportJobs(JobState.EXPORTING);
         LOG.debug("exporting export job num: {}", jobs.size());
         for (ExportJob job : jobs) {
-            boolean needContiue = checkBeStatus(job);
-            if (needContiue) {
+            boolean cancalled = checkBeStatus(job);
+            if (cancalled) {
                 continue;
             }
             try {
@@ -156,22 +156,22 @@ public final class ExportChecker extends LeaderDaemon {
 
     private boolean checkBeStatus(ExportJob job) {
 
-        boolean hasRebootBe = false;
+        boolean beHasErr = false;
         String errMsg = "";
         for (Long beId : job.getBeStartTimeMap().keySet()) {
             Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
             if (!be.isAvailable()) {
-                hasRebootBe = true;
+                beHasErr = true;
                 errMsg = "be not available during exec export job. be:" + beId;
                 LOG.warn(errMsg + " job: {}", job);
             }
             if (be.getLastStartTime() > job.getBeStartTimeMap().get(beId)) {
-                hasRebootBe = true;
+                beHasErr = true;
                 errMsg = "be has rebooted during exec export job. be:" + beId;
                 LOG.warn(errMsg + " job: {}", job);
             }
         }
-        if (hasRebootBe) {
+        if (beHasErr) {
             try {
                 job.cancel(ExportFailMsg.CancelType.BE_STATUS_ERR, errMsg);
             } catch (UserException e) {
