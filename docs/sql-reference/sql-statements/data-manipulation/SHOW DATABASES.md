@@ -22,7 +22,7 @@ Views databases in your current StarRocks cluster or an external data source. No
 
 `catalog_name`: the name of the internal catalog or an external catalog.
 
-- If you set the value of the parameter to the name of the internal catalog, which is default_catalog, you can view databases in your current StarRocks cluster.
+- If you set the value of the parameter to the name of the internal catalog, which is `default_catalog`, you can view databases in your current StarRocks cluster.
 - If you set the value of the parameter to the name of an external catalog, you can view databases in the corresponding external data source.
 
 ## Examples
