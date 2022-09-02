@@ -23,9 +23,9 @@ Parameters in brackets [] is optional.
 | IF EXISTS     | no           | If this parameter is specified, StarRocks will not throw an exception when deleting a materialized view that does not exist. If this parameter is not specified, the system will throw an exception when deleting a materialized view that does not exist. |
 | mv_name       | yes          | The name of the materialized view to delete.                 |
 
-## Example
+## Examples
 
-### Example 1: Drop an existing materialized view
+Example 1: Drop an existing materialized view
 
 1. View all existing materialized views in the database.
 
@@ -53,7 +53,7 @@ Parameters in brackets [] is optional.
   Empty set (0.01 sec)
   ```
 
-### Example 2: Drop a non-existing materialized view
+Example 2: Drop a non-existing materialized view
 
 - If the parameter `IF EXISTS` is specified, StarRocks will not throw an exception when deleting a materialized view that does not exist.
 
