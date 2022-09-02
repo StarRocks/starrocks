@@ -80,7 +80,11 @@ public class RendezvousHashRing<K, N> implements HashRing<K, N> {
             Hasher hasher = hashFunction.newHasher();
             hasher.putObject(key, keyFunnel);
             hasher.putObject(vNodes.get(i).node, nodeFunnel);
-            float w = vNodes.get(i).weight * (65.0f - (float) Math.log1p(Math.abs(hasher.hash().asLong())));
+            long hash = hasher.hash().asLong();
+            if (hash == Long.MIN_VALUE) {
+                hash += 1;
+            }
+            float w = vNodes.get(i).weight * (65.0f - (float) Math.log1p(Math.abs(hash)));
             Affinity aff = new Affinity();
             aff.weight = w;
             aff.node = vNodes.get(i).node;
