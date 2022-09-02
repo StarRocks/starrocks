@@ -191,13 +191,13 @@ public class AnalyzeTestUtil {
     public static StatementBase analyzeSuccess(String originStmt) {
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
-                    connectContext.getSessionVariable().getSqlMode()).get(0);
+                    connectContext.getSessionVariable()).get(0);
             Analyzer.analyze(statementBase, connectContext);
 
             if (statementBase instanceof QueryStatement) {
                 StatementBase viewStatement =
                         com.starrocks.sql.parser.SqlParser.parse(ViewDefBuilder.build(statementBase),
-                                connectContext.getSessionVariable().getSqlMode()).get(0);
+                                connectContext.getSessionVariable()).get(0);
                 Analyzer.analyze(viewStatement, connectContext);
             }
 
@@ -212,7 +212,7 @@ public class AnalyzeTestUtil {
     public static StatementBase analyzeWithoutTestView(String originStmt) {
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
-                    connectContext.getSessionVariable().getSqlMode()).get(0);
+                    connectContext.getSessionVariable()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             return statementBase;
         } catch (Exception ex) {

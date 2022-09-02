@@ -570,7 +570,7 @@ public class ShowExecutorTest {
         ctx.setQualifiedUser("default_cluster:testUser");
 
         ShowColumnStmt stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show columns from testTbl in testDb",
-                ctx.getSessionVariable().getSqlMode()).get(0);
+                ctx.getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -585,7 +585,7 @@ public class ShowExecutorTest {
 
         // verbose
         stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb",
-                ctx.getSessionVariable().getSqlMode()).get(0);
+                ctx.getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         executor = new ShowExecutor(ctx, stmt);

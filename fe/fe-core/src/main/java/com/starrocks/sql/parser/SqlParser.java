@@ -66,41 +66,11 @@ public class SqlParser {
         parser.addParseListener(new TokenNumberListener(sessionVariable.getParseTokensLimit()));
     }
 
+    @Deprecated
     public static List<StatementBase> parse(String originSql, long sqlMode) {
-        List<String> splitSql = splitSQL(originSql);
-        List<StatementBase> statements = Lists.newArrayList();
-
-        for (int idx = 0; idx < splitSql.size(); ++idx) {
-            String sql = splitSql.get(idx);
-            try {
-                StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
-                CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-                StarRocksParser parser = new StarRocksParser(tokenStream);
-                StarRocksParser.sqlMode = sqlMode;
-                parser.removeErrorListeners();
-                parser.addErrorListener(new ErrorHandler());
-                StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-                StatementBase statement = (StatementBase) new AstBuilder(sqlMode)
-                        .visitSingleStatement(sqlStatements.singleStatement(0));
-                statement.setOrigStmt(new OriginStatement(sql, idx));
-                statements.add(statement);
-            } catch (ParsingException parsingException) {
-                StatementBase statement;
-                try {
-                    statement = parseWithOldParser(sql, sqlMode, 0);
-                } catch (Exception e) {
-                    // both new and old parser failed. We return new parser error info to client.
-                    throw parsingException;
-                }
-
-                if (StatementPlanner.supportedByNewPlanner(statement)) {
-                    throw parsingException;
-                }
-                statements.add(statement);
-            }
-        }
-
-        return statements;
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setSqlMode(sqlMode);
+        return parse(originSql, sessionVariable);
     }
 
     /**

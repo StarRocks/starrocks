@@ -790,7 +790,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 db.readUnlock();
             }
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(createTableStmt.get(0),
-                    ConnectContext.get().getSessionVariable().getSqlMode()).get(0);
+                    ConnectContext.get().getSessionVariable()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ConnectContext.get());
             if (statementBase instanceof CreateTableStmt) {
                 CreateTableStmt parsedCreateTableStmt = (CreateTableStmt) statementBase;
