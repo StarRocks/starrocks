@@ -66,11 +66,12 @@ public class SqlParser {
         parser.addParseListener(new TokenNumberListener(sessionVariable.getParseTokensLimit()));
     }
 
-    @Deprecated
+
     /**
      * We need not only sqlMode but also other parameters to define the property of parser.
      * Please consider use {@link #parse(String, SessionVariable)}
      */
+    @Deprecated
     public static List<StatementBase> parse(String originSql, long sqlMode) {
         SessionVariable sessionVariable = new SessionVariable();
         sessionVariable.setSqlMode(sqlMode);
