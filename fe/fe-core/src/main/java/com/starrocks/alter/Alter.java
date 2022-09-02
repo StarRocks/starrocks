@@ -346,24 +346,29 @@ public class Alter {
         long dbId = log.getDbId();
         long id = log.getId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        MaterializedView oldMaterializedView;
-        final MaterializedView.MvRefreshScheme newMvRefreshScheme = new MaterializedView.MvRefreshScheme();
+        db.writeLock();
+        try {
+            MaterializedView oldMaterializedView;
+            final MaterializedView.MvRefreshScheme newMvRefreshScheme = new MaterializedView.MvRefreshScheme();
 
-        oldMaterializedView = (MaterializedView) db.getTable(id);
-        final MaterializedView.MvRefreshScheme oldRefreshScheme = oldMaterializedView.getRefreshScheme();
-        newMvRefreshScheme.setAsyncRefreshContext(oldRefreshScheme.getAsyncRefreshContext());
-        newMvRefreshScheme.setLastRefreshTime(oldRefreshScheme.getLastRefreshTime());
-        final MaterializedView.RefreshType refreshType = log.getRefreshType();
-        final MaterializedView.AsyncRefreshContext asyncRefreshContext = log.getAsyncRefreshContext();
-        newMvRefreshScheme.setType(refreshType);
-        newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
-        oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
-        LOG.info(
-                "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
-                        "interval step to {}, timeunit to {}, id: {}",
-                oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
-                asyncRefreshContext.getStep(),
-                asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId());
+            oldMaterializedView = (MaterializedView) db.getTable(id);
+            final MaterializedView.MvRefreshScheme oldRefreshScheme = oldMaterializedView.getRefreshScheme();
+            newMvRefreshScheme.setAsyncRefreshContext(oldRefreshScheme.getAsyncRefreshContext());
+            newMvRefreshScheme.setLastRefreshTime(oldRefreshScheme.getLastRefreshTime());
+            final MaterializedView.RefreshType refreshType = log.getRefreshType();
+            final MaterializedView.AsyncRefreshContext asyncRefreshContext = log.getAsyncRefreshContext();
+            newMvRefreshScheme.setType(refreshType);
+            newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
+            oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
+            LOG.info(
+                    "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
+                            "interval step to {}, timeunit to {}, id: {}",
+                    oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
+                    asyncRefreshContext.getStep(),
+                    asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId());
+        } finally {
+            db.writeUnlock();
+        }
     }
 
     public void processAlterTable(AlterTableStmt stmt) throws UserException {

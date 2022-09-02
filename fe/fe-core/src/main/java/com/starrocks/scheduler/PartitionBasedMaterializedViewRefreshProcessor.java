@@ -26,6 +26,7 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -152,9 +153,14 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             throw new DmlException("update meta failed. database:" + database.getFullName() + " not exist");
         }
         try {
+            // check
+            Table mv = database.getTable(materializedView.getId());
+            if (mv == null) {
+                throw new DmlException("update meta failed. materialized view:" + materializedView.getName() + " not exist");
+            }
             MaterializedView.AsyncRefreshContext refreshContext =
                     materializedView.getRefreshScheme().getAsyncRefreshContext();
-            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> currentlVersionMap =
+            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
                     refreshContext.getBaseTableVisibleVersionMap();
             // should write this to log at one time
             Map<Long, Map<String, MaterializedView.BasePartitionInfo>> changedTablePartitionInfos =
@@ -163,10 +169,10 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             for (Map.Entry<Long, Map<String, MaterializedView.BasePartitionInfo>> tableEntry
                     : changedTablePartitionInfos.entrySet()) {
                 Long tableId = tableEntry.getKey();
-                if (!currentlVersionMap.containsKey(tableId)) {
-                    currentlVersionMap.put(tableId, Maps.newHashMap());
+                if (!currentVersionMap.containsKey(tableId)) {
+                    currentVersionMap.put(tableId, Maps.newHashMap());
                 }
-                Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo = currentlVersionMap.get(tableId);
+                Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo = currentVersionMap.get(tableId);
                 Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = tableEntry.getValue();
                 currentTablePartitionInfo.putAll(partitionInfoMap);
 
@@ -548,6 +554,16 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             throw new DmlException("drop partition failed. database:" + database.getFullName() + " not exist");
         }
         try {
+            // check
+            Table mv = database.getTable(materializedView.getId());
+            if (mv == null) {
+                throw new DmlException("drop partition failed. mv:" + materializedView.getName() + " not exist");
+            }
+            Partition mvPartition = mv.getPartition(dropPartitionName);
+            if (mvPartition == null) {
+                throw new DmlException("drop partition failed. partition:" + dropPartitionName + " not exist");
+            }
+
             GlobalStateMgr.getCurrentState().dropPartition(
                     database, materializedView,
                     new DropPartitionClause(false, dropPartitionName, false, true));
