@@ -2160,6 +2160,6 @@ public class OptimizerTaskTest {
         rightOperator = (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
         assertEquals(rightOperator.getDistributionSpec().getType(), DistributionSpec.DistributionType.BROADCAST);
         rightScan = (PhysicalOlapScanOperator) physicalTree.getInputs().get(1).getInputs().get(0).getOp();
-        assertEquals(olapTable1.getId(), rightScan.getTable().getId());
+        assertEquals(olapTable2.getId(), rightScan.getTable().getId());
     }
 }

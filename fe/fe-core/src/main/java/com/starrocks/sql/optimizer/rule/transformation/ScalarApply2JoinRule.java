@@ -51,7 +51,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
         // Or-Scope is same with And-Scope
-        return apply.isScalar() && !Utils.containsCorrelationSubquery(input.getGroupExpression());
+        return apply.isScalar() && !SubqueryUtils.containsCorrelationSubquery(input);
     }
 
     @Override

@@ -2086,38 +2086,19 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testDeriveOutputColumns() throws Exception {
-        String sql = "select \n" +
-                "  rand() as c0, \n" +
-                "  round(\n" +
-                "    cast(\n" +
-                "      rand() as DOUBLE\n" +
-                "    )\n" +
-                "  ) as c1 \n" +
-                "from \n" +
-                "  (\n" +
-                "    select \n" +
-                "      subq_0.v1 as c0 \n" +
-                "    from \n" +
-                "      (\n" +
-                "        select \n" +
-                "          v1,v2,v3\n" +
-                "        from \n" +
-                "          t0 as ref_0 \n" +
-                "        where \n" +
-                "          ref_0.v1 = ref_0.v2 \n" +
-                "        limit \n" +
-                "          72\n" +
+        String sql = "select rand() as c0, round(cast(rand() as DOUBLE)) as c1 \n" +
+                "from (\n" +
+                "    select subq_0.v1 as c0 \n" +
+                "    from ( select v1,v2,v3\n" +
+                "        from t0 as ref_0 \n" +
+                "        where ref_0.v1 = ref_0.v2 \n" +
+                "        limit 72\n" +
                 "      ) as subq_0 \n" +
                 "      right join t1 as ref_1 on (subq_0.v3 = ref_1.v5) \n" +
-                "    where \n" +
-                "      subq_0.v2 <> subq_0.v3 \n" +
-                "    limit \n" +
-                "      126\n" +
-                "  ) as subq_1 \n" +
-                "where \n" +
-                "  66 <= unix_timestamp() \n" +
-                "limit \n" +
-                "  155;";
+                "    where subq_0.v2 <> subq_0.v3 \n" +
+                "    limit 126 ) as subq_1 \n" +
+                "where 66 <= unix_timestamp() \n" +
+                "limit 155;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "7:Project\n" +
                 "  |  <slot 2> : 2: v2");
