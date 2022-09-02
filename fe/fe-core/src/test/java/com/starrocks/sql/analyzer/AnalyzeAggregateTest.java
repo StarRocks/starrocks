@@ -153,6 +153,9 @@ public class AnalyzeAggregateTest {
                 "SUM(t0.v3) from t0 group by cube(t0.v1, t0.v2)");
         analyzeSuccess("select test.t0.v1, test.t0.v2, grouping_id(test.t0.v1, test.t0.v2), " +
                 "SUM(test.t0.v3) from t0 group by cube(test.t0.v1, test.t0.v2)");
+
+        analyzeSuccess("select grouping(v1), grouping(v2), grouping_id(v1,v2), " +
+                "v1,v2 from t0 group by grouping sets((v1,v2),(v1),(v2))");
     }
 
     @Test
