@@ -238,7 +238,20 @@ The calculation formula is
 
 `max_filter_ratio = (dpp.abnorm.ALL / (dpp.abnorm.ALL + dpp.norm.ALL ) )`
 
+<<<<<<< HEAD
 `dpp.abnorm.ALL` is the number of rows with unqualified data quality, such as type mismatch, column mismatch, length mismatch, etc.
+=======
+| **Parameter** | **Description**                                              |
+| ------------- | ------------------------------------------------------------ |
+| dbName        | The name of the database into which data is loaded           |
+| tblNames      | The name of the table into which data is loaded.             |
+| label         | The label of the load job.                                   |
+| state         | The status of the load job. Valid values:<ul><li>`PENDING`: The load job is in queue waiting to be scheduled.</li><li>`LOADING`: The load job is running.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul>For more information, see the "Asynchronous loading" section in [Overview of data loading](/docs/loading/Loading_intro.md). |
+| failMsg       | The reason why the load job failed. If the `state` value for the load job is `PENDING`, `LOADING`, or `FINISHED`, `NULL` is returned for the `failMsg` parameter. If the `state` value for the load job is `CANCELLED`, the value returned for the `failMsg` parameter consists of two parts: `type` and `msg`.<ul><li>The `type` part can be any of the following values:</li><ul><li>`USER_CANCEL`: The load job was manually canceled.</li><li>`ETL_SUBMIT_FAIL`: The load job failed to be submitted.</li><li>`ETL-QUALITY-UNSATISFIED`: The load job failed because the percentage of unqualified data exceeds the value of the `max-filter-ratio` parameter.</li><li>`LOAD-RUN-FAIL`: The load job failed in the `LOADING` stage.</li><li>`TIMEOUT`: The load job failed to finish within the specified timeout period.</li><li>`UNKNOWN`: The load job failed due to an unknown error.</li></ul><li>The `msg` part provides the detailed cause of the load failure.</li></ul> |
+| trackingUrl   | The URL that is used to access the unqualified data detected in the load job. You can use the `curl` or `wget` command to access the URL and obtain the unqualified data. If no unqualified data is detected, `NULL` is returned for the `trackingUrl` parameter. |
+| status        | The status of the HTTP request for the load job. Valid values: `OK` and `Fail`. |
+| msg           | The error information of the HTTP request for the load job.  |
+>>>>>>> 1b4edf85c (add </li> in BrokerLoad (#10759))
 
 `dpp.norm.ALL` is the number of rows with correct data during the import. Users can use the `SHOW LOAD` command to check the correct amount of data for the import job.
 
