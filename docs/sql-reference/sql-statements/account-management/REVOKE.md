@@ -93,7 +93,7 @@ Example 3: Revoke `my_role` from user `jack`.
 REVOKE 'my_role' FROM 'jack'@'%';
 ```
 
-Example 4: Revoke the privilege that allows user `jack` to perform operations as user `rose`.
+Example 4: Revoke the privilege that allows user `jack` to impersonate `rose` to perform operations.
 
 ```SQL
 REVOKE IMPERSONATE ON 'rose'@'%' FROM 'jack'@'%';
