@@ -58,6 +58,7 @@ public class HDFSBackendSelector implements BackendSelector {
     private final List<Long> remoteScanRangesBytes = Lists.newArrayList();
     private final ImmutableCollection<ComputeNode> computeNodes;
     private boolean forceScheduleLocal;
+    private final int kCandidateNumber = 3;
 
     class HdfsScanRangeHasher {
         String basePath;
@@ -206,7 +207,7 @@ public class HDFSBackendSelector implements BackendSelector {
         HashRing hashRing = makeHashRing();
         for (int i = 0; i < remoteScanRangeLocations.size(); ++i) {
             TScanRangeLocations scanRangeLocations = remoteScanRangeLocations.get(i);
-            List<ComputeNode> backends = hashRing.get(scanRangeLocations, 1);
+            List<ComputeNode> backends = hashRing.get(scanRangeLocations, kCandidateNumber);
             ComputeNode node = selectLeastScanBytesComputeNode(backends);
             if (node == null) {
                 throw new RuntimeException("Failed to find backend to execute");
