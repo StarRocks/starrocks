@@ -1063,7 +1063,10 @@ public:
     }
 
     // return the dump file size if dump _set into a new file
-    size_t dump_bound() { return sizeof(size_t) + _total_kv_pairs_usage + sizeof(size_t) * size(); }
+    //  ｜--------    snapshot file      --------｜
+    //  |  size_t ||   size_t  ||  char[]  | ... |   size_t  ||  char[]  |
+    //  |total num|| data size ||  data    | ... | data size ||  data    |
+    size_t dump_bound() { return sizeof(size_t) * (1 + size()) + _total_kv_pairs_usage; }
 
     bool dump(phmap::BinaryOutputArchive& ar) {
         if (!ar.dump(size())) {
