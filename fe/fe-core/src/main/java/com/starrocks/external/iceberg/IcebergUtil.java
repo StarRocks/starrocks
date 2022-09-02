@@ -210,8 +210,8 @@ public class IcebergUtil {
             fullSchema.add(column);
         }
 
-        return new IcebergTable(CONNECTOR_TABLE_ID_ID_GENERATOR.getNextId().asInt(), icebergTable.name(),
-                fullSchema, properties);
+        return new IcebergTable(CONNECTOR_TABLE_ID_ID_GENERATOR.getNextId().asInt(), icebergTable,
+                true, icebergTable.name(), fullSchema, properties);
     }
 
     static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {

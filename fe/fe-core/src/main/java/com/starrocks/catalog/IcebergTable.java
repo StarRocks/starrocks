@@ -57,10 +57,11 @@ public class IcebergTable extends Table {
 
     private org.apache.iceberg.Table icbTbl; // actual iceberg table
 
+    private boolean isCatalogTbl = false;
+
     private String db;
     private String table;
     private String resourceName;
-    private String tableLocation;
 
     private final List<String> columnNames = Lists.newArrayList();
 
@@ -68,6 +69,13 @@ public class IcebergTable extends Table {
 
     public IcebergTable() {
         super(TableType.ICEBERG);
+    }
+
+    public IcebergTable(long id, org.apache.iceberg.Table icbTbl, boolean isCatalogTbl, String name,
+                        List<Column> schema, Map<String, String> properties) throws DdlException {
+        this(id, name, schema, properties);
+        this.icbTbl = icbTbl;
+        this.isCatalogTbl = isCatalogTbl;
     }
 
     public IcebergTable(long id, String name, List<Column> schema, Map<String, String> properties) throws DdlException {
@@ -116,8 +124,8 @@ public class IcebergTable extends Table {
         return icebergProperties.get(ICEBERG_METASTORE_URIS);
     }
 
-    public void setTableLocation(String location) {
-        this.tableLocation = location;
+    public boolean isCatalogTbl() {
+        return isCatalogTbl;
     }
 
     public void refreshTable() {
@@ -299,7 +307,6 @@ public class IcebergTable extends Table {
         Preconditions.checkNotNull(partitions);
 
         TIcebergTable tIcebergTable = new TIcebergTable();
-        tIcebergTable.setLocation(tableLocation);
 
         List<TColumn> tColumns = Lists.newArrayList();
         for (Column column : getBaseSchema()) {
