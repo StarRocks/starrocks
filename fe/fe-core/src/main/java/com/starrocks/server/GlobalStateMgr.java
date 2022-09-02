@@ -238,6 +238,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1666,8 +1667,8 @@ public class GlobalStateMgr {
         long startTime = System.currentTimeMillis();
         long lineCnt = 0;
         while (true) {
+            JournalEntity entity = null;
             try {
-                JournalEntity entity = null;
                 entity = cursor.next();
 
                 // EOF or aggressive retry
@@ -1679,7 +1680,11 @@ public class GlobalStateMgr {
                 EditLog.loadJournal(this, entity);
             } catch (Throwable e) {
                 if (canSkipBadReplayedJournal()) {
-                    LOG.error("!!! DANGER: SKIP JOURNAL {} !!!", replayedJournalId.incrementAndGet(), e);
+                    LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
+                            replayedJournalId.incrementAndGet(),
+                            entity == null ? null : entity.getData(),
+                            e);
+                    cursor.skipNext();
                     continue;
                 }
                 throw e;  // handled in outer loop
@@ -1722,7 +1727,7 @@ public class GlobalStateMgr {
     private boolean canSkipBadReplayedJournal() {
         try {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
-                if (Long.valueOf(idStr) == replayedJournalId.get() + 1) {
+                if (!StringUtils.isEmpty(idStr) && Long.valueOf(idStr) == replayedJournalId.get() + 1) {
                     LOG.info("skip bad replayed journal id {} because configed {}",
                             idStr, Config.metadata_journal_skip_bad_journal_ids);
                     return true;
