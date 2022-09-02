@@ -66,9 +66,9 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
                     
                     // Since 2.4, StarRocks support partial updates for primary key model. You can specify the columns to be updated by configuring the following two properties.
                     
-                    .withProperty("sink.properties.partial_update", "true")
+                    // .withProperty("sink.properties.partial_update", "true")
                     
-                    .withProperty("sink.properties.columns", "k1,k2,k3")
+                    // .withProperty("sink.properties.columns", "k1,k2,k3")
 
                     .withProperty("sink.properties.format", "json")
 
@@ -142,9 +142,9 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
 
                     // Since 2.4, StarRocks support partial updates for primary key model. You can specify the columns to be updated by configuring the following two properties.
                     
-                    .withProperty("sink.properties.partial_update", "true")
+                    // .withProperty("sink.properties.partial_update", "true")
                     
-                    .withProperty("sink.properties.columns", "k1,k2,k3")
+                    // .withProperty("sink.properties.columns", "k1,k2,k3")
 
                     .withProperty("sink.properties.format", "csv")  
 
@@ -208,9 +208,9 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
 
                 // Since 2.4, StarRocks support partial updates for primary key model. You can specify the columns to be updated by configuring the following two properties.
 
-                "'sink.properties.partial_update' = 'true'," +
+                // "'sink.properties.partial_update' = 'true'," +
                 
-                "'sink.properties.row_delimiter' = 'k1,k2,k3'," + 
+                // "'sink.properties.row_delimiter' = 'k1,k2,k3'," + 
 
                 "'sink.properties.column_separator' = '\\x01'," +
 
