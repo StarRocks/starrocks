@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include "column/datum_tuple.h"
-#include "fs/fs_memory.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -95,11 +94,6 @@ protected:
         _counter = _pool.add(new ScannerCounter());
         _state = _pool.add(new RuntimeState(TQueryGlobals()));
         std::string starrocks_home = getenv("STARROCKS_HOME");
-        _file_names = std::vector<std::string>{starrocks_home + "./be/test/exec/test_data/json_scanner/test1.json",
-                                               starrocks_home + "./be/test/exec/test_data/json_scanner/test2.json",
-                                               starrocks_home + "./be/test/exec/test_data/json_scanner/test3.json",
-                                               starrocks_home + "./be/test/exec/test_data/json_scanner/test4.json",
-                                               starrocks_home + "./be/test/exec/test_data/json_scanner/test8.json"};
     }
 
     void TearDown() override {}
@@ -109,8 +103,39 @@ private:
     ScannerCounter* _counter = nullptr;
     RuntimeState* _state = nullptr;
     ObjectPool _pool;
-    std::vector<std::string> _file_names;
 };
+
+// NOLINTNEXTLINE
+TEST_F(JsonScannerTest, test_array_json) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+
+    TypeDescriptor array_type(TYPE_ARRAY);
+    array_type.children.emplace_back(TypeDescriptor::create_json_type());
+    types.emplace_back(array_type);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = true;
+    range.__isset.strip_outer_array = true;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test9.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"c1", "c2"});
+
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    auto st2 = scanner->get_next();
+    ASSERT_TRUE(st2.ok());
+
+    ChunkPtr chunk = st2.value();
+    ASSERT_EQ(chunk->columns()[0]->debug_string(), "[1]");
+    ASSERT_EQ(chunk->columns()[1]->debug_string(), "[[{\"k2\": \"v2\"}]]");
+}
 
 TEST_F(JsonScannerTest, test_json_without_path) {
     std::vector<TypeDescriptor> types;

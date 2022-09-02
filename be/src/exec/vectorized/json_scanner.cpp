@@ -6,6 +6,7 @@
 #include <ryu/ryu.h>
 
 #include <algorithm>
+#include <memory>
 #include <sstream>
 
 #include "column/chunk.h"
@@ -126,15 +127,14 @@ Status JsonScanner::_construct_json_types() {
                 slot_type->type == TYPE_TINYINT) {
                 // Treat these types as what they are.
                 child_type->children.emplace_back(slot_type->type);
-
             } else if (slot_type->type == TYPE_VARCHAR) {
                 auto varchar_type = TypeDescriptor::create_varchar_type(slot_type->len);
                 child_type->children.emplace_back(varchar_type);
-
             } else if (slot_type->type == TYPE_CHAR) {
                 auto char_type = TypeDescriptor::create_char_type(slot_type->len);
                 child_type->children.emplace_back(char_type);
-
+            } else if (slot_type->type == TYPE_JSON) {
+                child_type->children.emplace_back(TypeDescriptor::create_json_type());
             } else {
                 // Treat other types as VARCHAR.
                 auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
@@ -704,7 +704,7 @@ Status JsonReader::_read_and_parse_json() {
 
 #else
     // TODO: Remove the down_cast, should not rely on the specific implementation.
-    StreamLoadPipeInputStream* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
+    auto* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
     {
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         ASSIGN_OR_RETURN(_parser_buf, stream_file->pipe()->read());
@@ -748,23 +748,24 @@ Status JsonReader::_read_and_parse_json() {
         if (_scanner->_strip_outer_array) {
             // Expand outer array automatically according to _is_ndjson.
             if (_is_ndjson) {
-                _parser.reset(new ExpandedJsonDocumentStreamParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
+                _parser = std::make_unique<ExpandedJsonDocumentStreamParserWithRoot>(&_simdjson_parser,
+                                                                                     _scanner->_root_paths);
             } else {
-                _parser.reset(new ExpandedJsonArrayParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
+                _parser = std::make_unique<ExpandedJsonArrayParserWithRoot>(&_simdjson_parser, _scanner->_root_paths);
             }
         } else {
             if (_is_ndjson) {
-                _parser.reset(new JsonDocumentStreamParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
+                _parser = std::make_unique<JsonDocumentStreamParserWithRoot>(&_simdjson_parser, _scanner->_root_paths);
             } else {
-                _parser.reset(new JsonArrayParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
+                _parser = std::make_unique<JsonArrayParserWithRoot>(&_simdjson_parser, _scanner->_root_paths);
             }
         }
     } else {
         // Without json root set, the strip_outer_array determines whether to expand outer array.
         if (_scanner->_strip_outer_array) {
-            _parser.reset(new JsonArrayParser(&_simdjson_parser));
+            _parser = std::make_unique<JsonArrayParser>(&_simdjson_parser);
         } else {
-            _parser.reset(new JsonDocumentStreamParser(&_simdjson_parser));
+            _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
         }
     }
 
