@@ -65,9 +65,9 @@ public class HashRingTest {
         Collections.sort(loads);
         double t = 0;
         for (Integer x : loads) {
-            t = (x - avg) * (x - avg);
+            t += (x - avg) * (x - avg);
         }
-        t = Math.sqrt(t / keys.size());
+        t = Math.sqrt(t / loads.size());
 
         System.out.printf("Load: min = %d, max = %d, median = %d, stddev = %.2f\n", loads.get(0),
                 loads.get(loads.size() - 1), loads.get(loads.size() / 2), t);

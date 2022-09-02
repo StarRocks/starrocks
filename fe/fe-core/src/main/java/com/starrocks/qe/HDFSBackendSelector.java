@@ -206,7 +206,7 @@ public class HDFSBackendSelector implements BackendSelector {
         HashRing hashRing = makeHashRing();
         for (int i = 0; i < remoteScanRangeLocations.size(); ++i) {
             TScanRangeLocations scanRangeLocations = remoteScanRangeLocations.get(i);
-            List<ComputeNode> backends = hashRing.get(scanRangeLocations, 3);
+            List<ComputeNode> backends = hashRing.get(scanRangeLocations, 1);
             ComputeNode node = selectLeastScanBytesComputeNode(backends);
             if (node == null) {
                 throw new RuntimeException("Failed to find backend to execute");
