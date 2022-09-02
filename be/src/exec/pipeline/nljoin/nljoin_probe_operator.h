@@ -57,7 +57,7 @@ private:
     void _advance_join_stage(JoinStage stage) const;
     bool _skip_probe() const;
     void _check_post_probe() const;
-    void _init_build_match();
+    void _init_build_match() const;
     void _permute_probe_row(RuntimeState* state, ChunkPtr chunk);
     ChunkPtr _permute_chunk(RuntimeState* state);
     Status _permute_right_join(RuntimeState* state);
@@ -87,7 +87,7 @@ private:
     vectorized::Chunk* _curr_build_chunk = nullptr;
     size_t _prev_chunk_start = 0;
     size_t _prev_chunk_size = 0;
-    std::vector<uint8_t> _self_build_match_flag;
+    mutable std::vector<uint8_t> _self_build_match_flag;
 
     // Probe states
     vectorized::ChunkPtr _probe_chunk = nullptr;
