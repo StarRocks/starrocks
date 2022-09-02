@@ -6,6 +6,7 @@
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <brpc/controller.h>
+#include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
 DIAGNOSTIC_POP
 
@@ -29,7 +30,9 @@ struct RpcContext {
     Response* _response;
     // response_mtx protects accesses to response.
     bthread::Mutex _response_mtx;
-    CountDownLatch _latch;
+
+    using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
+    BThreadCountDownLatch _latch;
 
     RpcContext(::starrocks::ExecEnv* env, const Request* request, Response* response, int latchCount)
             : _env(env), _request(request), _response(response), _response_mtx(), _latch(latchCount) {}
