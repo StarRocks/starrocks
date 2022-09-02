@@ -2951,10 +2951,10 @@ Status PersistentIndex::_merge_compaction() {
         const auto [l1_shard_offset, l1_shard_size] = iter->second;
         const auto l1_kv_pairs_size = std::accumulate(std::next(_l1->_shards.begin(), l1_shard_offset),
                                                       std::next(_l1->_shards.begin(), l1_shard_offset + l1_shard_size),
-                                                      0, [](size_t s, const auto& e) { return s + e.size; });
+                                                      (size_t)0, [](size_t s, const auto& e) { return s + e.size; });
         const auto l1_kv_pairs_usage = std::accumulate(std::next(_l1->_shards.begin(), l1_shard_offset),
                                                        std::next(_l1->_shards.begin(), l1_shard_offset + l1_shard_size),
-                                                       0, [](size_t s, const auto& e) { return s + e.bytes; });
+                                                       (size_t)0, [](size_t s, const auto& e) { return s + e.bytes; });
         if (l0_kv_pairs_size == 0 && l1_kv_pairs_size != 0) {
             for (auto i = 0; i < l1_shard_size; i++) {
                 RETURN_IF_ERROR(writer->write_shard_as_rawbuff(_l1->_shards[l1_shard_offset + i], _l1.get()));
