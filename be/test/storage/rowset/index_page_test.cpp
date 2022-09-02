@@ -97,7 +97,7 @@ TEST_F(IndexPageTest, test_seek_at_or_after) {
     IndexPageReader reader3;
     reader3._parsed = true;
     reader3._keys = {"111", "333", "555"};
-    reader3._set_num_entries = 3;
+    reader3._num_entries = 3;
     std::vector<Slice> keys3 = {"000", "111", "222", "333", "444", "555", "666"};
     std::vector<int> pos3 = {0, 0, 0, 1, 1, 2, 2};
     IndexPageIterator iter3(&reader3);
