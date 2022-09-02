@@ -92,12 +92,6 @@ public class GroupingSetTest extends PlanTestBase {
 
         sql = "select k10, GROUPING(k10) from baseall group by GROUPING SETS (  (k10), ( ) );";
         starRocksAssert.query(sql).explainContains("group by: 7: k10, 12: GROUPING_ID, 13: GROUPING");
-
-        // Test for qualified name.
-        sql = "select k10, GROUPING(baseall.k10) from baseall group by GROUPING SETS (  (baseall.k10), ( ) );";
-        starRocksAssert.query(sql).explainContains("group by: 7: k10, 12: GROUPING_ID, 13: GROUPING");
-        sql = "select k10, GROUPING(test.baseall.k10) from baseall group by GROUPING SETS (  (test.baseall.k10), ( ) );";
-        starRocksAssert.query(sql).explainContains("group by: 7: k10, 12: GROUPING_ID, 13: GROUPING");
     }
 
     @Test
