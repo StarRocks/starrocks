@@ -1063,9 +1063,7 @@ public:
     }
 
     // return the dump file size if dump _set into a new file
-    // If _set is empty, the real snapshot file will only wite a size_(type is size_t) into file. So we
-    // will use `sizeof(size_t)` as return value.
-    size_t dump_bound() { return sizeof(size_t) + _total_kv_pairs_usage; }
+    size_t dump_bound() { return sizeof(size_t) + _total_kv_pairs_usage + sizeof(size_t) * size(); }
 
     bool dump(phmap::BinaryOutputArchive& ar) {
         if (!ar.dump(size())) {
