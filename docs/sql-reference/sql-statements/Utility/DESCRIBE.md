@@ -1,8 +1,8 @@
-# DESCRIBE
+# DESC
 
-## description
+## Description
 
-This statement is used to display schema information for the specified table.
+View the schema of a table stored in your StarRocks cluster or external data sources, such as Apache Hive™, Apache Iceberg, or Apache Hudi. Note that you can only use this statement to view the schema of a table in external data sources in StarRocks 2.4 and later versions.
 
 Syntax：
 
@@ -14,7 +14,7 @@ Note：
 
 If ALL is specified, the schema of all indexes(rollup) of the table is displayed
 
-## example
+## Examples
 
 1. Show Base table schema
 
@@ -27,7 +27,3 @@ If ALL is specified, the schema of all indexes(rollup) of the table is displayed
     ```sql
     DESC db1.table_name ALL;
     ```
-
-## keyword
-
-DESCRIBE,DESC
