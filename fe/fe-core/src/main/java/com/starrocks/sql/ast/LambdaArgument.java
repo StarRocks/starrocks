@@ -2,40 +2,34 @@
 
 package com.starrocks.sql.ast;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TExprNode;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
-public class LambdaArguments extends Expr {
-    public List<String> getNames() {
-        return names;
+public class LambdaArgument extends Expr {
+    private String name;
+    private boolean nullable;
+    public LambdaArgument(String name) {
+        this.name = name;
     }
-
-    List<String> names;
-    List<PlaceHolderExpr> arguments = Lists.newArrayList();
-
-    public void putArguments(List<PlaceHolderExpr> arguments) {
-        this.arguments.addAll(arguments);
-    }
-
-    public List<PlaceHolderExpr> getArguments() {
-        return arguments;
-    }
-
-    public LambdaArguments(List<String> name) {
-        this.names = name;
-    }
-
-    public LambdaArguments(LambdaArguments rhs) {
+    public LambdaArgument(LambdaArgument rhs) {
         super(rhs);
+        name = rhs.getName();
+    }
+    public String getName() {
+        return name;
+    }
+
+    @Override
+    public boolean isNullable() {
+        return nullable;
+    }
+
+    public void setNullable(boolean nullable) {
+        this.nullable = nullable;
     }
 
     @Override
@@ -45,11 +39,6 @@ public class LambdaArguments extends Expr {
 
     @Override
     protected String toSqlImpl() {
-        Preconditions.checkState(names.size() > 0);
-        String name = names.get(0);
-        if (names.size() > 1) {
-            name = "(" + names.stream().map(String::valueOf).collect(Collectors.joining(",")) + ")";
-        }
         return name;
     }
 
@@ -60,7 +49,7 @@ public class LambdaArguments extends Expr {
 
     @Override
     public Expr clone() {
-        return new LambdaArguments(this);
+        return new LambdaArgument(this);
     }
 
     @Override

@@ -60,7 +60,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
-import com.starrocks.sql.ast.LambdaArguments;
+import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
@@ -279,38 +279,32 @@ public class ExpressionAnalyzer {
         }
 
         @Override
-        public Void visitLambdaFunction(LambdaFunctionExpr node, Scope scope) {
-            ExpressionAnalyzer.analyzeExpression(node.getChild(0), this.analyzeState, scope, this.session);
-            // construct a new scope to analyze the lambda function
-            Scope lambdaScope = scope.getLambdaScope();
-            ExpressionAnalyzer.analyzeExpression(node.getChild(1), this.analyzeState, lambdaScope, this.session);
-            node.setType(Type.FUNCTION);
-            scope.clearLambdaArguments();
-            return null;
-        }
-
-        @Override
-        public Void visitLambdaArguments(LambdaArguments node, Scope scope) {
+        public Void visitLambdaFunctionExpr(LambdaFunctionExpr node, Scope scope) {
             if (scope.getLambdaInputs().size() == 0) {
-                throw new SemanticException("Lambda Functions can only be used in high-order functions.");
+                throw new SemanticException("Lambda Functions can only be used in high-order functions with arrays.");
             }
-            List<String> names = node.getNames();
+            if (scope.getLambdaInputs().size() != node.getChildren().size() - 1) {
+                throw new SemanticException("Lambda arguments should equal to lambda input arrays.");
+            }
+            // process lambda arguments
             Set<String> set = new HashSet<>();
-            for (String name : names) {
+            for (int i = 1; i < node.getChildren().size(); ++i) {
+                String name = ((LambdaArgument) node.getChild(i)).getName();
                 if (set.contains(name)) {
                     throw new SemanticException("Lambda argument: " + name + " is duplicated.");
                 }
                 set.add(name);
+                // bind argument with input arrays' data type and nullable info
+                scope.getLambdaInputs().get(i - 1).setName(name);
+                ((LambdaArgument) node.getChild(i)).setNullable(scope.getLambdaInputs().get(i - 1).isNullable());
+                node.getChild(i).setType(scope.getLambdaInputs().get(i - 1).getType());
             }
-            if (scope.getLambdaInputs().size() != names.size()) {
-                throw new SemanticException("Lambda arguments should equal to lambda input arrays.");
-            }
-            // bind argument names with lambda inputs
-            for (int i = 0; i < names.size(); ++i) {
-                scope.getLambdaInputs().get(i).setName(names.get(i));
-            }
-            List<PlaceHolderExpr> inputs = scope.getLambdaInputs();
-            node.putArguments(inputs);
+
+            // construct a new scope to analyze the lambda function
+            Scope lambdaScope = scope.getLambdaScope();
+            ExpressionAnalyzer.analyzeExpression(node.getChild(0), this.analyzeState, lambdaScope, this.session);
+            node.setType(Type.FUNCTION);
+            scope.clearLambdaArguments();
             return null;
         }
 

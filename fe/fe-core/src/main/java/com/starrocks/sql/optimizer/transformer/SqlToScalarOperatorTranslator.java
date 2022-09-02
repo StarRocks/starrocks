@@ -27,6 +27,7 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
@@ -43,7 +44,7 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
-import com.starrocks.sql.ast.LambdaArguments;
+import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -246,26 +247,31 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
-        public ScalarOperator visitLambdaFunction(LambdaFunctionExpr node, Void context) {
+        public ScalarOperator visitLambdaFunctionExpr(LambdaFunctionExpr node, Void context) {
             // To avoid the ids of lambda arguments are different after each visit()
             if (node.getTransformed() != null) {
                 return node.getTransformed();
             }
-            Preconditions.checkArgument(node.getChildren().size() == 2);
-            LambdaArguments args = (LambdaArguments) node.getChild(0);
+            Preconditions.checkArgument(node.getChildren().size() >= 2);
             List<ColumnRefOperator> refs = Lists.newArrayList();
-            for (int i = 0; i < args.getNames().size(); ++i) {
-                ColumnRefOperator ref = columnRefFactory.create(args.getArguments().get(i).getName(),
-                        args.getArguments().get(i).getType(), args.getArguments().get(i).isNullable());
-                refs.add(ref);
+            List<PlaceHolderExpr> args = Lists.newArrayList();
+            for (int i = 1; i < node.getChildren().size(); ++i) {
+                args.add(new PlaceHolderExpr(((LambdaArgument) node.getChild(i)).getName(),
+                        node.getChild(i).isNullable(), node.getChild(i).getType()));
+                refs.add((ColumnRefOperator) visit(node.getChild(i)));
             }
-            Scope scope = new Scope(args.getArguments(), expressionMapping.getScope());
+            Scope scope = new Scope(args, expressionMapping.getScope());
             ExpressionMapping old = expressionMapping;
             expressionMapping = new ExpressionMapping(scope, refs, expressionMapping);
-            ScalarOperator arg = visit(node.getChild(1));
+            ScalarOperator arg = visit(node.getChild(0));
             expressionMapping = old; // recovery it
             node.setTransformed(new LambdaFunctionOperator(refs, arg, Type.FUNCTION));
             return node.getTransformed();
+        }
+
+        @Override
+        public ScalarOperator visitLambdaArguments(LambdaArgument node, Void context) {
+            return columnRefFactory.create(node.getName(), node.getType(), node.isNullable());
         }
 
         @Override

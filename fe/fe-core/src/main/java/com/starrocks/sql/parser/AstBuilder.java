@@ -230,7 +230,7 @@ import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
-import com.starrocks.sql.ast.LambdaArguments;
+import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.Property;
@@ -2930,7 +2930,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitLambdaFunction(StarRocksParser.LambdaFunctionContext context) {
+    public ParseNode visitLambdaFunctionExpr(StarRocksParser.LambdaFunctionExprContext context) {
         List<String> names = Lists.newLinkedList();
         if (context.identifierList() != null) {
             final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
@@ -2938,9 +2938,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             names.add(((Identifier) visit(context.identifier())).getValue());
         }
-        LambdaArguments argument = new LambdaArguments(names);
+        List<Expr> arguments = Lists.newLinkedList();
         Expr expr = (Expr) visit(context.expression());
-        return new LambdaFunctionExpr(argument, expr);
+        arguments.add(expr); // put lambda body to the first argument
+        for (int i = 0; i < names.size(); ++i) {
+            arguments.add(new LambdaArgument(names.get(i)));
+        }
+        return new LambdaFunctionExpr(arguments);
     }
 
     @Override

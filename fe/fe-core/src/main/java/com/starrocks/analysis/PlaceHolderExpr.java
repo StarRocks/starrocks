@@ -29,6 +29,14 @@ public class PlaceHolderExpr extends Expr {
         this.type = type;
     }
 
+    public PlaceHolderExpr(String name, boolean nullable, Type type) {
+        super();
+        this.slotId = -1;
+        this.name = name;
+        this.nullable = nullable;
+        this.type = type;
+    }
+
     public void setName(String name) {
         this.name = name;
     }

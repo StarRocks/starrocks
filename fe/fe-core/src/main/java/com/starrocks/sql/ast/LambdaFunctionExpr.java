@@ -14,10 +14,7 @@ import java.util.List;
 
 public class LambdaFunctionExpr extends Expr {
     private LambdaFunctionOperator transformedOp = null;
-    public LambdaFunctionExpr(Expr left, Expr right) {
-        this.children.add(left);
-        this.children.add(right);
-    }
+
     public LambdaFunctionExpr(List<Expr> arguments) {
         this.children.addAll(arguments);
     }
@@ -40,19 +37,15 @@ public class LambdaFunctionExpr extends Expr {
 
     @Override
     protected String toSqlImpl() {
-        if (getChild(0) instanceof LambdaArguments) {
-            return String.format("%s -> %s", getChild(0).toSql(), getChild(1).toSql());
-        } else { // moved the lambda function to the first argument, and arguments are slots.
-            String names = getChild(1).toSql();
-            if (getChildren().size() > 2) {
-                names = "(" + getChild(1).toSql();
-                for (int i = 2; i < getChildren().size(); ++i) {
-                    names = names + ", " + getChild(i).toSql();
-                }
-                names = names + ")";
+        String names = getChild(1).toSql();
+        if (getChildren().size() > 2) {
+            names = "(" + getChild(1).toSql();
+            for (int i = 2; i < getChildren().size(); ++i) {
+                names = names + ", " + getChild(i).toSql();
             }
-            return String.format("%s -> %s", names, getChild(0).toSql());
+            names = names + ")";
         }
+        return String.format("%s -> %s", names, getChild(0).toSql());
     }
 
     @Override
@@ -67,7 +60,7 @@ public class LambdaFunctionExpr extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitLambdaFunction(this, context);
+        return visitor.visitLambdaFunctionExpr(this, context);
     }
 
 }
