@@ -33,7 +33,7 @@ FROM data_source
     ```sql
     [COLUMNS TERMINATED BY '<terminator>'],
     [COLUMNS ([<column_name> [, ...] ] [, column_assignment [, ...] ] )],
-    [WHERE <expr>],
+    [WHERE <expr>]
     [PARTITION ([ <partition_name> [, ...] ])]
 
     column_assignment:
@@ -82,7 +82,7 @@ FROM data_source
         用于指定过滤条件，只有满足过滤条件的数据才会导入到 StarRocks 中。过滤条件中指定的列可以是映射列或衍生列。例如只希望导入 k1 大于 100 并且 k2 等于 1000 的列，则可以书写如下：
 
         ```plain text
-        WHERE k1 > 100 and k2 = 1000；
+        WHERE k1 > 100 and k2 = 1000
         ```
 
     4. PARTITION

@@ -33,7 +33,7 @@
 CREATE ROUTINE LOAD load_test.routine_wiki_edit_1589191587 ON routine_wiki_edit
 COLUMNS TERMINATED BY ",",
 COLUMNS (event_time, channel, user, is_anonymous, is_minor, is_new, is_robot, is_unpatrolled, delta, added, deleted)
-WHERE event_time > "2022-01-01 00:00:00",
+WHERE event_time > "2022-01-01 00:00:00"
 PROPERTIES
 (
   "desired_concurrent_number" = "3",
