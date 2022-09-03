@@ -268,7 +268,8 @@ public class StarRocksAssert {
         }
 
         public void explainContains(String... keywords) throws Exception {
-            Assert.assertTrue(Stream.of(keywords).allMatch(explainQuery()::contains));
+            String plan = explainQuery();
+            Assert.assertTrue(plan, Stream.of(keywords).allMatch(plan::contains));
         }
 
         public void explainContains(String keywords, int count) throws Exception {

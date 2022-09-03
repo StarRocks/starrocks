@@ -3,7 +3,6 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.starrocks.sql.optimizer.Group;
-import com.starrocks.sql.optimizer.GroupExpression;
 
 /**
  * Optimize a group within a given context.
@@ -36,12 +35,12 @@ public class OptimizeGroupTask extends OptimizerTask {
             return;
         }
 
-        for (GroupExpression expression : group.getLogicalExpressions()) {
-            pushTask(new OptimizeExpressionTask(context, expression));
+        for (int i = group.getLogicalExpressions().size() - 1; i >= 0; i--) {
+            pushTask(new OptimizeExpressionTask(context, group.getLogicalExpressions().get(i)));
         }
 
-        for (GroupExpression expression : group.getPhysicalExpressions()) {
-            pushTask((new EnforceAndCostTask(context, expression)));
+        for (int i = group.getPhysicalExpressions().size() - 1; i >= 0; i--) {
+            pushTask((new EnforceAndCostTask(context, group.getPhysicalExpressions().get(i))));
         }
     }
 }
