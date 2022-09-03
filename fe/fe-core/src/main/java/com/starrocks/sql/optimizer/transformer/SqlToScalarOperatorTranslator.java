@@ -27,7 +27,6 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
@@ -254,10 +253,9 @@ public final class SqlToScalarOperatorTranslator {
             }
             Preconditions.checkArgument(node.getChildren().size() >= 2);
             List<ColumnRefOperator> refs = Lists.newArrayList();
-            List<PlaceHolderExpr> args = Lists.newArrayList();
+            List<LambdaArgument> args = Lists.newArrayList();
             for (int i = 1; i < node.getChildren().size(); ++i) {
-                args.add(new PlaceHolderExpr(((LambdaArgument) node.getChild(i)).getName(),
-                        node.getChild(i).isNullable(), node.getChild(i).getType()));
+                args.add((LambdaArgument) node.getChild(i));
                 refs.add((ColumnRefOperator) visit(node.getChild(i)));
             }
             Scope scope = new Scope(args, expressionMapping.getScope());

@@ -2,7 +2,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
@@ -35,8 +34,6 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
@@ -173,12 +170,6 @@ public class ExpressionAnalyzer {
 
         private void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
             analyzeState.addColumnReference(slot, FieldId.from(resolvedField));
-            if (resolvedField.isFromLambda()) {
-                Preconditions.checkArgument(resolvedField.getField().getOriginExpression() instanceof PlaceHolderExpr);
-                // bind the slotID of lambda arguments
-                slot.setDescAndMarkAnalyzed(new SlotDescriptor(
-                        new SlotId(((PlaceHolderExpr) resolvedField.getField().getOriginExpression()).getSlotId())));
-            }
         }
 
         @Override
@@ -288,20 +279,21 @@ public class ExpressionAnalyzer {
             }
             // process lambda arguments
             Set<String> set = new HashSet<>();
+            List<LambdaArgument> args = Lists.newArrayList();
             for (int i = 1; i < node.getChildren().size(); ++i) {
+                args.add((LambdaArgument) node.getChild(i));
                 String name = ((LambdaArgument) node.getChild(i)).getName();
                 if (set.contains(name)) {
                     throw new SemanticException("Lambda argument: " + name + " is duplicated.");
                 }
                 set.add(name);
                 // bind argument with input arrays' data type and nullable info
-                scope.getLambdaInputs().get(i - 1).setName(name);
                 ((LambdaArgument) node.getChild(i)).setNullable(scope.getLambdaInputs().get(i - 1).isNullable());
                 node.getChild(i).setType(scope.getLambdaInputs().get(i - 1).getType());
             }
 
             // construct a new scope to analyze the lambda function
-            Scope lambdaScope = scope.getLambdaScope();
+            Scope lambdaScope = new Scope(args, scope);
             ExpressionAnalyzer.analyzeExpression(node.getChild(0), this.analyzeState, lambdaScope, this.session);
             node.setType(Type.FUNCTION);
             scope.clearLambdaInputs();

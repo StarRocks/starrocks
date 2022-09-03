@@ -8,6 +8,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.LambdaArgument;
 
 import java.util.List;
 import java.util.Map;
@@ -32,7 +33,7 @@ public class Scope {
         this.relationFields = relation;
     }
 
-    public Scope(List<PlaceHolderExpr> exprs, Scope parent) {
+    public Scope(List<LambdaArgument> exprs, Scope parent) {
         this.relationId = RelationId.anonymous();
         List<Field> fieldList = Lists.newArrayList();
         for (int i = 0; i < exprs.size(); ++i) {
@@ -42,10 +43,6 @@ public class Scope {
         relationFields = new RelationFields(fieldList);
         this.parent = parent;
         isLambdaScope = true;
-    }
-
-    public Scope getLambdaScope() {
-        return new Scope(lambdaInputs, this);
     }
 
     public void putLambdaInput(PlaceHolderExpr expr) {

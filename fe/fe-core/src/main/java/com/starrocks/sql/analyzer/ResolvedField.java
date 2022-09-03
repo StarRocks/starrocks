@@ -1,10 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
-
-import com.starrocks.analysis.TableName;
-
-import java.util.Objects;
-
 /**
  * ResolvedField is represent resolved field,
  * contains scope which fields belong to and
@@ -31,10 +26,6 @@ public class ResolvedField {
 
     public Field getField() {
         return field;
-    }
-
-    public boolean isFromLambda() {
-        return scope.isLambdaScope() && Objects.equals(field.getRelationAlias().getTbl(), TableName.LAMBDA_FUNC_TABLE);
     }
 
     public int getRelationFieldIndex() {

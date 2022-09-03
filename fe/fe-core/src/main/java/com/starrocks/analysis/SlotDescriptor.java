@@ -75,14 +75,6 @@ public class SlotDescriptor {
         this.isNullable = true;
     }
 
-    public SlotDescriptor(SlotId id) {
-        this.id = id;
-        this.parent = null;
-        this.byteOffset = -1;  // invalid
-        this.isMaterialized = false;
-        this.isNullable = true;
-    }
-
     public SlotDescriptor(SlotId id, String name, Type type, boolean isNullable) {
         this.id = id;
         this.label_ = name;

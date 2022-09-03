@@ -13,40 +13,18 @@ import org.apache.logging.log4j.Logger;
 
 // placeholder is mainly used for function calls.
 // Unlike a slotRef, it does not represent a real column, but is only used as an input column for function calls.
-// now it was only used in global dictionary optimization, and express lambda arguments.
+// now it was only used in global dictionary optimization, and express lambda inputs.
 public class PlaceHolderExpr extends Expr {
     private static final Logger LOG = LogManager.getLogger(PlaceHolderExpr.class);
 
     private final int slotId;
     boolean nullable;
 
-    private String name;
-
     public PlaceHolderExpr(int slotId, boolean nullable, Type type) {
         super();
         this.slotId = slotId;
         this.nullable = nullable;
         this.type = type;
-    }
-
-    public PlaceHolderExpr(String name, boolean nullable, Type type) {
-        super();
-        this.slotId = -1;
-        this.name = name;
-        this.nullable = nullable;
-        this.type = type;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public int getSlotId() {
-        return slotId;
-    }
-
-    public String getName() {
-        return name;
     }
 
     @Override
