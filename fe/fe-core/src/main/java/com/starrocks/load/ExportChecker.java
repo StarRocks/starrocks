@@ -164,11 +164,13 @@ public final class ExportChecker extends LeaderDaemon {
                 beHasErr = true;
                 errMsg = "be not available during exec export job. be:" + beId;
                 LOG.warn(errMsg + " job: {}", job);
+                break;
             }
             if (be.getLastStartTime() > job.getBeStartTimeMap().get(beId)) {
                 beHasErr = true;
                 errMsg = "be has rebooted during exec export job. be:" + beId;
                 LOG.warn(errMsg + " job: {}", job);
+                break;
             }
         }
         if (beHasErr) {
