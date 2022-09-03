@@ -8,6 +8,7 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -59,7 +60,8 @@ public class AnalyzeExprTest {
 
         // translate arrow expression
         ScalarOperator so =
-                SqlToScalarOperatorTranslator.translate(arrow, new ExpressionMapping(null, Collections.emptyList()));
+                SqlToScalarOperatorTranslator.translate(arrow, new ExpressionMapping(null, Collections.emptyList()),
+                        new ColumnRefFactory());
         Assert.assertEquals(OperatorType.CALL, so.getOpType());
         CallOperator callOperator = (CallOperator) so;
         Assert.assertEquals(expected, callOperator.toString());
@@ -81,5 +83,30 @@ public class AnalyzeExprTest {
         sql = "select v1 * v1 / v1 % v1 + v1 - v1 DIV v1 from t0";
         statementBase = analyzeSuccess(sql);
         Assert.assertTrue(AST2SQL.toString(statementBase).contains("((((v1 * v1) / v1) % v1) + v1) - (v1 DIV v1)"));
+    }
+
+    @Test
+    public void testLambdaFunction() {
+        analyzeSuccess("select array_map(x -> x,[])");
+        analyzeSuccess("select array_map(x -> x,[null])");
+        analyzeSuccess("select array_map(x -> x,[1])");
+        analyzeSuccess("select array_map(x -> x is null,null)");
+        analyzeSuccess("select array_map(x -> array_map(y-> array_map(z -> z + array_length(x),y),x), [[[1,23],[4,3,2]],[[3]]])");
+        analyzeSuccess("select array_map(x -> x is null,[null]),array_map(x -> x is null,null)");
+        analyzeSuccess("select array_map((x,y) -> x + y, [], [])");
+        analyzeSuccess("select array_map((x,y) -> x, [], [])");
+        analyzeSuccess("select array_map([1], x -> x)");
+        analyzeSuccess("select array_map([1], x -> x + v1) from t0");
+        analyzeSuccess("select transform([1], x -> x)");
+
+        analyzeFail("select array_map(x,y -> x + y, [], [])"); // should be (x,y)
+        analyzeFail("select array_map((x,y,z) -> x + y, [], [])");
+        analyzeFail("select array_map(x -> z,[1])");
+        analyzeFail("select array_map(x -> x,[1],null)");
+        analyzeFail("select arrayMap(x -> x,[1])");
+        analyzeFail("select array_map(x -> x+1, 1)");
+        analyzeFail("select array_map((x,x) -> x+1, [1],[1])");
+        analyzeFail("select array_map((x,y) -> x+1)");
+        analyzeFail("select array_map((x,x) -> x+1, [1], x ->x+1)");
     }
 }
