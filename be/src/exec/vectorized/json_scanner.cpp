@@ -605,7 +605,6 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
                 continue;
             }
 
-            simdjson::ondemand::value val;
             // NOTE
             // Why not process this syntax in extract_from_object?
             // simdjson's api is limited, which coult not convert ondemand::object to ondemand::value.
@@ -619,19 +618,25 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
                 row->reset();
                 RETURN_IF_ERROR(add_nullable_column_by_json_object(column, _slot_descs[i]->type(),
                                                                    _slot_descs[i]->col_name(), row, !_strict_mode));
-            } else if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], &val).ok()) {
-                if (strcmp(column_name, "__op") == 0) {
-                    // special treatment for __op column, fill default value '0' rather than null
-                    if (column->is_binary()) {
-                        column->append_strings(std::vector{Slice{"0"}});
+            } else {
+                simdjson::ondemand::value val;
+                auto st = JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], &val);
+                if (st.ok()) {
+                    RETURN_IF_ERROR(_construct_column(val, column, _slot_descs[i]->type(), _slot_descs[i]->col_name()));
+                } else if (st.is_not_found()) {
+                    if (strcmp(column_name, "__op") == 0) {
+                        // special treatment for __op column, fill default value '0' rather than null
+                        if (column->is_binary()) {
+                            column->append_strings(std::vector{Slice{"0"}});
+                        } else {
+                            column->append_datum(Datum((uint8_t)0));
+                        }
                     } else {
-                        column->append_datum(Datum((uint8_t)0));
+                        column->append_nulls(1);
                     }
                 } else {
-                    column->append_nulls(1);
+                    return st;
                 }
-            } else {
-                RETURN_IF_ERROR(_construct_column(val, column, _slot_descs[i]->type(), _slot_descs[i]->col_name()));
             }
         }
         return Status::OK();

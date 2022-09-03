@@ -118,15 +118,16 @@ Status JsonFunctions::json_path_close(starrocks_udf::FunctionContext* context,
 
 Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
                                           simdjson::ondemand::value* value) noexcept {
-#define HANDLE_SIMDJSON_ERROR(err, msg)                                                                       \
-    do {                                                                                                      \
-        if (UNLIKELY(err)) break;                                                                             \
-        const simdjson::error_code& _err = err;                                                               \
-        const std::string& _msg = msg;                                                                        \
-        if (_err == simdjson::NO_SUCH_FIELD) {                                                                \
-            return Status::NotFound(fmt::format("err: {}, msg: {}", simdjson::error_message(_err), msg));     \
-        }                                                                                                     \
-        return Status::DataQualityError(fmt::format("err: {}, msg: {}", simdjson::error_message(_err), msg)); \
+#define HANDLE_SIMDJSON_ERROR(err, msg)                                                                           \
+    do {                                                                                                          \
+        const simdjson::error_code& _err = err;                                                                   \
+        const std::string& _msg = msg;                                                                            \
+        if (UNLIKELY(err)) {                                                                                      \
+            if (_err == simdjson::NO_SUCH_FIELD) {                                                                \
+                return Status::NotFound(fmt::format("err: {}, msg: {}", simdjson::error_message(_err), msg));     \
+            }                                                                                                     \
+            return Status::DataQualityError(fmt::format("err: {}, msg: {}", simdjson::error_message(_err), msg)); \
+        }                                                                                                         \
     } while (false);
 
     if (jsonpath.size() <= 1) {
