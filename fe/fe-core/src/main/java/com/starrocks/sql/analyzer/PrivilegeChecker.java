@@ -1,6 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.AlterDatabaseQuotaStmt;
+import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.BackupStmt;
@@ -51,6 +53,14 @@ import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowConfigStmt;
+import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
+import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterViewStmt;

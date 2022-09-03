@@ -4,6 +4,8 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.AddColumnClause;
 import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AddPartitionClause;
+import com.starrocks.analysis.AlterDatabaseQuotaStmt;
+import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AnalyticExpr;

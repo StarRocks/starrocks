@@ -3,6 +3,8 @@
 package com.starrocks.execution;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.analysis.AlterDatabaseQuotaStmt;
+import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.AlterSystemStmt;
@@ -51,6 +53,11 @@ import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterViewStmt;

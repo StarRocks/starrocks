@@ -165,6 +165,8 @@ import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;

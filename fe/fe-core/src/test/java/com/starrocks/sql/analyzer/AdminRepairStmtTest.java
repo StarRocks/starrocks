@@ -2,7 +2,9 @@
 
 package com.starrocks.sql.analyzer;
 
-
+import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
