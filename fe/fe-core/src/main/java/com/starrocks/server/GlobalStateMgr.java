@@ -147,7 +147,6 @@ import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.lake.compaction.CompactionDispatchDaemon;
 import com.starrocks.lake.compaction.CompactionManager;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.load.DeleteHandler;
@@ -419,8 +418,6 @@ public class GlobalStateMgr {
 
     // For LakeTable
     private CompactionManager compactionManager;
-    // For LakeTable
-    private CompactionDispatchDaemon compactionDispatchDaemon;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
@@ -600,7 +597,6 @@ public class GlobalStateMgr {
         };
         if (Config.use_staros) {
             this.compactionManager = new CompactionManager();
-            this.compactionDispatchDaemon = new CompactionDispatchDaemon();
         }
     }
 
@@ -1065,7 +1061,6 @@ public class GlobalStateMgr {
 
         if (Config.use_staros) {
             shardManager.getShardDeleter().start();
-            compactionDispatchDaemon.start();
         }
     }
 
@@ -1085,6 +1080,9 @@ public class GlobalStateMgr {
         }
         // domain resolver
         domainResolver.start();
+        if (Config.use_staros) {
+            compactionManager.start();
+        }
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -1187,6 +1185,10 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadShardManager(dis, checksum);
             remoteChecksum = dis.readLong();
+            if (Config.use_staros) {
+                checksum = loadCompactionManager(dis, checksum);
+                remoteChecksum = dis.readLong();
+            }
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1351,6 +1353,12 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadCompactionManager(DataInputStream in, long checksum) throws IOException {
+        compactionManager = CompactionManager.loadCompactionManager(in);
+        checksum ^= compactionManager.getChecksum();
+        return checksum;
+    }
+
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
         // Write image.ckpt
@@ -1415,6 +1423,10 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = shardManager.saveShardManager(dos, checksum);
             dos.writeLong(checksum);
+            if (Config.use_staros) {
+                checksum = compactionManager.saveCompactionManager(dos, checksum);
+                dos.writeLong(checksum);
+            }
         }
 
         long saveImageEndTime = System.currentTimeMillis();
