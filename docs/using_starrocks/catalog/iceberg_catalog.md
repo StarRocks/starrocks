@@ -2,21 +2,22 @@
 
 This topic describes how to create an Iceberg catalog, and how to configure your StarRock cluster for querying data from Apache Iceberg.
 
-An Iceberg catalog is an external catalog, which enables you to query data from Iceberg without loading data into StarRocks or creating external tables. The Iceberg catalog interacts with the following two components of Iceberg when you query Iceberg data:
+An Iceberg catalog is an external catalog, which enables you to query data from Iceberg without loading data into StarRocks or creating external tables. StarRocks interacts with the following two components of Iceberg when you query Iceberg data:
 
-- **Metadata service:** used by the leader FE of StarRocks to access Iceberg metadata. The leader FE generates a query execution plan based on Iceberg metadata.
-- **Data storage system:** used to store Iceberg data. You can use a distributed file system or object storage system as the data storage system to store the data files of Iceberg in various formats. After the leader FE distributes the query execution plan to all BEs, all BE s scan the target Iceberg data in parallel, perform calculations, and then return the query result.
+- **Metadata service:** used by FEs to access Iceberg metadata. FEs generate a query execution plan based on Iceberg metadata.
+- **Data storage system:** used to store Iceberg data. You can use a distributed file system or object storage system as the data storage system to store the data files of Iceberg in various formats. After FEs distribute the query execution plan to all BEs, all BE s scan the target Iceberg data in parallel, perform calculations, and then return the query result.
 
 ## Usage notes
 
-- StarRocks supports querying Iceberg data in the following formats: Parquet, ORC, gzip, Zstd, LZ4, and Snappy.
-- StarRocks supports querying Iceberg data in the following types: BOOLEAN, INT, LONG, FLOAT, DOUBLE, DECIMAL(P, S), DATE, TIME, TIMESTAMP, STRING, UUID, FIXED(L), and BINARY. Note that an error occurs when you query Iceberg data in unsupported data types. The following data types are not supported: TIMESTAMPTZ, STRUCT, LIST, and MAP.
+- StarRocks supports querying data files of Iceberg in the following formats: Parquet and ORC
+- StarRocks supports querying compressed data files of Iceberg in the following formats: gzip, Zstd, LZ4, and Snappy.
+- StarRocks supports querying Iceberg data in the following types: BOOLEAN, INT, LONG, FLOAT, DOUBLE, DECIMAL(P, S), DATE, TIME, TIMESTAMP, STRING, UUID, LIST, FIXED(L), and BINARY. Note that an error occurs when you query Iceberg data in unsupported data types. The following data types are not supported: TIMESTAMPTZ, STRUCT, and MAP.
 - StarRocks supports querying Versions 1 tables (Analytic Data Tables). Versions 2 tables (Row-level Deletes) are not supported. For the differences between these two types of tables, see [Iceberg Table Spec](https://iceberg.apache.org/spec/).
 - You can use the [DESC](/docs/sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of an Iceberg table in StarRocks 2.4 and later versions.
 
 ## Before you begin
 
-Before you create an Iceberg catalog, make sure that you have configured your StarRocks cluster to meet the requirements of the data storage system, metadata service, and authenticating service of your Iceberg cluster. StarRocks supports two data storage systems for Iceberg: HDFS and Amazon S3. StarRocks supports two metadata services for Iceberg: Hive metastore and custom metadata service. The configurations that need to be performed are the same as that before you create a Hive catalog, so for information about the configurations, see [Hive catalog](../catalog/hive_catalog.md).
+Before you create an Iceberg catalog, configure your StarRocks cluster so taht you can access the data storage system and metadata service of your Iceberg cluster. StarRocks supports two data storage systems for Iceberg: HDFS and Amazon S3. StarRocks supports two metadata services for Iceberg: Hive metastore and custom metadata service. The configurations that need to be performed are the same as that before you create a Hive catalog, so for information about the configurations, see [Hive catalog](../catalog/hive_catalog.md).
 
 ## Create an Iceberg catalog
 
@@ -29,7 +30,7 @@ CREATE EXTERNAL CATALOG catalog_name
 PROPERTIES ("key"="value", ...);
 ```
 
-> Note: After creation, you must add the mapping between the domain name and IP address of Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+> Note: Before querying Iceberg data, you must add the mapping between the domain name and IP address of Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
 
 ### Parameters
 
@@ -38,11 +39,13 @@ PROPERTIES ("key"="value", ...);
   - The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
   - The name cannot exceed 64 characters in length.
 
-- `PROPERTIES`: the properties of the Iceberg catalog. This parameter is required. In Apache Iceberg, there is a component called [catalog](https://iceberg.apache.org/docs/latest/configuration/#catalog-properties), which is used to store the mapping of Iceberg tables and paths to store Iceberg tables. You need to configure this parameter based on the type of the catalog used by your Iceberg cluster. StarRocks supports two types of catalogs used by Iceberg: HiveCatalog and custom catalog.
+- `PROPERTIES`: the properties of the Iceberg catalog. This parameter is required. In Apache Iceberg, there is a component called [catalog](https://iceberg.apache.org/docs/latest/configuration/#catalog-properties), which is used to store the mapping of Iceberg tables and paths to store Iceberg tables. You need to configure this parameter based on the type of the catalog configured for your Iceberg cluster. Because configuring different types of catalogs means that you use different metadata services for your Iceberg cluster. StarRocks supports two types of catalogs for Iceberg:
+  - HiveCatalog: Configuring HiveCatalog for your Iceberg cluster means that you use Hive metastore for your Iceberg cluster.
+  - custom catalog: Configuring a custom catalog for your Iceberg cluster means that you use the custom metadata service for your Iceberg cluster.
 
 #### HiveCatalog
 
-If you use HiveCatalog in your Iceberg cluster, configure the following properties for the Iceberg catalog.
+If you configure HiveCatalog in your Iceberg cluster, configure the following properties for the Iceberg catalog.
 
 | **Property**           | **Required** | **Description**                                              |
 | ---------------------- | ------------ | ------------------------------------------------------------ |
@@ -52,7 +55,7 @@ If you use HiveCatalog in your Iceberg cluster, configure the following properti
 
 #### Custom catalog
 
-If you use a custom catalog, you need to create a custom catalog class and implement the related interface in StarRocks. The custom catalog needs to inherit the abstract class BaseMetastoreCatalog. For information about how to create a custom catalog, see [IcebergHiveCatalog](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/external/iceberg/IcebergHiveCatalog.java). After the custom catalog is created, package the catalog and its related files, and then place them under the **fe/lib** path of each FE. Then restart each FE.
+If you configure a custom catalog for your Iceberg cluster, you need to create a custom catalog class and implement the related interface in StarRocks so that StarRocks can access the custom metadata service. The custom catalog needs to inherit the abstract class BaseMetastoreCatalog. For information about how to create a custom catalog, see [IcebergHiveCatalog](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/external/iceberg/IcebergHiveCatalog.java). After the custom catalog is created, package the catalog and its related files, and then place them under the **fe/lib** path of each FE. Then restart each FE.
 
 > Note: The class name of the custom catalog cannot be duplicated with the name of the class that already exists in StarRock.
 

@@ -2,20 +2,20 @@
 
 This topic describes how to create a Hive catalog, and how to configure your StarRock cluster for querying data from Apache Hive™.
 
-A Hive catalog is an external catalog, which enables you to query data from Hive without loading data into StarRocks or creating external tables. The Hive catalog interacts with the following two components of Hive when you query Hive data:
+A Hive catalog is an external catalog, which enables you to query data from Hive without loading data into StarRocks or creating external tables. StarRocks interacts with the following two components of Hive when you query Hive data:
 
-- **Metadata service:** used by the leader FE to access Hive metadata stored in a relational database, such as MySQL. The leader FE generates a query execution plan based on Hive metadata.
-- **Data storage system:** used to store Hive data. You can use a distributed file system or object storage system as the data storage system to store Hive data files in various formats. After the leader FE distributes the query execution plan to all BEs, all BEs scan the target Hive data in parallel, perform calculations, and then return the query result.
+- **Metadata service:** used by FEs to access Hive metadata stored in a relational database, such as MySQL. FEs generate a query execution plan based on Hive metadata.
+- **Data storage system:** used to store Hive data. You can use a distributed file system or object storage system as the data storage system to store Hive data files in various formats. After FEs distribute the query execution plan to all BEs, all BEs scan the target Hive data in parallel, perform calculations, and then return the query result.
 
 ## Usage notes
 
-- StarRocks supports querying Hive data in the following formats: Parquet, ORC, and CSV.
+- StarRocks supports querying data files of Hive in the following formats: Parquet, ORC, and CSV.
 - StarRocks support querying Hive data in the following types: INT, INTEGER, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY. Note that an error occurs if you query Hive data in unsupported data types. The following data types are not supported: TINYINT, SMALLINT, NUMERIC, DATE, INTERVAL, BOOLEAN, BINARY, MAP, STRUCT, and UNION.
 - You can use the [DESC](/docs/sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hive table in StarRocks 2.4 and later versions.
 
 ## Before you begin
 
-Before you create a Hive catalog, make sure that you have configured your StarRocks cluster to meet the requirements of the data storage system, metadata service, and authenticating service of your Hive cluster. StarRocks supports two data storage systems for Hive: HDFS and Amazon S3. StarRocks supports one metadata service for Hive: Hive metastore.
+Before you create a Hive catalog, configure your StarRocks cluster so that you can access the data storage system and metadata service of your Hive cluster. StarRocks supports two data storage systems for Hive: HDFS and Amazon S3. StarRocks supports one metadata service for Hive: Hive metastore.
 
 ### HDFS
 
@@ -117,7 +117,7 @@ The parameter description is as follows:
     | type                | Yes          | The type of the data source. Set the value to `hive`.        |
     | hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
 
-> Note: You must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+> Note: Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
 
 ## Caching strategy of Hive metadata
 
@@ -211,10 +211,10 @@ Configure the following parameters in the **$FE_HOME/conf/fe.conf** file of each
 
 | **Parameter**                      | **Description**                                              |
 | ---------------------------------- | ------------------------------------------------------------ |
-| enable_hms_events_incremental_sync | Whether the automatic incremental update strategy is enabled. Valid values are:`TRUE`: means enabled. The value of the parameter defaults to `TRUE`.`FALSE`: means disabled. |
+| enable_hms_events_incremental_sync | Whether the automatic incremental update strategy is enabled. Valid values are:<ul><li>`TRUE`: means enabled. The value of the parameter defaults to `TRUE`.</li><li>`FALSE`: means disabled. </li></ul>|
 | hms_events_polling_interval_ms     | The time interval for StarRocks to read events from Hive metastore. The parameter defaults to `5`. Unit: seconds. |
 | hms_events_batch_size_per_rpc      | The maximum number of events that StarRocks can read at a time. The parameter value defaults to `500`. |
-| enable_hms_parallel_process_evens  | Whether the read events are processed in parallel. Valid values are:`TRUE`: means the events are processed in parallel. The value of the parameter defaults to `TRUE`.`FALSE`: means the events are not processed in parallel. |
+| enable_hms_parallel_process_evens  | Whether the read events are processed in parallel. Valid values are:<ul><li>`TRUE`: means the events are processed in parallel. The value of the parameter defaults to `TRUE`.</li><li>`FALSE`: means the events are not processed in parallel.</li></ul> |
 | hms_process_events_parallel_num    | The maximum number of events that can be processed in parallel. This parameter defaults to `4`. |
 
 ## What to do next

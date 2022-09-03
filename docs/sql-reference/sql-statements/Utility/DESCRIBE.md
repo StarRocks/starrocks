@@ -14,7 +14,7 @@ DESC[RIBE] [db_name.]table_name [ALL];
 
 ## Examples
 
-Example 1: Show the schema of a bases table.
+Example 1: Show the schema of a base table.
 
 ```sql
 DESC table_name;

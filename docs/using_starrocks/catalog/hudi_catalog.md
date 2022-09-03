@@ -2,21 +2,22 @@
 
 This topic describes how to create a Hudi catalog, and how to configure your StarRock cluster for querying data from Apache Hudi.
 
-A Hudi catalog is an external catalog, which enables you to query data from Hudi without loading data into StarRocks or creating external tables. The Hudi catalog interacts with the following two components of Hudi when you query data from Hudi:
+A Hudi catalog is an external catalog, which enables you to query data from Hudi without loading data into StarRocks or creating external tables. The StarRocks interacts with the following two components of Hudi when you query data from Hudi:
 
-- **Metadata service:** used by the leader FE of StarRocks to access Hudi metadata. The leader FE generates a query execution plan based on Hudi metadata.
-- **Data storage system:** used to store Hudi data. You can use a distributed file system or object storage system as the data storage system to store the data files of Hudi in various formats. After the leader FE distributes the query execution plan to all BEs, all BEs scan the target Hudi data in parallel, perform calculations, and then return the query result.
+- **Metadata service:** used by FEs to access Hudi metadata. FEs generate a query execution plan based on Hudi metadata.
+- **Data storage system:** used to store Hudi data. You can use a distributed file system or object storage system as the data storage system to store the data files of Hudi in various formats. After FEs distribute the query execution plan to all BEs, all BEs scan the target Hudi data in parallel, perform calculations, and then return the query result.
 
 ## Usage notes
 
-- StarRocks supports querying Hudi data in the following formats: Parquet, ORC, gzip, Zstd, LZ4, or Snappy.
-- StarRocks supports querying Hudi data in the following types: BOOLEAN, INT, DATE, TimeMillis, TimeMicros, LONG, FLOAT, DOUBLE, STRING, ARRAY, and DECIMAL. Note that an error occurs when you query Hudi data in unsupported data types. The following data types are not supported: FIXED, ENUM, UNION, MAP,  and BYTES.
+- StarRocks supports querying data files of Hudi in the following formats: Parquet and ORC.
+- StarRocks supports querying compressed data files of Hudi in the following formats: gzip, Zstd, LZ4, and Snappy.
+- StarRocks supports querying Hudi data in the following types: BOOLEAN, INT, DATE, TimeMillis, TimeMicros, LONG, FLOAT, DOUBLE, STRING, ARRAY, and DECIMAL. Note that an error occurs when you query Hudi data in unsupported data types. The following data types are not supported: FIXED, ENUM, UNION, MAP, and BYTES.
 - StarRocks supports querying Copy On Write tables. Merge On Read tables are not supported. For the differences between these two types of tables, see [Table & Query Types](https://hudi.apache.org/docs/table_types).
 - You can use the [DESC](/docs/sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hudi table in StarRocks 2.4 and later versions.
 
 ## Before you begin
 
-Before you create a Hudi catalog, make sure that you have configured your StarRocks cluster to meet the requirements of the data storage system, metadata service, and authenticating service of your Hudi cluster. StarRocks supports two data storage systems for Hudi: HDFS and Amazon S3. StarRocks supports one metadata service for Hudi: Hive metastore. The configurations that need to be performed are the same as that before you create a Hive catalog. For information about the configurations, see [Hive catalog](../catalog/hive_catalog.md#before-you-begin).
+Before you create a Hudi catalog, configure your StarRocks cluster so that you can access the data storage system and metadata service of your Hudi cluster. StarRocks supports two data storage systems for Hudi: HDFS and Amazon S3. StarRocks supports one metadata service for Hudi: Hive metastore. The configurations that need to be performed are the same as that before you create a Hive catalog. For information about the configurations, see [Hive catalog](../catalog/hive_catalog.md#before-you-begin).
 
 ## Create a Hudi catalog
 
@@ -44,7 +45,7 @@ The parameter description is as follows:
     | type                | Yes          | The type of the data source. Set the value to `hudi`.        |
     | hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
 
-> Note: You must add the mapping between the domain name and IP address of Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+> Note: Before querying Hudi data, you must add the mapping between the domain name and IP address of Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
 
 ## Caching strategy of Hudi metadata
 
