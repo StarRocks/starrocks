@@ -130,7 +130,7 @@ OutPut Exchange Id: 11
 |
 9:NESTLOOP JOIN
 |  join op: CROSS JOIN
-|  other predicates: cast([6: c_acctbal, DECIMAL64(15,2), true] as DECIMAL128(38,8)) > [17: avg, DECIMAL128(38,8), true]
+|  other join predicates: cast([6: c_acctbal, DECIMAL64(15,2), true] as DECIMAL128(38,8)) > [17: avg, DECIMAL128(38,8), true]
 |  cardinality: 3750000
 |  column statistics:
 |  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 3750000.0] ESTIMATE

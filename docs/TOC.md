@@ -45,7 +45,6 @@
   + [Use catalogs to manage internal and external data](./using_starrocks/Manage_data.md)
   + [Array](./using_starrocks/Array.md)
   + [Window functions](./using_starrocks/Window_function.md)
-  + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
   + [Java UDFs](./using_starrocks/JAVA_UDF.md)
   + [Cost-based optimizer](./using_starrocks/Cost_based_optimizer.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
@@ -64,6 +63,7 @@
       + [SET PASSWORD](./sql-reference/sql-statements/account-management/SET%20PASSWORD.md)
       + [SET PROPERTY](./sql-reference/sql-statements/account-management/SET%20PROPERTY.md)
       + [SHOW GRANTS](./sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
+      + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
     + Cluster Management
       + [ADMIN CANCEL REPAIR](./sql-reference/sql-statements/Administration/ADMIN%20CANCEL%20REPAIR.md)
       + [ADMIN CHECK TABLET](./sql-reference/sql-statements/Administration/ADMIN%20CHECK%20TABLET.md)

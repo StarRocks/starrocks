@@ -35,12 +35,26 @@ public class BeTabletManager {
         if (tablets.get(request.tablet_id) != null) {
             throw new AlreadyExistsException("Tablet already exists");
         }
+        boolean isSchemaChange = false;
+        if (request.base_tablet_id > 0) {
+            Tablet baseTablet = getTablet(request.base_tablet_id);
+            if (baseTablet == null) {
+                throw new UserException("Base tablet not found");
+            }
+            isSchemaChange = true;
+        }
         Tablet tablet = new Tablet(request.tablet_id, request.table_id, request.partition_id,
                 request.tablet_schema.getSchema_hash(), request.enable_persistent_index);
+        tablet.setRunning(!isSchemaChange);
         tablets.put(request.tablet_id, tablet);
         tabletIdsByPartition.computeIfAbsent(tablet.partitionId, k -> Sets.newHashSet()).add(tablet.id);
-        LOG.info("created tablet {}", tablet.id);
+        LOG.info("created tablet {} {}", tablet.id, isSchemaChange ? "base tablet: " + request.base_tablet_id : "");
         return tablet;
+    }
+
+    public synchronized void addClonedTablet(Tablet tablet) {
+        tablets.put(tablet.id, tablet);
+        tabletIdsByPartition.computeIfAbsent(tablet.partitionId, k -> Sets.newHashSet()).add(tablet.id);
     }
 
     public synchronized void dropTablet(long tabletId, boolean force) {
@@ -61,12 +75,20 @@ public class BeTabletManager {
         return tablets.get(tabletId);
     }
 
+    public synchronized List<Tablet> getTabletsByTable(long tableId) {
+        return tablets.values().stream().filter(t -> t.tableId == tableId).collect(Collectors.toList());
+    }
+
     public synchronized List<Tablet> getTablets(long partitionId) {
         Set<Long> tabletIds = tabletIdsByPartition.get(partitionId);
         if (tabletIds == null) {
             return Collections.emptyList();
         }
         return tabletIds.stream().map(tablets::get).filter(t -> t != null).collect(Collectors.toList());
+    }
+
+    public synchronized int getNumTablet() {
+        return tablets.size();
     }
 
     void getTabletStat(TTabletStatResult result) {
@@ -89,5 +111,11 @@ public class BeTabletManager {
             tabletInfo.put(tablet.id, tTablet);
         }
         return tabletInfo;
+    }
+
+    public synchronized void maintenance() {
+        for (Tablet tablet : tablets.values()) {
+            tablet.versionGC();
+        }
     }
 }

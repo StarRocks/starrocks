@@ -27,6 +27,7 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
+#include "runtime/mem_tracker.h"
 #include "storage/column_block.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
@@ -60,7 +61,7 @@ public:
     // Return true if the index data was successfully loaded by the caller, false if
     // the data was loaded by another caller.
     StatusOr<bool> load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                        bool use_page_cache, bool kept_in_memory);
+                        bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker);
 
     // create a new column iterator.
     // REQUIRES: the index data has been successfully `load()`ed into memory.
@@ -80,7 +81,7 @@ public:
 
 private:
     Status do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta, bool use_page_cache,
-                   bool kept_in_memory);
+                   bool kept_in_memory, MemTracker* mem_tracker);
 
     OnceFlag _load_once;
     TypeInfoPtr _typeinfo;

@@ -68,6 +68,10 @@ public:
 
     Status delete_txn_vlog(int64_t version);
 
+    Status put_tablet_metadata_lock(int64_t version, int64_t expire_time);
+
+    Status delete_tablet_metadata_lock(int64_t version, int64_t expire_time);
+
     StatusOr<std::unique_ptr<TabletWriter>> new_writer();
 
     StatusOr<std::shared_ptr<TabletReader>> new_reader(int64_t version, vectorized::Schema schema);

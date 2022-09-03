@@ -30,11 +30,11 @@ public class FunctionSetTest {
 
     private FunctionSet functionSet;
 
-    private final Type VARCHAR_ARRAY = new ArrayType(Type.VARCHAR);
-    private final Type TINYINT_ARRAY = new ArrayType(Type.TINYINT);
-    private final Type INT_ARRAY = new ArrayType(Type.INT);
-    private final Type INT_ARRAY_ARRAY = new ArrayType(INT_ARRAY);
-    private final Type TINYINT_ARRAY_ARRAY = new ArrayType(TINYINT_ARRAY);
+    private static final Type VARCHAR_ARRAY = new ArrayType(Type.VARCHAR);
+    private static final Type TINYINT_ARRAY = new ArrayType(Type.TINYINT);
+    private static final Type INT_ARRAY = new ArrayType(Type.INT);
+    private static final Type INT_ARRAY_ARRAY = new ArrayType(INT_ARRAY);
+    private static final Type TINYINT_ARRAY_ARRAY = new ArrayType(TINYINT_ARRAY);
 
     @Before
     public void setUp() {

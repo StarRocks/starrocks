@@ -162,8 +162,7 @@ public class AnalyzeStmtAnalyzer {
                     Column column = analyzeTable.getColumn(columnName);
                     if (column.getType().isComplexType()
                             || column.getType().isJsonType()
-                            || column.getType().isOnlyMetricType()
-                            || column.getType().isChar() || column.getType().isVarchar()) {
+                            || column.getType().isOnlyMetricType()) {
                         throw new SemanticException("Can't create histogram statistics on column type is %s",
                                 column.getType().toSql());
                     }
@@ -187,8 +186,16 @@ public class AnalyzeStmtAnalyzer {
                         Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO)));
 
                 if (sampleRows < Config.statistic_sample_collect_rows && totalRows != 0) {
-                    properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO,
-                            String.valueOf(BigDecimal.valueOf((double) sampleRows / (double) totalRows)
+                    if (Config.statistic_sample_collect_rows > totalRows) {
+                        properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "1");
+                    } else {
+                        properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, String.valueOf(
+                                BigDecimal.valueOf((double) Config.statistic_sample_collect_rows / (double) totalRows)
+                                        .setScale(8, RoundingMode.HALF_UP).doubleValue()));
+                    }
+                } else if (sampleRows > Config.histogram_max_sample_row_count) {
+                    properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, String.valueOf(
+                            BigDecimal.valueOf((double) Config.histogram_max_sample_row_count / (double) totalRows)
                                     .setScale(8, RoundingMode.HALF_UP).doubleValue()));
                 }
             }

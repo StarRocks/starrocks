@@ -88,6 +88,8 @@ public:
     // jcolumn: Integer[]/String[]
     void get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn, int rows);
 
+    Status get_result_from_boxed_array(int type, Column* col, jobject jcolumn, int rows);
+
     // convert int handle to jobject
     // return a local ref
     jobject convert_handle_to_jobject(FunctionContext* ctx, int state);
@@ -194,6 +196,13 @@ private:
         LOG(WARNING) << "Exception: " << msg;                                      \
         ctx->set_error(msg.c_str());                                               \
         env->ExceptionClear();                                                     \
+    }
+
+#define RETURN_ERROR_IF_JNI_EXCEPTION(env)                                                     \
+    if (auto e = env->ExceptionOccurred()) {                                                   \
+        LOCAL_REF_GUARD(e);                                                                    \
+        std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e);             \
+        return Status::InternalError(JVMFunctionHelper::getInstance().dumpExceptionString(e)); \
     }
 
 // Used for UDAF serialization and deserialization,

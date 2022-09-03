@@ -340,6 +340,14 @@ void JVMFunctionHelper::get_result_from_boxed_array(FunctionContext* ctx, int ty
     CHECK_UDF_CALL_EXCEPTION(_env, ctx);
 }
 
+Status JVMFunctionHelper::get_result_from_boxed_array(int type, Column* col, jobject jcolumn, int rows) {
+    col->resize(rows);
+    _env->CallStaticVoidMethod(_udf_helper_class, _get_boxed_result, type, rows, jcolumn,
+                               reinterpret_cast<int64_t>(col));
+    RETURN_ERROR_IF_JNI_EXCEPTION(_env);
+    return Status::OK();
+}
+
 jobject JVMFunctionHelper::list_get(jobject obj, int idx) {
     return _env->CallObjectMethod(obj, _list_get, idx);
 }

@@ -46,9 +46,9 @@ CONF_String(priority_networks, "");
 //// tcmalloc gc parameter
 ////
 // Min memory for TCmalloc, when used memory is smaller than this, do not returned to OS.
-CONF_mInt64(tc_use_memory_min, "10737418240");
+CONF_mInt64(tc_use_memory_min, "0");
 // free memory rate.[0-100]
-CONF_mInt64(tc_free_memory_rate, "20");
+CONF_mInt64(tc_free_memory_rate, "0");
 // tcmalloc gc period, default 60, it should be between [1, 180]
 CONF_mInt64(tc_gc_period, "60");
 
@@ -303,6 +303,8 @@ CONF_mInt32(compaction_trace_threshold, "60");
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
 CONF_Bool(enable_event_based_compaction_framework, "true");
+
+CONF_Bool(enable_check_string_lengths, "true");
 // 5GB
 CONF_mInt64(min_cumulative_compaction_size, "5368709120");
 // 20GB
@@ -325,6 +327,9 @@ CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
 CONF_mInt64(load_error_log_reserve_hours, "48");
 CONF_Int32(number_tablet_writer_threads, "16");
+
+// delta writer hang after this time, be will exit since storage is in error state
+CONF_Int32(be_exit_after_disk_write_hang_second, "60");
 
 // Automatically detect whether a char/varchar column to use dictionary encoding
 // If the number of keys in a dictionary is greater than this fraction of the total number of rows
@@ -801,4 +806,16 @@ CONF_Int16(jdbc_connection_pool_size, "8");
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
 CONF_Int32(internal_service_async_thread_num, "10");
 
+/*
+ * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject
+ * to inject error through return random status(except ok).
+ */
+CONF_Int32(cardinality_of_inject, "100");
+
+/*
+ * Config range for inject erros,
+ * Specify the source code directory,
+ * Split by "," strictly.
+ */
+CONF_String(directory_of_inject, "/src/exec,/src/exprs");
 } // namespace starrocks::config

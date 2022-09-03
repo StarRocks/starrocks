@@ -1,8 +1,9 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.DmlStmt;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -20,6 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -250,6 +252,33 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         }
     }
 
+    @Test
+    public void testMvWithoutPartitionRefreshTwice() {
+        final AtomicInteger taskRunCounter = new AtomicInteger();
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                taskRunCounter.incrementAndGet();
+            }
+        };
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+
+        try {
+            for (int i = 0; i < 2; i++) {
+                taskRun.executeTaskRun();
+            }
+            Assert.assertEquals(1, taskRunCounter.get());
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail("refresh failed");
+        }
+    }
+
     private void testBaseTablePartitionInsertData(Database testDb, MaterializedView materializedView, TaskRun taskRun)
             throws Exception {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
@@ -448,7 +477,8 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
+            public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan,
+                                                InsertStmt insertStmt) throws Exception {
                 String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p100 VALUES [('9999-04-01'),('9999-05-01'))";
                 try {
                     new StmtExecutor(connectContext, addPartitionSql).execute();
@@ -527,7 +557,8 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
+            public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan,
+                                                InsertStmt insertStmt) throws Exception {
                 String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p100";
                 try {
                     new StmtExecutor(connectContext, dropPartitionSql).execute();

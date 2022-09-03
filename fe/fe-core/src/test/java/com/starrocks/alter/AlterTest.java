@@ -21,6 +21,7 @@
 
 package com.starrocks.alter;
 
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.staros.proto.ObjectStorageInfo;
@@ -28,16 +29,13 @@ import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AlterClause;
-import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.ColumnRenameClause;
-import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DropColumnClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.ModifyColumnClause;
 import com.starrocks.analysis.MultiItemListPartitionDesc;
@@ -47,7 +45,6 @@ import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TruncatePartitionClause;
-import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -55,12 +52,10 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -80,10 +75,14 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -190,7 +189,7 @@ public class AlterTest {
     public static void tearDown() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table test_partition_exception";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         try {
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
         } catch (Exception ex) {
@@ -483,7 +482,8 @@ public class AlterTest {
         OlapTable tbl = (OlapTable) db.getTable("tbl1");
 
         String stmt =
-                "alter table test.tbl1 add partition p3 values less than('2020-04-01'), add partition p4 values less than('2020-05-01')";
+                "alter table test.tbl1 add partition p3 values less than('2020-04-01'), " +
+                        "add partition p4 values less than('2020-05-01')";
         alterTableWithNewParser(stmt, true);
 
         stmt = "alter table test.tbl1 add partition p3 values less than('2020-04-01'), drop partition p4";
@@ -493,7 +493,7 @@ public class AlterTest {
         alterTableWithNewParser(stmt, true);
 
         stmt = "alter table test.tbl1 drop partition p3, add column k3 int";
-//        alterTable(stmt, true);
+        // alterTable(stmt, true);
 
         // no conflict
         stmt = "alter table test.tbl1 add column k3 int, add column k4 int";
@@ -523,13 +523,13 @@ public class AlterTest {
         Assert.assertEquals(4, tbl.getIndexIdToSchema().size());
 
         // add partition when dynamic partition is enable
-        stmt =
-                "alter table test.tbl1 add partition p3 values less than('2020-04-01') distributed by hash(k2) buckets 4 PROPERTIES ('replication_num' = '1')";
+        stmt = "alter table test.tbl1 add partition p3 values less than('2020-04-01') " +
+                "distributed by hash(k2) buckets 4 PROPERTIES ('replication_num' = '1')";
         alterTableWithNewParser(stmt, true);
 
         // add temp partition when dynamic partition is enable
-        stmt =
-                "alter table test.tbl1 add temporary partition tp3 values less than('2020-04-01') distributed by hash(k2) buckets 4 PROPERTIES ('replication_num' = '1')";
+        stmt = "alter table test.tbl1 add temporary partition tp3 values less than('2020-04-01') " +
+                "distributed by hash(k2) buckets 4 PROPERTIES ('replication_num' = '1')";
         alterTableWithNewParser(stmt, false);
         Assert.assertEquals(1, tbl.getTempPartitions().size());
 
@@ -539,8 +539,8 @@ public class AlterTest {
         Assert.assertFalse(tbl.getTableProperty().getDynamicPartitionProperty().getEnable());
 
         // add partition when dynamic partition is disable
-        stmt =
-                "alter table test.tbl1 add partition p3 values less than('2020-04-01') distributed by hash(k2) buckets 4";
+        stmt = "alter table test.tbl1 add partition p3 values less than('2020-04-01') " +
+                "distributed by hash(k2) buckets 4";
         alterTableWithNewParser(stmt, false);
 
         // set table's default replication num
@@ -587,7 +587,8 @@ public class AlterTest {
         stmt = "alter table test.tbl1 add partition p4 values less than('2020-04-10') ('replication_num' = '1')";
         alterTableWithNewParser(stmt, false);
 
-        stmt = "alter table test.tbl1 add TEMPORARY partition p5 values [('2020-04-10'), ('2020-05-10')) ('replication_num' = '1') " +
+        stmt = "alter table test.tbl1 " +
+                "add TEMPORARY partition p5 values [('2020-04-10'), ('2020-05-10')) ('replication_num' = '1') " +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3 PROPERTIES('replication_num' = '1');";
         alterTableWithNewParser(stmt, false);
         //rename table
@@ -2199,13 +2200,14 @@ public class AlterTest {
     public void testFindTruncatePartitionEntrance() throws Exception {
 
         Database db = new Database();
-        OlapTable table = new OlapTable(TableType.OLAP);
-        table.setState(OlapTableState.NORMAL);
+        OlapTable table = new OlapTable(Table.TableType.OLAP);
+        table.setState(OlapTable.OlapTableState.NORMAL);
         new MockUp<GlobalStateMgr>() {
             @Mock
             public Database getDb(String name) {
                 return db;
             }
+
             @Mock
             public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
                 throw new DdlException("test DdlException");

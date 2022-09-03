@@ -291,7 +291,10 @@ public class HiveMetaCacheTest {
                     ImmutableList.of(new HdfsFileDesc("file1",
                             "",
                             10000L,
-                            ImmutableList.of())),
+                            ImmutableList.of(),
+                            ImmutableList.of(),
+                            false,
+                            null)),
                     partitionPath);
         }
 

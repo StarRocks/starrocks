@@ -93,7 +93,8 @@ public class PartitionsProcDir implements ProcDirInterface {
 
         builder.add("DistributionKey").add("Buckets").add("ReplicationNum");
         if (olapTable.isLakeTable()) {
-            builder.add("EnableStorageCache").add("StorageCacheTtlSecond").add("DataSize").add("RowCount");
+            builder.add("EnableStorageCache").add("StorageCacheTtlSecond").add("AllowAsyncWriteBack")
+                    .add("DataSize").add("RowCount");
         } else {
             builder.add("StorageMedium").add("CooldownTime").add("LastConsistencyCheckTime").add("DataSize")
                     .add("IsInMemory").add("RowCount");
@@ -289,6 +290,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                     StorageInfo storageInfo = tblPartitionInfo.getStorageInfo(partitionId);
                     partitionInfo.add(storageInfo.isEnableStorageCache());
                     partitionInfo.add(storageInfo.getStorageCacheTtlS());
+                    partitionInfo.add(storageInfo.isAllowAsyncWriteBack());
                     partitionInfo.add(byteSizeValue);
                     partitionInfo.add(partition.getRowCount());
                 } else {

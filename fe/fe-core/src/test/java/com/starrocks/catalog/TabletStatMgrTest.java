@@ -32,7 +32,6 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -92,9 +91,9 @@ public class TabletStatMgrTest {
         tabletsStats.put(tablet2Id, tablet2Stat);
 
         new Expectations() {{
-            GlobalStateMgr.getCurrentInvertedIndex();
-            result = invertedIndex;
-        }};
+                GlobalStateMgr.getCurrentInvertedIndex();
+                result = invertedIndex;
+            }};
 
         // Check
         TabletStatMgr tabletStatMgr = new TabletStatMgr();

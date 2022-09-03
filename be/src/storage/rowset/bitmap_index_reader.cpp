@@ -31,12 +31,14 @@
 namespace starrocks {
 
 StatusOr<bool> BitmapIndexReader::load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta,
-                                       bool use_page_cache, bool kept_in_memory) {
-    return success_once(_load_once, [&]() { return do_load(fs, filename, meta, use_page_cache, kept_in_memory); });
+                                       bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker) {
+    return success_once(_load_once,
+                        [&]() { return do_load(fs, filename, meta, use_page_cache, kept_in_memory, mem_tracker); });
 }
 
 Status BitmapIndexReader::do_load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta,
-                                  bool use_page_cache, bool kept_in_memory) {
+                                  bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker) {
+    const auto old_mem_usage = mem_usage();
     _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
     const IndexedColumnMetaPB& dict_meta = meta.dict_column();
     const IndexedColumnMetaPB& bitmap_meta = meta.bitmap_column();
@@ -45,6 +47,8 @@ Status BitmapIndexReader::do_load(FileSystem* fs, const std::string& filename, c
     _bitmap_column_reader = std::make_unique<IndexedColumnReader>(fs, filename, bitmap_meta);
     RETURN_IF_ERROR(_dict_column_reader->load(use_page_cache, kept_in_memory));
     RETURN_IF_ERROR(_bitmap_column_reader->load(use_page_cache, kept_in_memory));
+    const auto new_mem_usage = mem_usage();
+    mem_tracker->consume(new_mem_usage - old_mem_usage);
     return Status::OK();
 }
 

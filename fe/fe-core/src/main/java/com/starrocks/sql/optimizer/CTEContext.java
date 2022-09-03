@@ -25,6 +25,8 @@ import java.util.Optional;
  *
  * */
 public class CTEContext {
+    private static final int MIN_EVERY_CTE_REFS = 3;
+
     // All CTE produce
     private List<Integer> produces;
 
@@ -45,6 +47,8 @@ public class CTEContext {
     private final List<Integer> forceCTEList;
 
     private double inlineCTERatio = 2.0;
+
+    private int maxCTELimit = 10;
 
     public CTEContext() {
         forceCTEList = Lists.newArrayList();
@@ -70,6 +74,10 @@ public class CTEContext {
 
     public void addCTEProduce(int cteId) {
         this.produces.add(cteId);
+    }
+
+    public void setMaxCTELimit(int maxCTELimit) {
+        this.maxCTELimit = maxCTELimit;
     }
 
     public void addCTEConsume(int cteId) {
@@ -118,7 +126,7 @@ public class CTEContext {
     }
 
     public boolean needOptimizeCTE() {
-        return consumeNums.values().stream().reduce(Integer::max).orElse(0) > 0 || produces.size() > 0;
+        return consumeNums.values().stream().reduce(Integer::max).orElse(0) > 0 || !produces.isEmpty();
     }
 
     public boolean needPushPredicate() {
@@ -149,11 +157,18 @@ public class CTEContext {
 
     /*
      * Inline CTE consume sense:
+     * 0. All CTEConsumer been pruned
      * 1. Disable CTE reuse, must inline all CTE
      * 2. CTE consume only use once, it's meanings none CTE data reuse
      * 3. CTE ratio less zero
+     * 4. limit CTE num strategy
      */
     public boolean needInline(int cteId) {
+        // 0. All CTEConsumer been pruned
+        if (!consumeNums.containsKey(cteId)) {
+            return true;
+        }
+
         if (forceCTEList.contains(cteId)) {
             return false;
         }
@@ -164,8 +179,23 @@ public class CTEContext {
             return true;
         }
 
-        // 3. Force inline
-        return inlineCTERatio < 0;
+        // 3. CTE ratio less zero, force inline
+        if (inlineCTERatio < 0) {
+            return true;
+        }
+
+        if (inlineCTERatio == 0) {
+            return false;
+        }
+
+        // 4. limit cte num strategy
+        // when actual CTE > maxCTELimit
+        // actual CTE refs > every CTE refs: force CTE
+        // actual CTE refs < every CTE refs: force inline
+        if (produces.size() > maxCTELimit) {
+            return consumeNums.get(cteId) < MIN_EVERY_CTE_REFS;
+        }
+        return false;
     }
 
     public boolean hasInlineCTE() {
@@ -183,6 +213,28 @@ public class CTEContext {
     }
 
     public boolean isForceCTE(int cteId) {
-        return inlineCTERatio == 0 || this.forceCTEList.contains(cteId);
+        // 1. rewrite to CTE rule, force CTE
+        if (this.forceCTEList.contains(cteId)) {
+            return true;
+        }
+
+        // 2. ratio is zero, force CTE reuse
+        if (inlineCTERatio == 0) {
+            return true;
+        }
+
+        if (inlineCTERatio < 0) {
+            return false;
+        }
+
+        // 3. limit cte num strategy
+        // when actual CTE > maxCTELimit
+        // actual CTE refs > CTE num * every CTE refs: force CTE
+        // actual CTE refs < CTE num * every CTE refs: force inline
+        if (produces.size() > maxCTELimit) {
+            return consumeNums.get(cteId) >= MIN_EVERY_CTE_REFS;
+        }
+
+        return false;
     }
 }

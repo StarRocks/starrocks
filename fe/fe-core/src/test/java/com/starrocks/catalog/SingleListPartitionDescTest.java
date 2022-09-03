@@ -10,7 +10,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.utframe.UtFrameUtils;
-
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;

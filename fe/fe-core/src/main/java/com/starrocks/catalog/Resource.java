@@ -129,5 +129,9 @@ public abstract class Resource implements Writable {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, Resource.class);
     }
+
+    public String getDdlStmt() {
+        return "";
+    }
 }
 

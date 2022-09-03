@@ -15,6 +15,7 @@ import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.logging.log4j.LogManager;
@@ -183,6 +184,13 @@ public class HiveRepository {
                 throw new DdlException(e.getMessage());
             }
         }
+
+        Map<PartitionKey, HivePartitionStats> partitionStatsMaps = Maps.newHashMap();
+        for (int index = 0; index < partitionKeys.size(); ++index) {
+            partitionStatsMaps.put(partitionKeys.get(index), result.get(index));
+        }
+        ConnectContext.get().getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDb(),
+                hmsTable.getTable()).addPartitionsStats(partitionStatsMaps);
         return result;
     }
 
