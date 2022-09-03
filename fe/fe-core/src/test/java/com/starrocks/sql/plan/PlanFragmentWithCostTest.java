@@ -1276,7 +1276,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  <slot 1> : 1: LO_ORDERDATE\n" +
                 "  |  <slot 2> : 2: LO_ORDERKEY\n" +
                 "  |  <slot 41> : 13: LO_REVENUE\n" +
-                "  |  <slot 42> : 40: mv_count_c_name\n" +
+                "  |  <slot 42> : 39: mv_count_c_name\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: lineorder_flat_for_mv\n" +
