@@ -75,12 +75,24 @@ public class PrivilegeStmtAnalyzer {
 
         /**
          * GRANT IMPERSONATE ON XX TO XX
-         * REVOKE IMPERSONATE ON XX TO XX
+         * GRANT IMPERSONATE ON XX TO ROLE XX
+         * REVOKE IMPERSONATE ON XX FROM XX
+         * REVOKE IMPERSONATE ON XX FROM ROLE XX
          */
         @Override
         public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt stmt, ConnectContext session) {
+<<<<<<< HEAD
             analyseUserAndCheckExist(stmt.getAuthorizedUser(), session);
             analyseUserAndCheckExist(stmt.getSecuredUser(), session);
+=======
+            analyseUser(stmt.getSecuredUser(), session, true);
+            if (stmt.getAuthorizedUser() != null) {
+                analyseUser(stmt.getAuthorizedUser(), session, true);
+            } else {
+                String qulifiedRole = analyseRoleName(stmt.getAuthorizedRoleName(), session);
+                stmt.setAuthorizedRoleName(qulifiedRole);
+            }
+>>>>>>> 4d7266f88 ([BugFix] persist grant/revoke role and support grant impersonate to role (#10596))
             return null;
         }
 

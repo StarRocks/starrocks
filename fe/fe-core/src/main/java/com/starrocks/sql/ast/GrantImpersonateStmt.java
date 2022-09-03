@@ -11,4 +11,16 @@ public class GrantImpersonateStmt extends BaseGrantRevokeImpersonateStmt {
     public GrantImpersonateStmt(UserIdentity authorizedUser, UserIdentity securedUser) {
         super(authorizedUser, securedUser, "GRANT", "TO");
     }
+<<<<<<< HEAD
+=======
+
+    public GrantImpersonateStmt(String authorizedRoleName, UserIdentity securedUser) {
+        super(authorizedRoleName, securedUser, "GRANT", "TO");
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+>>>>>>> 4d7266f88 ([BugFix] persist grant/revoke role and support grant impersonate to role (#10596))
 }
