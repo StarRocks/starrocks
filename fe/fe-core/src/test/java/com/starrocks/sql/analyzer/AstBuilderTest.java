@@ -3,14 +3,14 @@
 package com.starrocks.sql.analyzer;
 
 
-import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.ModifyBackendAddressClause;
-import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.TruncatePartitionClause;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.CaseInsensitiveStream;
 import com.starrocks.sql.parser.SqlParser;
@@ -27,7 +27,7 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 public class AstBuilderTest {
-    
+
     private static ConnectContext connectContext;
 
 

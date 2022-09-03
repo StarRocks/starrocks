@@ -1699,6 +1699,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
 
+    /**
+     * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
+     * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
+     * e.g 495501,495503
+     */
+    @ConfField(mutable = true)
+    public static String metadata_journal_skip_bad_journal_ids = "";
+
     @ConfField(mutable = true)
     public static boolean recursive_dir_search_enabled = false;
 }

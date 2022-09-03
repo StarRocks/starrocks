@@ -121,6 +121,8 @@ public:
     JoinRuntimeFilter::RunningContext* runtime_filter_ctx() { return &_runtime_filter_ctx; }
     bool is_local() const { return _is_local; }
     TPlanNodeId build_plan_node_id() const { return _build_plan_node_id; }
+    TPlanNodeId probe_plan_node_id() const { return _probe_plan_node_id; }
+    void set_probe_plan_node_id(TPlanNodeId id) { _probe_plan_node_id = id; }
     const std::vector<int32_t>* bucketseq_to_partition() { return &_bucketseq_to_partition; }
 
 private:
@@ -130,6 +132,7 @@ private:
     ExprContext* _probe_expr_ctx = nullptr;
     bool _is_local;
     TPlanNodeId _build_plan_node_id;
+    TPlanNodeId _probe_plan_node_id;
     std::atomic<const JoinRuntimeFilter*> _runtime_filter = nullptr;
     std::shared_ptr<const JoinRuntimeFilter> _shared_runtime_filter = nullptr;
     JoinRuntimeFilter::RunningContext _runtime_filter_ctx;

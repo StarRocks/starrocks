@@ -248,8 +248,7 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
         testCTE(Q59);
     }
 
-    //    @Test
-    // @todo: fix it
+    @Test
     public void testRatioQ64() throws Exception {
         testCTE(Q64);
     }
