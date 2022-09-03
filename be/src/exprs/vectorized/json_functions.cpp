@@ -118,6 +118,17 @@ Status JsonFunctions::json_path_close(starrocks_udf::FunctionContext* context,
 
 Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
                                           simdjson::ondemand::value* value) noexcept {
+#define HANDLE_SIMDJSON_ERROR(err, msg)                                                                       \
+    do {                                                                                                      \
+        if (UNLIKELY(err)) break;                                                                             \
+        const simdjson::error_code& _err = err;                                                               \
+        const std::string& _msg = msg;                                                                        \
+        if (_err == simdjson::NO_SUCH_FIELD) {                                                                \
+            return Status::NotFound(fmt::format("err: {}, msg: {}", simdjson::error_message(_err), msg));     \
+        }                                                                                                     \
+        return Status::DataQualityError(fmt::format("err: {}, msg: {}", simdjson::error_message(_err), msg)); \
+    } while (false);
+
     if (jsonpath.size() <= 1) {
         // The first elem of json path should be '$'.
         // A valid json path's size is >= 2.
@@ -138,46 +149,29 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
         // Since the simdjson::ondemand::object cannot be converted to simdjson::ondemand::value,
         // we have to do some special treatment for the second elem of json path.
         if (i == 1) {
-            auto err = obj.find_field_unordered(col).get(tvalue);
-            if (err) {
-                return Status::NotFound(
-                        fmt::format("failed to access field: {}, err: {}", col, simdjson::error_message(err)));
-            }
+            HANDLE_SIMDJSON_ERROR(obj.find_field_unordered(col).get(tvalue),
+                                  fmt::format("unable to find field: {}", col));
         } else {
-            auto err = tvalue.find_field_unordered(col).get(tvalue);
-            if (err) {
-                return Status::NotFound(
-                        fmt::format("failed to access field: {}, err: {}", col, simdjson::error_message(err)));
-            }
+            HANDLE_SIMDJSON_ERROR(tvalue.find_field_unordered(col).get(tvalue),
+                                  fmt::format("unable to find field: {}", col));
         }
 
         if (index != -1) {
             // try to access tvalue as array.
             simdjson::ondemand::array arr;
-            auto err = tvalue.get_array().get(arr);
-            if (err) {
-                return Status::InvalidArgument(fmt::format("failed to access field as array, field: {}, err: {}", col,
-                                                           simdjson::error_message(err)));
-            }
+            HANDLE_SIMDJSON_ERROR(tvalue.get_array().get(arr),
+                                  fmt::format("failed to access field as array, field: {}", col));
 
             size_t sz;
-            err = arr.count_elements().get(sz);
-            if (err) {
-                return Status::InvalidArgument(
-                        fmt::format("failed to get array size, field: {}, err: {}", col, simdjson::error_message(err)));
-            }
+            HANDLE_SIMDJSON_ERROR(arr.count_elements().get(sz), fmt::format("failed to get array size, field: ", col));
 
             if (index >= sz) {
                 return Status::NotFound(
                         fmt::format("index beyond array size, field: {}, index: {}, array size: {}", col, index, sz));
             }
 
-            err = arr.at(index).get(tvalue);
-            if (err) {
-                return Status::InvalidArgument(
-                        fmt::format("failed to access array, field: {}, index: {}, array size: {}, err: {}", col, index,
-                                    sz, simdjson::error_message(err)));
-            }
+            HANDLE_SIMDJSON_ERROR(arr.at(index).get(tvalue),
+                                  fmt::format("failed to access array field: {}, index: {}", col, index));
         }
     }
 
