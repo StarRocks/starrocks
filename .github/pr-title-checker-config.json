@@ -11,7 +11,7 @@
   },
   "MESSAGES": {
     "success": "All OK",
-    "failure": "Pull request title should add type, e.g. [type] title",
+    "failure": "Add type in the title of the pull request. e.g. [type] content",
     "notice": ""
   }
 }
