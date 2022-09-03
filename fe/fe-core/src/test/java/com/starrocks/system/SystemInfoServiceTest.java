@@ -2,7 +2,6 @@
 
 package com.starrocks.system;
 
-import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -10,6 +9,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -24,9 +24,9 @@ import java.net.UnknownHostException;
 import java.util.List;
 
 public class SystemInfoServiceTest {
-    
+
     SystemInfoService service;
-    
+
     @Mocked
     GlobalStateMgr globalStateMgr;
 
@@ -34,10 +34,10 @@ public class SystemInfoServiceTest {
     EditLog editLog;
 
     @Before
-    public void setUp() throws NoSuchFieldException, 
-                               SecurityException, 
-                               IllegalArgumentException, 
-                               IllegalAccessException {
+    public void setUp() throws NoSuchFieldException,
+            SecurityException,
+            IllegalArgumentException,
+            IllegalAccessException {
         service = new SystemInfoService();
         Field field = FrontendOptions.class.getDeclaredField("useFqdn");
         field.setAccessible(true);
@@ -59,17 +59,18 @@ public class SystemInfoServiceTest {
         };
         new MockUp<EditLog>() {
             @Mock
-            public void logBackendStateChange(Backend be) {}
+            public void logBackendStateChange(Backend be) {
+            }
         };
     }
-    
+
     @Test
     public void testUpdateBackendHostWithOneBe() throws Exception {
         mockFunc();
         Backend be = new Backend(100, "127.0.0.1", 1000);
         service.addBackend(be);
         ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.1", "sandbox");
-        service.modifyBackendHost(clause);    
+        service.modifyBackendHost(clause);
         Backend backend = service.getBackendWithHeartbeatPort("sandbox", 1000);
         Assert.assertNotNull(backend);
     }
@@ -82,7 +83,7 @@ public class SystemInfoServiceTest {
         service.addBackend(be1);
         service.addBackend(be2);
         ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.1", "sandbox");
-        service.modifyBackendHost(clause);    
+        service.modifyBackendHost(clause);
         Backend backend = service.getBackendWithHeartbeatPort("sandbox", 1000);
         Assert.assertNotNull(backend);
     }
@@ -166,6 +167,7 @@ public class SystemInfoServiceTest {
 
     @Mocked
     InetAddress addr;
+
     private void mockNet() {
         new MockUp<InetAddress>() {
             @Mock
@@ -211,7 +213,7 @@ public class SystemInfoServiceTest {
 
     @Test
     public void testGetBackendOnlyWithHost() throws Exception {
-        
+
         Backend be = new Backend(10001, "newHost", 1000);
         be.setBePort(1001);
         service.addBackend(be);

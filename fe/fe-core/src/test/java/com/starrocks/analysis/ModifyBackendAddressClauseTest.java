@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -19,7 +20,7 @@ public class ModifyBackendAddressClauseTest {
 
     @Test
     public void testNormal() throws AnalysisException {
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause(null);
+        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("", "");
         Assert.assertTrue(clause.getHostPortPairs().size() == 0);
     }
 }
