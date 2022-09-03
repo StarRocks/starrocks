@@ -64,7 +64,7 @@ public class SparkResourceTest {
         properties.put("spark.submit.deployMode", "cluster");
         properties.put("working_dir", workingDir);
         properties.put("broker", broker);
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
     }
 
     @Test

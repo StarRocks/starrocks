@@ -70,7 +70,7 @@ public class ResourceMgrTest {
         properties.put("spark.submit.deployMode", "cluster");
         properties.put("working_dir", workingDir);
         properties.put("broker", broker);
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
         hiveMetastoreUris = "thrift://10.10.44.98:9083";
     }
 
