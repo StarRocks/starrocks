@@ -17,15 +17,15 @@ public class MultiJoinReorderTest extends PlanTestBase {
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 1);
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         setTableStatistics(t1, 10);
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t2");
+        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
         setTableStatistics(t2, 100000);
 
-        OlapTable t3 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t3");
+        OlapTable t3 = (OlapTable) globalStateMgr.getDb("test").getTable("t3");
         setTableStatistics(t3, 1000000000);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(2);
         FeConstants.runningUnitTest = true;

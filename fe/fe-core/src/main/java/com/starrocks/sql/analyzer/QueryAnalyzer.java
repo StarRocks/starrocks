@@ -29,7 +29,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -282,9 +281,6 @@ public class QueryAnalyzer {
 
             node.setColumns(columns.build());
             String dbName = node.getName().getDb();
-            if (CatalogMgr.isInternalCatalog(node.getName().getCatalog())) {
-                dbName = dbName.split(":")[1];
-            }
 
             session.getDumpInfo().addTable(dbName, table);
 

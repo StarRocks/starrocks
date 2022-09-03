@@ -9,14 +9,11 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class ColocateTableIndexTest {
@@ -44,7 +41,7 @@ public class ColocateTableIndexTest {
         // group1->table1_1
         Assert.assertEquals(1, infos.size());
         Assert.assertTrue(infos.get(0).get(1).contains("group1"));
-        Table table1_1 = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getTable("table1_1");
+        Table table1_1 = GlobalStateMgr.getCurrentState().getDb("db1").getTable("table1_1");
         Assert.assertEquals(String.format("%d", table1_1.getId()), infos.get(0).get(2));
         LOG.info("after create db1.table1_1: {}", infos);
 
@@ -60,7 +57,7 @@ public class ColocateTableIndexTest {
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
         Assert.assertEquals(1, infos.size());
         Assert.assertTrue(infos.get(0).get(1).contains("group1"));
-        Table table1_2 = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getTable("table1_2");
+        Table table1_2 = GlobalStateMgr.getCurrentState().getDb("db1").getTable("table1_2");
         Assert.assertEquals(String.format("%d, %d", table1_1.getId(), table1_2.getId()), infos.get(0).get(2));
         LOG.info("after create db1.table1_2: {}", infos);
 
@@ -82,7 +79,7 @@ public class ColocateTableIndexTest {
         Assert.assertEquals(2, infos.size());
         Assert.assertTrue(infos.get(0).get(1).contains("group1"));
         Assert.assertEquals(String.format("%d, %d", table1_1.getId(), table1_2.getId()), infos.get(0).get(2));
-        Table table2_1 = GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getTable("table2_1");
+        Table table2_1 = GlobalStateMgr.getCurrentState().getDb("db2").getTable("table2_1");
         Assert.assertTrue(infos.get(1).get(1).contains("group2"));
         Assert.assertEquals(String.format("%d", table2_1.getId()), infos.get(1).get(2));
         LOG.info("after create db2.table2_1: {}", infos);

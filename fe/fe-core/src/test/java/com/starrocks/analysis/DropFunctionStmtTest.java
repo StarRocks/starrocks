@@ -28,7 +28,7 @@ public class DropFunctionStmtTest {
         compareAfterParse("DROP FUNCTION f()", "DROP FUNCTION testDb.f()");
         compareAfterParse("DROP FUNCTION f(int)", "DROP FUNCTION testDb.f(INT)");
         compareAfterParse("DROP FUNCTION f(int, ...)", "DROP FUNCTION testDb.f(INT, ...)");
-        compareAfterParse("DROP FUNCTION db.f(int, char(2))", "DROP FUNCTION default_cluster:db.f(INT, CHAR(2))");
+        compareAfterParse("DROP FUNCTION db.f(int, char(2))", "DROP FUNCTION db.f(INT, CHAR(2))");
     }
 
     private void compareAfterParse(String originSql, String exceptedNormalizedSql) throws Exception {

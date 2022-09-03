@@ -216,7 +216,6 @@ public class ShowStmtAnalyzer {
             return null;
         }
 
-        // used for remove default_cluster from stmt
         String getDatabaseName(String db, ConnectContext session) {
             if (Strings.isNullOrEmpty(db)) {
                 db = session.getDatabase();

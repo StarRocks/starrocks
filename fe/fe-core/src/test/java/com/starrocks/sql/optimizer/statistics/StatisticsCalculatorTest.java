@@ -216,7 +216,7 @@ public class StatisticsCalculatorTest {
     @Test
     public void testLogicalOlapTableScan() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table = (OlapTable) globalStateMgr.getDb("default_cluster:statistics_test").getTable("test_all_type");
+        OlapTable table = (OlapTable) globalStateMgr.getDb("statistics_test").getTable("test_all_type");
         Collection<Partition> partitions = table.getPartitions();
         List<Long> partitionIds =
                 partitions.stream().mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
@@ -265,7 +265,7 @@ public class StatisticsCalculatorTest {
 
         ColumnRefOperator id_date = columnRefFactory.create("id_date", Type.DATE, true);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Table table = globalStateMgr.getDb("default_cluster:statistics_test").getTable("test_all_type");
+        Table table = globalStateMgr.getDb("statistics_test").getTable("test_all_type");
 
         List<Partition> partitions = new ArrayList<>(((OlapTable) table).getPartitions());
 
@@ -322,7 +322,7 @@ public class StatisticsCalculatorTest {
         ColumnRefOperator id_date = columnRefFactory.create("id_date", Type.DATE, true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Table table = globalStateMgr.getDb("default_cluster:statistics_test").getTable("test_all_type");
+        Table table = globalStateMgr.getDb("statistics_test").getTable("test_all_type");
 
         new Expectations() {
             {
@@ -410,7 +410,7 @@ public class StatisticsCalculatorTest {
         ColumnRefOperator id_date = columnRefFactory.create("id_date", Type.DATE, true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table = (OlapTable) globalStateMgr.getDb("default_cluster:statistics_test").getTable("test_all_type_day_partition");
+        OlapTable table = (OlapTable) globalStateMgr.getDb("statistics_test").getTable("test_all_type_day_partition");
 
         new Expectations() {
             {

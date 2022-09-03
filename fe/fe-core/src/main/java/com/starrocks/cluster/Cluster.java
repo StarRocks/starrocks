@@ -161,7 +161,7 @@ public class Cluster implements Writable {
         }
 
         int dbCount = dbIds.size();
-        if (dbNames.contains(ClusterNamespace.getFullName(InfoSchemaDb.DATABASE_NAME))) {
+        if (dbNames.contains(InfoSchemaDb.DATABASE_NAME)) {
             dbCount--;
         }
 

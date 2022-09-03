@@ -23,7 +23,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -40,8 +39,8 @@ public class StatisticUtils {
 
     private static final List<String> COLLECT_DATABASES_BLACKLIST = ImmutableList.<String>builder()
             .add(StatsConstants.STATISTICS_DB_NAME)
-            .add(SystemInfoService.DEFAULT_CLUSTER + ":starrocks_monitor")
-            .add(SystemInfoService.DEFAULT_CLUSTER + ":information_schema").build();
+            .add("starrocks_monitor")
+            .add("information_schema").build();
 
     public static ConnectContext buildConnectContext() {
         ConnectContext context = new ConnectContext();

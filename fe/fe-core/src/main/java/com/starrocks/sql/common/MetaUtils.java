@@ -10,12 +10,10 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.SqlParser;
@@ -94,10 +92,6 @@ public class MetaUtils {
                 throw new SemanticException("No database selected");
             }
             tableName.setDb(connectContext.getDatabase());
-        } else {
-            if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-                tableName.setDb(ClusterNamespace.getFullName(tableName.getDb()));
-            }
         }
 
         if (Strings.isNullOrEmpty(tableName.getTbl())) {

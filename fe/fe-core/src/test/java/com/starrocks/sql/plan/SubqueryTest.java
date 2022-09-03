@@ -133,7 +133,7 @@ public class SubqueryTest extends PlanTestBase {
     @Test
     public void testMultiNotExistPredicatePushDown() throws Exception {
         FeConstants.runningUnitTest = true;
-        connectContext.setDatabase("default_cluster:test");
+        connectContext.setDatabase("test");
 
         String sql =
                 "select * from join1 where join1.dt > 1 and NOT EXISTS (select * from join1 as a where join1.dt = 1 and a.id = join1.id)" +
