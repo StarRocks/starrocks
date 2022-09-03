@@ -107,6 +107,9 @@ public class MockJournal implements Journal {
         @Override
         public void close() {
         }
+
+        @Override
+        public void skipNext() {}
     }
 
     private static class MockProtocol implements HAProtocol {

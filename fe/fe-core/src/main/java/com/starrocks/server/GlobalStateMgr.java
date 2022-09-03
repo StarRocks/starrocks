@@ -229,6 +229,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1508,6 +1509,7 @@ public class GlobalStateMgr {
         };
     }
 
+
     public void createReplayer() {
         replayer = new Daemon("replayer", REPLAY_INTERVAL_MS) {
             @Override
@@ -1517,14 +1519,23 @@ public class GlobalStateMgr {
                 try {
                     hasLog = replayJournal(-1);
                     metaReplayState.setOk();
+<<<<<<< HEAD
                 } catch (InsufficientLogException insufficientLogEx) {
                     // for InsufficientLogException we should refresh the log and
                     // then exit the process because we may have read dirty data.
                     LOG.error("catch insufficient log exception. please restart", insufficientLogEx);
                     ((BDBJEJournal) editLog.getJournal()).getBdbEnvironment().refreshLog(insufficientLogEx);
+=======
+                } catch (JournalInconsistentException | InterruptedException e) {
+                    LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
+                            replayedJournalId.get() + 1, e);
+                    // TODO exit gracefully
+                    Util.stdoutWithTime(e.getMessage());
+>>>>>>> 74438d22e ([Enhancement] Allow skip bad journal when replay (#10372))
                     System.exit(-1);
                 } catch (Throwable e) {
-                    LOG.error("replayer thread catch an exception when replay journal.", e);
+                    LOG.error("replayer thread catch an exception when replay journal {}.",
+                            replayedJournalId.get() + 1, e);
                     metaReplayState.setException(e);
                     try {
                         Thread.sleep(5000);
@@ -1704,8 +1715,33 @@ public class GlobalStateMgr {
         if (newToJournalId == -1) {
             newToJournalId = getMaxJournalId();
         }
+<<<<<<< HEAD
         if (newToJournalId <= replayedJournalId.get()) {
             return false;
+=======
+
+        long startJournalId = replayedJournalId.get() + 1;
+        long replayStartTime = System.currentTimeMillis();
+        LOG.info("start to replay journal from {} to {}", startJournalId, toJournalId);
+
+        JournalCursor cursor = null;
+        try {
+            cursor = journal.read(startJournalId, toJournalId);
+            replayJournalInner(cursor, false);
+        } catch (InterruptedException | JournalInconsistentException e) {
+            LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
+                    replayedJournalId.get() + 1,
+                    e);
+            // TODO exit gracefully
+            Util.stdoutWithTime(e.getMessage());
+            System.exit(-1);
+
+
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+>>>>>>> 74438d22e ([Enhancement] Allow skip bad journal when replay (#10372))
         }
 
         LOG.info("replayed journal id is {}, replay to journal id is {}", replayedJournalId, newToJournalId);
@@ -1718,12 +1754,40 @@ public class GlobalStateMgr {
         long startTime = System.currentTimeMillis();
         boolean hasLog = false;
         while (true) {
+<<<<<<< HEAD
             JournalEntity entity = cursor.next();
             if (entity == null) {
                 break;
             }
             hasLog = true;
             EditLog.loadJournal(this, entity);
+=======
+            JournalEntity entity = null;
+            try {
+                entity = cursor.next();
+
+                // EOF or aggressive retry
+                if (entity == null) {
+                    break;
+                }
+
+                // apply
+                EditLog.loadJournal(this, entity);
+            } catch (Throwable e) {
+                if (canSkipBadReplayedJournal()) {
+                    LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
+                            replayedJournalId.incrementAndGet(),
+                            entity == null ? null : entity.getData(),
+                            e);
+                    cursor.skipNext();
+                    continue;
+                }
+                // handled in outer loop
+                LOG.warn("catch exception when replaying {},", replayedJournalId.get() + 1, e);
+                throw e;
+            }
+
+>>>>>>> 74438d22e ([Enhancement] Allow skip bad journal when replay (#10372))
             replayedJournalId.incrementAndGet();
             LOG.debug("journal {} replayed.", replayedJournalId);
             if (feType != FrontendNodeType.MASTER) {
@@ -1740,6 +1804,22 @@ public class GlobalStateMgr {
         }
 
         return hasLog;
+    }
+
+    private boolean canSkipBadReplayedJournal() {
+        try {
+            for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
+                if (!StringUtils.isEmpty(idStr) && Long.valueOf(idStr) == replayedJournalId.get() + 1) {
+                    LOG.info("skip bad replayed journal id {} because configed {}",
+                            idStr, Config.metadata_journal_skip_bad_journal_ids);
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to parse metadata_journal_skip_bad_journal_ids: {}",
+                    Config.metadata_journal_skip_bad_journal_ids, e);
+        }
+        return false;
     }
 
     public void createTimePrinter() {

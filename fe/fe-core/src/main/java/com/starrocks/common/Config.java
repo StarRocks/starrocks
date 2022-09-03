@@ -1547,5 +1547,38 @@ public class Config extends ConfigBase {
      * after wait quorom_publish_wait_time_ms, will do quorum publish
      */
     @ConfField(mutable = true)
+<<<<<<< HEAD
     public static int quorom_publish_wait_time_ms = 500;
+=======
+    public static boolean enable_fqdn_func = false;
+
+    /**
+     * jaeger tracing endpoint, empty thing disables tracing
+     */
+    @ConfField
+    public static String jaeger_grpc_endpoint = "";
+
+    @ConfField
+    public static long experimental_lake_compaction_max_version_count = 10;
+
+    @ConfField
+    public static long experimental_lake_compaction_min_version_count = 3;
+
+    @ConfField
+    public static long experimental_lake_compaction_max_interval_seconds = 300;
+
+    @ConfField(mutable = true)
+    public static boolean enable_new_publish_mechanism = false;
+
+    /**
+     * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
+     * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
+     * e.g 495501,495503
+     */
+    @ConfField(mutable = true)
+    public static String metadata_journal_skip_bad_journal_ids = "";
+
+    @ConfField(mutable = true)
+    public static boolean recursive_dir_search_enabled = false;
+>>>>>>> 74438d22e ([Enhancement] Allow skip bad journal when replay (#10372))
 }

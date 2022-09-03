@@ -25,4 +25,9 @@ public interface JournalCursor {
 
     public void close();
 
+<<<<<<< HEAD
+=======
+    // skip current log
+    public void skipNext();
+>>>>>>> 74438d22e ([Enhancement] Allow skip bad journal when replay (#10372))
 }
