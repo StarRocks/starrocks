@@ -387,7 +387,7 @@ TEST_F(MysqlRowBufferTest, test_array) {
         row_buffer.begin_push_array();
 
         Slice json = R"({"k1": "v1"})";
-        row_buffer.push_string(json.data, json.size, false);
+        row_buffer.push_string(json.data, json.size, '\'');
 
         row_buffer.finish_push_array();
 
