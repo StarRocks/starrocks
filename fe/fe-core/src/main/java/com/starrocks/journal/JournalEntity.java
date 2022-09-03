@@ -367,7 +367,9 @@ public class JournalEntity implements Writable {
             case OperationType.OP_REVOKE_PRIV:
             case OperationType.OP_SET_PASSWORD:
             case OperationType.OP_CREATE_ROLE:
-            case OperationType.OP_DROP_ROLE: {
+            case OperationType.OP_DROP_ROLE:
+            case OperationType.OP_GRANT_ROLE:
+            case OperationType.OP_REVOKE_ROLE: {
                 data = PrivInfo.read(in);
                 isRead = true;
                 break;

@@ -882,7 +882,7 @@ grantRoleStatement
     ;
 
 grantImpersonateStatement
-    : GRANT IMPERSONATE ON user TO user
+    : GRANT IMPERSONATE ON user TO (user | ROLE identifierOrString)
     ;
 
 revokeRoleStatement
@@ -890,7 +890,7 @@ revokeRoleStatement
     ;
 
 revokeImpersonateStatement
-    : REVOKE IMPERSONATE ON user FROM user
+    : REVOKE IMPERSONATE ON user FROM  (user | ROLE identifierOrString)
     ;
 
 executeAsStatement

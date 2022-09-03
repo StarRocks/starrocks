@@ -214,7 +214,7 @@ public class StarRocksAssert {
     public void executeResourceGroupDdlSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
-        StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
+        StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
         Analyzer.analyze(statement, ctx);
 
         Assert.assertTrue(statement.getClass().getSimpleName().contains("ResourceGroupStmt"));

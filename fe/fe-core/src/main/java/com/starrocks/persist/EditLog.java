@@ -446,6 +446,16 @@ public class EditLog {
                     globalStateMgr.getAuth().replayDropRole(privInfo);
                     break;
                 }
+                case OperationType.OP_GRANT_ROLE: {
+                    PrivInfo privInfo = (PrivInfo) journal.getData();
+                    globalStateMgr.getAuth().replayGrantRole(privInfo);
+                    break;
+                }
+                case OperationType.OP_REVOKE_ROLE: {
+                    PrivInfo privInfo = (PrivInfo) journal.getData();
+                    globalStateMgr.getAuth().replayRevokeRole(privInfo);
+                    break;
+                }
                 case OperationType.OP_UPDATE_USER_PROPERTY: {
                     UserPropertyInfo propertyInfo = (UserPropertyInfo) journal.getData();
                     globalStateMgr.getAuth().replayUpdateUserProperty(propertyInfo);
@@ -1181,6 +1191,14 @@ public class EditLog {
 
     public void logDropRole(PrivInfo info) {
         logEdit(OperationType.OP_DROP_ROLE, info);
+    }
+
+    public void logGrantRole(PrivInfo info) {
+        logEdit(OperationType.OP_GRANT_ROLE, info);
+    }
+
+    public void logRevokeRole(PrivInfo info) {
+        logEdit(OperationType.OP_REVOKE_ROLE, info);
     }
 
     public void logDatabaseRename(DatabaseInfo databaseInfo) {

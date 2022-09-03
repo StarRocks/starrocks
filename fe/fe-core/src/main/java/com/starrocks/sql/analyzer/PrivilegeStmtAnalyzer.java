@@ -88,12 +88,19 @@ public class PrivilegeStmtAnalyzer {
 
         /**
          * GRANT IMPERSONATE ON XX TO XX
-         * REVOKE IMPERSONATE ON XX TO XX
+         * GRANT IMPERSONATE ON XX TO ROLE XX
+         * REVOKE IMPERSONATE ON XX FROM XX
+         * REVOKE IMPERSONATE ON XX FROM ROLE XX
          */
         @Override
         public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getAuthorizedUser(), session, true);
             analyseUser(stmt.getSecuredUser(), session, true);
+            if (stmt.getAuthorizedUser() != null) {
+                analyseUser(stmt.getAuthorizedUser(), session, true);
+            } else {
+                String qulifiedRole = analyseRoleName(stmt.getAuthorizedRoleName(), session);
+                stmt.setAuthorizedRoleName(qulifiedRole);
+            }
             return null;
         }
 

@@ -545,7 +545,7 @@ public class StmtExecutor {
             List<StatementBase> stmts;
             try {
                 stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt.originStmt,
-                        context.getSessionVariable().getSqlMode());
+                        context.getSessionVariable());
                 parsedStmt = stmts.get(originStmt.idx);
                 parsedStmt.setOrigStmt(originStmt);
             } catch (ParsingException parsingException) {
@@ -1222,8 +1222,26 @@ public class StmtExecutor {
             // if in strict mode, insert will fail if there are filtered rows
             if (context.getSessionVariable().getEnableInsertStrict()) {
                 if (filteredRows > 0) {
-                    context.getState().setError("Insert has filtered data in strict mode, tracking_url="
-                            + coord.getTrackingUrl());
+                    if (targetTable instanceof ExternalOlapTable) {
+                        ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                                externalTable.getSourceTableDbId(), transactionId,
+                                externalTable.getSourceTableHost(),
+                                externalTable.getSourceTablePort(),
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE  + ", tracking_url = " 
+                                + coord.getTrackingUrl()
+                        );
+                    } else {
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
+                                database.getId(),
+                                transactionId,
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = " 
+                                + coord.getTrackingUrl()
+                        );
+                    }
+                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " + 
+                            transactionId + " tracking_url = " + coord.getTrackingUrl());
+                    
                     return;
                 }
             }

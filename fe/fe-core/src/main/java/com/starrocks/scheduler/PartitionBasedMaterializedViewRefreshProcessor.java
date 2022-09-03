@@ -408,7 +408,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         ctx.setThreadLocalInfo();
         String definition = mvContext.getDefinition();
         InsertStmt insertStmt =
-                (InsertStmt) SqlParser.parse(definition, ctx.getSessionVariable().getSqlMode()).get(0);
+                (InsertStmt) SqlParser.parse(definition, ctx.getSessionVariable()).get(0);
         insertStmt.setTargetPartitionNames(new PartitionNames(false, new ArrayList<>(materializedViewPartitions)));
         QueryStatement queryStatement = insertStmt.getQueryStatement();
         Map<String, TableRelation> tableRelations =
