@@ -124,6 +124,7 @@ import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.analysis.ResourceDesc;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
+import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetNamesVar;
@@ -1612,16 +1613,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<StarRocksParser.LoadPropertiesContext> loadPropertiesContexts = context.loadProperties();
         Preconditions.checkNotNull(loadPropertiesContexts, "load properties is null");
         for (StarRocksParser.LoadPropertiesContext loadPropertiesContext : loadPropertiesContexts) {
-            if (loadPropertiesContext.string() != null) {
-                String literal = ((StringLiteral) visit(loadPropertiesContext.string())).getValue();
+            if (loadPropertiesContext.colSeparatorProperty() != null) {
+                String literal = ((StringLiteral) visit(loadPropertiesContext.colSeparatorProperty().string())).getValue();
                 loadPropertyList.add(new ColumnSeparator(literal));
+            }
+
+            if (loadPropertiesContext.rowDelimiterProperty() != null) {
+                String literal = ((StringLiteral) visit(loadPropertiesContext.rowDelimiterProperty().string())).getValue();
+                loadPropertyList.add(new RowDelimiter(literal));
             }
 
             if (loadPropertiesContext.columnProperties() != null) {
                 List<ImportColumnDesc> columns = new ArrayList<>();
                 for (int i = 0; i < loadPropertiesContext.columnProperties().getChildCount(); i++) {
                     ParseTree node = loadPropertiesContext.columnProperties().getChild(i);
-                    if (node instanceof StarRocksParser.UnquotedIdentifierContext) {
+                    if (node instanceof StarRocksParser.IdentifierContext) {
                         String column = ((Identifier) (visit(node))).getValue();
                         ImportColumnDesc columnDesc = new ImportColumnDesc(column);
                         columns.add(columnDesc);

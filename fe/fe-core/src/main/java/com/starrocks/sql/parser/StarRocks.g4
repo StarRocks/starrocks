@@ -647,10 +647,19 @@ createRoutineLoadStatement
     ;
 
 loadProperties
-    : (COLUMNS TERMINATED BY string)
+    : (colSeparatorProperty)
+    | (rowDelimiterProperty)
     | (COLUMNS columnProperties)
     | (WHERE expression)
     | (partitionNames)
+    ;
+
+colSeparatorProperty
+    : COLUMNS TERMINATED BY string
+    ;
+
+rowDelimiterProperty
+    : ROWS TERMINATED BY string
     ;
 
 columnProperties
