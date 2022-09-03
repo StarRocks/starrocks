@@ -1,0 +1,28 @@
+name: checker
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+jobs:
+    pr-commit-message:
+    name: Check Commit Message
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Commit Type
+        uses: gsactions/commit-message-checker@v1
+        with:
+          pattern: '\[[^]]+\] .+$'
+          flags: 'gm'
+          error: 'Your title has to contain a commit type [Type], e.g. "[BugFix] content".'
+
+      - name: Check Redundant Message
+        uses: gsactions/commit-message-checker@v1
+        with:
+          pattern: '.*\*.*'
+          error: 'The commit message like "* content" is illegal.'
+          checkAllCommitMessages: 'true'
+          accessToken: ${{ secrets.GITHUB_TOKEN  }}
