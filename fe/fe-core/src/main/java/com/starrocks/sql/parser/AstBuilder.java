@@ -2831,15 +2831,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitGrantImpersonate(StarRocksParser.GrantImpersonateContext context) {
         UserIdentity securedUser = ((UserIdentifier) visit(context.user(0))).getUserIdentity();
-        UserIdentity authorizedUser = ((UserIdentifier) visit(context.user(1))).getUserIdentity();
-        return new GrantImpersonateStmt(authorizedUser, securedUser);
+        if (context.user(1) != null) {
+            UserIdentity authorizedUser = ((UserIdentifier) visit(context.user(1))).getUserIdentity();
+            return new GrantImpersonateStmt(authorizedUser, securedUser);
+        } else {
+            String roleName = ((Identifier) visit(context.identifierOrString())).getValue();
+            return new GrantImpersonateStmt(roleName, securedUser);
+        }
     }
 
     @Override
     public ParseNode visitRevokeImpersonate(StarRocksParser.RevokeImpersonateContext context) {
         UserIdentity securedUser = ((UserIdentifier) visit(context.user(0))).getUserIdentity();
-        UserIdentity authorizedUser = ((UserIdentifier) visit(context.user(1))).getUserIdentity();
-        return new RevokeImpersonateStmt(authorizedUser, securedUser);
+        if (context.user(1) != null) {
+            UserIdentity authorizedUser = ((UserIdentifier) visit(context.user(1))).getUserIdentity();
+            return new RevokeImpersonateStmt(authorizedUser, securedUser);
+        } else {
+            String roleName = ((Identifier) visit(context.identifierOrString())).getValue();
+            return new RevokeImpersonateStmt(roleName, securedUser);
+        }
     }
 
     @Override
