@@ -16,10 +16,10 @@ import com.starrocks.qe.ShowResultSetMetaData;
 // SHOW PROC statement. Used to show proc information, only admin can use.
 public class ShowProcStmt extends ShowStmt {
 
-    public static final ImmutableSet<String> needForwardPathRoot;
+    public static final ImmutableSet<String> NEED_FORWARD_PATH_ROOT;
 
     static {
-        needForwardPathRoot = new ImmutableSet.Builder<String>()
+        NEED_FORWARD_PATH_ROOT = new ImmutableSet.Builder<String>()
                 .add("backends")
                 .add("cluster_balance")
                 .add("routine_loads")
@@ -72,7 +72,7 @@ public class ShowProcStmt extends ShowStmt {
                 return RedirectStatus.NO_FORWARD;
             }
             String[] pathGroup = path.split("/");
-            if (needForwardPathRoot.contains(pathGroup[1])) {
+            if (NEED_FORWARD_PATH_ROOT.contains(pathGroup[1])) {
                 return RedirectStatus.FORWARD_NO_SYNC;
             }
             return RedirectStatus.NO_FORWARD;

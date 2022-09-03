@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.ha.FrontendNodeType;
 
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import org.junit.Assert;
 import org.junit.Test;
 

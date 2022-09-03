@@ -2,16 +2,12 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AlterResourceStmt;
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
-import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
@@ -55,6 +51,8 @@ import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
@@ -68,6 +66,7 @@ import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
+import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
@@ -75,6 +74,7 @@ import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
+import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -360,14 +360,16 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
         @Override
         public Void visitCreateResourceStatement(CreateResourceStmt statement,
-                                                ConnectContext session) {
+                                                 ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
         }
+
         @Override
         public Void visitDropResourceStatement(DropResourceStmt statement,
                                                ConnectContext session) {
@@ -376,6 +378,7 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
         @Override
         public Void visitAlterResourceStatement(AlterResourceStmt statement,
                                                 ConnectContext session) {
@@ -384,6 +387,7 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
         public Void visitRecoverTableStatement(RecoverTableStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), statement.getDbName(),
                     statement.getTableName(),
@@ -1108,9 +1112,11 @@ public class PrivilegeChecker {
 
     private static class TablePrivilegeChecker extends AstVisitor<Void, Void> {
         private ConnectContext session;
+
         public TablePrivilegeChecker(ConnectContext session) {
             this.session = session;
         }
+
         @Override
         public Void visitQueryStatement(QueryStatement node, Void context) {
             return visit(node.getQueryRelation());

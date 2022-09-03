@@ -50,7 +50,6 @@ public class ShowOpenTableStmtTest {
     @Test
     public void testNormal() throws Exception {
         ShowOpenTableStmt stmt = (ShowOpenTableStmt) UtFrameUtils.parseStmtWithNewParser("SHOW OPEN TABLES", ctx);
-        Assert.assertEquals("SHOW OPEN TABLES", stmt.toString());
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);
         Assert.assertEquals(4, metaData.getColumnCount());

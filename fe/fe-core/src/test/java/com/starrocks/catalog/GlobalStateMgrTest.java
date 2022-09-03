@@ -27,7 +27,6 @@ import com.sleepycat.je.rep.MemberNotFoundException;
 import com.sleepycat.je.rep.ReplicaStateException;
 import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
-import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -39,6 +38,7 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Frontend;
 import mockit.Expectations;
 import mockit.Mock;
@@ -240,7 +240,7 @@ public class GlobalStateMgrTest {
         Assert.assertEquals("testHost", updatedfFe.getHost());
         Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
     }
-    
+
     @Mocked
     BDBEnvironment env;
 
@@ -252,7 +252,7 @@ public class GlobalStateMgrTest {
 
     @Test
     public void testUpdateFrontend() throws Exception {
-        
+
         new Expectations() {
             {
                 env.getReplicationGroupAdmin();
@@ -263,16 +263,18 @@ public class GlobalStateMgrTest {
         new MockUp<ReplicationGroupAdmin>() {
             @Mock
             public void updateAddress(String nodeName, String newHostName, int newPort)
-                throws EnvironmentFailureException,
+                    throws EnvironmentFailureException,
                     MasterStateException,
                     MemberNotFoundException,
                     ReplicaStateException,
-                    UnknownMasterException {}
+                    UnknownMasterException {
+            }
         };
 
         new MockUp<EditLog>() {
             @Mock
-            public void logUpdateFrontend(Frontend fe) {}
+            public void logUpdateFrontend(Frontend fe) {
+            }
         };
 
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();

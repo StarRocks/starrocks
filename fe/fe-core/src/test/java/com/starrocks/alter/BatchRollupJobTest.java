@@ -23,7 +23,6 @@ package com.starrocks.alter;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -31,6 +30,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -70,7 +70,7 @@ public class BatchRollupJobTest {
         // batch add 3 rollups
         String stmtStr = "alter table db1.tbl1 add rollup r1(k1) duplicate key(k1), r2(k1, k2) " +
                 "duplicate key(k1), r3(k2) duplicate key(k2);";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(stmtStr, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
         GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
 
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
@@ -120,7 +120,7 @@ public class BatchRollupJobTest {
         // batch add 3 rollups
         String stmtStr = "alter table db1.tbl2 add rollup r1(k1) " +
                 "duplicate key(k1), r2(k1, k2) duplicate key(k1), r3(k2) duplicate key(k2);";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(stmtStr, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
         GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
 
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();

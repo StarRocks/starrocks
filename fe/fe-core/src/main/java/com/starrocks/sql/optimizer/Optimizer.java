@@ -37,7 +37,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEPr
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
-import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TopDownRewriteIterativeTask;
@@ -162,10 +161,6 @@ public class Optimizer {
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(
                 rootTaskContext, memo.getRootGroup()));
-
-        context.getTaskScheduler().pushTask(new DeriveStatsTask(
-                rootTaskContext, memo.getRootGroup().getFirstLogicalExpression()));
-
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
     }
 

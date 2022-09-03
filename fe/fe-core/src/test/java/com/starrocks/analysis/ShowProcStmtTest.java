@@ -23,7 +23,6 @@ public class ShowProcStmtTest {
     public void testShowProc() {
         ShowProcStmt stmt = new ShowProcStmt("/dbs");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW PROC '/dbs'", stmt.toSql());
         Assert.assertEquals("/dbs", stmt.getPath());
     }
 

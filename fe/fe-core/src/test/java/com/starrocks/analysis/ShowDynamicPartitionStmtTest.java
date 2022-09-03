@@ -32,7 +32,6 @@ public class ShowDynamicPartitionStmtTest {
         ShowDynamicPartitionStmt stmt = new ShowDynamicPartitionStmt("testDb");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals(stmtFromSql.toSql(), stmt.toSql());
-        Assert.assertEquals("SHOW DYNAMIC PARTITION TABLES FROM testDb", stmt.toString());
         Assert.assertEquals("testDb", stmt.getDb());
 
         String showWithoutDbSQL = "SHOW DYNAMIC PARTITION TABLES ";
@@ -41,8 +40,6 @@ public class ShowDynamicPartitionStmtTest {
         ShowDynamicPartitionStmt stmtWithoutIndicateDb = new ShowDynamicPartitionStmt(null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmtWithoutIndicateDb, ctx);
         Assert.assertEquals(stmtWithoutDbFromSql.toSql(), stmtWithoutIndicateDb.toSql());
-        Assert.assertEquals("SHOW DYNAMIC PARTITION TABLES FROM testDb",
-                stmtWithoutIndicateDb.toString());
         Assert.assertEquals("testDb", stmtWithoutIndicateDb.getDb());
 
     }

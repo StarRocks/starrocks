@@ -3,8 +3,6 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCommand;
@@ -99,21 +97,12 @@ public class ShowDeleteTest {
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
-        final Analyzer analyzer = AccessTestUtil.fetchBlockAnalyzer();
-        ShowDeleteStmt stmt = new ShowDeleteStmt(null);
-        stmt.analyze(analyzer);
-        Assert.assertEquals("SHOW DELETE FROM `testCluster:testDb`", stmt.toString());
-        Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("TableName", stmt.getMetaData().getColumn(0).getName());
-    }
-
-    @Test
     public void testSqlParse() throws Exception {
         ctx.setExecutionId(UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
         String showSQL = "SHOW DELETE FROM testDb";
         ShowDeleteStmt stmt = (ShowDeleteStmt) UtFrameUtils.parseStmtWithNewParser(showSQL, ctx);
         Assert.assertEquals("testDb", stmt.getDbName());
-        Assert.assertEquals("SHOW DELETE FROM `testDb`", stmt.toSql());
+        Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
+        Assert.assertEquals("TableName", stmt.getMetaData().getColumn(0).getName());
     }
 }

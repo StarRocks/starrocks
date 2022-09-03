@@ -33,25 +33,15 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
-import com.starrocks.analysis.AddPartitionClause;
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelBackupStmt;
-import com.starrocks.analysis.ColumnRenameClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.InstallPluginStmt;
-import com.starrocks.analysis.ModifyFrontendAddressClause;
-import com.starrocks.analysis.PartitionRenameClause;
 import com.starrocks.analysis.RecoverPartitionStmt;
-import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.RestoreStmt;
-import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.BrokerMgr;
@@ -197,6 +187,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
@@ -204,16 +195,25 @@ import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
 import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.ReplacePartitionClause;
+import com.starrocks.sql.ast.RollupRenameClause;
+import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
@@ -239,6 +239,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1515,6 +1516,7 @@ public class GlobalStateMgr {
         };
     }
 
+
     public void createReplayer() {
         replayer = new Daemon("replayer", REPLAY_INTERVAL_MS) {
             private JournalCursor cursor = null;
@@ -1538,12 +1540,14 @@ public class GlobalStateMgr {
                     hasLog = replayJournalInner(cursor, true);
                     metaReplayState.setOk();
                 } catch (JournalInconsistentException | InterruptedException e) {
-                    LOG.warn("got interrupt exception or inconsistent exception when replay journal, will exit, ", e);
+                    LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
+                            replayedJournalId.get() + 1, e);
                     // TODO exit gracefully
                     Util.stdoutWithTime(e.getMessage());
                     System.exit(-1);
                 } catch (Throwable e) {
-                    LOG.error("replayer thread catch an exception when replay journal.", e);
+                    LOG.error("replayer thread catch an exception when replay journal {}.",
+                            replayedJournalId.get() + 1, e);
                     metaReplayState.setException(e);
                     try {
                         Thread.sleep(5000);
@@ -1629,10 +1633,14 @@ public class GlobalStateMgr {
             cursor = journal.read(startJournalId, toJournalId);
             replayJournalInner(cursor, false);
         } catch (InterruptedException | JournalInconsistentException e) {
-            LOG.warn("got interrupt exception or inconsistent exception when replay journal, will exit, ", e);
+            LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
+                    replayedJournalId.get() + 1,
+                    e);
             // TODO exit gracefully
             Util.stdoutWithTime(e.getMessage());
             System.exit(-1);
+
+
         } finally {
             if (cursor != null) {
                 cursor.close();
@@ -1661,15 +1669,30 @@ public class GlobalStateMgr {
         long lineCnt = 0;
         while (true) {
             JournalEntity entity = null;
-            entity = cursor.next();
+            try {
+                entity = cursor.next();
 
-            // EOF or aggressive retry
-            if (entity == null) {
-                break;
+                // EOF or aggressive retry
+                if (entity == null) {
+                    break;
+                }
+
+                // apply
+                EditLog.loadJournal(this, entity);
+            } catch (Throwable e) {
+                if (canSkipBadReplayedJournal()) {
+                    LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
+                            replayedJournalId.incrementAndGet(),
+                            entity == null ? null : entity.getData(),
+                            e);
+                    cursor.skipNext();
+                    continue;
+                }
+                // handled in outer loop
+                LOG.warn("catch exception when replaying {},", replayedJournalId.get() + 1, e);
+                throw e;
             }
 
-            // apply
-            EditLog.loadJournal(this, entity);
             replayedJournalId.incrementAndGet();
             LOG.debug("journal {} replayed.", replayedJournalId);
 
@@ -1700,6 +1723,22 @@ public class GlobalStateMgr {
         if (replayedJournalId.get() - startReplayId > 0) {
             LOG.info("replayed journal from {} - {}", startReplayId, replayedJournalId);
             return true;
+        }
+        return false;
+    }
+
+    private boolean canSkipBadReplayedJournal() {
+        try {
+            for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
+                if (!StringUtils.isEmpty(idStr) && Long.valueOf(idStr) == replayedJournalId.get() + 1) {
+                    LOG.info("skip bad replayed journal id {} because configed {}",
+                            idStr, Config.metadata_journal_skip_bad_journal_ids);
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to parse metadata_journal_skip_bad_journal_ids: {}",
+                    Config.metadata_journal_skip_bad_journal_ids, e);
         }
         return false;
     }

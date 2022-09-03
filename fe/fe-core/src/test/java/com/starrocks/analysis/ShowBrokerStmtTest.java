@@ -20,7 +20,6 @@ public class ShowBrokerStmtTest {
     @Test
     public void testNormal() throws Exception {
         ShowBrokerStmt stmt = (ShowBrokerStmt)UtFrameUtils.parseStmtWithNewParser("show broker", connectContext);
-        Assert.assertEquals("SHOW BROKER", stmt.toString());
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);
         Assert.assertEquals(7, metaData.getColumnCount());

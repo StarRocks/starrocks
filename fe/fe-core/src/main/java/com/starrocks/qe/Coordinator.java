@@ -1127,7 +1127,7 @@ public class Coordinator {
                     probeParamList.add(probeParam);
                 }
                 if (usePipeline && kv.getValue().isBroadcastJoin() && kv.getValue().isHasRemoteTargets()) {
-                    broadcastGRFProbersMap.put(kv.getKey(), probeParamList);
+                    broadcastGRFProbersMap.computeIfAbsent(kv.getKey(), k -> new ArrayList<>()).addAll(probeParamList);
                 } else {
                     idToProbePrams.computeIfAbsent(kv.getKey(), k -> new ArrayList<>()).addAll(probeParamList);
                 }

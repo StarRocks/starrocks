@@ -31,8 +31,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.DropBackendClause;
-import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
@@ -56,6 +54,8 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -301,7 +301,7 @@ public class SystemInfoService {
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
         List<Pair<String, Integer>> hostPortPairs = dropBackendClause.getHostPortPairs();
-        boolean needCheckUnforce = !dropBackendClause.isOldStyle() && !dropBackendClause.isForce();
+        boolean needCheckUnforce = !dropBackendClause.isForce();
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist

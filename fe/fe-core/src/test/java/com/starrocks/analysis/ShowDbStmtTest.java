@@ -125,14 +125,12 @@ public class ShowDbStmtTest {
         ShowDbStmt stmt = new ShowDbStmt(null);
         stmt.analyze(analyzer);
         Assert.assertNull(stmt.getPattern());
-        Assert.assertEquals("SHOW DATABASES", stmt.toString());
         Assert.assertEquals(1, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
 
         stmt = new ShowDbStmt("abc");
         stmt.analyze(analyzer);
         Assert.assertEquals("abc", stmt.getPattern());
-        Assert.assertEquals("SHOW DATABASES LIKE 'abc'", stmt.toString());
         Assert.assertEquals(1, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
 

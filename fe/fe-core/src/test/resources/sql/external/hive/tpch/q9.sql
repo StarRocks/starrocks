@@ -71,9 +71,9 @@ OutPut Exchange Id: 28
 25:EXCHANGE
 cardinality: 98
 
-PLAN FRAGMENT 2(F10)
+PLAN FRAGMENT 2(F12)
 
-Input Partition: HASH_PARTITIONED: 18: l_partkey
+Input Partition: HASH_PARTITIONED: 19: l_suppkey
 OutPut Partition: HASH_PARTITIONED: 48: n_name, 51: year
 OutPut Exchange Id: 25
 
@@ -99,49 +99,13 @@ OutPut Exchange Id: 25
 |  * expr-->[-49189.1, 104948.5, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 22:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
-|  equal join conjunct: [19: l_suppkey, INT, true] = [10: s_suppkey, INT, true]
-|  build runtime filters:
-|  - filter_id = 2, build_expr = (10: s_suppkey), remote = true
-|  output columns: 21, 22, 23, 36, 42, 48
-|  cardinality: 540034112
-|  column statistics:
-|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
-|  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * ps_supplycost-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-|  * year-->[1992.0, 1998.0, 0.0, 2.0, 7.0] ESTIMATE
-|  * expr-->[-49189.1, 104948.5, 0.0, 16.0, 3736520.0] ESTIMATE
-|
-|----21:EXCHANGE
-|       cardinality: 1000000
-|
-15:Project
-|  output columns:
-|  19 <-> [19: l_suppkey, INT, true]
-|  21 <-> [21: l_quantity, DECIMAL64(15,2), true]
-|  22 <-> [22: l_extendedprice, DECIMAL64(15,2), true]
-|  23 <-> [23: l_discount, DECIMAL64(15,2), true]
-|  36 <-> [36: ps_supplycost, DECIMAL64(15,2), true]
-|  42 <-> [42: o_orderdate, DATE, true]
-|  cardinality: 540034112
-|  column statistics:
-|  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
-|  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
-|  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * ps_supplycost-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
-|
-14:HASH JOIN
-|  join op: INNER JOIN (PARTITIONED)
+|  join op: INNER JOIN (BUCKET_SHUFFLE(S))
 |  equal join conjunct: [19: l_suppkey, INT, true] = [34: ps_suppkey, INT, true]
 |  equal join conjunct: [18: l_partkey, INT, true] = [33: ps_partkey, INT, true]
-|  output columns: 19, 21, 22, 23, 36, 42
+|  build runtime filters:
+|  - filter_id = 3, build_expr = (34: ps_suppkey), remote = false
+|  - filter_id = 4, build_expr = (33: ps_partkey), remote = false
+|  output columns: 21, 22, 23, 36, 42, 48
 |  cardinality: 540034112
 |  column statistics:
 |  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
@@ -153,24 +117,85 @@ OutPut Exchange Id: 25
 |  * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
 |  * ps_supplycost-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * year-->[1992.0, 1998.0, 0.0, 2.0, 7.0] ESTIMATE
+|  * expr-->[-49189.1, 104948.5, 0.0, 16.0, 3736520.0] ESTIMATE
 |
-|----13:EXCHANGE
+|----21:EXCHANGE
 |       cardinality: 80000000
+|
+19:Project
+|  output columns:
+|  18 <-> [18: l_partkey, INT, true]
+|  19 <-> [19: l_suppkey, INT, true]
+|  21 <-> [21: l_quantity, DECIMAL64(15,2), true]
+|  22 <-> [22: l_extendedprice, DECIMAL64(15,2), true]
+|  23 <-> [23: l_discount, DECIMAL64(15,2), true]
+|  42 <-> [42: o_orderdate, DATE, true]
+|  48 <-> [48: n_name, VARCHAR, true]
+|  cardinality: 150009476
+|  column statistics:
+|  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
+|  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
+|  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|
+18:HASH JOIN
+|  join op: INNER JOIN (PARTITIONED)
+|  equal join conjunct: [19: l_suppkey, INT, true] = [10: s_suppkey, INT, true]
+|  build runtime filters:
+|  - filter_id = 2, build_expr = (10: s_suppkey), remote = true
+|  output columns: 18, 19, 21, 22, 23, 42, 48
+|  cardinality: 150009476
+|  column statistics:
+|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE
+|  * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
+|  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
+|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
+|  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
+|  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|
+|----17:EXCHANGE
+|       cardinality: 1000000
 |       probe runtime filters:
-|       - filter_id = 2, probe_expr = (34: ps_suppkey)
+|       - filter_id = 3, probe_expr = (10: s_suppkey)
 |
 11:EXCHANGE
 cardinality: 150009476
 probe runtime filters:
-- filter_id = 2, probe_expr = (19: l_suppkey)
+- filter_id = 3, probe_expr = (19: l_suppkey)
+- filter_id = 4, probe_expr = (18: l_partkey)
 
-PLAN FRAGMENT 3(F11)
+PLAN FRAGMENT 3(F13)
 
 Input Partition: RANDOM
-OutPut Partition: UNPARTITIONED
+OutPut Partition: HASH_PARTITIONED: 34: ps_suppkey
 OutPut Exchange Id: 21
 
-20:Project
+20:HdfsScanNode
+TABLE: partsupp
+NON-PARTITION PREDICATES: 34: ps_suppkey IS NOT NULL, 33: ps_partkey IS NOT NULL
+partitions=1/1
+avgRowSize=24.0
+numNodes=0
+cardinality: 80000000
+column statistics:
+* ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+* ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
+* ps_supplycost-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
+
+PLAN FRAGMENT 4(F08)
+
+Input Partition: RANDOM
+OutPut Partition: HASH_PARTITIONED: 10: s_suppkey
+OutPut Exchange Id: 17
+
+16:Project
 |  output columns:
 |  10 <-> [10: s_suppkey, INT, true]
 |  48 <-> [48: n_name, VARCHAR, true]
@@ -179,7 +204,7 @@ OutPut Exchange Id: 21
 |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
-19:HASH JOIN
+15:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  equal join conjunct: [13: s_nationkey, INT, true] = [47: n_nationkey, INT, true]
 |  build runtime filters:
@@ -192,10 +217,10 @@ OutPut Exchange Id: 21
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
-|----18:EXCHANGE
+|----14:EXCHANGE
 |       cardinality: 25
 |
-16:HdfsScanNode
+12:HdfsScanNode
 TABLE: supplier
 partitions=1/1
 avgRowSize=8.0
@@ -207,13 +232,13 @@ column statistics:
 * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 
-PLAN FRAGMENT 4(F12)
+PLAN FRAGMENT 5(F09)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 18
+OutPut Exchange Id: 14
 
-17:HdfsScanNode
+13:HdfsScanNode
 TABLE: nation
 NON-PARTITION PREDICATES: 47: n_nationkey IS NOT NULL
 partitions=1/1
@@ -224,30 +249,10 @@ column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 
-PLAN FRAGMENT 5(F08)
-
-Input Partition: RANDOM
-OutPut Partition: HASH_PARTITIONED: 33: ps_partkey
-OutPut Exchange Id: 13
-
-12:HdfsScanNode
-TABLE: partsupp
-NON-PARTITION PREDICATES: 34: ps_suppkey IS NOT NULL, 33: ps_partkey IS NOT NULL
-partitions=1/1
-avgRowSize=24.0
-numNodes=0
-cardinality: 80000000
-probe runtime filters:
-- filter_id = 2, probe_expr = (34: ps_suppkey)
-column statistics:
-* ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
-* ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
-* ps_supplycost-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-
 PLAN FRAGMENT 6(F06)
 
 Input Partition: HASH_PARTITIONED: 17: l_orderkey
-OutPut Partition: HASH_PARTITIONED: 18: l_partkey
+OutPut Partition: HASH_PARTITIONED: 19: l_suppkey
 OutPut Exchange Id: 11
 
 10:Project

@@ -22,8 +22,6 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AddRollupClause;
-import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -49,6 +47,8 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
+import com.starrocks.sql.ast.AddRollupClause;
+import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.thrift.TStorageFormat;
 import org.apache.hadoop.util.ThreadUtil;

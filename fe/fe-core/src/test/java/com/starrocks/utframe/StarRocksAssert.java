@@ -24,9 +24,7 @@ package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DdlStmt;
@@ -44,9 +42,11 @@ import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropDbStmt;
@@ -198,7 +198,7 @@ public class StarRocksAssert {
 
     // Add rollup
     public StarRocksAssert withRollup(String sql) throws Exception {
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
         checkAlterJob();
         return this;
@@ -268,7 +268,8 @@ public class StarRocksAssert {
         }
 
         public void explainContains(String... keywords) throws Exception {
-            Assert.assertTrue(Stream.of(keywords).allMatch(explainQuery()::contains));
+            String plan = explainQuery();
+            Assert.assertTrue(plan, Stream.of(keywords).allMatch(plan::contains));
         }
 
         public void explainContains(String keywords, int count) throws Exception {

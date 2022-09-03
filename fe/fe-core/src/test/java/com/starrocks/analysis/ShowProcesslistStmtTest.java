@@ -5,7 +5,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowProcesslistStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import java.util.Locale;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -26,7 +25,6 @@ public class ShowProcesslistStmtTest {
 
     private void testSuccess(String originStmt) throws Exception {
         ShowProcesslistStmt stmt = (ShowProcesslistStmt)UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
-        Assert.assertEquals(originStmt.toUpperCase(Locale.ROOT), stmt.toString());
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);
         Assert.assertEquals(9, metaData.getColumnCount());
