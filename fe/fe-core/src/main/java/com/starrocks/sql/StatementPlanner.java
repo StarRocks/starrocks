@@ -4,7 +4,6 @@ package com.starrocks.sql;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.DeleteStmt;
-import com.starrocks.analysis.DmlStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UpdateStmt;

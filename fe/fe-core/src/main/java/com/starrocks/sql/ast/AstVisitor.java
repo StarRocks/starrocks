@@ -506,21 +506,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    // ----------------- Resource Clause -------------
-
-    public R visitCreateResourceStatement(CreateResourceStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-    public R visitDropResourceStatement(DropResourceStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-    public R visitAlterResourceStatement(AlterResourceStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-    public R visitShowResourceStatement(ShowResourcesStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     // ----------------- Catalog Clause -------------
 
     public R visitCreateCatalogStatement(CreateCatalogStmt statement, C context) {
