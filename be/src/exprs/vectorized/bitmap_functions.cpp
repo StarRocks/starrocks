@@ -280,6 +280,15 @@ ColumnPtr BitmapFunctions::bitmap_remove(FunctionContext* context, const starroc
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+void BitmapFunctions::detect_bitmap_cardinality(size_t* data_size, const int64_t cardinality) {
+    if (cardinality > config::max_length_for_bitmap_function) {
+        std::stringstream ss;
+        ss << "bitmap_to_array not supported size > " << config::max_length_for_bitmap_function;
+        throw std::runtime_error(ss.str());
+    }
+    (*data_size) += cardinality;
+}
+
 ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
@@ -295,23 +304,13 @@ ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starr
         for (int row = 0; row < size; ++row) {
             if (!lhs.is_null(row)) {
                 const auto cardinality = lhs.value(row)->cardinality();
-                if (cardinality > config::max_length_for_bitmap_function) {
-                    std::stringstream ss;
-                    ss << "bitmap_to_array not supported size > " << config::max_length_for_bitmap_function;
-                    throw std::runtime_error(ss.str());
-                }
-                data_size += cardinality;
+                detect_bitmap_cardinality(&data_size, cardinality);
             }
         }
     } else {
         for (int row = 0; row < size; ++row) {
             const auto cardinality = lhs.value(row)->cardinality();
-            if (cardinality > config::max_length_for_bitmap_function) {
-                std::stringstream ss;
-                ss << "bitmap_to_array not supported size > " << config::max_length_for_bitmap_function;
-                throw std::runtime_error(ss.str());
-            }
-            data_size += cardinality;
+            detect_bitmap_cardinality(&data_size, cardinality);
         }
     }
 
