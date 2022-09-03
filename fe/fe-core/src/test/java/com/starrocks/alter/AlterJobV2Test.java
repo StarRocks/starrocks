@@ -21,7 +21,6 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -32,6 +31,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
@@ -60,11 +60,11 @@ public class AlterJobV2Test {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE test.schema_change_test(k1 int, k2 int, k3 int) " + 
+                .withTable("CREATE TABLE test.schema_change_test(k1 int, k2 int, k3 int) " +
                         "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
-                .withTable("CREATE TABLE test.segmentv2(k1 int, k2 int, v1 int sum) " + 
+                .withTable("CREATE TABLE test.segmentv2(k1 int, k2 int, v1 int sum) " +
                         "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
-                .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " + 
+                .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
                         "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
                 .withTable("CREATE TABLE modify_column_test(k1 int, k2 int, k3 int) ENGINE = OLAP " +
                         "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
@@ -103,7 +103,7 @@ public class AlterJobV2Test {
     public void testRollup() throws Exception {
         // 1. process a rollup job
         String alterStmtStr = "alter table test.schema_change_test add rollup test_rollup(k1, k2);";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterStmtStr, connectContext);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
         // 2. check alter job
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();

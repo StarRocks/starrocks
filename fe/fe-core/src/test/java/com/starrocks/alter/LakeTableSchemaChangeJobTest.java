@@ -4,8 +4,6 @@ package com.starrocks.alter;
 
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
-import com.starrocks.analysis.AddColumnClause;
-import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
@@ -36,6 +34,8 @@ import com.starrocks.lake.Utils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;

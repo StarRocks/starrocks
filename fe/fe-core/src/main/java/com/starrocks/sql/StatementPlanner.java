@@ -1,8 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql;
 
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UpdateStmt;
@@ -142,8 +140,6 @@ public class StatementPlanner {
     }
 
     public static boolean supportedByNewPlanner(StatementBase statement) {
-        return AlterTableStmt.isSupportNewPlanner(statement)
-                || AlterSystemStmt.isSupportNewPlanner(statement)
-                || statement.isSupportNewPlanner();
+        return statement.isSupportNewPlanner();
     }
 }
