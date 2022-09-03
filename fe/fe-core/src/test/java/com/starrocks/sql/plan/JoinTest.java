@@ -1595,12 +1595,12 @@ public class JoinTest extends PlanTestBase {
                 "4:HASH JOIN\n" +
                         "  |  join op: INNER JOIN (PARTITIONED)\n" +
                         "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 5: id = 2: id",
-                "0:OlapScanNode\n" +
+                        "  |  equal join conjunct: 2: id = 5: id\n",
+                "2:OlapScanNode\n" +
                         "     TABLE: join2\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 5: id > 1",
-                "2:OlapScanNode\n" +
+                "0:OlapScanNode\n" +
                         "     TABLE: join1\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 2: id > 1");
@@ -2019,13 +2019,13 @@ public class JoinTest extends PlanTestBase {
                 "WHERE ((t0.v2) BETWEEN (CAST(subt3.v11 AS STRING)) AND (t0.v2)) = (t1.v4);";
         String plan = getFragmentPlan(sql);
         // check no exception
-        assertContains(plan, "  10:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  11:AGGREGATE (update finalize)\n" +
                 "  |  group by: 1: v4\n" +
                 "  |  \n" +
-                "  9:Project\n" +
+                "  10:Project\n" +
                 "  |  <slot 1> : 1: v4\n" +
                 "  |  \n" +
-                "  8:HASH JOIN\n" +
+                "  9:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v4 = 10: cast");
