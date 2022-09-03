@@ -101,6 +101,8 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
+import static java.lang.Math.min;
+
 public class SchemaChangeHandler extends AlterHandler {
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandler.class);
 
@@ -1031,6 +1033,22 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private void getAlterJobV2Infos(Database db, List<List<Comparable>> schemaChangeJobInfos) {
         getAlterJobV2Infos(db, ImmutableList.copyOf(alterJobsV2.values()), schemaChangeJobInfos);
+    }
+
+    @Nullable
+    public Long getMinActiveTxnId() {
+        long result = Long.MAX_VALUE;
+        Map<Long, AlterJobV2> alterJobV2Map = getAlterJobsV2();
+        for (AlterJobV2 job : alterJobV2Map.values()) {
+            AlterJobV2.JobState jobState = job.getJobState();
+            if (jobState == AlterJobV2.JobState.FINISHED || jobState == AlterJobV2.JobState.CANCELLED) {
+                continue;
+            }
+            if (job instanceof LakeTableSchemaChangeJob) {
+                result = min(result, ((LakeTableSchemaChangeJob) job).getWatershedTxnId());
+            }
+        }
+        return result == Long.MAX_VALUE ? null : result;
     }
 
     @VisibleForTesting
