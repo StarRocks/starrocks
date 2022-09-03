@@ -184,7 +184,7 @@ void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* pare
 void RuntimeState::init_mem_trackers(const std::shared_ptr<MemTracker>& query_mem_tracker) {
     DCHECK(query_mem_tracker != nullptr);
 
-    auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "MemoryLimit", TUnit::BYTES);
+    auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "QueryMemoryLimit", TUnit::BYTES);
     mem_tracker_counter->set(query_mem_tracker->limit());
 
     // all fragment instances in a BE shared a common query_mem_tracker.
