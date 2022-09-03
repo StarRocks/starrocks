@@ -4,7 +4,7 @@
     "color": "EEEEEE"
   },
   "CHECKS": {
-    "prefixes": ["[BugFix] ", "[BugFix]", "[Feature]", "[Refactor]", "[UT]"],
+    "prefixes": ["[BugFix] ", "[Enhancement]", "[Feature]", "[Refactor]", "[UT]"],
     "regexp": "\\[.*\\].*",
     "regexpFlags": "i",
     "ignoreLabels" : ["ignore-pr-title-check", "pass"]
