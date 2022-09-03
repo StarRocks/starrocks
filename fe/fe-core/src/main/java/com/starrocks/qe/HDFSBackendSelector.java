@@ -30,6 +30,7 @@ import com.starrocks.thrift.TScanRangeParams;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,7 +59,7 @@ public class HDFSBackendSelector implements BackendSelector {
     private final ImmutableCollection<ComputeNode> computeNodes;
     private boolean forceScheduleLocal;
     private final int kCandidateNumber = 3;
-    private final int kMaxImbalanceRatio = 4;
+    private final int kMaxImbalanceRatio = 3;
 
     class HdfsScanRangeHasher {
         String basePath;
@@ -170,6 +171,47 @@ public class HDFSBackendSelector implements BackendSelector {
         return hashRing;
     }
 
+    // Sort scan ranges, to shuffle them between hosts.
+    // Let's say sc1-h1, sc2-h1, sc3-h2, sc4-h2, then we will sort them as
+    // sc1-h1, sc3-h2, sc2-h1, sc4-h2, so h1, h2 will be interleaved assigned.
+    class ScanRagesSorter {
+        Map<ComputeNode, List<TScanRangeLocations>> map = new HashMap<>();
+
+        public void addScanRange(TScanRangeLocations scanRange, ComputeNode backend) {
+            List<TScanRangeLocations> scanRanges;
+            if (map.containsKey(backend)) {
+                scanRanges = map.get(backend);
+            } else {
+                scanRanges = new ArrayList<>();
+                map.put(backend, scanRanges);
+            }
+            scanRanges.add(scanRange);
+        }
+
+        public List<TScanRangeLocations> sort() {
+            List<TScanRangeLocations> ans = new ArrayList<>();
+            List<List<TScanRangeLocations>> ways = new ArrayList<>(map.values());
+            Collections.sort(ways, (o1, o2) -> o2.size() - o1.size());
+            while (ways.size() > 0) {
+                // shuffle them between hosts.
+                for (int i = 0; i < ways.size(); i++) {
+                    List<TScanRangeLocations> way = ways.get(i);
+                    ans.add(way.remove(way.size() - 1));
+                }
+                // remove empty list.
+                while (ways.size() > 0) {
+                    int last = ways.size() - 1;
+                    if (ways.get(last).size() == 0) {
+                        ways.remove(last);
+                    } else {
+                        break;
+                    }
+                }
+            }
+            return ans;
+        }
+    }
+
     private long computeAverageScanRangeBytes() {
         long size = 0;
         for (TScanRangeLocations scanRangeLocations : locations) {
@@ -220,13 +262,22 @@ public class HDFSBackendSelector implements BackendSelector {
         } else {
             remoteScanRangeLocations = locations;
         }
-
         if (remoteScanRangeLocations.isEmpty()) {
             return;
         }
 
         // use consistent hashing to schedule remote scan ranges
         HashRing hashRing = makeHashRing();
+
+        // sort scan ranges
+        ScanRagesSorter sorter = new ScanRagesSorter();
+        for (TScanRangeLocations scanRange : remoteScanRangeLocations) {
+            List<ComputeNode> backends = hashRing.get(scanRange, 1);
+            sorter.addScanRange(scanRange, backends.get(0));
+        }
+        remoteScanRangeLocations = sorter.sort();
+
+        // assign scan ranges.
         for (int i = 0; i < remoteScanRangeLocations.size(); ++i) {
             TScanRangeLocations scanRangeLocations = remoteScanRangeLocations.get(i);
             List<ComputeNode> backends = hashRing.get(scanRangeLocations, kCandidateNumber);
