@@ -138,9 +138,9 @@ statement
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
-    | GRANT IMPERSONATE ON user TO user                                                     #grantImpersonate
+    | GRANT IMPERSONATE ON user TO ( user | ROLE identifierOrString )                       #grantImpersonate
     | REVOKE identifierOrString FROM user                                                   #revokeRole
-    | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
+    | REVOKE IMPERSONATE ON user FROM ( user | ROLE identifierOrString )                    #revokeImpersonate
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     | ALTER USER user authOption                                                            #alterUser
     | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser

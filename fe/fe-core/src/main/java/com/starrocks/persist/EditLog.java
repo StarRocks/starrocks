@@ -501,6 +501,16 @@ public class EditLog {
                     globalStateMgr.getAuth().replayDropRole(privInfo);
                     break;
                 }
+                case OperationType.OP_GRANT_ROLE: {
+                    PrivInfo privInfo = (PrivInfo) journal.getData();
+                    globalStateMgr.getAuth().replayGrantRole(privInfo);
+                    break;
+                }
+                case OperationType.OP_REVOKE_ROLE: {
+                    PrivInfo privInfo = (PrivInfo) journal.getData();
+                    globalStateMgr.getAuth().replayRevokeRole(privInfo);
+                    break;
+                }
                 case OperationType.OP_UPDATE_USER_PROPERTY: {
                     UserPropertyInfo propertyInfo = (UserPropertyInfo) journal.getData();
                     globalStateMgr.getAuth().replayUpdateUserProperty(propertyInfo);
@@ -1257,8 +1267,17 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_ROLE, info);
     }
 
+<<<<<<< HEAD
     public void logFinishDecommissionBackend(DecommissionBackendJob job) {
         logEdit(OperationType.OP_FINISH_DECOMMISSION_BACKEND, job);
+=======
+    public void logGrantRole(PrivInfo info) {
+        logEdit(OperationType.OP_GRANT_ROLE, info);
+    }
+
+    public void logRevokeRole(PrivInfo info) {
+        logEdit(OperationType.OP_REVOKE_ROLE, info);
+>>>>>>> 4d7266f88 ([BugFix] persist grant/revoke role and support grant impersonate to role (#10596))
     }
 
     public void logDatabaseRename(DatabaseInfo databaseInfo) {
