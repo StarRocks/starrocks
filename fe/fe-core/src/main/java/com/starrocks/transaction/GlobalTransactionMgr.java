@@ -62,7 +62,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
+
+import static java.lang.Math.min;
 
 /**
  * Transaction Manager
@@ -531,6 +534,22 @@ public class GlobalTransactionMgr implements Writable {
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             dbTransactionMgr.removeExpiredTxns(currentMillis);
         }
+    }
+
+    /**
+     * Get the min txn id of running transactions.
+     *
+     * @return the min txn id of running transactions, null if no running transaction.
+     */
+    @Nullable
+    public Long getMinActiveTxnId() {
+        long result = Long.MAX_VALUE;
+        for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
+            long dbId = entry.getKey();
+            DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
+            result = min(result, dbTransactionMgr.getMinActiveTxnId());
+        }
+        return result == Long.MAX_VALUE ? null : result;
     }
 
     public TransactionState getTransactionState(long dbId, long transactionId) {
