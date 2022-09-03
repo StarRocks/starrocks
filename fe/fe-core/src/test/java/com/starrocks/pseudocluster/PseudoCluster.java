@@ -14,8 +14,8 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.LakeServiceAsync;
-import com.starrocks.rpc.PBackendServiceAsync;
+import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.PBackendService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
@@ -69,6 +69,10 @@ public class PseudoCluster {
         }
     }
 
+    public void setQueryTimeout(int timeout) {
+        dataSource.setDefaultQueryTimeout(timeout);
+    }
+
     private class HeatBeatPool extends PseudoGenericPool<HeartbeatService.Client> {
         public HeatBeatPool(String name) {
             super(name);
@@ -94,12 +98,12 @@ public class PseudoCluster {
 
     private class PseudoBrpcRroxy extends BrpcProxy {
         @Override
-        protected PBackendServiceAsync getBackendServiceImpl(TNetworkAddress address) {
+        protected PBackendService getBackendServiceImpl(TNetworkAddress address) {
             return getBackendByHost(address.getHostname()).pBackendService;
         }
 
         @Override
-        protected LakeServiceAsync getLakeServiceImpl(TNetworkAddress address) {
+        protected LakeService getLakeServiceImpl(TNetworkAddress address) {
             Preconditions.checkNotNull(getBackendByHost(address.getHostname()));
             Preconditions.checkState(false, "not implemented");
             return null;
@@ -199,7 +203,7 @@ public class PseudoCluster {
         runSql(db, sql, false);
     }
 
-    public void runSqlList(String db, List<String> sqls) throws SQLException {
+    public void runSqlList(String db, List<String> sqls, boolean verbose) throws SQLException {
         Connection connection = getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
@@ -207,7 +211,7 @@ public class PseudoCluster {
                 stmt.execute("use " + db);
             }
             for (String sql : sqls) {
-                runSingleSql(stmt, sql, false);
+                runSingleSql(stmt, sql, verbose);
             }
         } finally {
             stmt.close();
@@ -216,7 +220,7 @@ public class PseudoCluster {
     }
 
     public void runSqls(String db, String... sqls) throws SQLException {
-        runSqlList(db, Arrays.stream(sqls).collect(Collectors.toList()));
+        runSqlList(db, Arrays.stream(sqls).collect(Collectors.toList()), true);
     }
 
     public String getRunDir() {

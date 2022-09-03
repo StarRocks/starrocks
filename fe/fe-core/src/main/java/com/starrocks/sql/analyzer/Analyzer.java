@@ -1,16 +1,19 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LoadStmt;
@@ -22,6 +25,7 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowAuthenticationStmt;
 import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
+import com.starrocks.analysis.ShowResourcesStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
@@ -201,6 +205,26 @@ public class Analyzer {
         @Override
         public Void visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, ConnectContext session) {
             statement.analyze();
+            return null;
+        }
+        @Override
+        public Void visitCreateResourceStatement(CreateResourceStmt stmt, ConnectContext session) {
+            ResourceAnalyzer.analyze(stmt, session);
+            return null;
+        }
+        @Override
+        public Void visitDropResourceStatement(DropResourceStmt stmt, ConnectContext session) {
+            ResourceAnalyzer.analyze(stmt, session);
+            return null;
+        }
+        @Override
+        public Void visitAlterResourceStatement(AlterResourceStmt stmt, ConnectContext session) {
+            ResourceAnalyzer.analyze(stmt, session);
+            return null;
+        }
+        @Override
+        public Void visitShowResourceStatement(ShowResourcesStmt stmt, ConnectContext session) {
+            ResourceAnalyzer.analyze(stmt, session);
             return null;
         }
 

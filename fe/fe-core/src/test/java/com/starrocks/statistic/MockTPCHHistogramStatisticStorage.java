@@ -12,7 +12,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
@@ -319,12 +318,12 @@ public class MockTPCHHistogramStatisticStorage implements StatisticStorage {
     }
 
     @Override
-    public Map<ColumnRefOperator, Histogram> getHistogramStatistics(Table table, List<ColumnRefOperator> columns) {
-        Map<ColumnRefOperator, Histogram> histogramMap = new HashMap<>();
-        for (ColumnRefOperator columnRefOperator : columns) {
-            if (histogramStatistics.containsKey(columnRefOperator.getName())) {
-                Histogram histogram = histogramStatistics.get(columnRefOperator.getName());
-                histogramMap.put(columnRefOperator, histogram);
+    public Map<String, Histogram> getHistogramStatistics(Table table, List<String> columns) {
+        Map<String, Histogram> histogramMap = new HashMap<>();
+        for (String columnName : columns) {
+            if (histogramStatistics.containsKey(columnName)) {
+                Histogram histogram = histogramStatistics.get(columnName);
+                histogramMap.put(columnName, histogram);
             }
         }
         return histogramMap;

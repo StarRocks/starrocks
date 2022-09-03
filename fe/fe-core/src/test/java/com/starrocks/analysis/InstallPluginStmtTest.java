@@ -38,7 +38,7 @@ public class InstallPluginStmtTest {
 
     @Before
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
 
         new Expectations() {
             {

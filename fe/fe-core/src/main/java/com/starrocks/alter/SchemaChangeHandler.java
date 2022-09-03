@@ -21,6 +21,7 @@
 
 package com.starrocks.alter;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -98,6 +99,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
+
+import static java.lang.Math.min;
 
 public class SchemaChangeHandler extends AlterHandler {
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandler.class);
@@ -731,8 +735,8 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
-    private void createJob(long dbId, OlapTable olapTable, Map<Long, LinkedList<Column>> indexSchemaMap,
-                           Map<String, String> propertyMap, List<Index> indexes) throws UserException {
+    private AlterJobV2 createJob(long dbId, OlapTable olapTable, Map<Long, LinkedList<Column>> indexSchemaMap,
+                                 Map<String, String> propertyMap, List<Index> indexes) throws UserException {
         if (olapTable.getState() == OlapTableState.ROLLUP) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
         }
@@ -981,17 +985,7 @@ public class SchemaChangeHandler extends AlterHandler {
             LOG.debug("schema change[{}-{}-{}] check pass.", dbId, tableId, alterIndexId);
         } // end for indices
 
-        AlterJobV2 schemaChangeJob = jobBuilder.build();
-
-        // set table state
-        olapTable.setState(OlapTableState.SCHEMA_CHANGE);
-
-        // 2. add schemaChangeJob
-        addAlterJobV2(schemaChangeJob);
-
-        // 3. write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(schemaChangeJob);
-        LOG.info("finished to create schema change job: {}", schemaChangeJob.getJobId());
+        return jobBuilder.build();
     }
 
     @Override
@@ -1041,9 +1035,25 @@ public class SchemaChangeHandler extends AlterHandler {
         getAlterJobV2Infos(db, ImmutableList.copyOf(alterJobsV2.values()), schemaChangeJobInfos);
     }
 
-    @Override
-    public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
-            throws UserException {
+    @Nullable
+    public Long getMinActiveTxnId() {
+        long result = Long.MAX_VALUE;
+        Map<Long, AlterJobV2> alterJobV2Map = getAlterJobsV2();
+        for (AlterJobV2 job : alterJobV2Map.values()) {
+            AlterJobV2.JobState jobState = job.getJobState();
+            if (jobState == AlterJobV2.JobState.FINISHED || jobState == AlterJobV2.JobState.CANCELLED) {
+                continue;
+            }
+            if (job instanceof LakeTableSchemaChangeJob) {
+                result = min(result, ((LakeTableSchemaChangeJob) job).getWatershedTxnId());
+            }
+        }
+        return result == Long.MAX_VALUE ? null : result;
+    }
+
+    @VisibleForTesting
+    @Nullable
+    public AlterJobV2 analyzeAndCreateJob(List<AlterClause> alterClauses, Database db, OlapTable olapTable) throws UserException {
         // index id -> index schema
         Map<Long, LinkedList<Column>> indexSchemaMap = new HashMap<>();
         for (Map.Entry<Long, List<Column>> entry : olapTable.getIndexIdToSchema().entrySet()) {
@@ -1132,7 +1142,26 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         } // end for alter clauses
 
-        createJob(db.getId(), olapTable, indexSchemaMap, propertyMap, newIndexes);
+        return createJob(db.getId(), olapTable, indexSchemaMap, propertyMap, newIndexes);
+    }
+
+    @Override
+    public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
+            throws UserException {
+        AlterJobV2 schemaChangeJob = analyzeAndCreateJob(alterClauses, db, olapTable);
+        if (schemaChangeJob == null) {
+            return null;
+        }
+
+        // set table state
+        olapTable.setState(OlapTableState.SCHEMA_CHANGE);
+
+        // 2. add schemaChangeJob
+        addAlterJobV2(schemaChangeJob);
+
+        // 3. write edit log
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(schemaChangeJob);
+        LOG.info("finished to create schema change job: {}", schemaChangeJob.getJobId());
         return null;
     }
 
@@ -1183,12 +1212,6 @@ public class SchemaChangeHandler extends AlterHandler {
             metaValue = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX));
             if (metaValue == olapTable.enablePersistentIndex()) {
                 return;
-            }
-            if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS && metaValue) {
-                if (!olapTable.checkPersistentIndex()) {
-                    throw new DdlException("PrimaryKey table using persistent index don't support " +
-                            "varchar(char) as key so far, and key length should be no more than 64 Bytes");
-                }
             }
         } else {
             LOG.warn("meta type: {} does not support", metaType);

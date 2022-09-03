@@ -16,6 +16,7 @@ import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
+import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
@@ -37,6 +38,7 @@ import java.time.LocalDateTime;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
 public class AnalyzeStmtTest {
@@ -68,14 +70,14 @@ public class AnalyzeStmtTest {
     public void testShowUserProperty() {
         String sql = "SHOW PROPERTY FOR 'jack' LIKE '%load_cluster%'";
         ShowUserPropertyStmt showUserPropertyStmt = (ShowUserPropertyStmt) analyzeSuccess(sql);
-        Assert.assertEquals("default_cluster:jack", showUserPropertyStmt.getUser());
+        Assert.assertEquals("jack", showUserPropertyStmt.getUser());
     }
 
     @Test
     public void testSetUserProperty() {
         String sql = "SET PROPERTY FOR 'tom' 'max_user_connections' = 'value', 'test' = 'true'";
         SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt) analyzeSuccess(sql);
-        Assert.assertEquals("default_cluster:tom", setUserPropertyStmt.getUser());
+        Assert.assertEquals("tom", setUserPropertyStmt.getUser());
     }
 
     @Test
@@ -164,15 +166,13 @@ public class AnalyzeStmtTest {
                 Lists.newArrayList(10003L),
                 Lists.newArrayList("v1", "v2"), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap());
-        Assert.assertEquals("INSERT INTO column_statistics  SELECT 10004, 10003, 'v1', 10002, 'test.t0', 't0', " +
+        Assert.assertEquals("INSERT INTO column_statistics SELECT 10004, 10003, 'v1', 10002, 'test.t0', 't0', " +
                         "COUNT(1), COUNT(1) * 8, IFNULL(hll_union(hll_hash(`v1`)), hll_empty()), COUNT(1) - COUNT(`v1`), " +
                         "IFNULL(MAX(`v1`), ''), IFNULL(MIN(`v1`), ''), NOW() FROM test.t0 partition t0 " +
-                        "UNION ALL  " +
-                        "SELECT 10004, 10003, 'v2', 10002, 'test.t0', 't0', COUNT(1), COUNT(1) * 8, " +
-                        "IFNULL(hll_union(hll_hash(`v2`)), " +
-                        "hll_empty()), COUNT(1) - COUNT(`v2`), IFNULL(MAX(`v2`), ''), IFNULL(MIN(`v2`), ''), NOW() " +
-                        "FROM test.t0 partition t0 ",
-                collectJob.buildCollectFullStatisticSQL(database, table, partition, Lists.newArrayList("v1", "v2")));
+                        "UNION ALL SELECT 10004, 10003, 'v2', 10002, 'test.t0', 't0', COUNT(1), COUNT(1) * 8, " +
+                        "IFNULL(hll_union(hll_hash(`v2`)), hll_empty()), COUNT(1) - COUNT(`v2`), IFNULL(MAX(`v2`), ''), " +
+                        "IFNULL(MIN(`v2`), ''), NOW() FROM test.t0 partition t0",
+                collectJob.buildCollectSQLList().get(0));
     }
 
     @Test
@@ -229,5 +229,16 @@ public class AnalyzeStmtTest {
                 StatisticSQLBuilder.buildDropStatisticsSQL(10004L, StatsConstants.AnalyzeType.SAMPLE));
         Assert.assertEquals("DELETE FROM column_statistics WHERE TABLE_ID = 10004",
                 StatisticSQLBuilder.buildDropStatisticsSQL(10004L, StatsConstants.AnalyzeType.FULL));
+    }
+
+    @Test
+    public void testKillAnalyze() {
+        String sql = "kill analyze 1";
+        KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) analyzeSuccess(sql);
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(1, getConnectContext());
+        Assert.assertThrows(SemanticException.class, () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(2, true));
+        GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true);
+        Assert.assertThrows(SemanticException.class, () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true));
     }
 }

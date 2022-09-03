@@ -21,7 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -85,7 +84,7 @@ public class SetPassVar extends SetVar {
 
         // 2. No user can set password for root expect for root user itself
         if (userIdent.getQualifiedUser().equals(Auth.ROOT_USER)
-                && !ClusterNamespace.getNameFromFullName(ctx.getQualifiedUser()).equals(Auth.ROOT_USER)) {
+                && !ctx.getQualifiedUser().equals(Auth.ROOT_USER)) {
             throw new SemanticException("Can not set password for root user, except root itself");
         }
 

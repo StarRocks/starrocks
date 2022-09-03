@@ -23,10 +23,7 @@ std::ostream& operator<<(std::ostream& os, const staros::starlet::ShardInfo& sha
 absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     std::unique_lock l(_mtx);
     LOG(INFO) << "Adding " << shard;
-    auto ret = _shards.try_emplace(shard.id, ShardInfoDetails(shard));
-    if (!ret.second) {
-        return absl::AlreadyExistsError(fmt::format("Shard id '{}' already exists!", shard.id));
-    }
+    _shards.try_emplace(shard.id, ShardInfoDetails(shard));
     return absl::OkStatus();
 }
 

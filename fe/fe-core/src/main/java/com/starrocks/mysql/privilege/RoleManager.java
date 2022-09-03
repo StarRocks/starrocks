@@ -31,15 +31,20 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Writable;
 import com.starrocks.mysql.privilege.Auth.PrivLevel;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class RoleManager implements Writable {
+    private static final Logger LOG = LogManager.getLogger(RoleManager.class);
     private Map<String, Role> roles = Maps.newHashMap();
 
     public RoleManager() {
@@ -121,6 +126,15 @@ public class RoleManager implements Writable {
         }
 
         existingPriv.remove(privs);
+        return existingRole;
+    }
+
+    public Role revokePrivs(String role, UserIdentity securedUser) throws DdlException {
+        Role existingRole = roles.get(role);
+        if (existingRole == null) {
+            throw new DdlException("Role " + role + " does not exist");
+        }
+        existingRole.getImpersonateUsers().remove(securedUser);
         return existingRole;
     }
 
@@ -227,6 +241,27 @@ public class RoleManager implements Writable {
             Role role = Role.read(in);
             roles.put(role.getRoleName(), role);
         }
+    }
+    protected void loadImpersonateRoleToUser(Map<String, Set<UserIdentity>> impersonateRoleToUser) {
+        for (Map.Entry<String, Set<UserIdentity>> entry : impersonateRoleToUser.entrySet()) {
+            Role role = getRole(entry.getKey());
+            if (role == null) {
+                LOG.error("find non-existing role {} -> impersonate users {}", entry.getKey(), entry.getValue());
+                continue;
+            }
+            role.setImpersonateUsers(entry.getValue());
+        }
+    }
+
+    protected Map<String, Set<UserIdentity>> dumpImpersonateRoleToUser() {
+        Map<String, Set<UserIdentity>> ret = new HashMap<>();
+        for (Map.Entry<String, Role> entry : roles.entrySet()) {
+            Set<UserIdentity> users = entry.getValue().getImpersonateUsers();
+            if (!users.isEmpty()) {
+                ret.put(entry.getKey(), users);
+            }
+        }
+        return ret;
     }
 
     @Override

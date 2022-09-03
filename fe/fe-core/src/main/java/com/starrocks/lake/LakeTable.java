@@ -131,7 +131,7 @@ public class LakeTable extends OlapTable {
 
     @Override
     public AlterJobV2Builder alterTable() {
-        return new LakeTableAlterJobV2Builder();
+        return new LakeTableAlterJobV2Builder(this);
     }
 
     @Override

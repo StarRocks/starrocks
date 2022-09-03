@@ -375,7 +375,7 @@ public class QueryAnalyzer {
                             joinEqual.getType());
                 }
                 if (joinEqual.contains((Predicate<Expr>) node -> !node.getType().canJoinOn())) {
-                    throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
+                    throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
                 }
             } else {
                 if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin()) {
@@ -561,7 +561,7 @@ public class QueryAnalyzer {
                     analyzeExpression(expression, new AnalyzeState(), setOpOutputScope);
 
                     if (!expression.getType().canOrderBy()) {
-                        throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
+                        throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
                     }
 
                     orderByElement.setExpr(expression);

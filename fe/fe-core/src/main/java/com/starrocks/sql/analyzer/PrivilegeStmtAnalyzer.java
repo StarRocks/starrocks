@@ -6,7 +6,6 @@ import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -70,11 +69,10 @@ public class PrivilegeStmtAnalyzer {
                 // Remove it after all old methods migrate to the new framework
                 throw new SemanticException(e.getMessage());
             }
-            String qualifiedRole = ClusterNamespace.getFullName(roleName);
-            if (!session.getGlobalStateMgr().getAuth().doesRoleExist(qualifiedRole)) {
-                throw new SemanticException("role " + qualifiedRole + " not exist!");
+            if (!session.getGlobalStateMgr().getAuth().doesRoleExist(roleName)) {
+                throw new SemanticException("role " + roleName + " not exist!");
             }
-            return qualifiedRole;
+            return roleName;
         }
 
         /**
@@ -90,12 +88,19 @@ public class PrivilegeStmtAnalyzer {
 
         /**
          * GRANT IMPERSONATE ON XX TO XX
-         * REVOKE IMPERSONATE ON XX TO XX
+         * GRANT IMPERSONATE ON XX TO ROLE XX
+         * REVOKE IMPERSONATE ON XX FROM XX
+         * REVOKE IMPERSONATE ON XX FROM ROLE XX
          */
         @Override
         public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getAuthorizedUser(), session, true);
             analyseUser(stmt.getSecuredUser(), session, true);
+            if (stmt.getAuthorizedUser() != null) {
+                analyseUser(stmt.getAuthorizedUser(), session, true);
+            } else {
+                String qulifiedRole = analyseRoleName(stmt.getAuthorizedRoleName(), session);
+                stmt.setAuthorizedRoleName(qulifiedRole);
+            }
             return null;
         }
 

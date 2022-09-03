@@ -83,7 +83,6 @@ import com.starrocks.sql.plan.ReplayHiveRepository;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.codec.binary.Hex;
@@ -118,7 +117,7 @@ public class UtFrameUtils {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
     private static final AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
 
-    public static final String createStatisticsTableStmt = "CREATE TABLE `table_statistic_v1` (\n" +
+    public static final String CREATE_STATISTICS_TABLE_STMT = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
             "  `column_name` varchar(65530) NOT NULL COMMENT \"\",\n" +
             "  `db_id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -298,7 +297,6 @@ public class UtFrameUtils {
         disks.put(diskInfo1.getRootPath(), diskInfo1);
         be.setDisks(ImmutableMap.copyOf(disks));
         be.setAlive(true);
-        be.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
         be.setBePort(backend.getBeThriftPort());
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
@@ -398,7 +396,7 @@ public class UtFrameUtils {
 
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
         StatementBase statementBase =
-                com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())
+                com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable())
                         .get(0);
         Preconditions.checkState(statementBase instanceof QueryStatement);
         QueryStatement queryStmt = (QueryStatement) statementBase;
@@ -419,7 +417,7 @@ public class UtFrameUtils {
         if (!starRocksAssert.databaseExist("_statistics_")) {
             starRocksAssert.withDatabaseWithoutAnalyze(StatsConstants.STATISTICS_DB_NAME)
                     .useDatabase(StatsConstants.STATISTICS_DB_NAME);
-            starRocksAssert.withTable(createStatisticsTableStmt);
+            starRocksAssert.withTable(CREATE_STATISTICS_TABLE_STMT);
         }
         // prepare dump mock environment
         // statement
@@ -553,7 +551,7 @@ public class UtFrameUtils {
         Map<String, Database> dbs = null;
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
-                    connectContext.getSessionVariable().getSqlMode()).get(0);
+                    connectContext.getSessionVariable()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
 
             dbs = AnalyzerUtils.collectAllDatabase(connectContext, statementBase);

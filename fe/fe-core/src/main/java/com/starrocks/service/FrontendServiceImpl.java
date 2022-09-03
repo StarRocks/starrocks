@@ -21,8 +21,10 @@
 
 package com.starrocks.service;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SetType;
@@ -30,11 +32,15 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.View;
@@ -47,11 +53,13 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -104,6 +112,8 @@ import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.thrift.TGetTablePrivsParams;
 import com.starrocks.thrift.TGetTablePrivsResult;
+import com.starrocks.thrift.TGetTablesConfigRequest;
+import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TGetTaskInfoResult;
@@ -137,6 +147,7 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TStreamLoadPutResult;
+import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
@@ -155,6 +166,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -345,15 +357,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         db.readLock();
         try {
-            for (Table materializedView : db.getMaterializedViews()) {
+            for (MaterializedView mvTable : db.getMaterializedViews()) {
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
-                        materializedView.getName(), PrivPredicate.SHOW)) {
+                        mvTable.getName(), PrivPredicate.SHOW)) {
                     continue;
                 }
-                if (matcher != null && !matcher.match(materializedView.getName())) {
+                if (matcher != null && !matcher.match(mvTable.getName())) {
                     continue;
                 }
-                MaterializedView mvTable = (MaterializedView) materializedView;
                 List<String> createTableStmt = Lists.newArrayList();
                 GlobalStateMgr.getDdlStmt(mvTable, createTableStmt, null, null, false, true);
                 String ddlSql = createTableStmt.get(0);
@@ -844,11 +855,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private void checkPasswordAndPrivs(String cluster, String user, String passwd, String db, String tbl,
                                        String clientIp, PrivPredicate predicate) throws AuthenticationException {
 
-        final String fullUserName = ClusterNamespace.getFullName(user);
         List<UserIdentity> currentUser = Lists.newArrayList();
         if (!GlobalStateMgr.getCurrentState().getAuth()
-                .checkPlainPassword(fullUserName, clientIp, passwd, currentUser)) {
-            throw new AuthenticationException("Access denied for " + fullUserName + "@" + clientIp);
+                .checkPlainPassword(user, clientIp, passwd, currentUser)) {
+            throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
         }
 
         Preconditions.checkState(currentUser.size() == 1);
@@ -1313,5 +1323,134 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             return new TSetConfigResponse(status);
         }
+    }
+
+    @Override
+    public TGetTablesConfigResponse getTablesConfig(TGetTablesConfigRequest request) throws TException {
+        TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
+        List<TTableConfigInfo> tList = new ArrayList<>();
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<String> dbNames = globalStateMgr.getDbNames();
+
+        dbNames.forEach(dbName -> {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            if (db != null) {
+                db.readLock();
+                try {
+                    List<Table> allTables = db.getTables();
+                    allTables.forEach(table -> {
+                        TTableConfigInfo tableConfigInfo = new TTableConfigInfo();
+                        tableConfigInfo.setTable_schema(dbName);
+                        tableConfigInfo.setTable_name(table.getName());
+                        
+                        if (table.isOlapOrLakeTable() || 
+                                table.getType() == TableType.OLAP_EXTERNAL ||
+                                table.getType() == TableType.MATERIALIZED_VIEW) {
+                            // OLAP (done)
+                            // OLAP_EXTERNAL (done)
+                            // MATERIALIZED_VIEW (done)
+                            // LAKE (done)
+                            tableConfigInfo = genNormalTableConfigInfo(table, tableConfigInfo);
+                        } else {
+                            // SCHEMA (use default)
+                            // INLINE_VIEW (use default)
+                            // VIEW (use default)
+                            // BROKER (use default)                           
+                            tableConfigInfo = genDefaultConfigInfo(tableConfigInfo);
+                        }
+                        // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
+                        tList.add(tableConfigInfo);
+                    });
+                } finally {
+                    db.readUnlock();
+                }                
+            }            
+        });
+        resp.tables_config_infos = tList;
+        return resp;
+    }
+
+    static final ImmutableList<String> SHOW_PROPERTIES_NAME = new ImmutableList.Builder<String>()
+            .add(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)
+            .add(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+            .add(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
+            .build();
+
+    private TTableConfigInfo genNormalTableConfigInfo(Table table, TTableConfigInfo tableConfigInfo) {
+        OlapTable olapTable = (OlapTable) table;
+        // Distribution info
+        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+        String distributeKey = distributionInfo.getDistributionKey();
+        // Partition info
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        StringBuilder partitionKeySb = new StringBuilder();
+        if (partitionInfo.getType().equals(PartitionType.RANGE)) {
+            int idx = 0;
+            try {
+                for (Column column : partitionInfo.getPartitionColumns()) {
+                    if (idx != 0) {
+                        partitionKeySb.append(", ");
+                    }
+                    partitionKeySb.append("`").append(column.getName()).append("`");
+                    idx++;
+                }
+            } catch (NotImplementedException e) {
+                partitionKeySb.append("NULL");
+                LOG.warn("The partition of type range seems not implement getPartitionColumns");
+            }            
+        } else {
+            partitionKeySb.append("NULL");
+        }
+
+        // keys
+        StringBuilder keysSb = new StringBuilder();
+        List<String> keysColumnNames = Lists.newArrayList();
+        for (Column column : olapTable.getBaseSchema()) {
+            if (column.isKey()) {
+                keysColumnNames.add("`" + column.getName() + "`");
+            }
+        }
+        keysSb.append(Joiner.on(", ").join(keysColumnNames));
+
+        tableConfigInfo.setPrimary_key(isSortKey(olapTable.getKeysType()) ? "NULL" : keysSb.toString());
+        tableConfigInfo.setPartition_key(partitionKeySb.toString());
+        tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
+        tableConfigInfo.setDistribute_type("HASH");
+        tableConfigInfo.setDistribute_key(distributeKey);
+        tableConfigInfo.setSort_key(isSortKey(olapTable.getKeysType()) ? keysSb.toString() : "NULL");
+
+        Map<String, String> properties = olapTable.getTableProperty().getProperties();
+        Map<String, String> showProperties = new HashMap<>();
+        SHOW_PROPERTIES_NAME.forEach(key -> {
+            if (properties.containsKey(key)) {
+                showProperties.put(key, properties.get(key));
+            }
+        });
+        if (null != olapTable.getColocateGroup()) {
+            showProperties.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, olapTable.getColocateGroup());
+        }
+        Short replicationNum = olapTable.getDefaultReplicationNum();
+        showProperties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(replicationNum));
+        tableConfigInfo.setProperties(showProperties.toString());
+        return tableConfigInfo;
+    }
+
+    private boolean isSortKey(KeysType kType) {
+        if (kType.equals(KeysType.PRIMARY_KEYS) || kType.equals(KeysType.UNIQUE_KEYS)) {
+            return false;
+        }
+        return true;
+    }
+
+    private TTableConfigInfo genDefaultConfigInfo(TTableConfigInfo tableConfigInfo) {
+        tableConfigInfo.setPrimary_key("def");
+        tableConfigInfo.setPartition_key("def");
+        tableConfigInfo.setDistribute_bucket(0);
+        tableConfigInfo.setDistribute_type("def");
+        tableConfigInfo.setDistribute_key("def");
+        tableConfigInfo.setSort_key("def");
+        tableConfigInfo.setProperties("def");
+        return tableConfigInfo;
     }
 }

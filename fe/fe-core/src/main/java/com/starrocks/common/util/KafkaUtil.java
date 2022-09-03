@@ -52,29 +52,29 @@ import java.util.concurrent.TimeUnit;
 public class KafkaUtil {
     private static final Logger LOG = LogManager.getLogger(KafkaUtil.class);
 
-    private static final ProxyAPI proxyApi = new ProxyAPI();
+    private static final ProxyAPI PROXY_API = new ProxyAPI();
 
     public static List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties) throws UserException {
-        return proxyApi.getAllKafkaPartitions(brokerList, topic, properties);
+        return PROXY_API.getAllKafkaPartitions(brokerList, topic, properties);
     }
 
     // latest offset is (the latest existing message offset + 1)
     public static Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties,
                                                       List<Integer> partitions) throws UserException {
-        return proxyApi.getLatestOffsets(brokerList, topic, properties, partitions);
+        return PROXY_API.getLatestOffsets(brokerList, topic, properties, partitions);
     }
 
     public static Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
                                                          ImmutableMap<String, String> properties,
                                                          List<Integer> partitions) throws UserException {
-        return proxyApi.getBeginningOffsets(brokerList, topic, properties, partitions);
+        return PROXY_API.getBeginningOffsets(brokerList, topic, properties, partitions);
     }
 
     public static List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests)
             throws UserException {
-        return proxyApi.getBatchOffsets(requests);
+        return PROXY_API.getBatchOffsets(requests);
     }
 
     public static PKafkaLoadInfo genPKafkaLoadInfo(String brokerList, String topic,
