@@ -27,6 +27,7 @@
 #include <filesystem>
 #include <set>
 
+#include "agent/agent_common.h"
 #include "agent/finish_task.h"
 #include "agent/master_info.h"
 #include "common/status.h"
@@ -65,8 +66,8 @@ const uint32_t DOWNLOAD_FILE_MAX_RETRY = 3;
 const uint32_t LIST_REMOTE_FILE_TIMEOUT = 15;
 const uint32_t GET_LENGTH_TIMEOUT = 10;
 
-void run_clone_task(std::shared_ptr<TAgentTaskRequest> agent_task_req) {
-    const TCloneReq& clone_req = agent_task_req->clone_req;
+void run_clone_task(std::shared_ptr<CloneAgentTaskRequest> agent_task_req) {
+    const TCloneReq& clone_req = agent_task_req->task_req;
     AgentStatus status = STARROCKS_SUCCESS;
 
     // Return result to fe
@@ -780,7 +781,7 @@ Status EngineCloneTask::_clone_incremental_data(Tablet* tablet, const TabletMeta
     }
 
     // clone_data to tablet
-    Status st = tablet->revise_tablet_meta(StorageEngine::instance()->tablet_meta_mem_tracker(), rowsets_to_clone,
+    Status st = tablet->revise_tablet_meta(StorageEngine::instance()->metadata_mem_tracker(), rowsets_to_clone,
                                            versions_to_delete);
     LOG(INFO) << "finish to incremental clone. [tablet=" << tablet->full_name() << " status=" << st << "]";
     return st;
@@ -856,7 +857,7 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
     }
 
     // clone_data to tablet
-    Status st = tablet->revise_tablet_meta(StorageEngine::instance()->tablet_meta_mem_tracker(), rowsets_to_clone,
+    Status st = tablet->revise_tablet_meta(StorageEngine::instance()->metadata_mem_tracker(), rowsets_to_clone,
                                            versions_to_delete);
     LOG(INFO) << "finish to full clone. tablet=" << tablet->full_name() << ", res=" << st;
     // in previous step, copy all files from CLONE_DIR to tablet dir

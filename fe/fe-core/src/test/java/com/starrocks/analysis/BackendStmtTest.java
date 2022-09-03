@@ -29,7 +29,7 @@ public class BackendStmtTest {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
     }
 
     public BackendClause createStmt(int type) {

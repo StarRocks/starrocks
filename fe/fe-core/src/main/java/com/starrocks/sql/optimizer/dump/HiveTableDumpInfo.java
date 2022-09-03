@@ -35,7 +35,7 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
     private List<String> partColumnNames;
     private List<String> dataColumnNames;
     private Map<String, HiveColumnStats> tableLevelColumnStats = Maps.newHashMap();
-    private static final String type = "hive";
+    private static final String TYPE = "hive";
 
     @Override
     public void setPartitionKeys(Map<PartitionKey, Long> partitionKeys) {
@@ -109,7 +109,7 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
 
     @Override
     public String getType() {
-        return type;
+        return TYPE;
     }
 
     public static class HiveTableDumpInfoSerializer implements JsonSerializer<HiveTableDumpInfo> {
@@ -253,13 +253,15 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
             }
 
             // deserialize hive table level column statistics
-            JsonObject tableLevelColumnStats = dumpJsonObject.getAsJsonObject("tableLevelColumnStats");
-            Map<String, HiveColumnStats> tableLevelColumnStatsMap = Maps.newHashMap();
-            for (Map.Entry<String, JsonElement> columnStats : tableLevelColumnStats.entrySet()) {
-                tableLevelColumnStatsMap.put(columnStats.getKey(), HiveColumnStats.fromString(
-                        columnStats.getValue().getAsString()));
+            if (dumpJsonObject.has("tableLevelColumnStats")) {
+                JsonObject tableLevelColumnStats = dumpJsonObject.getAsJsonObject("tableLevelColumnStats");
+                Map<String, HiveColumnStats> tableLevelColumnStatsMap = Maps.newHashMap();
+                for (Map.Entry<String, JsonElement> columnStats : tableLevelColumnStats.entrySet()) {
+                    tableLevelColumnStatsMap.put(columnStats.getKey(), HiveColumnStats.fromString(
+                            columnStats.getValue().getAsString()));
+                }
+                hiveTableDumpInfo.addTableLevelColumnStats(tableLevelColumnStatsMap);
             }
-            hiveTableDumpInfo.addTableLevelColumnStats(tableLevelColumnStatsMap);
 
             // deserialize partition columns
             JsonArray partitionColumnsJson = dumpJsonObject.getAsJsonArray("PartitionColumns");

@@ -74,6 +74,13 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 null, TTabletType.TABLET_TYPE_DISK, 0);
     }
 
+    public static AlterReplicaTask alterLakeTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
+                                                   long rollupTabletId, long baseTabletId, long version, long jobId, long txnId) {
+        return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
+                baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
+                null, TTabletType.TABLET_TYPE_LAKE, txnId);
+    }
+
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
                                                      long rollupIndexId, long rollupTabletId, long baseTabletId,
                                                      long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,

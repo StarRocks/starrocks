@@ -29,7 +29,6 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.common.UserException;
@@ -103,12 +102,6 @@ public class SortNode extends PlanNode {
 
     public SortInfo getSortInfo() {
         return info;
-    }
-
-    @Override
-    public void getMaterializedIds(Analyzer analyzer, List<SlotId> ids) {
-        super.getMaterializedIds(analyzer, ids);
-        Expr.getIds(info.getOrderingExprs(), null, ids);
     }
 
     @Override

@@ -323,19 +323,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         return helper.toString();
     }
 
-    @Override
-    public void getMaterializedIds(Analyzer analyzer, List<SlotId> ids) {
-        super.getMaterializedIds(analyzer, ids);
-        // we also need to materialize everything referenced by eqJoinConjuncts
-        // and otherJoinConjuncts
-        for (Expr eqJoinPredicate : eqJoinConjuncts) {
-            eqJoinPredicate.getIds(null, ids);
-        }
-        for (Expr e : otherJoinConjuncts) {
-            e.getIds(null, ids);
-        }
-    }
-
     public void setIsPushDown(boolean isPushDown) {
         this.isPushDown = isPushDown;
     }

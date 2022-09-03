@@ -253,6 +253,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
 
+    public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -603,6 +605,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PRUNE_SHUFFLE_COLUMN_RATE, flag = VariableMgr.INVISIBLE)
     private double cboPruneShuffleColumnRate = 0.1;
+
+    @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
+    private int parseTokensLimit = 3500000;
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
@@ -1090,6 +1095,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getloadTransmissionCompressionType() {
         return loadTransmissionCompressionType;
+    }
+
+    public int getParseTokensLimit() {
+        return parseTokensLimit;
+    }
+
+    public void setParseTokensLimit(int parseTokensLimit) {
+        this.parseTokensLimit = parseTokensLimit;
     }
 
     // Serialize to thrift object

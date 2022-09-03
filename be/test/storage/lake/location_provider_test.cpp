@@ -38,18 +38,6 @@ TEST_F(StarletLocationProviderTest, test_location) {
     auto location = _provider->root_location(12345);
     EXPECT_EQ(build_starlet_uri(12345, "/"), location);
 
-    location = _provider->tablet_metadata_location(12345, 1);
-    EXPECT_EQ(build_starlet_uri(12345, tablet_metadata_filename(12345, 1)), location);
-
-    location = _provider->txn_log_location(12345, 45678);
-    EXPECT_EQ(build_starlet_uri(12345, txn_log_filename(12345, 45678)), location);
-
-    location = _provider->txn_vlog_location(12345, 10);
-    EXPECT_EQ(build_starlet_uri(12345, txn_vlog_filename(12345, 10)), location);
-
-    location = _provider->segment_location(12345, "c805dab9-4048-4909-8239-6d5431989044.dat");
-    EXPECT_EQ(build_starlet_uri(12345, "c805dab9-4048-4909-8239-6d5431989044.dat"), location);
-
     std::set<std::string> roots;
     auto st = _provider->list_root_locations(&roots);
     EXPECT_TRUE(st.ok());

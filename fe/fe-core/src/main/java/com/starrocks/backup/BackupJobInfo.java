@@ -264,7 +264,9 @@ public class BackupJobInfo implements Writable {
                     for (Tablet tablet : index.getTablets()) {
                         BackupTabletInfo tabletInfo = new BackupTabletInfo();
                         tabletInfo.id = tablet.getId();
-                        tabletInfo.files.addAll(snapshotInfos.get(tablet.getId()).getFiles());
+                        if (tbl.isOlapTable()) {
+                            tabletInfo.files.addAll(snapshotInfos.get(tablet.getId()).getFiles());
+                        }
                         idxInfo.tablets.add(tabletInfo);
                     }
                 }

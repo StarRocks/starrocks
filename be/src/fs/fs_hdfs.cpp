@@ -145,7 +145,7 @@ public:
 private:
     hdfsFS _fs;
     hdfsFile _file;
-    const std::string& _path;
+    std::string _path;
     size_t _offset;
     bool _closed;
 };
@@ -174,11 +174,19 @@ Status HDFSWritableFile::close() {
         return Status::OK();
     }
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
-        int r = hdfsCloseFile(this->_fs, this->_file);
+        // If we open a file and close it immediately here (before this file is flushed to the disk),
+        // hdfs cannot find the file and will cause BE crash.
+        // To avoid this, before closing the file, we need to call file sync.
+        int r = hdfsHSync(_fs, _file);
+        if (r != 0) {
+            return Status::IOError("sync error, file: {}"_format(_path));
+        }
+
+        r = hdfsCloseFile(_fs, _file);
         if (r == 0) {
             return Status::OK();
         } else {
-            return Status::IOError("");
+            return Status::IOError("close error, file: {}"_format(_path));
         }
     });
     Status st = ret->get_future().get();
@@ -425,6 +433,9 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
     int hdfs_read_buffer_size = 0;
     if (_options.scan_range_params != nullptr && _options.scan_range_params->__isset.hdfs_read_buffer_size_kb) {
         hdfs_read_buffer_size = _options.scan_range_params->hdfs_read_buffer_size_kb;
+    }
+    if (_options.download != nullptr && _options.download->__isset.hdfs_read_buffer_size_kb) {
+        hdfs_read_buffer_size = _options.download->hdfs_read_buffer_size_kb;
     }
     hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), O_RDONLY, hdfs_read_buffer_size, 0, 0);
     if (file == nullptr) {

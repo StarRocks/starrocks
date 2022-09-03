@@ -31,8 +31,7 @@ import com.starrocks.load.DeleteJob;
 import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.EmptyRpcCallback;
-import com.starrocks.rpc.LakeServiceAsync;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -99,8 +98,8 @@ public class LakeDeleteJob extends DeleteJob {
                 request.txnId = getTransactionId();
                 request.deletePredicate = deletePredicate;
 
-                LakeServiceAsync lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-                Future<DeleteDataResponse> responseFuture = lakeService.deleteData(request, new EmptyRpcCallback<>());
+                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                Future<DeleteDataResponse> responseFuture = lakeService.deleteData(request);
                 responseList.add(responseFuture);
             }
 

@@ -57,7 +57,6 @@ void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& active_inputs = factory->get_active_inputs();
     auto key = std::make_pair(_driver_sequence, source_index);
-    DCHECK(!active_inputs.contains(key));
     active_inputs.emplace(key);
 }
 
@@ -65,7 +64,6 @@ void ConnectorScanOperator::detach_chunk_source(int32_t source_index) {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& active_inputs = factory->get_active_inputs();
     auto key = std::make_pair(_driver_sequence, source_index);
-    DCHECK(active_inputs.contains(key));
     active_inputs.erase(key);
 }
 

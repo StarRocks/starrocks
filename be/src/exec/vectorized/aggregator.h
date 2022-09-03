@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <any>
 #include <atomic>
 #include <cstddef>
@@ -533,21 +534,26 @@ private:
 
     template <typename HashMapWithKey>
     void _release_agg_memory(HashMapWithKey* hash_map_with_key) {
-        if (hash_map_with_key != nullptr) {
+        // If all function states are of POD type,
+        // then we don't have to traverse the hash table to call destroy method.
+        //
+        bool skip_destroy = std::all_of(_agg_functions.begin(), _agg_functions.end(),
+                                        [](auto* func) { return func->is_pod_state(); });
+        if (hash_map_with_key != nullptr && !skip_destroy) {
             auto null_data_ptr = hash_map_with_key->get_null_key_data();
             if (null_data_ptr != nullptr) {
                 for (int i = 0; i < _agg_functions.size(); i++) {
                     _agg_functions[i]->destroy(_agg_fn_ctxs[i], null_data_ptr + _agg_states_offsets[i]);
                 }
             }
+            auto it = _state_allocator.begin();
+            auto end = _state_allocator.end();
 
-            auto it = hash_map_with_key->hash_map.begin();
-            auto end = hash_map_with_key->hash_map.end();
             while (it != end) {
                 for (int i = 0; i < _agg_functions.size(); i++) {
-                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], it->second + _agg_states_offsets[i]);
+                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], it.value() + _agg_states_offsets[i]);
                 }
-                ++it;
+                it.next();
             }
         }
     }

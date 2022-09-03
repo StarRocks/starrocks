@@ -144,6 +144,7 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionDispatchDaemon;
@@ -238,6 +239,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1514,6 +1516,7 @@ public class GlobalStateMgr {
         };
     }
 
+
     public void createReplayer() {
         replayer = new Daemon("replayer", REPLAY_INTERVAL_MS) {
             private JournalCursor cursor = null;
@@ -1537,12 +1540,14 @@ public class GlobalStateMgr {
                     hasLog = replayJournalInner(cursor, true);
                     metaReplayState.setOk();
                 } catch (JournalInconsistentException | InterruptedException e) {
-                    LOG.warn("got interrupt exception or inconsistent exception when replay journal, will exit, ", e);
+                    LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
+                            replayedJournalId.get() + 1, e);
                     // TODO exit gracefully
                     Util.stdoutWithTime(e.getMessage());
                     System.exit(-1);
                 } catch (Throwable e) {
-                    LOG.error("replayer thread catch an exception when replay journal.", e);
+                    LOG.error("replayer thread catch an exception when replay journal {}.",
+                            replayedJournalId.get() + 1, e);
                     metaReplayState.setException(e);
                     try {
                         Thread.sleep(5000);
@@ -1628,10 +1633,14 @@ public class GlobalStateMgr {
             cursor = journal.read(startJournalId, toJournalId);
             replayJournalInner(cursor, false);
         } catch (InterruptedException | JournalInconsistentException e) {
-            LOG.warn("got interrupt exception or inconsistent exception when replay journal, will exit, ", e);
+            LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
+                    replayedJournalId.get() + 1,
+                    e);
             // TODO exit gracefully
             Util.stdoutWithTime(e.getMessage());
             System.exit(-1);
+
+
         } finally {
             if (cursor != null) {
                 cursor.close();
@@ -1660,15 +1669,30 @@ public class GlobalStateMgr {
         long lineCnt = 0;
         while (true) {
             JournalEntity entity = null;
-            entity = cursor.next();
+            try {
+                entity = cursor.next();
 
-            // EOF or aggressive retry
-            if (entity == null) {
-                break;
+                // EOF or aggressive retry
+                if (entity == null) {
+                    break;
+                }
+
+                // apply
+                EditLog.loadJournal(this, entity);
+            } catch (Throwable e) {
+                if (canSkipBadReplayedJournal()) {
+                    LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
+                            replayedJournalId.incrementAndGet(),
+                            entity == null ? null : entity.getData(),
+                            e);
+                    cursor.skipNext();
+                    continue;
+                }
+                // handled in outer loop
+                LOG.warn("catch exception when replaying {},", replayedJournalId.get() + 1, e);
+                throw e;
             }
 
-            // apply
-            EditLog.loadJournal(this, entity);
             replayedJournalId.incrementAndGet();
             LOG.debug("journal {} replayed.", replayedJournalId);
 
@@ -1699,6 +1723,22 @@ public class GlobalStateMgr {
         if (replayedJournalId.get() - startReplayId > 0) {
             LOG.info("replayed journal from {} - {}", startReplayId, replayedJournalId);
             return true;
+        }
+        return false;
+    }
+
+    private boolean canSkipBadReplayedJournal() {
+        try {
+            for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
+                if (!StringUtils.isEmpty(idStr) && Long.valueOf(idStr) == replayedJournalId.get() + 1) {
+                    LOG.info("skip bad replayed journal id {} because configed {}",
+                            idStr, Config.metadata_journal_skip_bad_journal_ids);
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to parse metadata_journal_skip_bad_journal_ids: {}",
+                    Config.metadata_journal_skip_bad_journal_ids, e);
         }
         return false;
     }
@@ -1832,10 +1872,14 @@ public class GlobalStateMgr {
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
         sb.append("\n").append(distributionInfo.toSql());
 
-        // refresh schema
+        // refresh scheme
         MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
-        sb.append("\nREFRESH ").append(refreshScheme.getType());
-        if (refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
+        if (refreshScheme == null) {
+            sb.append("\nREFRESH ").append("UNKNOWN");
+        } else {
+            sb.append("\nREFRESH ").append(refreshScheme.getType());
+        }
+        if (refreshScheme != null && refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
             MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
             if (asyncRefreshContext.isDefineStartTime()) {
                 sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
@@ -2046,6 +2090,23 @@ public class GlobalStateMgr {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
                     .append("\" = \"");
             sb.append(olapTable.isInMemory()).append("\"");
+
+            // enable storage cache && cache ttl
+            if (table.isLakeTable()) {
+                Map<String, String> storageProperities = ((LakeTable) olapTable).getProperties();
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)
+                        .append("\" = \"");
+                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)
+                        .append("\" = \"");
+                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
+                        .append("\" = \"");
+                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
+            }
 
             // storage type
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT)

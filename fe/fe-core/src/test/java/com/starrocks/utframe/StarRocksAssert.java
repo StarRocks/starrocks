@@ -139,7 +139,7 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert withResource(String sql) throws Exception {
-        CreateResourceStmt createResourceStmt = (CreateResourceStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        CreateResourceStmt createResourceStmt = (CreateResourceStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (!GlobalStateMgr.getCurrentState().getResourceMgr().containsResource(createResourceStmt.getResourceName())) {
             GlobalStateMgr.getCurrentState().getResourceMgr().createResource(createResourceStmt);
         }
@@ -214,7 +214,7 @@ public class StarRocksAssert {
     public void executeResourceGroupDdlSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
-        StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
+        StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
         Analyzer.analyze(statement, ctx);
 
         Assert.assertTrue(statement.getClass().getSimpleName().contains("ResourceGroupStmt"));
@@ -268,7 +268,8 @@ public class StarRocksAssert {
         }
 
         public void explainContains(String... keywords) throws Exception {
-            Assert.assertTrue(Stream.of(keywords).allMatch(explainQuery()::contains));
+            String plan = explainQuery();
+            Assert.assertTrue(plan, Stream.of(keywords).allMatch(plan::contains));
         }
 
         public void explainContains(String keywords, int count) throws Exception {

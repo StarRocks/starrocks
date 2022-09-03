@@ -321,4 +321,10 @@ public class BDBJournalCursor implements JournalCursor {
             database.close();
         }
     }
+
+    @Override
+    public void skipNext() {
+        LOG.error("!!! DANGER: CURSOR SKIP {} !!!", nextKey);
+        nextKey++;
+    }
 }

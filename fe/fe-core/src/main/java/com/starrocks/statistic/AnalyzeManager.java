@@ -17,7 +17,9 @@ import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
@@ -44,6 +46,8 @@ public class AnalyzeManager implements Writable {
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
     private final Map<Long, BasicStatsMeta> basicStatsMetaMap;
     private final Map<Pair<Long, String>, HistogramStatsMeta> histogramStatsMetaMap;
+    //ConnectContext of all currently running analyze tasks
+    private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
 
     public AnalyzeManager() {
         analyzeJobMap = Maps.newConcurrentMap();
@@ -139,16 +143,21 @@ public class AnalyzeManager implements Writable {
         basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
     }
 
-    public void expireBasicStatisticsCache(BasicStatsMeta basicStatsMeta) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(basicStatsMeta.getDbId());
+    public void refreshBasicStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (null == db) {
             return;
         }
-        Table table = db.getTable(basicStatsMeta.getTableId());
+        Table table = db.getTable(tableId);
         if (null == table) {
             return;
         }
-        GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, basicStatsMeta.getColumns());
+        GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
+        if (async) {
+            GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
+        } else {
+            GlobalStateMgr.getCurrentStatisticStorage().getColumnStatisticsSync(table, columns);
+        }
     }
 
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
@@ -170,17 +179,22 @@ public class AnalyzeManager implements Writable {
                 new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);
     }
 
-    public void expireHistogramStatisticsCache(HistogramStatsMeta histogramStatsMeta) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(histogramStatsMeta.getDbId());
+    public void refreshHistogramStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (null == db) {
             return;
         }
-        Table table = db.getTable(histogramStatsMeta.getTableId());
+        Table table = db.getTable(tableId);
         if (null == table) {
             return;
         }
-        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(),
-                Lists.newArrayList(histogramStatsMeta.getColumn()));
+
+        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
+        if (async) {
+            GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columns);
+        } else {
+            GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatisticsSync(table, columns);
+        }
     }
 
     public void replayRemoveHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
@@ -256,6 +270,21 @@ public class AnalyzeManager implements Writable {
                 GlobalStateMgr.getCurrentState().getEditLog()
                         .logRemoveHistogramStatsMeta(histogramStatsMetaMap.get(histogramKey));
                 histogramStatsMetaMap.remove(histogramKey);
+            }
+        }
+    }
+
+    public void registerConnection(long analyzeID, ConnectContext ctx) {
+        connectionMap.put(analyzeID, ctx);
+    }
+
+    public void unregisterConnection(long analyzeID, boolean killExecutor) {
+        ConnectContext context = connectionMap.remove(analyzeID);
+        if (killExecutor) {
+            if (context != null) {
+                context.kill(false);
+            } else {
+                throw new SemanticException("There is no running task with analyzeId " + analyzeID);
             }
         }
     }

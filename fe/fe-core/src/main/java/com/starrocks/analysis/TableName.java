@@ -22,12 +22,15 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -36,10 +39,13 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class TableName implements Writable {
+public class TableName implements Writable, GsonPreProcessable, GsonPostProcessable {
     private String catalog;
+    @SerializedName(value = "tbl")
     private String tbl;
     private String db;
+    @SerializedName(value = "fullDb")
+    private String fullDb;
 
     public TableName() {
 
@@ -167,12 +173,7 @@ public class TableName implements Writable {
             stringBuilder.append("`").append(catalog).append("`.");
         }
         if (db != null) {
-            String dbName = ClusterNamespace.getNameFromFullName(db);
-            if (dbName == null) {
-                stringBuilder.append("`").append(db).append("`.");
-            } else {
-                stringBuilder.append("`").append(dbName).append("`.");
-            }
+            stringBuilder.append("`").append(db).append("`.");
         }
         stringBuilder.append("`").append(tbl).append("`");
         return stringBuilder.toString();
@@ -188,5 +189,15 @@ public class TableName implements Writable {
     public void readFields(DataInput in) throws IOException {
         db = ClusterNamespace.getNameFromFullName(Text.readString(in));
         tbl = Text.readString(in);
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        db = ClusterNamespace.getNameFromFullName(fullDb);
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        fullDb = ClusterNamespace.getFullName(db);
     }
 }

@@ -16,6 +16,7 @@ import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AddRollupClause;
 import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterUserStmt;
@@ -43,6 +44,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DataDescription;
@@ -60,6 +62,7 @@ import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.DropPartitionClause;
+import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -140,6 +143,7 @@ import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowProcesslistStmt;
+import com.starrocks.analysis.ShowResourcesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowStatusStmt;
 import com.starrocks.analysis.ShowTabletStmt;
@@ -229,6 +233,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
@@ -1416,6 +1421,36 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitAlterSystemStatement(StarRocksParser.AlterSystemStatementContext context) {
         return new AlterSystemStmt((AlterClause) visit(context.alterClause()));
     }
+    // ------------------------------------------- Resource Statement ---------------------------------------------------
+    public ParseNode visitCreateResourceStatement(StarRocksParser.CreateResourceStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateResourceStmt(context.EXTERNAL() != null, identifier.getValue(), properties);
+    }
+    public ParseNode visitDropResourceStatement(StarRocksParser.DropResourceStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        return new DropResourceStmt(identifier.getValue());
+    }
+    public ParseNode visitAlterResourceStatement(StarRocksParser.AlterResourceStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new AlterResourceStmt(identifier.getValue(), properties);
+    }
+    public ParseNode visitShowResourceStatement(StarRocksParser.ShowResourceStatementContext context) {
+        return new ShowResourcesStmt();
+    }
 
     // ------------------------------------------- Catalog Statement ---------------------------------------------------
 
@@ -1895,6 +1930,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new DropHistogramStmt(tableName, columnNames);
+    }
+
+    @Override
+    public ParseNode visitKillAnalyzeStatement(StarRocksParser.KillAnalyzeStatementContext context) {
+        return new KillAnalyzeStmt(Long.parseLong(context.INTEGER_VALUE().getText()));
     }
 
     // ------------------------------------------- Resource Group Statement -------------------------------------------------
@@ -2981,15 +3021,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitGrantImpersonate(StarRocksParser.GrantImpersonateContext context) {
         UserIdentity securedUser = ((UserIdentifier) visit(context.user(0))).getUserIdentity();
-        UserIdentity authorizedUser = ((UserIdentifier) visit(context.user(1))).getUserIdentity();
-        return new GrantImpersonateStmt(authorizedUser, securedUser);
+        if (context.user(1) != null) {
+            UserIdentity authorizedUser = ((UserIdentifier) visit(context.user(1))).getUserIdentity();
+            return new GrantImpersonateStmt(authorizedUser, securedUser);
+        } else {
+            String roleName = ((Identifier) visit(context.identifierOrString())).getValue();
+            return new GrantImpersonateStmt(roleName, securedUser);
+        }
     }
 
     @Override
     public ParseNode visitRevokeImpersonate(StarRocksParser.RevokeImpersonateContext context) {
         UserIdentity securedUser = ((UserIdentifier) visit(context.user(0))).getUserIdentity();
-        UserIdentity authorizedUser = ((UserIdentifier) visit(context.user(1))).getUserIdentity();
-        return new RevokeImpersonateStmt(authorizedUser, securedUser);
+        if (context.user(1) != null) {
+            UserIdentity authorizedUser = ((UserIdentifier) visit(context.user(1))).getUserIdentity();
+            return new RevokeImpersonateStmt(authorizedUser, securedUser);
+        } else {
+            String roleName = ((Identifier) visit(context.identifierOrString())).getValue();
+            return new RevokeImpersonateStmt(roleName, securedUser);
+        }
     }
 
     @Override
@@ -3410,13 +3460,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return buildOverClause(functionCallExpr, context.over());
     }
 
-    public static final ImmutableSet<String> WindowFunctionSet = ImmutableSet.of(
+    public static final ImmutableSet<String> WINDOW_FUNCTION_SET = ImmutableSet.of(
             FunctionSet.ROW_NUMBER, FunctionSet.RANK, FunctionSet.DENSE_RANK, FunctionSet.NTILE, FunctionSet.LEAD,
             FunctionSet.LAG, FunctionSet.FIRST_VALUE, FunctionSet.LAST_VALUE);
 
     @Override
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {
-        if (WindowFunctionSet.contains(context.name.getText().toLowerCase())) {
+        if (WINDOW_FUNCTION_SET.contains(context.name.getText().toLowerCase())) {
             return new FunctionCallExpr(context.name.getText().toLowerCase(),
                     new FunctionParams(false, visit(context.expression(), Expr.class)));
         }

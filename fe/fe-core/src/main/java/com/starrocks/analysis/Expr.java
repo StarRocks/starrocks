@@ -246,10 +246,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return opcode;
     }
 
-    public double getSelectivity() {
-        return selectivity;
-    }
-
     public long getNumDistinctValues() {
         return numDistinctValues;
     }
@@ -408,10 +404,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public static Expr compoundAnd(Collection<Expr> conjuncts) {
         return createCompound(CompoundPredicate.Operator.AND, conjuncts);
-    }
-
-    public static Expr compoundOr(Collection<Expr> conjuncts) {
-        return createCompound(CompoundPredicate.Operator.OR, conjuncts);
     }
 
     // Build a compound tree by bottom up
@@ -673,16 +665,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             if (duplicate) {
                 it1.remove();
             }
-        }
-    }
-
-    public static <C extends Expr> void getIds(List<? extends Expr> exprs, List<TupleId> tupleIds,
-                                               List<SlotId> slotIds) {
-        if (exprs == null) {
-            return;
-        }
-        for (Expr e : exprs) {
-            e.getIds(tupleIds, slotIds);
         }
     }
 
@@ -953,19 +935,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return true;
     }
 
-    public boolean isBound(List<SlotId> slotIds) {
-        final List<TupleId> exprTupleIds = Lists.newArrayList();
-        final List<SlotId> exprSlotIds = Lists.newArrayList();
-        getIds(exprTupleIds, exprSlotIds);
-        return !exprSlotIds.retainAll(slotIds);
-    }
-
-    public void getIds(List<TupleId> tupleIds, List<SlotId> slotIds) {
-        for (Expr child : children) {
-            child.getIds(tupleIds, slotIds);
-        }
-    }
-
     /**
      * @return true if this is an instance of LiteralExpr
      */
@@ -1098,31 +1067,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      */
     public Expr ignoreImplicitCast() {
         return this;
-    }
-
-    /**
-     * Cast the operands of a binary operation as necessary,
-     * give their compatible type.
-     * String literals are converted first, to enable casting of the
-     * the other non-string operand.
-     *
-     * @param compatibleType
-     * @return The possibly changed compatibleType
-     * (if a string literal forced casting the other operand)
-     */
-    public Type castBinaryOp(Type compatibleType) throws AnalysisException {
-        Preconditions.checkState(this instanceof BinaryPredicate || this instanceof ArithmeticExpr);
-        Type t1 = getChild(0).getType();
-        Type t2 = getChild(1).getType();
-        // add operand casts
-        Preconditions.checkState(compatibleType.isValid());
-        if (!t1.matchesType(compatibleType)) {
-            castChild(compatibleType, 0);
-        }
-        if (!t2.matchesType(compatibleType)) {
-            castChild(compatibleType, 1);
-        }
-        return compatibleType;
     }
 
     @Override

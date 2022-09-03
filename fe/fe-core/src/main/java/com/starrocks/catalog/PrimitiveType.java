@@ -79,7 +79,7 @@ public enum PrimitiveType {
     private static final int VARCHAR_INDEX_LEN = 20;
     private static final int DECIMAL_INDEX_LEN = 12;
 
-    private static final ImmutableSetMultimap<PrimitiveType, PrimitiveType> implicitCastMap;
+    private static final ImmutableSetMultimap<PrimitiveType, PrimitiveType> IMPLICIT_CAST_MAP;
 
     public static final ImmutableList<PrimitiveType> INTEGER_TYPE_LIST =
             ImmutableList.of(TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
@@ -181,7 +181,7 @@ public enum PrimitiveType {
             builder.put(JSON, type);
         }
 
-        implicitCastMap = builder.build();
+        IMPLICIT_CAST_MAP = builder.build();
     }
 
     private final String description;
@@ -204,7 +204,7 @@ public enum PrimitiveType {
         if (type.equals(target)) {
             return true;
         }
-        return implicitCastMap.get(type).contains(target);
+        return IMPLICIT_CAST_MAP.get(type).contains(target);
     }
 
     public static PrimitiveType fromThrift(TPrimitiveType tPrimitiveType) {

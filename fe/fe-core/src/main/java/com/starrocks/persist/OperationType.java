@@ -226,6 +226,8 @@ public class OperationType {
     // grant & revoke impersonate
     public static final short OP_GRANT_IMPERSONATE = 10062;
     public static final short OP_REVOKE_IMPERSONATE = 10063;
+    public static final short OP_GRANT_ROLE = 10064;
+    public static final short OP_REVOKE_ROLE = 10065;
 
     // task 10071 ~ 10090
     public static final short OP_CREATE_TASK = 10071;

@@ -10,7 +10,7 @@ import java.util.Map;
 
 public class CreateCatalogStmt extends DdlStmt {
     public static final String TYPE = "type";
-    public static final List<String> supportedCatalog = Lists.newArrayList("hive", "iceberg", "hudi", "jdbc");
+    public static final List<String> SUPPORTED_CATALOG = Lists.newArrayList("hive", "iceberg", "hudi", "jdbc");
 
     private final String catalogName;
     private final String comment;

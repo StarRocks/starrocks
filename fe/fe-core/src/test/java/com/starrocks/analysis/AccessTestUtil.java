@@ -211,7 +211,7 @@ public class AccessTestUtil {
             GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
             Auth auth = fetchBlockAccess();
-            Database db = mockDb("testCluster:testDb");
+            Database db = mockDb("testDb");
 
             new Expectations(globalStateMgr) {
                 {
@@ -223,11 +223,11 @@ public class AccessTestUtil {
                     minTimes = 0;
                     result = new DdlException("failed");
 
-                    globalStateMgr.getDb("testCluster:testDb");
+                    globalStateMgr.getDb("testDb");
                     minTimes = 0;
                     result = db;
 
-                    globalStateMgr.getDb("testCluster:emptyDb");
+                    globalStateMgr.getDb("emptyDb");
                     minTimes = 0;
                     result = null;
 
@@ -237,7 +237,7 @@ public class AccessTestUtil {
 
                     globalStateMgr.getDbNames();
                     minTimes = 0;
-                    result = Lists.newArrayList("testCluster:testDb");
+                    result = Lists.newArrayList("testDb");
 
                     globalStateMgr.getDb("emptyCluster");
                     minTimes = 0;
@@ -250,9 +250,7 @@ public class AccessTestUtil {
         }
     }
 
-    public static Analyzer fetchAdminAnalyzer(boolean withCluster) {
-        final String prefix = "testCluster:";
-
+    public static Analyzer fetchAdminAnalyzer() {
         Analyzer analyzer = new Analyzer(fetchAdminCatalog(), new ConnectContext(null));
         new Expectations(analyzer) {
             {
@@ -262,11 +260,11 @@ public class AccessTestUtil {
 
                 analyzer.getDefaultDb();
                 minTimes = 0;
-                result = withCluster ? prefix + "testDb" : "testDb";
+                result = "testDb";
 
                 analyzer.getQualifiedUser();
                 minTimes = 0;
-                result = withCluster ? prefix + "testUser" : "testUser";
+                result = "testUser";
 
                 analyzer.incrementCallDepth();
                 minTimes = 0;

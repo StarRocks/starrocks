@@ -6,6 +6,7 @@
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <brpc/controller.h>
+#include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
 DIAGNOSTIC_POP
 
@@ -14,95 +15,14 @@ DIAGNOSTIC_POP
 #include "fs/fs_util.h"
 #include "gutil/macros.h"
 #include "runtime/exec_env.h"
+#include "runtime/lake_snapshot_loader.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
 #include "util/countdown_latch.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
-
-template <typename Request, typename Response>
-struct RpcContext {
-    ::starrocks::ExecEnv* _env;
-    const Request* _request;
-    Response* _response;
-    // response_mtx protects accesses to response.
-    bthread::Mutex _response_mtx;
-    CountDownLatch _latch;
-
-    RpcContext(::starrocks::ExecEnv* env, const Request* request, Response* response, int latchCount)
-            : _env(env), _request(request), _response(response), _response_mtx(), _latch(latchCount) {}
-
-    ~RpcContext() = default;
-
-    void count_down() { _latch.count_down(); }
-
-    void wait() const { _latch.wait(); }
-};
-
-using PublishVersionContext = RpcContext<lake::PublishVersionRequest, lake::PublishVersionResponse>;
-using PublishLogVersionContext = RpcContext<lake::PublishLogVersionRequest, lake::PublishLogVersionResponse>;
-
-class PublishVersionTask : public Runnable {
-public:
-    PublishVersionTask(int64_t tablet_id, std::shared_ptr<PublishVersionContext> context)
-            : _tablet_id(tablet_id), _context(std::move(context)) {}
-
-    ~PublishVersionTask() override = default;
-
-    void run() override;
-
-    DISALLOW_COPY_AND_MOVE(PublishVersionTask);
-
-private:
-    int64_t _tablet_id;
-    std::shared_ptr<PublishVersionContext> _context;
-};
-
-inline void PublishVersionTask::run() {
-    auto base_version = _context->_request->base_version();
-    auto new_version = _context->_request->new_version();
-    auto txns = _context->_request->txn_ids().data();
-    auto txns_size = _context->_request->txn_ids().size();
-
-    auto st = _context->_env->lake_tablet_manager()->publish_version(_tablet_id, base_version, new_version, txns,
-                                                                     txns_size);
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to publish version for tablet " << _tablet_id << ": " << st;
-        std::lock_guard l(_context->_response_mtx);
-        _context->_response->add_failed_tablets(_tablet_id);
-    }
-    _context->count_down();
-}
-
-class PublishLogVersionTask : public Runnable {
-public:
-    PublishLogVersionTask(int64_t tablet_id, std::shared_ptr<PublishLogVersionContext> context)
-            : _tablet_id(tablet_id), _context(std::move(context)) {}
-
-    ~PublishLogVersionTask() override = default;
-
-    void run() override;
-
-    DISALLOW_COPY_AND_MOVE(PublishLogVersionTask);
-
-private:
-    int64_t _tablet_id;
-    std::shared_ptr<PublishLogVersionContext> _context;
-};
-
-inline void PublishLogVersionTask::run() {
-    auto txn_id = _context->_request->txn_id();
-    auto version = _context->_request->version();
-
-    auto st = _context->_env->lake_tablet_manager()->publish_log_version(_tablet_id, txn_id, version);
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to rename txn log. tablet_id=" << _tablet_id << " txn_id=" << txn_id << ": " << st;
-        std::lock_guard l(_context->_response_mtx);
-        _context->_response->add_failed_tablets(_tablet_id);
-    }
-    _context->count_down();
-}
+using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
                                       const ::starrocks::lake::PublishVersionRequest* request,
@@ -129,19 +49,36 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     }
 
     auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
-    auto context = std::make_shared<PublishVersionContext>(_env, request, response, request->tablet_ids_size());
+    auto latch = BThreadCountDownLatch(request->tablet_ids().size());
+    bthread::Mutex response_mtx;
 
     for (auto tablet_id : request->tablet_ids()) {
-        auto task = std::make_shared<PublishVersionTask>(tablet_id, context);
-        auto st = thread_pool->submit(std::move(task));
+        auto task = [&, tablet_id]() {
+            auto base_version = request->base_version();
+            auto new_version = request->new_version();
+            auto txns = request->txn_ids().data();
+            auto txns_size = request->txn_ids().size();
+
+            auto st =
+                    _env->lake_tablet_manager()->publish_version(tablet_id, base_version, new_version, txns, txns_size);
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to publish version for tablet " << tablet_id << ": " << st;
+                std::lock_guard l(response_mtx);
+                response->add_failed_tablets(tablet_id);
+            }
+            latch.count_down();
+        };
+
+        auto st = thread_pool->submit_func(task, ThreadPool::HIGH_PRIORITY);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to submit publish version task: " << st;
-            std::lock_guard l(context->_response_mtx);
+            std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
+            latch.count_down();
         }
     }
 
-    context->wait();
+    latch.wait();
 }
 
 void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* controller,
@@ -165,19 +102,33 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
     }
 
     auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
-    auto context = std::make_shared<PublishLogVersionContext>(_env, request, response, request->tablet_ids_size());
+    auto latch = BThreadCountDownLatch(request->tablet_ids().size());
+    bthread::Mutex response_mtx;
 
     for (auto tablet_id : request->tablet_ids()) {
-        auto task = std::make_shared<PublishLogVersionTask>(tablet_id, context);
-        auto st = thread_pool->submit(std::move(task));
+        auto task = [&, tablet_id]() {
+            auto txn_id = request->txn_id();
+            auto version = request->version();
+
+            auto st = _env->lake_tablet_manager()->publish_log_version(tablet_id, txn_id, version);
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to rename txn log. tablet_id=" << tablet_id << " txn_id=" << txn_id << ": " << st;
+                std::lock_guard l(response_mtx);
+                response->add_failed_tablets(tablet_id);
+            }
+            latch.count_down();
+        };
+
+        auto st = thread_pool->submit_func(task, ThreadPool::HIGH_PRIORITY);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to submit publish log version task: " << st;
-            std::lock_guard l(context->_response_mtx);
+            std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
+            latch.count_down();
         }
     }
 
-    context->wait();
+    latch.wait();
 }
 
 void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
@@ -186,11 +137,23 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard guard(done);
     (void)controller;
 
-    // TODO: move the execution to TaskWorkerPool
-    auto tablet_mgr = _env->lake_tablet_manager();
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+    auto latch = BThreadCountDownLatch(request->tablet_ids().size());
     for (auto tablet_id : request->tablet_ids()) {
-        tablet_mgr->abort_txn(tablet_id, request->txn_ids().data(), request->txn_ids_size());
+        auto task = [&, tablet_id]() {
+            auto* txn_ids = request->txn_ids().data();
+            auto txn_ids_size = request->txn_ids_size();
+            _env->lake_tablet_manager()->abort_txn(tablet_id, txn_ids, txn_ids_size);
+            latch.count_down();
+        };
+        auto st = thread_pool->submit_func(task);
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to submit abort txn  task: " << st;
+            latch.count_down();
+        }
     }
+
+    latch.wait();
 }
 
 void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controller,
@@ -426,6 +389,25 @@ void LakeServiceImpl::unlock_tablet_metadata(::google::protobuf::RpcController* 
         LOG(ERROR) << "Fail to unlock tablet metadata, tablet id: " << request->tablet_id()
                    << ", version: " << request->version();
         cntl->SetFailed("Fail to unlock tablet metadata");
+    }
+}
+
+void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* controller,
+                                       const ::starrocks::lake::UploadSnapshotsRequest* request,
+                                       ::starrocks::lake::UploadSnapshotsResponse* response,
+                                       ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+    // TODO: Support fs upload directly
+    if (!request->has_broker()) {
+        cntl->SetFailed("missing broker");
+        return;
+    }
+
+    auto loader = std::make_unique<LakeSnapshotLoader>(_env);
+    auto st = loader->upload(request);
+    if (!st.ok()) {
+        cntl->SetFailed(st.to_string());
     }
 }
 

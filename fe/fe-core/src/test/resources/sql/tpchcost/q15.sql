@@ -42,7 +42,7 @@ Output Exprs:1: S_SUPPKEY | 2: S_NAME | 3: S_ADDRESS | 5: S_PHONE | 27: sum
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-22:MERGING-EXCHANGE
+24:MERGING-EXCHANGE
 cardinality: 1
 column statistics:
 * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
@@ -56,9 +56,9 @@ PLAN FRAGMENT 1(F00)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 22
+OutPut Exchange Id: 24
 
-21:SORT
+23:SORT
 |  order by: [1, INT, false] ASC
 |  offset: 0
 |  cardinality: 1
@@ -70,7 +70,7 @@ OutPut Exchange Id: 22
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
 |  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
-20:Project
+22:Project
 |  output columns:
 |  1 <-> [1: S_SUPPKEY, INT, false]
 |  2 <-> [2: S_NAME, CHAR, false]
@@ -85,7 +85,7 @@ OutPut Exchange Id: 22
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.072527529100353] ESTIMATE
 |  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
-19:HASH JOIN
+21:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  equal join conjunct: [1: S_SUPPKEY, INT, false] = [11: L_SUPPKEY, INT, false]
 |  build runtime filters:
@@ -100,7 +100,7 @@ OutPut Exchange Id: 22
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
 |  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
-|----18:EXCHANGE
+|----20:EXCHANGE
 |       cardinality: 1
 |
 0:OlapScanNode
@@ -121,9 +121,9 @@ PLAN FRAGMENT 2(F02)
 
 Input Partition: HASH_PARTITIONED: 11: L_SUPPKEY
 OutPut Partition: BUCKET_SHUFFLE_HASH_PARTITIONED: 11: L_SUPPKEY
-OutPut Exchange Id: 18
+OutPut Exchange Id: 20
 
-17:Project
+19:Project
 |  output columns:
 |  11 <-> [11: L_SUPPKEY, INT, false]
 |  27 <-> [27: sum, DOUBLE, true]
@@ -132,7 +132,7 @@ OutPut Exchange Id: 18
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1.072527529100353] ESTIMATE
 |  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
-16:HASH JOIN
+18:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  equal join conjunct: [27: sum, DOUBLE, true] = [47: max, DOUBLE, true]
 |  build runtime filters:
@@ -144,7 +144,7 @@ OutPut Exchange Id: 18
 |  * sum-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
 |
-|----15:EXCHANGE
+|----17:EXCHANGE
 |       cardinality: 1
 |
 5:AGGREGATE (merge finalize)
@@ -165,11 +165,22 @@ PLAN FRAGMENT 3(F05)
 
 Input Partition: UNPARTITIONED
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 15
+OutPut Exchange Id: 17
 
+16:SELECT
+|  predicates: 47: max IS NOT NULL
+|  cardinality: 1
+|  column statistics:
+|  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
+|
+15:ASSERT NUMBER OF ROWS
+|  assert number of rows: LE 1
+|  cardinality: 1
+|  column statistics:
+|  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
+|
 14:AGGREGATE (merge finalize)
 |  aggregate: max[([47: max, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
-|  having: 47: max IS NOT NULL
 |  cardinality: 1
 |  column statistics:
 |  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE
