@@ -38,6 +38,10 @@ public class AnalyzeExprTest {
     @Test
     public void testArrowExpr() {
         analyzeSuccess("select v_json->'k1' from tjson");
+        // Test for qualified name.
+        analyzeSuccess("select tjson.v_json->'k1' from tjson");
+        analyzeSuccess("select test.tjson.v_json->'k1' from tjson");
+
         analyzeSuccess("select v_json->'k1'->'k2' from tjson");
         analyzeSuccess("select parse_json('{\"a\": 1}')->'k1'");
 
