@@ -200,7 +200,7 @@ public class StatisticExecutor {
         try {
             ConnectContext context = StatisticUtils.buildConnectContext();
             GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), context);
-            statsJob.collect(context);
+            statsJob.collect(context, analyzeStatus);
         } catch (Exception e) {
             LOG.warn("Collect statistics error ", e);
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);

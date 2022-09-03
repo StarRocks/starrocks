@@ -69,7 +69,11 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FINISH)) {
             row.set(6, "SUCCESS");
         } else {
-            row.set(6, analyzeStatus.getStatus().name());
+            String status = analyzeStatus.getStatus().name();
+            if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.RUNNING)) {
+                status += " (" + analyzeStatus.getProgress() + "%" + ")";
+            }
+            row.set(6, status);
         }
 
         row.set(7, analyzeStatus.getStartTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));

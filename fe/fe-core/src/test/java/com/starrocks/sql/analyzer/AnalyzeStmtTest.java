@@ -241,4 +241,26 @@ public class AnalyzeStmtTest {
         GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true);
         Assert.assertThrows(SemanticException.class, () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true));
     }
+
+    @Test
+    public void testAnalyzeStatus() throws MetaNotFoundException {
+        AnalyzeStatus analyzeStatus = new AnalyzeStatus(-1, 10002, 10004, Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(2020, 1, 1, 1, 1));
+        analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
+        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, RUNNING (0%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+
+        analyzeStatus.setProgress(50);
+        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, RUNNING (50%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, SUCCESS, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+    }
 }

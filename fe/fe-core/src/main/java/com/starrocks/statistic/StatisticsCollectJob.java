@@ -55,7 +55,7 @@ public abstract class StatisticsCollectJob {
         DEFAULT_VELOCITY_ENGINE.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
     }
 
-    public abstract void collect(ConnectContext context) throws Exception;
+    public abstract void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception;
 
     public Database getDb() {
         return db;

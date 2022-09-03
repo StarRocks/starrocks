@@ -57,6 +57,9 @@ public class AnalyzeStatus implements Writable {
     @SerializedName("reason")
     private String reason;
 
+    @SerializedName("progress")
+    private long progress;
+
     public AnalyzeStatus(long id, long dbId, long tableId, List<String> columns,
                          StatsConstants.AnalyzeType type,
                          StatsConstants.ScheduleType scheduleType,
@@ -126,6 +129,14 @@ public class AnalyzeStatus implements Writable {
 
     public void setReason(String reason) {
         this.reason = reason;
+    }
+
+    public long getProgress() {
+        return progress;
+    }
+
+    public void setProgress(long progress) {
+        this.progress = progress;
     }
 
     private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()

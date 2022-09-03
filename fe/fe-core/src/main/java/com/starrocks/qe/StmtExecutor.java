@@ -134,6 +134,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -781,25 +782,43 @@ public class StmtExecutor {
             return;
         }
 
-        AnalyzeStatus analyzeStatus;
-        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        Thread thread = new Thread(() -> {
+            StatisticExecutor statisticExecutor = new StatisticExecutor();
+            if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
+                statisticExecutor.collectStatistics(
+                        new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
+                                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                                analyzeStmt.getProperties()),
+                        //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                        false);
+            } else {
+                statisticExecutor.collectStatistics(
+                        StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
+                                analyzeStmt.getColumnNames(),
+                                analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
+                                        StatsConstants.AnalyzeType.FULL,
+                                StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
+                        //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                        false);
+            }
+        });
+        thread.start();
+
+        StatsConstants.AnalyzeType analyzeType;
         if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
-            analyzeStatus = statisticExecutor.collectStatistics(
-                    new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                            analyzeStmt.getProperties()),
-                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
-                    false);
+            analyzeType = StatsConstants.AnalyzeType.HISTOGRAM;
         } else {
-            analyzeStatus = statisticExecutor.collectStatistics(
-                    StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
-                            analyzeStmt.getColumnNames(),
-                            analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
-                                    StatsConstants.AnalyzeType.FULL,
-                            StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
-                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
-                    false);
+            if (analyzeStmt.isSample()) {
+                analyzeType = StatsConstants.AnalyzeType.SAMPLE;
+            } else {
+                analyzeType = StatsConstants.AnalyzeType.FULL;
+            }
         }
+
+        //Only for send sync command to client
+        AnalyzeStatus analyzeStatus = new AnalyzeStatus(-1, db.getId(), table.getId(), analyzeStmt.getColumnNames(),
+                analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
         ShowResultSet resultSet = analyzeStatus.toShowResult();
         if (isProxy) {
             proxyResultSet = resultSet;
