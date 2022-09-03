@@ -85,7 +85,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyLeftProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyLeftRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyProjectRule;
-import com.starrocks.sql.optimizer.rule.transformation.PushDownAssertOneRowProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnClauseRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitCTEAnchor;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitDirectRule;
@@ -123,9 +122,9 @@ import java.util.List;
 import java.util.Map;
 
 public class RuleSet {
-    private static final Map<RuleSetType, List<Rule>> rewriteRules = Maps.newHashMap();
+    private static final Map<RuleSetType, List<Rule>> REWRITE_RULES = Maps.newHashMap();
 
-    private static final List<Rule> allImplementRules = ImmutableList.of(
+    private static final List<Rule> ALL_IMPLEMENT_RULES = ImmutableList.of(
             new OlapScanImplementationRule(),
             new HiveScanImplementationRule(),
             new IcebergScanImplementationRule(),
@@ -155,12 +154,12 @@ public class RuleSet {
             new CTEProduceImplementationRule()
     );
 
-    private final List<Rule> implementRules = Lists.newArrayList(allImplementRules);
+    private final List<Rule> implementRules = Lists.newArrayList(ALL_IMPLEMENT_RULES);
 
     private final List<Rule> transformRules = Lists.newArrayList();
 
     static {
-        rewriteRules.put(RuleSetType.MERGE_LIMIT, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.MERGE_LIMIT, ImmutableList.of(
                 new MergeLimitWithSortRule(),
                 new SplitLimitRule(),
                 new PushDownLimitJoinRule(),
@@ -188,7 +187,7 @@ public class RuleSet {
                 MergeLimitDirectRule.TABLE_FUNCTION
         ));
 
-        rewriteRules.put(RuleSetType.PARTITION_PRUNE, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.PARTITION_PRUNE, ImmutableList.of(
                 new PartitionPruneRule(),
                 new DistributionPruneRule(),
                 RemoteScanPartitionPruneRule.HIVE_SCAN,
@@ -201,7 +200,7 @@ public class RuleSet {
                 new PartitionPredicatePrune()
         ));
 
-        rewriteRules.put(RuleSetType.PRUNE_COLUMNS, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.PRUNE_COLUMNS, ImmutableList.of(
                 PruneScanColumnRule.OLAP_SCAN,
                 PruneScanColumnRule.SCHEMA_SCAN,
                 PruneScanColumnRule.MYSQL_SCAN,
@@ -225,7 +224,7 @@ public class RuleSet {
                 new PruneCTEConsumeColumnsRule()
         ));
 
-        rewriteRules.put(RuleSetType.PUSH_DOWN_PREDICATE, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.PUSH_DOWN_PREDICATE, ImmutableList.of(
                 new CastToEmptyRule(),
                 new PushDownPredicateCTEAnchor(),
                 PushDownPredicateScanRule.OLAP_SCAN,
@@ -251,13 +250,13 @@ public class RuleSet {
                 new PushDownPredicateCTEConsumeRule()
         ));
 
-        rewriteRules.put(RuleSetType.PUSH_DOWN_SUBQUERY, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.PUSH_DOWN_SUBQUERY, ImmutableList.of(
                 new MergeApplyWithTableFunction(),
                 new PushDownApplyLeftProjectRule(),
                 new PushDownApplyLeftRule()
         ));
 
-        rewriteRules.put(RuleSetType.SUBQUERY_REWRITE, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE, ImmutableList.of(
                 new PushDownApplyProjectRule(),
                 new PushDownApplyFilterRule(),
                 new PushDownApplyAggFilterRule(),
@@ -270,41 +269,40 @@ public class RuleSet {
                 new ApplyExceptionRule()
         ));
 
-        rewriteRules.put(RuleSetType.PRUNE_ASSERT_ROW, ImmutableList.of(
-                new PushDownAssertOneRowProjectRule(),
+        REWRITE_RULES.put(RuleSetType.PRUNE_ASSERT_ROW, ImmutableList.of(
                 new PruneAssertOneRowRule()
         ));
 
-        rewriteRules.put(RuleSetType.AGGREGATE_REWRITE, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.AGGREGATE_REWRITE, ImmutableList.of(
                 new RewriteBitmapCountDistinctRule(),
                 new RewriteHllCountDistinctRule(),
                 new RewriteDuplicateAggregateFnRule()
         ));
 
-        rewriteRules.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
                 new RewriteMultiDistinctByCTERule(),
                 new RewriteMultiDistinctRule()
         ));
 
-        rewriteRules.put(RuleSetType.PRUNE_SET_OPERATOR, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.PRUNE_SET_OPERATOR, ImmutableList.of(
                 new PruneUnionEmptyRule(),
                 new PruneIntersectEmptyRule(),
                 new PruneExceptEmptyRule()
         ));
 
-        rewriteRules.put(RuleSetType.PRUNE_PROJECT, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.PRUNE_PROJECT, ImmutableList.of(
                 new PruneProjectRule(),
                 new PruneProjectEmptyRule(),
                 new MergeTwoProjectRule(),
                 new PushDownProjectToCTEAnchorRule()
         ));
 
-        rewriteRules.put(RuleSetType.COLLECT_CTE, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.COLLECT_CTE, ImmutableList.of(
                 new CollectCTEProduceRule(),
                 new CollectCTEConsumeRule()
         ));
 
-        rewriteRules.put(RuleSetType.INLINE_CTE, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.INLINE_CTE, ImmutableList.of(
                 new InlineOneCTEConsumeRule(),
                 new PruneCTEProduceRule()
         ));
@@ -334,7 +332,7 @@ public class RuleSet {
     }
 
     public List<Rule> getRewriteRulesByType(RuleSetType type) {
-        return rewriteRules.get(type);
+        return REWRITE_RULES.get(type);
     }
 
     public void addHashJoinImplementationRule() {

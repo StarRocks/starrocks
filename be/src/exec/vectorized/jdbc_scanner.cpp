@@ -14,6 +14,7 @@
 #include "exprs/vectorized/cast_expr.h"
 #include "runtime/primitive_type.h"
 #include "runtime/types.h"
+#include "udf/java/java_udf.h"
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {
@@ -27,6 +28,8 @@ namespace starrocks::vectorized {
     }
 
 Status JDBCScanner::open(RuntimeState* state) {
+    RETURN_IF_ERROR(detect_java_runtime());
+
     _init_profile();
 
     RETURN_IF_ERROR(_init_jdbc_bridge());

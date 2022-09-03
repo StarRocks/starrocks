@@ -6,6 +6,7 @@ import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
+import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AnalyticExpr;
@@ -28,6 +29,7 @@ import com.starrocks.analysis.ComputeNodeClause;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
@@ -36,6 +38,7 @@ import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
+import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -66,6 +69,11 @@ import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowOpenTableStmt;
+import com.starrocks.analysis.ShowPartitionsStmt;
+import com.starrocks.analysis.ShowProcStmt;
+import com.starrocks.analysis.ShowProcesslistStmt;
+import com.starrocks.analysis.ShowResourcesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SlotRef;
@@ -503,6 +511,25 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    public R visitKillAnalyzeStatement(KillAnalyzeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ----------------- Resource Clause -------------
+
+    public R visitCreateResourceStatement(CreateResourceStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+    public R visitDropResourceStatement(DropResourceStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+    public R visitAlterResourceStatement(AlterResourceStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+    public R visitShowResourceStatement(ShowResourcesStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ----------------- Catalog Clause -------------

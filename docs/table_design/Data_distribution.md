@@ -118,11 +118,12 @@ DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 10;
 
 ### How to determine the number of buckets
 
-In a StarRocks system, a partitioned bucket is a unit of actual physical file organization. After the data is written to disk, it will involve the management of disk files. Generally speaking, we do not recommend setting the buckets number too big or too small, it is more appropriate to try to be moderate.
+In a StarRocks system, a partitioned bucket is a unit of actual physical file organization. Since 2.4, StarRocks supports parallel scan of a tablet. A tablet related to a query can be segmented，and it can be scanned by multiple threads in parallel. So that the number of tablets can not limit query performance. As a result, you can set the number of buckets more easily. First, you need to estimate data volume in each partition. And then you can figure out a proper number of buckets by allocating every 10 GB raw data to one tablet.  
 
-As a rule of thumb, it is not recommended to have more than 10G per bucket, where 10G refers to the original data. Considering the compression ratio, the file size of each bucket on disk after compression is around 4~5G, which is sufficient to meet business needs in most cases.
-
-Users are recommended to adjust the number of buckets when building tables according to the change of cluster size. The change of cluster size mainly refers to the change of the number of nodes. Suppose there are 100G of raw data, according to the above criteria, 10 buckets can be built. However, if the user has 20 machines, then the amount of data per bucket can be reduced and the number of buckets can be increased.
+> Notes:
+>
+> * You need to execute 'SET GLOBAL enable_tablet_internal_parallel;' to enable parallel scanning of a tablet.
+> * The number of tablets of an existing partition cannot be changed. You can create tablets for newly added partitions.
 
 ### Best Practices
 

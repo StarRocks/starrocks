@@ -97,7 +97,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     // If this is an index of LakeTable and the index state is SHADOW, all transactions
     // whose txn id is less than 'visibleTxnId' will ignore this index when sending
     // PublishVersionRequest requests to BE nodes.
-    private final long visibleTxnId;
+    private long visibleTxnId;
 
     public MaterializedIndex() {
         this(0, IndexState.NORMAL);
@@ -143,6 +143,16 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
      */
     public boolean visibleForTransaction(long txnId) {
         return state == IndexState.NORMAL || visibleTxnId <= txnId;
+    }
+
+    /**
+     * Update the value of visibleTxnId.
+     *
+     * @param visibleTxnId the new value of visibleTxnId.
+     */
+    public void setVisibleTxnId(long visibleTxnId) {
+        Preconditions.checkState(state == IndexState.SHADOW);
+        this.visibleTxnId = visibleTxnId;
     }
 
     public List<Tablet> getTablets() {

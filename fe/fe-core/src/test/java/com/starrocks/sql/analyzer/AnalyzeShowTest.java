@@ -3,15 +3,15 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.SetType;
-import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.analysis.ShowStmt;
-import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
+import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -103,6 +103,6 @@ public class AnalyzeShowTest {
         sql = "SHOW AUTHENTICATION FOR xx";
         stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assert.assertFalse(stmt.isAll());
-        Assert.assertEquals("default_cluster:xx", stmt.getUserIdent().getQualifiedUser());
+        Assert.assertEquals("xx", stmt.getUserIdent().getQualifiedUser());
     }
 }

@@ -679,7 +679,7 @@ public class InsertPlanTest extends PlanTestBase {
                     "explain insert into baseall select k1, k2, k3, k4, k5, k6, k10, k11, k7, min(k8), " +
                             "max(k9) from baseall group by k1, k2, k3, k4, k5, k6, k10, k11, k7";
             plan = getInsertExecPlan(sql);
-            assertContains(plan, "  OLAP TABLE SINK\n" +
+            assertContains(plan, " OLAP TABLE SINK\n" +
                     "    TUPLE ID: 2\n" +
                     "    RANDOM\n" +
                     "\n" +

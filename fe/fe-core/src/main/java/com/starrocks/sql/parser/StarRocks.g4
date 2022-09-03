@@ -109,12 +109,19 @@ statement
     | showAnalyzeStatement                                                                  #showAnalyze
     | showStatsMetaStatement                                                                #showStatsMeta
     | showHistogramMetaStatement                                                            #showHistogramMeta
+    | killAnalyzeStatement                                                                  #killAnalyze
 
     // Work Group Statement
     | createResourceGroupStatement                                                          #createResourceGroup
     | dropResourceGroupStatement                                                            #dropResourceGroup
     | alterResourceGroupStatement                                                           #alterResourceGroup
     | showResourceGroupStatement                                                            #showResourceGroup
+
+    // Extenal Resource Statement
+    | createResourceStatement                                                               #createResource
+    | alterResourceStatement                                                                #alterResource
+    | dropResourceStatement                                                                 #dropResource
+    | showResourceStatement                                                                 #showResource
 
     //UDF
     | showFunctionsStatement                                                                #showFunctions
@@ -155,9 +162,9 @@ statement
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
-    | GRANT IMPERSONATE ON user TO user                                                     #grantImpersonate
+    | GRANT IMPERSONATE ON user TO ( user | ROLE identifierOrString )                       #grantImpersonate
     | REVOKE identifierOrString FROM user                                                   #revokeRole
-    | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
+    | REVOKE IMPERSONATE ON user FROM ( user | ROLE identifierOrString )                    #revokeImpersonate
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     | ALTER USER user authOption                                                            #alterUser
     | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
@@ -697,6 +704,10 @@ showHistogramMetaStatement
     : SHOW HISTOGRAM META (WHERE expression)?
     ;
 
+killAnalyzeStatement
+    : KILL ANALYZE INTEGER_VALUE
+    ;
+
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
 
 createResourceGroupStatement
@@ -718,6 +729,22 @@ alterResourceGroupStatement
 showResourceGroupStatement
     : SHOW RESOURCE GROUP identifier
     | SHOW RESOURCE GROUPS ALL?
+    ;
+
+createResourceStatement
+    : CREATE EXTERNAL? RESOURCE resourceName=identifierOrString properties?
+    ;
+
+alterResourceStatement
+    : ALTER RESOURCE resourceName=identifierOrString SET properties
+    ;
+
+dropResourceStatement
+    : DROP RESOURCE resourceName=identifierOrString
+    ;
+
+showResourceStatement
+    : SHOW RESOURCES
     ;
 
 classifier
@@ -784,8 +811,8 @@ dataDesc
     ;
 
 brokerDesc
-    : WITH BROKER name=identifierOrString props=propertyList?
-    | WITH BROKER props=propertyList?
+    : WITH BROKER props=propertyList?
+    | WITH BROKER name=identifierOrString props=propertyList?
     ;
 
 resourceDesc
@@ -1556,7 +1583,7 @@ nonReserved
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
-    | RESOURCE | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
+    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE
     | STRING | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION

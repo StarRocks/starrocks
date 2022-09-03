@@ -75,10 +75,10 @@ public class PushDownJoinAggRule extends TransformationRule {
                 Pattern.create(OperatorType.LOGICAL_AGGR, OperatorType.PATTERN_LEAF)));
     }
 
-    private static final PushDownJoinAggRule instance = new PushDownJoinAggRule();
+    private static final PushDownJoinAggRule INSTANCE = new PushDownJoinAggRule();
 
     public static PushDownJoinAggRule getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     @Override

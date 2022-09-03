@@ -9,6 +9,7 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
@@ -21,10 +22,12 @@ namespace starrocks {
 class LakeServiceTest : public testing::Test {
 public:
     LakeServiceTest() : _lake_service(ExecEnv::GetInstance()), _tablet_id(next_id()) {
-        CHECK_OK(fs::create_directories(kRootLocation));
         _location_provider = new lake::FixedLocationProvider(kRootLocation);
         _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
+        FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
+        FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
+        FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName));
     }
 
     ~LakeServiceTest() override {
@@ -643,8 +646,7 @@ TEST_F(LakeServiceTest, test_lock_unlock_tablet_metadata) {
     lock_request.set_expire_time(1);
     _lake_service.lock_tablet_metadata(&cntl, &lock_request, &lock_response, nullptr);
     ASSERT_FALSE(cntl.Failed());
-    std::string tablet_metadata_lock_path =
-            std::string(kRootLocation) + "/" + starrocks::lake::tablet_metadata_lock_filename(_tablet_id, 1, 1);
+    std::string tablet_metadata_lock_path = _location_provider->tablet_metadata_lock_location(_tablet_id, 1, 1);
     ASSERT_OK(FileSystem::Default()->path_exists(tablet_metadata_lock_path));
 
     cntl.Reset();

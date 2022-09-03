@@ -29,16 +29,15 @@ public class ShowProcesslistStmtTest {
         Assert.assertEquals(originStmt.toUpperCase(Locale.ROOT), stmt.toString());
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);
-        Assert.assertEquals(10, metaData.getColumnCount());
+        Assert.assertEquals(9, metaData.getColumnCount());
         Assert.assertEquals("Id", metaData.getColumn(0).getName());
         Assert.assertEquals("User", metaData.getColumn(1).getName());
         Assert.assertEquals("Host", metaData.getColumn(2).getName());
-        Assert.assertEquals("Cluster", metaData.getColumn(3).getName());
-        Assert.assertEquals("Db", metaData.getColumn(4).getName());
-        Assert.assertEquals("Command", metaData.getColumn(5).getName());
-        Assert.assertEquals("ConnectionStartTime", metaData.getColumn(6).getName());
-        Assert.assertEquals("Time", metaData.getColumn(7).getName());
-        Assert.assertEquals("State", metaData.getColumn(8).getName());
-        Assert.assertEquals("Info", metaData.getColumn(9).getName());
+        Assert.assertEquals("Db", metaData.getColumn(3).getName());
+        Assert.assertEquals("Command", metaData.getColumn(4).getName());
+        Assert.assertEquals("ConnectionStartTime", metaData.getColumn(5).getName());
+        Assert.assertEquals("Time", metaData.getColumn(6).getName());
+        Assert.assertEquals("State", metaData.getColumn(7).getName());
+        Assert.assertEquals("Info", metaData.getColumn(8).getName());
     }
 }

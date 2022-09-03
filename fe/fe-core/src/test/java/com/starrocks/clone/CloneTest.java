@@ -2,8 +2,8 @@
 package com.starrocks.clone;
 
 import com.starrocks.common.Config;
-import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
+import com.starrocks.pseudocluster.PseudoClusterUtils;
 import com.starrocks.pseudocluster.Tablet;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.AfterClass;
@@ -34,31 +34,13 @@ public class CloneTest {
 
     @AfterClass
     public static void tearDown() throws Exception {
-        PseudoCluster.getInstance().shutdown(true);
+        PseudoCluster.getInstance().shutdown(false);
     }
 
     @Test
     public void test1ReplicaWriteFailTriggerRepairClone() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
-        PseudoBackend be = cluster.getBackend(10001);
-        long tabletId = cluster.listTablets("test", "test").get(0);
-        Tablet tablet = be.getTablet(tabletId);
-        be.setWriteFailureRate(1.0f);
-        try {
-            // 2 replicas commit version 2
-            cluster.runSql("test", "insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3);");
-        } finally {
-            be.setWriteFailureRate(0.0f);
-        }
-        // 3 replicas commit version 3
-        cluster.runSql("test", "insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3);");
-        while (true) {
-            if (tablet.getCloneExecuted() == 1) {
-                break;
-            }
-            System.out.printf("wait tablet %d to finish clone\n", tabletId);
-            Thread.sleep(1000);
-        }
+        Tablet tablet = PseudoClusterUtils.triggerIncrementalCloneOnce(cluster, 10001);
         Assert.assertEquals(3, tablet.maxContinuousVersion());
         Assert.assertEquals(3, tablet.maxVersion());
     }

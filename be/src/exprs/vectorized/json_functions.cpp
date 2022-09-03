@@ -19,6 +19,8 @@
 #include "gutil/strings/substitute.h"
 #include "udf/udf.h"
 #include "util/json.h"
+#include "velocypack/Builder.h"
+#include "velocypack/Iterator.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks::vectorized {
@@ -622,6 +624,97 @@ ColumnPtr JsonFunctions::json_object(FunctionContext* context, const Columns& co
             result.append(std::move(json));
         } else {
             result.append_null();
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr JsonFunctions::json_length(FunctionContext* context, const Columns& columns) {
+    DCHECK_GT(columns.size(), 0);
+    size_t rows = columns[0]->size();
+    ColumnBuilder<TYPE_INT> result(rows);
+    ColumnViewer<TYPE_JSON> json_column(columns[0]);
+
+    bool with_path = false;
+    std::unique_ptr<ColumnViewer<TYPE_VARCHAR>> path_viewer;
+    if (columns.size() >= 2) {
+        with_path = true;
+        path_viewer = std::make_unique<ColumnViewer<TYPE_VARCHAR>>(columns[1]);
+    }
+
+    JsonPath stored_path;
+    for (size_t row = 0; row < rows; row++) {
+        if (json_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        JsonValue* json = json_column.value(row);
+        if (!with_path || path_viewer->value(row).empty()) {
+            switch (json->get_type()) {
+            case JSON_BOOL:
+            case JSON_NUMBER:
+            case JSON_STRING:
+            case JSON_NULL: {
+                result.append(1);
+                break;
+            }
+            case JSON_ARRAY:
+            case JSON_OBJECT: {
+                result.append(json->to_vslice().length());
+                break;
+            }
+            default: {
+                result.append(0);
+                break;
+            }
+            }
+        } else {
+            Slice path_str = path_viewer->value(row);
+            auto jsonpath = get_prepared_or_parse(context, path_str, &stored_path);
+            if (UNLIKELY(!jsonpath.ok())) {
+                result.append_null();
+                continue;
+            }
+
+            vpack::Builder builder;
+            vpack::Slice slice = JsonPath::extract(json, *jsonpath.value(), &builder);
+            if (slice.isObject() || slice.isArray()) {
+                result.append(slice.length());
+            } else if (slice.isNone()) {
+                result.append(0);
+            } else {
+                result.append(1);
+            }
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr JsonFunctions::json_keys(FunctionContext* context, const Columns& columns) {
+    auto rows = columns[0]->size();
+    auto json_viewer = ColumnViewer<TYPE_JSON>(columns[0]);
+    ColumnBuilder<TYPE_JSON> result(rows);
+
+    for (size_t row = 0; row < rows; row++) {
+        if (json_viewer.is_null(row) || json_viewer.value(row) == nullptr) {
+            result.append_null();
+            continue;
+        }
+        JsonValue* json_value = json_viewer.value(row);
+        vpack::Slice vslice = json_value->to_vslice();
+        if (!vslice.isObject()) {
+            result.append_null();
+        } else {
+            vpack::Builder builder;
+            {
+                vpack::ArrayBuilder ab(&builder);
+                for (const auto& iter : vpack::ObjectIterator(vslice)) {
+                    std::string key = iter.key.copyString();
+                    ab->add(vpack::Value(key));
+                }
+            }
+            vpack::Slice json_array = builder.slice();
+            result.append(JsonValue(json_array));
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));

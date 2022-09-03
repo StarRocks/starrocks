@@ -141,6 +141,8 @@ struct TPushReq {
     30: optional bool use_vectorized
     // 31 are used by spark load
     31: optional string timezone
+
+    32: optional TTabletType tablet_type
 }
 
 struct TCloneReq {

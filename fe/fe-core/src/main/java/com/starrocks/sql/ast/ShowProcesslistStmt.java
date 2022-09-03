@@ -16,7 +16,6 @@ public class ShowProcesslistStmt extends ShowStmt {
                     .addColumn(new Column("Id", ScalarType.createType(PrimitiveType.BIGINT)))
                     .addColumn(new Column("User", ScalarType.createVarchar(16)))
                     .addColumn(new Column("Host", ScalarType.createVarchar(16)))
-                    .addColumn(new Column("Cluster", ScalarType.createVarchar(16)))
                     .addColumn(new Column("Db", ScalarType.createVarchar(16)))
                     .addColumn(new Column("Command", ScalarType.createVarchar(16)))
                     .addColumn(new Column("ConnectionStartTime", ScalarType.createVarchar(16)))

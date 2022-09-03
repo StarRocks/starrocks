@@ -287,7 +287,7 @@ public class SelectAnalyzer {
             analyzeExpression(expression, analyzeState, orderByScope);
 
             if (!expression.getType().canOrderBy()) {
-                throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
+                throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
             }
 
             orderByElement.setExpr(expression);
@@ -399,7 +399,7 @@ public class SelectAnalyzer {
                     }
 
                     if (!groupingExpr.getType().canGroupBy()) {
-                        throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
+                        throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
                     }
 
                     if (analyzeState.getColumnReferences().get(groupingExpr) == null) {

@@ -17,13 +17,14 @@ import com.starrocks.qe.ShowResultSetMetaData;
 public class ShowProcStmt extends ShowStmt {
 
     public static final ImmutableSet<String> needForwardPathRoot;
+
     static {
         needForwardPathRoot = new ImmutableSet.Builder<String>()
-            .add("backends")
-            .add("cluster_balance")
-            .add("routine_loads")
-            .add("transactions")
-            .build();
+                .add("backends")
+                .add("cluster_balance")
+                .add("routine_loads")
+                .add("transactions")
+                .build();
     }
 
     private final String path;

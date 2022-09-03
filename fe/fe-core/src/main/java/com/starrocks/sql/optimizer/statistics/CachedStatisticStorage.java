@@ -11,7 +11,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -114,6 +113,40 @@ public class CachedStatisticStorage implements StatisticStorage {
     }
 
     @Override
+    public List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
+        Preconditions.checkState(table != null);
+
+        // get Statistics Table column info, just return default column statistics
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
+            return getDefaultColumnStatisticList(columns);
+        }
+
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            return getDefaultColumnStatisticList(columns);
+        }
+
+        List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
+        long tableId = table.getId();
+        for (String column : columns) {
+            cacheKeys.add(new ColumnStatsCacheKey(tableId, column));
+        }
+
+        Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = cachedStatistics.synchronous().getAll(cacheKeys);
+        List<ColumnStatistic> columnStatistics = new ArrayList<>();
+
+        for (String column : columns) {
+            Optional<ColumnStatistic> columnStatistic =
+                    result.getOrDefault(new ColumnStatsCacheKey(tableId, column), Optional.empty());
+            if (columnStatistic.isPresent()) {
+                columnStatistics.add(columnStatistic.get());
+            } else {
+                columnStatistics.add(ColumnStatistic.unknown());
+            }
+        }
+        return columnStatistics;
+    }
+
+    @Override
     public void expireColumnStatistics(Table table, List<String> columns) {
         if (columns == null) {
             return;
@@ -132,21 +165,21 @@ public class CachedStatisticStorage implements StatisticStorage {
     }
 
     @Override
-    public Map<ColumnRefOperator, Histogram> getHistogramStatistics(Table table, List<ColumnRefOperator> columns) {
+    public Map<String, Histogram> getHistogramStatistics(Table table, List<String> columns) {
         Preconditions.checkState(table != null);
 
-        List<ColumnRefOperator> columnHasHistogram = new ArrayList<>();
-        for (ColumnRefOperator columnRefOperator : columns) {
+        List<String> columnHasHistogram = new ArrayList<>();
+        for (String columnName : columns) {
             if (GlobalStateMgr.getCurrentAnalyzeMgr().getHistogramStatsMetaMap()
-                    .get(new Pair<>(table.getId(), columnRefOperator.getName())) != null) {
-                columnHasHistogram.add(columnRefOperator);
+                    .get(new Pair<>(table.getId(), columnName)) != null) {
+                columnHasHistogram.add(columnName);
             }
         }
 
         List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
         long tableId = table.getId();
-        for (ColumnRefOperator column : columnHasHistogram) {
-            cacheKeys.add(new ColumnStatsCacheKey(tableId, column.getName()));
+        for (String columnName : columnHasHistogram) {
+            cacheKeys.add(new ColumnStatsCacheKey(tableId, columnName));
         }
 
         CompletableFuture<Map<ColumnStatsCacheKey, Optional<Histogram>>> result = histogramCache.getAll(cacheKeys);
@@ -159,11 +192,11 @@ public class CachedStatisticStorage implements StatisticStorage {
                 return Maps.newHashMap();
             }
 
-            Map<ColumnRefOperator, Histogram> histogramStats = new HashMap<>();
-            for (ColumnRefOperator column : columnHasHistogram) {
+            Map<String, Histogram> histogramStats = new HashMap<>();
+            for (String columnName : columns) {
                 Optional<Histogram> histogramStatistics =
-                        realResult.getOrDefault(new ColumnStatsCacheKey(tableId, column.getName()), Optional.empty());
-                histogramStatistics.ifPresent(histogram -> histogramStats.put(column, histogram));
+                        realResult.getOrDefault(new ColumnStatsCacheKey(tableId, columnName), Optional.empty());
+                histogramStatistics.ifPresent(histogram -> histogramStats.put(columnName, histogram));
             }
             return histogramStats;
         } else {

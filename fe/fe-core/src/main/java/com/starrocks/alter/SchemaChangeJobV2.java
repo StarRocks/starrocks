@@ -599,6 +599,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
     }
 
+    @Override
+    protected void runFinishedRewritingJob() {
+        // nothing to do
+    }
+
     private void onFinished(OlapTable tbl) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         // 

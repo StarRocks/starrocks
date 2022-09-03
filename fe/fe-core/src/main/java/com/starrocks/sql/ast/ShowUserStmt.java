@@ -9,9 +9,9 @@ import com.starrocks.qe.ShowResultSetMetaData;
 
 public class ShowUserStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
-        ShowResultSetMetaData.builder()
-                .addColumn(new Column("User", ScalarType.createVarchar(50)))
-                .build();
+            ShowResultSetMetaData.builder()
+                    .addColumn(new Column("User", ScalarType.createVarchar(50)))
+                    .build();
 
     @Override
     public ShowResultSetMetaData getMetaData() {

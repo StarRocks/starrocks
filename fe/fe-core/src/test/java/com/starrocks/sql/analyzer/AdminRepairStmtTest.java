@@ -2,9 +2,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
-import com.starrocks.sql.ast.AdminCheckTabletsStmt;
-import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -43,6 +40,7 @@ public class AdminRepairStmtTest {
         analyzeFail("ADMIN REPAIR TABLE");
         analyzeFail("ADMIN REPAIR TABLE test TEMPORARY PARTITION(p1, p2, p3);");
     }
+
     @Test
     public void testAdminCancelRepairTable() {
         AdminCancelRepairTableStmt stmt = (AdminCancelRepairTableStmt) analyzeSuccess("ADMIN cancel REPAIR TABLE test;");
@@ -54,6 +52,7 @@ public class AdminRepairStmtTest {
         analyzeFail("ADMIN CANCEL REPAIR TABLE");
         analyzeFail("ADMIN cancel REPAIR TABLE test TEMPORARY PARTITION(p1, p2, p3);");
     }
+
     @Test
     public void testAdminCheckTablets() {
         AdminCheckTabletsStmt stmt = (AdminCheckTabletsStmt) analyzeSuccess("ADMIN CHECK TABLET (10000, 10001) " +

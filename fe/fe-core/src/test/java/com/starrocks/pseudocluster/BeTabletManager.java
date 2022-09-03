@@ -7,7 +7,6 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TTablet;
-import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
 import org.apache.logging.log4j.LogManager;
@@ -66,6 +65,11 @@ public class BeTabletManager {
                 tabletIdsByPartition.remove(removed.partitionId);
             }
             LOG.info("Dropped tablet {} force:{}", removed.id, force);
+            // TODO: if tablet trash feature is simulated, we should consider not updating disk usage.
+            if (PseudoBackend.getCurrentBackend() != null) {
+                PseudoBackend.getCurrentBackend().updateDiskUsage(
+                        0 - removed.numRowsets() * PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
+            }
         } else {
             LOG.warn("Drop Tablet {} not found", tabletId);
         }
@@ -99,10 +103,6 @@ public class BeTabletManager {
         result.tablets_stats = statMap;
     }
 
-    void getTabletInfo(TTabletInfo info) {
-
-    }
-
     public synchronized Map<Long, TTablet> getAllTabletInfo() {
         Map<Long, TTablet> tabletInfo = Maps.newHashMap();
         for (Tablet tablet : tablets.values()) {
@@ -115,6 +115,7 @@ public class BeTabletManager {
 
     public synchronized void maintenance() {
         for (Tablet tablet : tablets.values()) {
+            tablet.doCompaction();
             tablet.versionGC();
         }
     }

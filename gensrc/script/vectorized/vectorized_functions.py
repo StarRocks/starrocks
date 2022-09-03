@@ -519,6 +519,10 @@ vectorized_functions = [
     [110009, "json_array", "JSON", ["JSON", "..."], "JsonFunctions::json_array", False],
     [110010, "json_object", "JSON", [], "JsonFunctions::json_object_empty", False],
     [110011, "json_array", "JSON", [], "JsonFunctions::json_array_empty", False],
+    [110016, "json_length", "INT", ["JSON"], "JsonFunctions::json_length", False],
+    [110017, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length", 
+    "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+    [110018, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
 
     # aes and base64 function
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt", False],

@@ -5,12 +5,10 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.PartitionNames;
-import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Repository;
-import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -23,6 +21,7 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowBackupStmt;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -168,7 +167,7 @@ public class BackupStmtAnalyzer {
         }
 
         if (partitionNames != null) {
-            if (tbl.getType() != Table.TableType.OLAP) {
+            if (!tbl.isOlapOrLakeTable()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName.getTbl());
             }
 
@@ -186,12 +185,6 @@ public class BackupStmtAnalyzer {
             tblPartsMap.put(tableName.getTbl(), tableRef);
         } else {
             throw new SemanticException("Duplicated table: " + tableName.getTbl());
-        }
-
-        try {
-            CatalogUtils.checkIsLakeTable(dbName, tableName.getTbl());
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
         }
     }
 

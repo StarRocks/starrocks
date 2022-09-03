@@ -42,7 +42,7 @@ Output Exprs:32: substring | 33: count | 34: sum
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-18:MERGING-EXCHANGE
+19:MERGING-EXCHANGE
 cardinality: 150000
 column statistics:
 * substring-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
@@ -53,9 +53,9 @@ PLAN FRAGMENT 1(F08)
 
 Input Partition: HASH_PARTITIONED: 32: substring
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 18
+OutPut Exchange Id: 19
 
-17:SORT
+18:SORT
 |  order by: [32, VARCHAR, true] ASC
 |  offset: 0
 |  cardinality: 150000
@@ -64,7 +64,7 @@ OutPut Exchange Id: 18
 |  * count-->[0.0, 150000.0, 0.0, 8.0, 150000.0] ESTIMATE
 |  * sum-->[-1191.1273641969974, 11911.380844504778, 0.0, 8.0, 137439.0] ESTIMATE
 |
-16:AGGREGATE (merge finalize)
+17:AGGREGATE (merge finalize)
 |  aggregate: count[([33: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false], sum[([34: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [32: substring, VARCHAR, true]
 |  cardinality: 150000
@@ -73,16 +73,16 @@ OutPut Exchange Id: 18
 |  * count-->[0.0, 150000.0, 0.0, 8.0, 150000.0] ESTIMATE
 |  * sum-->[-1191.1273641969974, 11911.380844504778, 0.0, 8.0, 137439.0] ESTIMATE
 |
-15:EXCHANGE
+16:EXCHANGE
 cardinality: 150000
 
 PLAN FRAGMENT 2(F07)
 
 Input Partition: HASH_PARTITIONED: 22: O_CUSTKEY
 OutPut Partition: HASH_PARTITIONED: 32: substring
-OutPut Exchange Id: 15
+OutPut Exchange Id: 16
 
-14:AGGREGATE (update serialize)
+15:AGGREGATE (update serialize)
 |  STREAMING
 |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false], sum[([6: C_ACCTBAL, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [32: substring, VARCHAR, true]
@@ -92,7 +92,7 @@ OutPut Exchange Id: 15
 |  * count-->[0.0, 1500000.0, 0.0, 8.0, 150000.0] ESTIMATE
 |  * sum-->[-1091.382358719141, 10913.921812585948, 0.0, 8.0, 137439.0] ESTIMATE
 |
-13:Project
+14:Project
 |  output columns:
 |  6 <-> [6: C_ACCTBAL, DOUBLE, false]
 |  32 <-> substring[([5: C_PHONE, VARCHAR, false], 1, 2); args: VARCHAR,INT,INT; result: VARCHAR; args nullable: false; result nullable: true]
@@ -101,7 +101,7 @@ OutPut Exchange Id: 15
 |  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
 |  * substring-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
 |
-12:HASH JOIN
+13:HASH JOIN
 |  join op: RIGHT ANTI JOIN (PARTITIONED)
 |  equal join conjunct: [22: O_CUSTKEY, INT, false] = [1: C_CUSTKEY, INT, false]
 |  build runtime filters:
@@ -115,7 +115,7 @@ OutPut Exchange Id: 15
 |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 3750000.0] ESTIMATE
 |  * substring-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
 |
-|----11:EXCHANGE
+|----12:EXCHANGE
 |       cardinality: 3750000
 |
 1:EXCHANGE
@@ -125,9 +125,9 @@ PLAN FRAGMENT 3(F02)
 
 Input Partition: RANDOM
 OutPut Partition: HASH_PARTITIONED: 1: C_CUSTKEY
-OutPut Exchange Id: 11
+OutPut Exchange Id: 12
 
-10:Project
+11:Project
 |  output columns:
 |  1 <-> [1: C_CUSTKEY, INT, false]
 |  5 <-> [5: C_PHONE, CHAR, false]
@@ -138,7 +138,7 @@ OutPut Exchange Id: 11
 |  * C_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
 |  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
 |
-9:NESTLOOP JOIN
+10:NESTLOOP JOIN
 |  join op: CROSS JOIN
 |  other join predicates: [6: C_ACCTBAL, DOUBLE, false] > [19: avg, DOUBLE, true]
 |  cardinality: 3750000
@@ -148,7 +148,7 @@ OutPut Exchange Id: 11
 |  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
 |
-|----8:EXCHANGE
+|----9:EXCHANGE
 |       cardinality: 1
 |
 2:OlapScanNode
@@ -167,8 +167,14 @@ PLAN FRAGMENT 4(F04)
 
 Input Partition: UNPARTITIONED
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 08
+OutPut Exchange Id: 09
 
+8:ASSERT NUMBER OF ROWS
+|  assert number of rows: LE 1
+|  cardinality: 1
+|  column statistics:
+|  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
+|
 7:AGGREGATE (merge finalize)
 |  aggregate: avg[([19: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1

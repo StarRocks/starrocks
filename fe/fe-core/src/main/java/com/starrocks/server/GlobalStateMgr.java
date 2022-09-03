@@ -34,9 +34,6 @@ import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.AddPartitionClause;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
-import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.BackupStmt;
@@ -147,6 +144,7 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionDispatchDaemon;
@@ -205,9 +203,6 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
 import com.starrocks.sql.ast.AlterDatabaseRename;
-import com.starrocks.sql.ast.AdminCheckTabletsStmt;
-import com.starrocks.sql.ast.AdminSetConfigStmt;
-import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
@@ -1838,10 +1833,14 @@ public class GlobalStateMgr {
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
         sb.append("\n").append(distributionInfo.toSql());
 
-        // refresh schema
+        // refresh scheme
         MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
-        sb.append("\nREFRESH ").append(refreshScheme.getType());
-        if (refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
+        if (refreshScheme == null) {
+            sb.append("\nREFRESH ").append("UNKNOWN");
+        } else {
+            sb.append("\nREFRESH ").append(refreshScheme.getType());
+        }
+        if (refreshScheme != null && refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
             MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
             if (asyncRefreshContext.isDefineStartTime()) {
                 sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
@@ -2052,6 +2051,23 @@ public class GlobalStateMgr {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
                     .append("\" = \"");
             sb.append(olapTable.isInMemory()).append("\"");
+
+            // enable storage cache && cache ttl
+            if (table.isLakeTable()) {
+                Map<String, String> storageProperities = ((LakeTable) olapTable).getProperties();
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)
+                        .append("\" = \"");
+                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)
+                        .append("\" = \"");
+                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
+                        .append("\" = \"");
+                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
+            }
 
             // storage type
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT)

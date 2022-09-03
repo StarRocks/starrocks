@@ -1965,7 +1965,6 @@ public class JoinTest extends PlanTestBase {
                 "  2:AGGREGATE (update finalize)\n" +
                 "  |  output: max(22: k9)\n" +
                 "  |  group by: \n" +
-                "  |  having: CAST(23: max AS DOUBLE) > 0.0\n" +
                 "  |  \n" +
                 "  1:OlapScanNode");
     }

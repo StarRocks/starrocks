@@ -27,16 +27,9 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.HelpStmt;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SetType;
-import com.starrocks.sql.ast.ShowAuthorStmt;
-import com.starrocks.sql.ast.ShowBackendsStmt;
-import com.starrocks.sql.ast.ShowDbStmt;
-import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcedureStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
-import com.starrocks.sql.ast.ShowUserStmt;
-import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -66,10 +59,17 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.ShowAuthorStmt;
+import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.ShowEnginesStmt;
+import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
+import com.starrocks.sql.ast.ShowUserStmt;
+import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
@@ -310,7 +310,7 @@ public class ShowExecutorTest {
         ConnectScheduler scheduler = new ConnectScheduler(10);
         new Expectations(scheduler) {
             {
-                scheduler.listConnection("default_cluster:testUser");
+                scheduler.listConnection("testUser");
                 minTimes = 0;
                 result = Lists.newArrayList(ctx.toThreadInfo());
             }
@@ -318,7 +318,7 @@ public class ShowExecutorTest {
 
         ctx.setConnectScheduler(scheduler);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         new Expectations(ctx) {
             {
@@ -374,7 +374,7 @@ public class ShowExecutorTest {
         new MockUp<SystemInfoService>() {
             @Mock
             public List<Long> getAvailableBackendIds() {
-                return Arrays.asList(10001L, 10002L, 10003L);       
+                return Arrays.asList(10001L, 10002L, 10003L);
             }
         };
         // Prepare to Test
@@ -448,7 +448,7 @@ public class ShowExecutorTest {
     @Test
     public void testDescribe() throws DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         DescribeStmt stmt = (DescribeStmt) com.starrocks.sql.parser.SqlParser.parse("desc testTbl",
                 ctx.getSessionVariable().getSqlMode()).get(0);
@@ -520,7 +520,7 @@ public class ShowExecutorTest {
     @Test
     public void testShowCreateDb() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("testDb");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -535,7 +535,7 @@ public class ShowExecutorTest {
     @Test(expected = AnalysisException.class)
     public void testShowCreateNoDb() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("emptyDb");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -567,10 +567,10 @@ public class ShowExecutorTest {
     @Test
     public void testShowColumn() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         ShowColumnStmt stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show columns from testTbl in testDb",
-                ctx.getSessionVariable().getSqlMode()).get(0);
+                ctx.getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -585,7 +585,7 @@ public class ShowExecutorTest {
 
         // verbose
         stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb",
-                ctx.getSessionVariable().getSqlMode()).get(0);
+                ctx.getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         executor = new ShowExecutor(ctx, stmt);
@@ -615,7 +615,7 @@ public class ShowExecutorTest {
     @Test
     public void testShowColumnFromUnknownTable() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
         ShowColumnStmt stmt = new ShowColumnStmt(new TableName("emptyDb", "testTable"), null, null, false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -682,15 +682,15 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertEquals(26, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(25, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
-        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(24).getName());
-        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(25).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(23).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(24).getName());
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("1", resultSet.getString(0));
-        Assert.assertEquals("0", resultSet.getString(24));
-        Assert.assertEquals("5", resultSet.getString(25));
+        Assert.assertEquals("0", resultSet.getString(23));
+        Assert.assertEquals("5", resultSet.getString(24));
 
         Config.integrate_starmgr = false;
     }
