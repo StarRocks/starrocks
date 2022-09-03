@@ -31,7 +31,6 @@
 #include "column/datum_convert.h"
 #include "common/logging.h"
 #include "storage/rowset/array_column_iterator.h"
-#include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_reader.h"

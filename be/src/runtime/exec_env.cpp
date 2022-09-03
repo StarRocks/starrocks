@@ -467,7 +467,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_lake_location_provider);
 
     _metrics = nullptr;
-}
+} // namespace starrocks
 
 void ExecEnv::destroy(ExecEnv* env) {
     env->_destroy();
