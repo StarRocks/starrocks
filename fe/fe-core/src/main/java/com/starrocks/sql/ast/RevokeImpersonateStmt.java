@@ -11,4 +11,8 @@ public class RevokeImpersonateStmt extends BaseGrantRevokeImpersonateStmt {
     public RevokeImpersonateStmt(UserIdentity authorizedUser, UserIdentity securedUser) {
         super(authorizedUser, securedUser, "REVOKE", "FROM");
     }
+
+    public RevokeImpersonateStmt(String authorizedRoleName, UserIdentity securedUser) {
+        super(authorizedRoleName, securedUser, "REVOKE", "FROM");
+    }
 }

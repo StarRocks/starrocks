@@ -11,4 +11,8 @@ public class GrantImpersonateStmt extends BaseGrantRevokeImpersonateStmt {
     public GrantImpersonateStmt(UserIdentity authorizedUser, UserIdentity securedUser) {
         super(authorizedUser, securedUser, "GRANT", "TO");
     }
+
+    public GrantImpersonateStmt(String authorizedRoleName, UserIdentity securedUser) {
+        super(authorizedRoleName, securedUser, "GRANT", "TO");
+    }
 }

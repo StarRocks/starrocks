@@ -78,6 +78,15 @@ public class PrivInfo implements Writable {
         this.role = role;
     }
 
+    public PrivInfo(UserIdentity userIdent, String role) {
+        this.userIdent = userIdent;
+        this.role = role;
+        this.tblPattern = null;
+        this.resourcePattern = null;
+        this.privs = null;
+        this.passwd = null;
+    }
+
     public UserIdentity getUserIdent() {
         return userIdent;
     }

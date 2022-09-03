@@ -2,6 +2,8 @@
 
 package com.starrocks.persist;
 
+import com.starrocks.analysis.CreateRoleStmt;
+import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.system.SystemInfoService;
