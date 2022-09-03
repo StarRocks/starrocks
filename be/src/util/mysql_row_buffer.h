@@ -44,7 +44,7 @@ public:
     void push_largeint(__int128 data) { push_number(data); }
     void push_float(float data) { push_number(data); }
     void push_double(double data) { push_number(data); }
-    void push_string(const char* str, size_t length);
+    void push_string(const char* str, size_t length, bool double_quote_escape = true);
     void push_string(const Slice& s) { push_string(s.data, s.size); }
 
     template <typename T>

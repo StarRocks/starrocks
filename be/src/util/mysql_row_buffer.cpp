@@ -119,9 +119,17 @@ void MysqlRowBuffer::push_number(T data) {
     _data.resize(pos - _data.data());
 }
 
-void MysqlRowBuffer::push_string(const char* str, size_t length) {
+void MysqlRowBuffer::push_string(const char* str, size_t length, bool double_quote_escape) {
     if (_array_level == 0) {
         _push_string_normal(str, length);
+    } else if (!double_quote_escape) {
+        char* pos = _resize_extra(length + 2);
+        *pos++ = '\'';
+        strings::memcpy_inlined(pos, str, length);
+        pos += length;
+        *pos++ = '\'';
+        DCHECK_EQ(_data.data() + _data.size(), pos);
+        _data.resize(pos - _data.data());
     } else {
         const size_t escaped_len = 2 + _length_after_escape(str, length);
         //                  ^^^ Surround the string with two double-quotas.
