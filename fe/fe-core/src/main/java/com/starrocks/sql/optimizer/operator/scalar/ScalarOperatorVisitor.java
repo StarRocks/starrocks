@@ -78,6 +78,10 @@ public abstract class ScalarOperatorVisitor<R, C> {
         return visit(operator, context);
     }
 
+    public R visitLambdaFunctionOperator(LambdaFunctionOperator operator, C context) {
+        return visit(operator, context);
+    }
+
     public R visitCloneOperator(CloneOperator operator, C context) {
         return visit(operator, context);
     }

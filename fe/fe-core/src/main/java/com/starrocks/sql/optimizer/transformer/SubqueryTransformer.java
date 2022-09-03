@@ -69,9 +69,9 @@ public class SubqueryTransformer {
     }
 
     public ScalarOperator rewriteSubqueryScalarOperator(Expr predicate, OptExprBuilder subOpt,
-                                                        List<ColumnRefOperator> correlation) {
+                                                        List<ColumnRefOperator> correlation, ColumnRefFactory columnRefFactory) {
         ScalarOperator scalarPredicate =
-                SqlToScalarOperatorTranslator.translate(predicate, subOpt.getExpressionMapping(), correlation);
+                SqlToScalarOperatorTranslator.translate(predicate, subOpt.getExpressionMapping(), correlation, columnRefFactory);
 
         List<InPredicate> inPredicates = Lists.newArrayList();
         predicate.collect(InPredicate.class, inPredicates);
@@ -218,7 +218,7 @@ public class SubqueryTransformer {
             }
 
             ScalarOperator leftColRef = SqlToScalarOperatorTranslator
-                    .translate(inPredicate.getChild(0), context.builder.getExpressionMapping());
+                    .translate(inPredicate.getChild(0), context.builder.getExpressionMapping(), columnRefFactory);
             List<ColumnRefOperator> rightColRef = subqueryPlan.getOutputColumn();
             if (rightColRef.size() > 1) {
                 throw new SemanticException("subquery must return a single column when used in InPredicate");
@@ -346,7 +346,7 @@ public class SubqueryTransformer {
             if (subqueryPlan.getCorrelation().isEmpty()) {
                 for (Expr outer : context.outerExprs) {
                     outerUsedColumns.union(SqlToScalarOperatorTranslator
-                            .translate(outer, context.builder.getExpressionMapping())
+                            .translate(outer, context.builder.getExpressionMapping(), columnRefFactory)
                             .getUsedColumns());
                 }
             }

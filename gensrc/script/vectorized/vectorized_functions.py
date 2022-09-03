@@ -751,4 +751,7 @@ vectorized_functions = [
 
     # reserve 150281
     [150282, 'array_contains_all', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
+
+    # high-order functions related to lambda functions.
+    [160100, 'array_map','ANY_ARRAY',['FUNCTION','ANY_ARRAY', "..."],'ArrayFunctions::array_map'],
 ]

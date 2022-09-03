@@ -2,15 +2,19 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -220,6 +224,21 @@ public class ExpressionTest extends PlanTestBase {
         Expr castExpression = ScalarOperatorToExpr.buildExecExpression(castColumnRef, context);
 
         Assert.assertTrue(castExpression instanceof CastExpr);
+
+        // lambda functions
+        ScalarOperator lambdaExpr = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                new ColumnRefOperator(100000, Type.INT, "x", true),
+                ConstantOperator.createInt(1));
+        ColumnRefOperator colRef = new ColumnRefOperator(100000, Type.INT, "x", true);
+        LambdaFunctionOperator lambda = new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, Type.BOOLEAN);
+        variableToSlotRef.clear();
+        projectMap.clear();
+        context = new ScalarOperatorToExpr.FormatterContext(variableToSlotRef, projectMap);
+
+        Expr lambdaFunc = ScalarOperatorToExpr.buildExecExpression(lambda, context);
+
+        Assert.assertTrue(lambdaFunc instanceof LambdaFunctionExpr);
+        Assert.assertEquals("<slot 100000> -> <slot 100000> = 1", lambdaFunc.toSql());
     }
 
     @Test

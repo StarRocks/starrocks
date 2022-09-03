@@ -40,6 +40,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class TableName implements Writable, GsonPreProcessable, GsonPostProcessable {
+    public static final String LAMBDA_FUNC_TABLE = "__LAMBDA_TABLE";
     private String catalog;
     @SerializedName(value = "tbl")
     private String tbl;

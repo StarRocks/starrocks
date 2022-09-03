@@ -320,7 +320,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
             for (OrderByElement item : setOperationRelation.getOrderBy()) {
                 ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(item.getExpr(),
-                        root.getExpressionMapping());
+                        root.getExpressionMapping(), columnRefFactory);
                 Ordering ordering = new Ordering(column, item.getIsAsc(),
                         OrderByElement.nullsFirst(item.getNullsFirstParam()));
                 if (!orderByColumns.contains(column)) {
@@ -363,7 +363,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 }
 
                 ScalarOperator constant = SqlToScalarOperatorTranslator.translate(row.get(fieldIdx),
-                        new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())));
+                        new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                        columnRefFactory);
                 valuesRow.add(constant);
 
                 if (constant.isNullable()) {
@@ -586,8 +587,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         }
 
         ScalarOperator onPredicateWithoutRewrite = SqlToScalarOperatorTranslator
-                .translateWithoutRewrite(node.getOnPredicate(), expressionMapping);
-        ScalarOperator onPredicate = SqlToScalarOperatorTranslator.translate(node.getOnPredicate(), expressionMapping);
+                .translateWithoutRewrite(node.getOnPredicate(), expressionMapping, columnRefFactory);
+        ScalarOperator onPredicate = SqlToScalarOperatorTranslator.translate(node.getOnPredicate(), expressionMapping,
+                columnRefFactory);
 
         /*
          * If the on-predicate condition is rewrite to false.
@@ -651,7 +653,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
         FunctionCallExpr expr = new FunctionCallExpr(tableFunction.getFunctionName(), node.getChildExpressions());
         expr.setFn(tableFunction);
-        ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr, context);
+        ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr, context, columnRefFactory);
 
         if (operator.isConstantRef() && ((ConstantOperator) operator).isNull()) {
             throw new StarRocksPlannerException("table function not support null parameter", ErrorType.USER_ERROR);
