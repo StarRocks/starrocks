@@ -5,8 +5,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.SelectList;
-import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;

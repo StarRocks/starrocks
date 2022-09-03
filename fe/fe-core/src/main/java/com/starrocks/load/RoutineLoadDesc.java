@@ -25,8 +25,8 @@ import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.ImportColumnDesc;
 import com.starrocks.analysis.ImportColumnsStmt;
 import com.starrocks.analysis.ImportWhereStmt;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.RowDelimiter;
+import com.starrocks.sql.ast.PartitionNames;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,7 +40,8 @@ public class RoutineLoadDesc {
     // nullable
     private PartitionNames partitionNames;
 
-    public RoutineLoadDesc() {}
+    public RoutineLoadDesc() {
+    }
 
     public RoutineLoadDesc(ColumnSeparator columnSeparator, RowDelimiter rowDelimiter, ImportColumnsStmt columnsInfo,
                            ImportWhereStmt wherePredicate, PartitionNames partitionNames) {

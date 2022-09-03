@@ -1,9 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -23,7 +24,7 @@ import java.util.Map;
 
 public class MultiRangePartitionDesc extends PartitionDesc {
 
-    private final String DEFAULT_PREFIX = "p";
+    private final String defaultPrefix = "p";
     private final String partitionBegin;
     private final String partitionEnd;
     private Long step;
@@ -126,7 +127,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         // it will follow this configuration to set day of week
         int dayOfWeek = 1;
         int dayOfMonth = 1;
-        String partitionPrefix = DEFAULT_PREFIX;
+        String partitionPrefix = defaultPrefix;
         if (properties != null) {
             if (properties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
                 String dayOfWeekStr = properties.get(DynamicPartitionProperty.START_DAY_OF_WEEK);
@@ -212,7 +213,8 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             throw new AnalysisException("Batch build partition EVERY is date type " +
                     "but START or END does not type match.");
         }
-        long beginNum, endNum;
+        long beginNum;
+        long endNum;
         try {
             beginNum = Long.parseLong(partitionBegin);
             endNum = Long.parseLong(partitionEnd);
@@ -230,7 +232,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         long currentLoopNum = 0;
         long maxAllowedLimit = Config.max_partitions_in_one_batch;
         while (beginNum < endNum) {
-            String partitionName = DEFAULT_PREFIX + beginNum;
+            String partitionName = defaultPrefix + beginNum;
             PartitionValue lowerPartitionValue = new PartitionValue(Long.toString(beginNum));
             beginNum += step;
             PartitionValue upperPartitionValue = new PartitionValue(Long.toString(beginNum));

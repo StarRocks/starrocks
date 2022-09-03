@@ -1,31 +1,17 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/CreateFunctionStmt.java
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.DdlStmt;
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.HdfsURI;
+import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
@@ -36,7 +22,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.codec.binary.Hex;
 
@@ -93,7 +78,7 @@ public class CreateFunctionStmt extends DdlStmt {
     private Function function;
     private String checksum;
 
-    private static final ImmutableMap<PrimitiveType, Class> PrimitiveTypeToJavaClassType =
+    private static final ImmutableMap<PrimitiveType, Class> PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE =
             new ImmutableMap.Builder<PrimitiveType, Class>()
                     .put(PrimitiveType.BOOLEAN, Boolean.class)
                     .put(PrimitiveType.TINYINT, Byte.class)
@@ -198,7 +183,7 @@ public class CreateFunctionStmt extends DdlStmt {
                                 clazz.getCanonicalName(), method.getName(), expType));
             }
             ScalarType scalarType = (ScalarType) expType;
-            Class cls = PrimitiveTypeToJavaClassType.get(scalarType.getPrimitiveType());
+            Class cls = PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE.get(scalarType.getPrimitiveType());
             if (cls == null) {
                 throw new AnalysisException(
                         String.format("UDF class '%s' method '%s' does not support type '%s'",
@@ -293,25 +278,25 @@ public class CreateFunctionStmt extends DdlStmt {
     }
 
     private void analyzeUdfClassInStarrocksJar() throws AnalysisException {
-        String class_name = properties.get(SYMBOL_KEY);
-        if (Strings.isNullOrEmpty(class_name)) {
+        String className = properties.get(SYMBOL_KEY);
+        if (Strings.isNullOrEmpty(className)) {
             throw new AnalysisException("No '" + SYMBOL_KEY + "' in properties");
         }
 
         try {
             URL[] urls = {new URL("jar:" + objectFile + "!/")};
             try (URLClassLoader classLoader = URLClassLoader.newInstance(urls)) {
-                mainClass.setClazz(classLoader.loadClass(class_name));
+                mainClass.setClazz(classLoader.loadClass(className));
 
                 if (isAggregate) {
-                    String state_class_name = class_name + "$" + STATE_CLASS_NAME;
-                    udafStateClass.setClazz(classLoader.loadClass(state_class_name));
+                    String stateClassName = className + "$" + STATE_CLASS_NAME;
+                    udafStateClass.setClazz(classLoader.loadClass(stateClassName));
                 }
 
             } catch (IOException e) {
                 throw new AnalysisException("Failed to load object_file: " + objectFile);
             } catch (ClassNotFoundException e) {
-                throw new AnalysisException("Class '" + class_name + "' not found in object_file :" + objectFile);
+                throw new AnalysisException("Class '" + className + "' not found in object_file :" + objectFile);
             }
         } catch (MalformedURLException e) {
             throw new AnalysisException("Object file is invalid: " + objectFile);
@@ -484,44 +469,6 @@ public class CreateFunctionStmt extends DdlStmt {
                 .symbolName(mainClass.getCanonicalName());
         function = builder.build();
         function.setChecksum(checksum);
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append("CREATE ");
-        if (isAggregate) {
-            stringBuilder.append("AGGREGATE ");
-        } else if (isTable) {
-            stringBuilder.append("TABLE ");
-        }
-
-        stringBuilder.append("FUNCTION ");
-        stringBuilder.append(functionName.toString());
-        stringBuilder.append(argsDef.toSql());
-        stringBuilder.append(" RETURNS ");
-        stringBuilder.append(returnType.toString());
-
-        if (intermediateType != null) {
-            stringBuilder.append(" INTERMEDIATE ");
-            stringBuilder.append(intermediateType.toString());
-        }
-        if (properties.size() > 0) {
-            stringBuilder.append(" PROPERTIES (");
-            int i = 0;
-            for (Map.Entry<String, String> entry : properties.entrySet()) {
-                if (i != 0) {
-                    stringBuilder.append(", ");
-                }
-                stringBuilder.append('"').append(entry.getKey()).append('"');
-                stringBuilder.append("=");
-                stringBuilder.append('"').append(entry.getValue()).append('"');
-                i++;
-            }
-            stringBuilder.append(")");
-
-        }
-        return stringBuilder.toString();
     }
 
     @Override

@@ -1,29 +1,11 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/PartitionKeyDesc.java
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.AnalysisException;
 
 import java.util.List;
@@ -40,7 +22,7 @@ public class PartitionKeyDesc implements ParseNode {
 
     private List<PartitionValue> lowerValues;
     private List<PartitionValue> upperValues;
-    private PartitionRangeType partitionType;
+    private final PartitionRangeType partitionType;
 
     public static PartitionKeyDesc createMaxKeyDesc() {
         return MAX_VALUE;
@@ -90,7 +72,7 @@ public class PartitionKeyDesc implements ParseNode {
     public void analyze(int partColNum) throws AnalysisException {
         if (!isMax()) {
             if (upperValues.isEmpty() || upperValues.size() > partColNum) {
-                throw new AnalysisException("Partiton values number is more than partition column number: " + toSql());
+                throw new AnalysisException("Partiton values number is more than partition column number: " + this);
             }
         }
 
@@ -113,27 +95,6 @@ public class PartitionKeyDesc implements ParseNode {
         }
     }
 
-    // returns:
-    // 1: MAXVALUE
-    // 2: ("100", "200", MAXVALUE)
-    // 3: [("100", "200"), ("300", "200"))
-    public String toSql() {
-        if (isMax()) {
-            return "MAXVALUE";
-        }
-
-        if (partitionType == PartitionRangeType.LESS_THAN) {
-            return getPartitionValuesStr(upperValues);
-        } else if (partitionType == PartitionRangeType.FIXED) {
-            StringBuilder sb = new StringBuilder("[");
-            sb.append(getPartitionValuesStr(lowerValues)).append(", ").append(getPartitionValuesStr(upperValues));
-            sb.append(")");
-            return sb.toString();
-        } else {
-            return "INVALID";
-        }
-    }
-
     private String getPartitionValuesStr(List<PartitionValue> values) {
         StringBuilder sb = new StringBuilder("(");
         Joiner.on(", ").appendTo(sb, Lists.transform(values, new Function<PartitionValue, String>() {
@@ -147,5 +108,23 @@ public class PartitionKeyDesc implements ParseNode {
             }
         })).append(")");
         return sb.toString();
+    }
+
+    // returns:
+    // 1: MAXVALUE
+    // 2: ("100", "200", MAXVALUE)
+    // 3: [("100", "200"), ("300", "200"))
+    public String toString() {
+        if (isMax()) {
+            return "MAXVALUE";
+        }
+
+        if (partitionType == PartitionRangeType.LESS_THAN) {
+            return getPartitionValuesStr(upperValues);
+        } else if (partitionType == PartitionRangeType.FIXED) {
+            return "[" + getPartitionValuesStr(lowerValues) + ", " + getPartitionValuesStr(upperValues) + ")";
+        } else {
+            return "INVALID";
+        }
     }
 }

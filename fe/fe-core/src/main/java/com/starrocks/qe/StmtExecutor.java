@@ -1200,7 +1200,6 @@ public class StmtExecutor {
             }
 
 
-
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
                     execPlan.getDescTbl().toThrift());
             coord.setQueryType(TQueryType.LOAD);

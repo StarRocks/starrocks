@@ -24,8 +24,8 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.HashDistributionDesc;
+import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.HashDistributionDesc;
 
 import java.io.DataInput;
 import java.io.DataOutput;

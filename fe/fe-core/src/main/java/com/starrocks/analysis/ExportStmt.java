@@ -41,8 +41,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.starrocks.sql.ast.PartitionNames;
 
 import java.net.URI;
 import java.net.URISyntaxException;

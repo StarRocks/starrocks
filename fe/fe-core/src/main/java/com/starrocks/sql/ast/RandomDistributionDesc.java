@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
@@ -57,17 +57,8 @@ public class RandomDistributionDesc extends DistributionDesc {
     }
 
     @Override
-    public String toSql() {
-        StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append("DISTRIBUTED BY RANDOM\n")
-                .append("BUCKETS ").append(numBucket);
-        return stringBuilder.toString();
-    }
-
-    @Override
     public DistributionInfo toDistributionInfo(List<Column> columns) {
-        RandomDistributionInfo randomDistributionInfo = new RandomDistributionInfo(numBucket);
-        return randomDistributionInfo;
+        return new RandomDistributionInfo(numBucket);
     }
 
     @Override

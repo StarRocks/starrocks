@@ -4,7 +4,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BackupStmt;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
@@ -21,6 +20,7 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowBackupStmt;
 
 import java.util.HashMap;

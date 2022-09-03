@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import java.util.Arrays;
 
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import org.junit.Assert;
 import org.junit.Test;

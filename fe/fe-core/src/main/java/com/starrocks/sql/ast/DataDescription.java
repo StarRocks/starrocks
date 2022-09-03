@@ -1,25 +1,6 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/DataDescription.java
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
@@ -27,14 +8,23 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryPredicate.Operator;
+import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.ColumnSeparator;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.ImportColumnDesc;
+import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.RowDelimiter;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
@@ -660,61 +650,14 @@ public class DataDescription {
         analyzeColumns();
     }
 
-    /*
-     * If user does not specify COLUMNS in load stmt, we fill it here.
-     * eg1:
-     *      both COLUMNS and SET clause is empty. after fill:
-     *      (k1,k2,k3)
-     *
-     * eg2:
-     *      COLUMNS is empty, SET is not empty
-     *      SET ( k2 = default_value("2") )
-     *      after fill:
-     *      (k1, k2, k3)
-     *      SET ( k2 = default_value("2") )
-     *
-     * eg3:
-     *      COLUMNS is empty, SET is not empty
-     *      SET (k2 = strftime("%Y-%m-%d %H:%M:%S", k2)
-     *      after fill:
-     *      (k1,k2,k3)
-     *      SET (k2 = strftime("%Y-%m-%d %H:%M:%S", k2)
-     *
-     */
-    public void fillColumnInfoIfNotSpecified(List<Column> baseSchema) throws DdlException {
-        if (fileFieldNames != null && !fileFieldNames.isEmpty()) {
-            return;
-        }
-
-        fileFieldNames = Lists.newArrayList();
-
-        Set<String> mappingColNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        for (ImportColumnDesc importColumnDesc : parsedColumnExprList) {
-            mappingColNames.add(importColumnDesc.getColumnName());
-        }
-
-        for (Column column : baseSchema) {
-            if (!mappingColNames.contains(column.getName())) {
-                parsedColumnExprList.add(new ImportColumnDesc(column.getName(), null));
-            }
-            fileFieldNames.add(column.getName());
-        }
-
-        LOG.debug("after fill column info. columns: {}, parsed column exprs: {}", fileFieldNames, parsedColumnExprList);
-    }
-
-    public String toSql() {
+    @Override
+    public String toString() {
         StringBuilder sb = new StringBuilder();
         if (isLoadFromTable()) {
             sb.append("DATA FROM TABLE ").append(srcTableName);
         } else {
             sb.append("DATA INFILE (");
-            Joiner.on(", ").appendTo(sb, Lists.transform(filePaths, new Function<String, String>() {
-                @Override
-                public String apply(String s) {
-                    return "'" + s + "'";
-                }
-            })).append(")");
+            Joiner.on(", ").appendTo(sb, Lists.transform(filePaths, s -> "'" + s + "'")).append(")");
         }
         if (isNegative) {
             sb.append(" NEGATIVE");
@@ -722,13 +665,13 @@ public class DataDescription {
         sb.append(" INTO TABLE ").append(tableName);
         if (partitionNames != null) {
             sb.append(" ");
-            sb.append(partitionNames.toSql());
+            sb.append(partitionNames);
         }
         if (columnSeparator != null) {
-            sb.append(" COLUMNS TERMINATED BY ").append(columnSeparator.toSql());
+            sb.append(" COLUMNS TERMINATED BY ").append(columnSeparator);
         }
         if (rowDelimiter != null) {
-            sb.append(" ROWS TERMINATED BY ").append(rowDelimiter.toSql());
+            sb.append(" ROWS TERMINATED BY ").append(rowDelimiter);
         }
         if (columnsFromPath != null && !columnsFromPath.isEmpty()) {
             sb.append(" COLUMNS FROM PATH AS (");
@@ -740,18 +683,8 @@ public class DataDescription {
         }
         if (columnMappingList != null && !columnMappingList.isEmpty()) {
             sb.append(" SET (");
-            Joiner.on(", ").appendTo(sb, Lists.transform(columnMappingList, new Function<Expr, Object>() {
-                @Override
-                public Object apply(Expr expr) {
-                    return expr.toSql();
-                }
-            })).append(")");
+            Joiner.on(", ").appendTo(sb, Lists.transform(columnMappingList, (Function<Expr, Object>) Expr::toSql)).append(")");
         }
         return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 }

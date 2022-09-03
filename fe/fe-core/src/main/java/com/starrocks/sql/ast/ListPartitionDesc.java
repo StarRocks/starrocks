@@ -1,9 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -12,11 +14,11 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.stream.Collectors;
 
 /**
@@ -111,7 +113,8 @@ public class ListPartitionDesc extends PartitionDesc {
         this.analyzeDuplicateValues(this.partitionColNames.size(), allMultiLiteralExprValues);
     }
 
-    private void analyzeSingleListPartition(Map<String, String> tableProperties, List<ColumnDef> columnDefList) throws AnalysisException {
+    private void analyzeSingleListPartition(Map<String, String> tableProperties, List<ColumnDef> columnDefList)
+            throws AnalysisException {
         List<LiteralExpr> allLiteralExprValues = Lists.newArrayList();
         Set<String> singListPartitionName = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (SingleItemListPartitionDesc desc : this.singleListPartitionDescs) {
@@ -127,11 +130,13 @@ public class ListPartitionDesc extends PartitionDesc {
     /**
      * Check if duplicate values are found
      * If the value of the member in the same position is equals, it is considered a duplicate
-     * @param partitionColSize the partition column size
+     *
+     * @param partitionColSize          the partition column size
      * @param allMultiLiteralExprValues values from multi list partition
      * @throws AnalysisException
      */
-    private void analyzeDuplicateValues(int partitionColSize, List<List<LiteralExpr>> allMultiLiteralExprValues) throws AnalysisException {
+    private void analyzeDuplicateValues(int partitionColSize, List<List<LiteralExpr>> allMultiLiteralExprValues)
+            throws AnalysisException {
         for (int i = 0; i < allMultiLiteralExprValues.size(); i++) {
             List<LiteralExpr> literalExprValues1 = allMultiLiteralExprValues.get(i);
             for (int j = i + 1; j < allMultiLiteralExprValues.size(); j++) {
@@ -140,7 +145,7 @@ public class ListPartitionDesc extends PartitionDesc {
                 for (int k = 0; k < literalExprValues1.size(); k++) {
                     String value = literalExprValues1.get(k).getStringValue();
                     String tmpValue = literalExprValues2.get(k).getStringValue();
-                    if(value.equals(tmpValue)){
+                    if (value.equals(tmpValue)) {
                         duplicatedSize++;
                     }
                 }
@@ -149,7 +154,7 @@ public class ListPartitionDesc extends PartitionDesc {
                             .map(value -> ("\"" + value.getStringValue() + "\""))
                             .collect(Collectors.toList());
                     throw new AnalysisException("Duplicate values " +
-                            "(" + String.join(",",msg) + ") not allow");
+                            "(" + String.join(",", msg) + ") not allow");
                 }
             }
         }
@@ -158,6 +163,7 @@ public class ListPartitionDesc extends PartitionDesc {
     /**
      * Check if duplicate values are found
      * Use hashSet to check duplicate value
+     *
      * @param allLiteralExprValues values from single list partition
      * @throws AnalysisException
      */
@@ -171,7 +177,8 @@ public class ListPartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp) throws DdlException {
+    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
+            throws DdlException {
         try {
             List<Column> partitionColumns = this.findPartitionColumns(columns);
             ListPartitionInfo listPartitionInfo = new ListPartitionInfo(super.type, partitionColumns);
@@ -213,7 +220,7 @@ public class ListPartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public String toSql() {
+    public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("PARTITION BY LIST(");
         sb.append(this.partitionColNames.stream()
@@ -222,13 +229,13 @@ public class ListPartitionDesc extends PartitionDesc {
         sb.append(")(\n");
         if (!this.multiListPartitionDescs.isEmpty()) {
             String multiList = this.multiListPartitionDescs.stream()
-                    .map(item -> "  " + item.toSql())
+                    .map(item -> "  " + item.toString())
                     .collect(Collectors.joining(",\n"));
             sb.append(multiList);
         }
         if (!this.singleListPartitionDescs.isEmpty()) {
             String sinleList = this.singleListPartitionDescs.stream()
-                    .map(item -> "  " + item.toSql())
+                    .map(item -> "  " + item.toString())
                     .collect(Collectors.joining(",\n"));
             sb.append(sinleList);
         }

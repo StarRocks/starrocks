@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
@@ -229,11 +230,11 @@ terminal String KW_ADD, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ARR
     KW_CANCEL, KW_CASE, KW_CAST, KW_CHAIN, KW_CHAR, KW_CHARSET, KW_CHECK, KW_CLUSTER, KW_CLUSTERS,
     KW_COLLATE, KW_COLLATION, KW_COLUMNS, KW_COMMENT, KW_COMMIT, KW_COMMITTED,
     KW_CONFIG, KW_CONNECTION, KW_CONNECTION_ID, KW_CONSISTENT, KW_COUNT, KW_CREATE, KW_CURRENT, KW_CURRENT_TIMESTAMP, KW_CURRENT_USER,
-    KW_DATA, KW_DATABASE, KW_DATABASES, KW_DATE, KW_DATETIME, KW_DAY, KW_DECIMAL, KW_DECIMALV2, KW_DECIMAL32, KW_DECIMAL64, KW_DECIMAL128, KW_DECOMMISSION, KW_DEFAULT, KW_DESC,
+    KW_DATA, KW_DATABASE, KW_DATE, KW_DATETIME, KW_DAY, KW_DECIMAL, KW_DECIMALV2, KW_DECIMAL32, KW_DECIMAL64, KW_DECIMAL128, KW_DECOMMISSION, KW_DEFAULT, KW_DESC,
     KW_DELETE, KW_DISTINCT, KW_DISTINCTPC, KW_DISTINCTPCSA, KW_DYNAMIC, KW_BUCKETS, KW_DIV, KW_DOUBLE, KW_DROP,
     KW_ELSE, KW_END, KW_ENGINE, KW_ENGINES, KW_ERRORS, KW_EVENTS, KW_EXISTS, KW_EXPORT,
     KW_EXTERNAL, KW_EXTRACT,
-    KW_FALSE, KW_FOLLOWING, KW_FREE, KW_FROM, KW_FILE, KW_FIRST, KW_FLOAT, KW_FOR, KW_FORMAT, KW_FRONTENDS, KW_FULL, KW_FN, KW_FUNCTION,
+    KW_FALSE, KW_FOLLOWING, KW_FREE, KW_FROM, KW_FILE, KW_FIRST, KW_FLOAT, KW_FOR, KW_FORMAT, KW_FN, KW_FUNCTION,
     KW_GLOBAL, KW_GRANT, KW_GRANTS, KW_GROUPING,
     KW_HASH, KW_HELP,KW_HLL, KW_HLL_UNION, KW_HOUR, KW_HUB,
     KW_IDENTIFIED, KW_IF, KW_IN, KW_INDEXES, KW_INSTALL,
@@ -251,9 +252,9 @@ terminal String KW_ADD, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ARR
     KW_RANDOM, KW_RANGE, KW_READ, KW_RECOVER, KW_REGEXP, KW_RELEASE,
     KW_REPEATABLE, KW_REPOSITORY, KW_REPOSITORIES, KW_REPLACE, KW_REPLACE_IF_NOT_NULL, KW_RESOURCE, KW_RESOURCES, KW_RESTORE, KW_RETURNS, KW_RESUME, KW_REVOKE,
     KW_RIGHT, KW_ROLE, KW_ROLES, KW_ROLLBACK, KW_ROLLUP, KW_ROUTINE, KW_ROW, KW_ROWS,
-    KW_SCHEMA, KW_SCHEMAS, KW_SECOND, KW_SERIALIZABLE, KW_SESSION, KW_SET, KW_SHOW,
+    KW_SCHEMA, KW_SECOND, KW_SERIALIZABLE, KW_SESSION, KW_SET, KW_SHOW,
     KW_SMALLINT, KW_SNAPSHOT, KW_SONAME, KW_SPLIT, KW_START, KW_STATUS, KW_STOP, KW_STORAGE, KW_STRING,
-    KW_SUM, KW_SUPERUSER, KW_SYNC,
+    KW_SUM, KW_SUPERUSER,
     KW_TABLE, KW_TABLES, KW_TABLET, KW_TASK, KW_TEMPORARY, KW_TERMINATED, KW_THAN, KW_TIME, KW_THEN, KW_TIMESTAMP, KW_TINYINT,
     KW_TO, KW_TRANSACTION, KW_TRIGGERS, KW_TRIM, KW_TRUE, KW_TRUNCATE, KW_TYPE, KW_TYPES,
     KW_UNCOMMITTED, KW_UNBOUNDED, KW_USER, KW_UNINSTALL,
@@ -290,7 +291,7 @@ nonterminal List<ImportColumnDesc> import_column_descs;
 nonterminal opt_with_consistent_snapshot, opt_work, opt_chain, opt_release;
 
 // No return.
-nonterminal opt_full, from_or_in, opt_storage, opt_wild_where,
+nonterminal from_or_in, opt_wild_where,
             charset, equal, transaction_characteristics, isolation_level,
             transaction_access_mode, isolation_types;
 
@@ -314,7 +315,7 @@ nonterminal String opt_table_alias;
 nonterminal ArrayList<String> ident_list;
 nonterminal PartitionNames opt_partition_names, partition_names;
 nonterminal ArrayList<Long> opt_tablet_list, tablet_list;
-nonterminal TableName table_name, opt_table_name;
+nonterminal TableName table_name;
 nonterminal FunctionName function_name;
 nonterminal Expr where_clause;
 nonterminal Predicate predicate, between_predicate, comparison_predicate,
@@ -344,7 +345,7 @@ nonterminal Expr sign_chain_expr;
 nonterminal ArrayList<String> opt_common_hints;
 
 // Set type
-nonterminal SetType option_type, opt_var_type, var_ident_type;
+nonterminal SetType option_type, var_ident_type;
 
 // Set variable
 nonterminal SetVar option_value, option_value_follow_option_type, option_value_no_option_type;
@@ -383,7 +384,7 @@ nonterminal String keyword, ident, ident_or_text, variable_name, text_or_passwor
         collation_name_or_default, type_func_name_keyword, type_function_name, time_unit;
 
 nonterminal String opt_db;
-nonterminal Boolean opt_if_exists, opt_if_not_exists;
+nonterminal Boolean opt_if_not_exists;
 
 nonterminal RoutineLoadDataSourceProperties opt_datasource_properties;
 
@@ -392,7 +393,7 @@ precedence nonassoc STRING_LITERAL;
 precedence nonassoc KW_COLUMNS;
 precedence nonassoc KW_WITH;
 
-precedence left KW_FULL, KW_MERGE;
+precedence left KW_MERGE;
 precedence left DOT;
 precedence left SET_VAR;
 precedence left KW_OR;
@@ -962,16 +963,6 @@ opt_properties ::=
     :}
     ;
 
-opt_if_exists ::=
-    {:
-        RESULT = false;
-    :}
-    | KW_IF KW_EXISTS
-    {:
-        RESULT = true;
-    :}
-    ;
-
 opt_if_not_exists ::=
     {:
         RESULT = false;
@@ -1050,17 +1041,6 @@ opt_db ::=
     :}
     ;
 
-opt_table_name ::=
-     /* empty */
-     {:
-         RESULT = null;
-     :}
-     | from_or_in table_name:table
-     {:
-         RESULT = table;
-     :}
-     ;
-
 charset ::=
     KW_CHAR KW_SET
     | KW_CHARSET
@@ -1110,25 +1090,9 @@ collation_name_or_default ::=
     :}
     ;
 
-opt_storage ::=
-    /* Empty */
-    | KW_STORAGE
-    ;
-
 from_or_in ::=
     KW_FROM
     | KW_IN
-    ;
-
-opt_full ::=
-    /* empty */
-    {:
-        parser.isVerbose = false;
-    :}
-    | KW_FULL
-    {:
-        parser.isVerbose = true;
-    :}
     ;
 
 opt_wild_where ::=
@@ -1361,17 +1325,6 @@ option_type ::=
     {:
         RESULT = SetType.SESSION;
     :}
-    ;
-
-opt_var_type ::=
-    /* empty */
-    {: RESULT = SetType.DEFAULT; :}
-    | KW_GLOBAL
-    {: RESULT = SetType.GLOBAL; :}
-    | KW_LOCAL
-    {: RESULT = SetType.SESSION; :}
-    | KW_SESSION
-    {: RESULT = SetType.SESSION; :}
     ;
 
 var_ident_type ::=
