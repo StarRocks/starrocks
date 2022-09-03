@@ -798,4 +798,8 @@ CONF_Int64(loop_count_wait_fragments_finish, "0");
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
 CONF_Int32(internal_service_async_thread_num, "10");
 
+// Used by to_base64
+CONF_Int64(max_length_for_to_base64, "200000");
+// Used by bitmap functions
+CONF_Int64(max_length_for_bitmap_function, "1000000");
 } // namespace starrocks::config
