@@ -13,7 +13,7 @@ TEST_F(IndexPageTest, test_seek_at_or_before) {
     IndexPageReader reader1;
     reader1._parsed = true;
     reader1._keys = {"111"};
-    reader1._footer.set_num_entries(1);
+    reader1._num_entries = 1;
     std::vector<Slice> keys1 = {"000", "111", "222"};
     std::vector<int> pos1 = {-1, 0, 0};
     IndexPageIterator iter1(&reader1);
@@ -31,7 +31,7 @@ TEST_F(IndexPageTest, test_seek_at_or_before) {
     IndexPageReader reader2;
     reader2._parsed = true;
     reader2._keys = {"111", "333"};
-    reader2._footer.set_num_entries(2);
+    reader2._num_entries = 2;
     std::vector<Slice> keys2 = {"000", "111", "222", "333", "444"};
     std::vector<int> pos2 = {-1, 0, 0, 1, 1};
     IndexPageIterator iter2(&reader2);
@@ -49,7 +49,7 @@ TEST_F(IndexPageTest, test_seek_at_or_before) {
     IndexPageReader reader3;
     reader3._parsed = true;
     reader3._keys = {"111", "333", "555"};
-    reader3._footer.set_num_entries(3);
+    reader3._num_entries = 3;
     std::vector<Slice> keys3 = {"000", "111", "222", "333", "444", "555", "666"};
     std::vector<int> pos3 = {-1, 0, 0, 1, 1, 2, 2};
     IndexPageIterator iter3(&reader3);
@@ -69,7 +69,7 @@ TEST_F(IndexPageTest, test_seek_at_or_after) {
     IndexPageReader reader1;
     reader1._parsed = true;
     reader1._keys = {"111"};
-    reader1._footer.set_num_entries(1);
+    reader1._num_entries = 1;
     std::vector<Slice> keys1 = {"000", "111", "222"};
     std::vector<int> pos1 = {0, 0, 0};
     IndexPageIterator iter1(&reader1);
@@ -83,7 +83,7 @@ TEST_F(IndexPageTest, test_seek_at_or_after) {
     IndexPageReader reader2;
     reader2._parsed = true;
     reader2._keys = {"111", "333"};
-    reader2._footer.set_num_entries(2);
+    reader2._num_entries = 2;
     std::vector<Slice> keys2 = {"000", "111", "222", "333", "444"};
     std::vector<int> pos2 = {0, 0, 0, 1, 1};
     IndexPageIterator iter2(&reader2);
@@ -97,7 +97,7 @@ TEST_F(IndexPageTest, test_seek_at_or_after) {
     IndexPageReader reader3;
     reader3._parsed = true;
     reader3._keys = {"111", "333", "555"};
-    reader3._footer.set_num_entries(3);
+    reader3._num_entries = 3;
     std::vector<Slice> keys3 = {"000", "111", "222", "333", "444", "555", "666"};
     std::vector<int> pos3 = {0, 0, 0, 1, 1, 2, 2};
     IndexPageIterator iter3(&reader3);
