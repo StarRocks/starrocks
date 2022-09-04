@@ -83,8 +83,8 @@ statement
     | createRoutineLoadStatement
     | stopRoutineLoadStatement
     | resumeRoutineLoadStatement
-    | pauseRoutineLoadStatement                                                            
-    | showRoutineLoadStatement                                                            
+    | pauseRoutineLoadStatement
+    | showRoutineLoadStatement
 
     // Admin Statement
     | adminSetConfigStatement
