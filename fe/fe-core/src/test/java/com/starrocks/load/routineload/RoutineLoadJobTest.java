@@ -430,7 +430,7 @@ public class RoutineLoadJobTest {
                 "ROWS TERMINATED BY '\n', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
                 "TEMPORARY PARTITION(`p1`, `p2`), " +
-                "WHERE `a` = 1 " +
+                "WHERE a = 1 " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
 
@@ -444,7 +444,7 @@ public class RoutineLoadJobTest {
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`, `b`, `c` = 1), " +
                 "TEMPORARY PARTITION(`p1`, `p2`), " +
-                "WHERE `a` = 1 " +
+                "WHERE a = 1 " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
 
@@ -458,7 +458,7 @@ public class RoutineLoadJobTest {
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
                 "TEMPORARY PARTITION(`p1`, `p2`), " +
-                "WHERE `a` = 1 " +
+                "WHERE a = 1 " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
         // alter partition again
@@ -471,7 +471,7 @@ public class RoutineLoadJobTest {
                 "ROWS TERMINATED BY 'a', " +
                 "COLUMNS(`a`), " +
                 "PARTITION(`p1`, `p2`), " +
-                "WHERE `a` = 1 " +
+                "WHERE a = 1 " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
 
