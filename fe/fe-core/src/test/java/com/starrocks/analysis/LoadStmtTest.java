@@ -49,27 +49,7 @@ public class LoadStmtTest {
     }
 
     @Test
-    public void testNormal(@Injectable DataDescription desc, @Mocked GlobalStateMgr globalStateMgr, @Injectable ResourceMgr resourceMgr, @Injectable
-    Auth auth)
-            throws UserException {
-        String resourceName = "spark0";
-        SparkResource resource = new SparkResource(resourceName);
-
-        new Expectations() {
-            {
-                globalStateMgr.getResourceMgr();
-                result = resourceMgr;
-                resourceMgr.getResource(resourceName);
-                result = resource;
-                globalStateMgr.getAuth();
-                result = auth;
-                auth.checkResourcePriv((ConnectContext) any, resourceName, PrivPredicate.USAGE);
-                result = true;
-                auth.checkTblPriv((ConnectContext) any, "test",
-                        "t0", PrivPredicate.LOAD);
-                result = true;
-            }
-        };
+    public void testNormal() throws UserException {
         LoadStmt stmt = (LoadStmt) analyzeSuccess(
                 "LOAD LABEL test.testLabel " +
                         "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`)");
@@ -80,16 +60,6 @@ public class LoadStmtTest {
         Assert.assertNull(stmt.getProperties());
         Assert.assertEquals("LOAD LABEL `test`.`testLabel`\n" +
                 "(DATA INFILE ('hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file') INTO TABLE t0)", stmt.toString());
-
-        // test ResourceDesc
-        stmt = (LoadStmt) analyzeSuccess(
-                "LOAD LABEL test.testLabel " +
-                        "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) " +
-                        "WITH RESOURCE spark0 " +
-                        "PROPERTIES (\"strict_mode\"=\"true\")");
-        Assert.assertEquals(EtlJobType.SPARK, stmt.getResourceDesc().getEtlJobType());
-        Assert.assertEquals("root", stmt.getUser());
-        Assert.assertEquals(ImmutableSet.of("strict_mode"), stmt.getProperties().keySet());
     }
 
     @Test
@@ -115,5 +85,14 @@ public class LoadStmtTest {
         analyzeFail(
                 "LOAD LABEL testLabel (DATA FROM TABLE t0 INTO TABLE t1)",
                 "Load from table should use Spark Load");
+    }
+
+    @Test
+    public void testBrokerLoad() {
+        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER hdfs_broker PROPERTIES (\"strict_mode\"=\"true\")");
+        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER PROPERTIES (\"strict_mode\"=\"true\")");
+        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER hdfs_broker (\"username\"=\"sr\") PROPERTIES (\"strict_mode\"=\"true\")");
+        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER (\"username\"=\"sr\") PROPERTIES (\"strict_mode\"=\"true\")");
+        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER (\"username\"=\"sr\")");
     }
 }

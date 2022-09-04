@@ -92,7 +92,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.ConfigBase;
@@ -325,13 +324,12 @@ public class ShowExecutor {
                 matcher = PatternMatcher.createMysqlPattern(showMaterializedViewStmt.getPattern(),
                         CaseSensibility.TABLE.getCaseSensibility());
             }
-            for (Table materializedView : db.getMaterializedViews()) {
-                if (matcher != null && !matcher.match(materializedView.getName())) {
+            for (MaterializedView mvTable : db.getMaterializedViews()) {
+                if (matcher != null && !matcher.match(mvTable.getName())) {
                     continue;
                 }
-                MaterializedView mvTable = (MaterializedView) materializedView;
                 List<String> resultRow = Lists.newArrayList(String.valueOf(mvTable.getId()), mvTable.getName(), dbName,
-                        mvTable.getViewDefineSql(), String.valueOf(mvTable.getRowCount()));
+                        GlobalStateMgr.getMaterializedViewDdlStmt(mvTable), String.valueOf(mvTable.getRowCount()));
                 rowSets.add(resultRow);
             }
             for (Table table : db.getTables()) {
@@ -516,18 +514,17 @@ public class ShowExecutor {
                     CaseSensibility.DATABASE.getCaseSensibility());
         }
         Set<String> dbNameSet = Sets.newTreeSet();
-        for (String fullName : dbNames) {
-            final String db = ClusterNamespace.getNameFromFullName(fullName);
+        for (String dbName : dbNames) {
             // Filter dbname
-            if (matcher != null && !matcher.match(db)) {
+            if (matcher != null && !matcher.match(dbName)) {
                 continue;
             }
 
             if (!PrivilegeChecker.checkDbPriv(ConnectContext.get(), catalogName,
-                    fullName, PrivPredicate.SHOW)) {
+                    dbName, PrivPredicate.SHOW)) {
                 continue;
             }
-            dbNameSet.add(db);
+            dbNameSet.add(dbName);
         }
 
         for (String dbName : dbNameSet) {
@@ -655,9 +652,8 @@ public class ShowExecutor {
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDb());
         }
-        StringBuilder sb = new StringBuilder();
-        sb.append("CREATE DATABASE `").append(ClusterNamespace.getNameFromFullName(showStmt.getDb())).append("`");
-        rows.add(Lists.newArrayList(ClusterNamespace.getNameFromFullName(showStmt.getDb()), sb.toString()));
+        rows.add(Lists.newArrayList(showStmt.getDb(),
+                "CREATE DATABASE `" + showStmt.getDb() + "`"));
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 

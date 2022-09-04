@@ -1153,12 +1153,11 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
     }
 
-    LOG(INFO) << "Start to drop tablet" << tablet_id;
+    LOG(INFO) << "Start to drop tablet " << tablet_id;
     TabletSharedPtr dropped_tablet = it->second;
     tablet_map.erase(it);
     _remove_tablet_from_partition(*dropped_tablet);
     dropped_tablet->stop_compaction();
-    LOG(INFO) << "Succeed to stop compaction of tablet " << tablet_id;
 
     DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = flag};
 
@@ -1186,9 +1185,8 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
             // See comments above
             std::unique_lock l(dropped_tablet->get_header_lock());
             dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+            dropped_tablet->save_meta();
         }
-
-        dropped_tablet->save_meta();
 
         std::unique_lock l(_shutdown_tablets_lock);
         _shutdown_tablets.emplace(tablet_id, std::move(drop_info));
@@ -1196,7 +1194,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         DCHECK_EQ(kKeepMetaAndFiles, flag);
     }
     dropped_tablet->deregister_tablet_from_dir();
-    LOG(INFO) << "Succeed to drop tablet" << tablet_id;
+    LOG(INFO) << "Succeed to drop tablet " << tablet_id;
     return Status::OK();
 }
 

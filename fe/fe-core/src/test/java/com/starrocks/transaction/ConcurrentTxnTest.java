@@ -2,7 +2,6 @@
 package com.starrocks.transaction;
 
 import com.starrocks.common.Config;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.pseudocluster.Tablet;
@@ -12,13 +11,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
-import java.util.Random;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ConcurrentTxnTest {
@@ -31,185 +24,15 @@ public class ConcurrentTxnTest {
     public static void tearDown() throws Exception {
     }
 
-    static AtomicInteger totalTabletRead = new AtomicInteger(0);
-    static AtomicInteger totalTableRead = new AtomicInteger(0);
-
-    class TableLoad {
-        String db;
-        String table;
-        int id;
-        int numTablet;
-        int replicationNum;
-        int loadIntervalMs;
-        boolean withRead;
-
-        TableLoad(String db, int id, int numTablet, int replicationNum, int loadIntervalMs, boolean withRead) {
-            this.db = db;
-            this.table = "table_" + id;
-            this.id = id;
-            this.numTablet = numTablet;
-            this.replicationNum = replicationNum;
-            this.loadIntervalMs = loadIntervalMs;
-            this.withRead = withRead;
-        }
-
-        void createTable() throws SQLException {
-            PseudoCluster.getInstance().runSql(db,
-                    "create table " + table +
-                            " ( pk bigint NOT NULL, v0 string not null) primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS " +
-                            numTablet + " PROPERTIES(\"replication_num\" = \"" + replicationNum +
-                            "\", \"storage_medium\" = \"SSD\")");
-        }
-
-        boolean hasTask(int tsMs) {
-            return tsMs % loadIntervalMs == 0;
-        }
-
-        void loadOnce() throws SQLException {
-            List<String> sqls = new ArrayList<>();
-            sqls.add("insert into " + db + "." + table + " values (1,\"1\"), (2,\"2\"), (3,\"3\")");
-            if (withRead) {
-                sqls.add("select * from " + db + "." + table);
-                totalTableRead.incrementAndGet();
-                totalTabletRead.addAndGet(numTablet);
-            }
-            PseudoCluster.getInstance().runSqlList(null, sqls);
-        }
-    }
-
-    class DBLoad {
-        int numDB;
-        int numTable;
-        int numTabletPerTable = 0;
-        boolean withRead = false;
-        List<TableLoad> tableLoads;
-        volatile Exception error;
-
-        AtomicInteger finishedTask = new AtomicInteger(0);
-
-        DBLoad(int numDB, int numTable, boolean withRead) {
-            this.numDB = numDB;
-            this.numTable = numTable;
-            this.withRead = withRead;
-        }
-
-        DBLoad(int numDB, int numTable, int numTabletPerTable, boolean withRead) {
-            this.numDB = numDB;
-            this.numTable = numTable;
-            this.withRead = withRead;
-            this.numTabletPerTable = numTabletPerTable;
-        }
-
-        void run(int numThread, int runSeconds) {
-            for (int i = 0; i < numDB; i++) {
-                try {
-                    PseudoCluster.getInstance().runSql(null, "create database db_" + i);
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                    Assert.fail(e.getMessage());
-                }
-            }
-            ThreadPoolExecutor executor
-                    = (ThreadPoolExecutor) Executors.newFixedThreadPool(numThread);
-            tableLoads = new ArrayList<>();
-            Random r = new Random(0);
-            int scheduleIntervalMs = 200;
-            List<Future<?>> futures = new ArrayList<Future<?>>();
-            for (int i = 0; i < numTable; i++) {
-                int numTablet = r.nextInt(16) + 1;
-                if (this.numTabletPerTable != 0) {
-                    numTablet = this.numTabletPerTable;
-                }
-                int replicationNum = 3;
-                int loadIntervalMs = (r.nextInt(40) + 1) * scheduleIntervalMs;
-                String dbName = "db_" + (i % numDB);
-                TableLoad tableLoad = new TableLoad(dbName, i, numTablet, replicationNum, loadIntervalMs, withRead);
-                tableLoads.add(tableLoad);
-                futures.add(executor.submit(() -> {
-                    try {
-                        tableLoad.createTable();
-                    } catch (SQLException e) {
-                        error = e;
-                    }
-                }));
-                if (error != null) {
-                    Assert.fail(error.getMessage());
-                }
-            }
-            for (Future<?> future : futures) {
-                try {
-                    future.get();
-                } catch (Exception e) {
-                    Assert.fail(e.getMessage());
-                }
-            }
-            futures.clear();
-            long numLogBefore = MetricRepo.COUNTER_EDIT_LOG_WRITE.getValue();
-            finishedTask.set(0);
-            long startTs = System.nanoTime();
-            int runInterval = runSeconds * 1000 / scheduleIntervalMs;
-            for (int i = 0; i < runInterval; i++) {
-                for (TableLoad tableLoad : tableLoads) {
-                    if (tableLoad.hasTask(i * scheduleIntervalMs)) {
-                        futures.add(executor.submit(() -> {
-                            try {
-                                tableLoad.loadOnce();
-                                finishedTask.incrementAndGet();
-                            } catch (SQLException e) {
-                                System.out.printf("load error db:%s table:%s %s\n", tableLoad.db, tableLoad.table,
-                                        e.getMessage());
-                                e.printStackTrace();
-                                error = e;
-                            }
-                        }));
-                    }
-                }
-                if (error != null) {
-                    Assert.fail(error.getMessage());
-                }
-                try {
-                    Thread.sleep(scheduleIntervalMs);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-            for (Future<?> future : futures) {
-                try {
-                    future.get();
-                } catch (Exception e) {
-                    Assert.fail(e.getMessage());
-                }
-            }
-            if (error != null) {
-                Assert.fail(error.getMessage());
-            }
-            double t = (System.nanoTime() - startTs) / 1e9;
-            System.out.printf("numThread:%d numDB:%d numLoad:%d Time: %.2fs, %.2f tps\n", numThread, numDB, finishedTask.get(), t,
-                    finishedTask.get() / t);
-            long numLog = MetricRepo.COUNTER_EDIT_LOG_WRITE.getValue() - numLogBefore;
-            double writeBatch = MetricRepo.HISTO_JOURNAL_WRITE_BATCH.getSnapshot().getMedian();
-            double writeLatency = MetricRepo.HISTO_JOURNAL_WRITE_LATENCY.getSnapshot().getMedian();
-            double writeBytes = MetricRepo.HISTO_JOURNAL_WRITE_BYTES.getSnapshot().getMedian();
-            System.out.printf("numLog:%d writeBatch:%f writeLatency:%f writeBytes:%f\n", numLog, writeBatch, writeLatency,
-                    writeBytes);
-            for (int i = 0; i < numDB; i++) {
-                try {
-                    PseudoCluster.getInstance().runSql(null, "drop database db_" + i + " force");
-                } catch (SQLException e) {
-                    Assert.fail(e.getMessage());
-                }
-            }
-        }
-    }
-
     int runTime = 2;
     int numDB = 2;
     int numTable = 100;
     int numThread = 2;
     // 0 means random num of tablets
     int numTabletPerTable = 0;
-    int runSeconds = 2;
+    int runSeconds = 3;
     boolean withRead = true;
+    boolean withUpdateDelete = true;
     boolean deleteRunDir = true;
 
     void setup() throws SQLException {
@@ -220,13 +43,13 @@ public class ConcurrentTxnTest {
     public void testConcurrentLoad() throws Exception {
         setup();
         for (int i = 0; i < runTime; i++) {
-            totalTabletRead.set(0);
-            totalTableRead.set(0);
+            DBLoad.TableLoad.totalTabletRead.set(0);
+            DBLoad.TableLoad.totalTableRead.set(0);
             PseudoBackend.scansByQueryId.clear();
-            DBLoad dbLoad = new DBLoad(numDB, numTable, numTabletPerTable, withRead);
+            DBLoad dbLoad = new DBLoad(numDB, numTable, numTabletPerTable, withRead, withUpdateDelete);
             dbLoad.run(numThread, runSeconds);
             System.out.printf("totalReadExpected: %d totalRead: %d totalSucceed: %d totalFail: %d\n",
-                    totalTabletRead.get(), Tablet.getTotalReadExecuted(), Tablet.getTotalReadSucceed(),
+                    DBLoad.TableLoad.totalTabletRead.get(), Tablet.getTotalReadExecuted(), Tablet.getTotalReadSucceed(),
                     Tablet.getTotalReadFailed());
             if (numTabletPerTable != 0) {
                 for (Map.Entry<String, AtomicInteger> kv : PseudoBackend.scansByQueryId.entrySet()) {
@@ -236,9 +59,10 @@ public class ConcurrentTxnTest {
                     }
                 }
             }
-            System.out.printf("tableRead: %d scanQueryId: %d\n", totalTableRead.get(), PseudoBackend.scansByQueryId.size());
-            Assert.assertEquals(totalTableRead.get(), PseudoBackend.scansByQueryId.size());
-            Assert.assertEquals(totalTabletRead.get(), Tablet.getTotalReadSucceed());
+            System.out.printf("tableRead: %d scanQueryId: %d\n", DBLoad.TableLoad.totalTableRead.get(),
+                    PseudoBackend.scansByQueryId.size());
+            Assert.assertEquals(DBLoad.TableLoad.totalTableRead.get(), PseudoBackend.scansByQueryId.size());
+            Assert.assertEquals(DBLoad.TableLoad.totalTabletRead.get(), Tablet.getTotalReadSucceed());
             Tablet.clearStats();
         }
         PseudoCluster.getInstance().shutdown(deleteRunDir);

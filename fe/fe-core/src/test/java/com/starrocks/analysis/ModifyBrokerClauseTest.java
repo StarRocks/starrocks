@@ -3,17 +3,17 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.utframe.UtFrameUtils;
 
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 
 public class ModifyBrokerClauseTest {

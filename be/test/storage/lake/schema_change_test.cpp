@@ -4,16 +4,17 @@
 
 #include <gtest/gtest.h>
 
-#include "column/fixed_length_column.h"
 #include "column/datum_tuple.h"
+#include "column/fixed_length_column.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
-#include "storage/lake/tablet_reader.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reader.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 
@@ -66,7 +67,7 @@ public:
             c1->set_is_nullable(false);
         }
 
-        _base_tablet_schema = TabletSchema::create(_mem_tracker.get(), *base_schema);
+        _base_tablet_schema = TabletSchema::create(*base_schema);
         _base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_base_tablet_schema));
 
         // new tablet
@@ -112,7 +113,7 @@ public:
             c2->set_default_value("10");
         }
 
-        _new_tablet_schema = TabletSchema::create(_mem_tracker.get(), *new_schema);
+        _new_tablet_schema = TabletSchema::create(*new_schema);
         _new_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_new_tablet_schema));
     }
 
@@ -122,7 +123,9 @@ protected:
     void SetUp() override {
         (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(kTestGroupPath));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_base_tablet_metadata));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_new_tablet_metadata));
     }
@@ -282,7 +285,7 @@ public:
             c1->set_is_nullable(false);
         }
 
-        _base_tablet_schema = TabletSchema::create(_mem_tracker.get(), *base_schema);
+        _base_tablet_schema = TabletSchema::create(*base_schema);
         _base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_base_tablet_schema));
 
         // new tablet
@@ -318,7 +321,7 @@ public:
             c1->set_is_nullable(false);
         }
 
-        _new_tablet_schema = TabletSchema::create(_mem_tracker.get(), *new_schema);
+        _new_tablet_schema = TabletSchema::create(*new_schema);
         _new_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_new_tablet_schema));
     }
 
@@ -328,7 +331,9 @@ protected:
     void SetUp() override {
         (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(kTestGroupPath));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_base_tablet_metadata));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_new_tablet_metadata));
     }
@@ -496,7 +501,7 @@ public:
             c2->set_is_nullable(false);
         }
 
-        _base_tablet_schema = TabletSchema::create(_mem_tracker.get(), *base_schema);
+        _base_tablet_schema = TabletSchema::create(*base_schema);
         _base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_base_tablet_schema));
 
         // new tablet
@@ -542,7 +547,7 @@ public:
             c2->set_default_value("10");
         }
 
-        _new_tablet_schema = TabletSchema::create(_mem_tracker.get(), *new_schema);
+        _new_tablet_schema = TabletSchema::create(*new_schema);
         _new_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_new_tablet_schema));
     }
 
@@ -552,7 +557,9 @@ protected:
     void SetUp() override {
         (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(kTestGroupPath));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_base_tablet_metadata));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_new_tablet_metadata));
     }

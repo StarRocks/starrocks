@@ -59,7 +59,7 @@ public abstract class Type implements Cloneable {
     public static int MAX_NESTING_DEPTH = 15;
 
     // DECIMAL, NULL, and INVALID_TYPE  are handled separately.
-    private static final List<PrimitiveType> skipCompareTypes = Arrays.asList(
+    private static final List<PrimitiveType> SKIP_COMPARE_TYPES = Arrays.asList(
             PrimitiveType.INVALID_TYPE, PrimitiveType.NULL_TYPE, PrimitiveType.DECIMALV2,
             PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128,
             PrimitiveType.TIME, PrimitiveType.JSON, PrimitiveType.FUNCTION);
@@ -129,21 +129,21 @@ public abstract class Type implements Cloneable {
     public static final Type ARRAY_DATETIME = new ArrayType(Type.DATETIME);
     public static final Type ARRAY_VARCHAR = new ArrayType(Type.VARCHAR);
 
-    private static final ImmutableList<ScalarType> integerTypes =
+    private static final ImmutableList<ScalarType> INTEGER_TYPES =
             ImmutableList.of(TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
-    private static final ImmutableList<ScalarType> floatPointTypes =
+    private static final ImmutableList<ScalarType> FLOAT_POINT_TYPES =
             ImmutableList.of(FLOAT, DOUBLE, DECIMALV2, DECIMAL32, DECIMAL64, DECIMAL128);
-    private static final ImmutableList<ScalarType> numericTypes =
+    private static final ImmutableList<ScalarType> NUMERIC_TYPES =
             ImmutableList.<ScalarType>builder()
-                    .addAll(integerTypes)
-                    .addAll(floatPointTypes)
+                    .addAll(INTEGER_TYPES)
+                    .addAll(FLOAT_POINT_TYPES)
                     .build();
 
     protected static final ImmutableList<Type> SUPPORTED_TYPES =
             ImmutableList.<Type>builder()
                     .add(NULL)
                     .add(BOOLEAN)
-                    .addAll(integerTypes)
+                    .addAll(INTEGER_TYPES)
                     .add(FLOAT)
                     .add(DOUBLE)
                     .add(VARCHAR)
@@ -492,7 +492,7 @@ public abstract class Type implements Cloneable {
             for (int j = i; j < PrimitiveType.values().length - 2; ++j) {
                 PrimitiveType t1 = PrimitiveType.values()[i];
                 PrimitiveType t2 = PrimitiveType.values()[j];
-                if (skipCompareTypes.contains(t1) || skipCompareTypes.contains(t2)) {
+                if (SKIP_COMPARE_TYPES.contains(t1) || SKIP_COMPARE_TYPES.contains(t2)) {
                     continue;
                 }
                 Preconditions.checkNotNull(compatibilityMatrix[i][j]);
@@ -501,11 +501,11 @@ public abstract class Type implements Cloneable {
     }
 
     public static List<ScalarType> getIntegerTypes() {
-        return integerTypes;
+        return INTEGER_TYPES;
     }
 
     public static List<ScalarType> getNumericTypes() {
-        return numericTypes;
+        return NUMERIC_TYPES;
     }
 
     /**
@@ -708,7 +708,7 @@ public abstract class Type implements Cloneable {
                 !isJsonType() && !isOnlyMetricType() && !isFunctionType();
     }
 
-    public static final String OnlyMetricTypeErrorMsg =
+    public static final String ONLY_METRIC_TYPE_ERROR_MSG =
             "Type percentile/hll/bitmap/json not support aggregation/group-by/order-by/union/join";
 
     public boolean isHllType() {

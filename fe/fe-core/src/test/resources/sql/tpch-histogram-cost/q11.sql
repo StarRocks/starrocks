@@ -32,7 +32,7 @@ Output Exprs:1: PS_PARTKEY | 21: sum
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-29:MERGING-EXCHANGE
+30:MERGING-EXCHANGE
 cardinality: 1600000
 column statistics:
 * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1600000.0] ESTIMATE
@@ -43,9 +43,9 @@ PLAN FRAGMENT 1(F00)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 29
+OutPut Exchange Id: 30
 
-28:SORT
+29:SORT
 |  order by: [21, DOUBLE, true] DESC
 |  offset: 0
 |  cardinality: 1600000
@@ -54,7 +54,7 @@ OutPut Exchange Id: 29
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 8.0, 99864.0] ESTIMATE
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 8.0, 1.0] ESTIMATE
 |
-27:Project
+28:Project
 |  output columns:
 |  1 <-> [1: PS_PARTKEY, INT, false]
 |  21 <-> [21: sum, DOUBLE, true]
@@ -63,7 +63,7 @@ OutPut Exchange Id: 29
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1600000.0] ESTIMATE
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 8.0, 99864.0] ESTIMATE
 |
-26:NESTLOOP JOIN
+27:NESTLOOP JOIN
 |  join op: CROSS JOIN
 |  other join predicates: [21: sum, DOUBLE, true] > [43: expr, DOUBLE, true]
 |  cardinality: 1600000
@@ -72,7 +72,7 @@ OutPut Exchange Id: 29
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 8.0, 99864.0] ESTIMATE
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 8.0, 1.0] ESTIMATE
 |
-|----25:EXCHANGE
+|----26:EXCHANGE
 |       cardinality: 1
 |
 10:AGGREGATE (update finalize)
@@ -128,8 +128,15 @@ PLAN FRAGMENT 2(F10)
 
 Input Partition: UNPARTITIONED
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 25
+OutPut Exchange Id: 26
 
+25:ASSERT NUMBER OF ROWS
+|  assert number of rows: LE 1
+|  cardinality: 1
+|  column statistics:
+|  * sum-->[1.0, 9999000.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * expr-->[1.0E-4, 999.9000000000001, 0.0, 8.0, 1.0] ESTIMATE
+|
 24:Project
 |  output columns:
 |  43 <-> [42: sum, DOUBLE, true] * 1.0E-4

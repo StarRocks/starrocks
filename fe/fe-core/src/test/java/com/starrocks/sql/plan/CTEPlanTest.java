@@ -611,7 +611,25 @@ public class CTEPlanTest extends PlanTestBase {
                 "select * from x6;";
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setCboCTEMaxLimit(10);
-        System.out.println(plan);
         Assert.assertEquals(5, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testAllCTEConsumePruned() throws Exception {
+        String sql = "select * from t0 where (abs(2) = 1 or v1 in (select v4 from t1)) and v1 = 2 and v1 = 5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:EMPTYSET\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:EMPTYSET");
     }
 }

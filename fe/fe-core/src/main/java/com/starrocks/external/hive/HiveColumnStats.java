@@ -2,6 +2,8 @@
 
 package com.starrocks.external.hive;
 
+import com.google.common.base.Preconditions;
+import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.metastore.api.BooleanColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.DateColumnStatsData;
@@ -11,6 +13,11 @@ import org.apache.hadoop.hive.metastore.api.LongColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.StringColumnStatsData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.math.BigInteger;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.POSITIVE_INFINITY;
@@ -65,8 +72,20 @@ public class HiveColumnStats {
 
     @Override
     public String toString() {
-        return String.format("avgSize: %.2f, numNulls: %d, numDistinctValues: %d, minValue: %.2f, maxValue: %.2f",
-                avgSize, numNulls, numDistinctValues, minValue, maxValue);
+        return String.format("avgSize: %.2f, numNulls: %d, numDistinctValues: %d, minValue: %.2f, maxValue: %.2f, " +
+                        "type: %s",
+                avgSize, numNulls, numDistinctValues, minValue, maxValue, type);
+    }
+
+    public static HiveColumnStats fromString(String columnStats) {
+        String[] columnStatsArray = columnStats.split(",");
+        Preconditions.checkState(columnStatsArray.length == 6);
+
+        List<String> columnStatsList = Arrays.stream(columnStatsArray).map(s -> s.substring(s.indexOf(":") + 2)).
+                collect(Collectors.toList());
+        return new HiveColumnStats(Double.parseDouble(columnStatsList.get(3)), Double.parseDouble(columnStatsList.get(4)),
+                Long.parseLong(columnStatsList.get(1)), Double.parseDouble(columnStatsList.get(0)),
+                Long.parseLong(columnStatsList.get(2)), StatisticType.valueOf(columnStatsList.get(5)));
     }
 
     public void addNumNulls(long v) {
@@ -193,6 +212,14 @@ public class HiveColumnStats {
                     DecimalColumnStatsData decimalStats = statsData.getDecimalStats();
                     numNulls = decimalStats.getNumNulls();
                     numDistinctValues = decimalStats.getNumDVs();
+                    if (decimalStats.isSetHighValue()) {
+                        maxValue = HiveDecimal.create(new BigInteger(decimalStats.getHighValue().getUnscaled()),
+                                decimalStats.getHighValue().getScale()).doubleValue();
+                    }
+                    if (decimalStats.isSetLowValue()) {
+                        minValue = HiveDecimal.create(new BigInteger(decimalStats.getLowValue().getUnscaled()),
+                                decimalStats.getLowValue().getScale()).doubleValue();
+                    }
                 }
                 break;
             default:

@@ -14,7 +14,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.mortbay.log.Log;
@@ -150,11 +149,6 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
 
     @Override
     public void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic) {
-    }
-
-    @Override
-    public Map<ColumnRefOperator, Histogram> getHistogramStatistics(Table table, List<ColumnRefOperator> columns) {
-        return Maps.newHashMap();
     }
 
     private static class StatisticsEntry {

@@ -5,8 +5,6 @@ package com.starrocks.execution;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelAlterSystemStmt;
@@ -53,6 +51,8 @@ import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
@@ -81,7 +81,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 
 public class DataDefinitionExecutorFactory {
-    private static final ImmutableMap<Class<? extends StatementBase>, DataDefinitionExecutor> executorMap =
+    private static final ImmutableMap<Class<? extends StatementBase>, DataDefinitionExecutor> EXECUTOR_MAP =
             new ImmutableMap.Builder<Class<? extends StatementBase>, DataDefinitionExecutor>()
                     .put(CreateDbStmt.class, new CreateDbExecutor())
                     .put(DropDbStmt.class, new DropDbExecutor())
@@ -158,7 +158,7 @@ public class DataDefinitionExecutorFactory {
                     .build();
 
     public static ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
-        DataDefinitionExecutor executor = executorMap.get(stmt.getClass());
+        DataDefinitionExecutor executor = EXECUTOR_MAP.get(stmt.getClass());
         if (executor != null) {
             return executor.execute(stmt, context);
         } else {

@@ -244,11 +244,11 @@ vectorized_functions = [
     [30311, 'split', 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::split', 'StringFunctions::split_prepare', 'StringFunctions::split_close'],
 
     [30320, 'regexp_extract', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'], 'StringFunctions::regexp_extract',
-     'StringFunctions::regexp_prepare', 'StringFunctions::regexp_close'],
+     'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
     [30330, 'regexp_replace', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_replace',
-     'StringFunctions::regexp_prepare', 'StringFunctions::regexp_close'],
+     'StringFunctions::regexp_replace_prepare', 'StringFunctions::regexp_close'],
     [30331, 'replace', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_replace',
-     'StringFunctions::regexp_prepare', 'StringFunctions::regexp_close'],
+     'StringFunctions::regexp_replace_prepare', 'StringFunctions::regexp_close'],
     [30400, "money_format", "VARCHAR", ["BIGINT"], "StringFunctions::money_format_bigint"],
     [30401, "money_format", "VARCHAR", ["LARGEINT"], "StringFunctions::money_format_largeint"],
     [30402, "money_format", "VARCHAR", ["DECIMALV2"], "StringFunctions::money_format_decimalv2val"],
@@ -519,6 +519,10 @@ vectorized_functions = [
     [110009, "json_array", "JSON", ["JSON", "..."], "JsonFunctions::json_array", False],
     [110010, "json_object", "JSON", [], "JsonFunctions::json_object_empty", False],
     [110011, "json_array", "JSON", [], "JsonFunctions::json_array_empty", False],
+    [110016, "json_length", "INT", ["JSON"], "JsonFunctions::json_length", False],
+    [110017, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length", 
+    "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+    [110018, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
 
     # aes and base64 function
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt", False],
@@ -747,4 +751,7 @@ vectorized_functions = [
 
     # reserve 150281
     [150282, 'array_contains_all', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
+
+    # high-order functions related to lambda functions.
+    [160100, 'array_map','ANY_ARRAY',['FUNCTION','ANY_ARRAY', "..."],'ArrayFunctions::array_map'],
 ]

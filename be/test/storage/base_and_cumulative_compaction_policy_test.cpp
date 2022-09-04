@@ -26,8 +26,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_need_compaction) {
     compaction_context->tablet = tablet;
 
     std::vector<RowsetSharedPtr> rowsets;
-    TabletSchema tablet_schema;
-    create_tablet_schema(&tablet_schema);
+    auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
 
     int64_t base_time = UnixSeconds() - 100 * 60;
     RowsetMetaSharedPtr base_rowset_meta = std::make_shared<RowsetMeta>();
@@ -38,7 +37,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_need_compaction) {
     base_rowset_meta->set_num_segments(1);
     base_rowset_meta->set_total_disk_size(100 * 1024 * 1024);
     base_rowset_meta->set_empty(false);
-    RowsetSharedPtr base_rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset_0", base_rowset_meta);
+    RowsetSharedPtr base_rowset = std::make_shared<Rowset>(tablet_schema.get(), "./rowset_0", base_rowset_meta);
     compaction_context->rowset_levels[2].insert(base_rowset.get());
     rowsets.emplace_back(std::move(base_rowset));
     for (int i = 1; i <= 10; i++) {
@@ -49,7 +48,8 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_need_compaction) {
         rowset_meta->set_segments_overlap(NONOVERLAPPING);
         rowset_meta->set_num_segments(1);
         rowset_meta->set_total_disk_size(1024 * 1024);
-        RowsetSharedPtr rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset" + std::to_string(i), rowset_meta);
+        RowsetSharedPtr rowset =
+                std::make_shared<Rowset>(tablet_schema.get(), "./rowset" + std::to_string(i), rowset_meta);
         compaction_context->rowset_levels[1].insert(rowset.get());
         rowsets.emplace_back(std::move(rowset));
     }
@@ -62,7 +62,8 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_need_compaction) {
         rowset_meta->set_segments_overlap(NONOVERLAPPING);
         rowset_meta->set_num_segments(1);
         rowset_meta->set_total_disk_size(1024 * 1024);
-        RowsetSharedPtr rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset" + std::to_string(i), rowset_meta);
+        RowsetSharedPtr rowset =
+                std::make_shared<Rowset>(tablet_schema.get(), "./rowset" + std::to_string(i), rowset_meta);
         compaction_context->rowset_levels[0].insert(rowset.get());
         rowsets.emplace_back(std::move(rowset));
     }
@@ -79,8 +80,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_cumulative_compaction_wi
     compaction_context->tablet = tablet;
 
     std::vector<RowsetSharedPtr> rowsets;
-    TabletSchema tablet_schema;
-    create_tablet_schema(&tablet_schema);
+    auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
 
     int64_t base_time = UnixSeconds() - 100 * 60;
     RowsetMetaSharedPtr base_rowset_meta = std::make_shared<RowsetMeta>();
@@ -91,7 +91,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_cumulative_compaction_wi
     base_rowset_meta->set_num_segments(1);
     base_rowset_meta->set_total_disk_size(100 * 1024 * 1024);
     base_rowset_meta->set_empty(false);
-    RowsetSharedPtr base_rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset_0", base_rowset_meta);
+    RowsetSharedPtr base_rowset = std::make_shared<Rowset>(tablet_schema.get(), "./rowset_0", base_rowset_meta);
     compaction_context->rowset_levels[2].insert(base_rowset.get());
     rowsets.emplace_back(std::move(base_rowset));
     for (int i = 10; i <= 14; i++) {
@@ -106,7 +106,8 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_cumulative_compaction_wi
         rowset_meta->set_segments_overlap(NONOVERLAPPING);
         rowset_meta->set_num_segments(1);
         rowset_meta->set_total_disk_size(1024 * 1024);
-        RowsetSharedPtr rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset" + std::to_string(i), rowset_meta);
+        RowsetSharedPtr rowset =
+                std::make_shared<Rowset>(tablet_schema.get(), "./rowset" + std::to_string(i), rowset_meta);
         compaction_context->rowset_levels[0].insert(rowset.get());
         rowsets.emplace_back(std::move(rowset));
     }
@@ -125,8 +126,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_cumulative_compaction_wi
     compaction_context->tablet = tablet;
 
     std::vector<RowsetSharedPtr> rowsets;
-    TabletSchema tablet_schema;
-    create_tablet_schema(&tablet_schema);
+    auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
 
     int64_t base_time = UnixSeconds() - 100 * 60;
     RowsetMetaSharedPtr base_rowset_meta = std::make_shared<RowsetMeta>();
@@ -137,7 +137,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_cumulative_compaction_wi
     base_rowset_meta->set_num_segments(1);
     base_rowset_meta->set_total_disk_size(100 * 1024 * 1024);
     base_rowset_meta->set_empty(false);
-    RowsetSharedPtr base_rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset_0", base_rowset_meta);
+    RowsetSharedPtr base_rowset = std::make_shared<Rowset>(tablet_schema.get(), "./rowset_0", base_rowset_meta);
     compaction_context->rowset_levels[2].insert(base_rowset.get());
     rowsets.emplace_back(std::move(base_rowset));
     for (int i = 10; i <= 20; i++) {
@@ -152,7 +152,8 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_cumulative_compaction_wi
         rowset_meta->set_segments_overlap(NONOVERLAPPING);
         rowset_meta->set_num_segments(1);
         rowset_meta->set_total_disk_size(1024 * 1024);
-        RowsetSharedPtr rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset" + std::to_string(i), rowset_meta);
+        RowsetSharedPtr rowset =
+                std::make_shared<Rowset>(tablet_schema.get(), "./rowset" + std::to_string(i), rowset_meta);
         compaction_context->rowset_levels[0].insert(rowset.get());
         rowsets.emplace_back(std::move(rowset));
     }
@@ -171,8 +172,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_with_emp
     compaction_context->tablet = tablet;
 
     std::vector<RowsetSharedPtr> rowsets;
-    TabletSchema tablet_schema;
-    create_tablet_schema(&tablet_schema);
+    auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
 
     int64_t base_time = UnixSeconds() - 100 * 60;
     RowsetMetaSharedPtr base_rowset_meta = std::make_shared<RowsetMeta>();
@@ -181,7 +181,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_with_emp
     base_rowset_meta->set_creation_time(base_time);
     base_rowset_meta->set_total_disk_size(100 * 1024 * 1024);
     base_rowset_meta->set_empty(true);
-    RowsetSharedPtr base_rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset_0", base_rowset_meta);
+    RowsetSharedPtr base_rowset = std::make_shared<Rowset>(tablet_schema.get(), "./rowset_0", base_rowset_meta);
     compaction_context->rowset_levels[2].insert(base_rowset.get());
     rowsets.emplace_back(std::move(base_rowset));
     for (int i = 1; i <= 1; i++) {
@@ -192,7 +192,8 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_with_emp
         rowset_meta->set_segments_overlap(NONOVERLAPPING);
         rowset_meta->set_num_segments(1);
         rowset_meta->set_total_disk_size(1024 * 1024);
-        RowsetSharedPtr rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset" + std::to_string(i), rowset_meta);
+        RowsetSharedPtr rowset =
+                std::make_shared<Rowset>(tablet_schema.get(), "./rowset" + std::to_string(i), rowset_meta);
         compaction_context->rowset_levels[1].insert(rowset.get());
         rowsets.emplace_back(std::move(rowset));
     }
@@ -211,8 +212,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_with_mis
     compaction_context->tablet = tablet;
 
     std::vector<RowsetSharedPtr> rowsets;
-    TabletSchema tablet_schema;
-    create_tablet_schema(&tablet_schema);
+    auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
 
     int64_t base_time = UnixSeconds() - 100 * 60;
     RowsetMetaSharedPtr base_rowset_meta = std::make_shared<RowsetMeta>();
@@ -221,7 +221,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_with_mis
     base_rowset_meta->set_creation_time(base_time);
     base_rowset_meta->set_total_disk_size(100 * 1024 * 1024);
     base_rowset_meta->set_empty(true);
-    RowsetSharedPtr base_rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset_0", base_rowset_meta);
+    RowsetSharedPtr base_rowset = std::make_shared<Rowset>(tablet_schema.get(), "./rowset_0", base_rowset_meta);
     compaction_context->rowset_levels[2].insert(base_rowset.get());
     rowsets.emplace_back(std::move(base_rowset));
     for (int i = 1; i <= 10; i++) {
@@ -235,7 +235,8 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_with_mis
         rowset_meta->set_segments_overlap(NONOVERLAPPING);
         rowset_meta->set_num_segments(1);
         rowset_meta->set_total_disk_size(1024 * 1024);
-        RowsetSharedPtr rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset" + std::to_string(i), rowset_meta);
+        RowsetSharedPtr rowset =
+                std::make_shared<Rowset>(tablet_schema.get(), "./rowset" + std::to_string(i), rowset_meta);
         compaction_context->rowset_levels[1].insert(rowset.get());
         rowsets.emplace_back(std::move(rowset));
     }
@@ -254,19 +255,18 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_without_
     compaction_context->tablet = tablet;
 
     std::vector<RowsetSharedPtr> rowsets;
-    TabletSchema tablet_schema;
-    create_tablet_schema(&tablet_schema);
+    auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
     int64_t base_time = UnixSeconds() - 100 * 60;
 
     {
         RowsetMetaSharedPtr rowset_meta = std::make_shared<RowsetMeta>();
         rowset_meta->set_start_version(10);
         rowset_meta->set_end_version(19);
-        rowset_meta->set_creation_time(base_time +1);
+        rowset_meta->set_creation_time(base_time + 1);
         rowset_meta->set_segments_overlap(NONOVERLAPPING);
         rowset_meta->set_num_segments(1);
         rowset_meta->set_total_disk_size(1024 * 1024);
-        RowsetSharedPtr rowset = std::make_shared<Rowset>(&tablet_schema, "./rowset1", rowset_meta);
+        RowsetSharedPtr rowset = std::make_shared<Rowset>(tablet_schema.get(), "./rowset1", rowset_meta);
         compaction_context->rowset_levels[1].insert(rowset.get());
         rowsets.emplace_back(std::move(rowset));
     }

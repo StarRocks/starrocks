@@ -185,11 +185,12 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitLogicalIcebergScan(LogicalIcebergScanOperator node, Void context) {
-            return "LogicalIcebergScanOperator" + " {" + "table=" + ((IcebergTable) node.getTable()).getTable() +
-                    ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                    ", conjuncts=" + node.getConjuncts() +
-                    ", minMaxConjuncts=" + node.getMinMaxConjuncts() +
-                    "}";
+            StringBuilder sb = new StringBuilder("LogicalIcebergScanOperator");
+            sb.append(" {").append("table=").append(((IcebergTable) node.getTable()).getTable())
+                    .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
+                    .append(", predicates=").append(node.getScanOperatorPredicates())
+                    .append("}");
+            return sb.toString();
         }
 
         @Override
@@ -393,11 +394,12 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, Void context) {
-            return "PhysicalIcebergScanOperator" + " {" + "table=" + ((IcebergTable) node.getTable()).getTable() +
-                    ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
-                    ", conjuncts=" + node.getConjuncts() +
-                    ", minMaxConjuncts=" + node.getMinMaxConjuncts() +
-                    "}";
+            StringBuilder sb = new StringBuilder("PhysicalIcebergScanOperator");
+            sb.append(" {").append("table=").append(((IcebergTable) node.getTable()).getTable())
+                    .append(", outputColumns=").append(new ArrayList<>(node.getColRefToColumnMetaMap().keySet()))
+                    .append(", predicates=").append(node.getScanOperatorPredicates())
+                    .append("}");
+            return sb.toString();
         }
 
         @Override

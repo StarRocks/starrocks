@@ -2,6 +2,7 @@
 package com.starrocks.sql.common;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SqlScanner;
@@ -20,7 +21,6 @@ import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
@@ -100,7 +100,7 @@ public class MetaUtils {
         }
     }
 
-    public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) throws IOException {
+    public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) {
         CreateMaterializedViewStmt stmt;
 
         try {
@@ -109,7 +109,8 @@ public class MetaUtils {
             stmt.setIsReplay(true);
             return stmt.parseDefineExprWithoutAnalyze(originStmt.originStmt);
         } catch (Exception e) {
-            LOG.warn("error happens when parsing create materialized view use new parser:" + originStmt, e);
+            LOG.warn("error happens when parsing create materialized view stmt [{}] use new parser",
+                    originStmt, e);
         }
 
         // compatibility old parser can work but new parser failed
@@ -121,9 +122,14 @@ public class MetaUtils {
             stmt.setIsReplay(true);
             return stmt.parseDefineExprWithoutAnalyze(originStmt.originStmt);
         } catch (Exception e) {
-            throw new IOException("error happens when parsing create materialized view stmt use old parser:" +
+            LOG.warn("error happens when parsing create materialized view stmt [{}] use old parser:",
                     originStmt, e);
         }
+        // suggestion
+        LOG.warn("The materialized view [{}] has encountered compatibility problems. " +
+                "It is best to delete the materialized view and rebuild it to maintain the best compatibility.",
+                originStmt.originStmt);
+        return Maps.newConcurrentMap();
     }
 
 }

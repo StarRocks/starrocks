@@ -34,7 +34,6 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 
@@ -83,9 +82,6 @@ public class GlobalStateMgrTestUtil {
         Backend backend1 = createBackend(testBackendId1, "host1", 123, 124, 125);
         Backend backend2 = createBackend(testBackendId2, "host2", 123, 124, 125);
         Backend backend3 = createBackend(testBackendId3, "host3", 123, 124, 125);
-        backend1.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
-        backend2.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
-        backend3.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend1);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend2);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend3);

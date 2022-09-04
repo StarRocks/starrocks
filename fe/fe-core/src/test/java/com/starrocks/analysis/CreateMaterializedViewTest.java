@@ -622,6 +622,20 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testCreateMVWithExplainQuery() {
+        String sql = "create materialized view mv1 " +
+                "as explain select k1, v2 from aggregate_table_with_null;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals("Materialized view does not support explain query", e.getMessage());
+        } finally {
+            starRocksAssert.useDatabase("test");
+        }
+    }
+
+    @Test
     public void testPartitionWithFunctionIn() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
@@ -1825,6 +1839,18 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.assertEquals("Materialized view query statement not support subquery", e.getMessage());
+        }
+    }
+
+    @Test
+    public void createViewBadName() {
+        String longLongName = "view___123456789012345678901234567890123456789012345678901234567890";
+        String sql = "create view db1." + longLongName + " as select 1,2,3";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.fail(); // should raise Exception
+        } catch (Exception e) {
+            Assert.assertEquals("Incorrect table name '" + longLongName + "'", e.getMessage());
         }
     }
 }

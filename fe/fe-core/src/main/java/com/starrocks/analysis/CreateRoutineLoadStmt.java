@@ -39,7 +39,6 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.SqlModeHelper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -294,17 +293,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     }
 
     public static RoutineLoadDesc getLoadDesc(OriginStatement origStmt, Map<String, String> sessionVariables) {
-        long sqlMode;
-        if (sessionVariables != null && sessionVariables.containsKey(SessionVariable.SQL_MODE)) {
-            sqlMode = Long.parseLong(sessionVariables.get(SessionVariable.SQL_MODE));
-        } else {
-            sqlMode = SqlModeHelper.MODE_DEFAULT;
-        }
 
         // parse the origin stmt to get routine load desc
         try {
             List <StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(
-                    origStmt.originStmt, sqlMode);
+                    origStmt.originStmt, buildSessionVariables(sessionVariables));
             StatementBase stmt = stmts.get(origStmt.idx);
             if (stmt instanceof CreateRoutineLoadStmt) {
                 return CreateRoutineLoadStmt.
@@ -607,5 +600,21 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             throw new AnalysisException(propertyName + " must be a integer: " + valueString);
         }
         return value;
+    }
+
+    private static SessionVariable buildSessionVariables(Map<String, String> sessionVariables) {
+        SessionVariable sessionVariable = new SessionVariable();
+        if (sessionVariables == null) {
+            return sessionVariable;
+        }
+        if (sessionVariables.containsKey(SessionVariable.SQL_MODE)) {
+            sessionVariable.setSqlMode(Long.parseLong(sessionVariables.get(SessionVariable.SQL_MODE)));
+        }
+
+        if (sessionVariables.containsKey(SessionVariable.PARSE_TOKENS_LIMIT)) {
+            sessionVariable.setParseTokensLimit(Integer.parseInt(
+                    sessionVariables.get(SessionVariable.PARSE_TOKENS_LIMIT)));
+        }
+        return sessionVariable;
     }
 }

@@ -45,10 +45,10 @@ public class JoinAssociativityRule extends TransformationRule {
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 
-    private static final JoinAssociativityRule instance = new JoinAssociativityRule();
+    private static final JoinAssociativityRule INSTANCE = new JoinAssociativityRule();
 
     public static JoinAssociativityRule getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     public boolean check(final OptExpression input, OptimizerContext context) {

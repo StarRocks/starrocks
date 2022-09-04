@@ -157,11 +157,11 @@ add_library(Storage STATIC
     compaction_task_factory.cpp
     base_and_cumulative_compaction_policy.cpp
     cluster_id_mgr.cpp
+    push_utils.cpp
     lake/async_delta_writer.cpp
     lake/compaction_policy.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
-    lake/fixed_location_provider.cpp
     lake/gc.cpp
     lake/general_tablet_writer.cpp
     lake/rowset.cpp
@@ -171,4 +171,5 @@ add_library(Storage STATIC
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp
     lake/metadata_iterator.cpp
+    lake/spark_load.cpp
 )

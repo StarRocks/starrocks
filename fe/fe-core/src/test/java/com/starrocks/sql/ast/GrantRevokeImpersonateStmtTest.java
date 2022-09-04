@@ -41,6 +41,10 @@ public class GrantRevokeImpersonateStmtTest {
                 auth.getUserPrivTable();
                 minTimes = 0;
                 result = userPrivTable;
+
+                auth.doesRoleExist((String) any);
+                minTimes = 0;
+                result = true;
             }
         };
 
@@ -68,13 +72,24 @@ public class GrantRevokeImpersonateStmtTest {
         GrantImpersonateStmt stmt = (GrantImpersonateStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "grant IMPERSONATE on user2 to user1", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("GRANT IMPERSONATE ON 'default_cluster:user2'@'%' TO 'default_cluster:user1'@'%'", stmt.toString());
+        Assert.assertEquals("GRANT IMPERSONATE ON 'user2'@'%' TO 'user1'@'%'", stmt.toString());
+
+        stmt = (GrantImpersonateStmt) com.starrocks.sql.parser.SqlParser.parse(
+                "grant IMPERSONATE on user2 to ROLE role1", 1).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.assertEquals("GRANT IMPERSONATE ON 'user2'@'%' TO ROLE 'role1'", stmt.toString());
 
         // revoke
         RevokeImpersonateStmt stmt2 = (RevokeImpersonateStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "revoke IMPERSONATE on user2 from user1", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt2, ctx);
-        Assert.assertEquals("REVOKE IMPERSONATE ON 'default_cluster:user2'@'%' FROM 'default_cluster:user1'@'%'",
+        Assert.assertEquals("REVOKE IMPERSONATE ON 'user2'@'%' FROM 'user1'@'%'",
+                stmt2.toString());
+
+        stmt2 = (RevokeImpersonateStmt) com.starrocks.sql.parser.SqlParser.parse(
+                "revoke IMPERSONATE on user2 from ROLE role1", 1).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt2, ctx);
+        Assert.assertEquals("REVOKE IMPERSONATE ON 'user2'@'%' FROM ROLE 'role1'",
                 stmt2.toString());
     }
 
@@ -90,6 +105,29 @@ public class GrantRevokeImpersonateStmtTest {
         };
         GrantImpersonateStmt stmt = (GrantImpersonateStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "grant IMPERSONATE on user2 to user1", 1).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.fail("No exception throws.");
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testRoleNotExist() throws Exception {
+        // suppose current user doesn't exist, check for exception
+        new Expectations(userPrivTable) {
+            {
+                userPrivTable.doesUserExist((UserIdentity) any);
+                minTimes = 0;
+                result = true;
+            }
+        };
+        new Expectations(auth) {
+            {
+                auth.doesRoleExist((String) any);
+                minTimes = 0;
+                result = false;
+            }
+        };
+        GrantImpersonateStmt stmt = (GrantImpersonateStmt) com.starrocks.sql.parser.SqlParser.parse(
+                "grant IMPERSONATE on user2 to Role role1", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No exception throws.");
     }

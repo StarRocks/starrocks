@@ -81,9 +81,6 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
             }
         }
     } else {
-        std::vector<size_t> first_size_array;
-        first_size_array.resize(dats_segment_size);
-
         include_num = 0;
         filter_array.resize(dats_segment_size);
         for (size_t i = 0; i < dats_segment_size; ++i) {
@@ -91,16 +88,12 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
             size_t rows = segment.chunk->num_rows();
             filter_array[i].resize(rows);
 
-            size_t local_first_size = include_num;
             for (size_t j = 0; j < rows; ++j) {
                 if (compare_results_array[i][j] <= 0) {
                     filter_array[i][j] = DataSegment::INCLUDE_IN_SEGMENT;
                     ++include_num;
                 }
             }
-
-            // Obtain number of rows for second compare.
-            first_size_array[i] = include_num - local_first_size;
         }
 
         // Second compare with first row of this chunk, use rows from first compare.

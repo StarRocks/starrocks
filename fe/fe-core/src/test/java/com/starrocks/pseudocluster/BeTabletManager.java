@@ -7,7 +7,6 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TTablet;
-import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
 import org.apache.logging.log4j.LogManager;
@@ -52,6 +51,11 @@ public class BeTabletManager {
         return tablet;
     }
 
+    public synchronized void addClonedTablet(Tablet tablet) {
+        tablets.put(tablet.id, tablet);
+        tabletIdsByPartition.computeIfAbsent(tablet.partitionId, k -> Sets.newHashSet()).add(tablet.id);
+    }
+
     public synchronized void dropTablet(long tabletId, boolean force) {
         Tablet removed = tablets.remove(tabletId);
         if (removed != null) {
@@ -61,6 +65,11 @@ public class BeTabletManager {
                 tabletIdsByPartition.remove(removed.partitionId);
             }
             LOG.info("Dropped tablet {} force:{}", removed.id, force);
+            // TODO: if tablet trash feature is simulated, we should consider not updating disk usage.
+            if (PseudoBackend.getCurrentBackend() != null) {
+                PseudoBackend.getCurrentBackend().updateDiskUsage(
+                        0 - removed.numRowsets() * PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
+            }
         } else {
             LOG.warn("Drop Tablet {} not found", tabletId);
         }
@@ -68,6 +77,10 @@ public class BeTabletManager {
 
     public synchronized Tablet getTablet(long tabletId) {
         return tablets.get(tabletId);
+    }
+
+    public synchronized List<Tablet> getTabletsByTable(long tableId) {
+        return tablets.values().stream().filter(t -> t.tableId == tableId).collect(Collectors.toList());
     }
 
     public synchronized List<Tablet> getTablets(long partitionId) {
@@ -78,16 +91,16 @@ public class BeTabletManager {
         return tabletIds.stream().map(tablets::get).filter(t -> t != null).collect(Collectors.toList());
     }
 
+    public synchronized int getNumTablet() {
+        return tablets.size();
+    }
+
     void getTabletStat(TTabletStatResult result) {
         Map<Long, TTabletStat> statMap = Maps.newHashMap();
         for (Tablet tablet : tablets.values()) {
             statMap.put(tablet.id, tablet.getStats());
         }
         result.tablets_stats = statMap;
-    }
-
-    void getTabletInfo(TTabletInfo info) {
-
     }
 
     public synchronized Map<Long, TTablet> getAllTabletInfo() {
@@ -102,6 +115,7 @@ public class BeTabletManager {
 
     public synchronized void maintenance() {
         for (Tablet tablet : tablets.values()) {
+            tablet.doCompaction();
             tablet.versionGC();
         }
     }

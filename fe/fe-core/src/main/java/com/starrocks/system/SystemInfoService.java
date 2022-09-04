@@ -31,8 +31,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.DropBackendClause;
-import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
@@ -56,6 +54,8 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -148,7 +148,6 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
         cluster.addComputeNode(computeNode.getId());
-        computeNode.setOwnerClusterName(DEFAULT_CLUSTER);
         computeNode.setBackendState(BackendState.using);
     }
 
@@ -194,7 +193,6 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
         cluster.addBackend(backend.getId());
-        backend.setOwnerClusterName(DEFAULT_CLUSTER);
         backend.setBackendState(BackendState.using);
     }
 
@@ -293,7 +291,7 @@ public class SystemInfoService {
         if (null != cluster) {
             cluster.removeComputeNode(dropComputeNode.getId());
         } else {
-            LOG.error("Cluster {} no exist.", dropComputeNode.getOwnerClusterName());
+            LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
         }
         // log
         GlobalStateMgr.getCurrentState().getEditLog()
@@ -303,7 +301,7 @@ public class SystemInfoService {
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
         List<Pair<String, Integer>> hostPortPairs = dropBackendClause.getHostPortPairs();
-        boolean needCheckUnforce = !dropBackendClause.isOldStyle() && !dropBackendClause.isForce();
+        boolean needCheckUnforce = !dropBackendClause.isForce();
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
@@ -406,7 +404,7 @@ public class SystemInfoService {
 
             cluster.removeBackend(droppedBackend.getId());
         } else {
-            LOG.error("Cluster {} no exist.", droppedBackend.getOwnerClusterName());
+            LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
         }
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logDropBackend(droppedBackend);
@@ -695,16 +693,16 @@ public class SystemInfoService {
             }
         }
 
-        if (isCreate) {
-            lastBackendIdForCreation = lastBackendId;
-        } else {
-            lastBackendIdForOther = lastBackendId;
-        }
         if (backendIds.size() != backendNum) {
             failed = true;
         }
 
         if (!failed) {
+            if (isCreate) {
+                lastBackendIdForCreation = lastBackendId;
+            } else {
+                lastBackendIdForOther = lastBackendId;
+            }
             return backendIds;
         }
 
@@ -751,20 +749,6 @@ public class SystemInfoService {
             backends.add(idToComputeNode.get(backendId));
         }
         return ImmutableList.copyOf(backends);
-    }
-
-    public ImmutableMap<Long, Backend> getBackendsInCluster(String cluster) {
-        if (Strings.isNullOrEmpty(cluster)) {
-            return idToBackendRef;
-        }
-
-        Map<Long, Backend> retMaps = Maps.newHashMap();
-        for (Backend backend : idToBackendRef.values().asList()) {
-            if (cluster.equals(backend.getOwnerClusterName())) {
-                retMaps.put(backend.getId(), backend);
-            }
-        }
-        return ImmutableMap.copyOf(retMaps);
     }
 
     public long getBackendReportVersion(long backendId) {
@@ -906,7 +890,6 @@ public class SystemInfoService {
 
     public void replayAddComputeNode(ComputeNode newComputeNode) {
         // update idToComputeNode
-        newComputeNode.setOwnerClusterName(DEFAULT_CLUSTER);
         newComputeNode.setBackendState(BackendState.using);
         Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
         copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
@@ -928,7 +911,6 @@ public class SystemInfoService {
     public void replayAddBackend(Backend newBackend) {
         // update idToBackend
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            newBackend.setOwnerClusterName(DEFAULT_CLUSTER);
             newBackend.setBackendState(BackendState.using);
         }
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
@@ -996,7 +978,7 @@ public class SystemInfoService {
                 GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
             }
         } else {
-            LOG.error("Cluster {} no exist.", backend.getOwnerClusterName());
+            LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
         }
     }
 
@@ -1021,7 +1003,6 @@ public class SystemInfoService {
         memoryBe.setLastStartTime(be.getLastStartTime());
         memoryBe.setDisks(be.getDisks());
         memoryBe.setBackendState(be.getBackendState());
-        memoryBe.setOwnerClusterName(be.getOwnerClusterName());
         memoryBe.setDecommissionType(be.getDecommissionType());
     }
 

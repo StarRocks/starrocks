@@ -1,5 +1,5 @@
 ## What type of PR is this：
-- [ ] bug
+- [ ] bugfix
 - [ ] feature
 - [ ] enhancement
 - [ ] refactor
