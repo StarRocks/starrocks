@@ -28,17 +28,14 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
-#include <sstream>
 
 #include "common/config.h"
 #include "common/status.h"
 #include "common/tracer.h"
 #include "http/ev_http_server.h"
 #include "http/http_channel.h"
-#include "http/http_handler.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-#include "http/http_response.h"
 #include "util/bfd_parser.h"
 
 namespace starrocks {

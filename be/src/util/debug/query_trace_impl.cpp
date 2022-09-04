@@ -10,7 +10,6 @@
 #include "io/fd_output_stream.h" // write trace to file
 #include "util/debug/query_trace.h"
 #include "util/time.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 namespace debug {

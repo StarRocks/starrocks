@@ -4,7 +4,6 @@
 
 #include "common/config.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "gen_cpp/internal_service.pb.h"
 #include "glog/logging.h"
 #include "runtime/exec_env.h"
 #include "util/metrics.h"

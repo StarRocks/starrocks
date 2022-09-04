@@ -3,7 +3,6 @@
 #include "exprs/vectorized/lambda_function.h"
 
 #include <iostream>
-#include <string>
 namespace starrocks::vectorized {
 LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false) {}
 

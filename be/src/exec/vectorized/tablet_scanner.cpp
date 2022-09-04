@@ -5,9 +5,7 @@
 #include <memory>
 #include <utility>
 
-#include "column/column_helper.h"
 #include "column/column_pool.h"
-#include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/vectorized/olap_scan_node.h"

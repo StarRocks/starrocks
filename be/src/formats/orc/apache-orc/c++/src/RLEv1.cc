@@ -20,7 +20,6 @@
 
 #include <algorithm>
 
-#include "Adaptor.hh"
 #include "Compression.hh"
 #include "Utils.hh"
 #include "orc/Exceptions.hh"

@@ -20,8 +20,6 @@ using std::unordered_set;
 
 #include "gutil/hash/hash.h"
 #include "gutil/integral_types.h"
-#include "gutil/logging-inl.h"
-#include "gutil/macros.h"
 #include "gutil/strings/ascii_ctype.h"
 #include "gutil/strings/util.h"
 #include "gutil/strtoint.h"

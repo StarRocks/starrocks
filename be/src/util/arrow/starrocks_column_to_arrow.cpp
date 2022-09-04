@@ -7,7 +7,6 @@
 #include "exec/vectorized/arrow_type_traits.h"
 #include "exprs/expr.h"
 #include "runtime/large_int_value.h"
-#include "types/hll.h"
 #include "util/raw_container.h"
 
 namespace starrocks::vectorized {

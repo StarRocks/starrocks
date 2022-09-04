@@ -21,7 +21,6 @@
 
 #include "runtime/small_file_mgr.h"
 
-#include <boost/algorithm/string/classification.hpp> // boost::is_any_of
 #include <boost/algorithm/string/predicate.hpp>      // boost::algorithm::starts_with
 #include <cstdint>
 #include <cstdio>
@@ -32,7 +31,6 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "gen_cpp/HeartbeatService.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"

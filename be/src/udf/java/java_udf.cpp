@@ -2,7 +2,6 @@
 
 #include "udf/java/java_udf.h"
 
-#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <sstream>
@@ -10,16 +9,12 @@
 
 #include "column/binary_column.h"
 #include "column/column.h"
-#include "column/fixed_length_column.h"
-#include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "fmt/compile.h"
 #include "fmt/core.h"
 #include "jni.h"
 #include "runtime/primitive_type.h"
 #include "udf/java/java_native_method.h"
 #include "udf/java/utils.h"
-#include "udf/udf.h"
 #include "udf/udf_internal.h"
 #include "util/defer_op.h"
 

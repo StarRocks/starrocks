@@ -10,7 +10,6 @@
 #include "gen_cpp/Status_types.h"  // for TStatus
 #include "gen_cpp/status.pb.h"     // for StatusPB
 #include "gutil/strings/fastmem.h" // for memcpy_inlined
-#include "gutil/strings/split.h"
 
 namespace starrocks {
 

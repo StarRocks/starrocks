@@ -2,12 +2,10 @@
 
 #include "exec/pipeline/scan/chunk_source.h"
 
-#include "column/column_helper.h"
 #include "common/statusor.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 

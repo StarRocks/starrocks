@@ -10,7 +10,6 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/table_function/table_function.h"
-#include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
 #include "jni.h"
 #include "runtime/types.h"

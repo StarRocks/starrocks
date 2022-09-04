@@ -6,7 +6,6 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "common/status.h"
 #include "exprs/vectorized/string_functions.h"
 #include "runtime/Volnitsky.h"
 #include "util/utf8.h"
