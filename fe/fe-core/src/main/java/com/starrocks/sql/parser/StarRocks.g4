@@ -80,11 +80,11 @@ statement
     | deleteStatement
 
     //Routine Statement
-    | createRoutineLoadStatement                                                            #createRoutineLoad
-    | stopRoutineLoadStatement                                                              #stopRoutineLoad
-    | resumeRoutineLoadStatement                                                            #resumeRoutineLoad
-    | pauseRoutineLoadStatement                                                             #pauseRoutineLoad
-    | showRoutineLoadStatement                                                              #showRoutineLoad
+    | createRoutineLoadStatement
+    | stopRoutineLoadStatement
+    | resumeRoutineLoadStatement
+    | pauseRoutineLoadStatement                                                            
+    | showRoutineLoadStatement                                                            
 
     // Admin Statement
     | adminSetConfigStatement
