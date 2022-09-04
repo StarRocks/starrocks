@@ -57,10 +57,6 @@ public class ResourcePrivEntry extends PrivEntry {
     public static ResourcePrivEntry create(String host, String resourceName, String user, boolean isDomain,
                                            PrivBitSet privs)
             throws AnalysisException {
-        if (privs.containsNodePriv() || privs.containsDbTablePriv() || privs.containsImpersonatePriv()) {
-            throw new AnalysisException(
-                    "Resource privilege can not contains node or db or table or impersonate privileges: " + privs);
-        }
 
         ResourcePrivEntry resourcePrivEntry = new ResourcePrivEntry(host, user, isDomain, privs, resourceName);
         resourcePrivEntry.analyse();

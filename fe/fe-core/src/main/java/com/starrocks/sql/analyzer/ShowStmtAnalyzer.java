@@ -81,7 +81,7 @@ public class ShowStmtAnalyzer {
 
     static class ShowStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
-        private static final Logger logger = LoggerFactory.getLogger(ShowStmtAnalyzerVisitor.class);
+        private static final Logger LOGGER = LoggerFactory.getLogger(ShowStmtAnalyzerVisitor.class);
 
         public void analyze(ShowStmt statement, ConnectContext session) {
             analyzeShowPredicate(statement);
@@ -495,7 +495,7 @@ public class ShowStmtAnalyzer {
                     stringBuilder.append("/partitions");
                 }
 
-                logger.debug("process SHOW PROC '{}';", stringBuilder);
+                LOGGER.debug("process SHOW PROC '{}';", stringBuilder);
 
                 try {
                     statement.setNode(ProcService.getInstance().open(stringBuilder.toString()));

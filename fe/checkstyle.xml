@@ -35,7 +35,7 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
     <module name="SuppressWarningsFilter"/>
     <module name="BeforeExecutionExclusionFileFilter">
         <property name="fileNamePattern"
-                  value="(.*[\\/]starrocks[\\/](analysis)|(planner)[\\/].*$)|Log4jConfig.java|FunctionSet.java|HiveMetaStoreThriftClient.java"/>
+                  value="(.*[\\/]starrocks[\\/](analysis)|(planner)[\\/].*$)|Log4jConfig.java|FunctionSet.java|HiveMetaStoreThriftClient.java|Platform.java|.*[\\/]udf-extensions[\\/].*"/>
     </module>
 
     <module name="FileTabCharacter">
@@ -111,7 +111,7 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
             <property name="allowEmptyLoops" value="true"/>
             <property name="ignoreEnhancedForColon" value="false"/>
             <property name="tokens"
-                      value="ASSIGN, BAND, BAND_ASSIGN, BOR, BOR_ASSIGN, BSR, BSR_ASSIGN, BXOR,
+                      value="ASSIGN, ARRAY_INIT, BAND, BAND_ASSIGN, BOR, BOR_ASSIGN, BSR, BSR_ASSIGN, BXOR,
                     BXOR_ASSIGN, COLON, DIV, DIV_ASSIGN, DO_WHILE, EQUAL, GE, GT, LAMBDA, LAND,
                     LCURLY, LE, LITERAL_CATCH, LITERAL_DO, LITERAL_ELSE, LITERAL_FINALLY,
                     LITERAL_FOR, LITERAL_IF, LITERAL_RETURN, LITERAL_SWITCH, LITERAL_SYNCHRONIZED,
@@ -185,6 +185,7 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
             <message key="name.invalidPattern"
                      value="Parameter name ''{0}'' must match pattern ''{1}''."/>
         </module>
+        <module name="ConstantName"/>
         <module name="LambdaParameterName">
             <property name="format" value="^[a-z]([a-zA-Z0-9]*)?$"/>
             <message key="name.invalidPattern"

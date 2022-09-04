@@ -294,8 +294,7 @@ public class HiveMetaCacheTest {
                             ImmutableList.of(),
                             ImmutableList.of(),
                             false,
-                            null,
-                            false)),
+                            null)),
                     partitionPath);
         }
 

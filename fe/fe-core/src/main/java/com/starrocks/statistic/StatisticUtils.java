@@ -22,6 +22,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -32,6 +34,8 @@ import java.util.Optional;
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
 public class StatisticUtils {
+    private static final Logger LOG = LogManager.getLogger(StatisticUtils.class);
+
     private static final List<String> COLLECT_DATABASES_BLACKLIST = ImmutableList.<String>builder()
             .add(StatsConstants.STATISTICS_DB_NAME)
             .add("starrocks_monitor")
@@ -204,24 +208,30 @@ public class StatisticUtils {
         if (!type.canStatistic()) {
             throw new StarRocksPlannerException("Error statistic type : " + type.toSql(), ErrorType.INTERNAL_ERROR);
         }
-        switch (type.getPrimitiveType()) {
-            case BOOLEAN:
-                if (statistic.equalsIgnoreCase("TRUE")) {
-                    return Optional.of(1D);
-                } else {
-                    return Optional.of(0D);
-                }
-            case DATE:
-                return Optional.of((double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        statistic, DateUtils.DATE_FORMATTER_UNIX)));
-            case DATETIME:
-                return Optional.of((double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        statistic, DateUtils.DATE_TIME_FORMATTER_UNIX)));
-            case CHAR:
-            case VARCHAR:
-                return Optional.empty();
-            default:
-                return Optional.of(Double.parseDouble(statistic));
+        try {
+            switch (type.getPrimitiveType()) {
+                case BOOLEAN:
+                    if (statistic.equalsIgnoreCase("TRUE")) {
+                        return Optional.of(1D);
+                    } else {
+                        return Optional.of(0D);
+                    }
+                case DATE:
+                    return Optional.of((double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                            statistic, DateUtils.DATE_FORMATTER_UNIX)));
+                case DATETIME:
+                    return Optional.of((double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                            statistic, DateUtils.DATE_TIME_FORMATTER_UNIX)));
+                case CHAR:
+                case VARCHAR:
+                    return Optional.empty();
+                default:
+                    return Optional.of(Double.parseDouble(statistic));
+            }
+        } catch (Exception e) {
+            LOG.warn(String.format("Statistic convert error, type %s, statistic %s, %s",
+                    type.toSql(), statistic, e.getMessage()));
+            return Optional.empty();
         }
     }
 }

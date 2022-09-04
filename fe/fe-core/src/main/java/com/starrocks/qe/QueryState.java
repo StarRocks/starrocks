@@ -36,7 +36,7 @@ public class QueryState {
         EOF,    // send EOF packet to remote
         ERR;     // send ERROR packet to remote
 
-        private static final ImmutableMap<String, MysqlStateType> states =
+        private static final ImmutableMap<String, MysqlStateType> STATES =
                 new ImmutableMap.Builder<String, MysqlStateType>()
                         .put("NOOP", NOOP)
                         .put("OK", OK)
@@ -45,7 +45,7 @@ public class QueryState {
                         .build();
 
         public static MysqlStateType fromString(String state) {
-            return states.get(state);
+            return STATES.get(state);
         }
     }
 

@@ -96,7 +96,7 @@ public class DeleteHandlerTest {
         globalTransactionMgr.setEditLog(editLog);
         deleteHandler = new DeleteHandler();
         auth = AccessTestUtil.fetchAdminAccess();
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
         try {
             db = CatalogMocker.mockDb();
         } catch (AnalysisException e) {

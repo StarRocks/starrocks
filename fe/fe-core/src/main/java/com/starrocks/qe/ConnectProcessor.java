@@ -24,7 +24,6 @@ package com.starrocks.qe;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.KillStmt;
-import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
@@ -192,12 +191,7 @@ public class ConnectProcessor {
     }
 
     public String computeStatementDigest(StatementBase queryStmt) {
-        String digest;
-        if (queryStmt instanceof QueryStmt) {
-            digest = ((QueryStmt) queryStmt).toDigest();
-        } else {
-            digest = SqlDigestBuilder.build(queryStmt);
-        }
+        String digest = SqlDigestBuilder.build(queryStmt);
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.reset();
@@ -246,7 +240,7 @@ public class ConnectProcessor {
         } else {
             sql = parsedStmt.getOrigStmt().originStmt;
         }
-        boolean isQuery = parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement;
+        boolean isQuery = parsedStmt instanceof QueryStatement;
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(ctx.getQueryId()),
                 isQuery,
@@ -290,7 +284,7 @@ public class ConnectProcessor {
             ctx.setQueryId(UUIDUtil.genUUID());
             List<StatementBase> stmts;
             try {
-                stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode());
+                stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable());
             } catch (ParsingException parsingException) {
                 throw new AnalysisException(parsingException.getMessage());
             }

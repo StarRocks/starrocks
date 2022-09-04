@@ -21,21 +21,18 @@
 
 package com.starrocks.qe;
 
-import com.baidu.brpc.RpcContext;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.proto.PFetchDataRequest;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
-import io.netty.buffer.ByteBuf;
-import io.netty.util.ReferenceCountUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TDeserializer;
@@ -73,8 +70,7 @@ public class ResultReceiver {
         final RowBatch rowBatch = new RowBatch();
         try {
             while (!isDone && !isCancel) {
-                PFetchDataRequest request = new PFetchDataRequest();
-                request.finstId = finstId;
+                PFetchDataRequest request = new PFetchDataRequest(finstId);
 
                 currentThread = Thread.currentThread();
                 Future<PFetchDataResult> future = BackendServiceClient.getInstance().fetchDataAsync(address, request);
@@ -112,22 +108,14 @@ public class ResultReceiver {
                 packetIdx++;
                 isDone = pResult.eos;
 
-                if (RpcContext.isSet()) {
-                    RpcContext rpcContext = RpcContext.getContext();
-                    ByteBuf buf = rpcContext.getResponseBinaryAttachment();
-                    if (buf != null) {
-                        byte[] serialResult = new byte[buf.readableBytes()];
-                        buf.readBytes(serialResult);
-                        ReferenceCountUtil.release(rpcContext.getResponseBinaryAttachment());
-                        if (serialResult != null && serialResult.length > 0) {
-                            TResultBatch resultBatch = new TResultBatch();
-                            TDeserializer deserializer = new TDeserializer();
-                            deserializer.deserialize(resultBatch, serialResult);
-                            rowBatch.setBatch(resultBatch);
-                            rowBatch.setEos(pResult.eos);
-                            return rowBatch;
-                        }
-                    }
+                byte[] serialResult = request.getSerializedResult();
+                if (serialResult != null && serialResult.length > 0) {
+                    TResultBatch resultBatch = new TResultBatch();
+                    TDeserializer deserializer = new TDeserializer();
+                    deserializer.deserialize(resultBatch, serialResult);
+                    rowBatch.setBatch(resultBatch);
+                    rowBatch.setEos(pResult.eos);
+                    return rowBatch;
                 }
             }
         } catch (RpcException e) {

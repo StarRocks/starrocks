@@ -49,7 +49,7 @@ import java.nio.charset.CodingErrorAction;
 public class Text implements Writable {
     private static final Logger LOG = LogManager.getLogger(Text.class);
 
-    private static ThreadLocal<CharsetEncoder> ENCODER_FACTORY = new ThreadLocal<CharsetEncoder>() {
+    private static final ThreadLocal<CharsetEncoder> ENCODER_FACTORY = new ThreadLocal<CharsetEncoder>() {
         protected CharsetEncoder initialValue() {
             return Charset.forName("UTF-8").newEncoder()
                     .onMalformedInput(CodingErrorAction.REPORT)
@@ -57,7 +57,7 @@ public class Text implements Writable {
         }
     };
 
-    private static ThreadLocal<CharsetDecoder> DECODER_FACTORY = new ThreadLocal<CharsetDecoder>() {
+    private static final ThreadLocal<CharsetDecoder> DECODER_FACTORY = new ThreadLocal<CharsetDecoder>() {
         protected CharsetDecoder initialValue() {
             return Charset.forName("UTF-8").newDecoder()
                     .onMalformedInput(CodingErrorAction.REPORT)
@@ -408,7 +408,7 @@ public class Text implements Writable {
      * values 4 and 5 are presented in this table, even though valid UTF-8
      * cannot include the five and six byte sequences.
      */
-    static final int[] bytesFromUTF8 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    static final int[] BYTES_FROM_UTF_8 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -438,7 +438,7 @@ public class Text implements Writable {
         bytes.mark();
         byte b = bytes.get();
         bytes.reset();
-        int extraBytesToRead = bytesFromUTF8[(b & 0xFF)];
+        int extraBytesToRead = BYTES_FROM_UTF_8[(b & 0xFF)];
         if (extraBytesToRead < 0) {
             return -1; // trailing byte!
         }
@@ -463,11 +463,11 @@ public class Text implements Writable {
             case 0:
                 ch += (bytes.get() & 0xFF);
         }
-        ch -= offsetsFromUTF8[extraBytesToRead];
+        ch -= OFFSETS_FROM_UTF_8[extraBytesToRead];
 
         return ch;
     }
 
-    static final int[] offsetsFromUTF8 = {0x00000000, 0x00003080, 0x000E2080,
+    static final int[] OFFSETS_FROM_UTF_8 = {0x00000000, 0x00003080, 0x000E2080,
             0x03C82080, 0xFA082080, 0x82082080};
 }

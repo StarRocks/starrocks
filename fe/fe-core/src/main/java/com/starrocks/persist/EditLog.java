@@ -77,6 +77,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
+import jersey.repackaged.com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -445,6 +446,16 @@ public class EditLog {
                     globalStateMgr.getAuth().replayDropRole(privInfo);
                     break;
                 }
+                case OperationType.OP_GRANT_ROLE: {
+                    PrivInfo privInfo = (PrivInfo) journal.getData();
+                    globalStateMgr.getAuth().replayGrantRole(privInfo);
+                    break;
+                }
+                case OperationType.OP_REVOKE_ROLE: {
+                    PrivInfo privInfo = (PrivInfo) journal.getData();
+                    globalStateMgr.getAuth().replayRevokeRole(privInfo);
+                    break;
+                }
                 case OperationType.OP_UPDATE_USER_PROPERTY: {
                     UserPropertyInfo propertyInfo = (UserPropertyInfo) journal.getData();
                     globalStateMgr.getAuth().replayUpdateUserProperty(propertyInfo);
@@ -798,8 +809,9 @@ public class EditLog {
                     BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeManager().replayAddBasicStatsMeta(basicStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
-                    // statistic, and the follower's should expire cache here.
-                    globalStateMgr.getAnalyzeManager().expireBasicStatisticsCache(basicStatsMeta);
+                    // statistic, and the follower's should refresh cache here.
+                    globalStateMgr.getAnalyzeManager().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
+                            basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
                     break;
                 }
                 case OperationType.OP_REMOVE_BASIC_STATS_META: {
@@ -812,7 +824,9 @@ public class EditLog {
                     globalStateMgr.getAnalyzeManager().replayAddHistogramStatsMeta(histogramStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
                     // statistic, and the follower's should expire cache here.
-                    globalStateMgr.getAnalyzeManager().expireHistogramStatisticsCache(histogramStatsMeta);
+                    globalStateMgr.getAnalyzeManager().refreshHistogramStatisticsCache(
+                            histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
+                            Lists.newArrayList(histogramStatsMeta.getColumn()), true);
                     break;
                 }
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
@@ -1177,6 +1191,14 @@ public class EditLog {
 
     public void logDropRole(PrivInfo info) {
         logEdit(OperationType.OP_DROP_ROLE, info);
+    }
+
+    public void logGrantRole(PrivInfo info) {
+        logEdit(OperationType.OP_GRANT_ROLE, info);
+    }
+
+    public void logRevokeRole(PrivInfo info) {
+        logEdit(OperationType.OP_REVOKE_ROLE, info);
     }
 
     public void logDatabaseRename(DatabaseInfo databaseInfo) {

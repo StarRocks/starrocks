@@ -14,8 +14,8 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.LakeServiceAsync;
-import com.starrocks.rpc.PBackendServiceAsync;
+import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.PBackendService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
@@ -32,6 +32,7 @@ import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.SQLSyntaxErrorException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -68,6 +69,10 @@ public class PseudoCluster {
         }
     }
 
+    public void setQueryTimeout(int timeout) {
+        dataSource.setDefaultQueryTimeout(timeout);
+    }
+
     private class HeatBeatPool extends PseudoGenericPool<HeartbeatService.Client> {
         public HeatBeatPool(String name) {
             super(name);
@@ -93,12 +98,12 @@ public class PseudoCluster {
 
     private class PseudoBrpcRroxy extends BrpcProxy {
         @Override
-        protected PBackendServiceAsync getBackendServiceImpl(TNetworkAddress address) {
+        protected PBackendService getBackendServiceImpl(TNetworkAddress address) {
             return getBackendByHost(address.getHostname()).pBackendService;
         }
 
         @Override
-        protected LakeServiceAsync getLakeServiceImpl(TNetworkAddress address) {
+        protected LakeService getLakeServiceImpl(TNetworkAddress address) {
             Preconditions.checkNotNull(getBackendByHost(address.getHostname()));
             Preconditions.checkState(false, "not implemented");
             return null;
@@ -156,21 +161,49 @@ public class PseudoCluster {
         }
     }
 
-    public void runSql(String db, String sql) throws SQLException {
+    private static void runSingleSql(Statement stmt, String sql, boolean verbose) throws SQLException {
+        while (true) {
+            try {
+                long start = System.nanoTime();
+                stmt.execute(sql);
+                if (verbose) {
+                    long end = System.nanoTime();
+                    System.out.printf("runSql(%.3fs): %s\n", (end - start) / 1e9, sql);
+                }
+                break;
+            } catch (SQLSyntaxErrorException e) {
+                if (e.getMessage().startsWith("rpc failed, host")) {
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ie) {
+                    }
+                    System.out.println("retry execute " + sql);
+                    continue;
+                }
+                throw e;
+            }
+        }
+    }
+
+    public void runSql(String db, String sql, boolean verbose) throws SQLException {
         Connection connection = getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
             if (db != null) {
                 stmt.execute("use " + db);
             }
-            stmt.execute(sql);
+            runSingleSql(stmt, sql, verbose);
         } finally {
             stmt.close();
             connection.close();
         }
     }
 
-    public void runSqlList(String db, List<String> sqls) throws SQLException {
+    public void runSql(String db, String sql) throws SQLException {
+        runSql(db, sql, false);
+    }
+
+    public void runSqlList(String db, List<String> sqls, boolean verbose) throws SQLException {
         Connection connection = getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
@@ -178,7 +211,7 @@ public class PseudoCluster {
                 stmt.execute("use " + db);
             }
             for (String sql : sqls) {
-                stmt.execute(sql);
+                runSingleSql(stmt, sql, verbose);
             }
         } finally {
             stmt.close();
@@ -187,7 +220,7 @@ public class PseudoCluster {
     }
 
     public void runSqls(String db, String... sqls) throws SQLException {
-        runSqlList(db, Arrays.stream(sqls).collect(Collectors.toList()));
+        runSqlList(db, Arrays.stream(sqls).collect(Collectors.toList()), true);
     }
 
     public String getRunDir() {
@@ -256,7 +289,7 @@ public class PseudoCluster {
             long beId = backendIdStart + i;
             String beRunPath = runDir + "/be" + beId;
             PseudoBackend backend = new PseudoBackend(cluster, beRunPath, beId, host, port++, port++, port++, port++,
-                                                      cluster.frontend.getFrontendService());
+                    cluster.frontend.getFrontendService());
             cluster.backends.put(backend.getHost(), backend);
             cluster.backendIdToHost.put(beId, backend.getHost());
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
@@ -330,10 +363,10 @@ public class PseudoCluster {
 
         public String build() {
             return String.format("create table %s (id bigint not null, name varchar(64) not null, age int null) " +
-                                         "primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS %d " +
-                                         "PROPERTIES(\"replication_num\" = \"%d\", \"storage_medium\" = \"%s\")", tableName,
-                                 buckets, replication,
-                                 ssd ? "SSD" : "HDD");
+                            "primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS %d " +
+                            "PROPERTIES(\"replication_num\" = \"%d\", \"storage_medium\" = \"%s\")", tableName,
+                    buckets, replication,
+                    ssd ? "SSD" : "HDD");
         }
     }
 
@@ -346,8 +379,8 @@ public class PseudoCluster {
     }
 
     public static void main(String[] args) throws Exception {
-        PseudoCluster.getOrCreateWithRandomPort(false, 3);
-        for (int i = 0; i < 3; i++) {
+        PseudoCluster.getOrCreate("pseudo_cluster", false, 9030, 4);
+        for (int i = 0; i < 4; i++) {
             System.out.println(GlobalStateMgr.getCurrentSystemInfo().getBackend(10001 + i).getBePort());
         }
         while (true) {

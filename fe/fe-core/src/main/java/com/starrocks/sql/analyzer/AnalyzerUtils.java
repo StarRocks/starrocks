@@ -6,12 +6,10 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
@@ -22,13 +20,12 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -40,12 +37,8 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.Collection;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
 
 public class AnalyzerUtils {
     public static void verifyNoAggregateFunctions(Expr expression, String clause) {
@@ -133,12 +126,8 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
-            Database db = session.getGlobalStateMgr().getDb(node.getDb());
-            if (db == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
-            }
-            this.dbs.put(node.getDb(), db);
-            return visit(node.getQueryStatement());
+            getDB(node.getTableName());
+            return null;
         }
 
         @Override
@@ -199,17 +188,22 @@ public class AnalyzerUtils {
         }
 
         private void getDB(TableName tableName) {
-            String dbName = tableName.getDb();
+            String catalog = Strings.isNullOrEmpty(tableName.getCatalog()) ? session.getCurrentCatalog() : tableName.getCatalog();
+            String dbName = Strings.isNullOrEmpty(tableName.getDb()) ? session.getDatabase() : tableName.getDb();
+
+            if (Strings.isNullOrEmpty(catalog)) {
+                return;
+            }
+
             if (Strings.isNullOrEmpty(dbName)) {
-                dbName = session.getDatabase();
-            } else {
-                if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-                    return;
-                }
+                return;
+            }
+
+            if (!CatalogMgr.isInternalCatalog(catalog)) {
+                return;
             }
 
             Database db = session.getGlobalStateMgr().getDb(dbName);
-
             dbs.put(db.getFullName(), db);
         }
     }
@@ -370,100 +364,5 @@ public class AnalyzerUtils {
         public Void visitTable(TableRelation node, Void context) {
             return null;
         }
-    }
-
-    /**
-     * Gather conjuncts from this expr and return them in a list.
-     * A conjunct is an expr that returns a boolean, e.g., Predicates, function calls,
-     * SlotRefs, etc. Hence, this method is placed here and not in Predicate.
-     */
-    public static List<Expr> extractConjuncts(Expr root) {
-        List<Expr> conjuncts = Lists.newArrayList();
-        if (null == root) {
-            return conjuncts;
-        }
-
-        extractConjunctsImpl(root, conjuncts);
-        return conjuncts;
-    }
-
-    private static void extractConjunctsImpl(Expr root, List<Expr> conjuncts) {
-        if (!(root instanceof CompoundPredicate)) {
-            conjuncts.add(root);
-            return;
-        }
-
-        CompoundPredicate cpe = (CompoundPredicate) root;
-        if (!CompoundPredicate.Operator.AND.equals(cpe.getOp())) {
-            conjuncts.add(root);
-            return;
-        }
-
-        extractConjunctsImpl(cpe.getChild(0), conjuncts);
-        extractConjunctsImpl(cpe.getChild(1), conjuncts);
-    }
-
-    public static Expr compoundAnd(Collection<Expr> conjuncts) {
-        return createCompound(CompoundPredicate.Operator.AND, conjuncts);
-    }
-
-    public static Expr compoundOr(Collection<Expr> conjuncts) {
-        return createCompound(CompoundPredicate.Operator.OR, conjuncts);
-    }
-
-    // Build a compound tree by bottom up
-    //
-    // Example: compoundType.OR
-    // Initial state:
-    //  a b c d e
-    //
-    // First iteration:
-    //  or    or
-    //  /\    /\   e
-    // a  b  c  d
-    //
-    // Second iteration:
-    //     or   e
-    //    / \
-    //  or   or
-    //  /\   /\
-    // a  b c  d
-    //
-    // Last iteration:
-    //       or
-    //      / \
-    //     or  e
-    //    / \
-    //  or   or
-    //  /\   /\
-    // a  b c  d
-    public static Expr createCompound(CompoundPredicate.Operator type, Collection<Expr> nodes) {
-        LinkedList<Expr> link =
-                nodes.stream().filter(Objects::nonNull).collect(Collectors.toCollection(Lists::newLinkedList));
-
-        if (link.size() < 1) {
-            return null;
-        }
-        if (link.size() == 1) {
-            return link.get(0);
-        }
-
-        while (link.size() > 1) {
-            LinkedList<Expr> buffer = Lists.newLinkedList();
-
-            // combine pairs of elements
-            while (link.size() >= 2) {
-                buffer.add(new CompoundPredicate(type, link.poll(), link.poll()));
-            }
-
-            // if there's and odd number of elements, just append the last one
-            if (!link.isEmpty()) {
-                buffer.add(link.remove());
-            }
-
-            link = buffer;
-        }
-
-        return link.remove();
     }
 }

@@ -191,6 +191,10 @@ public class Table extends MetaObject implements Writable {
         return isLocalTable() || isLakeTable();
     }
 
+    public boolean isHiveTable() {
+        return type == TableType.HIVE;
+    }
+
     // for create table
     public boolean isOlapOrLakeTable() {
         return isOlapTable() || isLakeTable();

@@ -44,7 +44,6 @@ import org.apache.hudi.common.model.FileSlice;
 import org.apache.hudi.common.model.HoodieBaseFile;
 import org.apache.hudi.common.model.HoodieFileFormat;
 import org.apache.hudi.common.model.HoodieLogFile;
-import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
@@ -98,7 +97,7 @@ public class HiveMetaClient {
     private long baseHmsEventId;
 
     // Required for creating an instance of RetryingMetaStoreClient.
-    private static final HiveMetaHookLoader dummyHookLoader = tbl -> null;
+    private static final HiveMetaHookLoader DUMMY_HOOK_LOADER = tbl -> null;
 
     public HiveMetaClient(String uris) throws DdlException {
         HiveConf conf = new HiveConf();
@@ -122,10 +121,10 @@ public class HiveMetaClient {
 
         private AutoCloseClient(HiveConf conf) throws MetaException {
             if (!DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
                         HiveMetaStoreThriftClient.class.getName());
             } else {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
                         DLFProxyMetaStoreClient.class.getName());
             }
         }
@@ -335,7 +334,7 @@ public class HiveMetaClient {
             List<String> logs = fileSlice.getLogFiles().map(HoodieLogFile::getFileName).collect(Collectors.toList());
             fileDescs.add(new HdfsFileDesc(fileName, "", fileLength,
                     ImmutableList.of(), ImmutableList.copyOf(logs), HdfsFileFormat.isSplittable(sd.getInputFormat()),
-                    getTextFileFormatDesc(sd), metaClient.getTableType() == HoodieTableType.MERGE_ON_READ));
+                    getTextFileFormatDesc(sd)));
         }
         return fileDescs;
     }
@@ -674,18 +673,26 @@ public class HiveMetaClient {
         // block locations of the files in the given path in one operation.
         // The performance is better than getting status and block location one by one.
         try {
-            RemoteIterator<LocatedFileStatus> blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
+            // files in hdfs may have multiple directories, so we need to list all files in hdfs recursively here
+            RemoteIterator<LocatedFileStatus> blockIterator = null;
+            if (!Config.recursive_dir_search_enabled) {
+                blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
+            } else {
+                blockIterator = fileSystem.listFiles(new Path(uri.getPath()), true);
+            }
             while (blockIterator.hasNext()) {
                 LocatedFileStatus locatedFileStatus = blockIterator.next();
                 if (!isValidDataFile(locatedFileStatus)) {
                     continue;
+                } else if (locatedFileStatus.isDirectory() && Config.recursive_dir_search_enabled) {
+                    fileDescs.addAll(getHdfsFileDescs(locatedFileStatus.getPath().toString(), isSplittable, sd));
                 }
                 String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                 List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
                 fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
                         ImmutableList.copyOf(fileBlockDescs), ImmutableList.of(),
-                        isSplittable, getTextFileFormatDesc(sd), false));
+                        isSplittable, getTextFileFormatDesc(sd)));
             }
         } catch (FileNotFoundException ignored) {
             // hive empty partition may not create directory
@@ -713,7 +720,7 @@ public class HiveMetaClient {
     }
 
     private boolean isValidDataFile(FileStatus fileStatus) {
-        if (fileStatus.isDirectory()) {
+        if (fileStatus.isDirectory() && !Config.recursive_dir_search_enabled) {
             return false;
         }
 

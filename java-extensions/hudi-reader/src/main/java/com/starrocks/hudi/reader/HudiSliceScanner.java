@@ -57,7 +57,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.fetchSize = fetchSize;
         this.basePath = params.get("base_path");
         this.hiveColumnNames = params.get("hive_column_names");
-        this.hiveColumnTypes = params.get("hive_column_types").split(",");
+        this.hiveColumnTypes = params.get("hive_column_types").split(":");
         this.requiredFields = params.get("required_fields").split(",");
         this.instantTime = params.get("instant_time");
         if (params.get("delta_file_paths").length() == 0) {
@@ -98,7 +98,12 @@ public class HudiSliceScanner extends ConnectorScanner {
                     columnIdBuilder.append(",");
                 }
                 columnIdBuilder.append(hiveColumnNameToIndex.get(requiredFields[i]));
-                requiredTypes[i] = hiveColumnNameToType.get(requiredFields[i]);
+                String typeStr = hiveColumnNameToType.get(requiredFields[i]);
+                // convert decimal(x,y) to decimal
+                if (typeStr.startsWith("decimal")) {
+                    typeStr = "decimal";
+                }
+                requiredTypes[i] = typeStr;
                 isFirst = false;
             }
             initOffHeapTableWriter(requiredTypes, fetchSize, TypeMapping.hiveTypeMappings);

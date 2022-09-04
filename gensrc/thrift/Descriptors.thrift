@@ -101,6 +101,7 @@ enum TSchemaTableType {
     SCH_STATISTICS,
     SCH_STATUS,
     SCH_TABLES,
+    SCH_TABLES_CONFIG,
     SCH_TABLE_CONSTRAINTS,
     SCH_TABLE_NAMES,
     SCH_TABLE_PRIVILEGES,
@@ -345,6 +346,9 @@ struct THudiTable {
 
     // hudi table serde_lib
     10: optional string serde_lib
+
+    // hudi table type: copy on write or merge on read
+    11: optional bool is_mor_table
 }
 
 struct TJDBCTable {

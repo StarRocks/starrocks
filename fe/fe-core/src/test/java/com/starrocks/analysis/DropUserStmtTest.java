@@ -44,8 +44,8 @@ public class DropUserStmtTest {
     public void testNormal() throws Exception {
         String dropSql = "DROP USER 'user'";
         DropUserStmt stmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
-        Assert.assertEquals("DROP USER 'default_cluster:user'@'%'", stmt.toString());
-        Assert.assertEquals("default_cluster:user", stmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("DROP USER 'user'@'%'", stmt.toString());
+        Assert.assertEquals("user", stmt.getUserIdentity().getQualifiedUser());
     }
 
     @Test(expected = AnalysisException.class)

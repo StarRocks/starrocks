@@ -225,6 +225,7 @@ public class SelectAnalyzer {
                 outputFields.addAll(fields);
 
             } else {
+                // The name here only refer to column name.
                 String name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
 
                 analyzeExpression(item.getExpr(), analyzeState, scope);
@@ -287,7 +288,7 @@ public class SelectAnalyzer {
             analyzeExpression(expression, analyzeState, orderByScope);
 
             if (!expression.getType().canOrderBy()) {
-                throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
+                throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
             }
 
             orderByElement.setExpr(expression);
@@ -399,7 +400,7 @@ public class SelectAnalyzer {
                     }
 
                     if (!groupingExpr.getType().canGroupBy()) {
-                        throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
+                        throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
                     }
 
                     if (analyzeState.getColumnReferences().get(groupingExpr) == null) {
@@ -523,12 +524,12 @@ public class SelectAnalyzer {
 
         @Override
         public Expr visitSlot(SlotRef slotRef, Void context) {
-            if (sourceScope.tryResolveFeild(slotRef).isPresent() &&
+            if (sourceScope.tryResolveField(slotRef).isPresent() &&
                     !session.getSessionVariable().getEnableGroupbyUseOutputAlias()) {
                 return slotRef;
             }
 
-            Optional<ResolvedField> resolvedField = outputScope.tryResolveFeild(slotRef);
+            Optional<ResolvedField> resolvedField = outputScope.tryResolveField(slotRef);
             if (resolvedField.isPresent()) {
                 return outputExprs.get(resolvedField.get().getRelationFieldIndex());
             }

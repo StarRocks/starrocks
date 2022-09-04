@@ -193,7 +193,6 @@ void ESDataSource::close(RuntimeState* state) {
     if (_es_reader != nullptr) {
         _es_reader->close();
     }
-    Expr::close(_conjunct_ctxs, state);
 }
 
 void ESDataSource::_init_counter() {

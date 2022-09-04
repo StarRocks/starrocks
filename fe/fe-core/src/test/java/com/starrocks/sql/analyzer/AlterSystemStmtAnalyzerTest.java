@@ -3,8 +3,8 @@
 package com.starrocks.sql.analyzer;
 
 
-import com.starrocks.analysis.ModifyBackendAddressClause;
-import com.starrocks.analysis.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;

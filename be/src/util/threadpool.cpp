@@ -522,6 +522,7 @@ void ThreadPool::dispatch_thread() {
         // with this threadpool, and produce a deadlock.
         task.runnable.reset();
         l.lock();
+        _last_active_timestamp = MonoTime::Now();
 
         // Possible states:
         // 1. The token was shut down while we ran its task. Transition to QUIESCED.
