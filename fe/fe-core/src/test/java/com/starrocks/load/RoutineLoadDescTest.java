@@ -45,7 +45,7 @@ public class RoutineLoadDescTest {
                         "ROWS TERMINATED BY '\n', " +
                         "COLUMNS(`a`, `b`, `c` = 1), " +
                         "TEMPORARY PARTITION(`p1`, `p2`), " +
-                        "WHERE `a` = 1",
+                        "WHERE a = 1",
                 desc.toSql());
     }
 }
