@@ -21,7 +21,7 @@
 
 #include "runtime/small_file_mgr.h"
 
-#include <boost/algorithm/string/predicate.hpp>      // boost::algorithm::starts_with
+#include <boost/algorithm/string/predicate.hpp> // boost::algorithm::starts_with
 #include <cstdint>
 #include <cstdio>
 #include <sstream>
