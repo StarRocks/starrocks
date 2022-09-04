@@ -2,11 +2,11 @@
 
 package com.starrocks.execution;
 
-import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.ast.AlterSystemStmt;
 
 public class AlterSystemExecutor implements DataDefinitionExecutor {
 

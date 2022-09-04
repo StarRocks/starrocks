@@ -26,25 +26,15 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
-import com.starrocks.analysis.AddColumnsClause;
-import com.starrocks.analysis.AddPartitionClause;
-import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.ColumnRenameClause;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.DropColumnClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.GrantStmt;
-import com.starrocks.analysis.ModifyColumnClause;
 import com.starrocks.analysis.MultiItemListPartitionDesc;
 import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.PartitionNames;
-import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TruncatePartitionClause;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -75,13 +65,23 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
+import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
@@ -279,21 +279,6 @@ public class AlterTest {
         }
     }
 
-    private static void alterTable(String sql, boolean expectedException) throws Exception {
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
-        try {
-            GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
-            if (expectedException) {
-                Assert.fail();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            if (!expectedException) {
-                Assert.fail();
-            }
-        }
-    }
-
     private static void alterTableWithNewParser(String sql, boolean expectedException) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
@@ -306,15 +291,6 @@ public class AlterTest {
             if (!expectedException) {
                 Assert.fail();
             }
-        }
-    }
-
-    private static void alterTableWithExceptionMsg(String sql, String msg) throws Exception {
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
-        try {
-            GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
-        } catch (Exception e) {
-            Assert.assertEquals(msg, e.getMessage());
         }
     }
 
@@ -501,11 +477,11 @@ public class AlterTest {
         waitSchemaChangeJobDone(false, tbl);
 
         stmt = "alter table test.tbl1 add rollup r1 (k1)";
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         waitSchemaChangeJobDone(true, tbl);
 
         stmt = "alter table test.tbl1 add rollup r2 (k1), r3 (k1)";
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         waitSchemaChangeJobDone(true, tbl);
 
         // enable dynamic partition
@@ -2192,7 +2168,7 @@ public class AlterTest {
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         clause = (ReorderColumnsClause) alterTableStmt.getOps().get(0);
         Assert.assertEquals(clause.getRollupName(), "testRollup");
-        Assert.assertEquals("ORDER BY `k1`, `k2` IN `testRollup`", clause.toString());
+        Assert.assertEquals("[k1, k2]", clause.getColumnsByPos().toString());
     }
 
 

@@ -220,6 +220,10 @@ public class RuntimeFilterDescription {
         this.broadcastGRFDestinations = broadcastGRFDestinations;
     }
 
+    public List<TRuntimeFilterDestination> getBroadcastGRFDestinations() {
+        return broadcastGRFDestinations;
+    }
+
     public String toExplainString(int probeNodeId) {
         StringBuilder sb = new StringBuilder();
         sb.append("filter_id = ").append(filterId);

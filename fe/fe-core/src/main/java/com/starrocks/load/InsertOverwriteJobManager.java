@@ -56,10 +56,6 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     }
 
     public void executeJob(ConnectContext context, StmtExecutor stmtExecutor, InsertOverwriteJob job) throws Exception {
-        // add an edit log
-        CreateInsertOverwriteJobLog info = new CreateInsertOverwriteJobLog(job.getJobId(),
-                job.getTargetDbId(), job.getTargetTableId(), job.getSourcePartitionIds());
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
         boolean registered = registerOverwriteJob(job);
         if (!registered) {
             LOG.warn("register insert overwrite job:{} failed", job.getJobId());
@@ -176,6 +172,8 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
                         try {
                             InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
                             runner.cancel();
+                        } catch (Exception e) {
+                            LOG.warn("cancel insert overwrite job:{} failed.", job.getJobId(), e);
                         } finally {
                             deregisterOverwriteJob(job.getJobId());
                         }

@@ -37,7 +37,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -1336,6 +1338,30 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public void setFn(Function fn) {
         this.fn = fn;
+    }
+
+    // only the first/last one can be lambda functions.
+    public boolean hasLambdaFunction() {
+        int pos = -1, num = 0;
+        for (int i = 0; i < children.size(); ++i) {
+            if (children.get(i) instanceof LambdaFunctionExpr) {
+                num++;
+                pos = i;
+            }
+        }
+        if (num == 1 && (pos == 0 || pos == children.size() - 1)) {
+            if (children.size() <= 1) {
+                throw new SemanticException("Lambda functions should work with inputs in high-order functions.");
+            }
+            return true;
+        } else if (num > 1) {
+            throw new SemanticException("A high-order function can have one lambda function.");
+        } else if (pos > 0 && pos < children.size() - 1) {
+            throw new SemanticException(
+                    "Lambda functions can only be the first or last argument of any high-order function, " +
+                            "or lambda arguments should be in ().");
+        }
+        return false;
     }
 
     public boolean isSelfMonotonic() {

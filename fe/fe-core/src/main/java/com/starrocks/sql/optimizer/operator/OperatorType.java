@@ -91,7 +91,7 @@ public enum OperatorType {
     LIKE,
     DICT_MAPPING,
     CLONE,
-
+    LAMBDA_FUNCTION,
     /**
      * PATTERN
      */

@@ -388,8 +388,9 @@ public class AST2SQL {
             return visit(node.getChild(0)) + "[" + visit(node.getChild(1)) + "]";
         }
 
+        @Override
         public String visitArrowExpr(ArrowExpr node, Void context) {
-            return visitExpression(node, context);
+            return String.format("%s->%s", visit(node.getItem(), context), visit(node.getKey(), context));
         }
 
         @Override
@@ -487,7 +488,7 @@ public class AST2SQL {
         }
 
         public String visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {
-            return visitExpression(node, context);
+            return visitFunctionCall(node, context);
         }
 
         public String visitInformationFunction(InformationFunction node, Void context) {

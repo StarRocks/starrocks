@@ -3,6 +3,7 @@
 package com.starrocks.external.hive;
 
 import com.google.common.base.Preconditions;
+import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.metastore.api.BooleanColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.DateColumnStatsData;
@@ -13,6 +14,7 @@ import org.apache.hadoop.hive.metastore.api.StringColumnStatsData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -210,6 +212,14 @@ public class HiveColumnStats {
                     DecimalColumnStatsData decimalStats = statsData.getDecimalStats();
                     numNulls = decimalStats.getNumNulls();
                     numDistinctValues = decimalStats.getNumDVs();
+                    if (decimalStats.isSetHighValue()) {
+                        maxValue = HiveDecimal.create(new BigInteger(decimalStats.getHighValue().getUnscaled()),
+                                decimalStats.getHighValue().getScale()).doubleValue();
+                    }
+                    if (decimalStats.isSetLowValue()) {
+                        minValue = HiveDecimal.create(new BigInteger(decimalStats.getLowValue().getUnscaled()),
+                                decimalStats.getLowValue().getScale()).doubleValue();
+                    }
                 }
                 break;
             default:
