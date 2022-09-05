@@ -232,10 +232,11 @@ public class RuleSet {
                 PushDownPredicateScanRule.ICEBERG_SCAN,
                 PushDownPredicateScanRule.HUDI_SCAN,
                 PushDownPredicateScanRule.SCHEMA_SCAN,
-                PushDownPredicateScanRule.MYSQL_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,
-                PushDownPredicateScanRule.JDBC_SCAN,
+                // Commented out because of UTs in `ExternalTableTest.java`
+                // PushDownPredicateScanRule.MYSQL_SCAN,
+                // PushDownPredicateScanRule.JDBC_SCAN,
                 new PushDownPredicateAggRule(),
                 new PushDownPredicateWindowRule(),
                 new PushDownPredicateJoinRule(),
