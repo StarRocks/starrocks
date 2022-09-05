@@ -3,7 +3,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.PartitionKeyDesc;

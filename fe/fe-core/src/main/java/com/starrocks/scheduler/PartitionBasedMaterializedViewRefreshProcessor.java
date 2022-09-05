@@ -330,8 +330,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private boolean needToRefreshNonPartitionTable() {
-        for (OlapTable olapTable : snapshotBaseTables.values()) {
-            if (needToRefreshTable(olapTable)) {
+        for (BaseTableInfo baseTableInfo : snapshotBaseTables.values()) {
+            if (needToRefreshTable(baseTableInfo.getCachedBaseTable())) {
                 return true;
             }
         }

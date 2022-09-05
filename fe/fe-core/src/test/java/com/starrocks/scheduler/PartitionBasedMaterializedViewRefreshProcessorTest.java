@@ -338,11 +338,13 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
                     if (baseDb == null) {
-                        throw new SemanticException("Materialized view base db: " + baseTableInfo.getDbId() + " not exist.");
+                        throw new SemanticException("Materialized view base db: " +
+                                baseTableInfo.getDbId() + " not exist.");
                     }
                     OlapTable olapTable = (OlapTable) baseDb.getTable(baseTableInfo.getTableId());
                     if (olapTable == null) {
-                        throw new SemanticException("Materialized view base table: " + baseTableInfo.getTableId() + " not exist.");
+                        throw new SemanticException("Materialized view base table: " +
+                                baseTableInfo.getTableId() + " not exist.");
                     }
                     OlapTable copied = new OlapTable();
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
@@ -384,11 +386,13 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
                     if (baseDb == null) {
-                        throw new SemanticException("Materialized view base db: " + baseTableInfo.getDbId() + " not exist.");
+                        throw new SemanticException("Materialized view base db: " +
+                                baseTableInfo.getDbId() + " not exist.");
                     }
                     OlapTable olapTable = (OlapTable) baseDb.getTable(baseTableInfo.getTableId());
                     if (olapTable == null) {
-                        throw new SemanticException("Materialized view base table: " + baseTableInfo.getTableId() + " not exist.");
+                        throw new SemanticException("Materialized view base table: " +
+                                baseTableInfo.getTableId() + " not exist.");
                     }
                     OlapTable copied = new OlapTable();
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
@@ -437,11 +441,13 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
                     if (baseDb == null) {
-                        throw new SemanticException("Materialized view base db: " + baseTableInfo.getDbId() + " not exist.");
+                        throw new SemanticException("Materialized view base db: " +
+                                baseTableInfo.getDbId() + " not exist.");
                     }
                     OlapTable olapTable = (OlapTable) baseDb.getTable(baseTableInfo.getTableId());
                     if (olapTable == null) {
-                        throw new SemanticException("Materialized view base table: " + baseTableInfo.getTableId() + " not exist.");
+                        throw new SemanticException("Materialized view base table: " +
+                                baseTableInfo.getTableId() + " not exist.");
                     }
                     OlapTable copied = new OlapTable();
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
@@ -519,11 +525,13 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
                     if (baseDb == null) {
-                        throw new SemanticException("Materialized view base db: " + baseTableInfo.getDbId() + " not exist.");
+                        throw new SemanticException("Materialized view base db: " +
+                                baseTableInfo.getDbId() + " not exist.");
                     }
                     OlapTable olapTable = (OlapTable) baseDb.getTable(baseTableInfo.getTableId());
                     if (olapTable == null) {
-                        throw new SemanticException("Materialized view base table: " + baseTableInfo.getTableId() + " not exist.");
+                        throw new SemanticException("Materialized view base table: " +
+                                baseTableInfo.getTableId() + " not exist.");
                     }
                     OlapTable copied = new OlapTable();
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
