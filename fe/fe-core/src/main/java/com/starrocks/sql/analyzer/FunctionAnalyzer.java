@@ -27,7 +27,7 @@ public class FunctionAnalyzer {
         }
 
         FunctionName fnName = functionCallExpr.getFnName();
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+        if (fnName.getFunction().equals(FunctionSet.DATE_TRUNC)) {
             if (!(functionCallExpr.getChild(0) instanceof StringLiteral)) {
                 throw new SemanticException("date_trunc requires first parameter must be a string constant");
             }
@@ -49,7 +49,7 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.ARRAY_DIFFERENCE)) {
+        if (fnName.getFunction().equals(FunctionSet.ARRAY_DIFFERENCE)) {
             Preconditions.checkState(functionCallExpr.getChildren().size() == 1);
             if (!functionCallExpr.getChild(0).getType().isNull()) {
                 Preconditions.checkState(functionCallExpr.getChild(0).getType().isArrayType());
@@ -70,11 +70,11 @@ public class FunctionAnalyzer {
         FunctionName fnName = functionCallExpr.getFnName();
         FunctionParams fnParams = functionCallExpr.getParams();
 
-        if (fnParams.isStar() && !fnName.getFunction().equalsIgnoreCase(FunctionSet.COUNT)) {
+        if (fnParams.isStar() && !fnName.getFunction().equals(FunctionSet.COUNT)) {
             throw new SemanticException("'*' can only be used in conjunction with COUNT: " + functionCallExpr.toSql());
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.COUNT)) {
+        if (fnName.getFunction().equals(FunctionSet.COUNT)) {
             // for multiple exprs count must be qualified with distinct
             if (functionCallExpr.getChildren().size() > 1 && !fnParams.isDistinct()) {
                 throw new SemanticException(
@@ -83,7 +83,7 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.GROUP_CONCAT)) {
+        if (fnName.getFunction().equals(FunctionSet.GROUP_CONCAT)) {
             if (functionCallExpr.getChildren().size() > 2 || functionCallExpr.getChildren().isEmpty()) {
                 throw new SemanticException(
                         "group_concat requires one or two parameters: " + functionCallExpr.toSql());
@@ -110,8 +110,8 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.LAG)
-                || fnName.getFunction().equalsIgnoreCase(FunctionSet.LEAD)) {
+        if (fnName.getFunction().equals(FunctionSet.LAG)
+                || fnName.getFunction().equals(FunctionSet.LEAD)) {
             if (!functionCallExpr.isAnalyticFnCall()) {
                 throw new SemanticException(fnName.getFunction() + " only used in analytic function");
             } else {
@@ -138,7 +138,7 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
+        if (fnName.getFunction().equals(FunctionSet.ARRAY_AGG)) {
             if (fnParams.isDistinct()) {
                 throw new SemanticException("array_agg does not support DISTINCT");
             }
@@ -147,19 +147,19 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.ARRAYS_OVERLAP)) {
+        if (fnName.getFunction().equals(FunctionSet.ARRAYS_OVERLAP)) {
             if (functionCallExpr.getChildren().size() != 2) {
                 throw new SemanticException("arrays_overlap only support 2 parameters");
             }
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.ARRAY_FILTER)) {
+        if (fnName.getFunction().equals(FunctionSet.ARRAY_FILTER)) {
             if (functionCallExpr.getChildren().size() != 2) {
                 throw new SemanticException("array_filter only support 2 parameters");
             }
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.RETENTION)) {
+        if (fnName.getFunction().equals(FunctionSet.RETENTION)) {
             if (!arg.getType().isArrayType()) {
                 throw new SemanticException("retention only support Array<BOOLEAN>");
             }
@@ -195,8 +195,8 @@ public class FunctionAnalyzer {
         }
 
         // SUM and AVG cannot be applied to non-numeric types
-        if ((fnName.getFunction().equalsIgnoreCase(FunctionSet.SUM)
-                || fnName.getFunction().equalsIgnoreCase(FunctionSet.AVG))
+        if ((fnName.getFunction().equals(FunctionSet.SUM)
+                || fnName.getFunction().equals(FunctionSet.AVG))
                 && ((!arg.getType().isNumericType() && !arg.getType().isBoolean()
                 && !arg.getType().isStringType() && !arg.getType().isNull() &&
                 !(arg instanceof NullLiteral)) ||
@@ -204,26 +204,26 @@ public class FunctionAnalyzer {
             throw new SemanticException(
                     fnName.getFunction() + " requires a numeric parameter: " + functionCallExpr.toSql());
         }
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.SUM_DISTINCT)
+        if (fnName.getFunction().equals(FunctionSet.SUM_DISTINCT)
                 && ((!arg.getType().isNumericType() && !arg.getType().isNull() && !(arg instanceof NullLiteral)) ||
                 !arg.getType().canApplyToNumeric())) {
             throw new SemanticException(
                     "SUM_DISTINCT requires a numeric parameter: " + functionCallExpr.toSql());
         }
 
-        if ((fnName.getFunction().equalsIgnoreCase(FunctionSet.MIN)
-                || fnName.getFunction().equalsIgnoreCase(FunctionSet.MAX)
-                || fnName.getFunction().equalsIgnoreCase(FunctionSet.NDV)
-                || fnName.getFunction().equalsIgnoreCase(FunctionSet.APPROX_COUNT_DISTINCT))
+        if ((fnName.getFunction().equals(FunctionSet.MIN)
+                || fnName.getFunction().equals(FunctionSet.MAX)
+                || fnName.getFunction().equals(FunctionSet.NDV)
+                || fnName.getFunction().equals(FunctionSet.APPROX_COUNT_DISTINCT))
                 && !arg.getType().canApplyToNumeric()) {
             throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
         }
 
-        if ((fnName.getFunction().equalsIgnoreCase(FunctionSet.BITMAP_UNION_INT) && !arg.getType().isIntegerType())) {
+        if ((fnName.getFunction().equals(FunctionSet.BITMAP_UNION_INT) && !arg.getType().isIntegerType())) {
             throw new SemanticException("BITMAP_UNION_INT params only support Integer getType()");
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.INTERSECT_COUNT)) {
+        if (fnName.getFunction().equals(FunctionSet.INTERSECT_COUNT)) {
             if (functionCallExpr.getChildren().size() <= 2) {
                 throw new SemanticException("intersect_count(bitmap_column, column_to_filter, filter_values) " +
                         "function requires at least three parameters");
@@ -247,10 +247,10 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.BITMAP_COUNT)
-                || fnName.getFunction().equalsIgnoreCase(FunctionSet.BITMAP_UNION)
-                || fnName.getFunction().equalsIgnoreCase(FunctionSet.BITMAP_UNION_COUNT)
-                || fnName.getFunction().equalsIgnoreCase(FunctionSet.BITMAP_INTERSECT)) {
+        if (fnName.getFunction().equals(FunctionSet.BITMAP_COUNT)
+                || fnName.getFunction().equals(FunctionSet.BITMAP_UNION)
+                || fnName.getFunction().equals(FunctionSet.BITMAP_UNION_COUNT)
+                || fnName.getFunction().equals(FunctionSet.BITMAP_INTERSECT)) {
             if (functionCallExpr.getChildren().size() != 1) {
                 throw new SemanticException(fnName + " function could only have one child");
             }
@@ -262,23 +262,23 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if ((fnName.getFunction().equalsIgnoreCase(FunctionSet.HLL_UNION_AGG)
-                || fnName.getFunction().equalsIgnoreCase(FunctionSet.HLL_UNION)
-                || fnName.getFunction().equalsIgnoreCase(FunctionSet.HLL_CARDINALITY)
-                || fnName.getFunction().equalsIgnoreCase(FunctionSet.HLL_RAW_AGG))
+        if ((fnName.getFunction().equals(FunctionSet.HLL_UNION_AGG)
+                || fnName.getFunction().equals(FunctionSet.HLL_UNION)
+                || fnName.getFunction().equals(FunctionSet.HLL_CARDINALITY)
+                || fnName.getFunction().equals(FunctionSet.HLL_RAW_AGG))
                 && !arg.getType().isHllType()) {
             throw new SemanticException(
                     "HLL_UNION_AGG, HLL_RAW_AGG and HLL_CARDINALITY's params must be hll column");
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.MIN)
-                || fnName.getFunction().equalsIgnoreCase(FunctionSet.MAX)
-                || fnName.getFunction().equalsIgnoreCase(FunctionSet.NDV)
-                || fnName.getFunction().equalsIgnoreCase(FunctionSet.HLL_UNION_AGG)) {
+        if (fnName.getFunction().equals(FunctionSet.MIN)
+                || fnName.getFunction().equals(FunctionSet.MAX)
+                || fnName.getFunction().equals(FunctionSet.NDV)
+                || fnName.getFunction().equals(FunctionSet.HLL_UNION_AGG)) {
             fnParams.setIsDistinct(false);  // DISTINCT is meaningless here
         }
 
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.PERCENTILE_APPROX)) {
+        if (fnName.getFunction().equals(FunctionSet.PERCENTILE_APPROX)) {
             if (functionCallExpr.getChildren().size() != 2 && functionCallExpr.getChildren().size() != 3) {
                 throw new SemanticException("percentile_approx(expr, DOUBLE [, B]) requires two or three parameters");
             }

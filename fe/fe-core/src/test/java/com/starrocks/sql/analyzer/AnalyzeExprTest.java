@@ -126,7 +126,7 @@ public class AnalyzeExprTest {
 
         analyzeFail("select array_filter(x,y -> x + y, [], [])"); // should be (x,y)
         analyzeFail("select array_filter((x,y,z) -> x + y, [], [])");
-        analyzeFail("select array_filter([1], x -> x)");
+        analyzeFail("select arrayFilter([1], x -> x)");
         analyzeFail("select array_filter(x -> z,[1])");
         analyzeFail("select array_filter(x -> x,[1],null)");
     }
