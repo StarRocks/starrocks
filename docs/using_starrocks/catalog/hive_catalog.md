@@ -21,7 +21,7 @@ Before you create a Hive catalog, configure your StarRocks cluster so that you c
 
 If you use HDFS as the data storage system, configure your StarRocks cluster as follows:
 
-- (Optional) Set the username that is used to access your HDFS and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS and Hive metastore. You can also set the username via the `HADOOP_USERNAME` parameter in the **fe/conf/hadoop_env.sh** file of each FE and the **be/conf/hadoop_env.sh** file of each BE. Then restart each BE to make the parameter setting take effect.
+- (Optional) Set the username that is used to access your HDFS and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS and Hive metastore. You can also set the username via the `HADOOP_USERNAME` parameter in the **fe/conf/hadoop_env.sh** file of each FE and the **be/conf/hadoop_env.sh** file of each BE. Then restart each FE and BE to make the parameter settings take effect.
 
     > Note: You can set only one username for a StarRocks cluster.
 
@@ -104,14 +104,12 @@ PROPERTIES ("key"="value", ...);
 
 The parameter description is as follows:
 
-- `catalog_name`: the name of the Hive catalog. This parameter is required.<br>
-  The naming conventions are as follows:
+- `catalog_name`: the name of the Hive catalog. This parameter is required.<br>The naming conventions are as follows:
 
   - The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
   - The name cannot exceed 64 characters in length.
 
-- `PROPERTIES`: the properties of the Hive catalog. This parameter is required.<br>
-   You can configure the following properties:
+- `PROPERTIES`: the properties of the Hive catalog. This parameter is required.<br>You can configure the following properties:
 
     | **Property**        | **Required** | **Description**                                              |
     | ------------------- | ------------ | ------------------------------------------------------------ |
@@ -175,32 +173,32 @@ Both Hive metastore 2.x and 3.x support the configuration of the event listener.
 
 ```XML
 <property>
-  <name>hive.metastore.event.db.notification.api.auth</name>
-  <value>false</value>
+    <name>hive.metastore.event.db.notification.api.auth</name>
+    <value>false</value>
 </property>
 <property>
-  <name>hive.metastore.notifications.add.thrift.objects</name>
-  <value>true</value>
+    <name>hive.metastore.notifications.add.thrift.objects</name>
+    <value>true</value>
 </property>
 <property>
-  <name>hive.metastore.alter.notifications.basic</name>
-  <value>false</value>
+    <name>hive.metastore.alter.notifications.basic</name>
+    <value>false</value>
 </property>
 <property>
-  <name>hive.metastore.dml.events</name>
-  <value>true</value>
+    <name>hive.metastore.dml.events</name>
+    <value>true</value>
 </property>
 <property>
-  <name>hive.metastore.transactional.event.listeners</name>
-  <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
+    <name>hive.metastore.transactional.event.listeners</name>
+    <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
 </property>
 <property>
-  <name>hive.metastore.event.db.listener.timetolive</name>
-  <value>172800s</value>
+    <name>hive.metastore.event.db.listener.timetolive</name>
+    <value>172800s</value>
 </property>
 <property>
-  <name>hive.metastore.server.max.message.size</name>
-  <value>858993459</value>
+    <name>hive.metastore.server.max.message.size</name>
+    <value>858993459</value>
 </property>
 ```
 

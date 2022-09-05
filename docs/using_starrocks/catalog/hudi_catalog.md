@@ -11,7 +11,7 @@ A Hudi catalog is an external catalog, which enables you to query data from Hudi
 
 - StarRocks supports querying data files of Hudi in the following formats: Parquet and ORC.
 - StarRocks supports querying compressed data files of Hudi in the following formats: gzip, Zstd, LZ4, and Snappy.
-- StarRocks supports querying Hudi data in the following types: BOOLEAN, INT, DATE, TimeMillis, TimeMicros, LONG, FLOAT, DOUBLE, STRING, ARRAY, and DECIMAL. Note that an error occurs when you query Hudi data in unsupported data types. The following data types are not supported: FIXED, ENUM, UNION, MAP, and BYTES.
+- StarRocks supports querying Hudi data in the following types: BOOLEAN, INT, DATE, TIME, BIGINT, FLOAT, DOUBLE, DECIMAL, CHAR, and VARCHAR. Note that an error occurs when you query Hudi data in unsupported data types. The following data types are not supported: ARRAY, MAP, and STRUCT.
 - StarRocks supports querying Copy On Write tables. Merge On Read tables are not supported. For the differences between these two types of tables, see [Table & Query Types](https://hudi.apache.org/docs/table_types).
 - You can use the [DESC](/docs/sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hudi table in StarRocks 2.4 and later versions.
 
@@ -30,15 +30,12 @@ PROPERTIES ("key"="value", ...);
 
 The parameter description is as follows:
 
-- `catalog_name`: the name of the Hudi catalog. This parameter is required.
-   The naming conventions are as follows:
+- `catalog_name`: the name of the Hudi catalog. This parameter is required.<br>The naming conventions are as follows:
 
   - The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
   - The name cannot exceed 64 characters in length.
 
-- `PROPERTIES`: the properties of the Hudi catalog.
-
-   This parameter is required. You can configure the following properties:
+- `PROPERTIES`: the properties of the Hudi catalog. <br> This parameter is required. You can configure the following properties:
 
     | **Property**        | **Required** | **Description**                                              |
     | ------------------- | ------------ | ------------------------------------------------------------ |

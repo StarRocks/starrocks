@@ -34,12 +34,11 @@ PROPERTIES ("key"="value", ...);
 
 ### Parameters
 
-- `catalog_name`: the name of the Iceberg catalog. This parameter is required.
-  The naming conventions are as follows:
+- `catalog_name`: the name of the Iceberg catalog. This parameter is required.<br>The naming conventions are as follows:
   - The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
   - The name cannot exceed 64 characters in length.
 
-- `PROPERTIES`: the properties of the Iceberg catalog. This parameter is required. You need to configure this parameter based on the types of metadata service used by your Iceberg cluster. In Iceberg, there is a component called [catalog](https://iceberg.apache.org/docs/latest/configuration/#catalog-properties), which is used to store the mapping of Iceberg tables and paths to store Iceberg tables. If you use different types of metadata services, you need to configure different types of catalogs for your Iceberg cluster.
+- `PROPERTIES`: the properties of the Iceberg catalog. This parameter is required. You need to configure this parameter based on the metadata service used by your Iceberg cluster. In Iceberg, there is a component called [catalog](https://iceberg.apache.org/docs/latest/configuration/#catalog-properties), which is used to store the mapping of Iceberg tables and paths of storing Iceberg tables. If you use different metadata services, you need to configure different types of catalogs for your Iceberg cluster.
   - Hive metastore: If you use Hive metastore, configure HiveCatalog for your Iceberg cluster.
   - Custom metadata service: If you use the custom metadata service, configure a custom catalog for your Iceberg cluster.
 
@@ -50,12 +49,12 @@ If you use Hive metastore for your Iceberg cluster, configure the following prop
 | **Property**           | **Required** | **Description**                                              |
 | ---------------------- | ------------ | ------------------------------------------------------------ |
 | type                   | Yes          | The type of the data source. Set the value to `iceberg`.     |
-| starrocks.catalog-type | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `HIVE` if you configure the HiveCatalog. |
+| starrocks.catalog-type | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `HIVE` when you configure the HiveCatalog to use Hive metastore. |
 | hive.metastore.uris    | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
 
 #### Custom catalog
 
-If you use the custom metadata service for your Iceberg cluster, you need to create a custom catalog class and implement the related interface in StarRocks so that StarRocks can access the custom metadata service. The custom catalog class needs to inherit the abstract class BaseMetastoreCatalog. For information about how to create a custom catalog in StarRocks, see [IcebergHiveCatalog](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/external/iceberg/IcebergHiveCatalog.java). After the custom catalog is created, package the catalog and its related files, and then place them under the **fe/lib** path of each FE. Then restart each FE.
+If you use a custom metadata service for your Iceberg cluster, you need to create a custom catalog class and implement the related interface in StarRocks so that StarRocks can access the custom metadata service. The custom catalog class needs to inherit the abstract class BaseMetastoreCatalog. For information about how to create a custom catalog in StarRocks, see [IcebergHiveCatalog](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/external/iceberg/IcebergHiveCatalog.java). After the custom catalog is created, package the catalog and its related files, and then place them under the **fe/lib** path of each FE. Then restart each FE.
 
 > Note: The class name of the custom catalog cannot be duplicated with the name of the class that already exists in StarRock.
 
@@ -64,7 +63,7 @@ After you complete the preceding operations, you can create an Iceberg catalog a
 | **Property**           | **Required** | **Description**                                              |
 | ---------------------- | ------------ | ------------------------------------------------------------ |
 | type                   | Yes          | The type of the data source. Set the value to `iceberg`.     |
-| starrocks.catalog-type | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `CUSTOM` if you configure the custom catalog. |
+| starrocks.catalog-type | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `CUSTOM` when you configure the custom catalog to use the custom metadata service. |
 | iceberg.catalog-impl   | Yes          | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the custom catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg catalog. |
 
 ## Caching strategy of Iceberg metadata
