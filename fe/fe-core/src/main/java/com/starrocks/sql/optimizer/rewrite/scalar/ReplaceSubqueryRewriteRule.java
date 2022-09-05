@@ -10,6 +10,14 @@ import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 
+/**
+ * The processing flow of the subquery is as follows:
+ * 1. Transform `Expr` expression to `ScalarOperator` expression, while subquery in simply wrapped in `SubqueryOperator`
+ * 2. Parse `SubqueryOperator` to apply operator, and save the `SubqueryOperator -> ColumnRefOperator` in ExpressionMapping
+ * 3. rewrite `ScalarOperator` created by step1 with the `ExpressionMapping` created by step2
+ * <p>
+ * This rule works in step3, simply replace `SubqueryOperator` with `ColumnRefOperator`
+ */
 public class ReplaceSubqueryRewriteRule extends TopDownScalarOperatorRewriteRule {
 
     private final ExpressionMapping expressionMapping;

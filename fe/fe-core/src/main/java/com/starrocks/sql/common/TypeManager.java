@@ -120,23 +120,24 @@ public class TypeManager {
         return BinaryPredicate.getCmpType(type1, type2);
     }
 
+    public static Type getCompatibleTypeForIf(List<Type> types) {
+        return getCompatibleType(types, "If");
+    }
+
     public static Type getCompatibleTypeForCaseWhen(List<Type> types) {
+        return getCompatibleType(types, "CaseWhen");
+    }
+
+    public static Type getCompatibleType(List<Type> types, String kind) {
         Type compatibleType = types.get(0);
         for (int i = 1; i < types.size(); i++) {
             compatibleType = Type.getAssignmentCompatibleType(compatibleType, types.get(i), false);
             if (!compatibleType.isValid()) {
-                throw new SemanticException("Failed to get Compatible Type ForCaseWhen with %s and %s",
-                        types.get(i), types.get(i - 1));
+                throw new SemanticException("Failed to get compatible type for %s with %s and %s",
+                        kind, types.get(i), types.get(i - 1));
             }
         }
 
         return compatibleType;
     }
-
-    public static class TypeTriple {
-        public ScalarType returnType;
-        public ScalarType lhsTargetType;
-        public ScalarType rhsTargetType;
-    }
-
 }

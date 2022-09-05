@@ -1322,4 +1322,101 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  \n" +
                 "  1:OlapScanNode");
     }
+
+    @Test
+    public void testSubqueryTypeRewrite() throws Exception {
+        {
+            String sql =
+                    "select nullif((select max(v4) from t1), (select min(v6) from t1))";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  14:Project\n" +
+                    "  |  <slot 2> : nullif(7: max, 11: min)");
+        }
+        {
+            String sql =
+                    "select nullif((select max(v4) from t1), (select avg(v6) from t1))";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  14:Project\n" +
+                    "  |  <slot 2> : nullif(CAST(7: max AS DOUBLE), 11: avg)");
+        }
+        {
+            String sql =
+                    "select ifnull((select max(v4) from t1), (select min(v6) from t1))";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  14:Project\n" +
+                    "  |  <slot 2> : ifnull(7: max, 11: min)");
+        }
+        {
+            String sql =
+                    "select ifnull((select max(v4) from t1), (select avg(v6) from t1))";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  14:Project\n" +
+                    "  |  <slot 2> : ifnull(CAST(7: max AS DOUBLE), 11: avg)");
+        }
+        {
+            String sql =
+                    "select ifnull((select max(v4) from t1), (select min(v6) from t1))";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  14:Project\n" +
+                    "  |  <slot 2> : ifnull(7: max, 11: min)");
+        }
+        {
+            String sql =
+                    "select coalesce((select max(v4) from t1), (select any_value(v5) from t1), (select min(v6) from t1))";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  21:Project\n" +
+                    "  |  <slot 2> : coalesce(7: max, 12: any_value, 16: min)");
+        }
+        {
+            String sql =
+                    "select coalesce((select max(v4) from t1), (select avg(v5) from t1), (select min(v6) from t1))";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  21:Project\n" +
+                    "  |  <slot 2> : coalesce(CAST(7: max AS DOUBLE), 12: avg, CAST(16: min AS DOUBLE))");
+        }
+        {
+            String sql =
+                    "select case " +
+                            "when(select count(*) from t2) > 10 then (select max(v4) from t1) " +
+                            "else (select min(v6) from t1) " +
+                            "end c";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  21:Project\n" +
+                    "  |  <slot 2> : if(7: count > 10, 12: max, 16: min)");
+        }
+        {
+            String sql =
+                    "select case " +
+                            "when(select count(*) from t2) > 10 then (select max(v4) from t1) " +
+                            "else (select avg(v6) from t1) " +
+                            "end c";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  21:Project\n" +
+                    "  |  <slot 2> : if(7: count > 10, CAST(12: max AS DOUBLE), 16: avg)");
+        }
+        {
+            String sql =
+                    "select case " +
+                            "when(select count(*) from t2) > 10 then (select max(v4) from t1) " +
+                            "when(select count(*) from t3) > 20 then (select any_value(v5) from t1) " +
+                            "else (select min(v6) from t1) " +
+                            "end c";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  35:Project\n" +
+                    "  |  <slot 2> : CASE WHEN 7: count > 10 THEN 12: max WHEN 17: count > 20 " +
+                    "THEN 22: any_value ELSE 26: min END");
+        }
+        {
+            String sql =
+                    "select case " +
+                            "when(select count(*) from t2) > 10 then (select max(v4) from t1) " +
+                            "when(select count(*) from t3) > 20 then (select avg(v5) from t1) " +
+                            "else (select min(v6) from t1) " +
+                            "end c";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  35:Project\n" +
+                    "  |  <slot 2> : CASE WHEN 7: count > 10 THEN CAST(12: max AS DOUBLE) " +
+                    "WHEN 17: count > 20 THEN 22: avg ELSE CAST(26: min AS DOUBLE) END");
+        }
+    }
 }

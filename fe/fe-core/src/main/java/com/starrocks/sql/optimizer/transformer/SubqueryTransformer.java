@@ -31,7 +31,9 @@ import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReplaceSubqueryRewriteRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ReplaceSubqueryTypeRewriteRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -89,8 +91,18 @@ public class SubqueryTransformer {
         if (scalarOperator == null) {
             return null;
         }
+        List<SubqueryOperator> subqueries = Utils.collect(scalarOperator, SubqueryOperator.class);
+        if (CollectionUtils.isEmpty(subqueries)) {
+            return scalarOperator;
+        }
+
+        // The scalarOperator will be rewritten in the following steps:
+        // 1. replace the SubqueryOperator with the ColumnRefOperator from expressionMapping
+        // 2. re-calculate types of some functions or expression, such as if and case when
+        // 3. perform implicit cast if necessary
         List<ScalarOperatorRewriteRule> rules = Lists.newArrayList();
         rules.add(new ReplaceSubqueryRewriteRule(expressionMapping));
+        rules.add(new ReplaceSubqueryTypeRewriteRule());
         rules.add(new ImplicitCastRule());
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         return rewriter.rewrite(scalarOperator, rules);
