@@ -4,8 +4,8 @@ This topic describes how to create a Hudi catalog, and how to configure your Sta
 
 A Hudi catalog is an external catalog, which enables you to query data from Hudi without loading data into StarRocks or creating external tables. The StarRocks interacts with the following two components of Hudi when you query data from Hudi:
 
-- **Metadata service:** used by FEs to access Hudi metadata. FEs generate a query execution plan based on Hudi metadata.
-- **Data storage system:** used to store Hudi data. You can use a distributed file system or object storage system as the data storage system to store the data files of Hudi in various formats. After FEs distribute the query execution plan to all BEs, all BEs scan the target Hudi data in parallel, perform calculations, and then return the query result.
+- **Metadata service:** used by the FEs to access Hudi metadata. The FEs generate a query execution plan based on Hudi metadata.
+- **Data storage system:** used to store Hudi data. You can use a distributed file system or object storage system as the data storage system to store the data files of Hudi in various formats. After the FEs distribute the query execution plan to all BEs, all BEs scan the target Hudi data in parallel, perform calculations, and then return the query result.
 
 ## Usage notes
 

@@ -4,13 +4,13 @@ This topic describes how to create a Hive catalog, and how to configure your Sta
 
 A Hive catalog is an external catalog, which enables you to query data from Hive without loading data into StarRocks or creating external tables. StarRocks interacts with the following two components of Hive when you query Hive data:
 
-- **Metadata service:** used by FEs to access Hive metadata stored in a relational database, such as MySQL. FEs generate a query execution plan based on Hive metadata.
-- **Data storage system:** used to store Hive data. You can use a distributed file system or object storage system as the data storage system to store Hive data files in various formats. After FEs distribute the query execution plan to all BEs, all BEs scan the target Hive data in parallel, perform calculations, and then return the query result.
+- **Metadata service:** used by the FEs to access Hive metadata stored in a relational database, such as MySQL. The FEs generate a query execution plan based on Hive metadata.
+- **Data storage system:** used to store Hive data. You can use a distributed file system or object storage system as the data storage system to store Hive data files in various formats. After the FEs distribute the query execution plan to all BEs, all BEs scan the target Hive data in parallel, perform calculations, and then return the query result.
 
 ## Usage notes
 
 - StarRocks supports querying data files of Hive in the following formats: Parquet, ORC, and CSV.
-- StarRocks support querying Hive data in the following types: INT, INTEGER, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY. Note that an error occurs if you query Hive data in unsupported data types. The following data types are not supported: TINYINT, SMALLINT, NUMERIC, DATE, INTERVAL, BOOLEAN, BINARY, MAP, STRUCT, and UNION.
+- StarRocks support querying Hive data in the following types: TINYINT, SMALLINT, DATE, BOOLEAN, INT, INTEGER, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY. Note that an error occurs if you query Hive data in unsupported data types. The following data types are not supported: INTERVAL, BINARY, MAP, STRUCT, and UNION.
 - You can use the [DESC](/docs/sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hive table in StarRocks 2.4 and later versions.
 
 ## Before you begin
@@ -21,14 +21,22 @@ Before you create a Hive catalog, configure your StarRocks cluster so that you c
 
 If you use HDFS as the data storage system, configure your StarRocks cluster as follows:
 
-- (Optional) Set the username that is used to access your HDFS and Hive metastore. By default, StarRocks uses the username of the FE process to access your HDFS and Hive metastore. You can also set the username via the `HADOOP_USERNAME` parameter in the **be/conf/hadoop_env.sh** file of each BE and then restart each BE to make the parameter setting take effect.
+- (Optional) Set the username that is used to access your HDFS and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS and Hive metastore. You can also set the username via the `HADOOP_USERNAME` parameter in the **fe/conf/hadoop_env.sh** file of each FE and the **be/conf/hadoop_env.sh** file of each BE. Then restart each BE to make the parameter setting take effect.
 
     > Note: You can set only one username for a StarRocks cluster.
 
 - When you query Hive data, the FEs and BEs use the HDFS client to access HDFS. In general, StarRocks starts the HDFS client using the default configurations. However, in the following cases, you need to configure your StarRocks cluster:
   - If your HDFS cluster runs in HA mode, add the **hdfs-site.xml** file of your HA cluster to the **$FE_HOME/conf path** of each FE and the **$BE_HOME/conf** path of each BE.
-  - If you configure View File System (ViewFs) to your HDFS cluster, add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and the **$BE_HOME/conf** path of each BE**.**
-- Configure the mapping between the host names and IP addresses of HDFS nodes under the **/etc/hosts** path. Otherwise, StarRocks may fail to access HDFS when you send a query.
+  - If you configure View File System (ViewFs) to your HDFS cluster, add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and the **$BE_HOME/conf** path of each BE.
+
+> Note: If an error (unknown host) occurs when you send a query, configure the mapping between the host names and IP addresses of HDFS nodes under the **/etc/hosts** path.
+
+### Kerberos authentication
+
+If  Kerberos authentication is enabled for your HDFS cluster or Hive metastore, configure your StarRocks cluster as follows:
+
+- Run the `kinit -kt keytab_path principal` command on each FE and each BE to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC). To run this command, you must have the permissions to access your HDFS cluster and Hive metastore. Note that accessing KDC with this command is time-sensitive. Therefore, you need to use the cron to run this command periodically.
+- Add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$FE_HOME/conf/fe.conf** file of each FE and the **$BE_HOME/conf/be.conf** file of each BE. `/etc/krb5.conf` indicates the path of the **krb5.conf** file. You can modify the path based on your needs.
 
 ### Amazon S3
 
@@ -39,30 +47,30 @@ If you use Amazon S3 as the data storage system, configure your StarRocks cluste
 
       ```XML
       <configuration>
-      <property>
-        <name>fs.s3a.impl</name>
-        <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
-      </property>
-      <property>
-        <name>fs.AbstractFileSystem.s3a.impl</name>
-        <value>org.apache.hadoop.fs.s3a.S3A</value>
-      </property>
-      <property>
-        <name>fs.s3a.access.key</name>
-        <value>******</value>
-      </property>
-      <property>
-        <name>fs.s3a.secret.key</name>
-        <value>******</value>
-      </property>
-      <property>
-        <name>fs.s3a.endpoint</name>
-        <value>******</value>
-      </property>
-      <property>
-        <name>fs.s3a.connection.maximum</name>
-        <value>500</value>
-      </property>
+            <property>
+                <name>fs.s3a.impl</name>
+                <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+            </property>
+            <property>
+                <name>fs.AbstractFileSystem.s3a.impl</name>
+                <value>org.apache.hadoop.fs.s3a.S3A</value>
+            </property>
+            <property>
+                <name>fs.s3a.access.key</name>
+                <value>******</value>
+            </property>
+            <property>
+                <name>fs.s3a.secret.key</name>
+                <value>******</value>
+            </property>
+            <property>
+                <name>fs.s3a.endpoint</name>
+                <value>******</value>
+            </property>
+            <property>
+                <name>fs.s3a.connection.maximum</name>
+                <value>500</value>
+            </property>
       </configuration>
       ```
 
@@ -75,7 +83,7 @@ If you use Amazon S3 as the data storage system, configure your StarRocks cluste
       | fs.s3a.endpoint           | The regional endpoint of your Amazon S3 service. For example, `s3.us-west-2.amazonaws.com` is the endpoint of US East (Ohio). For information about how to obtain your regional endpoint, see [Amazon Simple Storage Service endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/s3.html). |
       | fs.s3a.connection.maximum | The maximum number of concurrent connections that are allowed by your Amazon S3 service. This parameter defaults to `500`.  If an error (`Timeout waiting for connection from poll`) occurs when you query Hive data, increase the value of this parameter. |
 
-3. Add the following configuration items to **$BE_HOME/conf/be.conf** of each BE.
+3. Add the following configuration items to the **$BE_HOME/conf/be.conf** file of each BE.
 
       | **Configuration item**           | **Description**                                              |
       | -------------------------------- | ------------------------------------------------------------ |
@@ -84,13 +92,6 @@ If you use Amazon S3 as the data storage system, configure your StarRocks cluste
       | object_storage_endpoint          | The regional endpoint of your Amazon S3 service. The value of the parameter is the same as the value of the `fs.s3a.endpoint` parameter. |
 
 4. Restart all BEs and FEs.
-
-### Kerberos authentication
-
-If  Kerberos authentication is enabled for your HDFS cluster or Hive metastore, configure your StarRocks cluster as follows:
-
-- Run the `kinit -kt keytab_path principal` command on each FE and each BE to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC). To run this command, you must have the permissions to access your HDFS cluster and Hive metastore. Note that accessing KDC with this command is time-sensitive. Therefore, you need to use the `crontab` command to execute the `kinit -kt keytab_path principal` command periodically.
-- Add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to **$FE_HOME/conf/fe.conf** of each FE and **$BE_HOME/conf/be.conf** of each BE. `/etc/krb5.conf` indicates the path of the **krb5.conf** file. You can modify the path based on your needs.
 
 ## Create a Hive catalog
 
@@ -103,13 +104,13 @@ PROPERTIES ("key"="value", ...);
 
 The parameter description is as follows:
 
-- `catalog_name`: the name of the Hive catalog. This parameter is required.
+- `catalog_name`: the name of the Hive catalog. This parameter is required.<br>
   The naming conventions are as follows:
 
   - The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
   - The name cannot exceed 64 characters in length.
 
-- `PROPERTIES`: the properties of the Hive catalog. This parameter is required.
+- `PROPERTIES`: the properties of the Hive catalog. This parameter is required.<br>
    You can configure the following properties:
 
     | **Property**        | **Required** | **Description**                                              |
@@ -170,7 +171,7 @@ This strategy enables FEs to read the events from Hive metastore, such as adding
 
 #### Step 1: Configure the event listener for your Hive metastore
 
-Currently, both Hive metastore 2.x and 3.x support the configuration of the event listener. The following configuration is for Hive metastore 3.1.2. Add the following configuration to the file **$HiveMetastore/conf/hive-site.xml** and restart Hive metastore.
+Both Hive metastore 2.x and 3.x support the configuration of the event listener. The following configuration is for Hive metastore 3.1.2. Add the following configuration items to the file **$HiveMetastore/conf/hive-site.xml** and restart Hive metastore.
 
 ```XML
 <property>
