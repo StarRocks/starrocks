@@ -18,13 +18,10 @@
 
 #include "orc/OrcFile.hh"
 
-#include <errno.h>
 #include <fcntl.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 
-#include "Adaptor.hh"
 #include "Utils.hh"
 #include "orc/Exceptions.hh"
 

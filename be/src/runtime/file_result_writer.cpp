@@ -30,7 +30,6 @@
 #include "formats/csv/output_stream.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_posix.h"
-#include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
 #include "util/date_func.h"
 #include "util/uid_util.h"

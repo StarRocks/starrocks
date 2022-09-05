@@ -5,7 +5,6 @@
 #include <re2/re2.h>
 
 #include <algorithm>
-#include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 
 #include "column/column_builder.h"
@@ -15,13 +14,11 @@
 #include "exprs/vectorized/jsonpath.h"
 #include "glog/logging.h"
 #include "gutil/strings/escaping.h"
-#include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "udf/udf.h"
 #include "util/json.h"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
-#include "velocypack/vpack.h"
 
 namespace starrocks::vectorized {
 

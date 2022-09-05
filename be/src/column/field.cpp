@@ -2,8 +2,6 @@
 
 #include "column/field.h"
 
-#include <utility>
-
 #include "column/datum.h"
 #include "storage/chunk_helper.h"
 #include "storage/key_coder.h"

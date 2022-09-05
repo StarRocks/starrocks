@@ -3,7 +3,6 @@
 #include "exec/vectorized/jdbc_scanner.h"
 
 #include <memory>
-#include <type_traits>
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"

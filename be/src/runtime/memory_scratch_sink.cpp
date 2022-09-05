@@ -28,11 +28,7 @@
 
 #include "common/logging.h"
 #include "exprs/expr.h"
-#include "gen_cpp/StarrocksExternalService_types.h"
-#include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
-#include "runtime/primitive_type.h"
-#include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_state.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"

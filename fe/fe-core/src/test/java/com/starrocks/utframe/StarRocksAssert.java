@@ -104,7 +104,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert withRole(String roleName) throws Exception {
         CreateRoleStmt createRoleStmt =
-                (CreateRoleStmt) UtFrameUtils.parseAndAnalyzeStmt("create role " + roleName + ";", ctx);
+                (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser("create role " + roleName + ";", ctx);
         GlobalStateMgr.getCurrentState().getAuth().createRole(createRoleStmt);
         return this;
     }

@@ -169,6 +169,7 @@ statement
     | createUserStatement
     | dropUserStatement
     | showAuthenticationStatement
+    | createRoleStatement
 
     // Backup Restore Satement
     | backupStatement
@@ -985,6 +986,10 @@ showAuthenticationStatement
     | SHOW AUTHENTICATION (FOR user)?                                                        #showAuthenticationForUser
     ;
 
+createRoleStatement
+    : CREATE ROLE identifierOrString                                                         #createRole
+    ;
+
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showDatabasesStatement
@@ -1301,6 +1306,7 @@ primaryExpression
     | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | primaryExpression ARROW string                                                      #arrowExpression
+    | (identifier | identifierList) '->' expression                                       #lambdaFunctionExpr
     ;
 
 literalExpression

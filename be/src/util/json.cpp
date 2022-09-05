@@ -7,11 +7,8 @@
 #include <string>
 #include <vector>
 
-#include "column/column.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "gutil/strings/escaping.h"
-#include "gutil/strings/substitute.h"
 #include "simdjson.h"
 #include "util/json_converter.h"
 #include "velocypack/ValueType.h"

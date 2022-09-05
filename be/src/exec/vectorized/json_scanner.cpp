@@ -128,9 +128,9 @@ Status JsonScanner::_construct_json_types() {
                 child_type = &(child_type->children[0]);
             }
 
+            // the json lib don't support get_int128_t(), so we load with BinaryColumn and then convert to LargeIntColumn
             if (slot_type->type == TYPE_FLOAT || slot_type->type == TYPE_DOUBLE || slot_type->type == TYPE_BIGINT ||
-                slot_type->type == TYPE_BIGINT || slot_type->type == TYPE_INT || slot_type->type == TYPE_SMALLINT ||
-                slot_type->type == TYPE_TINYINT) {
+                slot_type->type == TYPE_INT || slot_type->type == TYPE_SMALLINT || slot_type->type == TYPE_TINYINT) {
                 // Treat these types as what they are.
                 child_type->children.emplace_back(slot_type->type);
             } else if (slot_type->type == TYPE_VARCHAR) {

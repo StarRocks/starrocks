@@ -29,6 +29,7 @@ import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.DateLiteral;
@@ -200,6 +201,8 @@ import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
+import com.starrocks.sql.ast.LambdaArgument;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
@@ -2615,6 +2618,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitCreateRole(StarRocksParser.CreateRoleContext context) {
+        Identifier role = (Identifier) visit(context.identifierOrString());
+        return new CreateRoleStmt(role.getValue());
+    }
+
+    @Override
     public ParseNode visitAuthWithoutPlugin(StarRocksParser.AuthWithoutPluginContext context) {
         String password = ((StringLiteral) visit(context.string())).getStringValue();
         boolean isPasswordPlain = context.PASSWORD() == null;
@@ -3109,6 +3118,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return visit(context.expression());
         }
+    }
+
+    @Override
+    public ParseNode visitLambdaFunctionExpr(StarRocksParser.LambdaFunctionExprContext context) {
+        List<String> names = Lists.newLinkedList();
+        if (context.identifierList() != null) {
+            final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+            names = identifierList.stream().map(Identifier::getValue).collect(toList());
+        } else {
+            names.add(((Identifier) visit(context.identifier())).getValue());
+        }
+        List<Expr> arguments = Lists.newLinkedList();
+        Expr expr = (Expr) visit(context.expression());
+        arguments.add(expr); // put lambda body to the first argument
+        for (int i = 0; i < names.size(); ++i) {
+            arguments.add(new LambdaArgument(names.get(i)));
+        }
+        return new LambdaFunctionExpr(arguments);
     }
 
     @Override

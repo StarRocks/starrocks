@@ -5,7 +5,6 @@
 #include <memory>
 
 #include "exec/workgroup/work_group.h"
-#include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"

@@ -18,6 +18,7 @@ import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
@@ -452,6 +453,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitCreateRoleStatement(CreateRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ------------------------------------------- Analyze Statement ---------------------------------------------------
 
     public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
@@ -775,6 +780,14 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitLikePredicate(LikePredicate node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitLambdaFunctionExpr(LambdaFunctionExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitLambdaArguments(LambdaArgument node, C context) {
         return visitExpression(node, context);
     }
 
