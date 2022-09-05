@@ -79,6 +79,7 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -106,6 +107,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -139,6 +141,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -782,28 +785,6 @@ public class StmtExecutor {
             return;
         }
 
-        Thread thread = new Thread(() -> {
-            StatisticExecutor statisticExecutor = new StatisticExecutor();
-            if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
-                statisticExecutor.collectStatistics(
-                        new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                                analyzeStmt.getProperties()),
-                        //Sync load cache, auto-populate column statistic cache after Analyze table manually
-                        false);
-            } else {
-                statisticExecutor.collectStatistics(
-                        StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
-                                analyzeStmt.getColumnNames(),
-                                analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
-                                        StatsConstants.AnalyzeType.FULL,
-                                StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
-                        //Sync load cache, auto-populate column statistic cache after Analyze table manually
-                        false);
-            }
-        });
-        thread.start();
-
         StatsConstants.AnalyzeType analyzeType;
         if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
             analyzeType = StatsConstants.AnalyzeType.HISTOGRAM;
@@ -816,9 +797,43 @@ public class StmtExecutor {
         }
 
         //Only for send sync command to client
-        AnalyzeStatus analyzeStatus = new AnalyzeStatus(-1, db.getId(), table.getId(), analyzeStmt.getColumnNames(),
+        AnalyzeStatus analyzeStatus = new AnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), table.getId(), analyzeStmt.getColumnNames(),
                 analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+        GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+
+        try {
+            GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool().submit(() -> {
+                StatisticExecutor statisticExecutor = new StatisticExecutor();
+                if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
+                    statisticExecutor.collectStatistics(
+                            new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
+                                    StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                                    analyzeStmt.getProperties()),
+                            analyzeStatus,
+                            //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                            false);
+                } else {
+                    statisticExecutor.collectStatistics(
+                            StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
+                                    analyzeStmt.getColumnNames(),
+                                    analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
+                                            StatsConstants.AnalyzeType.FULL,
+                                    StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
+                            analyzeStatus,
+                            //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                            false);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+            analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        }
+
         ShowResultSet resultSet = analyzeStatus.toShowResult();
         if (isProxy) {
             proxyResultSet = resultSet;
@@ -1091,11 +1106,22 @@ public class StmtExecutor {
             throw new RuntimeException("not supported table type for insert overwrite");
         }
         OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
-        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
+        InsertOverwriteJob job = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
                 insertStmt, database.getId(), olapTable.getId());
-        insertStmt.setOverwriteJobId(insertOverwriteJob.getJobId());
+        if (!database.writeLockAndCheckExist()) {
+            throw new DmlException("database:%s does not exist.", database.getFullName());
+        }
+        try {
+            // add an edit log
+            CreateInsertOverwriteJobLog info = new CreateInsertOverwriteJobLog(job.getJobId(),
+                    job.getTargetDbId(), job.getTargetTableId(), job.getSourcePartitionIds());
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
+        } finally {
+            database.writeUnlock();
+        }
+        insertStmt.setOverwriteJobId(job.getJobId());
         InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();
-        manager.executeJob(context, this, insertOverwriteJob);
+        manager.executeJob(context, this, job);
     }
 
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
@@ -1247,20 +1273,20 @@ public class StmtExecutor {
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE  + ", tracking_url = " 
-                                + coord.getTrackingUrl()
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = "
+                                        + coord.getTrackingUrl()
                         );
                     } else {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(),
                                 transactionId,
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = " 
-                                + coord.getTrackingUrl()
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = "
+                                        + coord.getTrackingUrl()
                         );
                     }
-                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " + 
+                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " +
                             transactionId + " tracking_url = " + coord.getTrackingUrl());
-                    
+
                     return;
                 }
             }

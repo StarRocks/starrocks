@@ -5,11 +5,7 @@
 #include "gutil/cpu.h"
 
 #include <algorithm>
-#include <cstdlib>
 #include <cstring>
-#include <fstream>
-#include <sstream>
-#include <streambuf>
 #include <string>
 
 #if defined(__x86_64__)

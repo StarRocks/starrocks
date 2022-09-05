@@ -102,6 +102,7 @@ static Status add_nullable_native_json_column(Column* column, const TypeDescript
 static Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                   simdjson::ondemand::value* value) {
     // The type mappint should be in accord with JsonScanner::_construct_json_types();
+    // the json lib don't support get_int128_t(), so we load with BinaryColumn and then convert to LargeIntColumn
     switch (type_desc.type) {
     case TYPE_BIGINT:
         return add_nullable_numeric_column<int64_t>(column, type_desc, name, value);

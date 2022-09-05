@@ -6,7 +6,6 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/expr.h"
-#include "gen_cpp/Data_types.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/primitive_type.h"
 #include "util/thrift_util.h"

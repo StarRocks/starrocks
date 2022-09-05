@@ -8,7 +8,6 @@
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/datum.h"
-#include "column/fixed_length_column_base.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"

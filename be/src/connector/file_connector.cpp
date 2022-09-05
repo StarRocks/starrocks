@@ -2,7 +2,6 @@
 
 #include "connector/file_connector.h"
 
-#include "column/chunk.h"
 #include "exec/exec_node.h"
 #include "exec/vectorized/csv_scanner.h"
 #include "exec/vectorized/json_scanner.h"

@@ -87,6 +87,10 @@ public class FunctionCallExpr extends Expr {
         return fnName;
     }
 
+    public void resetFnName(String db, String name) {
+        this.fnName = new FunctionName(db, name);
+    }
+
     // only used restore from readFields.
     private FunctionCallExpr() {
         super();

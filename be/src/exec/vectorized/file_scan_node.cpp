@@ -12,7 +12,6 @@
 #include "exec/vectorized/parquet_scanner.h"
 #include "exprs/expr.h"
 #include "fs/fs.h"
-#include "fs/fs_broker.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "util/defer_op.h"

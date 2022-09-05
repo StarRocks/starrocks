@@ -24,8 +24,6 @@
 #include <iostream>
 #include <utility>
 
-#include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/types.pb.h" // PUniqueId
 #include "runtime/data_stream_recvr.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"

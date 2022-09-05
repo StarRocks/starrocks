@@ -269,7 +269,8 @@ public class InsertPlanner {
                                 Lists.newArrayList());
                 expressionMapping.put(targetColumn.getRefColumn(), originColRefOp);
                 ScalarOperator scalarOperator =
-                        SqlToScalarOperatorTranslator.translate(targetColumn.getDefineExpr(), expressionMapping);
+                        SqlToScalarOperatorTranslator.translate(targetColumn.getDefineExpr(), expressionMapping,
+                                columnRefFactory);
 
                 ColumnRefOperator columnRefOperator =
                         columnRefFactory.create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());

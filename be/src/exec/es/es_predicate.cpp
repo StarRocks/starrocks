@@ -37,7 +37,6 @@
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
-#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/large_int_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"

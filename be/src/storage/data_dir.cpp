@@ -21,19 +21,12 @@
 
 #include "storage/data_dir.h"
 
-#include <mntent.h>
-#include <sys/file.h>
-#include <sys/stat.h>
-#include <utime.h>
-
 #include <filesystem>
-#include <fstream>
 #include <set>
 #include <sstream>
 #include <utility>
 
 #include "common/config.h"
-#include "common/version.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"

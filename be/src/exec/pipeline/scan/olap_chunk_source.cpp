@@ -2,14 +2,11 @@
 
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
-#include "column/column_helper.h"
-#include "common/constexpr.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/workgroup/work_group.h"
-#include "exprs/vectorized/runtime_filter.h"
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"

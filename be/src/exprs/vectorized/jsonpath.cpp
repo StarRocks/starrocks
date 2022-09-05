@@ -5,7 +5,6 @@
 #include <re2/re2.h>
 
 #include <algorithm>
-#include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 
 #include "column/column_viewer.h"

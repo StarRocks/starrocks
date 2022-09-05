@@ -98,7 +98,7 @@ public class ExpressionMapping {
         }
 
         if (expression instanceof SlotRef) {
-            scope.tryResolveFeild((SlotRef) expression)
+            scope.tryResolveField((SlotRef) expression)
                     .ifPresent(field -> fieldMappings[field.getRelationFieldIndex()] = variable);
         }
         expressionToColumns.put(expression, variable);

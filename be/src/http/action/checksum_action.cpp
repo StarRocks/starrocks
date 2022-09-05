@@ -27,14 +27,10 @@
 #include "boost/lexical_cast.hpp"
 #include "common/logging.h"
 #include "http/http_channel.h"
-#include "http/http_headers.h"
 #include "http/http_request.h"
-#include "http/http_response.h"
 #include "http/http_status.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "storage/olap_define.h"
-#include "storage/storage_engine.h"
 #include "storage/task/engine_checksum_task.h"
 
 namespace starrocks {

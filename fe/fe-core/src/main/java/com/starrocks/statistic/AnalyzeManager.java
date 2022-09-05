@@ -10,6 +10,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
@@ -38,6 +39,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 
 public class AnalyzeManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(AnalyzeManager.class);
@@ -48,6 +50,9 @@ public class AnalyzeManager implements Writable {
     private final Map<Pair<Long, String>, HistogramStatsMeta> histogramStatsMetaMap;
     //ConnectContext of all currently running analyze tasks
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
+    private static final ExecutorService ANALYZE_TASK_THREAD_POOL = ThreadPoolManager.newDaemonFixedThreadPool(
+            Config.statistic_collect_concurrency, Config.statistic_collect_concurrency * 3,
+            "analyze-task-concurrency-pool", true);
 
     public AnalyzeManager() {
         analyzeJobMap = Maps.newConcurrentMap();
@@ -287,6 +292,10 @@ public class AnalyzeManager implements Writable {
                 throw new SemanticException("There is no running task with analyzeId " + analyzeID);
             }
         }
+    }
+
+    public ExecutorService getAnalyzeTaskThreadPool() {
+        return ANALYZE_TASK_THREAD_POOL;
     }
 
     public void updateLoadRows(TransactionState transactionState) {

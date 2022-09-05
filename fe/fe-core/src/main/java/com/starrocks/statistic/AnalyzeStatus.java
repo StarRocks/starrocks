@@ -174,12 +174,12 @@ public class AnalyzeStatus implements Writable {
 
         String msgType;
         String msgText;
-        if (status.equals(StatsConstants.ScheduleStatus.FINISH)) {
-            msgType = "status";
-            msgText = "OK";
-        } else {
+        if (status.equals(StatsConstants.ScheduleStatus.FAILED)) {
             msgType = "error";
             msgText = reason;
+        } else {
+            msgType = "status";
+            msgText = "OK";
         }
 
         List<List<String>> rows = new ArrayList<>();

@@ -34,7 +34,7 @@ public:
 private:
     Status _construct_json_types();
     Status _construct_cast_exprs();
-    Status _parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs);
+    static Status _parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs);
     Status _create_src_chunk(ChunkPtr* chunk);
     Status _open_next_reader();
     ChunkPtr _cast_chunk(const ChunkPtr& src_chunk);

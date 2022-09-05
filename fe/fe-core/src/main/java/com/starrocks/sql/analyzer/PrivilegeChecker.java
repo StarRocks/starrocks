@@ -2,12 +2,11 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AlterResourceStmt;
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateResourceStmt;
+import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -65,6 +64,8 @@ import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
@@ -174,7 +175,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitCreateTableLikeStatement(CreateTableLikeStmt statement, ConnectContext session) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session,  statement.getExistedDbName(),
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, statement.getExistedDbName(),
                     statement.getExistedTableName(), PrivPredicate.SELECT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "SELECT");
             }
@@ -276,6 +277,7 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
         @Override
         public Void visitAdminRepairTableStatement(AdminRepairTableStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
@@ -283,6 +285,7 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
         @Override
         public Void visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
@@ -290,6 +293,7 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
         @Override
         public Void visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
@@ -297,6 +301,7 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
         @Override
         public Void visitShowUserPropertyStmt(ShowUserPropertyStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
@@ -354,14 +359,16 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
         @Override
         public Void visitCreateResourceStatement(CreateResourceStmt statement,
-                                                ConnectContext session) {
+                                                 ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
         }
+
         @Override
         public Void visitDropResourceStatement(DropResourceStmt statement,
                                                ConnectContext session) {
@@ -370,6 +377,7 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
         @Override
         public Void visitAlterResourceStatement(AlterResourceStmt statement,
                                                 ConnectContext session) {
@@ -378,6 +386,7 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
         public Void visitRecoverTableStatement(RecoverTableStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), statement.getDbName(),
                     statement.getTableName(),
@@ -525,6 +534,15 @@ public class PrivilegeChecker {
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkHasPriv(context, PrivPredicate.GRANT, Auth.PrivLevel.GLOBAL, Auth.PrivLevel.DATABASE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRoleStatement(CreateRoleStmt statement, ConnectContext context) {
+            // check if current user has GRANT priv on GLOBAL level.
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(context, PrivPredicate.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE USER");
             }
             return null;
         }
@@ -1071,7 +1089,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
-            if (statement.isAll() || ! context.getCurrentUserIdentity().equals(statement.getUserIdent())) {
+            if (statement.isAll() || !context.getCurrentUserIdentity().equals(statement.getUserIdent())) {
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
                 }
@@ -1082,9 +1100,11 @@ public class PrivilegeChecker {
 
     private static class TablePrivilegeChecker extends AstVisitor<Void, Void> {
         private ConnectContext session;
+
         public TablePrivilegeChecker(ConnectContext session) {
             this.session = session;
         }
+
         @Override
         public Void visitQueryStatement(QueryStatement node, Void context) {
             return visit(node.getQueryRelation());

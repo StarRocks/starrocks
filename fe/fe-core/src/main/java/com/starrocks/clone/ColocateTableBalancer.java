@@ -260,6 +260,8 @@ public class ColocateTableBalancer extends LeaderDaemon {
                                     } else {
                                         tablet.setLastStatusCheckTime(checkStartTime);
                                     }
+                                } else {
+                                    isGroupStable = false;
                                 }
                                 idx++;
                             }
