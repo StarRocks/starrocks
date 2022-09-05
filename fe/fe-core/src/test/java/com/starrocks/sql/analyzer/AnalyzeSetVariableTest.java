@@ -34,6 +34,12 @@ public class AnalyzeSetVariableTest {
         analyzeSuccess(sql);
         sql = "set LOCAL query_timeout = 10";
         analyzeSuccess(sql);
+        sql = "set tablet_internal_parallel_mode = auto";
+        analyzeSuccess(sql);
+        sql = "set tablet_internal_parallel_mode = force_split";
+        analyzeSuccess(sql);
+        sql = "set tablet_internal_parallel_mode = force";
+        analyzeFail(sql);
     }
 
     @Test

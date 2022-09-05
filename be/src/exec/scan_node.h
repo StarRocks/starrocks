@@ -70,10 +70,12 @@ public:
     StatusOr<pipeline::MorselQueueFactoryPtr> convert_scan_range_to_morsel_queue_factory(
             const std::vector<TScanRangeParams>& scan_ranges,
             const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
-            int pipeline_dop, bool enable_tablet_internal_parallel);
+            int pipeline_dop, bool enable_tablet_internal_parallel,
+            TTabletInternalParallelMode::type tablet_internal_parallel_mode);
     virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
-            bool enable_tablet_internal_parallel, size_t num_total_scan_ranges);
+            bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+            size_t num_total_scan_ranges);
 
     // If this scan node accept empty scan ranges.
     virtual bool accept_empty_scan_ranges() const { return true; }
