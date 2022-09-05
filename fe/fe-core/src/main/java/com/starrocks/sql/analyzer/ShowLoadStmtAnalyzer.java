@@ -7,7 +7,6 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ShowLoadStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.AnalysisException;
@@ -18,6 +17,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowLoadStmt;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -188,8 +188,8 @@ public class ShowLoadStmtAnalyzer {
             if (!valid) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Where clause should looks like: LABEL = \"your_load_label\","
-                        + " or LABEL LIKE \"matcher\", " + " or STATE = \"PENDING|ETL|LOADING|FINISHED|CANCELLED\", "
-                        + " or compound predicate with operator AND");
+                                + " or LABEL LIKE \"matcher\", " + " or STATE = \"PENDING|ETL|LOADING|FINISHED|CANCELLED\", "
+                                + " or compound predicate with operator AND");
             }
         }
     }

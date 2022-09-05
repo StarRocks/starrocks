@@ -2,8 +2,8 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.ShowUserPropertyStmt;
 
 public class ShowUserPropertyAnalyzer {
 

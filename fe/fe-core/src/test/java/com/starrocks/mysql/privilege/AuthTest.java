@@ -22,7 +22,6 @@
 package com.starrocks.mysql.privilege;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateUserStmt;
@@ -49,6 +48,7 @@ import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
@@ -612,7 +612,7 @@ public class AuthTest {
         currentUser2.clear();
         auth.checkPlainPassword("zhangsan", "192.1.1.1", "12345", currentUser2);
         Assert.assertEquals(1, currentUser2.size());
-        Assert.assertTrue(auth.checkTblPriv(currentUser2.get(0),  "db2",
+        Assert.assertTrue(auth.checkTblPriv(currentUser2.get(0), "db2",
                 "tbl2", PrivPredicate.ALTER));
         try {
             auth.revoke(revokeStmt);
@@ -1798,6 +1798,7 @@ public class AuthTest {
     }
 
     private static final Logger LOG = LogManager.getLogger(AuthTest.class);
+
     @Test
     public void testManyUsersAndTables() throws Exception {
         int bigNumber = 500;
@@ -1844,7 +1845,7 @@ public class AuthTest {
             }
         }
         long end = System.currentTimeMillis();
-        LOG.info("add privilege: {} entries, total {} ms",  auth.getTablePrivTable().size(), end - start);
+        LOG.info("add privilege: {} entries, total {} ms", auth.getTablePrivTable().size(), end - start);
 
         start = System.currentTimeMillis();
         for (int i = 0; i != bigNumber; i++) {
@@ -2214,6 +2215,7 @@ public class AuthTest {
                     }
                 };
             }
+
             {
                 editLog.logRevokeImpersonate((ImpersonatePrivInfo) any);
                 minTimes = 0;
@@ -2223,6 +2225,7 @@ public class AuthTest {
                     }
                 };
             }
+
             {
                 editLog.logCreateUser((PrivInfo) any);
                 minTimes = 0;

@@ -35,6 +35,8 @@ public class AnalyzeFunctionTest {
     public void testSingle() {
         analyzeFail("select sum() from t0", "No matching function with signature: sum()");
         analyzeFail("select now(*) from t0");
+
+        analyzeSuccess("SHOW FULL BUILTIN FUNCTIONS FROM `testDb1` LIKE '%year%'");
     }
 
     @Test
