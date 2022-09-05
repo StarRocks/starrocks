@@ -115,6 +115,18 @@ public class StarMgrServer {
         com.staros.util.Config.S3_ENDPOINT = Config.starmgr_s3_endpoint;
         com.staros.util.Config.S3_AK = Config.starmgr_s3_ak;
         com.staros.util.Config.S3_SK = Config.starmgr_s3_sk;
+        if (com.staros.util.Config.S3_BUCKET.isEmpty()) {
+            com.staros.util.Config.S3_BUCKET = System.getenv("s3_bucket");
+        }
+        if (com.staros.util.Config.S3_ENDPOINT.isEmpty()) {
+            com.staros.util.Config.S3_ENDPOINT = System.getenv("s3_endpoint");
+        }
+        if (com.staros.util.Config.S3_AK.isEmpty()) {
+            com.staros.util.Config.S3_AK = System.getenv("s3_ak");
+        }
+        if (com.staros.util.Config.S3_SK.isEmpty()) {
+            com.staros.util.Config.S3_SK = System.getenv("s3_sk");
+        }
 
         // start rpc server
         starMgrServer = new StarManagerServer(journalSystem);
