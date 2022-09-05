@@ -38,9 +38,9 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             PartitionIdentifier partitionIdentifier =
                     new PartitionIdentifier(txnState.getDbId(), table.getId(), partition.getId());
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
-                compactionManager.handleCompactionFinished(partitionIdentifier, version);
+                compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime);
             } else {
-                compactionManager.handleLoadingFinished(partitionIdentifier, version);
+                compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime);
             }
         }
     }
