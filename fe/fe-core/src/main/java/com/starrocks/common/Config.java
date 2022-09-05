@@ -1687,10 +1687,10 @@ public class Config extends ConfigBase {
     public static String jaeger_grpc_endpoint = "";
 
     @ConfField
-    public static String lake_compaction_selector = "com.starrocks.lake.compaction.SimpleSelector";
+    public static String lake_compaction_selector = "SimpleSelector";
 
     @ConfField
-    public static String lake_compaction_sorter = "com.starrocks.lake.compaction.RandomSorter";
+    public static String lake_compaction_sorter = "RandomSorter";
 
     @ConfField
     public static long lake_compaction_simple_selector_min_versions = 3;

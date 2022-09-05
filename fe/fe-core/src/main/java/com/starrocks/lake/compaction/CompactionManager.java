@@ -42,10 +42,11 @@ public class CompactionManager {
 
     void init() throws ClassNotFoundException, NoSuchMethodException, InvocationTargetException, InstantiationException,
             IllegalAccessException {
-        Class<?> selectorClazz = Class.forName(Config.lake_compaction_selector);
+        String packageName = CompactionManager.class.getPackage().getName();
+        Class<?> selectorClazz = Class.forName(packageName + "." + Config.lake_compaction_selector);
         selector = (Selector) selectorClazz.getConstructor().newInstance();
 
-        Class<?> sorterClazz = Class.forName(Config.lake_compaction_sorter);
+        Class<?> sorterClazz = Class.forName(packageName + "." + Config.lake_compaction_sorter);
         sorter = (Sorter) sorterClazz.getConstructor().newInstance();
     }
 
