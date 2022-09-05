@@ -24,11 +24,13 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TAggregationNode;
 import com.starrocks.thrift.TExplainLevel;
@@ -38,6 +40,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStreamingPreaggregationMode;
 
 import java.util.List;
+import java.util.Optional;
 
 public class AggregationNode extends PlanNode {
     private final AggregateInfo aggInfo;
@@ -230,32 +233,39 @@ public class AggregationNode extends PlanNode {
     }
 
     @Override
-    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+    public List<Expr> candidatesOfSlotExpr(Expr expr) {
+        List<Expr> newSlotExprs = Lists.newArrayList();
+        if (!expr.isBoundByTupleIds(getTupleIds())) {
+            return newSlotExprs;
+        }
+        if (!(expr instanceof SlotRef)) {
+            return newSlotExprs;
+        }
+        for (Expr gexpr : aggInfo.getGroupingExprs()) {
+            if (!(gexpr instanceof SlotRef)) {
+                continue;
+            }
+            if (((SlotRef)gexpr).getSlotId().asInt() == ((SlotRef)expr).getSlotId().asInt()) {
+                newSlotExprs.add(gexpr);
+            }
+        }
+        return newSlotExprs;
+    }
+
+    @Override
+    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
-        if (probeExpr.isBoundByTupleIds(getTupleIds())) {
-            if (probeExpr instanceof SlotRef) {
-                for (Expr gexpr : aggInfo.getGroupingExprs()) {
-                    // push down only when both of them are slot ref and slot id match.
-                    if ((gexpr instanceof SlotRef) &&
-                            (((SlotRef) gexpr).getSlotId().asInt() == ((SlotRef) probeExpr).getSlotId().asInt())) {
-                        if (children.get(0).pushDownRuntimeFilters(description, gexpr)) {
-                            return true;
-                        }
-                    }
-                }
-            }
 
-            if (description.canProbeUse(this)) {
-                // can not push down to children.
-                // use runtime filter at this level.
-                description.addProbeExpr(id.asInt(), probeExpr);
-                probeRuntimeFilters.add(description);
-                return true;
-            }
+        if (!probeExpr.isBoundByTupleIds(getTupleIds())) {
+            return false;
         }
-        return false;
+
+        List<Expr> probeExprCandidates = candidatesOfSlotExpr(probeExpr);
+        List<List<Expr>> partitionByExprsCandidates = candidatesOfSlotExprs(partitionByExprs);
+        return canPushDownRuntimeFilterForChild(description, probeExpr, probeExprCandidates,
+                partitionByExprs, partitionByExprsCandidates, 0, true);
     }
 
     @Override

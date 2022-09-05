@@ -218,6 +218,22 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         _bucketseq_to_partition = desc.bucketseq_to_instance;
     }
 
+    if (desc.__isset.plan_node_id_to_partition_by_exprs) {
+        const auto& it = const_cast<TRuntimeFilterDescription&>(desc).plan_node_id_to_partition_by_exprs.find(node_id);
+        if (it != desc.plan_node_id_to_partition_by_exprs.end()) {
+            RETURN_IF_ERROR(Expr::create_expr_trees(pool, it->second, &_partition_by_exprs_contexts));
+            for (auto ctx : _partition_by_exprs_contexts) {
+                if (!ctx->root()->is_slotref()) {
+                    return Status::NotFound("partition_by_exprs only support column_ref type. node_id = " +
+                                            std::to_string(node_id));
+                } else {
+                    auto ref = (vectorized::ColumnRef*)ctx->root();
+                    _partition_by_expr_ids.push_back(ref->slot_id());
+                }
+            }
+        }
+    }
+
     if (not_found) {
         return Status::NotFound("plan node id not found. node_id = " + std::to_string(node_id));
     }
@@ -325,37 +341,45 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
         update_selectivity(chunk, eval_context);
         return;
     }
-    if (!eval_context.selectivity.empty()) {
-        auto& selection = eval_context.running_context.selection;
-        eval_context.running_context.use_merged_selection = false;
-        eval_context.running_context.compatibility =
-                _runtime_state->func_version() <= 3 || !_runtime_state->enable_pipeline_engine();
-        for (auto& kv : eval_context.selectivity) {
-            RuntimeFilterProbeDescriptor* rf_desc = kv.second;
-            const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
-            if (filter == nullptr) {
-                continue;
-            }
-            auto* ctx = rf_desc->probe_expr_ctx();
-            ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
-            // for colocate grf
-            eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
-            filter->evaluate(column.get(), &eval_context.running_context);
 
-            auto true_count = SIMD::count_nonzero(selection);
-            eval_context.run_filter_nums += 1;
+    auto& seletivity_map = eval_context.selectivity;
+    if (seletivity_map.empty()) {
+        return;
+    }
 
-            if (true_count == 0) {
-                chunk->set_num_rows(0);
-                return;
-            } else {
-                chunk->filter(selection);
-            }
+    auto& selection = eval_context.running_context.selection;
+    eval_context.running_context.use_merged_selection = false;
+    eval_context.running_context.compatibility =
+            _runtime_state->func_version() <= 3 || !_runtime_state->enable_pipeline_engine();
+
+    RuntimeFilterProbeDescriptor* prev_rf_desc = nullptr;
+    for (auto& kv : seletivity_map) {
+        RuntimeFilterProbeDescriptor* rf_desc = kv.second;
+        const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+        if (filter == nullptr) {
+            continue;
+        }
+        auto* ctx = rf_desc->probe_expr_ctx();
+        ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
+        // for colocate grf
+        eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
+        compute_hash_values(chunk, column.get(), rf_desc, prev_rf_desc, eval_context);
+        filter->evaluate(column.get(), &eval_context.running_context);
+
+        auto true_count = SIMD::count_nonzero(selection);
+        eval_context.run_filter_nums += 1;
+
+        if (true_count == 0) {
+            chunk->set_num_rows(0);
+            return;
+        } else {
+            chunk->filter(selection);
         }
     }
 }
 void RuntimeFilterProbeCollector::init_counter() {
     _eval_context.join_runtime_filter_timer = ADD_TIMER(_runtime_profile, "JoinRuntimeFilterTime");
+    _eval_context.join_runtime_filter_hash_timer = ADD_TIMER(_runtime_profile, "JoinRuntimeFilterHashTime");
     _eval_context.join_runtime_filter_input_counter =
             ADD_COUNTER(_runtime_profile, "JoinRuntimeFilterInputRows", TUnit::UNIT);
     _eval_context.join_runtime_filter_output_counter =
@@ -388,15 +412,47 @@ void RuntimeFilterProbeCollector::evaluate(vectorized::Chunk* chunk, RuntimeBloo
     }
 }
 
+void RuntimeFilterProbeCollector::compute_hash_values(vectorized::Chunk* chunk, Column* column,
+                                                      RuntimeFilterProbeDescriptor* rf_desc,
+                                                      RuntimeFilterProbeDescriptor* prev_rf_desc,
+                                                      RuntimeBloomFilterEvalContext& eval_context) {
+    // compute hash used for multi-part
+    SCOPED_TIMER(eval_context.join_runtime_filter_hash_timer);
+    const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+    DCHECK(filter);
+    if (filter->num_hash_partitions() == 0) {
+        return;
+    }
+    if (rf_desc->partition_by_expr_contexts()->empty()) {
+        filter->compute_hash({column}, &eval_context.running_context);
+    } else {
+        if (prev_rf_desc &&
+            (_is_all_the_same_partition_by_exprs || prev_rf_desc->is_the_same_partition_by_exprs(rf_desc))) {
+            VLOG_FILE << "Skip compute hash_values for the same partition_by_exprs.";
+        } else {
+            std::vector<Column*> partition_by_columns;
+            for (auto& partition_ctx : *(rf_desc->partition_by_expr_contexts())) {
+                ColumnPtr partition_column = EVALUATE_NULL_IF_ERROR(partition_ctx, partition_ctx->root(), chunk);
+                partition_by_columns.push_back(partition_column.get());
+            }
+            filter->compute_hash(std::move(partition_by_columns), &eval_context.running_context);
+            prev_rf_desc = rf_desc;
+        }
+    }
+}
+
 void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
                                                      RuntimeBloomFilterEvalContext& eval_context) {
-    eval_context.selectivity.clear();
     size_t chunk_size = chunk->num_rows();
     auto& merged_selection = eval_context.running_context.merged_selection;
     auto& use_merged_selection = eval_context.running_context.use_merged_selection;
     eval_context.running_context.compatibility =
             _runtime_state->func_version() <= 3 || !_runtime_state->enable_pipeline_engine();
+    auto& seletivity_map = eval_context.selectivity;
     use_merged_selection = true;
+
+    RuntimeFilterProbeDescriptor* prev_rf_desc = nullptr;
+    seletivity_map.clear();
     for (auto& it : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = it.second;
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
@@ -410,28 +466,31 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
         // for colocate grf
         eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
+        compute_hash_values(chunk, column.get(), rf_desc, prev_rf_desc, eval_context);
         // true count is not accummulated, it is evaluated for each RF respectively
         filter->evaluate(column.get(), &eval_context.running_context);
         auto true_count = SIMD::count_nonzero(selection);
         eval_context.run_filter_nums += 1;
         double selectivity = true_count * 1.0 / chunk_size;
+        VLOG_FILE << "update_selectivity, filter_id=" << rf_desc->filter_id() << ", plan_node_id= " << _plan_node_id
+                  << ", selectivity=" << selectivity;
         if (selectivity <= 0.5) {     // useful filter
             if (selectivity < 0.05) { // very useful filter, could early return
-                eval_context.selectivity.clear();
-                eval_context.selectivity.emplace(selectivity, rf_desc);
+                seletivity_map.clear();
+                seletivity_map.emplace(selectivity, rf_desc);
                 chunk->filter(selection);
                 return;
             }
 
             // Only choose three most selective runtime filters
-            if (eval_context.selectivity.size() < 3) {
-                eval_context.selectivity.emplace(selectivity, rf_desc);
+            if (seletivity_map.size() < 3) {
+                seletivity_map.emplace(selectivity, rf_desc);
             } else {
-                auto it = eval_context.selectivity.end();
+                auto it = seletivity_map.end();
                 it--;
                 if (selectivity < it->first) {
-                    eval_context.selectivity.erase(it);
-                    eval_context.selectivity.emplace(selectivity, rf_desc);
+                    seletivity_map.erase(it);
+                    seletivity_map.emplace(selectivity, rf_desc);
                 }
             }
 
@@ -446,7 +505,7 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
             }
         }
     }
-    if (!eval_context.selectivity.empty()) {
+    if (!seletivity_map.empty()) {
         chunk->filter(merged_selection);
     }
 }
@@ -483,7 +542,14 @@ std::string RuntimeFilterProbeCollector::debug_string() const {
 }
 
 void RuntimeFilterProbeCollector::add_descriptor(RuntimeFilterProbeDescriptor* desc) {
+    VLOG_FILE << "add runtime filter descriptor: filter_id=" << desc->filter_id()
+              << ", plan_node_id = " << _plan_node_id;
     _descriptors[desc->filter_id()] = desc;
+    if (!_prev_rf_desc) {
+        _prev_rf_desc = desc;
+    } else if (_is_all_the_same_partition_by_exprs) {
+        _is_all_the_same_partition_by_exprs &= _prev_rf_desc->is_the_same_partition_by_exprs(desc);
+    }
 }
 
 void RuntimeFilterProbeCollector::wait(bool on_scan_node) {

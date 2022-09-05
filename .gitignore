@@ -34,6 +34,11 @@ fe/fe-core/gen
 fe/fe-common/.classpath
 fs_brokers/apache_hdfs_broker/src/main/resources/
 fs_brokers/apache_hdfs_broker/src/main/thrift/
+fe/fe-core/pseudo_cluster_*
+fe/fe-core/RecyclePartitionInfoV1
+fe/fe-core/RecycleRangePartitionInfo
+fe/fe-core/RollupJobV2Test
+fe/fe-core/ShardInfoTest
 dependency-reduced-pom.xml
 tags
 .tags

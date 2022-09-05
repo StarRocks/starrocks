@@ -33,6 +33,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TAnalyticNode;
 import com.starrocks.thrift.TExplainLevel;
@@ -40,6 +41,7 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
 import java.util.List;
+import java.util.Optional;
 
 public class AnalyticEvalNode extends PlanNode {
     private List<Expr> analyticFnCalls;
@@ -251,33 +253,39 @@ public class AnalyticEvalNode extends PlanNode {
     }
 
     @Override
-    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+    public List<Expr> candidatesOfSlotExpr(Expr expr) {
+        List<Expr> newSlotExprs = Lists.newArrayList();
+        if (!expr.isBoundByTupleIds(getTupleIds())) {
+            return newSlotExprs;
+        }
+        if (!(expr instanceof SlotRef)) {
+            return newSlotExprs;
+        }
+
+        for (Expr pExpr : partitionExprs) {
+            // push down only when both of them are slot ref and slot id match.
+            if ((pExpr instanceof SlotRef) &&
+                    (((SlotRef) pExpr).getSlotId().asInt() == ((SlotRef) expr).getSlotId().asInt())) {
+                newSlotExprs.add(pExpr);
+            }
+        }
+        return newSlotExprs;
+    }
+
+    @Override
+    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
 
-        if (probeExpr.isBoundByTupleIds(getTupleIds())) {
-            if (probeExpr instanceof SlotRef) {
-                for (Expr pExpr : partitionExprs) {
-                    // push down only when both of them are slot ref and slot id match.
-                    if ((pExpr instanceof SlotRef) &&
-                            (((SlotRef) pExpr).getSlotId().asInt() == ((SlotRef) probeExpr).getSlotId().asInt())) {
-                        if (children.get(0).pushDownRuntimeFilters(description, pExpr)) {
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            if (description.canProbeUse(this)) {
-                // can not push down to children.
-                // use runtime filter at this level.
-                description.addProbeExpr(id.asInt(), probeExpr);
-                probeRuntimeFilters.add(description);
-                return true;
-            }
+        if (!probeExpr.isBoundByTupleIds(getTupleIds())) {
+            return false;
         }
-        return false;
+
+        List<Expr> probeExprCandidates = candidatesOfSlotExpr(probeExpr);
+        List<List<Expr>> partitionByExprsCandidates = candidatesOfSlotExprs(partitionByExprs);
+        return canPushDownRuntimeFilterForChild(description, probeExpr, probeExprCandidates,
+                partitionByExprs, partitionByExprsCandidates, 0, true);
     }
 
     @Override
