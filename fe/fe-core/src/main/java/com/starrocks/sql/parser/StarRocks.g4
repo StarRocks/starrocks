@@ -163,6 +163,7 @@ statement
     | createUserStatement
     | dropUserStatement
     | showAuthenticationStatement
+    | createRoleStatement
 
     // procedure
     | showProcedureStatement
@@ -912,6 +913,10 @@ dropUserStatement
 showAuthenticationStatement
     : SHOW ALL AUTHENTICATION                                                                #showAllAuthentication
     | SHOW AUTHENTICATION (FOR user)?                                                        #showAuthenticationForUser
+    ;
+
+createRoleStatement
+    : CREATE ROLE identifierOrString                                                         #createRole
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
