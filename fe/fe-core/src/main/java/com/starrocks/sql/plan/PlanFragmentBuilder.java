@@ -273,6 +273,14 @@ public class PlanFragmentBuilder {
             if (!ConnectContext.get().getSessionVariable().isAbleFilterUnusedColumnsInScanStage()) {
                 return;
             }
+
+            // Key columns and value columns cannot be pruned in the non-skip-aggr scan stage.
+            // - All the keys columns must be retained to merge and aggregate rows.
+            // - Value columns can only be used after merging and aggregating.
+            if (referenceTable.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
+                return;
+            }
+
             List<ColumnRefOperator> outputColumns = node.getOutputColumns();
             // if outputColumns is empty, skip this optimization
             if (outputColumns.isEmpty()) {
