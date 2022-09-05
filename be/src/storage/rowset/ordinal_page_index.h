@@ -27,6 +27,7 @@
 
 #include "common/status.h"
 #include "gutil/macros.h"
+#include "runtime/mem_tracker.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/page_pointer.h"
@@ -46,6 +47,8 @@ class WritableFile;
 class OrdinalIndexWriter {
 public:
     OrdinalIndexWriter() : _page_builder(new IndexPageBuilder(0, true)) {}
+    OrdinalIndexWriter(const OrdinalIndexWriter&) = delete;
+    const OrdinalIndexWriter& operator=(const OrdinalIndexWriter&) = delete;
 
     void append_entry(ordinal_t ordinal, const PagePointer& data_pp);
 
@@ -54,8 +57,6 @@ public:
     Status finish(WritableFile* wfile, ColumnIndexMetaPB* meta);
 
 private:
-    OrdinalIndexWriter(const OrdinalIndexWriter&) = delete;
-    const OrdinalIndexWriter& operator=(const OrdinalIndexWriter&) = delete;
     std::unique_ptr<IndexPageBuilder> _page_builder;
     PagePointer _last_pp;
 };
@@ -64,7 +65,7 @@ class OrdinalPageIndexIterator;
 
 class OrdinalIndexReader {
 public:
-    OrdinalIndexReader() : _load_once(), _num_pages(0) {}
+    OrdinalIndexReader() = default;
 
     // Multiple callers may call this method concurrently, but only the first one
     // can load the data, the others will wait until the first one finished loading
@@ -73,7 +74,7 @@ public:
     // Return true if the index data was successfully loaded by the caller, false if
     // the data was loaded by another caller.
     StatusOr<bool> load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
-                        bool use_page_cache, bool kept_in_memory);
+                        bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker);
 
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     OrdinalPageIndexIterator seek_at_or_before(ordinal_t ordinal);
@@ -106,12 +107,14 @@ public:
 private:
     friend OrdinalPageIndexIterator;
 
-    Status do_load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
-                   bool use_page_cache, bool kept_in_memory);
+    void _reset();
+
+    Status _do_load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
+                    bool use_page_cache, bool kept_in_memory);
 
     OnceFlag _load_once;
     // valid after load
-    int _num_pages;
+    int _num_pages = 0;
     // _ordinals[i] = first ordinal of the i-th data page,
     std::vector<ordinal_t> _ordinals;
     // _pages[i] = page pointer to the i-th data page
@@ -120,8 +123,8 @@ private:
 
 class OrdinalPageIndexIterator {
 public:
-    OrdinalPageIndexIterator() {}
-    OrdinalPageIndexIterator(OrdinalIndexReader* index) : _index(index), _cur_idx(0) {}
+    OrdinalPageIndexIterator() = default;
+    explicit OrdinalPageIndexIterator(OrdinalIndexReader* index) : _index(index), _cur_idx(0) {}
     OrdinalPageIndexIterator(OrdinalIndexReader* index, int cur_idx) : _index(index), _cur_idx(cur_idx) {}
     bool valid() const { return _cur_idx < _index->_num_pages; }
     void next() {
@@ -143,7 +146,7 @@ inline OrdinalPageIndexIterator OrdinalIndexReader::begin() {
 }
 
 inline OrdinalPageIndexIterator OrdinalIndexReader::end() {
-    return OrdinalPageIndexIterator(this, _num_pages);
+    return {this, _num_pages};
 }
 
 } // namespace starrocks

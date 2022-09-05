@@ -34,7 +34,6 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -107,15 +106,6 @@ public class Analyzer {
         private final Set<ExprId> assignedConjuncts =
                 Collections.newSetFromMap(new IdentityHashMap<ExprId, Boolean>());
 
-        // map from outer-joined tuple id, ie, one that is nullable in this select block,
-        // to the last Join clause (represented by its rhs table ref) that outer-joined it
-        private final Map<TupleId, TableRef> outerJoinedTupleIds = Maps.newHashMap();
-
-        // Map from semi-joined tuple id, i.e., one that is invisible outside the join's
-        // On-clause, to its Join clause (represented by its rhs table ref). An anti-join is
-        // a kind of semi-join, so anti-joined tuples are also registered here.
-        public final Map<TupleId, TableRef> semiJoinedTupleIds = Maps.newHashMap();
-
         // map from registered conjunct to its containing outer join On clause (represented
         // by its right-hand side table ref); only conjuncts that can only be correctly
         // evaluated by the originating outer join are registered here
@@ -140,9 +130,6 @@ public class Analyzer {
     // ancestors contains the Analyzers of the enclosing select blocks of 'this'
     // (ancestors[0] contains the immediate parent, etc.).
     private final ArrayList<Analyzer> ancestors;
-
-    // map from lowercase table alias to a view definition in this analyzer's scope
-    private final Map<String, View> localViews_ = Maps.newHashMap();
 
     // Map from lowercase table alias to descriptor. Tables without an explicit alias
     // are assigned two implicit aliases: the unqualified and fully-qualified table name.
@@ -256,10 +243,6 @@ public class Analyzer {
             String viewAlias = tableName.getTbl();
             Analyzer analyzer = this;
             do {
-                View localView = analyzer.localViews_.get(viewAlias);
-                if (localView != null) {
-                    return new InlineViewRef(localView, tableRef);
-                }
                 analyzer = (analyzer.ancestors.isEmpty() ? null : analyzer.ancestors.get(0));
             } while (analyzer != null);
         }
@@ -290,12 +273,8 @@ public class Analyzer {
         }
 
         TableName tblName = new TableName(database.getFullName(), table.getName());
-        if (table instanceof View) {
-            return new InlineViewRef((View) table, tableRef);
-        } else {
-            // The table must be a base table.
-            return new BaseTableRef(tableRef, table, tblName);
-        }
+        // The table must be a base table.
+        return new BaseTableRef(tableRef, table, tblName);
     }
 
     public Table getTable(TableName tblName) {
@@ -401,13 +380,6 @@ public class Analyzer {
         return new TableName(getDefaultDb(), tableName.getTbl());
     }
 
-    /**
-     * Return rhs ref of last Join clause that outer-joined id.
-     */
-    public TableRef getLastOjClause(TupleId id) {
-        return globalState.outerJoinedTupleIds.get(id);
-    }
-
     public DescriptorTable getDescTbl() {
         return globalState.descTbl;
     }
@@ -448,51 +420,10 @@ public class Analyzer {
         return globalState.context;
     }
 
-    /**
-     * Returns true if predicate 'e' can be correctly evaluated by a tree materializing
-     * 'tupleIds', otherwise false:
-     * - The predicate needs to be bound by tupleIds.
-     * - For On-clause predicates:
-     * - If the predicate is from an anti-join On-clause it must be evaluated by the
-     * corresponding anti-join node.
-     * - Predicates from the On-clause of an inner or semi join are evaluated at the
-     * node that materializes the required tuple ids, unless they reference outer
-     * joined tuple ids. In that case, the predicates are evaluated at the join node
-     * of the corresponding On-clause.
-     * - Predicates referencing full-outer joined tuples are assigned at the originating
-     * join if it is a full-outer join, otherwise at the last full-outer join that does
-     * not materialize the table ref ids of the originating join.
-     * - Predicates from the On-clause of a left/right outer join are assigned at
-     * the corresponding outer join node with the exception of simple predicates
-     * that only reference a single tuple id. Those may be assigned below the
-     * outer join node if they are from the same On-clause that makes the tuple id
-     * nullable.
-     * - Otherwise, a predicate can only be correctly evaluated if for all outer-joined
-     * referenced tids the last join to outer-join this tid has been materialized.
-     */
     public boolean canEvalPredicate(List<TupleId> tupleIds, Expr e) {
         if (!e.isBoundByTupleIds(tupleIds)) {
             return false;
         }
-        ArrayList<TupleId> ids = Lists.newArrayList();
-        e.getIds(ids, null);
-        Set<TupleId> tids = Sets.newHashSet(ids);
-        if (tids.isEmpty()) {
-            return true;
-        }
-
-        for (TupleId tid : tids) {
-            TableRef rhsRef = getLastOjClause(tid);
-            // this is not outer-joined; ignore
-            if (rhsRef == null) {
-                continue;
-            }
-            // check whether the last join to outer-join 'tid' is materialized by tupleIds
-            if (!tupleIds.containsAll(rhsRef.getAllTupleIds())) {
-                return false;
-            }
-        }
-
         return true;
     }
 }

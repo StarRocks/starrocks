@@ -21,14 +21,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class CreateRoleStmt extends DdlStmt {
 
@@ -42,20 +35,22 @@ public class CreateRoleStmt extends DdlStmt {
         return role;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-        FeNameFormat.checkRoleName(role, false /* can not be admin */, "Can not create role");
-        role = ClusterNamespace.getFullName(role);
-
-        // check if current user has GRANT priv on GLOBAL level.
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE USER");
-        }
+    public void setQualifiedRole(String role) {
+        this.role = role;
     }
 
     @Override
     public String toSql() {
         return "CREATE ROLE " + role;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateRoleStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

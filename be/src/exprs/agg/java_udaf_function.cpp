@@ -4,14 +4,11 @@
 
 #include <memory>
 
-#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fmt/core.h"
-#include "fmt/format.h"
 #include "jni.h"
-#include "runtime/primitive_type.h"
 #include "runtime/user_function_cache.h"
 
 namespace starrocks::vectorized {
@@ -25,6 +22,7 @@ const AggregateFunction* getJavaUDAFFunction(bool input_nullable) {
 
 Status init_udaf_context(int64_t id, const std::string& url, const std::string& checksum, const std::string& symbol,
                          starrocks_udf::FunctionContext* context) {
+    RETURN_IF_ERROR(detect_java_runtime());
     std::string libpath;
     std::string state = symbol + "$State";
     RETURN_IF_ERROR(UserFunctionCache::instance()->get_libpath(id, url, checksum, &libpath));

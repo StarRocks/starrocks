@@ -3,10 +3,10 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.AlterUserStmt;
+import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -59,22 +59,29 @@ public class PrivilegeStmtAnalyzer {
         }
 
         /**
+         * check if role name valid and get full role name + check if role exists
+         */
+        private String analyseRoleName(String roleName, ConnectContext session, boolean canBeAdmin, String errMsg) {
+            String qualifiedRole = validRoleName(roleName, canBeAdmin, errMsg);
+            if (!session.getGlobalStateMgr().getAuth().doesRoleExist(qualifiedRole)) {
+                throw new SemanticException("role " + qualifiedRole + " not exist!");
+            }
+            return qualifiedRole;
+        }
+
+        /**
          * check if role name valid and get full role name
          */
-        private String analyseRoleName(String roleName, ConnectContext session) {
+        private String validRoleName(String roleName, boolean canBeAdmin, String errMsg) {
             try {
-                FeNameFormat.checkRoleName(roleName, true /* can be admin */, "Can not granted/revoke role to user");
+                FeNameFormat.checkRoleName(roleName, canBeAdmin, errMsg);
             } catch (AnalysisException e) {
                 // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
                 // that is permitted to throw during analyzing phrase under the new framework for compatibility.
                 // Remove it after all old methods migrate to the new framework
                 throw new SemanticException(e.getMessage());
             }
-            String qualifiedRole = ClusterNamespace.getFullName(roleName);
-            if (!session.getGlobalStateMgr().getAuth().doesRoleExist(qualifiedRole)) {
-                throw new SemanticException("role " + qualifiedRole + " not exist!");
-            }
-            return qualifiedRole;
+            return roleName;
         }
 
         /**
@@ -84,18 +91,27 @@ public class PrivilegeStmtAnalyzer {
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
             analyseUser(stmt.getUserIdent(), session, true);
-            stmt.setQualifiedRole(analyseRoleName(stmt.getRole(), session));
+            stmt.setQualifiedRole(
+                    analyseRoleName(stmt.getRole(), session, true, "Can not granted/revoke role to user"));
             return null;
         }
 
         /**
          * GRANT IMPERSONATE ON XX TO XX
-         * REVOKE IMPERSONATE ON XX TO XX
+         * GRANT IMPERSONATE ON XX TO ROLE XX
+         * REVOKE IMPERSONATE ON XX FROM XX
+         * REVOKE IMPERSONATE ON XX FROM ROLE XX
          */
         @Override
         public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getAuthorizedUser(), session, true);
             analyseUser(stmt.getSecuredUser(), session, true);
+            if (stmt.getAuthorizedUser() != null) {
+                analyseUser(stmt.getAuthorizedUser(), session, true);
+            } else {
+                String qulifiedRole = analyseRoleName(stmt.getAuthorizedRoleName(), session, true,
+                        "Can not granted/revoke role to user");
+                stmt.setAuthorizedRoleName(qulifiedRole);
+            }
             return null;
         }
 
@@ -177,7 +193,8 @@ public class PrivilegeStmtAnalyzer {
                     // for forward compatibility
                     stmt.setRole(Role.ADMIN_ROLE);
                 }
-                stmt.setRole(analyseRoleName(stmt.getQualifiedRole(), session));
+                stmt.setRole(
+                        analyseRoleName(stmt.getQualifiedRole(), session, true, "Can not granted/revoke role to user"));
             }
             return null;
         }
@@ -185,6 +202,12 @@ public class PrivilegeStmtAnalyzer {
         @Override
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
             analyseUser(stmt.getUserIdent(), session, false);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
+            stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not create role"));
             return null;
         }
     }

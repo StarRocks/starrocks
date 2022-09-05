@@ -23,7 +23,6 @@
 
 #include <unistd.h> // for link()
 
-#include <cstdio> // for remove()
 #include <memory>
 #include <set>
 
@@ -131,7 +130,7 @@ Status Rowset::do_load() {
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path, seg_id, _schema,
+        auto res = Segment::open(ExecEnv::GetInstance()->metadata_mem_tracker(), fs, seg_path, seg_id, _schema,
                                  &footer_size_hint, rowset_meta()->partial_rowset_footer(seg_id));
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
@@ -151,7 +150,7 @@ Status Rowset::reload() {
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path, seg_id, _schema,
+        auto res = Segment::open(ExecEnv::GetInstance()->metadata_mem_tracker(), fs, seg_path, seg_id, _schema,
                                  &footer_size_hint);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();

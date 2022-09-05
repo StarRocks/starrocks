@@ -25,7 +25,7 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
                     .setCatalog(ctx.getCurrentCatalog());
             ctx.getPlannerProfile().reset();
             String definition = context.getDefinition();
-            StatementBase sqlStmt = SqlParser.parse(definition, ctx.getSessionVariable().getSqlMode()).get(0);
+            StatementBase sqlStmt = SqlParser.parse(definition, ctx.getSessionVariable()).get(0);
             sqlStmt.setOrigStmt(new OriginStatement(definition, 0));
             executor = new StmtExecutor(ctx, sqlStmt);
             ctx.setExecutor(executor);

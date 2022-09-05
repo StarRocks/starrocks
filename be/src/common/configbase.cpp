@@ -23,7 +23,6 @@
 #include <list>
 #include <map>
 #include <regex>
-#include <sstream>
 
 #define __IN_CONFIGBASE_CPP__
 #include "common/config.h"

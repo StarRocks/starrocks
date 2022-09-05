@@ -60,7 +60,7 @@ static const std::string TEST_DIR = "/column_reader_writer_test";
 class ColumnReaderWriterTest : public testing::Test {
 public:
     ColumnReaderWriterTest() {
-        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
+        _metadata_mem_tracker = std::make_unique<MemTracker>();
 
         TabletSchemaPB schema_pb;
         auto* c0 = schema_pb.add_column();
@@ -77,7 +77,7 @@ public:
         c2->set_name("v2");
         c2->set_type("INT");
 
-        _dummy_segment_schema = TabletSchema::create(_tablet_meta_mem_tracker.get(), schema_pb);
+        _dummy_segment_schema = TabletSchema::create(schema_pb);
     }
 
     ~ColumnReaderWriterTest() override = default;
@@ -89,7 +89,7 @@ protected:
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
         return std::make_shared<Segment>(Segment::private_type(0), fs, fname, 1, _dummy_segment_schema.get(),
-                                         _tablet_meta_mem_tracker.get());
+                                         _metadata_mem_tracker.get());
     }
 
     template <FieldType type, EncodingTypePB encoding, uint32_t version>
@@ -429,7 +429,7 @@ protected:
                 ASSERT_EQ("[4, 5, 6]", dst_column->debug_item(1));
             }
 
-            ASSERT_EQ(2, reader->num_rows_from_meta_pb(&meta));
+            ASSERT_EQ(2, meta.num_rows());
             ASSERT_EQ(36, reader->total_mem_footprint());
         }
     }
@@ -556,7 +556,7 @@ protected:
     }
 
     MemPool _pool;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker;
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
 };
 
@@ -726,7 +726,7 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
         auto res = ColumnReader::create(&meta, segment.get());
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
-        ASSERT_EQ(1024, reader->num_rows_from_meta_pb(&meta));
+        ASSERT_EQ(1024, meta.num_rows());
         ASSERT_EQ(1024 * 4 + 1024, reader->total_mem_footprint());
     }
 }

@@ -19,7 +19,9 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
@@ -41,6 +43,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -49,7 +52,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
-import com.starrocks.sql.optimizer.base.SetQualifier;
+import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -284,6 +287,20 @@ public class QueryAnalyzer {
             String dbName = node.getName().getDb();
 
             session.getDumpInfo().addTable(dbName, table);
+            if (table.isHiveTable()) {
+                HiveTable hiveTable = (HiveTable) table;
+                Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
+                        getResource(hiveTable.getResourceName());
+                if (resource != null) {
+                    session.getDumpInfo().addResource(resource);
+                }
+                session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
+                        hiveTable.getTableName());
+                HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
+                        hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
+                hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
+                hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
+            }
 
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
             node.setScope(scope);
@@ -358,7 +375,7 @@ public class QueryAnalyzer {
                             joinEqual.getType());
                 }
                 if (joinEqual.contains((Predicate<Expr>) node -> !node.getType().canJoinOn())) {
-                    throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
+                    throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
                 }
             } else {
                 if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin()) {
@@ -544,7 +561,7 @@ public class QueryAnalyzer {
                     analyzeExpression(expression, new AnalyzeState(), setOpOutputScope);
 
                     if (!expression.getType().canOrderBy()) {
-                        throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
+                        throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
                     }
 
                     orderByElement.setExpr(expression);

@@ -24,7 +24,6 @@
 #include <bthread/sys_futex.h>
 
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/column_block.h"
 #include "storage/olap_define.h"
 #include "storage/olap_type_infra.h"
@@ -113,7 +112,7 @@ template <FieldType type>
 void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) {
     if (count > 0) {
         _page_zone_map.has_not_null = true;
-        const CppType* vals = reinterpret_cast<const CppType*>(values);
+        const auto* vals = reinterpret_cast<const CppType*>(values);
         auto [pmin, pmax] = std::minmax_element(vals, vals + count);
         if (unaligned_load<CppType>(pmin) < unaligned_load<CppType>(_page_zone_map.min_value)) {
             _field->type_info()->direct_copy(_page_zone_map.min_value, pmin, nullptr);
@@ -191,12 +190,22 @@ Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMeta
 }
 
 StatusOr<bool> ZoneMapIndexReader::load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB& meta,
-                                        bool use_page_cache, bool kept_in_memory) {
-    return success_once(_load_once, [&]() { return do_load(fs, filename, meta, use_page_cache, kept_in_memory); });
+                                        bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker) {
+    return success_once(_load_once, [&]() {
+        size_t old_mem_usage = mem_usage();
+        Status st = _do_load(fs, filename, meta, use_page_cache, kept_in_memory);
+        if (st.ok()) {
+            size_t new_mem_usage = mem_usage();
+            MEM_TRACKER_SAFE_CONSUME(mem_tracker, new_mem_usage - old_mem_usage);
+        } else {
+            _reset();
+        }
+        return st;
+    });
 }
 
-Status ZoneMapIndexReader::do_load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB& meta,
-                                   bool use_page_cache, bool kept_in_memory) {
+Status ZoneMapIndexReader::_do_load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB& meta,
+                                    bool use_page_cache, bool kept_in_memory) {
     IndexedColumnReader reader(fs, filename, meta.page_zone_maps());
     RETURN_IF_ERROR(reader.load(use_page_cache, kept_in_memory));
     std::unique_ptr<IndexedColumnIterator> iter;

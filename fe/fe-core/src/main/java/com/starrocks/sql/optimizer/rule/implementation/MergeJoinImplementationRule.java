@@ -18,10 +18,10 @@ public class MergeJoinImplementationRule extends JoinImplementationRule {
         super(RuleType.IMP_EQ_JOIN_TO_MERGE_JOIN);
     }
 
-    private static final MergeJoinImplementationRule instance = new MergeJoinImplementationRule();
+    private static final MergeJoinImplementationRule INSTANCE = new MergeJoinImplementationRule();
 
     public static MergeJoinImplementationRule getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     @Override

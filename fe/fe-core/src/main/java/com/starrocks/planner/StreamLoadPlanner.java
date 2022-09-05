@@ -173,7 +173,7 @@ public class StreamLoadPlanner {
         // whether update.
         fragment.setLoadGlobalDicts(globalDicts);
 
-        fragment.finalize(TResultSinkType.MYSQL_PROTOCAL);
+        fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
 
         TExecPlanFragmentParams params = new TExecPlanFragmentParams();
         params.setProtocol_version(InternalServiceVersion.V1);

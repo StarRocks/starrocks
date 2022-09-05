@@ -23,8 +23,6 @@
 #include <iostream>
 #include <sstream>
 
-#include "Adaptor.hh"
-
 namespace orc {
 
 Int128 Int128::maximumValue() {

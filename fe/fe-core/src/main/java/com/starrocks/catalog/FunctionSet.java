@@ -371,6 +371,10 @@ public class FunctionSet {
     public static final String DEFAULT_VALUE = "default_value";
     public static final String REPLACE_VALUE = "replace_value";
 
+    // high-order functions related lambda functions
+    public static final String ARRAY_MAP = "array_map";
+    public static final String TRANSFORM = "transform";
+
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
@@ -490,6 +494,18 @@ public class FunctionSet {
             .add(FunctionSet.LAST_VALUE)
             .add(FunctionSet.FIRST_VALUE_REWRITE)
             .build();
+
+    public static final Set<String> varianceFunctions = ImmutableSet.<String>builder()
+            .add(FunctionSet.VAR_POP)
+            .add(FunctionSet.VAR_SAMP)
+            .add(FunctionSet.VARIANCE)
+            .add(FunctionSet.VARIANCE_POP)
+            .add(FunctionSet.VARIANCE_SAMP)
+            .add(FunctionSet.STD)
+            .add(FunctionSet.STDDEV)
+            .add(FunctionSet.STDDEV_POP)
+            .add(FunctionSet.STDDEV_SAMP)
+            .add(FunctionSet.STDDEV_VAL).build();
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
@@ -1014,7 +1030,7 @@ public class FunctionSet {
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion
             // TODO: array/json/pseudo is not supported yet
-            if (t.isNull() || t.isChar() || t.isTime() || t.isArrayType() || t.isJsonType() || t.isPseudoType()) {
+            if (t.isNull() || t.isChar() || t.isTime() || t.isArrayType() || t.isJsonType() || t.isPseudoType() || t.isFunctionType()) {
                 continue;
             }
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
@@ -1132,6 +1148,8 @@ public class FunctionSet {
                     LOGGER.warn("could not determine polymorphic type because input has non-match types");
                     return null;
                 }
+            } else if (declType == Type.FUNCTION) {
+                continue;
             } else {
                 LOGGER.warn("has unhandled pseudo type '{}'", declType);
                 return null;

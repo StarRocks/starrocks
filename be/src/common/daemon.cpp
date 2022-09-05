@@ -33,8 +33,6 @@
 #include "common/config.h"
 #include "common/minidump.h"
 #include "exec/workgroup/work_group.h"
-#include "runtime/exec_env.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
@@ -49,7 +47,6 @@
 #include "util/monotime.h"
 #include "util/network_util.h"
 #include "util/starrocks_metrics.h"
-#include "util/system_metrics.h"
 #include "util/thread.h"
 #include "util/thrift_util.h"
 #include "util/time.h"
@@ -140,7 +137,7 @@ void calculate_metrics(void* arg_this) {
     std::map<std::string, int64_t> lst_net_send_bytes;
     std::map<std::string, int64_t> lst_net_receive_bytes;
 
-    Daemon* daemon = static_cast<Daemon*>(arg_this);
+    auto* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
         StarRocksMetrics::instance()->metrics()->trigger_hook();
 
@@ -185,6 +182,19 @@ void calculate_metrics(void* arg_this) {
             StarRocksMetrics::instance()->system_metrics()->get_network_traffic(&lst_net_send_bytes,
                                                                                 &lst_net_receive_bytes);
         }
+
+        auto* mem_metrics = StarRocksMetrics::instance()->system_metrics()->memory_metrics();
+
+        LOG(INFO) << fmt::format(
+                "Current memory statistics: process({}), query_pool({}), load({}), "
+                "metadata({}), compaction({}), schema_change({}), column_pool({}), "
+                "page_cache({}), update({}), chunk_allocator({}), clone({}), consistency({})",
+                mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
+                mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
+                mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
+                mem_metrics->column_pool_mem_bytes.value(), mem_metrics->storage_page_cache_mem_bytes.value(),
+                mem_metrics->update_mem_bytes.value(), mem_metrics->chunk_allocator_mem_bytes.value(),
+                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value());
 
         sleep(15); // 15 seconds
     }

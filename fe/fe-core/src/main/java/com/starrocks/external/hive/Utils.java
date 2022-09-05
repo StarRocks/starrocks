@@ -17,17 +17,20 @@ import com.starrocks.external.HiveMetaStoreTableUtils;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class Utils {
     public static final String DECIMAL_PATTERN = "^decimal\\((\\d+),(\\d+)\\)";
     public static final String ARRAY_PATTERN = "^array<([0-9a-z<>(),]+)>";
     public static final String CHAR_PATTERN = "^char\\(([0-9]+)\\)";
     public static final String VARCHAR_PATTERN = "^varchar\\(([0-9,-1]+)\\)";
+    protected static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("STRUCT", "BINARY", "MAP", "UNIONTYPE");
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
         return createPartitionKey(values, columns, false);
@@ -158,17 +161,25 @@ public class Utils {
     public static int[] getPrecisionAndScale(String typeStr) throws DdlException {
         Matcher matcher = Pattern.compile(DECIMAL_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         if (matcher.find()) {
-            return new int[]{Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2))};
+            return new int[] {Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2))};
         }
         throw new DdlException("Failed to get precision and scale at " + typeStr);
     }
 
     // Array string like "Array<Array<int>>"
     public static Type convertToArrayType(String typeStr) throws DdlException {
+        if (!HIVE_UNSUPPORTED_TYPES.stream().filter(typeStr.toUpperCase()::contains).collect(Collectors.toList())
+                .isEmpty()) {
+            return Type.UNKNOWN_TYPE;
+        }
         Matcher matcher = Pattern.compile(ARRAY_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         Type itemType;
         if (matcher.find()) {
-            itemType = new ArrayType(convertToArrayType(matcher.group(1)));
+            if (convertToArrayType(matcher.group(1)).equals(Type.UNKNOWN_TYPE)) {
+                itemType = Type.UNKNOWN_TYPE;
+            } else {
+                itemType = new ArrayType(convertToArrayType(matcher.group(1)));
+            }
         } else {
             itemType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         }

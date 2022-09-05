@@ -2,8 +2,6 @@
 
 #include "column/const_column.h"
 
-#include <algorithm>
-
 #include "column/column_helper.h"
 #include "simd/simd.h"
 #include "util/coding.h"

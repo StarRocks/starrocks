@@ -36,10 +36,10 @@ public class JoinCommutativityRule extends TransformationRule {
                         Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 
-    private static final JoinCommutativityRule instance = new JoinCommutativityRule();
+    private static final JoinCommutativityRule INSTANCE = new JoinCommutativityRule();
 
     public static JoinCommutativityRule getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     public boolean check(final OptExpression input, OptimizerContext context) {

@@ -52,6 +52,7 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.lake.LakeBackupJob;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
@@ -280,10 +281,11 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         }
 
         // Check if backup objects are valid
-        // This is just a pre-check to avoid most of invalid backup requests.
+        // This is just a pre-check to avoid most of the invalid backup requests.
         // Also calculate the signature for incremental backup check.
         List<TableRef> tblRefs = stmt.getTableRefs();
         BackupMeta curBackupMeta = null;
+        TableType t = TableType.OLAP;
         db.readLock();
         try {
             List<Table> backupTbls = Lists.newArrayList();
@@ -292,9 +294,19 @@ public class BackupHandler extends LeaderDaemon implements Writable {
                 Table tbl = db.getTable(tblName);
                 if (tbl == null) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
+                    return;
                 }
-                if (tbl.getType() != TableType.OLAP) {
+                if (!tbl.isOlapOrLakeTable()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tblName);
+                }
+
+                if (tbl.isLakeTable()) {
+                    t = TableType.LAKE;
+                }
+
+                if (t == TableType.LAKE && tbl.isOlapTable()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
+                    return;
                 }
 
                 OlapTable olapTbl = (OlapTable) tbl;
@@ -372,10 +384,14 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         }
 
         // Create a backup job
-        BackupJob backupJob = new BackupJob(stmt.getLabel(), db.getId(),
-                db.getOriginName(),
-                tblRefs, stmt.getTimeoutMs(),
-                globalStateMgr, repository.getId());
+        BackupJob backupJob = null;
+        if (t == TableType.OLAP) {
+            backupJob = new BackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs, stmt.getTimeoutMs(),
+                    globalStateMgr, repository.getId());
+        } else if (t == TableType.LAKE) {
+            backupJob = new LakeBackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs, stmt.getTimeoutMs(),
+                    globalStateMgr, repository.getId());
+        }
         // write log
         globalStateMgr.getEditLog().logBackupJob(backupJob);
 

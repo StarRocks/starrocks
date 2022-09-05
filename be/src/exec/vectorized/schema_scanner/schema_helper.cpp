@@ -35,6 +35,13 @@ Status SchemaHelper::list_table_status(const std::string& ip, const int32_t port
             [&request, &result](FrontendServiceConnection& client) { client->listTableStatus(*result, request); });
 }
 
+Status SchemaHelper::get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
+                                     TGetTablesInfoResponse* response) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port,
+            [&request, &response](FrontendServiceConnection& client) { client->getTablesInfo(*response, request); });
+}
+
 Status SchemaHelper::describe_table(const std::string& ip, const int32_t port, const TDescribeTableParams& request,
                                     TDescribeTableResult* result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
@@ -76,6 +83,15 @@ Status SchemaHelper::get_table_privs(const std::string& ip, const int32_t port, 
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
             ip, port,
             [&request, &result](FrontendServiceConnection& client) { client->getTablePrivs(*result, request); });
+}
+
+Status SchemaHelper::get_tables_config(const std::string& ip, const int32_t port,
+                                       const TGetTablesConfigRequest& var_params,
+                                       TGetTablesConfigResponse* var_result) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(ip, port,
+                                                       [&var_params, &var_result](FrontendServiceConnection& client) {
+                                                           client->getTablesConfig(*var_result, var_params);
+                                                       });
 }
 
 Status SchemaHelper::get_tasks(const std::string& ip, const int32_t port, const TGetTasksParams& var_params,

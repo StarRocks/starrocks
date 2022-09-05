@@ -28,9 +28,7 @@ public class IcebergScanImplementationRule extends ImplementationRule {
         if (scan.getTableType() == Table.TableType.ICEBERG) {
             PhysicalIcebergScanOperator physicalIcebergScan = new PhysicalIcebergScanOperator(scan.getTable(),
                     scan.getColRefToColumnMetaMap(),
-                    scan.getConjuncts(),
-                    scan.getMinMaxConjuncts(),
-                    scan.getMinMaxColumnRefMap(),
+                    scan.getScanOperatorPredicates(),
                     scan.getLimit(),
                     scan.getPredicate(),
                     scan.getProjection());

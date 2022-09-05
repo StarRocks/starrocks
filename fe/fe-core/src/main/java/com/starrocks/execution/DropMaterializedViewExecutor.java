@@ -2,7 +2,7 @@
 
 package com.starrocks.execution;
 
-import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;

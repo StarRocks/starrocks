@@ -14,7 +14,7 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.DefaultValueExpr;
+import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -49,13 +49,13 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
-import com.starrocks.sql.optimizer.base.SetQualifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -388,8 +388,9 @@ public class AST2SQL {
             return visit(node.getChild(0)) + "[" + visit(node.getChild(1)) + "]";
         }
 
+        @Override
         public String visitArrowExpr(ArrowExpr node, Void context) {
-            return visitExpression(node, context);
+            return String.format("%s->%s", visit(node.getItem(), context), visit(node.getKey(), context));
         }
 
         @Override
@@ -487,7 +488,7 @@ public class AST2SQL {
         }
 
         public String visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {
-            return visitExpression(node, context);
+            return visitFunctionCall(node, context);
         }
 
         public String visitInformationFunction(InformationFunction node, Void context) {

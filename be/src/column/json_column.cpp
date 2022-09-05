@@ -34,7 +34,7 @@ void JsonColumn::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx
     if (!json_str.ok()) {
         buf->push_null();
     } else {
-        buf->push_string(json_str->data(), json_str->size());
+        buf->push_string(json_str->data(), json_str->size(), '\'');
     }
 }
 

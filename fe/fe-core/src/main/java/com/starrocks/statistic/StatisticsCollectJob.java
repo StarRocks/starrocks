@@ -5,7 +5,9 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -53,7 +55,7 @@ public abstract class StatisticsCollectJob {
         DEFAULT_VELOCITY_ENGINE.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
     }
 
-    public abstract void collect() throws Exception;
+    public abstract void collect(ConnectContext context) throws Exception;
 
     public Database getDb() {
         return db;
@@ -79,11 +81,13 @@ public abstract class StatisticsCollectJob {
         return properties;
     }
 
-    public void collectStatisticSync(String sql) throws Exception {
+    public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
         LOG.debug("statistics collect sql : " + sql);
-        ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        context.setExecutor(executor);
+        context.setQueryId(UUIDUtil.genUUID());
+        context.setStartTime();
         executor.execute();
 
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
@@ -105,6 +109,19 @@ public abstract class StatisticsCollectJob {
             return "IFNULL(SUM(t1.count), 0) * " + typeSize;
         }
         return "COUNT(1) * " + typeSize;
+    }
+
+    protected int splitColumns(long rowCount) {
+        long splitSize;
+        if (rowCount == 0) {
+            splitSize = columns.size();
+        } else {
+            splitSize = Config.statistic_collect_max_row_count_per_query / rowCount + 1;
+            if (splitSize > columns.size()) {
+                splitSize = columns.size();
+            }
+        }
+        return (int) splitSize;
     }
 
     protected String build(VelocityContext context, String template) {

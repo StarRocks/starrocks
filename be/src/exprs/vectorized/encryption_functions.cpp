@@ -2,8 +2,6 @@
 
 #include "exprs/vectorized/encryption_functions.h"
 
-#include <boost/smart_ptr.hpp>
-
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/status.h"
@@ -129,6 +127,10 @@ ColumnPtr EncryptionFunctions::to_base64(FunctionContext* ctx, const Columns& co
         if (src_value.size == 0) {
             result.append_null();
             continue;
+        } else if (src_value.size > config::max_length_for_to_base64) {
+            std::stringstream ss;
+            ss << "to_base64 not supported length > " << config::max_length_for_to_base64;
+            throw std::runtime_error(ss.str());
         }
 
         int cipher_len = (size_t)(4.0 * ceil((double)src_value.size / 3.0)) + 1;

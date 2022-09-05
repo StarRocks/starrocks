@@ -75,6 +75,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
+
+import static java.lang.Long.min;
 
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
@@ -187,6 +190,7 @@ public class DatabaseTransactionMgr {
     }
 
     @VisibleForTesting
+    @Nullable
     protected Set<Long> unprotectedGetTxnIdsByLabel(String label) {
         return labelToTxnIds.get(label);
     }
@@ -229,6 +233,14 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         return infos;
+    }
+
+    public long getMinActiveTxnId() {
+        long result = Long.MAX_VALUE;
+        for (Long txnId : idToRunningTransactionState.keySet()) {
+            result = min(result, txnId);
+        }
+        return result;
     }
 
     private void getTxnStateInfo(TransactionState txnState, List<String> info) {
@@ -1151,11 +1163,7 @@ public class DatabaseTransactionMgr {
     }
 
     private void updateTxnLabels(TransactionState transactionState) {
-        Set<Long> txnIds = labelToTxnIds.get(transactionState.getLabel());
-        if (txnIds == null) {
-            txnIds = Sets.newHashSet();
-            labelToTxnIds.put(transactionState.getLabel(), txnIds);
-        }
+        Set<Long> txnIds = labelToTxnIds.computeIfAbsent(transactionState.getLabel(), k -> Sets.newHashSet());
         txnIds.add(transactionState.getTransactionId());
     }
 
@@ -1245,7 +1253,10 @@ public class DatabaseTransactionMgr {
             for (Long tableId : transactionState.getTableIdList()) {
                 Table table = db.getTable(tableId);
                 if (table != null) {
-                    listeners.add(stateListenerFactory.create(this, table));
+                    TransactionStateListener listener = stateListenerFactory.create(this, table);
+                    if (listener != null) {
+                        listeners.add(listener);
+                    }
                 }
             }
         } finally {

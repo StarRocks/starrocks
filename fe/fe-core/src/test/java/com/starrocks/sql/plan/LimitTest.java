@@ -431,10 +431,10 @@ public class LimitTest extends PlanTestBase {
     public void testLimitRightJoin() throws Exception {
         String sql = "select v1 from t0 right outer join t1 on t0.v1 = t1.v4 limit 100";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+        assertContains(plan, "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
-                "  |  limit: 100"));
+                "  |  limit: 100");
         Assert.assertTrue(plan.contains("  |----3:EXCHANGE\n" +
                 "  |       limit: 100"));
 

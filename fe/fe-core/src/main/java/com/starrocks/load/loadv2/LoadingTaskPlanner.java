@@ -203,7 +203,7 @@ public class LoadingTaskPlanner {
 
         // 4. finalize
         for (PlanFragment fragment : fragments) {
-            fragment.finalize(TResultSinkType.MYSQL_PROTOCAL);
+            fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
         }
         Collections.reverse(fragments);
     }
@@ -266,7 +266,7 @@ public class LoadingTaskPlanner {
 
         // 4. finalize
         for (PlanFragment fragment : fragments) {
-            fragment.finalize(TResultSinkType.MYSQL_PROTOCAL);
+            fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
         }
         Collections.reverse(fragments);
     }

@@ -13,12 +13,10 @@
 #include "column/datum_tuple.h"
 #include "common/config.h"
 #include "common/status.h"
-#include "fmt/compile.h"
 #include "fs/fs.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
-#include "runtime/external_scan_context_mgr.h"
 #include "segment_options.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
@@ -32,7 +30,6 @@
 #include "storage/roaring2range.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
-#include "storage/rowset/column_reader.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
@@ -470,7 +467,7 @@ Status SegmentIterator::_get_row_ranges_by_key_ranges() {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(_segment->load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
+    RETURN_IF_ERROR(_segment->load_index(StorageEngine::instance()->metadata_mem_tracker()));
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -501,7 +498,7 @@ Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(_segment->load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
+    RETURN_IF_ERROR(_segment->load_index(StorageEngine::instance()->metadata_mem_tracker()));
     for (const auto& short_key_range : _opts.short_key_ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();

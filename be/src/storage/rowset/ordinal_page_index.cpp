@@ -64,13 +64,23 @@ Status OrdinalIndexWriter::finish(WritableFile* wfile, ColumnIndexMetaPB* meta) 
 }
 
 StatusOr<bool> OrdinalIndexReader::load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta,
-                                        ordinal_t num_values, bool use_page_cache, bool kept_in_memory) {
-    return success_once(_load_once,
-                        [&]() { return do_load(fs, filename, meta, num_values, use_page_cache, kept_in_memory); });
+                                        ordinal_t num_values, bool use_page_cache, bool kept_in_memory,
+                                        MemTracker* mem_tracker) {
+    return success_once(_load_once, [&]() {
+        size_t old_mem_usage = mem_usage();
+        Status st = _do_load(fs, filename, meta, num_values, use_page_cache, kept_in_memory);
+        if (st.ok()) {
+            size_t new_mem_usage = mem_usage();
+            MEM_TRACKER_SAFE_CONSUME(mem_tracker, new_mem_usage - old_mem_usage);
+        } else {
+            _reset();
+        }
+        return st;
+    });
 }
 
-Status OrdinalIndexReader::do_load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta,
-                                   ordinal_t num_values, bool use_page_cache, bool kept_in_memory) {
+Status OrdinalIndexReader::_do_load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta,
+                                    ordinal_t num_values, bool use_page_cache, bool kept_in_memory) {
     if (meta.root_page().is_root_data_page()) {
         // only one data page, no index page
         _num_pages = 1;
@@ -117,6 +127,12 @@ Status OrdinalIndexReader::do_load(FileSystem* fs, const std::string& filename, 
     return Status::OK();
 }
 
+void OrdinalIndexReader::_reset() {
+    _num_pages = 0;
+    std::vector<ordinal_t>{}.swap(_ordinals);
+    std::vector<PagePointer>{}.swap(_pages);
+}
+
 OrdinalPageIndexIterator OrdinalIndexReader::seek_at_or_before(ordinal_t ordinal) {
     int32_t left = 0;
     int32_t right = _num_pages - 1;
@@ -133,9 +149,9 @@ OrdinalPageIndexIterator OrdinalIndexReader::seek_at_or_before(ordinal_t ordinal
         }
     }
     if (_ordinals[left] > ordinal) {
-        return OrdinalPageIndexIterator(this, _num_pages);
+        return {this, _num_pages};
     }
-    return OrdinalPageIndexIterator(this, left);
+    return {this, left};
 }
 
 } // namespace starrocks

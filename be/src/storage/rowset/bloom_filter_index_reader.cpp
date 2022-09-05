@@ -31,12 +31,22 @@
 namespace starrocks {
 
 StatusOr<bool> BloomFilterIndexReader::load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                                            bool use_page_cache, bool kept_in_memory) {
-    return success_once(_load_once, [&]() { return do_load(fs, filename, meta, use_page_cache, kept_in_memory); });
+                                            bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker) {
+    return success_once(_load_once, [&]() {
+        size_t old_mem_usage = mem_usage();
+        Status st = _do_load(fs, filename, meta, use_page_cache, kept_in_memory);
+        if (st.ok()) {
+            size_t new_mem_usage = mem_usage();
+            MEM_TRACKER_SAFE_CONSUME(mem_tracker, new_mem_usage - old_mem_usage);
+        } else {
+            _reset();
+        }
+        return st;
+    });
 }
 
-Status BloomFilterIndexReader::do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                                       bool use_page_cache, bool kept_in_memory) {
+Status BloomFilterIndexReader::_do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
+                                        bool use_page_cache, bool kept_in_memory) {
     _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
     _algorithm = meta.algorithm();
     _hash_strategy = meta.hash_strategy();
@@ -44,6 +54,13 @@ Status BloomFilterIndexReader::do_load(FileSystem* fs, const std::string& filena
     _bloom_filter_reader = std::make_unique<IndexedColumnReader>(fs, filename, bf_index_meta);
     RETURN_IF_ERROR(_bloom_filter_reader->load(use_page_cache, kept_in_memory));
     return Status::OK();
+}
+
+void BloomFilterIndexReader::_reset() {
+    _typeinfo.reset();
+    _algorithm = BLOCK_BLOOM_FILTER;
+    _hash_strategy = HASH_MURMUR3_X64_64;
+    _bloom_filter_reader.reset();
 }
 
 Status BloomFilterIndexReader::new_iterator(std::unique_ptr<BloomFilterIndexIterator>* iterator) {

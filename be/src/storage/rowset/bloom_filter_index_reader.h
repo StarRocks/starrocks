@@ -27,6 +27,7 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
+#include "runtime/mem_tracker.h"
 #include "storage/column_block.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
@@ -46,12 +47,7 @@ class BloomFilterIndexReader {
     friend class BloomFilterIndexIterator;
 
 public:
-    BloomFilterIndexReader()
-            : _load_once(),
-              _typeinfo(),
-              _algorithm(BLOCK_BLOOM_FILTER),
-              _hash_strategy(HASH_MURMUR3_X64_64),
-              _bloom_filter_reader() {}
+    BloomFilterIndexReader() = default;
 
     // Multiple callers may call this method concurrently, but only the first one
     // can load the data, the others will wait until the first one finished loading
@@ -60,7 +56,7 @@ public:
     // Return true if the index data was successfully loaded by the caller, false if
     // the data was loaded by another caller.
     StatusOr<bool> load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                        bool use_page_cache, bool kept_in_memory);
+                        bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker);
 
     // create a new column iterator.
     // REQUIRES: the index data has been successfully `load()`ed into memory.
@@ -79,13 +75,15 @@ public:
     bool loaded() const { return invoked(_load_once); }
 
 private:
-    Status do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta, bool use_page_cache,
-                   bool kept_in_memory);
+    Status _do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta, bool use_page_cache,
+                    bool kept_in_memory);
+
+    void _reset();
 
     OnceFlag _load_once;
     TypeInfoPtr _typeinfo;
-    BloomFilterAlgorithmPB _algorithm;
-    HashStrategyPB _hash_strategy;
+    BloomFilterAlgorithmPB _algorithm = BLOCK_BLOOM_FILTER;
+    HashStrategyPB _hash_strategy = HASH_MURMUR3_X64_64;
     std::unique_ptr<IndexedColumnReader> _bloom_filter_reader;
 };
 

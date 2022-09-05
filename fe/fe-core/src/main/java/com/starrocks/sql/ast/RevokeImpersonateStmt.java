@@ -12,6 +12,10 @@ public class RevokeImpersonateStmt extends BaseGrantRevokeImpersonateStmt {
         super(authorizedUser, securedUser, "REVOKE", "FROM");
     }
 
+    public RevokeImpersonateStmt(String authorizedRoleName, UserIdentity securedUser) {
+        super(authorizedRoleName, securedUser, "REVOKE", "FROM");
+    }
+
     @Override
     public boolean isSupportNewPlanner() {
         return true;

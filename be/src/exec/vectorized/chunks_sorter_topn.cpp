@@ -5,7 +5,6 @@
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exec/vectorized/sorting/merge.h"
-#include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "exprs/expr.h"

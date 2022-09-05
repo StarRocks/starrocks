@@ -157,12 +157,18 @@ public class CTEContext {
 
     /*
      * Inline CTE consume sense:
+     * 0. All CTEConsumer been pruned
      * 1. Disable CTE reuse, must inline all CTE
      * 2. CTE consume only use once, it's meanings none CTE data reuse
      * 3. CTE ratio less zero
      * 4. limit CTE num strategy
      */
     public boolean needInline(int cteId) {
+        // 0. All CTEConsumer been pruned
+        if (!consumeNums.containsKey(cteId)) {
+            return true;
+        }
+
         if (forceCTEList.contains(cteId)) {
             return false;
         }

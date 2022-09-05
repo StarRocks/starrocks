@@ -2,7 +2,6 @@
 
 #include "udf/java/java_udf.h"
 
-#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <sstream>
@@ -10,16 +9,12 @@
 
 #include "column/binary_column.h"
 #include "column/column.h"
-#include "column/fixed_length_column.h"
-#include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "fmt/compile.h"
 #include "fmt/core.h"
 #include "jni.h"
 #include "runtime/primitive_type.h"
 #include "udf/java/java_native_method.h"
 #include "udf/java/utils.h"
-#include "udf/udf.h"
 #include "udf/udf_internal.h"
 #include "util/defer_op.h"
 
@@ -885,6 +880,14 @@ jobject UDAFFunction::window_update_batch(int state, int peer_group_start, int p
     jobject res = env->CallObjectMethodA(_udaf_handle, window_update, jvalues);
     CHECK_UDF_CALL_EXCEPTION(env, _function_context);
     return res;
+}
+
+Status detect_java_runtime() {
+    const char* p = std::getenv("JAVA_HOME");
+    if (p == nullptr) {
+        return Status::RuntimeError("env 'JAVA_HOME' is not set");
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::vectorized

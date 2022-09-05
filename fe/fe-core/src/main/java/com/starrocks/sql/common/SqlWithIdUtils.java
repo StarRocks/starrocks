@@ -92,7 +92,7 @@ public class SqlWithIdUtils {
         for (Table table : tableMap.values()) {
             sql = sql.replaceAll(TABLE_ID_PREFIX + table.getId() + COMMON_SUFFIX, table.getName());
         }
-        return SqlParser.parse(sql, context.getSessionVariable().getSqlMode()).get(0);
+        return SqlParser.parse(sql, context.getSessionVariable()).get(0);
     }
 
     private static class SqlEncoderVisitor extends AST2SQL.SQLBuilder {

@@ -37,6 +37,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
@@ -53,6 +54,7 @@ import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -471,6 +473,28 @@ public class ScalarOperatorToExpr {
 
             CaseExpr result = new CaseExpr(caseExpr, list, elseExpr);
             result.setType(operator.getType());
+            return result;
+        }
+
+
+        @Override
+        public Expr visitLambdaFunctionOperator(LambdaFunctionOperator operator, FormatterContext context) {
+            // lambda arguments
+            List<Expr> arguments = Lists.newArrayList();
+            List<Expr> newArguments = Lists.newArrayList();
+            for (ColumnRefOperator ref : operator.getRefColumns()) {
+                SlotRef slot = new SlotRef(new SlotDescriptor(
+                        new SlotId(ref.getId()), ref.getName(), ref.getType(), ref.isNullable()));
+                context.colRefToExpr.put(ref, slot);
+                arguments.add(slot);
+            }
+            // lambda expression and put it at the first
+            final ScalarOperator lambdaOp = operator.getLambdaExpr();
+            final Expr lambdaExpr = buildExpr.build(lambdaOp, context);
+            newArguments.add(lambdaExpr);
+            newArguments.addAll(arguments);
+            Expr result = new LambdaFunctionExpr(newArguments);
+            result.setType(Type.FUNCTION);
             return result;
         }
 
