@@ -411,8 +411,8 @@ StatusOr<bool> OlapScanNode::_could_split_tablet_physically(const std::vector<TS
     ASSIGN_OR_RETURN(TabletSharedPtr first_tablet, get_tablet(&(scan_ranges[0].scan_range.internal_scan_range)));
     KeysType keys_type = first_tablet->tablet_schema().keys_type();
     const auto skip_aggr = thrift_olap_scan_node().is_preaggregation;
-    bool is_keys_type_matched =
-            keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr);
+    bool is_keys_type_matched = keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
+                                ((keys_type == UNIQUE_KEYS || keys_type == AGG_KEYS) && skip_aggr);
     return is_keys_type_matched;
 }
 
