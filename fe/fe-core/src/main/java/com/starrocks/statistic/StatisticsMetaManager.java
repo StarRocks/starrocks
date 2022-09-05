@@ -10,9 +10,6 @@ import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -67,36 +64,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
     }
 
     private boolean checkReplicateNormal(String tableName) {
-        int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
-        int total = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
-        // maybe cluster just shutdown, ignore
-        if (aliveSize <= total / 2) {
-            lossTableCount = 0;
-            return true;
-        }
-
-        Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
-        Preconditions.checkState(db != null);
-        OlapTable table = (OlapTable) db.getTable(tableName);
-        Preconditions.checkState(table != null);
-
-        boolean check = true;
-        for (Partition partition : table.getPartitions()) {
-            // check replicate miss
-            if (partition.getBaseIndex().getTablets().stream()
-                    .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
-                check = false;
-                break;
-            }
-        }
-
-        if (!check) {
-            lossTableCount++;
-        } else {
-            lossTableCount = 0;
-        }
-
-        return lossTableCount < 3;
+        return true;
     }
 
     private static final List<String> KEY_COLUMN_NAMES = ImmutableList.of(
