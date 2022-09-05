@@ -1934,7 +1934,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (stmt.isExternal()) {
             olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
-        } else if (stmt.isLakeEngine()) {
+        } else if (true) {
             olapTable = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
 
             // storage cache property
