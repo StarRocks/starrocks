@@ -1073,7 +1073,6 @@ PARALLEL_TEST(ArrayColumnTest, test_empty_null_array) {
     ASSERT_EQ("[]", column->debug_item(0));
     ASSERT_EQ("[4, 5, 6]", column->debug_item(1));
 
-
     null_map->get_data()[1] = 1;
     res = column->empty_null_array(null_map);
     ASSERT_TRUE(res);
