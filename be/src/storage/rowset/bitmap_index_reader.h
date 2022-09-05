@@ -50,7 +50,7 @@ class IndexedColumnIterator;
 
 class BitmapIndexReader {
 public:
-    BitmapIndexReader() : _load_once(), _has_null(false) {}
+    BitmapIndexReader() = default;
 
     // Load index data into memory.
     //
@@ -94,14 +94,16 @@ private:
         kLoaded = 2,   // data was successfully loaded in memory
     };
 
-    Status do_load(fs::BlockManager* fs, const std::string& filename, const BitmapIndexPB& meta, bool use_page_cache,
-                   bool kept_in_memory, MemTracker* mem_tracker);
+    void _reset();
+
+    Status _do_load(fs::BlockManager* fs, const std::string& filename, const BitmapIndexPB& meta, bool use_page_cache,
+                    bool kept_in_memory);
 
     OnceFlag _load_once;
     TypeInfoPtr _typeinfo;
     std::unique_ptr<IndexedColumnReader> _dict_column_reader;
     std::unique_ptr<IndexedColumnReader> _bitmap_column_reader;
-    bool _has_null;
+    bool _has_null = false;
 };
 
 class BitmapIndexIterator {
