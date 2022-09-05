@@ -12,8 +12,10 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.MysqlTableSink;
@@ -30,6 +32,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.TypeManager;
@@ -74,6 +77,68 @@ import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
 public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
+
+    public ExecPlan planViewUpdate(InsertStmt insertStmt, QueryStatement viewStmt, MaterializedView view,
+                                   ConnectContext session) {
+        QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
+        List<ColumnRefOperator> outputColumns = new ArrayList<>();
+        if (queryRelation instanceof ValuesRelation) {
+            castLiteralToTargetColumnsType(insertStmt);
+        }
+
+        // Build logical plan for view query
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        LogicalPlan logicalPlan =
+                new RelationTransformer(columnRefFactory, session).transform(
+                        insertStmt.getQueryStatement().getQueryRelation());
+        OptExprBuilder optExprBuilder = fillDefaultValue(logicalPlan, columnRefFactory, insertStmt, outputColumns);
+        optExprBuilder = fillShadowColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
+        optExprBuilder =
+                castOutputColumnsTypeToTargetColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
+
+        // Attach insert relation to view query
+        // TODO
+
+        // Optimize view query with stream plan
+        logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
+        Optimizer optimizer = new Optimizer();
+        PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
+        session.getSessionVariable().enableStreamPlanner(true);
+        OptExpression optimizedPlan = optimizer.optimize(
+                session,
+                logicalPlan.getRoot(),
+                requiredPropertySet,
+                new ColumnRefSet(logicalPlan.getOutputColumn()),
+                columnRefFactory);
+        session.getSessionVariable().enableStreamPlanner(false);
+
+        // Build plan fragment
+        boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
+                || insertStmt.getTargetTable() instanceof MysqlTable);
+        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+        DescriptorTable descriptorTable = execPlan.getDescTbl();
+
+        TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
+        long tableId = view.getId();
+        for (Column column : insertStmt.getTargetTable().getFullSchema()) {
+            SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
+            slotDescriptor.setIsMaterialized(true);
+            slotDescriptor.setType(column.getType());
+            slotDescriptor.setColumn(column);
+            slotDescriptor.setIsNullable(column.isAllowNull());
+        }
+        olapTuple.computeMemLayout();
+
+        // Attach ViewUpdateSink ahead of view query
+        // TODO: Replace with ViewUpdateSink
+        List<Long> partitionIds = view.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
+        DataSink dataSink = new OlapTableSink(view, olapTuple, partitionIds);
+        execPlan.getFragments().get(0).setSink(dataSink);
+
+        return execPlan;
+    }
 
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();

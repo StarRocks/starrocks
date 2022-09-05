@@ -4,6 +4,7 @@ package com.starrocks.sql;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
@@ -15,6 +16,8 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
@@ -37,8 +40,27 @@ public class StatementPlanner {
         return plan(stmt, session, true, TResultSinkType.MYSQL_PROTOCAL);
     }
 
-    public static ExecPlan plan(StatementBase stmt, ConnectContext session, boolean lockDb,
-                                TResultSinkType resultSinkType) {
+    public static ExecPlan planViewUpdate(InsertStmt insertStmt, MaterializedView view, ConnectContext session) {
+        String viewSql = view.getViewDefineSql();
+        List<StatementBase> viewStmts = com.starrocks.sql.parser.SqlParser.parse(viewSql, session.getSessionVariable());
+        if (viewStmts.size() != 1 || !(viewStmts.get(0) instanceof QueryStatement)) {
+            throw new StarRocksPlannerException("Invalid realtime view definition: " + viewSql, ErrorType.USER_ERROR);
+        }
+        QueryStatement viewStmt = (QueryStatement) viewStmts.get(0);
+
+        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, insertStmt);
+        try {
+            lock(dbs);
+            Analyzer.analyze(insertStmt, session);
+            PrivilegeChecker.check(insertStmt, session);
+
+            return new InsertPlanner().planViewUpdate(insertStmt, viewStmt, view, session);
+        } finally {
+            unLock(dbs);
+        }
+    }
+
+    public static ExecPlan plan(StatementBase stmt, ConnectContext session, boolean lockDb, TResultSinkType resultSinkType) {
         if (stmt instanceof QueryStatement) {
             OptimizerTraceUtil.logQueryStatement(session, "after parse:\n%s", (QueryStatement) stmt);
         }

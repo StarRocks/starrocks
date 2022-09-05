@@ -158,6 +158,9 @@ public enum RuleType {
     IMP_CTE_ANCHOR,
     IMP_CTE_ANCHOR_TO_NO_CTE,
     IMP_CTE_PRODUCE,
+    IMP_STREAM_SCAN,
+    IMP_STREAM_JOIN,
+    IMP_STREAM_AGG,
 
     NUM_RULES;
 
