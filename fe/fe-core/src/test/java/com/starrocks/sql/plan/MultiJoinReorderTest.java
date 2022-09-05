@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -200,15 +200,15 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "join (select * from t1 join t3 on t1.v4 = t3.v10 join t0 on t1.v4 = t0.v2 join t2 on t1.v5 = t2.v8) as a  " +
                 "on t1.v5 = a.v8 ";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("24:HASH JOIN\n" +
+        Assert.assertTrue(planFragment, planFragment.contains("24:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 10: v4 = 13: v10"));
+                "  |  equal join conjunct: 1: v4 = 4: v10"));
 
-        Assert.assertTrue(planFragment.contains("19:HASH JOIN\n" +
+        Assert.assertTrue(planFragment, planFragment.contains("19:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 4: v10 = 1: v4"));
+                "  |  equal join conjunct: 13: v10 = 10: v4"));
     }
 
     @Test
@@ -377,11 +377,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=1/1\n" +
                 "     rollup: t2\n" +
-                "     tabletRatio=3/3\n" +
-                "     tabletList=10024,10026,10028\n" +
-                "     cardinality=100000\n" +
-                "     avgRowSize=1.0\n" +
-                "     numNodes=0\n"));
+                "     tabletRatio=3/3\n"));
 
         // Right sub join tree (a)
         assertContains(planFragment, "  STREAM DATA SINK\n" +
@@ -456,6 +452,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "select v1,v4 from t0 join t1 on v1 = v4 ) a join (" +
                 "select t1a, null as t1b,v7 from test_all_type join t2 on t1a = v7) b on v1 = t1a";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("<slot 27> : CAST(NULL AS VARCHAR(20))"));
+        Assert.assertTrue(plan.contains("<slot 27> : NULL"));
     }
 }

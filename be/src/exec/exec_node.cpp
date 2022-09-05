@@ -60,7 +60,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
-#include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "simd/simd.h"
 #include "util/debug_util.h"
@@ -147,7 +147,10 @@ void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state,
 
 void ExecNode::register_runtime_filter_descriptor(RuntimeState* state,
                                                   vectorized::RuntimeFilterProbeDescriptor* rf_desc) {
+    rf_desc->set_probe_plan_node_id(_id);
     _runtime_filter_collector.add_descriptor(rf_desc);
+    ExecEnv::GetInstance()->add_rf_event({state->query_id(), rf_desc->filter_id(), BackendOptions::get_localhost(),
+                                          strings::Substitute("REGISTER_GRF(probe_node_id=$0", _id)});
     state->runtime_filter_port()->add_listener(rf_desc);
 }
 
@@ -437,6 +440,7 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new vectorized::TopNNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::CROSS_JOIN_NODE:
+    case TPlanNodeType::NESTLOOP_JOIN_NODE:
         *node = pool->add(new vectorized::CrossJoinNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::UNION_NODE:

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.mv;
 
@@ -33,10 +33,10 @@ import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 // we need rewrite percentile_approx to percentile_approx_raw(percentile_union)
 // TODO(kks): Remove this class if we support percentile_union_count aggregate function later
 public class MVProjectAggProjectScanRewrite {
-    private static final MVProjectAggProjectScanRewrite instance = new MVProjectAggProjectScanRewrite();
+    private static final MVProjectAggProjectScanRewrite INSTANCE = new MVProjectAggProjectScanRewrite();
 
     public static MVProjectAggProjectScanRewrite getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     public void rewriteOptExpressionTree(

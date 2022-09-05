@@ -1,12 +1,14 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 namespace cpp starrocks
 namespace java com.starrocks.thrift
 
 enum TWorkGroupType {
+  // Not suppported.
   WG_REALTIME,
   WG_NORMAL,
-  WG_DEFAULT
+  WG_DEFAULT,
+  WG_SHORT_QUERY
 }
 
 struct TWorkGroup {

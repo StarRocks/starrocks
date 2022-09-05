@@ -56,7 +56,7 @@ public class TimeUtils {
     private static final TimeZone TIME_ZONE;
 
     // set CST to +08:00 instead of America/Chicago
-    public static final ImmutableMap<String, String> timeZoneAliasMap = ImmutableMap.of(
+    public static final ImmutableMap<String, String> TIME_ZONE_ALIAS_MAP = ImmutableMap.of(
             "CST", DEFAULT_TIME_ZONE, "PRC", DEFAULT_TIME_ZONE);
 
     // NOTICE: Date formats are not synchronized.
@@ -126,12 +126,12 @@ public class TimeUtils {
         } else {
             timezone = VariableMgr.getDefaultSessionVariable().getTimeZone();
         }
-        return TimeZone.getTimeZone(ZoneId.of(timezone, timeZoneAliasMap));
+        return TimeZone.getTimeZone(ZoneId.of(timezone, TIME_ZONE_ALIAS_MAP));
     }
 
     // return the time zone of current system
     public static TimeZone getSystemTimeZone() {
-        return TimeZone.getTimeZone(ZoneId.of(ZoneId.systemDefault().getId(), timeZoneAliasMap));
+        return TimeZone.getTimeZone(ZoneId.of(ZoneId.systemDefault().getId(), TIME_ZONE_ALIAS_MAP));
     }
 
     // get time zone of given zone name, or return system time zone if name is null.
@@ -139,7 +139,7 @@ public class TimeUtils {
         if (timeZone == null) {
             return getSystemTimeZone();
         }
-        return TimeZone.getTimeZone(ZoneId.of(timeZone, timeZoneAliasMap));
+        return TimeZone.getTimeZone(ZoneId.of(timeZone, TIME_ZONE_ALIAS_MAP));
     }
 
     public static String longToTimeString(long timeStamp, SimpleDateFormat dateFormat) {
@@ -246,7 +246,7 @@ public class TimeUtils {
                     ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_TIME_ZONE, value);
                 }
             }
-            ZoneId.of(value, timeZoneAliasMap);
+            ZoneId.of(value, TIME_ZONE_ALIAS_MAP);
             return value;
         } catch (DateTimeException ex) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_TIME_ZONE, value);
@@ -270,7 +270,7 @@ public class TimeUtils {
         }
     }
 
-    public static long convertTimeUnitValuetoSecond(long value, TimeUnit unit) {
+    public static long convertTimeUnitValueToSecond(long value, TimeUnit unit) {
         switch (unit) {
             case DAYS:
                 return value * 60 * 60 * 24;

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "butil/file_util.h"
 #include "column/column_helper.h"
@@ -50,14 +50,16 @@ int main(int argc, char** argv) {
     std::vector<starrocks::StorePath> paths;
     paths.emplace_back(starrocks::config::storage_root_path);
 
-    std::unique_ptr<starrocks::MemTracker> table_meta_mem_tracker = std::make_unique<starrocks::MemTracker>();
-    std::unique_ptr<starrocks::MemTracker> schema_change_mem_tracker = std::make_unique<starrocks::MemTracker>();
-    std::unique_ptr<starrocks::MemTracker> compaction_mem_tracker = std::make_unique<starrocks::MemTracker>();
-    std::unique_ptr<starrocks::MemTracker> update_mem_tracker = std::make_unique<starrocks::MemTracker>();
+    auto metadata_mem_tracker = std::make_unique<starrocks::MemTracker>();
+    auto tablet_schema_mem_tracker =
+            std::make_unique<starrocks::MemTracker>(-1, "tablet_schema", metadata_mem_tracker.get());
+    auto schema_change_mem_tracker = std::make_unique<starrocks::MemTracker>();
+    auto compaction_mem_tracker = std::make_unique<starrocks::MemTracker>();
+    auto update_mem_tracker = std::make_unique<starrocks::MemTracker>();
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;
-    options.tablet_meta_mem_tracker = table_meta_mem_tracker.get();
+    options.metadata_mem_tracker = metadata_mem_tracker.get();
     options.schema_change_mem_tracker = schema_change_mem_tracker.get();
     options.compaction_mem_tracker = compaction_mem_tracker.get();
     options.update_mem_tracker = update_mem_tracker.get();
@@ -79,9 +81,7 @@ int main(int argc, char** argv) {
     (void)butil::DeleteFile(storage_root, true);
     starrocks::vectorized::TEST_clear_all_columns_this_thread();
     // delete engine
-    engine->stop();
-    delete engine;
-    exec_env->set_storage_engine(nullptr);
+    starrocks::StorageEngine::instance()->stop();
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     starrocks::ExecEnv::destroy(exec_env);

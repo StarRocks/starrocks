@@ -25,7 +25,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -127,7 +126,7 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
                 break CHECK;
             }
             StringLiteral stringLiteral = (StringLiteral) binaryPredicate.getChild(1);
-            jobName = stringLiteral.getValue().toLowerCase();
+            jobName = stringLiteral.getValue();
         }
 
         if (!valid) {

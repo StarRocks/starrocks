@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -10,6 +10,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.SubqueryUtils;
@@ -67,6 +68,12 @@ public class ScalarApply2JoinRule extends TransformationRule {
 
     private List<OptExpression> transformCorrelate(OptExpression input, LogicalApplyOperator apply,
                                                    OptimizerContext context) {
+        // check correlation filter
+        if (!SubqueryUtils.checkAllIsBinaryEQ(Utils.extractConjuncts(apply.getCorrelationConjuncts()),
+                apply.getCorrelationColumnRefs())) {
+            throw new SemanticException("Not support Non-EQ correlation predicate correlation scalar-subquery");
+        }
+
         if (apply.isNeedCheckMaxRows()) {
             return transformCorrelateWithCheckOneRows(input, apply, context);
         } else {

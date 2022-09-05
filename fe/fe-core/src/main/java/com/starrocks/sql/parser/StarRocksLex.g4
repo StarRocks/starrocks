@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 lexer grammar StarRocksLex;
 @parser::members {public static long sqlMode;}
@@ -20,6 +20,7 @@ AS: 'AS';
 ASC: 'ASC';
 ASYNC: 'ASYNC';
 AUTHORS: 'AUTHORS';
+AUTHENTICATION: 'AUTHENTICATION';
 AVG: 'AVG';
 BACKEND: 'BACKEND';
 BACKENDS: 'BACKENDS';
@@ -75,6 +76,7 @@ DECIMALV2: 'DECIMALV2';
 DECIMAL32: 'DECIMAL32';
 DECIMAL64: 'DECIMAL64';
 DECIMAL128: 'DECIMAL128';
+DECOMMISSION: 'DECOMMISSION';
 DEFAULT: 'DEFAULT';
 DELETE: 'DELETE';
 DENSE_RANK: 'DENSE_RANK';
@@ -137,6 +139,7 @@ HLL: 'HLL';
 HLL_UNION: 'HLL_UNION';
 HOST: 'HOST';
 HOUR: 'HOUR';
+HUB: 'HUB';
 IDENTIFIED: 'IDENTIFIED';
 IF: 'IF';
 IMPERSONATE: 'IMPERSONATE';
@@ -246,6 +249,7 @@ REPLICA: 'REPLICA';
 REPOSITORY: 'REPOSITORY';
 REPOSITORIES: 'REPOSITORIES';
 RESOURCE: 'RESOURCE';
+RESOURCES: 'RESOURCES';
 RESTORE: 'RESTORE';
 RESUME: 'RESUME';
 RETURNS: 'RETURNS';

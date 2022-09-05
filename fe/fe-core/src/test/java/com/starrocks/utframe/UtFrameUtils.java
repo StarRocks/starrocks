@@ -26,8 +26,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
@@ -37,6 +35,7 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
@@ -61,6 +60,8 @@ import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.SqlDigestBuilder;
@@ -78,10 +79,12 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.plan.ReplayHiveRepository;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.codec.binary.Hex;
 
 import java.io.ByteArrayInputStream;
@@ -111,10 +114,10 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
 
 public class UtFrameUtils {
-    private final static AtomicInteger INDEX = new AtomicInteger(0);
-    private final static AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
+    private static final AtomicInteger INDEX = new AtomicInteger(0);
+    private static final AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
 
-    public static final String createStatisticsTableStmt = "CREATE TABLE `table_statistic_v1` (\n" +
+    public static final String CREATE_STATISTICS_TABLE_STMT = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
             "  `column_name` varchar(65530) NOT NULL COMMENT \"\",\n" +
             "  `db_id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -138,7 +141,7 @@ public class UtFrameUtils {
             ");";
 
     // Help to create a mocked ConnectContext.
-    public static ConnectContext createDefaultCtx() throws IOException {
+    public static ConnectContext createDefaultCtx() {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setQualifiedUser(Auth.ROOT_USER);
@@ -252,7 +255,7 @@ public class UtFrameUtils {
         frontend.start(startBDB, new String[0]);
     }
 
-    public synchronized static void createMinStarRocksCluster(boolean startBDB) {
+    public static synchronized void createMinStarRocksCluster(boolean startBDB) {
         // to avoid call createMinStarRocksCluster multiple times
         if (CREATED_MIN_CLUSTER.get()) {
             return;
@@ -294,7 +297,6 @@ public class UtFrameUtils {
         disks.put(diskInfo1.getRootPath(), diskInfo1);
         be.setDisks(ImmutableMap.copyOf(disks));
         be.setAlive(true);
-        be.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
         be.setBePort(backend.getBeThriftPort());
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
@@ -394,7 +396,7 @@ public class UtFrameUtils {
 
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
         StatementBase statementBase =
-                com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())
+                com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable())
                         .get(0);
         Preconditions.checkState(statementBase instanceof QueryStatement);
         QueryStatement queryStmt = (QueryStatement) statementBase;
@@ -415,13 +417,23 @@ public class UtFrameUtils {
         if (!starRocksAssert.databaseExist("_statistics_")) {
             starRocksAssert.withDatabaseWithoutAnalyze(StatsConstants.STATISTICS_DB_NAME)
                     .useDatabase(StatsConstants.STATISTICS_DB_NAME);
-            starRocksAssert.withTable(createStatisticsTableStmt);
+            starRocksAssert.withTable(CREATE_STATISTICS_TABLE_STMT);
         }
         // prepare dump mock environment
         // statement
         String replaySql = replayDumpInfo.getOriginStmt();
         // session variable
         connectContext.setSessionVariable(replayDumpInfo.getSessionVariable());
+        // create resource
+        for (String createResourceStmt : replayDumpInfo.getCreateResourceStmtList()) {
+            starRocksAssert.withResource(createResourceStmt);
+        }
+        // mock replay external table info
+        if (!replayDumpInfo.getHmsTableMap().isEmpty()) {
+            ReplayHiveRepository replayHiveRepository = new ReplayHiveRepository(replayDumpInfo.getHmsTableMap());
+            connectContext.getGlobalStateMgr().setHiveRepository(replayHiveRepository);
+        }
+
         // create table
         int backendId = 10002;
         int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
@@ -463,6 +475,12 @@ public class UtFrameUtils {
         for (int i = 1; i < replayDumpInfo.getBeNum(); ++i) {
             UtFrameUtils.addMockBackend(backendId++);
         }
+        // mock be core stat
+        for (Map.Entry<Long, Integer> entry : replayDumpInfo.getNumOfHardwareCoresPerBe().entrySet()) {
+            BackendCoreStat.setNumOfHardwareCoresOfBe(entry.getKey(), entry.getValue());
+        }
+        BackendCoreStat.setCachedAvgNumOfHardwareCores(replayDumpInfo.getCachedAvgNumOfHardwareCores());
+
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
@@ -476,7 +494,7 @@ public class UtFrameUtils {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : replayDumpInfo.getTableStatisticsMap()
                 .entrySet()) {
             String dbName = entry.getKey().split("\\.")[0];
-            OlapTable replayTable = (OlapTable) connectContext.getGlobalStateMgr().getDb("" + dbName)
+            Table replayTable = connectContext.getGlobalStateMgr().getDb("" + dbName)
                     .getTable(entry.getKey().split("\\.")[1]);
             for (Map.Entry<String, ColumnStatistic> columnStatisticEntry : entry.getValue().entrySet()) {
                 GlobalStateMgr.getCurrentStatisticStorage()
@@ -514,7 +532,8 @@ public class UtFrameUtils {
 
         ExecPlan execPlan = new PlanFragmentBuilder()
                 .createPhysicalPlan(optimizedPlan, connectContext,
-                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>());
+                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
+                        TResultSinkType.MYSQL_PROTOCAL, true);
 
         OperatorStrings operatorPrinter = new OperatorStrings();
         return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);
@@ -532,7 +551,7 @@ public class UtFrameUtils {
         Map<String, Database> dbs = null;
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
-                    connectContext.getSessionVariable().getSqlMode()).get(0);
+                    connectContext.getSessionVariable()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
 
             dbs = AnalyzerUtils.collectAllDatabase(connectContext, statementBase);
@@ -613,7 +632,7 @@ public class UtFrameUtils {
         private DataOutputBuffer buffer;
         private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-        protected static void setUpImageVersion (){
+        protected static void setUpImageVersion() {
             MetaContext metaContext = new MetaContext();
             metaContext.setMetaVersion(FeMetaVersion.VERSION_CURRENT);
             metaContext.setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_CURRENT);
@@ -643,9 +662,11 @@ public class UtFrameUtils {
      */
     public static class PseudoJournalReplayer {
         // master journal queue
-        private static BlockingQueue<JournalTask> masterJournalQueue = new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+        private static BlockingQueue<JournalTask> masterJournalQueue =
+                new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
         // follower journal queue
-        private static BlockingQueue<JournalTask> followerJournalQueue = new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+        private static BlockingQueue<JournalTask> followerJournalQueue =
+                new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
         // constantly move master journal to follower and mark succeed
         private static Thread fakeJournalWriter = null;
 

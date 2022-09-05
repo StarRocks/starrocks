@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive.events;
 
@@ -40,7 +40,7 @@ public abstract class MetastoreTableEvent extends MetastoreEvent {
      * Returns a list of parameters that are set by Hive for tables/partitions that can be
      * ignored to determine if the alter table/partition event is a trivial one.
      */
-    static final List<String> parametersToIgnore =
+    private static final List<String> PARAMETERS_TO_IGNORE =
             new ImmutableList.Builder<String>()
                     .add("transient_lastDdlTime")
                     .add("numFilesErasureCoded")
@@ -52,7 +52,7 @@ public abstract class MetastoreTableEvent extends MetastoreEvent {
      * Util method that sets the parameters that can be ignored equal before and after event.
      */
     protected static void filterParameters(Map<String, String> parametersBefore, Map<String, String> parametersAfter) {
-        for (String parameter : parametersToIgnore) {
+        for (String parameter : PARAMETERS_TO_IGNORE) {
             String val = parametersBefore.get(parameter);
             if (val == null) {
                 parametersAfter.remove(parameter);

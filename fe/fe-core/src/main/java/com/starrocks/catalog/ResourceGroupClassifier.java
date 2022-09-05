@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
@@ -14,7 +14,6 @@ import org.apache.commons.net.util.SubnetUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -23,9 +22,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class ResourceGroupClassifier implements Writable {
-    public static final Pattern UseRolePattern = Pattern.compile("^\\w+$");
-    public static final Set<String> QUERY_TYPES =
-            Arrays.stream(QueryType.values()).map(Enum::name).collect(Collectors.toSet());
+    public static final Pattern USE_ROLE_PATTERN = Pattern.compile("^\\w+$");
     public static final ImmutableSet<String> SUPPORTED_QUERY_TYPES =
             ImmutableSet.of(QueryType.SELECT.name());
 

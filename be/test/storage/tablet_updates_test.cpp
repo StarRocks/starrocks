@@ -1,10 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/tablet_updates.h"
 
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <memory>
 #include <string>
 #include <thread>
 
@@ -288,8 +289,8 @@ public:
     }
 
     void SetUp() override {
-        _compaction_mem_tracker.reset(new MemTracker(-1));
-        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
+        _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
+        _metadata_mem_tracker = std::make_unique<MemTracker>();
     }
 
     void TearDown() override {
@@ -448,7 +449,7 @@ protected:
     TabletSharedPtr _tablet;
     TabletSharedPtr _tablet2;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker;
 };
 
 static TabletSharedPtr load_same_tablet_from_store(MemTracker* mem_tracker, const TabletSharedPtr& tablet) {
@@ -760,7 +761,7 @@ void TabletUpdatesTest::test_noncontinous_meta_save_load(bool enable_persistent_
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     _tablet->save_meta();
 
-    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
+    auto tablet1 = load_same_tablet_from_store(_metadata_mem_tracker.get(), _tablet);
 
     ASSERT_EQ(2, tablet1->updates()->num_pending());
     ASSERT_EQ(2, tablet1->updates()->max_version());
@@ -798,7 +799,7 @@ void TabletUpdatesTest::test_save_meta(bool enable_persistent_index) {
 
     _tablet->save_meta();
 
-    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
+    auto tablet1 = load_same_tablet_from_store(_metadata_mem_tracker.get(), _tablet);
     ASSERT_EQ(31, tablet1->updates()->version_history_count());
     ASSERT_EQ(31, tablet1->updates()->max_version());
 
@@ -876,7 +877,7 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     EXPECT_EQ(-1, read_tablet(_tablet, 2));
     EXPECT_EQ(-1, read_tablet(_tablet, 1));
 
-    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
+    auto tablet1 = load_same_tablet_from_store(_metadata_mem_tracker.get(), _tablet);
     EXPECT_EQ(1, tablet1->updates()->version_history_count());
     EXPECT_EQ(4, tablet1->updates()->max_version());
     EXPECT_EQ(N, read_tablet(tablet1, 4));
@@ -919,11 +920,14 @@ void TabletUpdatesTest::test_apply(bool enable_persistent_index) {
         ASSERT_EQ(version, _tablet->updates()->max_version());
         ASSERT_EQ(version, _tablet->updates()->version_history_count());
     }
-    ASSERT_EQ(N, read_tablet(_tablet, rowsets.size()));
+    ASSERT_EQ(N, read_tablet(_tablet, rowsets.size() + 1));
 
     // Ensure the persistent meta is correct.
     auto max_version = rowsets.size() + 1;
-    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
+    auto tablet1 = load_same_tablet_from_store(_metadata_mem_tracker.get(), _tablet);
+    // `enable_persistent_index` is not persistent in this case
+    // so we reset the `enable_persistent_index` after load
+    tablet1->set_enable_persistent_index(enable_persistent_index);
     EXPECT_EQ(max_version, tablet1->updates()->max_version());
     EXPECT_EQ(max_version, tablet1->updates()->version_history_count());
     for (int i = 2; i <= max_version; i++) {
@@ -1004,7 +1008,7 @@ void TabletUpdatesTest::test_concurrent_write_read_and_gc(bool enable_persistent
     EXPECT_EQ(version.load(), _tablet->updates()->max_version());
 
     // Ensure the persistent meta is correct.
-    auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
+    auto tablet1 = load_same_tablet_from_store(_metadata_mem_tracker.get(), _tablet);
     EXPECT_EQ(1, tablet1->updates()->version_history_count());
     EXPECT_EQ(version.load(), tablet1->updates()->max_version());
     EXPECT_EQ(N, read_tablet(tablet1, version.load()));
@@ -1213,22 +1217,35 @@ void TabletUpdatesTest::test_compaction_with_empty_rowset(bool enable_persistent
         keys5.push_back(i * 3 + 2);
     }
     ASSERT_TRUE(_tablet->rowset_commit(5, create_rowset(_tablet, keys5)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    {
+        // used for wait merely
+        std::vector<RowsetSharedPtr> dummy_rowsets;
+        ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(5, &dummy_rowsets).ok());
+    }
     ASSERT_TRUE(_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    // Wait until compaction applied.
+    while (true) {
+        std::vector<RowsetSharedPtr> dummy_rowsets;
+        EditVersion full_version;
+        ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(5, &dummy_rowsets, &full_version).ok());
+        if (full_version.minor() == 1) {
+            break;
+        }
+        std::cerr << "waiting for compaction applied\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
 }
 
-// Todo(qzc): fix this ut
-// TEST_F(TabletUpdatesTest, compaction_with_empty_rowset) {
-//     test_compaction_with_empty_rowset(false, true, false);
-//     test_compaction_with_empty_rowset(false, true, true);
-//     test_compaction_with_empty_rowset(false, false, false);
-//     test_compaction_with_empty_rowset(false, false, true);
-//     test_compaction_with_empty_rowset(true, true, false);
-//     test_compaction_with_empty_rowset(true, true, true);
-//     test_compaction_with_empty_rowset(true, false, false);
-//     test_compaction_with_empty_rowset(true, false, true);
-// }
+TEST_F(TabletUpdatesTest, compaction_with_empty_rowset) {
+    test_compaction_with_empty_rowset(false, true, false);
+    test_compaction_with_empty_rowset(false, true, true);
+    test_compaction_with_empty_rowset(false, false, false);
+    test_compaction_with_empty_rowset(false, false, true);
+    test_compaction_with_empty_rowset(true, true, false);
+    test_compaction_with_empty_rowset(true, true, true);
+    test_compaction_with_empty_rowset(true, false, false);
+    test_compaction_with_empty_rowset(true, false, true);
+}
 
 void TabletUpdatesTest::test_link_from(bool enable_persistent_index) {
     srand(GetCurrentTimeMicros());
@@ -1427,7 +1444,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental(bool enable_persistent_in
     ASSERT_EQ(6, tablet1->updates()->version_history_count());
     EXPECT_EQ(10, read_tablet(tablet1, 6));
 
-    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
+    auto tablet2 = load_same_tablet_from_store(_metadata_mem_tracker.get(), tablet1);
     ASSERT_EQ(6, tablet2->updates()->max_version());
     ASSERT_EQ(6, tablet2->updates()->version_history_count());
     EXPECT_EQ(10, read_tablet(tablet2, 6));
@@ -1501,7 +1518,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_ignore_already_committed_
     ASSERT_EQ(6, tablet1->updates()->version_history_count());
     EXPECT_EQ(10, read_tablet(tablet1, 6));
 
-    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
+    auto tablet2 = load_same_tablet_from_store(_metadata_mem_tracker.get(), tablet1);
     ASSERT_EQ(6, tablet2->updates()->max_version());
     ASSERT_EQ(6, tablet2->updates()->version_history_count());
     EXPECT_EQ(10, read_tablet(tablet2, 6));
@@ -2032,7 +2049,7 @@ void TabletUpdatesTest::test_load_snapshot_full(bool enable_persistent_index) {
     EXPECT_EQ(keys0.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
 
     // Ensure that the tablet state is valid after process restarted.
-    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
+    auto tablet2 = load_same_tablet_from_store(_metadata_mem_tracker.get(), tablet1);
     ASSERT_EQ(11, tablet2->updates()->max_version());
     ASSERT_EQ(1, tablet2->updates()->version_history_count());
     EXPECT_EQ(keys0.size(), read_tablet(tablet2, tablet2->updates()->max_version()));
@@ -2102,7 +2119,7 @@ void TabletUpdatesTest::test_load_snapshot_full_file_not_exist(bool enable_persi
     EXPECT_EQ(keys1.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
 
     // Ensure that the persistent meta is still valid.
-    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
+    auto tablet2 = load_same_tablet_from_store(_metadata_mem_tracker.get(), tablet1);
     ASSERT_EQ(3, tablet2->updates()->max_version());
     ASSERT_EQ(3, tablet2->updates()->version_history_count());
     EXPECT_EQ(keys1.size(), read_tablet(tablet2, tablet2->updates()->max_version()));
@@ -2216,7 +2233,7 @@ void TabletUpdatesTest::test_issue_4193(bool enable_persistent_index) {
     EXPECT_EQ(keys0.size() + keys1.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
 
     // Ensure that the tablet state is valid after process restarted.
-    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
+    auto tablet2 = load_same_tablet_from_store(_metadata_mem_tracker.get(), tablet1);
     ASSERT_EQ(13, tablet2->updates()->max_version());
     EXPECT_EQ(keys0.size() + keys1.size(), read_tablet(tablet2, tablet2->updates()->max_version()));
 }
@@ -2269,7 +2286,7 @@ void TabletUpdatesTest::test_issue_4181(bool enable_persistent_index) {
     EXPECT_EQ(keys0.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
 
     // Ensure that the tablet state is valid after process restarted.
-    auto tablet2 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), tablet1);
+    auto tablet2 = load_same_tablet_from_store(_metadata_mem_tracker.get(), tablet1);
     ASSERT_EQ(11, tablet2->updates()->max_version());
     EXPECT_EQ(keys0.size(), read_tablet(tablet2, tablet2->updates()->max_version()));
 }

@@ -242,11 +242,18 @@ public class FileSystemManager {
         String dfsNameServices = properties.getOrDefault(DFS_NAMESERVICES_KEY, "");
         String authentication = properties.getOrDefault(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
                 AUTHENTICATION_SIMPLE);
+        String disableCache = properties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
         if (Strings.isNullOrEmpty(authentication) || (!authentication.equals(AUTHENTICATION_SIMPLE)
                 && !authentication.equals(AUTHENTICATION_KERBEROS))) {
-            logger.warn("invalid authentication:" + authentication);
+            logger.warn("invalid authentication: " + authentication);
             throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
-                    "invalid authentication:" + authentication);
+                    "invalid authentication: " + authentication);
+        }
+        String disableCacheLowerCase = disableCache.toLowerCase();
+        if (!(disableCacheLowerCase.equals("true") || disableCacheLowerCase.equals("false"))) {
+            logger.warn("invalid disable cache: " + disableCache);
+            throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
+                    "invalid disable cache: " + disableCache);
         }
         String hdfsUgi = username + "," + password;
         FileSystemIdentity fileSystemIdentity = null;
@@ -388,7 +395,7 @@ public class FileSystemManager {
                     }
                 }
 
-                conf.set(FS_HDFS_IMPL_DISABLE_CACHE, "true");
+                conf.set(FS_HDFS_IMPL_DISABLE_CACHE, disableCache);
                 FileSystem dfsFileSystem = null;
                 if (authentication.equals(AUTHENTICATION_SIMPLE) &&
                         properties.containsKey(USER_NAME_KEY) && !Strings.isNullOrEmpty(username)) {
@@ -907,7 +914,7 @@ public class FileSystemManager {
             try {
                 fsDataOutputStream.write(data);
             } catch (IOException e) {
-                logger.error("errors while write data to output stream", e);
+                logger.error("errors while write file " + fd + " to output stream", e);
                 throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
                         e, "errors while write data to output stream");
             }
@@ -918,10 +925,10 @@ public class FileSystemManager {
         FSDataOutputStream fsDataOutputStream = clientContextManager.getFsDataOutputStream(fd);
         synchronized (fsDataOutputStream) {
             try {
-                fsDataOutputStream.flush();
+                fsDataOutputStream.hsync();
                 fsDataOutputStream.close();
             } catch (IOException e) {
-                logger.error("errors while close file output stream", e);
+                logger.error("errors while close file " + fd + " output stream", e);
                 throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
                         e, "errors while close file output stream");
             } finally {

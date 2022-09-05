@@ -52,7 +52,7 @@ public class BackendsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES;
     static {
         ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
-                .add("BackendId").add("Cluster").add("IP").add("HeartbeatPort")
+                .add("BackendId").add("IP").add("HeartbeatPort")
                 .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat")
                 .add("Alive").add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
                 .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
@@ -109,7 +109,6 @@ public class BackendsProcDir implements ProcDirInterface {
             watch.stop();
             List<Comparable> backendInfo = Lists.newArrayList();
             backendInfo.add(String.valueOf(backendId));
-            backendInfo.add(backend.getOwnerClusterName());
             backendInfo.add(backend.getHost());
             backendInfo.add(String.valueOf(backend.getHeartbeatPort()));
             backendInfo.add(String.valueOf(backend.getBePort()));

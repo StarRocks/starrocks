@@ -1,34 +1,26 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.scheduler;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Queues;
 import com.starrocks.analysis.DmlStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.Coordinator;
-import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
-import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.SubmitTaskStmt;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -36,20 +28,15 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.spark_project.guava.collect.MinMaxPriorityQueue;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.PriorityBlockingQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class TaskManagerTest {
@@ -115,7 +102,7 @@ public class TaskManagerTest {
     }
 
     @Test
-    public void SubmitTaskRegularTest() throws Exception {
+    public void submitTaskRegularTest() throws Exception {
 
         ConnectContext ctx = starRocksAssert.getCtx();
         ctx.setExecutionId(UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
@@ -134,10 +121,11 @@ public class TaskManagerTest {
         List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
         Constants.TaskRunState state = null;
 
-        int retryCount = 0, maxRetry = 5;
+        int retryCount = 0;
+        int maxRetry = 5;
         while (retryCount < maxRetry) {
             state = taskRuns.get(0).getState();
-            retryCount ++;
+            retryCount++;
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
                 break;
@@ -149,56 +137,8 @@ public class TaskManagerTest {
 
     }
 
-    // This test is temporarily removed because it is unstable,
-    // and it will be added back when the cause of the problem is found and fixed.
-    public void SubmitMvTaskTest() {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {}
-        };
-        String sql = "create materialized view test.mv1\n" +
-                "partition by date_trunc('month',k1)\n" +
-                "distributed by hash(k2)\n" +
-                "refresh manual\n" +
-                "properties('replication_num' = '1')\n" +
-                "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;";
-        Database testDb = null;
-        try {
-            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-            testDb = GlobalStateMgr.getCurrentState().getDb("test");
-            MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv1"));
-            Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
-
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            taskManager.createTask(task, true);
-            taskManager.executeTask(task.getName());
-            List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
-
-            Constants.TaskRunState state = null;
-            int retryCount = 0, maxRetry = 5;
-            while (retryCount < maxRetry) {
-                state = taskRuns.get(0).getState();
-                retryCount ++;
-                ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-                if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
-                    break;
-                }
-                LOG.info("SubmitMvTaskTest is waiting for TaskRunState retryCount:" + retryCount);
-            }
-            Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
-        } finally {
-            if (testDb != null) {
-                testDb.dropTable("mv1");
-            }
-        }
-    }
-
     @Test
-    public void SubmitMvAsyncTaskTest() {
+    public void submitMvAsyncTaskTest() {
         new MockUp<StmtExecutor>() {
             @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
@@ -223,11 +163,12 @@ public class TaskManagerTest {
 
             // at least 2 times = schedule 1 times + execute 1 times
             List<TaskRunStatus> taskRuns = null;
-            int retryCount = 0, maxRetry = 5;
+            int retryCount = 0;
+            int maxRetry = 5;
             while (retryCount < maxRetry) {
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
                 taskRuns = taskManager.showTaskRunStatus(null);
-                if(taskRuns.size() == 2) {
+                if (taskRuns.size() == 2) {
                     Set<Constants.TaskRunState> taskRunStates =
                             taskRuns.stream().map(TaskRunStatus::getState).collect(Collectors.toSet());
                     if (taskRunStates.size() == 1 && (taskRunStates.contains(Constants.TaskRunState.FAILED) ||
@@ -248,41 +189,6 @@ public class TaskManagerTest {
                 testDb.dropTable("mv1");
             }
         }
-    }
-
-    @Test
-    public void periodicalTaskRegularTest(@Mocked RowBatch rowBatch) throws DdlException {
-        new MockUp<Coordinator>() {
-            @Mock
-            public void exec() throws Exception {}
-        };
-
-        LocalDateTime now = LocalDateTime.now();
-
-        Task task = new Task("test_periodical");
-        task.setCreateTime(System.currentTimeMillis());
-        task.setDbName("test");
-        task.setDefinition("select 1");
-        task.setExpireTime(0L);
-        long startTime = Utils.getLongFromDateTime(LocalDateTime.now().plusSeconds(3));
-        TaskSchedule taskSchedule = new TaskSchedule(startTime, 5, TimeUnit.SECONDS);
-        task.setSchedule(taskSchedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        LOG.info("start time is :" + now);
-        taskManager.createTask(task, false);
-        TaskRunHistory taskRunHistory = taskManager.getTaskRunManager().getTaskRunHistory();
-        taskRunHistory.getAllHistory().clear();
-
-        ThreadUtil.sleepAtLeastIgnoreInterrupts(10000L);
-        taskManager.dropTasks(ImmutableList.of(task.getId()), true);
-
-        Deque<TaskRunStatus> allHistory = taskRunHistory.getAllHistory();
-        for (TaskRunStatus taskRunStatus : allHistory) {
-            LOG.info(taskRunStatus);
-        }
-
-        Assert.assertEquals(2, allHistory.size());
     }
 
     @Test

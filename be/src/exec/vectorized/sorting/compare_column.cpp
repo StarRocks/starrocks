@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
@@ -17,7 +17,7 @@ namespace starrocks::vectorized {
 // For column-wise compare, only consider rows that are equal at previous columns
 // @return number of rows that are equal
 template <class DataComparator>
-static inline int compare_column_helper(CompareVector& cmp_vector, DataComparator cmp) {
+static inline size_t compare_column_helper(CompareVector& cmp_vector, DataComparator cmp) {
     DCHECK(std::all_of(cmp_vector.begin(), cmp_vector.end(), [](int8_t x) { return x == 0 || x == -1 || x == 1; }));
 
     // TODO(mofei) optimize the compare with SIMD
@@ -31,9 +31,9 @@ static inline int compare_column_helper(CompareVector& cmp_vector, DataComparato
             }
         }
     } else {
-        int idx = 0;
+        size_t idx = 0;
         while (true) {
-            int pos = SIMD::find_zero(cmp_vector, idx);
+            size_t pos = SIMD::find_zero(cmp_vector, idx);
             if (pos >= cmp_vector.size()) {
                 break;
             }
@@ -63,7 +63,7 @@ public:
     explicit ColumnCompare(CompareVector& cmp_vector, Datum rhs_value, int sort_order, int null_first)
             : ColumnVisitorAdapter(this),
               _cmp_vector(cmp_vector),
-              _rhs_value(rhs_value),
+              _rhs_value(std::move(rhs_value)),
               _sort_order(sort_order),
               _null_first(null_first) {
         DCHECK(sort_order == 1 || sort_order == -1);
@@ -85,7 +85,7 @@ public:
             DCHECK(null_data[lhs_row] == 1);
             return _rhs_value.is_null() ? 0 : _null_first;
         };
-        int null_equal_count = compare_column_helper(null_vector, null_cmp);
+        size_t null_equal_count = compare_column_helper(null_vector, null_cmp);
 
         int notnull_equal_count = 0;
         if (_rhs_value.is_null()) {
@@ -194,7 +194,7 @@ public:
         return Status::OK();
     }
 
-    int get_equal_count() { return _equal_count; }
+    size_t get_equal_count() const { return _equal_count; }
 
 private:
     CompareVector& _cmp_vector;
@@ -202,7 +202,7 @@ private:
     int _sort_order;
     int _null_first;
 
-    int _equal_count = 0; // Output equal count of compare
+    size_t _equal_count = 0; // Output equal count of compare
 };
 
 class ColumnTieBuilder final : public ColumnVisitorAdapter<ColumnTieBuilder> {

@@ -1,3 +1,5 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
@@ -94,7 +96,7 @@ public class DeleteHandlerTest {
         globalTransactionMgr.setEditLog(editLog);
         deleteHandler = new DeleteHandler();
         auth = AccessTestUtil.fetchAdminAccess();
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
         try {
             db = CatalogMocker.mockDb();
         } catch (AnalysisException e) {
@@ -517,7 +519,7 @@ public class DeleteHandlerTest {
         Assert.assertEquals(2, deleteHandler.getDeleteInfosByDb(1).size());
 
         // 2. replay after expire
-        DeleteInfo expireDelete = new DeleteInfo(1, 1, "test_tbl", -1, "test_partition", 1,new ArrayList<>());
+        DeleteInfo expireDelete = new DeleteInfo(1, 1, "test_tbl", -1, "test_partition", 1, new ArrayList<>());
         MultiDeleteInfo expireMultiDelete = new MultiDeleteInfo(1, 1, "test_tbl", new ArrayList<>());
         Thread.sleep(2000);
         deleteHandler.replayDelete(expireDelete, globalStateMgr);
@@ -537,7 +539,7 @@ public class DeleteHandlerTest {
         deleteHandler.removeOldDeleteInfo();
         List<List<Comparable>> deleteInfos = deleteHandler.getDeleteInfosByDb(1);
         Assert.assertEquals(1, deleteInfos.size());
-        Assert.assertEquals("test_tbl2", (String)deleteInfos.get(0).get(0));
+        Assert.assertEquals("test_tbl2", (String) deleteInfos.get(0).get(0));
 
     }
 }

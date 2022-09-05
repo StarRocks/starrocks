@@ -1,11 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.statistic;
 
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.util.DateUtils;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.velocity.VelocityContext;
@@ -20,7 +20,7 @@ import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_
 public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT $tableId, '$columnName', $dbId, '$dbName.$tableName'," +
-                    " histogram($columnName, $bucketNum, $sampleRatio), " +
+                    " histogram($columnName, cast($bucketNum as int), cast($sampleRatio as double)), " +
                     " $mcv," +
                     " NOW()" +
                     " FROM (SELECT $columnName FROM $dbName.$tableName where rand() <= $sampleRatio" +
@@ -39,15 +39,14 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     "group by `$columnName` " +
                     "order by count(`$columnName`) desc limit $topN ) t";
 
-    public HistogramStatisticsCollectJob(Database db, OlapTable table, List<String> columns,
+    public HistogramStatisticsCollectJob(Database db, Table table, List<String> columns,
                                          StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                          Map<String, String> properties) {
         super(db, table, columns, type, scheduleType, properties);
     }
 
     @Override
-    public void collect() throws Exception {
-        ConnectContext context = StatisticUtils.buildConnectContext();
+    public void collect(ConnectContext context) throws Exception {
         context.getSessionVariable().setNewPlanerAggStage(1);
 
         double sampleRatio = Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
@@ -65,11 +64,11 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             }
 
             sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, column);
-            collectStatisticSync(sql);
+            collectStatisticSync(sql, context);
         }
     }
 
-    private String buildCollectMCV(Database database, OlapTable table, Long topN, String columnName) {
+    private String buildCollectMCV(Database database, Table table, Long topN, String columnName) {
         VelocityContext context = new VelocityContext();
         context.put("tableId", table.getId());
         context.put("columnName", columnName);
@@ -82,7 +81,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         return build(context, COLLECT_MCV_STATISTIC_TEMPLATE);
     }
 
-    private String buildCollectHistogram(Database database, OlapTable table, double sampleRatio,
+    private String buildCollectHistogram(Database database, Table table, double sampleRatio,
                                          Long bucketNum, Map<String, String> mostCommonValues, String columnName) {
         StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME).append(" ");
 
@@ -95,34 +94,23 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
         context.put("bucketNum", bucketNum);
         context.put("sampleRatio", sampleRatio);
-        context.put("totalRows", Long.MAX_VALUE);
+        context.put("totalRows", Config.histogram_max_sample_row_count);
 
         Column column = table.getColumn(columnName);
 
         List<String> mcvList = new ArrayList<>();
         for (Map.Entry<String, String> entry : mostCommonValues.entrySet()) {
-            String key;
-            if (column.getType().isDate()) {
-                key = DateUtils.parseStringWithDefaultHSM(entry.getKey(), DateUtils.DATE_FORMATTER_UNIX)
-                        .format(DateUtils.DATEKEY_FORMATTER_UNIX);
-            } else if (column.getType().isDatetime()) {
-                key = DateUtils.parseStringWithDefaultHSM(entry.getKey(), DateUtils.DATE_TIME_FORMATTER_UNIX)
-                        .format(DateUtils.DATETIMEKEY_FORMATTER_UNIX);
-            } else {
-                key = entry.getKey();
-            }
-
-            mcvList.add("[\"" + key + "\",\"" + entry.getValue() + "\"]");
+            mcvList.add("[\"" + entry.getKey() + "\",\"" + entry.getValue() + "\"]");
         }
 
-        if (mcvList.isEmpty()) {
+        if (mostCommonValues.isEmpty()) {
             context.put("mcv", "NULL");
         } else {
             context.put("mcv", "'[" + Joiner.on(",").join(mcvList) + "]'");
         }
 
         if (!mostCommonValues.isEmpty()) {
-            if (column.getType().getPrimitiveType().isDateType()) {
+            if (column.getType().getPrimitiveType().isDateType() || column.getType().getPrimitiveType().isCharFamily()) {
                 context.put("MCVExclude", " and " + columnName + " not in (\"" +
                         Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
             } else {

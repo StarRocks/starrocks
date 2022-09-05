@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "service/service_be/lake_service.h"
 
@@ -6,6 +6,7 @@
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <brpc/controller.h>
+#include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
 DIAGNOSTIC_POP
 
@@ -14,87 +15,14 @@ DIAGNOSTIC_POP
 #include "fs/fs_util.h"
 #include "gutil/macros.h"
 #include "runtime/exec_env.h"
+#include "runtime/lake_snapshot_loader.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
 #include "util/countdown_latch.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
-
-#ifndef BE_TEST
-struct PublishVersionContext {
-    ::starrocks::ExecEnv* _env;
-    ::google::protobuf::Closure* _done;
-    const ::starrocks::lake::PublishVersionRequest* _request;
-    ::starrocks::lake::PublishVersionResponse* _response;
-    // response_mtx protects accesses to response.
-    bthread::Mutex _response_mtx;
-
-    PublishVersionContext(::starrocks::ExecEnv* env, ::google::protobuf::Closure* done,
-                          const ::starrocks::lake::PublishVersionRequest* request,
-                          ::starrocks::lake::PublishVersionResponse* response)
-            : _env(env), _done(done), _request(request), _response(response), _response_mtx() {}
-
-    ~PublishVersionContext() { _done->Run(); }
-};
-#else
-// For unit tests
-struct PublishVersionContext {
-    ::starrocks::ExecEnv* _env;
-    const ::starrocks::lake::PublishVersionRequest* _request;
-    ::starrocks::lake::PublishVersionResponse* _response;
-    // response_mtx protects accesses to response.
-    bthread::Mutex _response_mtx;
-    CountDownLatch _latch;
-
-    PublishVersionContext(::starrocks::ExecEnv* env, ::google::protobuf::Closure* /*done*/,
-                          const ::starrocks::lake::PublishVersionRequest* request,
-                          ::starrocks::lake::PublishVersionResponse* response)
-            : _env(env), _request(request), _response(response), _response_mtx(), _latch(request->tablet_ids_size()) {}
-
-    ~PublishVersionContext() = default;
-
-    void count_down() { _latch.count_down(); }
-
-    void wait() { _latch.wait(); }
-};
-#endif // BE_TEST
-
-class PublishVersionTask : public Runnable {
-public:
-    PublishVersionTask(int64_t tablet_id, std::shared_ptr<PublishVersionContext> context)
-            : _tablet_id(tablet_id), _context(std::move(context)) {}
-
-    ~PublishVersionTask() override = default;
-
-    void run() override;
-
-    DISALLOW_COPY_AND_MOVE(PublishVersionTask);
-
-private:
-    int64_t _tablet_id;
-    std::shared_ptr<PublishVersionContext> _context;
-};
-
-inline void PublishVersionTask::run() {
-    auto base_version = _context->_request->base_version();
-    auto new_version = _context->_request->new_version();
-    auto txns = _context->_request->txn_ids().data();
-    auto txns_size = _context->_request->txn_ids().size();
-
-    auto st = _context->_env->lake_tablet_manager()->publish_version(_tablet_id, base_version, new_version, txns,
-                                                                     txns_size);
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to publish version for tablet " << _tablet_id << ": " << st;
-        std::lock_guard l(_context->_response_mtx);
-        _context->_response->add_failed_tablets(_tablet_id);
-    }
-#ifdef BE_TEST
-    _context->count_down();
-#endif
-    // Will call `_context->done->Run()` if this is the ref count of _context is 1.
-    _context.reset();
-}
+using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
                                       const ::starrocks::lake::PublishVersionRequest* request,
@@ -121,21 +49,86 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     }
 
     auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
-    auto context = std::make_shared<PublishVersionContext>(_env, guard.release(), request, response);
+    auto latch = BThreadCountDownLatch(request->tablet_ids().size());
+    bthread::Mutex response_mtx;
 
     for (auto tablet_id : request->tablet_ids()) {
-        auto task = std::make_shared<PublishVersionTask>(tablet_id, context);
-        auto st = thread_pool->submit(std::move(task));
+        auto task = [&, tablet_id]() {
+            auto base_version = request->base_version();
+            auto new_version = request->new_version();
+            auto txns = request->txn_ids().data();
+            auto txns_size = request->txn_ids().size();
+
+            auto st =
+                    _env->lake_tablet_manager()->publish_version(tablet_id, base_version, new_version, txns, txns_size);
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to publish version for tablet " << tablet_id << ": " << st;
+                std::lock_guard l(response_mtx);
+                response->add_failed_tablets(tablet_id);
+            }
+            latch.count_down();
+        };
+
+        auto st = thread_pool->submit_func(task, ThreadPool::HIGH_PRIORITY);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to submit publish version task: " << st;
-            std::lock_guard l(context->_response_mtx);
+            std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
+            latch.count_down();
         }
     }
 
-#ifdef BE_TEST
-    context->wait();
-#endif
+    latch.wait();
+}
+
+void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* controller,
+                                          const ::starrocks::lake::PublishLogVersionRequest* request,
+                                          ::starrocks::lake::PublishLogVersionResponse* response,
+                                          ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_ids_size() == 0) {
+        cntl->SetFailed("missing tablet_ids");
+        return;
+    }
+    if (!request->has_txn_id()) {
+        cntl->SetFailed("missing txn_id");
+        return;
+    }
+    if (!request->has_version()) {
+        cntl->SetFailed("missing version");
+        return;
+    }
+
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+    auto latch = BThreadCountDownLatch(request->tablet_ids().size());
+    bthread::Mutex response_mtx;
+
+    for (auto tablet_id : request->tablet_ids()) {
+        auto task = [&, tablet_id]() {
+            auto txn_id = request->txn_id();
+            auto version = request->version();
+
+            auto st = _env->lake_tablet_manager()->publish_log_version(tablet_id, txn_id, version);
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to rename txn log. tablet_id=" << tablet_id << " txn_id=" << txn_id << ": " << st;
+                std::lock_guard l(response_mtx);
+                response->add_failed_tablets(tablet_id);
+            }
+            latch.count_down();
+        };
+
+        auto st = thread_pool->submit_func(task, ThreadPool::HIGH_PRIORITY);
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to submit publish log version task: " << st;
+            std::lock_guard l(response_mtx);
+            response->add_failed_tablets(tablet_id);
+            latch.count_down();
+        }
+    }
+
+    latch.wait();
 }
 
 void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
@@ -144,11 +137,23 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard guard(done);
     (void)controller;
 
-    // TODO: move the execution to TaskWorkerPool
-    auto tablet_mgr = _env->lake_tablet_manager();
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+    auto latch = BThreadCountDownLatch(request->tablet_ids().size());
     for (auto tablet_id : request->tablet_ids()) {
-        tablet_mgr->abort_txn(tablet_id, request->txn_ids().data(), request->txn_ids_size());
+        auto task = [&, tablet_id]() {
+            auto* txn_ids = request->txn_ids().data();
+            auto txn_ids_size = request->txn_ids_size();
+            _env->lake_tablet_manager()->abort_txn(tablet_id, txn_ids, txn_ids_size);
+            latch.count_down();
+        };
+        auto st = thread_pool->submit_func(task);
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to submit abort txn  task: " << st;
+            latch.count_down();
+        }
     }
+
+    latch.wait();
 }
 
 void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controller,
@@ -308,6 +313,101 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
         tablet_stat->set_tablet_id(tablet_id);
         tablet_stat->set_num_rows(num_rows);
         tablet_stat->set_data_size(data_size);
+    }
+}
+
+void LakeServiceImpl::lock_tablet_metadata(::google::protobuf::RpcController* controller,
+                                           const ::starrocks::lake::LockTabletMetadataRequest* request,
+                                           ::starrocks::lake::LockTabletMetadataResponse* response,
+                                           ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (!request->has_version()) {
+        cntl->SetFailed("missing version");
+        return;
+    }
+    if (!request->has_tablet_id()) {
+        cntl->SetFailed("missing tablet id");
+        return;
+    }
+    if (!request->has_expire_time()) {
+        cntl->SetFailed("missing expire time");
+        return;
+    }
+
+    auto tablet = _env->lake_tablet_manager()->get_tablet(request->tablet_id());
+    if (!tablet.ok()) {
+        LOG(ERROR) << "Fail to get tablet " << request->tablet_id();
+        cntl->SetFailed("Fail to get tablet");
+        return;
+    }
+    auto st = tablet->put_tablet_metadata_lock(request->version(), request->expire_time());
+    if (!st.ok()) {
+        LOG(ERROR) << "Fail to lock tablet metadata, tablet id: " << request->tablet_id()
+                   << ", version: " << request->version();
+        cntl->SetFailed("Fail to lock tablet metadata");
+        return;
+    }
+
+    auto tablet_meta = tablet->get_metadata(request->version());
+    // If metadata has been deleted, the request should fail.
+    if (!tablet_meta.ok()) {
+        LOG(ERROR) << "Tablet metadata has been deleted, tablet id: " << request->tablet_id()
+                   << ", version: " << request->version();
+        cntl->SetFailed("Tablet metadata has been deleted");
+    }
+}
+
+void LakeServiceImpl::unlock_tablet_metadata(::google::protobuf::RpcController* controller,
+                                             const ::starrocks::lake::UnlockTabletMetadataRequest* request,
+                                             ::starrocks::lake::UnlockTabletMetadataResponse* response,
+                                             ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+    if (!request->has_version()) {
+        cntl->SetFailed("missing version");
+        return;
+    }
+    if (!request->has_tablet_id()) {
+        cntl->SetFailed("missing tablet id");
+        return;
+    }
+    if (!request->has_expire_time()) {
+        cntl->SetFailed("missing expire time");
+        return;
+    }
+
+    auto tablet = _env->lake_tablet_manager()->get_tablet(request->tablet_id());
+    if (!tablet.ok()) {
+        LOG(ERROR) << "Fail to get tablet " << request->tablet_id();
+        cntl->SetFailed("Fail to get tablet");
+        return;
+    }
+    auto st = tablet->delete_tablet_metadata_lock(request->version(), request->expire_time());
+    if (!st.ok()) {
+        LOG(ERROR) << "Fail to unlock tablet metadata, tablet id: " << request->tablet_id()
+                   << ", version: " << request->version();
+        cntl->SetFailed("Fail to unlock tablet metadata");
+    }
+}
+
+void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* controller,
+                                       const ::starrocks::lake::UploadSnapshotsRequest* request,
+                                       ::starrocks::lake::UploadSnapshotsResponse* response,
+                                       ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+    // TODO: Support fs upload directly
+    if (!request->has_broker()) {
+        cntl->SetFailed("missing broker");
+        return;
+    }
+
+    auto loader = std::make_unique<LakeSnapshotLoader>(_env);
+    auto st = loader->upload(request);
+    if (!st.ok()) {
+        cntl->SetFailed(st.to_string());
     }
 }
 

@@ -1,10 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.planner;
 
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.Analyzer;
+import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -44,7 +44,7 @@ public class MultiCastPlanFragment extends PlanFragment {
     }
 
     @Override
-    public void finalize(Analyzer analyzer, boolean validateFileFormats) {
+    public void createDataSink(TResultSinkType resultSinkType) {
         if (sink != null) {
             return;
         }
@@ -62,11 +62,6 @@ public class MultiCastPlanFragment extends PlanFragment {
             multiCastDataSink.getDataStreamSinks().add(streamSink);
             multiCastDataSink.getDestinations().add(Lists.newArrayList());
         }
-    }
-
-    @Override
-    public void finalizeForStatistic(boolean isStatistic) {
-        Preconditions.checkState(false, "MultiCastPlanFragment don't support statistic query");
     }
 
     @Override

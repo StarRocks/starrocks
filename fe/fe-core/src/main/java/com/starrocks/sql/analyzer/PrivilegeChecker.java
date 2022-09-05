@@ -1,44 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AdminShowConfigStmt;
-import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
-import com.starrocks.analysis.AdminShowReplicaStatusStmt;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt;
-import com.starrocks.analysis.AlterDatabaseRename;
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.AlterViewStmt;
+import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.BackupStmt;
-import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
-import com.starrocks.analysis.CreateTableLikeStmt;
-import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.CreateViewStmt;
+import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.DeleteStmt;
-import com.starrocks.analysis.DescribeStmt;
-import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropUserStmt;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
-import com.starrocks.analysis.RecoverDbStmt;
-import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
-import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowAuthenticationStmt;
+import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowBrokerStmt;
-import com.starrocks.analysis.ShowCreateDbStmt;
-import com.starrocks.analysis.ShowCreateTableStmt;
-import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
@@ -46,14 +26,12 @@ import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
-import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -73,24 +51,61 @@ import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowConfigStmt;
+import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
+import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
+import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RecoverDbStmt;
+import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
+import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataStmt;
+import com.starrocks.sql.ast.ShowTableStatusStmt;
+import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.StatsConstants;
 
@@ -159,7 +174,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitCreateTableLikeStatement(CreateTableLikeStmt statement, ConnectContext session) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session,  statement.getExistedDbName(),
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, statement.getExistedDbName(),
                     statement.getExistedTableName(), PrivPredicate.SELECT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "SELECT");
             }
@@ -263,6 +278,30 @@ public class PrivilegeChecker {
         }
 
         @Override
+        public Void visitAdminRepairTableStatement(AdminRepairTableStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
         public Void visitShowUserPropertyStmt(ShowUserPropertyStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
                 try {
@@ -320,6 +359,33 @@ public class PrivilegeChecker {
             return null;
         }
 
+        @Override
+        public Void visitCreateResourceStatement(CreateResourceStmt statement,
+                                                 ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropResourceStatement(DropResourceStmt statement,
+                                               ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAlterResourceStatement(AlterResourceStmt statement,
+                                                ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
         public Void visitRecoverTableStatement(RecoverTableStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), statement.getDbName(),
                     statement.getTableName(),
@@ -365,14 +431,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitQueryStatement(QueryStatement stmt, ConnectContext session) {
-            Map<TableName, Table> tables = AnalyzerUtils.collectAllTable(stmt);
-            for (Map.Entry<TableName, Table> table : tables.entrySet()) {
-                TableName tableName = table.getKey();
-                if (!checkTblPriv(session, tableName, PrivPredicate.SELECT)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
-                            session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
-                }
-            }
+            new TablePrivilegeChecker(session).visit(stmt);
             return null;
         }
 
@@ -1007,5 +1066,92 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
+        @Override
+        public Void visitShowBackupStmt(ShowBackupStmt showBackupStmt, ConnectContext context) {
+            String dbName = showBackupStmt.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.LOAD)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                        ConnectContext.get().getQualifiedUser(), dbName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            if (statement.isAll() || !context.getCurrentUserIdentity().equals(statement.getUserIdent())) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                }
+            }
+            return null;
+        }
     }
+
+    private static class TablePrivilegeChecker extends AstVisitor<Void, Void> {
+        private ConnectContext session;
+
+        public TablePrivilegeChecker(ConnectContext session) {
+            this.session = session;
+        }
+
+        @Override
+        public Void visitQueryStatement(QueryStatement node, Void context) {
+            return visit(node.getQueryRelation());
+        }
+
+        @Override
+        public Void visitSubquery(SubqueryRelation node, Void context) {
+            return visit(node.getQueryStatement());
+        }
+
+        @Override
+        public Void visitView(ViewRelation node, Void context) {
+            // if user has select privilege for the view, then there's no need to check base table
+            if (checkTblPriv(session, node.getName(), PrivPredicate.SELECT)) {
+                return null;
+            }
+            return visit(node.getQueryStatement());
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (node.hasWithClause()) {
+                node.getCteRelations().forEach(this::visit);
+            }
+
+            return visit(node.getRelation());
+        }
+
+        @Override
+        public Void visitSetOp(SetOperationRelation node, Void context) {
+            if (node.hasWithClause()) {
+                node.getRelations().forEach(this::visit);
+            }
+            node.getRelations().forEach(this::visit);
+            return null;
+        }
+
+        @Override
+        public Void visitJoin(JoinRelation node, Void context) {
+            visit(node.getLeft());
+            visit(node.getRight());
+            return null;
+        }
+
+        @Override
+        public Void visitCTE(CTERelation node, Void context) {
+            return visit(node.getCteQueryStatement());
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            if (!checkTblPriv(session, node.getName(), PrivPredicate.SELECT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
+                        session.getQualifiedUser(), session.getRemoteIP(), node.getTable());
+            }
+            return null;
+        }
+    }
+
 }

@@ -207,6 +207,15 @@ void PInternalServiceImplBase<T>::tablet_writer_add_chunk(google::protobuf::RpcC
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::tablet_writer_add_chunks(google::protobuf::RpcController* cntl_base,
+                                                           const PTabletWriterAddChunksRequest* request,
+                                                           PTabletWriterAddBatchResult* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcController* cntl_base,
                                                        const PTabletWriterCancelRequest* request,
                                                        PTabletWriterCancelResult* response,
@@ -389,15 +398,16 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
 
     GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
 
-    int timeout = request->has_timeout() ? request->timeout() : config::routine_load_kafka_timeout_second;
+    int timeout_ms =
+            request->has_timeout() ? request->timeout() * 1000 : config::routine_load_kafka_timeout_second * 1000;
 
     // watch estimates the interval before the task is actually executed.
     MonotonicStopWatch watch;
     watch.start();
 
     if (!_async_thread_pool.try_offer([&]() {
-            timeout -= watch.elapsed_time() / 1000 / 1000;
-            _get_info_impl(request, response, &latch, timeout);
+            timeout_ms -= watch.elapsed_time() / 1000 / 1000;
+            _get_info_impl(request, response, &latch, timeout_ms);
         })) {
         Status::ServiceUnavailable(
                 "too busy to get kafka info, please check the kafka broker status, or set "
@@ -412,10 +422,10 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
 template <typename T>
 void PInternalServiceImplBase<T>::_get_info_impl(
         const PProxyRequest* request, PProxyResult* response,
-        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout) {
+        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms) {
     DeferOp defer([latch] { latch->count_down(); });
 
-    if (timeout <= 0) {
+    if (timeout_ms <= 0) {
         Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
         return;
     }
@@ -423,7 +433,7 @@ void PInternalServiceImplBase<T>::_get_info_impl(
     if (request->has_kafka_meta_request()) {
         std::vector<int32_t> partition_ids;
         Status st = _exec_env->routine_load_task_executor()->get_kafka_partition_meta(request->kafka_meta_request(),
-                                                                                      &partition_ids, timeout);
+                                                                                      &partition_ids, timeout_ms);
         if (st.ok()) {
             PKafkaMetaProxyResult* kafka_result = response->mutable_kafka_meta_result();
             for (int32_t id : partition_ids) {
@@ -437,7 +447,7 @@ void PInternalServiceImplBase<T>::_get_info_impl(
         std::vector<int64_t> beginning_offsets;
         std::vector<int64_t> latest_offsets;
         Status st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                request->kafka_offset_request(), &beginning_offsets, &latest_offsets, timeout);
+                request->kafka_offset_request(), &beginning_offsets, &latest_offsets, timeout_ms);
         if (st.ok()) {
             auto result = response->mutable_kafka_offset_result();
             for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -456,14 +466,14 @@ void PInternalServiceImplBase<T>::_get_info_impl(
             std::vector<int64_t> beginning_offsets;
             std::vector<int64_t> latest_offsets;
 
-            auto timeout_left = timeout - watch.elapsed_time() / 1000 / 1000;
-            if (timeout_left <= 0) {
+            auto left_ms = timeout_ms - watch.elapsed_time() / 1000 / 1000;
+            if (left_ms <= 0) {
                 Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
                 return;
             }
 
             Status st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                    offset_req, &beginning_offsets, &latest_offsets, timeout_left);
+                    offset_req, &beginning_offsets, &latest_offsets, left_ms);
             auto offset_result = response->mutable_kafka_offset_batch_result()->add_results();
             if (st.ok()) {
                 for (int i = 0; i < beginning_offsets.size(); i++) {

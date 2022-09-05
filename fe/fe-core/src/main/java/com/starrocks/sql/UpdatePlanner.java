@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql;
 
 import com.google.common.collect.Lists;
@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
 import java.util.Optional;
@@ -42,8 +43,8 @@ public class UpdatePlanner {
                 new PhysicalPropertySet(),
                 new ColumnRefSet(logicalPlan.getOutputColumn()),
                 columnRefFactory);
-        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(optimizedPlan, session,
+                logicalPlan.getOutputColumn(), columnRefFactory, colNames, TResultSinkType.MYSQL_PROTOCAL, false);
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 

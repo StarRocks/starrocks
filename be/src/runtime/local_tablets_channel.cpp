@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "runtime/local_tablets_channel.h"
 
@@ -61,10 +61,10 @@ public:
 
     const TabletsChannelKey& key() const { return _key; }
 
-    Status open(const PTabletWriterOpenRequest& params) override;
+    Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) override;
 
-    void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
-                   PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) override;
+    void add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+                   PTabletWriterAddBatchResult* response) override;
 
     void cancel() override;
 
@@ -151,14 +151,11 @@ private:
 
     Status _open_all_writers(const PTabletWriterOpenRequest& params);
 
-    Status _build_chunk_meta(const ChunkPB& pb_chunk);
-
-    StatusOr<std::shared_ptr<WriteContext>> _create_write_context(const PTabletWriterAddChunkRequest& request,
+    StatusOr<std::shared_ptr<WriteContext>> _create_write_context(vectorized::Chunk* chunk,
+                                                                  const PTabletWriterAddChunkRequest& request,
                                                                   PTabletWriterAddBatchResult* response);
 
     int _close_sender(const int64_t* partitions, size_t partitions_size);
-
-    Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk, faststring* uncompressed_buffer);
 
     LoadChannel* _load_channel;
 
@@ -169,8 +166,8 @@ private:
     // initialized in open function
     int64_t _txn_id = -1;
     int64_t _index_id = -1;
-    OlapTableSchemaParam* _schema = nullptr;
-    RowDescriptor* _row_desc = nullptr;
+    std::shared_ptr<OlapTableSchemaParam> _schema;
+    TupleDescriptor* _tuple_desc = nullptr;
 
     // next sequence we expect
     std::atomic<int> _num_remaining_senders;
@@ -179,10 +176,6 @@ private:
 
     mutable bthread::Mutex _partitions_ids_lock;
     std::unordered_set<int64_t> _partition_ids;
-
-    mutable bthread::Mutex _chunk_meta_lock;
-    serde::ProtobufChunkMeta _chunk_meta;
-    std::atomic<bool> _has_chunk_meta;
 
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     // tablet_id -> TabletChannel
@@ -200,7 +193,6 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
           _load_channel(load_channel),
           _key(key),
           _mem_tracker(mem_tracker),
-          _has_chunk_meta(false),
           _mem_pool(std::make_unique<MemPool>()) {
     static std::once_flag once_flag;
     std::call_once(once_flag, [] {
@@ -210,17 +202,14 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
 
 LocalTabletsChannel::~LocalTabletsChannel() {
     _s_tablet_writer_count -= _delta_writers.size();
-    delete _row_desc;
-    delete _schema;
     _mem_pool.reset();
 }
 
-Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params) {
+Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) {
     _txn_id = params.txn_id();
     _index_id = params.index_id();
-    _schema = new OlapTableSchemaParam();
-    RETURN_IF_ERROR(_schema->init(params.schema()));
-    _row_desc = new RowDescriptor(_schema->tuple_desc(), false);
+    _schema = schema;
+    _tuple_desc = _schema->tuple_desc();
 
     _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
     _senders = std::vector<Sender>(params.num_senders());
@@ -229,10 +218,8 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params) {
     return Status::OK();
 }
 
-void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
-                                    PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) {
-    ClosureGuard done_guard(done);
-
+void LocalTabletsChannel::add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+                                    PTabletWriterAddBatchResult* response) {
     auto t0 = std::chrono::steady_clock::now();
 
     if (UNLIKELY(!request.has_sender_id())) {
@@ -298,7 +285,7 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
         }
     }
 
-    auto res = _create_write_context(request, response);
+    auto res = _create_write_context(chunk, request, response);
     if (!res.ok()) {
         res.status().to_protobuf(response->mutable_status());
         return;
@@ -310,7 +297,7 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
     }
 
     auto context = std::move(res).value();
-    auto channel_size = request.has_chunk() ? _tablet_id_to_sorted_indexes.size() : 0;
+    auto channel_size = chunk != nullptr ? _tablet_id_to_sorted_indexes.size() : 0;
     auto tablet_ids = request.tablet_ids().data();
     auto channel_row_idx_start_points = context->_channel_row_idx_start_points.get(); // May be a nullptr
     auto row_indexes = context->_row_indexes.get();                                   // May be a nullptr
@@ -331,7 +318,7 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
         auto& delta_writer = it->second;
 
         AsyncDeltaWriterRequest req;
-        req.chunk = &context->_chunk;
+        req.chunk = chunk;
         req.indexes = row_indexes + from;
         req.indexes_size = size;
         req.commit_after_write = false;
@@ -390,8 +377,13 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
         }
     }
 
+    int64_t last_execution_time_us = 0;
+    if (response->has_execution_time_us()) {
+        last_execution_time_us = response->execution_time_us();
+    }
     auto t1 = std::chrono::steady_clock::now();
-    response->set_execution_time_us(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
+    response->set_execution_time_us(last_execution_time_us +
+                                    std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
     response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
 
     if (close_channel) {
@@ -409,21 +401,6 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
         auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
         LOG_IF(WARNING, !st.ok()) << "failed to persist transactions: " << st;
     }
-}
-
-Status LocalTabletsChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
-    if (_has_chunk_meta.load(std::memory_order_acquire)) {
-        return Status::OK();
-    }
-    std::lock_guard l(_chunk_meta_lock);
-    if (_has_chunk_meta.load(std::memory_order_acquire)) {
-        return Status::OK();
-    }
-    StatusOr<serde::ProtobufChunkMeta> res = serde::build_protobuf_chunk_meta(*_row_desc, pb_chunk);
-    if (!res.ok()) return res.status();
-    _chunk_meta = std::move(res).value();
-    _has_chunk_meta.store(true, std::memory_order_release);
-    return Status::OK();
 }
 
 int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
@@ -508,64 +485,24 @@ void LocalTabletsChannel::cancel() {
               << " tablet_ids:" << tablet_id_list_str;
 }
 
-Status LocalTabletsChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk,
-                                               faststring* uncompressed_buffer) {
-    if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
-        TRY_CATCH_BAD_ALLOC({
-            serde::ProtobufChunkDeserializer des(_chunk_meta);
-            StatusOr<vectorized::Chunk> res = des.deserialize(pchunk.data());
-            if (!res.ok()) return res.status();
-            chunk = std::move(res).value();
-        });
-    } else {
-        [[maybe_unused]] size_t uncompressed_size;
-        {
-            const BlockCompressionCodec* codec = nullptr;
-            RETURN_IF_ERROR(get_block_compression_codec(pchunk.compress_type(), &codec));
-            uncompressed_size = pchunk.uncompressed_size();
-            TRY_CATCH_BAD_ALLOC(uncompressed_buffer->resize(uncompressed_size));
-            Slice output{uncompressed_buffer->data(), uncompressed_size};
-            RETURN_IF_ERROR(codec->decompress(pchunk.data(), &output));
-        }
-        {
-            TRY_CATCH_BAD_ALLOC({
-                std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
-                serde::ProtobufChunkDeserializer des(_chunk_meta);
-                StatusOr<vectorized::Chunk> res = des.deserialize(buff);
-                if (!res.ok()) return res.status();
-                chunk = std::move(res).value();
-            });
-        }
-    }
-    return Status::OK();
-}
-
 StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel::_create_write_context(
-        const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
-    if (!request.has_chunk() && !request.eos()) {
+        vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
+    if (chunk == nullptr && !request.eos()) {
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }
 
     auto context = std::make_shared<WriteContext>(response);
 
-    if (!request.has_chunk()) {
+    if (chunk == nullptr) {
         return std::move(context);
     }
 
-    auto& pchunk = request.chunk();
-    RETURN_IF_ERROR(_build_chunk_meta(pchunk));
-
-    vectorized::Chunk& chunk = context->_chunk;
-
-    faststring uncompressed_buffer;
-    RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk, &uncompressed_buffer));
-
-    if (UNLIKELY(request.tablet_ids_size() != chunk.num_rows())) {
+    if (UNLIKELY(request.tablet_ids_size() != chunk->num_rows())) {
         return Status::InvalidArgument("request.tablet_ids_size() != chunk.num_rows()");
     }
 
     const auto channel_size = _tablet_id_to_sorted_indexes.size();
-    context->_row_indexes = std::make_unique<uint32_t[]>(chunk.num_rows());
+    context->_row_indexes = std::make_unique<uint32_t[]>(chunk->num_rows());
     context->_channel_row_idx_start_points = std::make_unique<uint32_t[]>(channel_size + 1);
 
     auto& row_indexes = context->_row_indexes;

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 grammar StarRocks;
 import StarRocksLex;
@@ -13,153 +13,179 @@ singleStatement
 
 statement
     // Query Statement
-    : queryStatement                                                                        #query
+    : queryStatement
 
     // Database Statement
-    | alterDbQuotaStmt                                                                      #alterDbQuota
-    | createDbStatement                                                                     #createDb
-    | dropDbStatement                                                                       #dropDb
-    | showCreateDbStatement                                                                 #showCreateDb
-    | alterDatabaseRename                                                                   #databaseRename
-    | recoverDbStmt                                                                         #revoverDb
-    | showDataStmt                                                                          #showData
-    | showDynamicPartitionStatement                                                         #showDynamicPartition
+    | useDatabaseStatement
+    | useCatalogStatement
+    | showDatabasesStatement
+    | alterDbQuotaStmtatement
+    | createDbStatement
+    | dropDbStatement
+    | showCreateDbStatement
+    | alterDatabaseRename
+    | recoverDbStmt
+    | showDataStmt
 
     // Table Statement
-    | createTableStatement                                                                  #createTable
-    | createTableAsSelectStatement                                                          #createTableAsSelect
-    | alterTableStatement                                                                   #alterTable
-    | dropTableStatement                                                                    #dropTable
-    | showTableStatement                                                                    #showTables
-    | showCreateTableStatement                                                              #showCreateTable
-    | showColumnStatement                                                                   #showColumn
-    | showTableStatusStatement                                                              #showTableStatus
-    | createIndexStatement                                                                  #createIndex
-    | dropIndexStatement                                                                    #dropIndex
-    | refreshTableStatement                                                                 #refreshTable
-    | showAlterStatement                                                                    #showAlter
-    | showDeleteStatement                                                                   #showDelete
-    | descTableStatement                                                                    #descTable
-    | createTableLikeStatement                                                              #createTableLike
-    | showIndexStatement                                                                    #showIndex
-    | recoverTableStatement                                                                 #recoverTable
-    | truncateTableStatement                                                                #truncateTable
-    | showTabletStatement                                                                   #showTablet
-    | cancelAlterTableStatement                                                             #cancelAlterTable
-    | showPartitionsStatement                                                               #showPartitions
-    | recoverPartitionStatement                                                             #recoverPartition
-    | showOpenTableStatement                                                                #showOpenTable
+    | createTableStatement
+    | createTableAsSelectStatement
+    | createTableLikeStatement
+    | showCreateTableStatement
+    | dropTableStatement
+    | recoverTableStatement
+    | truncateTableStatement
+    | showTableStatement
+    | descTableStatement
+    | showTableStatusStatement
+    | showColumnStatement
+    | refreshTableStatement
+    | alterTableStatement
+    | cancelAlterTableStatement
+    | showAlterStatement
 
     // View Statement
-    | createViewStatement                                                                   #createView
-    | alterViewStatement                                                                    #alterView
-    | dropViewStatement                                                                     #dropView
+    | createViewStatement
+    | alterViewStatement
+    | dropViewStatement
+
+    // Partition Statement
+    | showPartitionsStatement
+    | recoverPartitionStatement
+
+    // Index Statement
+    | createIndexStatement
+    | dropIndexStatement
+    | showIndexStatement
 
     // Task Statement
-    | submitTaskStatement                                                                   #submitTask
+    | submitTaskStatement
 
     // Materialized View Statement
-    | createMaterializedViewStatement                                                       #createMaterializedView
-    | showMaterializedViewStatement                                                         #showMaterializedView
-    | dropMaterializedViewStatement                                                         #dropMaterializedView
-    | alterMaterializedViewStatement                                                        #alterMaterializedView
-    | refreshMaterializedViewStatement                                                      #refreshMaterializedView
-    | cancelRefreshMaterializedViewStatement                                                #cancelRefreshMaterializedView
+    | createMaterializedViewStatement
+    | showMaterializedViewStatement
+    | dropMaterializedViewStatement
+    | alterMaterializedViewStatement
+    | refreshMaterializedViewStatement
+    | cancelRefreshMaterializedViewStatement
 
     // Catalog Statement
-    | createExternalCatalogStatement                                                        #createCatalog
-    | dropExternalCatalogStatement                                                          #dropCatalog
-    | showCatalogsStatement                                                                 #showCatalogs
+    | createExternalCatalogStatement
+    | dropExternalCatalogStatement
+    | showCatalogsStatement
 
     // DML Statement
-    | insertStatement                                                                       #insert
-    | updateStatement                                                                       #update
-    | deleteStatement                                                                       #delete
+    | insertStatement
+    | updateStatement
+    | deleteStatement
 
     //Routine Statement
-    | stopRoutineLoadStatement                                                              #stopRoutineLoad
-    | resumeRoutineLoadStatement                                                            #resumeRoutineLoad
-    | pauseRoutineLoadStatement                                                             #pauseRoutineLoad
-    | showRoutineLoadStatement                                                              #showRoutineLoad
+    | stopRoutineLoadStatement
+    | resumeRoutineLoadStatement
+    | pauseRoutineLoadStatement
+    | showRoutineLoadStatement
 
     // Admin Statement
-    | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
-    | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
-    | ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?                                     #adminShowConfig
-    | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
-    | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
-            (WHERE where=expression)?                                                       #adminShowReplicaStatus
+    | adminSetConfigStatement
+    | adminSetReplicaStatusStatement
+    | adminShowConfigStatement
+    | adminShowReplicaDistributionStatement
+    | adminShowReplicaStatusStatement
+    | adminRepairTableStatement
+    | adminCancelRepairTableStatement
+    | adminCheckTabletsStatement
 
     // Cluster Mangement Statement
-    | alterSystemStatement                                                                  #alterSystem
-    | showNodesStatement                                                                    #showNodes
+    | alterSystemStatement
+    | showNodesStatement
 
     // Analyze Statement
-    | analyzeStatement                                                                      #analyze
-    | dropStatsStatement                                                                    #dropStats
-    | createAnalyzeStatement                                                                #createAnalyze
-    | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
-    | analyzeHistogramStatement                                                             #analyzeHistogram
-    | dropHistogramStatement                                                                #dropHistogram
-    | showAnalyzeStatement                                                                  #showAnalyze
-    | showStatsMetaStatement                                                                #showStatsMeta
-    | showHistogramMetaStatement                                                            #showHistogramMeta
+    | analyzeStatement
+    | dropStatsStatement
+    | createAnalyzeStatement
+    | dropAnalyzeJobStatement
+    | analyzeHistogramStatement
+    | dropHistogramStatement
+    | showAnalyzeStatement
+    | showStatsMetaStatement
+    | showHistogramMetaStatement
+    | killAnalyzeStatement
 
     // Work Group Statement
-    | createResourceGroupStatement                                                          #createResourceGroup
-    | dropResourceGroupStatement                                                            #dropResourceGroup
-    | alterResourceGroupStatement                                                           #alterResourceGroup
-    | showResourceGroupStatement                                                            #showResourceGroup
+    | createResourceGroupStatement
+    | dropResourceGroupStatement
+    | alterResourceGroupStatement
+    | showResourceGroupStatement
+
+    // Extenal Resource Statement
+    | createResourceStatement
+    | alterResourceStatement
+    | dropResourceStatement
+    | showResourceStatement
 
     //UDF
-    | showFunctionsStatement                                                                #showFunctions
-    | dropFunctionStatement                                                                 #dropFunctionst
-    | createFunctionStatement                                                               #createFunction
+    | showFunctionsStatement
+    | dropFunctionStatement
+    | createFunctionStatement
 
     // Load Statement
-    | loadStatement                                                                         #load
-    | showLoadStatement                                                                     #showLoad
-    | showLoadWarningsStatement                                                             #showLoadWarnings
-    | cancelLoadStatement                                                                   #cancelLoad
+    | loadStatement
+    | showLoadStatement
+    | showLoadWarningsStatement
+    | cancelLoadStatement
 
     // Other statement
-    | USE qualifiedName                                                                     #useDb
-    | USE CATALOG identifierOrString                                                        #useCatalog
-    | showDatabasesStatement                                                                #showDatabases
-    | showVariablesStatement                                                                #showVariables
-    | showProcesslistStatement                                                              #showProcesslist
-    | showUserPropertyStatement                                                             #showUserProperty
-    | killStatement                                                                         #kill
-    | setUserPropertyStatement                                                              #setUserProperty
-    | showStatusStatement                                                                   #showStatus
-    | showCharsetStatement                                                                  #showCharset
-    | showBrokerStatement                                                                   #showBroker
-    | showCollationStatement                                                                #showCollation
-    | setStatement                                                                          #setStmt
-    | showWarningStatement                                                                  #showWarning
+    | showVariablesStatement
+    | showProcesslistStatement
+    | showUserPropertyStatement
+    | killStatement
+    | setUserPropertyStatement
+    | showStatusStatement
+    | showCharsetStatement
+    | showBrokerStatement
+    | showCollationStatement
+    | setStatement
+
+    //Show Statement
+    | showWarningStatement
+    | showTabletStatement
+    | showDeleteStatement
+    | showOpenTableStatement
+    | showDynamicPartitionStatement
 
     // privilege
-    | GRANT identifierOrString TO user                                                      #grantRole
-    | GRANT IMPERSONATE ON user TO user                                                     #grantImpersonate
-    | REVOKE identifierOrString FROM user                                                   #revokeRole
-    | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
-    | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
-    | ALTER USER user authOption                                                            #alterUser
-    | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
-    | DROP USER user                                                                        #dropUser
+    | grantRoleStatement
+    | grantImpersonateStatement
+    | revokeRoleStatement
+    | revokeImpersonateStatement
+    | executeAsStatement
+    | alterUserStatement
+    | createUserStatement
+    | dropUserStatement
+    | showAuthenticationStatement
 
     // procedure
-    | showProcedureStatement                                                                 #showProcedure
+    | showProcedureStatement
 
     // proc
-    | showProcStatement                                                                      #showProc
+    | showProcStatement
 
     // Backup Restore Satement
-    | backupStatement                                                                        #backup
+    | backupStatement
+    | showBackupStatement
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
-alterDbQuotaStmt
+
+useDatabaseStatement
+    : USE qualifiedName
+    ;
+
+useCatalogStatement
+    : USE CATALOG identifierOrString
+    ;
+
+alterDbQuotaStmtatement
     : ALTER DATABASE identifier SET DATA QUOTA identifier
     | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
     ;
@@ -190,11 +216,6 @@ showDataStmt
     : SHOW DATA
     | SHOW DATA FROM qualifiedName
     ;
-
-showDynamicPartitionStatement
-    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
-    ;
-
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
@@ -254,10 +275,10 @@ aggDesc
     ;
 
 rollupDesc
-    : ROLLUP '(' addRollupClause (',' addRollupClause)* ')'
+    : ROLLUP '(' rollupItem (',' rollupItem)* ')'
     ;
 
-addRollupClause
+rollupItem
     : rollupName=identifier identifierList (dupKeys)? (fromRollup)? properties?
     ;
 
@@ -284,6 +305,8 @@ dropTableStatement
 
 alterTableStatement
     : ALTER TABLE qualifiedName alterClause (',' alterClause)*
+    | ALTER TABLE qualifiedName ADD ROLLUP rollupItem (',' rollupItem)*
+    | ALTER TABLE qualifiedName DROP ROLLUP identifier (',' identifier)*
     ;
 
 createIndexStatement
@@ -432,6 +455,38 @@ cancelRefreshMaterializedViewStatement
     : CANCEL REFRESH MATERIALIZED VIEW mvName=qualifiedName
     ;
 
+// ------------------------------------------- Admin Statement ---------------------------------------------------------
+
+adminSetConfigStatement
+    : ADMIN SET FRONTEND CONFIG '(' property ')'
+    ;
+adminSetReplicaStatusStatement
+    : ADMIN SET REPLICA STATUS properties
+    ;
+adminShowConfigStatement
+    : ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?
+    ;
+
+adminShowReplicaDistributionStatement
+    : ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?
+    ;
+
+adminShowReplicaStatusStatement
+    : ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames? (WHERE where=expression)?
+    ;
+
+adminRepairTableStatement
+    : ADMIN REPAIR TABLE qualifiedName partitionNames?
+    ;
+
+adminCancelRepairTableStatement
+    : ADMIN CANCEL REPAIR TABLE qualifiedName partitionNames?
+    ;
+
+adminCheckTabletsStatement
+    : ADMIN CHECK tabletList properties
+    ;
+
 // ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
 
 alterSystemStatement
@@ -456,35 +511,91 @@ showCatalogsStatement
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
 
 alterClause
-    : createIndexClause
-    | dropIndexClause
-    | tableRenameClause
-    | addBackendClause
-    | dropBackendClause
-    | modifyBackendHostClause
-    | addFrontendClause
+    //Alter system clause
+    : addFrontendClause
     | dropFrontendClause
     | modifyFrontendHostClause
+    | addBackendClause
+    | dropBackendClause
+    | decommissionBackendClause
+    | modifyBackendHostClause
     | addComputeNodeClause
     | dropComputeNodeClause
+    | modifyBrokerClause
+    | alterLoadErrorUrlClause
+
+    //Alter table clause
+    | createIndexClause
+    | dropIndexClause
+    | tableRenameClause
     | swapTableClause
-    | dropPartitionClause
-    | truncatePartitionClause
     | modifyTablePropertiesClause
-    | addPartitionClause
-    | modifyPartitionClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
     | modifyColumnClause
     | columnRenameClause
     | reorderColumnsClause
-    | modifyBrokerClause
+    | rollupRenameClause
+
+    //Alter partition clause
+    | addPartitionClause
+    | dropPartitionClause
+    | truncatePartitionClause
+    | modifyPartitionClause
+    | replacePartitionClause
+    | partitionRenameClause
     ;
 
-addPartitionClause
-    : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties?
+// ---------Alter system clause---------
+
+addFrontendClause
+   : ADD (FOLLOWER | OBSERVER) string
+   ;
+
+dropFrontendClause
+   : DROP (FOLLOWER | OBSERVER) string
+   ;
+
+modifyFrontendHostClause
+  : MODIFY FRONTEND HOST string TO string
+  ;
+
+addBackendClause
+   : ADD BACKEND string (',' string)*
+   ;
+
+dropBackendClause
+   : DROP BACKEND string (',' string)* FORCE?
+   ;
+
+decommissionBackendClause
+   : DECOMMISSION BACKEND string (',' string)*
+   ;
+
+modifyBackendHostClause
+   : MODIFY BACKEND HOST string TO string
+   ;
+
+addComputeNodeClause
+   : ADD COMPUTE NODE string (',' string)*
+   ;
+
+dropComputeNodeClause
+   : DROP COMPUTE NODE string (',' string)*
+   ;
+
+modifyBrokerClause
+    : ADD BROKER identifierOrString string (',' string)*
+    | DROP BROKER identifierOrString string (',' string)*
+    | DROP ALL BROKER identifierOrString
     ;
+
+alterLoadErrorUrlClause
+    : SET LOAD ERRORS HUB properties?
+    ;
+
+// ---------Alter table clause---------
 
 createIndexClause
     : ADD INDEX indexName=identifier identifierList indexType? comment?
@@ -492,14 +603,6 @@ createIndexClause
 
 dropIndexClause
     : DROP INDEX indexName=identifier
-    ;
-
-dropPartitionClause
-    : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
-    ;
-
-truncatePartitionClause
-    : TRUNCATE partitionNames
     ;
 
 tableRenameClause
@@ -512,42 +615,6 @@ swapTableClause
 
 modifyTablePropertiesClause
     : SET propertyList
-    ;
-
-addBackendClause
-   : ADD BACKEND string (',' string)*
-   ;
-
-dropBackendClause
-   : DROP BACKEND string (',' string)* FORCE?
-   ;
-
-modifyBackendHostClause
-   : MODIFY BACKEND HOST string TO string
-   ;
-
-addFrontendClause
-   : ADD (FOLLOWER | OBSERVER) string
-   ;
-
-dropFrontendClause
-   : DROP (FOLLOWER | OBSERVER) string
-   ;
-
-modifyFrontendHostClause
-   : MODIFY FRONTEND HOST string TO string
-   ;
-
-addComputeNodeClause
-   : ADD COMPUTE NODE string (',' string)*
-   ;
-
-dropComputeNodeClause
-   : DROP COMPUTE NODE string (',' string)*
-   ;
-
-modifyPartitionClause
-    : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
     ;
 
 addColumnClause
@@ -574,10 +641,33 @@ reorderColumnsClause
     : ORDER BY identifierList (FROM rollupName=identifier)? properties?
     ;
 
-modifyBrokerClause
-    : ADD BROKER identifierOrString string (',' string)*
-    | DROP BROKER identifierOrString string (',' string)*
-    | DROP ALL BROKER identifierOrString
+rollupRenameClause
+    : RENAME ROLLUP rollupName=identifier newRollupName=identifier
+    ;
+
+// ---------Alter partition clause---------
+
+addPartitionClause
+    : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties?
+    ;
+dropPartitionClause
+    : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
+    ;
+
+truncatePartitionClause
+    : TRUNCATE partitionNames
+    ;
+
+modifyPartitionClause
+    : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
+    ;
+
+replacePartitionClause
+    : REPLACE parName=partitionNames WITH tempParName=partitionNames properties?
+    ;
+
+partitionRenameClause
+    : RENAME PARTITION parName=identifier newParName=identifier
     ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
@@ -657,6 +747,10 @@ showHistogramMetaStatement
     : SHOW HISTOGRAM META (WHERE expression)?
     ;
 
+killAnalyzeStatement
+    : KILL ANALYZE INTEGER_VALUE
+    ;
+
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
 
 createResourceGroupStatement
@@ -678,6 +772,22 @@ alterResourceGroupStatement
 showResourceGroupStatement
     : SHOW RESOURCE GROUP identifier
     | SHOW RESOURCE GROUPS ALL?
+    ;
+
+createResourceStatement
+    : CREATE EXTERNAL? RESOURCE resourceName=identifierOrString properties?
+    ;
+
+alterResourceStatement
+    : ALTER RESOURCE resourceName=identifierOrString SET properties
+    ;
+
+dropResourceStatement
+    : DROP RESOURCE resourceName=identifierOrString
+    ;
+
+showResourceStatement
+    : SHOW RESOURCES
     ;
 
 classifier
@@ -744,8 +854,8 @@ dataDesc
     ;
 
 brokerDesc
-    : WITH BROKER name=identifierOrString props=propertyList?
-    | WITH BROKER props=propertyList?
+    : WITH BROKER props=propertyList?
+    | WITH BROKER name=identifierOrString props=propertyList?
     ;
 
 resourceDesc
@@ -763,6 +873,45 @@ showLoadWarningsStatement
 
 cancelLoadStatement
     : CANCEL LOAD (FROM identifier)? (WHERE expression)?
+    ;
+
+// ------------------------------------------- Privilege Statement -----------------------------------------------------
+
+grantRoleStatement
+    : GRANT identifierOrString TO user
+    ;
+
+grantImpersonateStatement
+    : GRANT IMPERSONATE ON user TO (user | ROLE identifierOrString)
+    ;
+
+revokeRoleStatement
+    : REVOKE identifierOrString FROM user
+    ;
+
+revokeImpersonateStatement
+    : REVOKE IMPERSONATE ON user FROM  (user | ROLE identifierOrString)
+    ;
+
+executeAsStatement
+    : EXECUTE AS user (WITH NO REVERT)?
+    ;
+
+alterUserStatement
+    : ALTER USER user authOption
+    ;
+
+createUserStatement
+    : CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?
+    ;
+
+dropUserStatement
+    : DROP USER user
+    ;
+
+showAuthenticationStatement
+    : SHOW ALL AUTHENTICATION                                                                #showAllAuthentication
+    | SHOW AUTHENTICATION (FOR user)?                                                        #showAuthenticationForUser
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
@@ -828,8 +977,8 @@ setVar
     | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
     | PASSWORD FOR user '=' (string | PASSWORD '(' string ')')                                  #setPassword
     | varType? identifier '=' setExprOrDefault                                                  #setVariable
-    | AT identifierOrString '=' expression                                                      #setVariable
-    | AT AT (varType '.')? identifier '=' setExprOrDefault                                      #setVariable
+    | userVariable '=' expression                                                         #setVariable
+    | systemVariable '=' setExprOrDefault                                                       #setVariable
     ;
 
 setExprOrDefault
@@ -837,6 +986,10 @@ setExprOrDefault
     | ON
     | ALL
     | expression
+    ;
+
+showDynamicPartitionStatement
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -1012,6 +1165,10 @@ backupStatement
     (PROPERTIES propertyList)?
     ;
 
+showBackupStatement
+    : SHOW BACKUP ((FROM | IN) identifier)?
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -1083,7 +1240,8 @@ valueExpression
     ;
 
 primaryExpression
-    : variable                                                                            #var
+    : userVariable                                                                        #userVariableExpression
+    | systemVariable                                                                      #systemVariableExpression
     | columnReference                                                                     #columnRef
     | functionCall                                                                        #functionCallExpression
     | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
@@ -1102,6 +1260,7 @@ primaryExpression
     | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | primaryExpression ARROW string                                                      #arrowExpression
+    | (identifier | identifierList) '->' expression                                       #lambdaFunctionExpr
     ;
 
 literalExpression
@@ -1133,7 +1292,11 @@ aggregationFunction
     | SUM '(' DISTINCT? expression ')'
     ;
 
-variable
+userVariable
+    : AT identifierOrString
+    ;
+
+systemVariable
     : AT AT (varType '.')? identifier
     ;
 
@@ -1435,11 +1598,11 @@ nonReserved
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
     | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
-    | DATA | DATE | DATETIME | DAY | DISTRIBUTION | DUPLICATE | DYNAMIC
+    | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FILE | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
-    | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR
+    | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
@@ -1450,7 +1613,7 @@ nonReserved
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
-    | RESOURCE | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
+    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE
     | STRING | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION

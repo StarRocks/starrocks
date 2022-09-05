@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.lake;
 
@@ -13,7 +13,7 @@ import com.starrocks.lake.proto.DeleteTabletRequest;
 import com.starrocks.lake.proto.DeleteTabletResponse;
 import com.starrocks.persist.ShardInfo;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.LakeServiceAsync;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import org.apache.logging.log4j.LogManager;
@@ -74,8 +74,8 @@ public class ShardDeleter extends LeaderDaemon {
             request.tabletIds = Lists.newArrayList(shards);
 
             try {
-                LakeServiceAsync lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-                DeleteTabletResponse response = lakeService.deleteTablet(request);
+                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                DeleteTabletResponse response = lakeService.deleteTablet(request).get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
                     LOG.info("failedTablets is {}", response.failedTablets);
                     response.failedTablets.forEach(shards::remove);

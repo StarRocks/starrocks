@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.connector.hive;
 
@@ -105,7 +105,7 @@ public class HiveMetadataTest {
         HiveMetadata metadata = new HiveMetadata(resourceName);
         HiveTable table1 = (HiveTable) metadata.getTable(db, tbl1);
         Assert.assertEquals(tbl1, table1.getTableName());
-        Assert.assertEquals(db, table1.getHiveDb());
+        Assert.assertEquals(db, table1.getDbName());
         Assert.assertEquals(String.format("%s.%s", db, tbl1), table1.getHiveDbTable());
         Assert.assertEquals(hdfsPath, table1.getHdfsPath());
         Assert.assertEquals(Lists.newArrayList(new Column("col1", Type.BIGINT, true)), table1.getPartitionColumns());

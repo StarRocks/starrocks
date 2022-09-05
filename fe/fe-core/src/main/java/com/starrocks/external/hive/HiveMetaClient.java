@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive;
 
@@ -38,19 +38,15 @@ import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
-import org.apache.hudi.common.config.HoodieMetadataConfig;
-import org.apache.hudi.common.engine.HoodieEngineContext;
-import org.apache.hudi.common.engine.HoodieLocalEngineContext;
 import org.apache.hudi.common.fs.FSUtils;
+import org.apache.hudi.common.model.BaseFile;
+import org.apache.hudi.common.model.FileSlice;
 import org.apache.hudi.common.model.HoodieBaseFile;
 import org.apache.hudi.common.model.HoodieFileFormat;
+import org.apache.hudi.common.model.HoodieLogFile;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
-import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
-import org.apache.hudi.common.table.view.FileSystemViewManager;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
-import org.apache.hudi.common.util.Option;
-import org.apache.hudi.hadoop.utils.HoodieInputFormatUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -64,6 +60,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.ConcurrentHashMap;
@@ -100,7 +97,7 @@ public class HiveMetaClient {
     private long baseHmsEventId;
 
     // Required for creating an instance of RetryingMetaStoreClient.
-    private static final HiveMetaHookLoader dummyHookLoader = tbl -> null;
+    private static final HiveMetaHookLoader DUMMY_HOOK_LOADER = tbl -> null;
 
     public HiveMetaClient(String uris) throws DdlException {
         HiveConf conf = new HiveConf();
@@ -124,10 +121,10 @@ public class HiveMetaClient {
 
         private AutoCloseClient(HiveConf conf) throws MetaException {
             if (!DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
                         HiveMetaStoreThriftClient.class.getName());
             } else {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
                         DLFProxyMetaStoreClient.class.getName());
             }
         }
@@ -321,29 +318,22 @@ public class HiveMetaClient {
     private List<HdfsFileDesc> getHudiFileDescs(StorageDescriptor sd, HoodieTableMetaClient metaClient,
                                                 String partName) throws Exception {
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
-        FileSystem fileSystem = metaClient.getRawFs();
-        HoodieEngineContext engineContext = new HoodieLocalEngineContext(conf);
-        HoodieMetadataConfig metadataConfig = HoodieMetadataConfig.newBuilder().build();
-        HoodieTableFileSystemView fileSystemView = FileSystemViewManager.createInMemoryFileSystemView(engineContext,
-                metaClient, metadataConfig);
-        HoodieTimeline activeInstants = metaClient.getActiveTimeline().getCommitsTimeline().filterCompletedInstants();
-        Option<HoodieInstant> latestInstant = activeInstants.lastInstant();
-        String queryInstant = latestInstant.get().getTimestamp();
-        Iterator<HoodieBaseFile> hoodieBaseFileIterator = fileSystemView
-                .getLatestBaseFilesBeforeOrOn(partName, queryInstant).iterator();
-        while (hoodieBaseFileIterator.hasNext()) {
-            HoodieBaseFile baseFile = hoodieBaseFileIterator.next();
-
-            FileStatus fileStatus = HoodieInputFormatUtils.getFileStatus(baseFile);
-            BlockLocation[] blockLocations;
-            if (fileStatus instanceof LocatedFileStatus) {
-                blockLocations = ((LocatedFileStatus) fileStatus).getBlockLocations();
-            } else {
-                blockLocations = fileSystem.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
-            }
-            List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
-            fileDescs.add(new HdfsFileDesc(baseFile.getFileName(), "", fileStatus.getLen(),
-                    ImmutableList.copyOf(fileBlockDescs), HdfsFileFormat.isSplittable(sd.getInputFormat()),
+        HoodieTimeline timeline = metaClient.getActiveTimeline().filterCompletedAndCompactionInstants();
+        String globPath = String.format("%s/%s/*", metaClient.getBasePath(), partName);
+        List<FileStatus> statuses = FSUtils.getGlobStatusExcludingMetaFolder(metaClient.getRawFs(), new Path(globPath));
+        HoodieTableFileSystemView fileSystemView = new HoodieTableFileSystemView(metaClient,
+                timeline, statuses.toArray(new FileStatus[0]));
+        String queryInstant = timeline.lastInstant().get().getTimestamp();
+        Iterator<FileSlice> hoodieFileSliceIterator = fileSystemView
+                .getLatestMergedFileSlicesBeforeOrOn(partName, queryInstant).iterator();
+        while (hoodieFileSliceIterator.hasNext()) {
+            FileSlice fileSlice = hoodieFileSliceIterator.next();
+            Optional<HoodieBaseFile> baseFile = fileSlice.getBaseFile().toJavaOptional();
+            String fileName = baseFile.map(BaseFile::getFileName).orElse("");
+            long fileLength = baseFile.map(BaseFile::getFileLen).orElse(-1L);
+            List<String> logs = fileSlice.getLogFiles().map(HoodieLogFile::getFileName).collect(Collectors.toList());
+            fileDescs.add(new HdfsFileDesc(fileName, "", fileLength,
+                    ImmutableList.of(), ImmutableList.copyOf(logs), HdfsFileFormat.isSplittable(sd.getInputFormat()),
                     getTextFileFormatDesc(sd)));
         }
         return fileDescs;
@@ -556,6 +546,7 @@ public class HiveMetaClient {
             }
             stats.setNumDistinctValues(distinctCnt.size());
             stats.setNumNulls(numNulls);
+            stats.setType(HiveColumnStats.StatisticType.ESTIMATE);
             result.put(column.getName(), stats);
         }
 
@@ -674,7 +665,7 @@ public class HiveMetaClient {
 
     public List<HdfsFileDesc> getHdfsFileDescs(String dirPath, boolean isSplittable,
                                                StorageDescriptor sd) throws Exception {
-        URI uri = new URI(dirPath.replace(" ", "%20"));
+        URI uri = new Path(dirPath).toUri();
         FileSystem fileSystem = getFileSystem(uri);
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
 
@@ -682,17 +673,26 @@ public class HiveMetaClient {
         // block locations of the files in the given path in one operation.
         // The performance is better than getting status and block location one by one.
         try {
-            RemoteIterator<LocatedFileStatus> blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
+            // files in hdfs may have multiple directories, so we need to list all files in hdfs recursively here
+            RemoteIterator<LocatedFileStatus> blockIterator = null;
+            if (!Config.recursive_dir_search_enabled) {
+                blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
+            } else {
+                blockIterator = fileSystem.listFiles(new Path(uri.getPath()), true);
+            }
             while (blockIterator.hasNext()) {
                 LocatedFileStatus locatedFileStatus = blockIterator.next();
                 if (!isValidDataFile(locatedFileStatus)) {
                     continue;
+                } else if (locatedFileStatus.isDirectory() && Config.recursive_dir_search_enabled) {
+                    fileDescs.addAll(getHdfsFileDescs(locatedFileStatus.getPath().toString(), isSplittable, sd));
                 }
                 String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                 List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
                 fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
-                        ImmutableList.copyOf(fileBlockDescs), isSplittable, getTextFileFormatDesc(sd)));
+                        ImmutableList.copyOf(fileBlockDescs), ImmutableList.of(),
+                        isSplittable, getTextFileFormatDesc(sd)));
             }
         } catch (FileNotFoundException ignored) {
             // hive empty partition may not create directory
@@ -720,7 +720,7 @@ public class HiveMetaClient {
     }
 
     private boolean isValidDataFile(FileStatus fileStatus) {
-        if (fileStatus.isDirectory()) {
+        if (fileStatus.isDirectory() && !Config.recursive_dir_search_enabled) {
             return false;
         }
 

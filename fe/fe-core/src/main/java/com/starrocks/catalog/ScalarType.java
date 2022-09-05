@@ -379,6 +379,9 @@ public class ScalarType extends Type implements Cloneable {
         if (!t1.isValid() || !t2.isValid()) {
             return INVALID;
         }
+        if (t1.isUnknown() || t2.isUnknown()) {
+            return UNKNOWN_TYPE;
+        }
         if (t1.equals(t2)) {
             return t1;
         }
@@ -416,6 +419,10 @@ public class ScalarType extends Type implements Cloneable {
 
         if (t1.isDecimalV2() || t2.isDecimalV2()) {
             return DECIMALV2;
+        }
+
+        if (t1.isFunctionType() || t2.isFunctionType()) {
+            return INVALID;
         }
 
         PrimitiveType smallerType =
@@ -505,6 +512,7 @@ public class ScalarType extends Type implements Cloneable {
             case BITMAP:
             case PERCENTILE:
             case JSON:
+            case FUNCTION:
                 stringBuilder.append(type.toString().toLowerCase());
                 break;
             default:

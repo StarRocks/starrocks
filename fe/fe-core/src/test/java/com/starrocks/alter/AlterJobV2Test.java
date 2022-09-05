@@ -21,18 +21,23 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.ShowAlterStmt;
-import com.starrocks.analysis.ShowCreateTableStmt;
+import com.starrocks.analysis.StatementBase;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.hadoop.util.ThreadUtil;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -46,7 +51,7 @@ public class AlterJobV2Test {
     public static void beforeClass() throws Exception {
         FeConstants.default_scheduler_interval_millisecond = 1000;
         FeConstants.runningUnitTest = true;
-
+        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
@@ -55,12 +60,14 @@ public class AlterJobV2Test {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable(
-                        "CREATE TABLE test.schema_change_test(k1 int, k2 int, k3 int) distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
-                .withTable(
-                        "CREATE TABLE test.segmentv2(k1 int, k2 int, v1 int sum) distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
-                .withTable(
-                        "CREATE TABLE test.properties_change_test(k1 int, v1 int) primary key(k1) distributed by hash(k1) properties('replication_num' = '1');");
+                .withTable("CREATE TABLE test.schema_change_test(k1 int, k2 int, k3 int) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
+                .withTable("CREATE TABLE test.segmentv2(k1 int, k2 int, v1 int sum) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
+                .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
+                        "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
+                .withTable("CREATE TABLE modify_column_test(k1 int, k2 int, k3 int) ENGINE = OLAP " +
+                        "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
     }
 
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {
@@ -80,17 +87,8 @@ public class AlterJobV2Test {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
         // 2. check alter job
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
-        Assert.assertEquals(1, alterJobs.size());
-        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            while (!alterJobV2.getJobState().isFinalState()) {
-                System.out.println(
-                        "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
-                Thread.sleep(1000);
-            }
-            System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
-            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
-        }
+        waitForSchemaChangeAlterJobFinish();
+
         // 3. check show alter table column
         String showAlterStmtStr = "show alter table column from test;";
         ShowAlterStmt showAlterStmt =
@@ -105,7 +103,7 @@ public class AlterJobV2Test {
     public void testRollup() throws Exception {
         // 1. process a rollup job
         String alterStmtStr = "alter table test.schema_change_test add rollup test_rollup(k1, k2);";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterStmtStr, connectContext);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
         // 2. check alter job
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
@@ -135,17 +133,8 @@ public class AlterJobV2Test {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
         // 2. check alter job
-        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
-        Assert.assertEquals(1, alterJobs.size());
-        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            while (!alterJobV2.getJobState().isFinalState()) {
-                System.out.println(
-                        "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
-                Thread.sleep(1000);
-            }
-            System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
-            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
-        }
+        waitForSchemaChangeAlterJobFinish();
+
         // 3. check enable persistent index
         String showCreateTableStr = "show create table test.properties_change_test;";
         ShowCreateTableStmt showCreateTableStmt =
@@ -161,22 +150,68 @@ public class AlterJobV2Test {
         GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
 
         // 4. check alter job
-        alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
-        Assert.assertEquals(1, alterJobs.size());
-        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            while (!alterJobV2.getJobState().isFinalState()) {
-                System.out.println(
-                        "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
-                Thread.sleep(1000);
-            }
-            System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
-            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
-        }
+        waitForSchemaChangeAlterJobFinish();
+
         // 5. check enable persistent index
         showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateTableStr, connectContext);
         showResultSet = showExecutor.execute();
         System.out.println(showResultSet.getMetaData());
         System.out.println(showResultSet.getResultRows());
+    }
+
+    @Test
+    public void testModifyRelatedColumnWithMv() {
+        try {
+            String sql = "CREATE MATERIALIZED VIEW test.mv2 DISTRIBUTED BY HASH(k1) " +
+                    " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT k1, k2 FROM modify_column_test";
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+
+            // modify column which define in mv
+            String alterStmtStr = "alter table test.modify_column_test modify column k2 varchar(10)";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+
+            waitForSchemaChangeAlterJobFinish();
+            MaterializedView mv2 = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv2");
+            Assert.assertFalse(mv2.isActive());
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testModifyUnRelatedColumnWithMv() {
+        try {
+            String sql = "CREATE MATERIALIZED VIEW test.mv1 DISTRIBUTED BY HASH(k1) " +
+                    " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT k1, k2 FROM modify_column_test";
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+
+            // modify column which not define in mv
+            String alterStmtStr = "alter table test.modify_column_test modify column k3 varchar(10)";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+
+            waitForSchemaChangeAlterJobFinish();
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv1");
+            Assert.assertTrue(mv.isActive());
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    private void waitForSchemaChangeAlterJobFinish() throws Exception {
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            while (!alterJobV2.getJobState().isFinalState()) {
+                System.out.println(
+                        "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
+                ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
+            }
+            System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
+            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+        }
     }
 }

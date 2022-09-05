@@ -32,6 +32,7 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.FailMsg;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -69,11 +70,13 @@ public class LoadLoadingTask extends LoadTask {
     private final Map<String, String> sessionVariables;
 
     private LoadingTaskPlanner planner;
+    private ConnectContext context;
 
     public LoadLoadingTask(Database db, OlapTable table, BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
             long jobDeadlineMs, long execMemLimit, boolean strictMode,
             long txnId, LoadTaskCallback callback, String timezone,
-            long timeoutS, long createTimestamp, boolean partialUpdate, Map<String, String> sessionVariables) {
+            long timeoutS, long createTimestamp, boolean partialUpdate, Map<String, String> sessionVariables, 
+            ConnectContext context) {
         super(callback, TaskType.LOADING);
         this.db = db;
         this.table = table;
@@ -84,12 +87,13 @@ public class LoadLoadingTask extends LoadTask {
         this.strictMode = strictMode;
         this.txnId = txnId;
         this.failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL);
-        this.retryTime = 2; // 2 times is enough
+        this.retryTime = 1; // load task retry does not satisfy transaction's atomic
         this.timezone = timezone;
         this.timeoutS = timeoutS;
         this.createTimestamp = createTimestamp;
         this.partialUpdate = partialUpdate;
         this.sessionVariables = sessionVariables;
+        this.context = context;
     }
 
     public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
@@ -119,7 +123,7 @@ public class LoadLoadingTask extends LoadTask {
         // New one query id,
         Coordinator curCoordinator = new Coordinator(callback.getCallbackId(), loadId, planner.getDescTable(),
                 planner.getFragments(), planner.getScanNodes(),
-                planner.getTimezone(), planner.getStartTime(), sessionVariables);
+                planner.getTimezone(), planner.getStartTime(), sessionVariables, context);
         curCoordinator.setQueryType(TQueryType.LOAD);
         curCoordinator.setExecMemoryLimit(execMemLimit);
         /*

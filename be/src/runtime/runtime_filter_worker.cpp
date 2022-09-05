@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "runtime/runtime_filter_worker.h"
 
@@ -60,6 +60,23 @@ void RuntimeFilterPort::add_listener(vectorized::RuntimeFilterProbeDescriptor* r
     }
     auto& wait_list = _listeners.find(rf_id)->second;
     wait_list.emplace_back(rf_desc);
+}
+std::string RuntimeFilterPort::listeners(int32_t filter_id) {
+    std::stringstream ss;
+    if (!_listeners.count(filter_id)) {
+        return "[]";
+    }
+    auto& listener_list = _listeners[filter_id];
+    if (listener_list.empty()) {
+        return "[]";
+    }
+    auto it = listener_list.begin();
+    ss << "[" << (*it)->probe_plan_node_id();
+    while (++it != listener_list.end()) {
+        ss << ", " << (*it)->probe_plan_node_id();
+    }
+    ss << "]";
+    return ss.str();
 }
 
 void RuntimeFilterPort::publish_runtime_filters(std::list<vectorized::RuntimeFilterBuildDescriptor*>& rf_descs) {
@@ -504,6 +521,8 @@ static inline Status receive_total_runtime_filter_pipeline(
     // we conservatively consider that global rf arrives in advance, so cache it for later use.
     if (!query_ctx) {
         ExecEnv::GetInstance()->runtime_filter_cache()->put_if_absent(query_id, params.filter_id(), shared_rf);
+        ExecEnv::GetInstance()->add_rf_event({params.query_id(), params.filter_id(), BackendOptions::get_localhost(),
+                                              "PUT_TOTAL_RF_IN_CACHE_QUERY_NOT_READY"});
     }
     // race condition exists among rf caching, FragmentContext's registration and OperatorFactory's preparation
     query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(query_id);
@@ -527,6 +546,9 @@ static inline Status receive_total_runtime_filter_pipeline(
         // we conservatively consider that global rf arrives in advance, so cache it for later use.
         if (!fragment_ctx) {
             ExecEnv::GetInstance()->runtime_filter_cache()->put_if_absent(query_id, params.filter_id(), shared_rf);
+            ExecEnv::GetInstance()->add_rf_event({params.query_id(), params.filter_id(),
+                                                  BackendOptions::get_localhost(),
+                                                  "PUT_TOTAL_RF_IN_CACHE_FRAGMENT_INSTANCE_NOT_READY"});
         }
         // race condition exists among rf caching, FragmentContext's registration and OperatorFactory's preparation
         fragment_ctx = query_ctx->fragment_mgr()->get(finst_id);
@@ -538,6 +560,11 @@ static inline Status receive_total_runtime_filter_pipeline(
             continue;
         }
         fragment_ctx->runtime_filter_port()->receive_shared_runtime_filter(params.filter_id(), shared_rf);
+        ExecEnv::GetInstance()->add_rf_event(
+                {params.query_id(), params.filter_id(), BackendOptions::get_localhost(),
+                 strings::Substitute("INSTALL_GRF(num_waiters=$0, instance_id=$1)",
+                                     fragment_ctx->runtime_filter_port()->listeners(params.filter_id()),
+                                     print_id(finst_id))});
     }
     return Status::OK();
 }

@@ -147,6 +147,7 @@ message PTabletWriterOpenRequest {
 
 message PTabletWriterOpenResult {
     required StatusPB status = 1;
+    optional bool is_repeated_chunk = 2 [default = false];
 };
 
 // Add batch to tablet writer.
@@ -185,6 +186,14 @@ message PTabletWriterAddChunkRequest {
     optional int64 txn_id = 9;
 };
 
+message PTabletWriterAddChunksRequest {
+    optional PUniqueId id = 1;
+    repeated PTabletWriterAddChunkRequest requests = 2;
+    // all request's chunk are repeated if true
+    // only first request's chunk will be set
+    optional bool is_repeated_chunk = 3 [default = false];
+}
+
 message PTabletWriterAddBatchResult {
     required StatusPB status = 1;
     repeated PTabletInfo tablet_vec = 2;
@@ -203,18 +212,14 @@ message PTabletWriterCancelRequest {
 message PTabletWriterCancelResult {
 };
 
-// If request is null, there will be an error when brpc encode request.
 message PExecPlanFragmentRequest {
-    optional bool pad = 1;
 };
 
 message PExecPlanFragmentResult {
     required StatusPB status = 1;
 };
 
-// If request is null, there will be an error when brpc encode request.
 message PExecBatchPlanFragmentsRequest {
-    optional bool pad = 1;
 };
 
 message PExecBatchPlanFragmentsResult {
@@ -330,6 +335,7 @@ service PInternalService {
     // Transmit vectorized data between backends.
     rpc transmit_chunk(PTransmitChunkParams) returns (PTransmitChunkResult);
     rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc tablet_writer_add_chunks(starrocks.PTabletWriterAddChunksRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
 };
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -10,17 +10,17 @@ import java.util.Optional;
 
 public class MockDictManager implements IDictManager {
     
-    private static final ImmutableMap<ByteBuffer, Integer> mockDict =
+    private static final ImmutableMap<ByteBuffer, Integer> MOCK_DICT =
             ImmutableMap.of(ByteBuffer.wrap("mock".getBytes(StandardCharsets.UTF_8)), 1);
-    private static final ColumnDict columnDict = new ColumnDict(mockDict, 1);
+    private static final ColumnDict COLUMN_DICT = new ColumnDict(MOCK_DICT, 1);
 
     private MockDictManager() {
     }
 
-    private static final MockDictManager instance = new MockDictManager();
+    private static final MockDictManager INSTANCE = new MockDictManager();
 
     protected static MockDictManager getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     @Override
@@ -52,6 +52,6 @@ public class MockDictManager implements IDictManager {
 
     @Override
     public Optional<ColumnDict> getGlobalDict(long tableId, String columnName) {
-        return Optional.of(columnDict);
+        return Optional.of(COLUMN_DICT);
     }
 }

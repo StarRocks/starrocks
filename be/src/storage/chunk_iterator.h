@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -101,7 +101,7 @@ public:
         if (_is_init_output_schema) {
             return _output_schema;
         } else {
-            return _schema;
+            return encoded_schema();
         }
     }
 

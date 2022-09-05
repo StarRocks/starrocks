@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -9,7 +9,11 @@ namespace starrocks::lake {
 
 class FixedLocationProvider : public LocationProvider {
 public:
-    explicit FixedLocationProvider(std::string root);
+    explicit FixedLocationProvider(std::string root) : _root(root) {
+        while (!_root.empty() && _root.back() == '/') {
+            _root.pop_back();
+        }
+    }
 
     ~FixedLocationProvider() override = default;
 
@@ -18,13 +22,10 @@ public:
 
     std::string root_location(int64_t tablet_id) const override { return _root; }
 
-    std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const override;
-
-    std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const override;
-
-    std::string segment_location(int64_t tablet_id, std::string_view segment_name) const override;
-
-    Status list_root_locations(std::set<std::string>* roots) const override;
+    Status list_root_locations(std::set<std::string>* roots) const override {
+        roots->insert(_root);
+        return Status::OK();
+    }
 
 private:
     std::string _root;

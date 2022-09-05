@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/lake/tablet_writer.h"
 
@@ -15,6 +15,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -69,13 +70,15 @@ public:
             c1->set_is_nullable(false);
         }
 
-        _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
+        _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(kTestGroupPath));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
     }
 
@@ -136,9 +139,11 @@ TEST_F(DuplicateTabletWriterTest, test_write_success) {
     writer->close();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(_mem_tracker.get(), fs, fmt::format("{}/{}", kTestGroupPath, files[0]), 0,
+    ASSIGN_OR_ABORT(auto seg0, Segment::open(_mem_tracker.get(), fs,
+                                             _location_provider->segment_location(_tablet_metadata->id(), files[0]), 0,
                                              _tablet_schema.get()));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(_mem_tracker.get(), fs, fmt::format("{}/{}", kTestGroupPath, files[1]), 1,
+    ASSIGN_OR_ABORT(auto seg1, Segment::open(_mem_tracker.get(), fs,
+                                             _location_provider->segment_location(_tablet_metadata->id(), files[1]), 1,
                                              _tablet_schema.get()));
 
     OlapReaderStatistics statistics;
@@ -218,7 +223,7 @@ TEST_F(DuplicateTabletWriterTest, test_close_without_finish) {
     ASSERT_OK(writer->flush());
 
     ASSERT_EQ(1, writer->files().size());
-    auto seg_path = fmt::format("{}/{}", kTestGroupPath, writer->files()[0]);
+    auto seg_path = _location_provider->segment_location(_tablet_metadata->id(), writer->files()[0]);
     ASSERT_OK(fs->path_exists(seg_path));
 
     // `close()` directly without calling `finish()`

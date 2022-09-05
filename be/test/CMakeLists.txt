@@ -1,4 +1,4 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 set(EXEC_FILES
         ./test_main.cpp
@@ -39,10 +39,11 @@ set(EXEC_FILES
         ./exec/vectorized/file_scan_node_test.cpp
         ./exec/schema_columns_scanner_test.cpp
         ./exec/tablet_info_test.cpp
+        ./exec/vectorized/analytor_test.cpp
+        ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/sorting_test.cpp
         ./exec/vectorized/chunks_sorter_test.cpp
         ./exec/vectorized/parquet_scanner_test.cpp
-        ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/repeat_node_test.cpp
         ./exec/vectorized/analytor_test.cpp
         ./exec/es/es_query_builder_test.cpp
@@ -51,7 +52,6 @@ set(EXEC_FILES
         ./exec/vectorized/hdfs_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
-        ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
@@ -87,6 +87,7 @@ set(EXEC_FILES
         ./exprs/vectorized/in_predicate_test.cpp
         ./exprs/vectorized/is_null_predicate_test.cpp
         ./exprs/vectorized/json_functions_test.cpp
+        ./exprs/vectorized/lambda_function_expr_test.cpp
         ./exprs/vectorized/like_test.cpp
         ./exprs/vectorized/math_functions_test.cpp
         ./exprs/vectorized/null_if_expr_test.cpp
@@ -155,6 +156,7 @@ set(EXEC_FILES
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
         ./storage/tablet_mgr_test.cpp
+        ./storage/tablet_schema_helper.cpp
         ./storage/version_graph_test.cpp
         ./storage/lake/async_delta_writer_test.cpp
         ./storage/lake/compaction_policy_test.cpp
@@ -162,6 +164,7 @@ set(EXEC_FILES
         ./storage/lake/gc_test.cpp
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/horizontal_compaction_task_test.cpp
+        ./storage/lake/schema_change_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp
@@ -361,7 +364,3 @@ ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/vectorized/sorting_test)
-
-# =================================================
-# benchmark cases. But I think it makes non-sense, because it's compiled in ASAN mode.
-ADD_BE_BENCH(exec/vectorized/chunks_sorter_bench_test)

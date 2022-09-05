@@ -1,26 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.analyzer;
 
 
-import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.ModifyBackendAddressClause;
-import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.TruncatePartitionClause;
-import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.CaseInsensitiveStream;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.parser.StarRocksLexer;
 import com.starrocks.sql.parser.StarRocksParser;
-
 import com.starrocks.utframe.UtFrameUtils;
-
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.junit.Assert;
@@ -31,7 +27,7 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 public class AstBuilderTest {
-    
+
     private static ConnectContext connectContext;
 
 
@@ -45,7 +41,8 @@ public class AstBuilderTest {
     }
 
     @Test
-    public void testModifyBackendHost() throws NoSuchFieldException, SecurityException, IllegalArgumentException, IllegalAccessException {
+    public void testModifyBackendHost() throws NoSuchFieldException, SecurityException,
+            IllegalArgumentException, IllegalAccessException {
         String sql = "alter system modify backend host '127.0.0.1' to 'testHost'";
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
@@ -60,7 +57,8 @@ public class AstBuilderTest {
     }
 
     @Test
-    public void testModifyFrontendHost() throws NoSuchFieldException, SecurityException, IllegalArgumentException, IllegalAccessException {
+    public void testModifyFrontendHost() throws NoSuchFieldException, SecurityException,
+            IllegalArgumentException, IllegalAccessException {
         String sql = "alter system modify frontend host '127.0.0.1' to 'testHost'";
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
@@ -80,7 +78,7 @@ public class AstBuilderTest {
         StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         AlterTableStmt aStmt = (AlterTableStmt) statement;
         List<AlterClause> alterClauses = aStmt.getOps();
-        TruncatePartitionClause c = (TruncatePartitionClause)alterClauses.get(0);
+        TruncatePartitionClause c = (TruncatePartitionClause) alterClauses.get(0);
         Assert.assertTrue(c.getPartitionNames().getPartitionNames().get(0).equals("p1"));
     }
 }

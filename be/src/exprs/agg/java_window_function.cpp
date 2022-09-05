@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/agg/java_window_function.h"
 
@@ -15,6 +15,7 @@ const AggregateFunction* getJavaWindowFunction() {
 
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
                                const std::string& symbol, starrocks_udf::FunctionContext* context) {
+    RETURN_IF_ERROR(detect_java_runtime());
     std::string libpath;
     std::string state = symbol + "$State";
     RETURN_IF_ERROR(UserFunctionCache::instance()->get_libpath(fid, url, checksum, &libpath));

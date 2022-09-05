@@ -1,7 +1,8 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -78,7 +79,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "    p_partkey limit 100;\n" +
                 "\n";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(432, planCount);
+        Assert.assertEquals(32, planCount);
     }
 
     @Test
@@ -118,7 +119,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    revenue desc ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(76, planCount);
+        Assert.assertEquals(77, planCount);
     }
 
     @Test
@@ -166,7 +167,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    o_year ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(96, planCount);
+        Assert.assertEquals(53, planCount);
     }
 
     @Test
@@ -209,7 +210,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    o_year ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(96, planCount);
+        Assert.assertEquals(53, planCount);
     }
 
     @Test
@@ -292,7 +293,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "    o_totalprice desc,\n" +
                 "    o_orderdate limit 100;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(22, planCount);
+        Assert.assertEquals(10, planCount);
     }
 
     @Test
@@ -340,7 +341,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    s_name ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(28, planCount);
+        Assert.assertEquals(12, planCount);
     }
 
     @Test
@@ -384,8 +385,10 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    numwait desc,\n" +
                 "    s_name limit 100;";
+        connectContext.getSessionVariable().setJoinImplementationMode("hash");
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(86, planCount);
+        Assert.assertEquals("planCount is " + planCount, 21, planCount);
+        connectContext.getSessionVariable().setJoinImplementationMode("auto");
     }
 
     @Test

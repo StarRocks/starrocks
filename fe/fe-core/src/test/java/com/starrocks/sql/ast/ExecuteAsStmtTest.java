@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.ast;
 
@@ -67,9 +67,9 @@ public class ExecuteAsStmtTest {
         ExecuteAsStmt stmt = (ExecuteAsStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "execute as user1 with no revert", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("default_cluster:user1", stmt.getToUser().getQualifiedUser());
+        Assert.assertEquals("user1", stmt.getToUser().getQualifiedUser());
         Assert.assertEquals("%", stmt.getToUser().getHost());
-        Assert.assertEquals("EXECUTE AS 'default_cluster:user1'@'%' WITH NO REVERT", stmt.toString());
+        Assert.assertEquals("EXECUTE AS 'user1'@'%' WITH NO REVERT", stmt.toString());
         Assert.assertFalse(stmt.isAllowRevert());
     }
 

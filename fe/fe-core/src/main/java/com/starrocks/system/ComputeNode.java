@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.system;
 
@@ -296,14 +296,6 @@ public class ComputeNode implements IComputable, Writable {
                 isAlive.get() + "]";
     }
 
-    public String getOwnerClusterName() {
-        return ownerClusterName;
-    }
-
-    public void setOwnerClusterName(String name) {
-        ownerClusterName = name;
-    }
-
     public void clearClusterName() {
         ownerClusterName = "";
     }
@@ -397,11 +389,18 @@ public class ComputeNode implements IComputable, Writable {
             this.lastUpdateMs = hbResponse.getHbTime();
             if (!isAlive.get()) {
                 isChanged = true;
-                this.lastStartTime = hbResponse.getHbTime();
+                // From version 2.5 we not use isAlive to determine whether to update the lastStartTime 
+                // This line to set 'lastStartTime' will be removed in due time
+                this.lastStartTime = hbResponse.getHbTime(); 
                 LOG.info("{} is alive, last start time: {}", this.toString(), hbResponse.getHbTime());
                 this.isAlive.set(true);
             } else if (this.lastStartTime <= 0) {
                 this.lastStartTime = hbResponse.getHbTime();
+            }
+
+            if (hbResponse.getRebootTime() > this.lastStartTime) {
+                this.lastStartTime = hbResponse.getRebootTime();
+                isChanged = true;
             }
 
             if (this.cpuCores != hbResponse.getCpuCores()) {

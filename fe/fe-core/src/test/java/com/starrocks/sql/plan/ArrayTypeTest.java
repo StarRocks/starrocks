@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -56,7 +56,8 @@ public class ArrayTypeTest extends PlanTestBase {
         String sql = "select [][1] + 1, [1,2,3][1] + [[1,2,3],[1,1,1]][2][2]";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  <slot 2> : NULL\n" +
-                "  |  <slot 3> : CAST(ARRAY<tinyint(4)>[1,2,3][1] AS SMALLINT) + CAST(ARRAY<ARRAY<tinyint(4)>>[[1,2,3],[1,1,1]][2][2] AS SMALLINT)"));
+                "  |  <slot 3> : CAST(ARRAY<tinyint(4)>[1,2,3][1] AS SMALLINT) + " +
+                "CAST(ARRAY<ARRAY<tinyint(4)>>[[1,2,3],[1,1,1]][2][2] AS SMALLINT)"));
 
         sql = "select v1, v3[1] + [1,2,3][1] as v, sum(v3[1]) from tarray group by v1, v order by v";
         plan = getFragmentPlan(sql);
@@ -182,7 +183,8 @@ public class ArrayTypeTest extends PlanTestBase {
     @Test
     public void testArrayClone() throws Exception {
         String sql =
-                "select array_contains([v],1), array_contains([v],2) from (select v1+1 as v from t0,t1 group by v) t group by 1,2";
+                "select array_contains([v],1), array_contains([v],2) " +
+                        "from (select v1+1 as v from t0,t1 group by v) t group by 1,2";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  8:Project\n" +
                 "  |  <slot 8> : array_contains(ARRAY<bigint(20)>[7: expr], 1)\n" +

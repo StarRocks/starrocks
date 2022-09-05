@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.connector.hive;
 
@@ -49,8 +49,12 @@ public class HiveConnector implements Connector {
     @Override
     public void shutdown() {
         if (Config.enable_hms_events_incremental_sync) {
-            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
-                    .unregisterExternalCatalogResource(resourceName);
+            boolean existOtherCatalogWithSameUrl = GlobalStateMgr.getCurrentState().getCatalogMgr()
+                    .existSameUrlCatalog(resourceName);
+            if (!existOtherCatalogWithSameUrl) {
+                GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
+                        .unregisterExternalCatalogResource(resourceName);
+            }
         }
     }
 }

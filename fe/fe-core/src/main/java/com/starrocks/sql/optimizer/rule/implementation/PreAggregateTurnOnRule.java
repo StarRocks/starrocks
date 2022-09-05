@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
@@ -8,6 +8,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -108,8 +109,10 @@ public class PreAggregateTurnOnRule {
             // default false
             scan.setPreAggregation(false);
 
-            // Duplicate table
-            if (!((OlapTable) scan.getTable()).getKeysType().isAggregationFamily()) {
+            long selectedIndex = scan.getSelectedIndexId();
+            OlapTable olapTable = ((OlapTable) scan.getTable());
+            MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByIndexId(selectedIndex);
+            if (!materializedIndexMeta.getKeysType().isAggregationFamily()) {
                 scan.setPreAggregation(true);
                 scan.setTurnOffReason("");
                 return null;
@@ -280,6 +283,7 @@ public class PreAggregateTurnOnRule {
                         if (!AggregateType.BITMAP_UNION.equals(column.getAggregationType())) {
                             scan.setTurnOffReason(
                                     "Aggregate Operator not match: BITMAP_UNION <--> " + column.getAggregationType());
+                            return true;
                         }
                     } else if (!call.getFnName().equalsIgnoreCase(column.getAggregationType().name())) {
                         scan.setTurnOffReason(
@@ -300,6 +304,11 @@ public class PreAggregateTurnOnRule {
         @Override
         public Void visitPhysicalMergeJoin(OptExpression optExpression, PreAggregationContext context) {
             return visitPhysicalJoin(optExpression, context);
+        }
+
+        @Override
+        public Void visitPhysicalNestLoopJoin(OptExpression optExpr, PreAggregationContext context) {
+            return visitPhysicalJoin(optExpr, context);
         }
 
         public Void visitPhysicalJoin(OptExpression optExpression, PreAggregationContext context) {

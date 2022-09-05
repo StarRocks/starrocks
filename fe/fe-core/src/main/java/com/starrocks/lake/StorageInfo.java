@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.lake;
 
@@ -16,6 +16,7 @@ public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
     // Currently, storage group is table level, so "shardStorageInfo" is null in partition property.
     private ShardStorageInfo shardStorageInfo;
 
+    // TODO: replace StorageCacheInfo with com.staros.proto.CacheInfo.
     @SerializedName(value = "storageCacheInfo")
     private StorageCacheInfo storageCacheInfo;
 
@@ -32,8 +33,16 @@ public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
         return storageCacheInfo.getCacheTtlS();
     }
 
+    public boolean isAllowAsyncWriteBack() {
+        return storageCacheInfo.isAllowAsyncWriteBack();
+    }
+
     public ShardStorageInfo getShardStorageInfo() {
         return shardStorageInfo;
+    }
+
+    public StorageCacheInfo getStorageCacheInfo() {
+        return storageCacheInfo;
     }
 
     @Override

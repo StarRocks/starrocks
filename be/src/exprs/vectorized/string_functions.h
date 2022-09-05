@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -33,6 +33,18 @@ struct ConcatState {
     bool is_const = false;
     bool is_oversize = false;
     std::string tail;
+};
+
+class StringFunctionsState;
+
+struct MatchInfo {
+    size_t from;
+    size_t to;
+};
+
+struct MatchInfoChain {
+    std::vector<MatchInfo> info_chain;
+    unsigned long long last_to = 0;
 };
 
 class StringFunctions {
@@ -274,8 +286,10 @@ public:
     DEFINE_VECTORIZED_FN(split_part);
 
     // regex method
-    static Status regexp_prepare(starrocks_udf::FunctionContext* context,
-                                 starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status regexp_extract_prepare(starrocks_udf::FunctionContext* context,
+                                         starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status regexp_replace_prepare(starrocks_udf::FunctionContext* context,
+                                         starrocks_udf::FunctionContext::FunctionStateScope scope);
     static Status regexp_close(starrocks_udf::FunctionContext* context,
                                starrocks_udf::FunctionContext::FunctionStateScope scope);
 
@@ -390,8 +404,13 @@ public:
      */
     DEFINE_VECTORIZED_FN(sm3);
 
+    static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
+
 private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);
+
+    static Status hs_compile_and_alloc_scratch(const std::string&, StringFunctionsState*,
+                                               starrocks_udf::FunctionContext*, const Slice& slice);
 
 private:
     struct CurrencyFormat : std::moneypunct<char> {

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "runtime/statistic_result_writer.h"
 
@@ -172,8 +172,8 @@ Status StatisticResultWriter::_fill_statistic_histogram(int version, const vecto
     SCOPED_TIMER(_serialize_timer);
     DCHECK(columns.size() == 5);
 
-    auto& dbIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[1])->get_data();
-    auto& tableIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[2])->get_data();
+    Int64Column* dbIds = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[1].get()));
+    Int64Column* tableIds = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[2].get()));
     BinaryColumn* nameColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[3].get()));
     BinaryColumn* histogramColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[4].get()));
 
@@ -182,8 +182,8 @@ Status StatisticResultWriter::_fill_statistic_histogram(int version, const vecto
 
     data_list.resize(num_rows);
     for (int i = 0; i < num_rows; ++i) {
-        data_list[i].__set_dbId(dbIds[i]);
-        data_list[i].__set_tableId(tableIds[i]);
+        data_list[i].__set_dbId(dbIds->get(i).get_int64());
+        data_list[i].__set_tableId(tableIds->get(i).get_int64());
         data_list[i].__set_columnName(nameColumn->get_slice(i).to_string());
         data_list[i].__set_histogram(histogramColumn->get_slice(i).to_string());
     }

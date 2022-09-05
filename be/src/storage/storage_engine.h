@@ -179,7 +179,7 @@ public:
 
     bool bg_worker_stopped() { return _bg_worker_stopped.load(std::memory_order_consume); }
 
-    MemTracker* tablet_meta_mem_tracker() { return _options.tablet_meta_mem_tracker; }
+    MemTracker* metadata_mem_tracker() { return _options.metadata_mem_tracker; }
 
     void compaction_check();
 
@@ -188,8 +188,13 @@ public:
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>>
     get_executed_repair_compaction_tasks();
 
+    void do_manual_compact(bool force_compact);
+
 protected:
     static StorageEngine* _s_instance;
+
+    static StorageEngine* _p_instance;
+
     int32_t _effective_cluster_id;
 
 private:
@@ -211,8 +216,6 @@ private:
     void _clean_unused_txns();
 
     void _clean_unused_rowset_metas();
-
-    void _do_manual_compact();
 
     Status _do_sweep(const std::string& scan_root, const time_t& local_tm_now, const int32_t expire);
 

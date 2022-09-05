@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.statistic;
 
 import com.starrocks.catalog.Database;
@@ -29,8 +29,8 @@ public class CacheLoaderTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
 
-        String DB_NAME = "test";
-        starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+        String dbName = "test";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -113,12 +113,15 @@ public class CacheLoaderTest {
         Assert.assertEquals(1, bucket.getUpperRepeats(), 0.1);
 
         Assert.assertEquals(3, histogram.getMCV().size());
-        Assert.assertEquals("{19.0=5, 20.0=4, 27.0=8}", histogram.getMCV().toString());
+        Assert.assertEquals("{27=8, 19=5, 20=4}", histogram.getMCV().toString());
 
         statisticData.setColumnName("v4");
-        statisticData.setHistogram("{ \"buckets\" : [[\"20220102\",\"20220107\",\"6\",\"1\"],[\"20220108\",\"20220113\",\"12\",\"1\"]," +
-                "[\"20220114\",\"20220121\",\"18\",\"1\"],[\"20220122\",\"20220128\",\"24\",\"1\"],[\"20220129\",\"20220130\",\"30\",\"1\"]], " +
-                "\"mcv\" : [[\"20220127\",\"8\"],[\"20220119\",\"5\"],[\"20220120\",\"4\"]] }");
+        statisticData.setHistogram("{ \"buckets\" : [[\"2022-01-02\",\"2022-01-07\",\"6\",\"1\"]," +
+                "[\"2022-01-08\",\"2022-01-13\",\"12\",\"1\"]," +
+                "[\"2022-01-14\",\"2022-01-21\",\"18\",\"1\"]," +
+                "[\"2022-01-22\",\"2022-01-28\",\"24\",\"1\"]," +
+                "[\"2022-01-29\",\"2022-01-30\",\"30\",\"1\"]], " +
+                "\"mcv\" : [[\"2022-01-27\",\"8\"],[\"2022-01-19\",\"5\"],[\"2022-01-20\",\"4\"]] }");
 
         histogram = Deencapsulation.invoke(columnHistogramStatsCacheLoader, "convert2Histogram", statisticData);
         bucket = histogram.getBuckets().get(0);
@@ -126,7 +129,7 @@ public class CacheLoaderTest {
         Assert.assertEquals(1.6414848E9, bucket.getUpper(), 0.1);
         Assert.assertEquals(6, bucket.getCount(), 0.1);
         Assert.assertEquals(1, bucket.getUpperRepeats(), 0.1);
-        Assert.assertEquals("{1.6425216E9=5, 1.6432128E9=8, 1.642608E9=4}", histogram.getMCV().toString());
+        Assert.assertEquals("{2022-01-19=5, 2022-01-27=8, 2022-01-20=4}", histogram.getMCV().toString());
     }
 
     @Test
@@ -141,9 +144,9 @@ public class CacheLoaderTest {
         statisticData.setTableId(table.getId());
         statisticData.setColumnName("v4");
 
-        statisticData.setHistogram("{ \"buckets\" : [[\"00000101\",\"20220101\",\"10\",\"1\"]," +
-                "[\"20220102\",\"99991231\",\"10\",\"1\"]], " +
-                "\"mcv\" : [[\"00000101\",\"8\"],[\"99991231\",\"5\"]] }");
+        statisticData.setHistogram("{ \"buckets\" : [[\"0000-01-01\",\"2022-01-01\",\"10\",\"1\"]," +
+                "[\"2022-01-02\",\"9999-12-31\",\"10\",\"1\"]], " +
+                "\"mcv\" : [[\"0000-01-01\",\"8\"],[\"9999-12-31\",\"5\"]] }");
         Histogram histogram = Deencapsulation.invoke(columnHistogramStatsCacheLoader, "convert2Histogram", statisticData);
 
         Bucket bucket = histogram.getBuckets().get(0);
@@ -154,6 +157,6 @@ public class CacheLoaderTest {
         Assert.assertEquals(1.6410528E9, bucket.getLower(), 0.1);
         Assert.assertEquals(2.534021856E11, bucket.getUpper(), 0.1);
 
-        Assert.assertEquals("{2.534021856E11=5, -6.2167248343E10=8}", histogram.getMCV().toString());
+        Assert.assertEquals("{0000-01-01=8, 9999-12-31=5}", histogram.getMCV().toString());
     }
 }

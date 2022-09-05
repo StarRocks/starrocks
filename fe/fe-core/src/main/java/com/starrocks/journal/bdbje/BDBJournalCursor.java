@@ -24,6 +24,7 @@ package com.starrocks.journal.bdbje;
 import com.sleepycat.bind.tuple.TupleBinding;
 import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.DatabaseException;
+import com.sleepycat.je.EnvironmentFailureException;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.rep.InsufficientLogException;
@@ -61,7 +62,7 @@ public class BDBJournalCursor implements JournalCursor {
      *
      * 1. wrap as JournalException and return if it's a normal DatabaseException.
      * 2. RestartRequiredException is a fatal error since we're replaying as a follower, we must exit by raising an
-     * JournalInconsistentException.
+     * JournalInconsistentException. Same with EnvironmentFailureException when replicated environment is invalid.
      * 3. If it is an InsufficientLogException, we should call refreshLog() to restore the data as much as possible.
      */
     protected JournalException wrapDatabaseException(DatabaseException originException, String errMsg)
@@ -74,6 +75,13 @@ public class BDBJournalCursor implements JournalCursor {
                 // then exit the process because we may have read dirty data.
                 environment.refreshLog((InsufficientLogException) originException);
             }
+            JournalInconsistentException journalInconsistentException = new JournalInconsistentException(errMsg);
+            journalInconsistentException.initCause(originException);
+            throw journalInconsistentException;
+        } else if (originException instanceof EnvironmentFailureException
+                && ! environment.getReplicatedEnvironment().isValid()) {
+            errMsg += "Got EnvironmentFailureException and the current ReplicatedEnvironment is invalid, will exit.";
+            LOG.warn(errMsg, originException);
             JournalInconsistentException journalInconsistentException = new JournalInconsistentException(errMsg);
             journalInconsistentException.initCause(originException);
             throw journalInconsistentException;
@@ -312,5 +320,11 @@ public class BDBJournalCursor implements JournalCursor {
         if (database != null) {
             database.close();
         }
+    }
+
+    @Override
+    public void skipNext() {
+        LOG.error("!!! DANGER: CURSOR SKIP {} !!!", nextKey);
+        nextKey++;
     }
 }

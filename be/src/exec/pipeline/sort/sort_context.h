@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/vectorized/chunks_sorter.h"
@@ -20,7 +21,6 @@ using SortContextPtr = std::shared_ptr<SortContext>;
 using vectorized::ChunkPtr;
 using vectorized::ChunksSorter;
 using vectorized::SortDescs;
-using vectorized::SortedRuns;
 
 class SortContext final : public ContextWithDependency {
 public:
@@ -34,32 +34,20 @@ public:
               _num_partition_sinkers(num_right_sinkers),
               _sort_exprs(sort_exprs),
               _sort_desc(sort_descs) {
-        _chunks_sorter_partions.reserve(num_right_sinkers);
+        _chunks_sorter_partitions.reserve(num_right_sinkers);
     }
 
     void close(RuntimeState* state) override;
 
-    void add_partition_chunks_sorter(std::shared_ptr<ChunksSorter> chunks_sorter) {
-        _chunks_sorter_partions.push_back(chunks_sorter);
-    }
-
-    void finish_partition(uint64_t partition_rows) {
-        _total_rows.fetch_add(partition_rows, std::memory_order_relaxed);
-        _num_partition_finished.fetch_add(1, std::memory_order_release);
-    }
-
-    bool is_partition_sort_finished() const {
-        return _num_partition_finished.load(std::memory_order_acquire) == _num_partition_sinkers;
-    }
-
-    bool is_output_finished() const {
-        return is_partition_sort_finished() && _is_merge_finish && _merged_runs.num_chunks() == 0;
-    }
+    void add_partition_chunks_sorter(std::shared_ptr<ChunksSorter> chunks_sorter);
+    void finish_partition(uint64_t partition_rows);
+    bool is_partition_sort_finished() const;
+    bool is_output_finished() const;
 
     StatusOr<ChunkPtr> pull_chunk();
 
 private:
-    Status _merge_inputs();
+    Status _init_merger();
 
     RuntimeState* _state;
     const TTopNType::type _topn_type;
@@ -72,10 +60,12 @@ private:
     std::atomic<int64_t> _total_rows = 0; // size of all chunks from all partitions.
     std::atomic<int32_t> _num_partition_finished = 0;
 
-    std::vector<std::shared_ptr<ChunksSorter>> _chunks_sorter_partions; // Partial sorters
-    bool _is_merge_finish = false;
-
-    SortedRuns _merged_runs;
+    std::vector<std::shared_ptr<ChunksSorter>> _chunks_sorter_partitions; // Partial sorters
+    std::vector<std::unique_ptr<vectorized::SimpleChunkSortCursor>> _partial_cursors;
+    vectorized::MergeCursorsCascade _merger;
+    vectorized::ChunkSlice _current_chunk;
+    int64_t _required_rows = 0;
+    bool _merger_inited = false;
 };
 
 class SortContextFactory {

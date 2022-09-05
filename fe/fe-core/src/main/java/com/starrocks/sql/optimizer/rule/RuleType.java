@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule;
 
@@ -103,6 +103,8 @@ public enum RuleType {
     TF_REWRITE_BITMAP_COUNT_DISTINCT,
     TF_REWRITE_HLL_COUNT_DISTINCT,
     TF_REWRITE_DUPLICATE_AGGREGATE_FN,
+    TF_REWRITE_GROUP_BY_COUNT_DISTINCT,
+    TF_REMOVE_AGGREGATION_BY_AGG_TABLE,
 
     TF_JOIN_FORCE_LIMIT,
     TF_INTERSECT_REORDER,
@@ -150,7 +152,8 @@ public enum RuleType {
     IMP_FILTER,
     IMP_TABLE_FUNCTION,
     IMP_LIMIT,
-    IMP_CTE_CONSUMER,
+    IMP_CTE_CONSUME_REUSE,
+    IMP_CTE_CONSUME_INLINE,
     IMP_CTE_ANCHOR,
     IMP_CTE_ANCHOR_TO_NO_CTE,
     IMP_CTE_PRODUCE,

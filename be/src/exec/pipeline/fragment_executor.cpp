@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/fragment_executor.h"
 
@@ -510,11 +510,6 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
         RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
     }
     prepare_success = true;
-
-    if (_wg) {
-        int64_t elapsed = MonotonicNanos() - _fragment_start_time;
-        _wg->increment_real_runtime_ns(elapsed);
-    }
 
     auto* executor =
             _fragment_ctx->enable_resource_group() ? exec_env->wg_driver_executor() : exec_env->driver_executor();

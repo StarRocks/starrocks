@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -37,15 +37,15 @@ public class PruneHDFSScanColumnRuleTest {
     ColumnRefOperator unknownColumnOperator = new ColumnRefOperator(3, Type.UNKNOWN_TYPE, "unknown", true);
 
     Map<ColumnRefOperator, Column> scanColumnMap = new HashMap<ColumnRefOperator, Column>() {{
-        put(intColumnOperator, new Column("id", Type.INT));
-        put(strColumnOperator, new Column("name", Type.STRING));
-    }};
+            put(intColumnOperator, new Column("id", Type.INT));
+            put(strColumnOperator, new Column("name", Type.STRING));
+        }};
 
     Map<ColumnRefOperator, Column> scanColumnMapWithUnknown = new HashMap<ColumnRefOperator, Column>() {{
-        put(intColumnOperator, new Column("id", Type.INT));
-        put(strColumnOperator, new Column("name", Type.STRING));
-        put(unknownColumnOperator, new Column("name", Type.UNKNOWN_TYPE));
-    }};
+            put(intColumnOperator, new Column("id", Type.INT));
+            put(strColumnOperator, new Column("name", Type.STRING));
+            put(unknownColumnOperator, new Column("name", Type.UNKNOWN_TYPE));
+        }};
 
     @Test
     public void transformIcebergWithPredicate(@Mocked IcebergTable table,

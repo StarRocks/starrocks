@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/scan/connector_scan_operator.h"
 
@@ -57,7 +57,6 @@ void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& active_inputs = factory->get_active_inputs();
     auto key = std::make_pair(_driver_sequence, source_index);
-    DCHECK(!active_inputs.contains(key));
     active_inputs.emplace(key);
 }
 
@@ -65,7 +64,6 @@ void ConnectorScanOperator::detach_chunk_source(int32_t source_index) {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& active_inputs = factory->get_active_inputs();
     auto key = std::make_pair(_driver_sequence, source_index);
-    DCHECK(active_inputs.contains(key));
     active_inputs.erase(key);
 }
 
@@ -136,8 +134,7 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
 ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile,
                                            MorselPtr&& morsel, ScanOperator* op,
                                            vectorized::ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
-        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), chunk_buffer,
-                      workgroup::TypeConnectorScanExecutor),
+        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), chunk_buffer),
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.task;
 
@@ -21,10 +21,10 @@ import java.util.List;
 /**
  * ApplyRuleTask firstly applies a rule, then
  * <p>
- * If the rule is transformation rule and exploreOnly is true:
+ * If the rule is transformation rule and isExplore is true:
  * We need to explore (apply logical rules)
  * <p>
- * If the rule is transformation rule and exploreOnly is false:
+ * If the rule is transformation rule and isExplore is false:
  * We need to optimize (apply logical & physical rules)
  * <p>
  * If the rule is implementation rule:
@@ -35,16 +35,18 @@ public class ApplyRuleTask extends OptimizerTask {
     private static final Logger LOG = LogManager.getLogger(Optimizer.class);
     private final GroupExpression groupExpression;
     private final Rule rule;
+    private final boolean isExplore;
 
-    ApplyRuleTask(TaskContext context, GroupExpression groupExpression, Rule rule) {
+    ApplyRuleTask(TaskContext context, GroupExpression groupExpression, Rule rule, boolean isExplore) {
         super(context);
         this.groupExpression = groupExpression;
         this.rule = rule;
+        this.isExplore = isExplore;
     }
 
     @Override
     public String toString() {
-        return "ApplyRuleTask for groupExpression " + groupExpression +
+        return "ApplyRuleTask" + (this.isExplore ? "[explore]" : "") + " for groupExpression " + groupExpression +
                 "\n rule " + rule;
     }
 
@@ -84,12 +86,10 @@ public class ApplyRuleTask extends OptimizerTask {
                 return;
             }
 
-            // TODO(kks) optimize this
             GroupExpression newGroupExpression = result.second;
             if (newGroupExpression.getOp().isLogical()) {
                 // For logic newGroupExpression, optimize it
-                pushTask(new OptimizeExpressionTask(context, newGroupExpression));
-                pushTask(new DeriveStatsTask(context, newGroupExpression));
+                pushTask(new OptimizeExpressionTask(context, newGroupExpression, isExplore));
             } else {
                 // For physical newGroupExpression, enforce and cost it,
                 // Optimize its inputs if needed

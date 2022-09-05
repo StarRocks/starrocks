@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.parser;
 
@@ -26,6 +26,7 @@ import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
 import java.util.List;
+import java.util.StringJoiner;
 import java.util.concurrent.TimeUnit;
 
 @BenchmarkMode(Mode.AverageTime)
@@ -56,20 +57,33 @@ public class ParserBench {
     @Param({"100", "1000", "5000", "10000"})
     public int times;
 
+    @Param({"true", "false"})
+    public boolean isRightSql;
+
+    @Param({"true", "false"})
+    public boolean isLimit;
+
     @Benchmark
     public void parseInsertIntoValues() {
         parseSql(sql);
     }
 
     private String generateSQL() {
-        List<String> values = Lists.newArrayList("K0.14044384266968246155471433667116798460483551025390625",
+        List<String> wrongValues = Lists.newArrayList("K0.14044384266968246155471433667116798460483551025390625",
                 "-1869445626", "K0.17698452552099786", "K127", "k-366217216");
-        String joined = String.join(",", values);
-        StringBuilder result = new StringBuilder();
-        for (int i = 0; i < times; i++) {
-            result.append("(").append(joined).append("), ");
+        List<String> rightValues = Lists.newArrayList("0.14044384266968246155471433667116798460483551025390625",
+                "-1869445626", "0.17698452552099786", "127", "-366217216");
+
+        String joined;
+        if (isRightSql) {
+            joined = String.join(",", rightValues);
+        } else {
+            joined = String.join(",", wrongValues);
         }
-        result.append("(").append(joined).append(")");
+        StringJoiner result = new StringJoiner(",", "(", ")");
+        for (int i = 0; i < times; i++) {
+            result.add(joined);
+        }
         return "INSERT INTO test_load_decimal_1_0 VALUES " + result + ";";
     }
 
@@ -80,6 +94,10 @@ public class ParserBench {
         StarRocksParser.sqlMode = SqlModeHelper.MODE_DEFAULT;
         parser.removeErrorListeners();
         parser.addErrorListener(new BaseErrorListener());
+        parser.removeParseListeners();
+        if (isLimit) {
+            parser.addParseListener(new TokenNumberListener(1000000));
+        }
         parser.getInterpreter().setPredictionMode(mode.equals("SLL") ? PredictionMode.SLL : PredictionMode.LL);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
         return (StatementBase) new AstBuilder(SqlModeHelper.MODE_DEFAULT)

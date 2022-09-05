@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -51,10 +51,10 @@ public class SplitAggregateRule extends TransformationRule {
         super(RuleType.TF_SPLIT_AGGREGATE, Pattern.create(OperatorType.LOGICAL_AGGR, OperatorType.PATTERN_LEAF));
     }
 
-    private static final SplitAggregateRule instance = new SplitAggregateRule();
+    private static final SplitAggregateRule INSTANCE = new SplitAggregateRule();
 
     public static SplitAggregateRule getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     public boolean check(final OptExpression input, OptimizerContext context) {

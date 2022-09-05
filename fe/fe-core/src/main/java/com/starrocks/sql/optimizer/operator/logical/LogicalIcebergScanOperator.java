@@ -1,30 +1,23 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 public class LogicalIcebergScanOperator extends LogicalScanOperator {
     private final Table.TableType tableType;
 
-    private List<ScalarOperator> conjuncts = Lists.newArrayList();
-    // List of conjuncts for min/max values that are used to skip data when scanning Parquet/Orc files.
-    private List<ScalarOperator> minMaxConjuncts = new ArrayList<>();
-    // Map of columnRefOperator to column which column in minMaxConjuncts
-    private Map<ColumnRefOperator, Column> minMaxColumnRefMap = Maps.newHashMap();
+    private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
 
     public LogicalIcebergScanOperator(Table table,
                                       Table.TableType tableType,
@@ -53,25 +46,21 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
                 builder.getProjection());
 
         this.tableType = builder.tableType;
-        this.conjuncts = builder.conjuncts;
-        this.minMaxConjuncts = builder.minMaxConjuncts;
-        this.minMaxColumnRefMap = builder.minMaxColumnRefMap;
+        this.predicates = builder.predicates;
     }
 
     public Table.TableType getTableType() {
         return tableType;
     }
 
-    public List<ScalarOperator> getConjuncts() {
-        return conjuncts;
+    @Override
+    public ScanOperatorPredicates getScanOperatorPredicates() {
+        return this.predicates;
     }
 
-    public List<ScalarOperator> getMinMaxConjuncts() {
-        return minMaxConjuncts;
-    }
-
-    public Map<ColumnRefOperator, Column> getMinMaxColumnRefMap() {
-        return minMaxColumnRefMap;
+    @Override
+    public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
+        this.predicates = predicates;
     }
 
     @Override
@@ -82,9 +71,7 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalIcebergScanOperator, LogicalIcebergScanOperator.Builder> {
         private Table.TableType tableType;
-        private List<ScalarOperator> conjuncts = Lists.newArrayList();
-        private List<ScalarOperator> minMaxConjuncts = new ArrayList<>();
-        private Map<ColumnRefOperator, Column> minMaxColumnRefMap = Maps.newHashMap();
+        private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
 
         @Override
         public LogicalIcebergScanOperator build() {
@@ -96,9 +83,7 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
             super.withOperator(scanOperator);
 
             this.tableType = scanOperator.tableType;
-            this.conjuncts = scanOperator.conjuncts;
-            this.minMaxConjuncts = scanOperator.minMaxConjuncts;
-            this.minMaxColumnRefMap = scanOperator.minMaxColumnRefMap;
+            this.predicates = scanOperator.predicates;
             return this;
         }
     }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.metric;
 
@@ -13,8 +13,8 @@ import java.util.concurrent.TimeUnit;
 public final class TableMetricsRegistry {
 
     private final Map<Long, TableMetricsEntity> idToTableMetrics;
-    private ScheduledThreadPoolExecutor timer;
-    private static final TableMetricsRegistry instance = new TableMetricsRegistry();
+    private final ScheduledThreadPoolExecutor timer;
+    private static final TableMetricsRegistry INSTANCE = new TableMetricsRegistry();
 
     private TableMetricsRegistry() {
         idToTableMetrics = Maps.newHashMap();
@@ -24,7 +24,7 @@ public final class TableMetricsRegistry {
     }
 
     public static TableMetricsRegistry getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     public synchronized TableMetricsEntity getMetricsEntity(long tableId) {

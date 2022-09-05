@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.base;
 
@@ -82,7 +82,7 @@ public class LogicalProperty implements Property {
                 // because some operator even does not have the concept of tablets.
                 // The value should not be too low, otherwise it will make cost optimizer to underestimate the cost of broadcast.
                 // A thing to be noted that, this tablet number is better not to be 1, to avoid generate 1 phase agg.
-                return FeConstants.default_tablet_number;
+                return FeConstants.DEFAULT_TABLET_NUMBER;
             }
         }
 

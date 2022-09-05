@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "formats/parquet/schema.h"
 
@@ -354,9 +354,11 @@ std::string SchemaDescriptor::debug_string() const {
     return ss.str();
 }
 
-int SchemaDescriptor::get_column_index(const std::string& column) const {
+int SchemaDescriptor::get_column_index(const std::string& column, bool case_sensitive) const {
     for (size_t i = 0; i < _fields.size(); i++) {
-        if (_fields[i].name == column) {
+        bool found =
+                case_sensitive ? _fields[i].name == column : strcasecmp(_fields[i].name.c_str(), column.c_str()) == 0;
+        if (found) {
             return i;
         }
     }

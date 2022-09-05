@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.planner;
 
@@ -29,7 +29,7 @@ public class HudiScanNode extends ScanNode {
         this.hudiTable = (HudiTable) desc.getTable();
     }
 
-    public HDFSScanNodePredicates getPredictsExpr() {
+    public HDFSScanNodePredicates getScanNodePredicates() {
         return scanNodePredicates;
     }
 

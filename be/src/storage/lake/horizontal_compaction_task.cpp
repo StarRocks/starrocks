@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/lake/horizontal_compaction_task.h"
 
@@ -61,7 +61,7 @@ Status HorizontalCompactionTask::execute() {
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
     while (true) {
-        if (UNLIKELY(ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped())) {
+        if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::Cancelled("background worker stopped");
         }
 #ifndef BE_TEST

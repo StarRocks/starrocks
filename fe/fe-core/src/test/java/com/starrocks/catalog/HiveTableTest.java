@@ -106,7 +106,7 @@ public class HiveTableTest {
         properties.put("resource", resourceName);
         HiveTable table = new HiveTable(1000, "hive_table", columns, properties);
         Assert.assertEquals(hiveTable, table.getTableName());
-        Assert.assertEquals(hiveDb, table.getHiveDb());
+        Assert.assertEquals(hiveDb, table.getDbName());
         Assert.assertEquals(String.format("%s.%s", hiveDb, hiveTable), table.getHiveDbTable());
         Assert.assertEquals(hdfsPath, table.getHdfsPath());
         Assert.assertEquals(Lists.newArrayList(new Column("col1", Type.BIGINT, true)), table.getPartitionColumns());
@@ -134,7 +134,15 @@ public class HiveTableTest {
     }
 
     @Test
-    public void testHiveColumnConvert() {
+    public void testHiveColumnConvert() throws DdlException {
+        // test case for hiveType from hms
         Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("BINARY", Type.UNKNOWN_TYPE));
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("uniontype<int,double>", Type.UNKNOWN_TYPE));
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("array<struct<col_int:int>>", Type.UNKNOWN_TYPE));
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("map<int,bigint>", Type.UNKNOWN_TYPE));
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("struct<col_int:int>", Type.UNKNOWN_TYPE));
+        // test case for hiveType mis input
+        Assert.assertEquals(Type.UNKNOWN_TYPE,
+                HiveMetaStoreTableUtils.convertHiveTableColumnType("array<brray<int>>"));
     }
 }

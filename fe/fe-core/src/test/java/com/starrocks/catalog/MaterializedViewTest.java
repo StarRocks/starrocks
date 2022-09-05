@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
@@ -76,7 +76,7 @@ public class MaterializedViewTest {
         Assert.assertEquals(OlapTable.OlapTableState.ROLLUP, mv2.getState());
         Assert.assertEquals(null, mv2.getDefaultDistributionInfo());
         Assert.assertEquals(null, mv2.getPartitionInfo());
-        mv2.setReplicationNum((short)3);
+        mv2.setReplicationNum((short) 3);
         Assert.assertEquals(3, mv2.getDefaultReplicationNum().shortValue());
         mv2.setStorageMedium(TStorageMedium.SSD);
         Assert.assertEquals("SSD", mv2.getStorageMedium());
@@ -325,7 +325,7 @@ public class MaterializedViewTest {
                 new FunctionCallExpr("date_trunc", Arrays.asList(quarterStringLiteral, slotRef1));
         exprs.add(quarterFunctionCallExpr);
 
-        RangePartitionInfo partitionInfo = new ExpressionRangePartitionInfo(exprs,partitionColumns);
+        RangePartitionInfo partitionInfo = new ExpressionRangePartitionInfo(exprs, partitionColumns);
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
@@ -501,6 +501,74 @@ public class MaterializedViewTest {
         String dropSql = "drop table tbl_drop;";
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, dropSql);
         stmtExecutor.execute();
+        Assert.assertNotNull(mv);
+        Assert.assertFalse(mv.isActive());
+    }
+
+    @Test
+    public void testMvAfterBaseTableRename() throws Exception {
+        FeConstants.runningUnitTest = true;
+        Config.enable_experimental_mv = true;
+        UtFrameUtils.createMinStarRocksCluster();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl_to_rename\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withNewMaterializedView("create materialized view mv_to_check\n" +
+                        "distributed by hash(k2) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select k2, sum(v1) as total from tbl_to_rename group by k2;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        String alterSql = "alter table tbl_to_rename rename new_tbl_name;";
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, alterSql);
+        stmtExecutor.execute();
+        MaterializedView mv = ((MaterializedView) testDb.getTable("mv_to_check"));
+        Assert.assertNotNull(mv);
+        Assert.assertFalse(mv.isActive());
+    }
+
+    @Test
+    public void testMvAfterBaseTablePartitionRename() throws Exception {
+        FeConstants.runningUnitTest = true;
+        Config.enable_experimental_mv = true;
+        UtFrameUtils.createMinStarRocksCluster();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl_to_rename\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withNewMaterializedView("create materialized view mv_to_check\n" +
+                        "distributed by hash(k2) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select k2, sum(v1) as total from tbl_to_rename group by k2;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        String alterPartitionSql = "alter table tbl_to_rename rename partition p1 new_p1;";
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, alterPartitionSql);
+        stmtExecutor.execute();
+        MaterializedView mv = ((MaterializedView) testDb.getTable("mv_to_check"));
         Assert.assertNotNull(mv);
         Assert.assertFalse(mv.isActive());
     }

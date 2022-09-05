@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Predicate;
@@ -10,7 +10,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
@@ -21,13 +20,12 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -128,12 +126,8 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
-            Database db = session.getGlobalStateMgr().getDb(node.getDb());
-            if (db == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
-            }
-            this.dbs.put(node.getDb(), db);
-            return visit(node.getQueryStatement());
+            getDB(node.getTableName());
+            return null;
         }
 
         @Override
@@ -194,17 +188,22 @@ public class AnalyzerUtils {
         }
 
         private void getDB(TableName tableName) {
-            String dbName = tableName.getDb();
+            String catalog = Strings.isNullOrEmpty(tableName.getCatalog()) ? session.getCurrentCatalog() : tableName.getCatalog();
+            String dbName = Strings.isNullOrEmpty(tableName.getDb()) ? session.getDatabase() : tableName.getDb();
+
+            if (Strings.isNullOrEmpty(catalog)) {
+                return;
+            }
+
             if (Strings.isNullOrEmpty(dbName)) {
-                dbName = session.getDatabase();
-            } else {
-                if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-                    return;
-                }
+                return;
+            }
+
+            if (!CatalogMgr.isInternalCatalog(catalog)) {
+                return;
             }
 
             Database db = session.getGlobalStateMgr().getDb(dbName);
-
             dbs.put(db.getFullName(), db);
         }
     }
@@ -300,7 +299,6 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
-
     public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
         new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
@@ -367,5 +365,4 @@ public class AnalyzerUtils {
             return null;
         }
     }
-
 }

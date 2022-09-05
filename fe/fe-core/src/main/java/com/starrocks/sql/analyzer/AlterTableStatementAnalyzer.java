@@ -1,26 +1,14 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.AddColumnClause;
-import com.starrocks.analysis.AddColumnsClause;
-import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ColumnPosition;
-import com.starrocks.analysis.ColumnRenameClause;
-import com.starrocks.analysis.CreateIndexClause;
-import com.starrocks.analysis.DropColumnClause;
 import com.starrocks.analysis.IndexDef;
-import com.starrocks.analysis.ModifyColumnClause;
-import com.starrocks.analysis.ModifyPartitionClause;
-import com.starrocks.analysis.ModifyTablePropertiesClause;
-import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedView;
@@ -34,7 +22,24 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddRollupClause;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CreateIndexClause;
+import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.ModifyPartitionClause;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.PartitionRenameClause;
+import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.sql.ast.ReplacePartitionClause;
+import com.starrocks.sql.ast.RollupRenameClause;
+import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.MetaUtils;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 
@@ -341,6 +346,75 @@ public class AlterTableStatementAnalyzer {
 
             // 4. tablet type
             PropertyAnalyzer.analyzeTabletType(properties);
+        }
+
+        @Override
+        public Void visitReplacePartitionClause(ReplacePartitionClause clause, ConnectContext context) {
+            if (clause.getPartitionNames().stream().anyMatch(String::isEmpty)
+                    || clause.getTempPartitionNames().stream().anyMatch(String::isEmpty)) {
+                throw new SemanticException("there are empty partition name");
+            }
+
+            if (clause.getPartition().isTemp() || !clause.getTempPartition().isTemp()) {
+                throw new SemanticException("Only support replace partitions with temp partitions");
+            }
+
+            clause.setStrictRange(PropertyAnalyzer.analyzeBooleanProp(
+                    clause.getProperties(), PropertyAnalyzer.PROPERTIES_STRICT_RANGE, true));
+            clause.setUseTempPartitionName(PropertyAnalyzer.analyzeBooleanProp(
+                    clause.getProperties(), PropertyAnalyzer.PROPERTIES_USE_TEMP_PARTITION_NAME, false));
+
+            if (clause.getProperties() != null && !clause.getProperties().isEmpty()) {
+                throw new SemanticException("Unknown properties: " + clause.getProperties().keySet());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitPartitionRenameClause(PartitionRenameClause clause, ConnectContext context) {
+            try {
+                if (Strings.isNullOrEmpty(clause.getPartitionName())) {
+                    throw new AnalysisException("Partition name is not set");
+                }
+
+                if (Strings.isNullOrEmpty(clause.getNewPartitionName())) {
+                    throw new AnalysisException("New partition name is not set");
+                }
+                FeNameFormat.checkPartitionName(clause.getNewPartitionName());
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAddRollupClause(AddRollupClause clause, ConnectContext context) {
+            try {
+                clause.analyze(null);
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropRollupClause(DropRollupClause clause, ConnectContext context) {
+            try {
+                clause.analyze(null);
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitRollupRenameClause(RollupRenameClause clause, ConnectContext context) {
+            try {
+                clause.analyze(null);
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            return null;
         }
     }
 }

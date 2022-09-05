@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -117,6 +117,14 @@ inline size_t find_nonzero(const std::vector<uint8_t>& list, size_t start, size_
 
 inline size_t find_zero(const std::vector<int8_t>& list, size_t start) {
     return find_byte<int8_t>(list, start, 0);
+}
+
+inline bool contain_zero(const std::vector<uint8_t>& list) {
+    return find_zero(list, 0) < list.size();
+}
+
+inline bool contain_nonzero(const std::vector<uint8_t>& list) {
+    return find_nonzero(list, 0) < list.size();
 }
 
 inline bool contain_nonzero(const std::vector<uint8_t>& list, size_t start) {

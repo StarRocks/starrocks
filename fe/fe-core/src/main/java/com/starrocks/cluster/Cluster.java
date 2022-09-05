@@ -169,7 +169,7 @@ public class Cluster implements Writable {
         // don't persist InfoSchemaDb meta
         for (String name : dbNames) {
             if (!name.equals(InfoSchemaDb.DATABASE_NAME)) {
-                Text.writeString(out, name);
+                Text.writeString(out, ClusterNamespace.getFullName(name));
             } else {
                 dbIds.remove(dbNameToIDs.get(name));
             }
@@ -208,7 +208,7 @@ public class Cluster implements Writable {
         }
         int count = in.readInt();
         while (count-- > 0) {
-            dbNames.add(Text.readString(in));
+            dbNames.add(ClusterNamespace.getNameFromFullName(Text.readString(in)));
         }
 
         count = in.readInt();

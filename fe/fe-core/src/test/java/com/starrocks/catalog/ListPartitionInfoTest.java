@@ -1,18 +1,13 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.UtFrameUtils;
-
-import mockit.Expectations;
-import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -117,8 +112,10 @@ public class ListPartitionInfoTest {
         List<Long> partitionId = Lists.newArrayList(10001L, 10002L);
         String sql = this.listPartitionInfoForMulti.toSql(this.findTableForMultiListPartition(), partitionId);
         String target = "PARTITION BY LIST(`dt`,`province`)(\n" +
-                "  PARTITION p1 VALUES IN (('2022-04-15', 'guangdong'), ('2022-04-15', 'tianjin')) (\"replication_num\" = \"1\"),\n" +
-                "  PARTITION p2 VALUES IN (('2022-04-16', 'shanghai'), ('2022-04-16', 'beijing')) (\"replication_num\" = \"1\")\n" +
+                "  PARTITION p1 VALUES IN (('2022-04-15', 'guangdong'), ('2022-04-15', 'tianjin')) " +
+                "(\"replication_num\" = \"1\"),\n" +
+                "  PARTITION p2 VALUES IN (('2022-04-16', 'shanghai'), ('2022-04-16', 'beijing')) " +
+                "(\"replication_num\" = \"1\")\n" +
                 ")";
         Assert.assertEquals(sql, target);
     }

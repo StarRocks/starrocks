@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.plan;
 
 import org.junit.Test;
@@ -70,8 +70,8 @@ public class SelectConstTest extends PlanTestBase {
 
     @Test
     public void testAggWithConstant() throws Exception {
-        assertPlanContains(
-                "select case when c1=1 then 1 end from (select '1' c1  union  all select '2') a group by rollup(case  when c1=1 then 1 end, 1 + 1)",
+        assertPlanContains("select case when c1=1 then 1 end from (select '1' c1  union  all select '2') a " +
+                        "group by rollup(case  when c1=1 then 1 end, 1 + 1)",
                 "<slot 4> : '2'",
                 "<slot 2> : '1'",
                 "  8:REPEAT_NODE\n" +
@@ -98,28 +98,28 @@ public class SelectConstTest extends PlanTestBase {
                 "         NULL");
         assertPlanContains("select * from t0 where v3 = (select 6)", "  5:Project\n" +
                 "  |  <slot 7> : CAST(5: expr AS BIGINT)", "equal join conjunct: 3: v3 = 7: cast");
-        assertPlanContains("select case when (select max(v4) from t1) > 1 then 2 else 3 end", "  5:Project\n" +
+        assertPlanContains("select case when (select max(v4) from t1) > 1 then 2 else 3 end", "  7:Project\n" +
                 "  |  <slot 7> : if(5: max > 1, 2, 3)\n" +
                 "  |  \n" +
-                "  4:NESTLOOP JOIN\n" +
+                "  6:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
-                "  |----3:EXCHANGE\n" +
+                "  |----5:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
-        assertPlanContains("select 1, 2, case when (select max(v4) from t1) > 1 then 4 else 5 end", "  5:Project\n" +
+        assertPlanContains("select 1, 2, case when (select max(v4) from t1) > 1 then 4 else 5 end", "  7:Project\n" +
                 "  |  <slot 2> : 1\n" +
                 "  |  <slot 3> : 2\n" +
                 "  |  <slot 9> : if(7: max > 1, 4, 5)\n" +
                 "  |  \n" +
-                "  4:NESTLOOP JOIN\n" +
+                "  6:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
-                "  |----3:EXCHANGE\n" +
+                "  |----5:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
@@ -128,8 +128,8 @@ public class SelectConstTest extends PlanTestBase {
 
     @Test
     public void testDoubleCastWithoutScientificNotation() throws Exception {
-        String sql =
-                "SELECT * FROM t0 WHERE CAST(CAST(CASE WHEN TRUE THEN -1229625855 WHEN false THEN 1 ELSE 2 / 3 END AS STRING ) AS BOOLEAN );";
+        String sql = "SELECT * FROM t0 WHERE CAST(CAST(CASE WHEN TRUE THEN -1229625855 " +
+                "WHEN false THEN 1 ELSE 2 / 3 END AS STRING ) AS BOOLEAN );";
         assertPlanContains(sql, "PREDICATES: CAST('-1229625855' AS BOOLEAN)");
     }
 }

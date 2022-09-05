@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/table_function/java_udtf_function.h"
 
@@ -53,6 +53,7 @@ private:
 };
 
 Status JavaUDTFState::open() {
+    RETURN_IF_ERROR(detect_java_runtime());
     _class_loader = std::make_unique<ClassLoader>(std::move(_libpath));
     RETURN_IF_ERROR(_class_loader->init());
     _analyzer = std::make_unique<ClassAnalyzer>();

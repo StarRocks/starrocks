@@ -1,12 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
-import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.PartitionNames;
@@ -18,7 +14,15 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
+import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
@@ -143,6 +147,68 @@ public class AdminStmtAnalyzer {
             }
             if (stmt.getType() != AdminSetConfigStmt.ConfigType.FRONTEND) {
                 throw new SemanticException("Only support setting Frontend configs now");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAdminRepairTableStatement(AdminRepairTableStmt adminRepairTableStmt, ConnectContext session) {
+            String dbName = adminRepairTableStmt.getDbName();
+            if (Strings.isNullOrEmpty(dbName)) {
+                if (Strings.isNullOrEmpty(session.getDatabase())) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                } else {
+                    dbName = session.getDatabase();
+                }
+            }
+            adminRepairTableStmt.setDbName(dbName);
+            PartitionNames partitionNames = adminRepairTableStmt.getPartitionNames();
+            if (partitionNames != null) {
+                if (partitionNames.isTemp()) {
+                    throw new SemanticException("Do not support repair temporary partitions");
+                }
+                adminRepairTableStmt.setPartitions(partitionNames);
+            }
+            adminRepairTableStmt.setTimeoutSec(4 * 3600L); // default 4 hours
+            return null;
+        }
+
+        @Override
+        public Void visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt adminCancelRepairTableStmt,
+                                                         ConnectContext session) {
+            String dbName = adminCancelRepairTableStmt.getDbName();
+            if (Strings.isNullOrEmpty(dbName)) {
+                if (Strings.isNullOrEmpty(session.getDatabase())) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                } else {
+                    dbName = session.getDatabase();
+                }
+            }
+            adminCancelRepairTableStmt.setDbName(dbName);
+            PartitionNames partitionNames = adminCancelRepairTableStmt.getPartitionNames();
+            if (partitionNames != null) {
+                if (partitionNames.isTemp()) {
+                    throw new SemanticException("Do not support (cancel)repair temporary partitions");
+                }
+                adminCancelRepairTableStmt.setPartitions(partitionNames);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, ConnectContext session) {
+            Map<String, String> properties = statement.getProperties();
+            String typeStr = PropertyAnalyzer.analyzeType(properties);
+            if (typeStr == null) {
+                throw new SemanticException("Should specify 'type' property");
+            }
+            try {
+                statement.setType(AdminCheckTabletsStmt.CheckType.getTypeFromString(typeStr));
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            if (properties != null && !properties.isEmpty()) {
+                throw new SemanticException("Unknown properties: " + properties.keySet());
             }
             return null;
         }

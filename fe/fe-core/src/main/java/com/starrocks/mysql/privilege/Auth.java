@@ -26,6 +26,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.StarRocksFE;
 import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.CreateRoleStmt;
@@ -47,9 +48,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.PrivInfo;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.GrantImpersonateStmt;
@@ -69,6 +72,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -628,7 +632,7 @@ public class Auth implements Writable {
 
             // 4. grant privs of role to user
             if (role != null) {
-                grantRoleInternal(role, userIdent, false);
+                grantRoleInternal(roleName, userIdent, false, true);
             }
 
             // other user properties
@@ -713,22 +717,37 @@ public class Auth implements Writable {
     public void grantRole(GrantRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            grantRoleInternal(this.roleManager.getRole(stmt.getQualifiedRole()), stmt.getUserIdent(), true);
+            grantRoleInternal(stmt.getQualifiedRole(), stmt.getUserIdent(), true, false);
         } finally {
             writeUnlock();
         }
     }
+
+    public void replayGrantRole(PrivInfo privInfo) throws DdlException {
+        writeLock();
+        try {
+            grantRoleInternal(privInfo.getRole(), privInfo.getUserIdent(), true, true);
+        } finally {
+            writeUnlock();
+        }
+    }
+
 
     /**
      * simply copy all privileges map from role to user.
      * TODO this is a temporary implement that make it impossible to safely revoke privilege from role.
      * We will refactor the whole user privilege framework later to ultimately fix this.
      *
-     * @param role
+     * @param roleName
      * @param userIdent
      * @throws DdlException
      */
-    private void grantRoleInternal(Role role, UserIdentity userIdent, boolean errOnNonExist) throws DdlException {
+    private void grantRoleInternal(String roleName, UserIdentity userIdent, boolean errOnNonExist, boolean isReplay)
+            throws DdlException {
+        Role role = roleManager.getRole(roleName);
+        if (role == null) {
+            throw new DdlException("Role: " + roleName + " does not exist");
+        }
         for (Map.Entry<TablePattern, PrivBitSet> entry : role.getTblPatternToPrivs().entrySet()) {
             // use PrivBitSet copy to avoid same object being changed synchronously
             grantInternal(userIdent, null /* role */, entry.getKey(), entry.getValue().copy(),
@@ -739,13 +758,31 @@ public class Auth implements Writable {
             grantInternal(userIdent, null /* role */, entry.getKey(), entry.getValue().copy(),
                     errOnNonExist /* err on non exist */, true /* is replay */);
         }
+        for (UserIdentity user : role.getImpersonateUsers()) {
+            grantImpersonateToUserInternal(userIdent, user, true);
+        }
+
         role.addUser(userIdent);
+        if (!isReplay) {
+            PrivInfo privInfo = new PrivInfo(userIdent, role.getRoleName());
+            GlobalStateMgr.getCurrentState().getEditLog().logGrantRole(privInfo);
+        }
+        LOG.info("grant {} to {}, isReplay = {}", roleName, userIdent, isReplay);
     }
 
     public void revokeRole(RevokeRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            revokeRoleInternal(this.roleManager.getRole(stmt.getQualifiedRole()), stmt.getUserIdent());
+            revokeRoleInternal(stmt.getQualifiedRole(), stmt.getUserIdent(), false);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void replayRevokeRole(PrivInfo privInfo) throws DdlException {
+        writeLock();
+        try {
+            revokeRoleInternal(privInfo.getRole(), privInfo.getUserIdent(), true);
         } finally {
             writeUnlock();
         }
@@ -756,41 +793,70 @@ public class Auth implements Writable {
      * TODO this is a temporary implement that make it impossible to safely revoke privilege from role.
      * We will refactor the whole user privilege framework later to ultimately fix this.
      *
-     * @param role
+     * @param roleName
      * @param userIdent
      * @throws DdlException
      */
-    private void revokeRoleInternal(Role role, UserIdentity userIdent) throws DdlException {
+    private void revokeRoleInternal(String roleName, UserIdentity userIdent, boolean isReplay) throws DdlException {
+        Role role = roleManager.getRole(roleName);
+        if (role == null) {
+            throw new DdlException("Role: " + roleName + " does not exist");
+        }
         for (Map.Entry<TablePattern, PrivBitSet> entry : role.getTblPatternToPrivs().entrySet()) {
             revokeInternal(userIdent, null /* role */, entry.getKey(), entry.getValue().copy(),
-                    false /* err on non exist */, false /* is replay */);
+                    false /* err on non exist */, true /* is replay */);
         }
         for (Map.Entry<ResourcePattern, PrivBitSet> entry : role.getResourcePatternToPrivs().entrySet()) {
             revokeInternal(userIdent, null /* role */, entry.getKey(), entry.getValue().copy(),
-                    false /* err on non exist */, false /* is replay */);
+                    false /* err on non exist */, true /* is replay */);
         }
+        for (UserIdentity user : role.getImpersonateUsers()) {
+            revokeImpersonateFromUserInternal(userIdent, user, true);
+        }
+
         role.dropUser(userIdent);
+        if (!isReplay) {
+            PrivInfo privInfo = new PrivInfo(userIdent, role.getRoleName());
+            GlobalStateMgr.getCurrentState().getEditLog().logRevokeRole(privInfo);
+        }
+        LOG.info("revoke {} from {}, isReplay = {}", roleName, userIdent, isReplay);
     }
 
     public void grantImpersonate(GrantImpersonateStmt stmt) throws DdlException {
-        grantImpersonateInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
+        if (stmt.getAuthorizedRoleName() == null) {
+            grantImpersonateToUserInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
+        } else {
+            grantImpersonateToRoleInternal(stmt.getAuthorizedRoleName(), stmt.getSecuredUser(), false);
+        }
     }
 
     public void replayGrantImpersonate(ImpersonatePrivInfo info) {
         try {
-            grantImpersonateInternal(info.getAuthorizedUser(), info.getSecuredUser(), true);
+            if (info.getAuthorizedRoleName() == null) {
+                grantImpersonateToUserInternal(info.getAuthorizedUser(), info.getSecuredUser(), true);
+            } else {
+                grantImpersonateToRoleInternal(info.getAuthorizedRoleName(), info.getSecuredUser(), true);
+            }
         } catch (DdlException e) {
             LOG.error("should not happend", e);
         }
     }
 
     public void revokeImpersonate(RevokeImpersonateStmt stmt) throws DdlException {
-        revokeImpersonateInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
+        if (stmt.getAuthorizedRoleName() == null) {
+            revokeImpersonateFromUserInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
+        } else {
+            revokeImpersonateFromRoleInternal(stmt.getAuthorizedRoleName(), stmt.getSecuredUser(), false);
+        }
     }
 
     public void replayRevokeImpersonate(ImpersonatePrivInfo info) {
         try {
-            revokeImpersonateInternal(info.getAuthorizedUser(), info.getSecuredUser(), true);
+            if (info.getAuthorizedRoleName() == null) {
+                revokeImpersonateFromUserInternal(info.getAuthorizedUser(), info.getSecuredUser(), true);
+            } else {
+                revokeImpersonateFromRoleInternal(info.getAuthorizedRoleName(), info.getSecuredUser(), true);
+            }
         } catch (DdlException e) {
             LOG.error("should not happend", e);
         }
@@ -827,6 +893,26 @@ public class Auth implements Writable {
     private void grantInternal(UserIdentity userIdent, String role, TablePattern tblPattern,
                                PrivBitSet privs, boolean errOnNonExist, boolean isReplay)
             throws DdlException {
+
+        if (!isReplay) {
+            // check privilege only on leader, in case of replaying old journal
+            switch (tblPattern.getPrivLevel()) {
+                case DATABASE:
+                    if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
+                        throw new DdlException("Some of the privileges are not for database: " + privs);
+                    }
+                    break;
+
+                case TABLE:
+                    if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
+                        throw new DdlException("Some of the privileges are not for table: " + privs);
+                    }
+                    break;
+
+                default:
+                    break;
+            }
+        }
         writeLock();
         try {
             if (role != null) {
@@ -857,6 +943,19 @@ public class Auth implements Writable {
 
     private void grantInternal(UserIdentity userIdent, String role, ResourcePattern resourcePattern, PrivBitSet privs,
                                boolean errOnNonExist, boolean isReplay) throws DdlException {
+        if (!isReplay) {
+            // check privilege only on leader, in case of replaying old journal
+            switch (resourcePattern.getPrivLevel()) {
+                case RESOURCE:
+                    if (privs.containsNodePriv() || privs.containsDbTablePriv() || privs.containsImpersonatePriv()) {
+                        throw new DdlException("Some of the privileges are not for resource: " + privs);
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
         writeLock();
         try {
             if (role != null) {
@@ -954,7 +1053,7 @@ public class Auth implements Writable {
         }
     }
 
-    private void grantImpersonateInternal(
+    private void grantImpersonateToUserInternal(
             UserIdentity authorizedUser, UserIdentity securedUser, boolean isReplay) throws DdlException {
         writeLock();
         try {
@@ -966,7 +1065,7 @@ public class Auth implements Writable {
                 ImpersonatePrivInfo info = new ImpersonatePrivInfo(authorizedUser, securedUser);
                 GlobalStateMgr.getCurrentState().getEditLog().logGrantImpersonate(info);
             }
-            LOG.debug("finished to grant impersonate. is replay: {}", isReplay);
+            LOG.info("grant impersonate on {} to {}, isReplay = {}", securedUser, authorizedUser, isReplay);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         } finally {
@@ -974,7 +1073,28 @@ public class Auth implements Writable {
         }
     }
 
+    private void grantImpersonateToRoleInternal(
+            String authorizedRoleName, UserIdentity securedUser, boolean isReplay) throws DdlException {
+        writeLock();
+        try {
+            // grant privs to role, role must exist
+            Role newRole = new Role(authorizedRoleName, securedUser);
+            Role existingRole = roleManager.addRole(newRole, false /* err on exist */);
 
+            // update users' privs of this role
+            for (UserIdentity user : existingRole.getUsers()) {
+                grantImpersonateToUserInternal(user, securedUser, true);
+            }
+
+            if (!isReplay) {
+                ImpersonatePrivInfo info = new ImpersonatePrivInfo(authorizedRoleName, securedUser);
+                GlobalStateMgr.getCurrentState().getEditLog().logGrantImpersonate(info);
+            }
+            LOG.info("grant impersonate on {} to role {}, isReplay = {}", securedUser, authorizedRoleName, isReplay);
+        } finally {
+            writeUnlock();
+        }
+    }
 
     // return true if user ident exist
     private boolean doesUserExist(UserIdentity userIdent) {
@@ -1105,7 +1225,7 @@ public class Auth implements Writable {
         }
     }
 
-    private void revokeImpersonateInternal(
+    private void revokeImpersonateFromUserInternal(
             UserIdentity authorizedUser, UserIdentity securedUser, boolean isReplay) throws DdlException {
         writeLock();
         try {
@@ -1117,9 +1237,32 @@ public class Auth implements Writable {
                 ImpersonatePrivInfo info = new ImpersonatePrivInfo(authorizedUser, securedUser);
                 GlobalStateMgr.getCurrentState().getEditLog().logRevokeImpersonate(info);
             }
-            LOG.debug("finished to revoke impersonate. is replay: {}", isReplay);
+            LOG.info("revoke impersonate on {} from {}. is replay: {}", securedUser, authorizedUser, isReplay);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    private void revokeImpersonateFromRoleInternal(
+            String authorizedRoleName, UserIdentity securedUser, boolean isReplay) throws DdlException {
+        writeLock();
+        try {
+            // revoke privs from role, role must exist
+            Role existingRole = roleManager.revokePrivs(authorizedRoleName, securedUser);
+
+            // revoke privs from users of this role
+            for (UserIdentity user : existingRole.getUsers()) {
+                revokeImpersonateFromUserInternal(user, securedUser, true);
+            }
+
+            if (!isReplay) {
+                ImpersonatePrivInfo info = new ImpersonatePrivInfo(authorizedRoleName, securedUser);
+                GlobalStateMgr.getCurrentState().getEditLog().logRevokeImpersonate(info);
+            }
+            LOG.debug("revoke impersonate on {} from role {}. is replay: {}", securedUser, authorizedRoleName, isReplay);
+
         } finally {
             writeUnlock();
         }
@@ -1442,58 +1585,73 @@ public class Auth implements Writable {
         return userAuthInfos;
     }
 
-    /**
-     * TODO: This function is much too long and obscure. I'll refactor it in another PR.
-     */
-    private void getUserAuthInfo(List<List<String>> userAuthInfos, UserIdentity userIdent) {
-        List<String> userAuthInfo = Lists.newArrayList();
+    public List<List<String>> getAuthenticationInfo(UserIdentity specifiedUserIdent) {
+        List<List<String>> userAuthInfos = Lists.newArrayList();
+        readLock();
+        try {
+            Set<UserIdentity> userIdents;
+            if (specifiedUserIdent == null) {
+                userIdents = getAllUserIdents(false /* include entry set by resolver */);
+            } else {
+                userIdents = new HashSet<>();
+                userIdents.add(specifiedUserIdent);
+            }
 
-        // global
+            for (UserIdentity userIdent : userIdents) {
+                List<String> userAuthInfo = Lists.newArrayList();
+                getUserGlobalPrivs(userAuthInfo, userIdent, true);
+                userAuthInfos.add(userAuthInfo);
+            }
+        } finally {
+            readUnlock();
+        }
+        return userAuthInfos;
+    }
+
+    private void getUserGlobalPrivs(List<String> userAuthInfo, UserIdentity userIdent, boolean onlyAuthenticationInfo) {
         List<PrivEntry> userPrivEntries = userPrivTable.map.get(userIdent);
         if (userPrivEntries != null) {
-            for (PrivEntry entry : userPrivEntries) {
-                GlobalPrivEntry gEntry = (GlobalPrivEntry) entry;
-                userAuthInfo.add(userIdent.toString());
-                Password password = gEntry.getPassword();
-                //Password
-                if (userIdent.isDomain()) {
-                    // for domain user ident, password is saved in property manager
-                    userAuthInfo.add(propertyMgr.doesUserHasPassword(userIdent) ? "No" : "Yes");
+            Preconditions.checkArgument(userPrivEntries.size() == 1,
+                    "more than one entries for " + userIdent.toString() + ": " + userPrivEntries.toString());
+            GlobalPrivEntry gEntry = (GlobalPrivEntry) userPrivEntries.get(0);
+            userAuthInfo.add(userIdent.toString());
+            Password password = gEntry.getPassword();
+            // Password
+            if (userIdent.isDomain()) {
+                // for domain user ident, password is saved in property manager
+                userAuthInfo.add(propertyMgr.doesUserHasPassword(userIdent) ? "No" : "Yes");
+            } else {
+                userAuthInfo.add((password == null || password.getPassword().length == 0) ? "No" : "Yes");
+            }
+            // AuthPlugin and UserForAuthPlugin
+            if (password == null) {
+                userAuthInfo.add(FeConstants.null_string);
+                userAuthInfo.add(FeConstants.null_string);
+            } else {
+                if (password.getAuthPlugin() == null) {
+                    userAuthInfo.add(FeConstants.null_string);
                 } else {
-                    userAuthInfo.add((password == null || password.getPassword().length == 0) ? "No" : "Yes");
+                    userAuthInfo.add(password.getAuthPlugin().name());
                 }
-                //AuthPlugin and UserForAuthPlugin
-                if (password == null) {
-                    userAuthInfo.add(FeConstants.null_string);
-                    userAuthInfo.add(FeConstants.null_string);
-                } else {
-                    if (password.getAuthPlugin() == null) {
-                        userAuthInfo.add(FeConstants.null_string);
-                    } else {
-                        userAuthInfo.add(password.getAuthPlugin().name());
-                    }
 
-                    if (Strings.isNullOrEmpty(password.getUserForAuthPlugin())) {
-                        userAuthInfo.add(FeConstants.null_string);
-                    } else {
-                        userAuthInfo.add(password.getUserForAuthPlugin());
-                    }
+                if (Strings.isNullOrEmpty(password.getUserForAuthPlugin())) {
+                    userAuthInfo.add(FeConstants.null_string);
+                } else {
+                    userAuthInfo.add(password.getUserForAuthPlugin());
                 }
+            }
+            if (! onlyAuthenticationInfo) {
                 //GlobalPrivs
                 userAuthInfo.add(gEntry.getPrivSet().toString() + " (" + gEntry.isSetByDomainResolver() + ")");
-                break;
             }
         } else {
             // user not in user priv table
-            // TODO I cannot think of any occation that would lead to this branch.
-            //   I'll try to figure out and clean this up in another PR
             if (!userIdent.isDomain()) {
                 // If this is not a domain user identity, it must have global priv entry.
                 // TODO(cmy): I don't know why previous comment said:
                 // This may happen when we grant non global privs to a non exist user via GRANT stmt.
                 LOG.warn("user identity does not have global priv entry: {}", userIdent);
                 userAuthInfo.add(userIdent.toString());
-                userAuthInfo.add(FeConstants.null_string);
                 userAuthInfo.add(FeConstants.null_string);
                 userAuthInfo.add(FeConstants.null_string);
                 userAuthInfo.add(FeConstants.null_string);
@@ -1504,9 +1662,21 @@ public class Auth implements Writable {
                 userAuthInfo.add(propertyMgr.doesUserHasPassword(userIdent) ? "No" : "Yes");
                 userAuthInfo.add(FeConstants.null_string);
                 userAuthInfo.add(FeConstants.null_string);
+            }
+            if (! onlyAuthenticationInfo) {
                 userAuthInfo.add(FeConstants.null_string);
             }
         }
+    }
+
+    /**
+     * TODO: This function is much too long and obscure. I'll refactor it in another PR.
+     */
+    private void getUserAuthInfo(List<List<String>> userAuthInfos, UserIdentity userIdent) {
+        List<String> userAuthInfo = Lists.newArrayList();
+
+        // global
+        getUserGlobalPrivs(userAuthInfo, userIdent, false);
 
         // db
         List<String> dbPrivs = Lists.newArrayList();
@@ -1686,7 +1856,14 @@ public class Auth implements Writable {
      * newly added metadata entity should deserialize with gson in this method
      **/
     public long readAsGson(DataInput in, long checksum) throws IOException {
-        this.impersonateUserPrivTable = ImpersonateUserPrivTable.read(in);
+        SerializeData data = GsonUtils.GSON.fromJson(Text.readString(in), SerializeData.class);
+        try {
+            this.impersonateUserPrivTable.loadEntries(data.entries);
+            this.roleManager.loadImpersonateRoleToUser(data.impersonateRoleToUser);
+        } catch (AnalysisException e) {
+            LOG.error("failed to readAsGson, ", e);
+            throw new IOException(e.getMessage());
+        }
         checksum ^= this.impersonateUserPrivTable.size();
         return checksum;
     }
@@ -1695,7 +1872,10 @@ public class Auth implements Writable {
      * newly added metadata entity should serialize with gson in this method
      **/
     public long writeAsGson(DataOutput out, long checksum) throws IOException {
-        impersonateUserPrivTable.write(out);
+        SerializeData data = new SerializeData();
+        data.entries = impersonateUserPrivTable.dumpEntries();
+        data.impersonateRoleToUser = roleManager.dumpImpersonateRoleToUser();
+        Text.writeString(out, GsonUtils.GSON.toJson(data));
         checksum ^= impersonateUserPrivTable.size();
         return checksum;
     }
@@ -1724,6 +1904,12 @@ public class Auth implements Writable {
         sb.append(roleManager).append("\n");
         sb.append(propertyMgr).append("\n");
         return sb.toString();
+    }
+    private static class SerializeData {
+        @SerializedName("entries")
+        public List<ImpersonateUserPrivEntry> entries = new ArrayList<>();
+        @SerializedName("impersonateRoleToUser")
+        public Map<String, Set<UserIdentity>> impersonateRoleToUser = new HashMap<>();
     }
 }
 

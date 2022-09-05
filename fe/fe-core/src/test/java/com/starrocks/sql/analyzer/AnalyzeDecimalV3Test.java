@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.Expr;
@@ -787,15 +787,13 @@ public class AnalyzeDecimalV3Test {
             List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
 
             Assert.assertEquals(items.size(), 24);
-            Type decimal128p38s9 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
             for (int i = 0; i < items.size(); ++i) {
                 Expr expr = items.get(i);
-                Assert.assertEquals(expr.getType(), decimal128p38s9);
-                Assert.assertEquals(((FunctionCallExpr) expr).getFn().getArgs()[0], decimal128p38s9);
-                Assert.assertEquals(((FunctionCallExpr) expr).getFn().getReturnType(), decimal128p38s9);
+                Assert.assertEquals(expr.getType(), Type.DOUBLE);
+                Assert.assertEquals(((FunctionCallExpr) expr).getFn().getArgs()[0], Type.DOUBLE);
+                Assert.assertEquals(((FunctionCallExpr) expr).getFn().getReturnType(), Type.DOUBLE);
                 Assert.assertEquals(((AggregateFunction) ((FunctionCallExpr) expr).getFn()).getIntermediateType(),
                         Type.VARCHAR);
-                Assert.assertEquals(expr.getChild(0).getType(), decimal128p38s9);
             }
         }
     }

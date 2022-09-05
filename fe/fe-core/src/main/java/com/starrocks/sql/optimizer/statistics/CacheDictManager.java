@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -32,18 +32,18 @@ import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
 
 public class CacheDictManager implements IDictManager {
     private static final Logger LOG = LogManager.getLogger(CacheDictManager.class);
-    private static final Set<ColumnIdentifier> noDictStringColumns = Sets.newConcurrentHashSet();
-    private static final Set<Long> forbiddenDictTableIds = Sets.newConcurrentHashSet();
+    private static final Set<ColumnIdentifier> NO_DICT_STRING_COLUMNS = Sets.newConcurrentHashSet();
+    private static final Set<Long> FORBIDDEN_DICT_TABLE_IDS = Sets.newConcurrentHashSet();
 
     public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
 
     private CacheDictManager() {
     }
 
-    private static final CacheDictManager instance = new CacheDictManager();
+    private static final CacheDictManager INSTANCE = new CacheDictManager();
 
     protected static CacheDictManager getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     private final AsyncCacheLoader<ColumnIdentifier, Optional<ColumnDict>> dictLoader =
@@ -61,7 +61,7 @@ public class CacheDictManager implements IDictManager {
                                     tableId, columnName);
                             if (result.second.isGlobalDictError()) {
                                 LOG.debug("{}-{} isn't low cardinality string column", tableId, columnName);
-                                noDictStringColumns.add(columnIdentifier);
+                                NO_DICT_STRING_COLUMNS.add(columnIdentifier);
                                 return Optional.empty();
                             } else {
                                 // check TStatisticData is not empty, There may be no such column Statistics in BE
@@ -104,7 +104,7 @@ public class CacheDictManager implements IDictManager {
         int dictSize = tGlobalDict.getIdsSize();
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (dictSize > LOW_CARDINALITY_THRESHOLD) {
-            noDictStringColumns.add(columnIdentifier);
+            NO_DICT_STRING_COLUMNS.add(columnIdentifier);
             return Optional.empty();
         } else {
             int dictDataSize = 0;
@@ -122,7 +122,7 @@ public class CacheDictManager implements IDictManager {
             // will be generated after the compaction.
             // Additional 32 bytes reserved for security.
             if (dictDataSize > DICT_PAGE_MAX_SIZE - 32) {
-                noDictStringColumns.add(columnIdentifier);
+                NO_DICT_STRING_COLUMNS.add(columnIdentifier);
                 return Optional.empty();
             }
         }
@@ -135,12 +135,12 @@ public class CacheDictManager implements IDictManager {
     @Override
     public boolean hasGlobalDict(long tableId, String columnName, long versionTime) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
-        if (noDictStringColumns.contains(columnIdentifier)) {
+        if (NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
             LOG.debug("{}-{} isn't low cardinality string column", tableId, columnName);
             return false;
         }
 
-        if (forbiddenDictTableIds.contains(tableId)) {
+        if (FORBIDDEN_DICT_TABLE_IDS.contains(tableId)) {
             LOG.debug("table {} forbid low cardinality global dict", tableId);
             return false;
         }
@@ -185,12 +185,12 @@ public class CacheDictManager implements IDictManager {
     @Override
     public boolean hasGlobalDict(long tableId, String columnName) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
-        if (noDictStringColumns.contains(columnIdentifier)) {
+        if (NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
             LOG.debug("{} isn't low cardinality string column", columnName);
             return false;
         }
 
-        if (forbiddenDictTableIds.contains(tableId)) {
+        if (FORBIDDEN_DICT_TABLE_IDS.contains(tableId)) {
             LOG.debug("table {} forbid low cardinality global dict", tableId);
             return false;
         }
@@ -208,12 +208,12 @@ public class CacheDictManager implements IDictManager {
     @Override
     public void disableGlobalDict(long tableId) {
         LOG.debug("remove dict for table {}", tableId);
-        forbiddenDictTableIds.add(tableId);
+        FORBIDDEN_DICT_TABLE_IDS.add(tableId);
     }
 
     @Override
     public void enableGlobalDict(long tableId) {
-        forbiddenDictTableIds.remove(tableId);
+        FORBIDDEN_DICT_TABLE_IDS.remove(tableId);
     }
 
     @Override

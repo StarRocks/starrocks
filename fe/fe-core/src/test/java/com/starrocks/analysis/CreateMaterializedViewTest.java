@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.analysis;
 
@@ -14,7 +14,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.RefreshType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -624,6 +623,20 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testCreateMVWithExplainQuery() {
+        String sql = "create materialized view mv1 " +
+                "as explain select k1, v2 from aggregate_table_with_null;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertEquals("Materialized view does not support explain query", e.getMessage());
+        } finally {
+            starRocksAssert.useDatabase("test");
+        }
+    }
+
+    @Test
     public void testPartitionWithFunctionIn() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
@@ -1107,7 +1120,7 @@ public class CreateMaterializedViewTest {
                     (CreateMaterializedViewStatement) statementBase;
             RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-            Assert.assertEquals(RefreshType.ASYNC, refreshSchemeDesc.getType());
+            Assert.assertEquals(MaterializedView.RefreshType.ASYNC, refreshSchemeDesc.getType());
             Assert.assertNotNull(asyncRefreshSchemeDesc.getStartTime());
             Assert.assertEquals(2, ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
             Assert.assertEquals("MINUTE",
@@ -1149,7 +1162,7 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) statementBase;
             RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
-            Assert.assertEquals(RefreshType.MANUAL, refreshSchemeDesc.getType());
+            Assert.assertEquals(MaterializedView.RefreshType.MANUAL, refreshSchemeDesc.getType());
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -1827,6 +1840,18 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.assertEquals("Materialized view query statement not support subquery", e.getMessage());
+        }
+    }
+
+    @Test
+    public void createViewBadName() {
+        String longLongName = "view___123456789012345678901234567890123456789012345678901234567890";
+        String sql = "create view db1." + longLongName + " as select 1,2,3";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            Assert.fail(); // should raise Exception
+        } catch (Exception e) {
+            Assert.assertEquals("Incorrect table name '" + longLongName + "'", e.getMessage());
         }
     }
 }

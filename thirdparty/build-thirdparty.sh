@@ -904,6 +904,21 @@ build_jemalloc() {
     export CFLAGS=$OLD_CFLAGS
 }
 
+# google benchmark
+build_benchmark() {
+    check_if_source_exist $BENCHMARK_SOURCE
+    cd $TP_SOURCE_DIR/$BENCHMARK_SOURCE
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    rm -rf CMakeCache.txt CMakeFiles/
+    cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=off \
+          -DBENCHMARK_ENABLE_GTEST_TESTS=off \
+          -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+          -DCMAKE_BUILD_TYPE=Release ../
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
 export CPPFLAGS=$CXXFLAGS
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
@@ -948,6 +963,7 @@ build_aws_cpp_sdk
 build_vpack
 build_opentelemetry
 build_jemalloc
+build_benchmark
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

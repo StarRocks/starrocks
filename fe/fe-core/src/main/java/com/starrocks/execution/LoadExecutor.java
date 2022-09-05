@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.execution;
 
@@ -23,7 +23,7 @@ public class LoadExecutor implements DataDefinitionExecutor {
                     + " Try using broker load. See 'help broker load;'");
         }
 
-        context.getGlobalStateMgr().getLoadManager().createLoadJobFromStmt(loadStmt);
+        context.getGlobalStateMgr().getLoadManager().createLoadJobFromStmt(loadStmt, context);
         return null;
     }
 }

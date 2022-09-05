@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "compaction.h"
 
@@ -169,7 +169,7 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
     Status status;
-    while (!ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped()) {
+    while (!StorageEngine::instance()->bg_worker_stopped()) {
 #ifndef BE_TEST
         status = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");
         if (!status.ok()) {
@@ -199,7 +199,7 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
         output_rows += chunk->num_rows();
     }
 
-    if (ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped()) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
         return Status::InternalError("Process is going to quit. The compaction will stop.");
     }
 
@@ -261,7 +261,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
         Status status;
-        while (!ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped()) {
+        while (!StorageEngine::instance()->bg_worker_stopped()) {
 #ifndef BE_TEST
             status = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");
             if (!status.ok()) {
@@ -300,7 +300,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
             }
         }
 
-        if (ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped()) {
+        if (StorageEngine::instance()->bg_worker_stopped()) {
             return Status::InternalError("Process is going to quit. The compaction will stop.");
         }
 
@@ -331,7 +331,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
 }
 
 Status Compaction::modify_rowsets() {
-    if (ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped()) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
         return Status::InternalError("Process is going to quit. The compaction will stop.");
     }
 

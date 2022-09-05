@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/lake/tablet_manager.h"
 
@@ -31,15 +31,11 @@ public:
         std::vector<starrocks::StorePath> paths;
         starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
         _test_dir = paths[0].path + "/lake";
-        CHECK_OK(FileSystem::Default()->create_dir_recursive(_test_dir));
         _location_provider = new lake::FixedLocationProvider(_test_dir);
+        CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->metadata_root_location(1)));
+        CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(1)));
+        CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
         _tablet_manager = new starrocks::lake::TabletManager(_location_provider, 16384);
-    }
-
-    std::string tablet_root_location(int64_t tablet_id) const {
-        auto root = _location_provider->root_location(tablet_id);
-        FileSystemUtil::create_directory(root);
-        return root;
     }
 
     void TearDown() override {
@@ -63,7 +59,6 @@ TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
     rowset_meta_pb->set_overlapped(false);
     rowset_meta_pb->set_data_size(1024);
     rowset_meta_pb->set_num_rows(5);
-    auto root = tablet_root_location(12345);
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
     auto res = _tablet_manager->get_tablet_metadata(12345, 2);
     EXPECT_TRUE(res.ok());
@@ -79,7 +74,6 @@ TEST_F(LakeTabletManagerTest, txnlog_write_and_read) {
     starrocks::lake::TxnLog txnLog;
     txnLog.set_tablet_id(12345);
     txnLog.set_txn_id(2);
-    auto root = tablet_root_location(12345);
     EXPECT_OK(_tablet_manager->put_txn_log(txnLog));
     auto res = _tablet_manager->get_txn_log(12345, 2);
     EXPECT_TRUE(res.ok());
@@ -105,14 +99,12 @@ TEST_F(LakeTabletManagerTest, create_and_delete_tablet) {
     starrocks::lake::TxnLog txnLog;
     txnLog.set_tablet_id(65535);
     txnLog.set_txn_id(2);
-    auto root = res.value().root_location();
     EXPECT_OK(_tablet_manager->put_txn_log(txnLog));
     EXPECT_OK(_tablet_manager->delete_tablet(65535));
 
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(root));
-    auto st = fs->path_exists(fmt::format("{}/tbl_{:016X}_{:016X}", root, 65535, 1));
+    auto st = FileSystem::Default()->path_exists(_location_provider->tablet_metadata_location(65535, 1));
     EXPECT_TRUE(st.is_not_found());
-    st = fs->path_exists(fmt::format("{}/txn_{:016X}_{:016X}", root, 65535, 2));
+    st = FileSystem::Default()->path_exists(_location_provider->tablet_metadata_location(65535, 2));
     EXPECT_TRUE(st.is_not_found());
 }
 
@@ -126,7 +118,6 @@ TEST_F(LakeTabletManagerTest, list_tablet_meta) {
     rowset_meta_pb->set_overlapped(false);
     rowset_meta_pb->set_data_size(1024);
     rowset_meta_pb->set_num_rows(5);
-    auto root = tablet_root_location(12345);
     EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
 
     metadata.set_version(3);
@@ -141,15 +132,15 @@ TEST_F(LakeTabletManagerTest, list_tablet_meta) {
     std::vector<std::string> objects;
     while (metaIter.has_next()) {
         ASSIGN_OR_ABORT(auto tabletmeta_ptr, metaIter.next());
-        objects.emplace_back(fmt::format("tbl_{:016X}_{:016X}", tabletmeta_ptr->id(), tabletmeta_ptr->version()));
+        objects.emplace_back(fmt::format("{:016X}_{:016X}.meta", tabletmeta_ptr->id(), tabletmeta_ptr->version()));
     }
 
     EXPECT_EQ(objects.size(), 3);
-    auto iter = std::find(objects.begin(), objects.end(), "tbl_0000000000003039_0000000000000002");
+    auto iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000002.meta");
     EXPECT_TRUE(iter != objects.end());
-    iter = std::find(objects.begin(), objects.end(), "tbl_0000000000003039_0000000000000003");
+    iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000003.meta");
     EXPECT_TRUE(iter != objects.end());
-    iter = std::find(objects.begin(), objects.end(), "tbl_0000000000005BA0_0000000000000002");
+    iter = std::find(objects.begin(), objects.end(), "0000000000005BA0_0000000000000002.meta");
     EXPECT_TRUE(iter != objects.end());
 
     ASSIGN_OR_ABORT(metaIter, _tablet_manager->list_tablet_metadata(12345, true));
@@ -157,13 +148,13 @@ TEST_F(LakeTabletManagerTest, list_tablet_meta) {
     objects.clear();
     while (metaIter.has_next()) {
         ASSIGN_OR_ABORT(auto tabletmeta_ptr, metaIter.next());
-        objects.emplace_back(fmt::format("tbl_{:016X}_{:016X}", tabletmeta_ptr->id(), tabletmeta_ptr->version()));
+        objects.emplace_back(fmt::format("{:016X}_{:016X}.meta", tabletmeta_ptr->id(), tabletmeta_ptr->version()));
     }
 
     EXPECT_EQ(objects.size(), 2);
-    iter = std::find(objects.begin(), objects.end(), "tbl_0000000000003039_0000000000000002");
+    iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000002.meta");
     EXPECT_TRUE(iter != objects.end());
-    iter = std::find(objects.begin(), objects.end(), "tbl_0000000000003039_0000000000000003");
+    iter = std::find(objects.begin(), objects.end(), "0000000000003039_0000000000000003.meta");
     EXPECT_TRUE(iter != objects.end());
 }
 
@@ -172,7 +163,6 @@ TEST_F(LakeTabletManagerTest, list_txn_log) {
     starrocks::lake::TxnLog txnLog;
     txnLog.set_tablet_id(12345);
     txnLog.set_txn_id(2);
-    auto root = tablet_root_location(12345);
     EXPECT_OK(_tablet_manager->put_txn_log(txnLog));
 
     txnLog.set_txn_id(3);
@@ -187,15 +177,15 @@ TEST_F(LakeTabletManagerTest, list_txn_log) {
     std::vector<std::string> txnlogs;
     while (metaIter.has_next()) {
         ASSIGN_OR_ABORT(auto txnlog_ptr, metaIter.next());
-        txnlogs.emplace_back(fmt::format("txn_{:016X}_{:016X}", txnlog_ptr->tablet_id(), txnlog_ptr->txn_id()));
+        txnlogs.emplace_back(fmt::format("{:016X}_{:016X}.log", txnlog_ptr->tablet_id(), txnlog_ptr->txn_id()));
     }
 
     EXPECT_EQ(txnlogs.size(), 3);
-    auto iter = std::find(txnlogs.begin(), txnlogs.end(), "txn_0000000000003039_0000000000000002");
+    auto iter = std::find(txnlogs.begin(), txnlogs.end(), "0000000000003039_0000000000000002.log");
     EXPECT_TRUE(iter != txnlogs.end());
-    iter = std::find(txnlogs.begin(), txnlogs.end(), "txn_0000000000003039_0000000000000003");
+    iter = std::find(txnlogs.begin(), txnlogs.end(), "0000000000003039_0000000000000003.log");
     EXPECT_TRUE(iter != txnlogs.end());
-    iter = std::find(txnlogs.begin(), txnlogs.end(), "txn_0000000000005BA0_0000000000000003");
+    iter = std::find(txnlogs.begin(), txnlogs.end(), "0000000000005BA0_0000000000000003.log");
     EXPECT_TRUE(iter != txnlogs.end());
 
     ASSIGN_OR_ABORT(metaIter, _tablet_manager->list_txn_log(12345, true));
@@ -203,13 +193,13 @@ TEST_F(LakeTabletManagerTest, list_txn_log) {
     txnlogs.clear();
     while (metaIter.has_next()) {
         ASSIGN_OR_ABORT(auto txnlog_ptr, metaIter.next());
-        txnlogs.emplace_back(fmt::format("txn_{:016X}_{:016X}", txnlog_ptr->tablet_id(), txnlog_ptr->txn_id()));
+        txnlogs.emplace_back(fmt::format("{:016X}_{:016X}.log", txnlog_ptr->tablet_id(), txnlog_ptr->txn_id()));
     }
 
     EXPECT_EQ(txnlogs.size(), 2);
-    iter = std::find(txnlogs.begin(), txnlogs.end(), "txn_0000000000003039_0000000000000002");
+    iter = std::find(txnlogs.begin(), txnlogs.end(), "0000000000003039_0000000000000002.log");
     EXPECT_TRUE(iter != txnlogs.end());
-    iter = std::find(txnlogs.begin(), txnlogs.end(), "txn_0000000000003039_0000000000000003");
+    iter = std::find(txnlogs.begin(), txnlogs.end(), "0000000000003039_0000000000000003.log");
     EXPECT_TRUE(iter != txnlogs.end());
 }
 
@@ -218,8 +208,6 @@ TEST_F(LakeTabletManagerTest, list_txn_log) {
 TEST_F(LakeTabletManagerTest, DISABLED_put_get_tabletmetadata_witch_cache_evict) {
     int64_t tablet_id = 23456;
     std::vector<lake::TabletMetadataPtr> vec;
-
-    auto root = tablet_root_location(tablet_id);
 
     // we set meta cache capacity to 16K, and each meta here cost 232 bytes,putting 64 tablet meta will fill up the cache space.
     for (int i = 0; i < 64; ++i) {
@@ -303,7 +291,6 @@ TEST_F(LakeTabletManagerTest, tablet_schema_load) {
         c1->set_is_key(false);
         c1->set_is_nullable(false);
     }
-    auto root = tablet_root_location(12345);
     _tablet_manager->put_tablet_metadata(metadata);
 
     const TabletSchema* ptr = nullptr;

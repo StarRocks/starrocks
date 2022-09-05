@@ -1,6 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/hdfs_scanner.h"
+
+#include <boost/algorithm/string.hpp>
 
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
@@ -107,6 +109,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
     ctx.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
+    ctx.case_sensitive = _scanner_params.case_sensitive;
     ctx.timezone = _runtime_state->timezone();
     ctx.stats = &_stats;
 
@@ -134,10 +137,6 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     if (_opened) {
         return Status::OK();
     }
-    CHECK(_file == nullptr) << "File has already been opened";
-    ASSIGN_OR_RETURN(_raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path));
-    _file = std::make_unique<RandomAccessFile>(
-            std::make_shared<CountedSeekableInputStream>(_raw_file->stream(), &_stats), _raw_file->filename());
     _build_scanner_context();
     auto status = do_open(runtime_state);
     if (status.ok()) {
@@ -175,6 +174,14 @@ void HdfsScanner::enter_pending_queue() {
 
 uint64_t HdfsScanner::exit_pending_queue() {
     return _pending_queue_sw.reset();
+}
+
+Status HdfsScanner::open_random_access_file() {
+    CHECK(_file == nullptr) << "File has already been opened";
+    ASSIGN_OR_RETURN(_raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path))
+    _file = std::make_unique<RandomAccessFile>(
+            std::make_shared<CountedSeekableInputStream>(_raw_file->stream(), &_stats), _raw_file->filename());
+    return Status::OK();
 }
 
 void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
@@ -219,7 +226,8 @@ void HdfsScanner::update_counter() {
 
 void HdfsScannerContext::set_columns_from_file(const std::unordered_set<std::string>& names) {
     for (auto& column : materialized_columns) {
-        if (names.find(column.col_name) == names.end()) {
+        auto col_name = column.formated_col_name(case_sensitive);
+        if (names.find(col_name) == names.end()) {
             not_existed_slots.push_back(column.slot_desc);
             SlotId slot_id = column.slot_id;
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {

@@ -37,7 +37,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -51,10 +54,13 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Root of the expr node hierarchy.
@@ -242,10 +248,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return opcode;
     }
 
-    public double getSelectivity() {
-        return selectivity;
-    }
-
     public long getNumDistinctValues() {
         return numDistinctValues;
     }
@@ -261,6 +263,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public boolean isFilter() {
         return isFilter;
     }
+
     public boolean isAuxExpr() {
         return isAuxExpr;
     }
@@ -368,6 +371,98 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         } catch (AnalysisException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    /**
+     * Gather conjuncts from this expr and return them in a list.
+     * A conjunct is an expr that returns a boolean, e.g., Predicates, function calls,
+     * SlotRefs, etc. Hence, this method is placed here and not in Predicate.
+     */
+    public static List<Expr> extractConjuncts(Expr root) {
+        List<Expr> conjuncts = Lists.newArrayList();
+        if (null == root) {
+            return conjuncts;
+        }
+
+        extractConjunctsImpl(root, conjuncts);
+        return conjuncts;
+    }
+
+    private static void extractConjunctsImpl(Expr root, List<Expr> conjuncts) {
+        if (!(root instanceof CompoundPredicate)) {
+            conjuncts.add(root);
+            return;
+        }
+
+        CompoundPredicate cpe = (CompoundPredicate) root;
+        if (!CompoundPredicate.Operator.AND.equals(cpe.getOp())) {
+            conjuncts.add(root);
+            return;
+        }
+
+        extractConjunctsImpl(cpe.getChild(0), conjuncts);
+        extractConjunctsImpl(cpe.getChild(1), conjuncts);
+    }
+
+    public static Expr compoundAnd(Collection<Expr> conjuncts) {
+        return createCompound(CompoundPredicate.Operator.AND, conjuncts);
+    }
+
+    // Build a compound tree by bottom up
+    //
+    // Example: compoundType.OR
+    // Initial state:
+    //  a b c d e
+    //
+    // First iteration:
+    //  or    or
+    //  /\    /\   e
+    // a  b  c  d
+    //
+    // Second iteration:
+    //     or   e
+    //    / \
+    //  or   or
+    //  /\   /\
+    // a  b c  d
+    //
+    // Last iteration:
+    //       or
+    //      / \
+    //     or  e
+    //    / \
+    //  or   or
+    //  /\   /\
+    // a  b c  d
+    public static Expr createCompound(CompoundPredicate.Operator type, Collection<Expr> nodes) {
+        LinkedList<Expr> link =
+                nodes.stream().filter(java.util.Objects::nonNull)
+                        .collect(Collectors.toCollection(Lists::newLinkedList));
+
+        if (link.size() < 1) {
+            return null;
+        }
+        if (link.size() == 1) {
+            return link.get(0);
+        }
+
+        while (link.size() > 1) {
+            LinkedList<Expr> buffer = Lists.newLinkedList();
+
+            // combine pairs of elements
+            while (link.size() >= 2) {
+                buffer.add(new CompoundPredicate(type, link.poll(), link.poll()));
+            }
+
+            // if there's and odd number of elements, just append the last one
+            if (!link.isEmpty()) {
+                buffer.add(link.remove());
+            }
+
+            link = buffer;
+        }
+
+        return link.remove();
     }
 
     /**
@@ -575,16 +670,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
     }
 
-    public static <C extends Expr> void getIds(List<? extends Expr> exprs, List<TupleId> tupleIds,
-                                               List<SlotId> slotIds) {
-        if (exprs == null) {
-            return;
-        }
-        for (Expr e : exprs) {
-            e.getIds(tupleIds, slotIds);
-        }
-    }
-
     public String toSql() {
         return (printSqlInParens) ? "(" + toSqlImpl() + ")" : toSqlImpl();
     }
@@ -618,6 +703,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public String toJDBCSQL(boolean isMySQL) {
         return toSql();
     }
+
     /**
      * Return a column label for the expression
      */
@@ -777,29 +863,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     /**
-     * Gather conjuncts from this expr and return them in a list.
-     * A conjunct is an expr that returns a boolean, e.g., Predicates, function calls,
-     * SlotRefs, etc. Hence, this method is placed here and not in Predicate.
-     */
-    public List<Expr> getConjuncts() {
-        List<Expr> list = Lists.newArrayList();
-        if (this instanceof CompoundPredicate && ((CompoundPredicate) this).getOp() ==
-                CompoundPredicate.Operator.AND) {
-            // TODO: we have to convert CompoundPredicate.AND to two expr trees for
-            // conjuncts because NULLs are handled differently for CompoundPredicate.AND
-            // and conjunct evaluation.  This is not optimal for jitted exprs because it
-            // will result in two functions instead of one. Create a new CompoundPredicate
-            // Operator (i.e. CONJUNCT_AND) with the right NULL semantics and use that
-            // instead
-            list.addAll((getChild(0)).getConjuncts());
-            list.addAll((getChild(1)).getConjuncts());
-        } else {
-            list.add(this);
-        }
-        return list;
-    }
-
-    /**
      * Create a deep copy of 'this'. If sMap is non-null,
      * use it to substitute 'this' or its subnodes.
      * <p/>
@@ -872,19 +935,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             }
         }
         return true;
-    }
-
-    public boolean isBound(List<SlotId> slotIds) {
-        final List<TupleId> exprTupleIds = Lists.newArrayList();
-        final List<SlotId> exprSlotIds = Lists.newArrayList();
-        getIds(exprTupleIds, exprSlotIds);
-        return !exprSlotIds.retainAll(slotIds);
-    }
-
-    public void getIds(List<TupleId> tupleIds, List<SlotId> slotIds) {
-        for (Expr child : children) {
-            child.getIds(tupleIds, slotIds);
-        }
     }
 
     /**
@@ -1019,31 +1069,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      */
     public Expr ignoreImplicitCast() {
         return this;
-    }
-
-    /**
-     * Cast the operands of a binary operation as necessary,
-     * give their compatible type.
-     * String literals are converted first, to enable casting of the
-     * the other non-string operand.
-     *
-     * @param compatibleType
-     * @return The possibly changed compatibleType
-     * (if a string literal forced casting the other operand)
-     */
-    public Type castBinaryOp(Type compatibleType) throws AnalysisException {
-        Preconditions.checkState(this instanceof BinaryPredicate || this instanceof ArithmeticExpr);
-        Type t1 = getChild(0).getType();
-        Type t2 = getChild(1).getType();
-        // add operand casts
-        Preconditions.checkState(compatibleType.isValid());
-        if (!t1.matchesType(compatibleType)) {
-            castChild(compatibleType, 0);
-        }
-        if (!t2.matchesType(compatibleType)) {
-            castChild(compatibleType, 1);
-        }
-        return compatibleType;
     }
 
     @Override
@@ -1315,6 +1340,30 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         this.fn = fn;
     }
 
+    // only the first/last one can be lambda functions.
+    public boolean hasLambdaFunction() {
+        int pos = -1, num = 0;
+        for (int i = 0; i < children.size(); ++i) {
+            if (children.get(i) instanceof LambdaFunctionExpr) {
+                num++;
+                pos = i;
+            }
+        }
+        if (num == 1 && (pos == 0 || pos == children.size() - 1)) {
+            if (children.size() <= 1) {
+                throw new SemanticException("Lambda functions should work with inputs in high-order functions.");
+            }
+            return true;
+        } else if (num > 1) {
+            throw new SemanticException("A high-order function can have one lambda function.");
+        } else if (pos > 0 && pos < children.size() - 1) {
+            throw new SemanticException(
+                    "Lambda functions can only be the first or last argument of any high-order function, " +
+                            "or lambda arguments should be in ().");
+        }
+        return false;
+    }
+
     public boolean isSelfMonotonic() {
         return false;
     }
@@ -1334,11 +1383,15 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public static Expr analyzeAndCastFold(Expr expr) {
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(expr, ConnectContext.get());
         // Translating expr to scalar in order to do some rewrites
-        ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expr);
-        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-        // Add cast and constant fold
-        scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-        return ScalarOperatorToExpr.buildExprIgnoreSlot(scalarOperator,
-                new ScalarOperatorToExpr.FormatterContext(Maps.newHashMap()));
+        try {
+            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expr);
+            ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+            // Add cast and constant fold
+            scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            return ScalarOperatorToExpr.buildExprIgnoreSlot(scalarOperator,
+                    new ScalarOperatorToExpr.FormatterContext(Maps.newHashMap()));
+        } catch (UnsupportedException e) {
+            return expr;
+        }
     }
 }

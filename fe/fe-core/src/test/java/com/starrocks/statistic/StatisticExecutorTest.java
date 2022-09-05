@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
@@ -19,7 +19,7 @@ public class StatisticExecutorTest extends PlanTestBase {
         Database db = GlobalStateMgr.getCurrentState().getDb(10002);
         OlapTable olapTable = (OlapTable) db.getTable("t0");
 
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(10002, olapTable.getId(),
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(10002, olapTable.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));

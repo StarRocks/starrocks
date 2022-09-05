@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -33,7 +33,7 @@ public:
                               const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
                               const RowDescriptor& parent_node_row_desc,
                               const RowDescriptor& parent_node_child_row_desc, SortContext* sort_context)
-            : Operator(factory, id, "partition_sort_sink", plan_node_id, driver_sequence),
+            : Operator(factory, id, "local_sort_sink", plan_node_id, driver_sequence),
               _chunks_sorter(std::move(chunks_sorter)),
               _sort_exec_exprs(std::move(sort_exec_exprs)),
               _order_by_types(order_by_types),
@@ -90,7 +90,7 @@ public:
             const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
             const RowDescriptor& parent_node_row_desc, const RowDescriptor& parent_node_child_row_desc,
             const std::vector<ExprContext*>& analytic_partition_exprs)
-            : OperatorFactory(id, "partition_sort_sink", plan_node_id),
+            : OperatorFactory(id, "local_sort_sink", plan_node_id),
               _sort_context_factory(sort_context_factory),
               _sort_exec_exprs(sort_exec_exprs),
               _is_asc_order(is_asc_order),

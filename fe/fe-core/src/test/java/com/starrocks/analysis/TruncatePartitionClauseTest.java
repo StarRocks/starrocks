@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.analysis;
 
 import java.util.Arrays;
 
+import com.starrocks.sql.ast.TruncatePartitionClause;
 import org.junit.Assert;
 import org.junit.Test;
 

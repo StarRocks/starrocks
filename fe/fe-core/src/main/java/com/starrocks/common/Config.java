@@ -117,6 +117,13 @@ public class Config extends ConfigBase {
     @ConfField
     public static String audit_log_delete_age = "30d";
 
+    @ConfField(mutable = true)
+    public static long slow_lock_threshold_ms = 3000L;
+
+    @ConfField(mutable = true)
+    public static long slow_lock_log_every_ms = 3000L;
+
+
     /**
      * dump_log_dir:
      * This specifies FE dump log dir.
@@ -467,6 +474,15 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int http_backlog_num = 1024;
+
+    @ConfField
+    public static int http_max_initial_line_length = 4096;
+
+    @ConfField
+    public static int http_max_header_size = 8192;
+
+    @ConfField
+    public static int http_max_chunk_size = 8192;
 
     /**
      * Cluster name will be shown as the title of web page
@@ -1100,6 +1116,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static int tablet_sched_checker_interval_seconds = 20;
 
+    @ConfField(mutable = true)
+    public static int tablet_sched_max_migration_task_sent_once = 1000;
+
     @Deprecated
     @ConfField(mutable = true)
     public static int report_queue_size = 100;
@@ -1357,7 +1376,7 @@ public class Config extends ConfigBase {
      * Max row count in statistics collect per query
      */
     @ConfField(mutable = true)
-    public static long statistic_collect_max_row_count_per_query = 5000000;
+    public static long statistic_collect_max_row_count_per_query = 5000000000L; //5 billion
 
     /**
      * default bucket size of histogram statistics
@@ -1679,4 +1698,15 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
+
+    /**
+     * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
+     * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
+     * e.g 495501,495503
+     */
+    @ConfField(mutable = true)
+    public static String metadata_journal_skip_bad_journal_ids = "";
+
+    @ConfField(mutable = true)
+    public static boolean recursive_dir_search_enabled = false;
 }

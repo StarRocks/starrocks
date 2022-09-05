@@ -1,16 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.mysql.privilege;
 
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.io.Text;
-import com.starrocks.persist.gson.GsonUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -21,8 +15,6 @@ import java.util.List;
  * ImpersonateUserPrivTable saves all impersonate user privileges
  */
 public class ImpersonateUserPrivTable extends PrivTable {
-    private static final Logger LOG = LogManager.getLogger(ImpersonateUserPrivTable.class);
-
     /**
      * Return first priv which match the user@host on securedUser
      * The returned priv will be saved in 'savedPrivs'.
@@ -61,36 +53,29 @@ public class ImpersonateUserPrivTable extends PrivTable {
         return privBitSet.satisfy(PrivPredicate.IMPERSONATE);
     }
 
-    public static ImpersonateUserPrivTable read(DataInput in) throws IOException {
-        ImpersonateUserPrivTable table = new ImpersonateUserPrivTable();
-        SerializeData data = GsonUtils.GSON.fromJson(Text.readString(in), SerializeData.class);
-        for (ImpersonateUserPrivEntry entry : data.entries) {
-            try {
-                entry.analyse();
-            } catch (AnalysisException e) {
-                // TODO This is ugly, somewhere above AnalysisException should be allowed
-                throw new IOException(e);
-            }
+    protected void loadEntries(List<ImpersonateUserPrivEntry> dataEntries) throws AnalysisException {
+        for (ImpersonateUserPrivEntry entry : dataEntries) {
+            entry.analyse();
             UserIdentity newUser = entry.getUserIdent();
-            List<PrivEntry> entries = table.map.computeIfAbsent(newUser, k -> new ArrayList<>());
+            List<PrivEntry> entries = this.map.computeIfAbsent(newUser, k -> new ArrayList<>());
             entries.add(entry);
         }
-        return table;
+    }
+
+    public List<ImpersonateUserPrivEntry> dumpEntries() {
+        List<ImpersonateUserPrivEntry> dataEntries = new ArrayList<>();
+        Iterator<PrivEntry> iter = this.getFullReadOnlyIterator();
+        while (iter.hasNext()) {
+            ImpersonateUserPrivEntry entry = (ImpersonateUserPrivEntry) iter.next();
+            dataEntries.add(entry);
+        }
+        return dataEntries;
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
-        SerializeData data = new SerializeData();
-        Iterator<PrivEntry> iter = this.getFullReadOnlyIterator();
-        while (iter.hasNext()) {
-            ImpersonateUserPrivEntry entry = (ImpersonateUserPrivEntry) iter.next();
-            data.entries.add(entry);
-        }
-        Text.writeString(out, GsonUtils.GSON.toJson(data));
+        throw new IOException("not implement");
     }
 
-    private static class SerializeData {
-        @SerializedName("entries")
-        public List<ImpersonateUserPrivEntry> entries = new ArrayList<>();
-    }
+
 }

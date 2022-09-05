@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "service/service_be/lake_service.h"
 
@@ -7,7 +7,9 @@
 
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
@@ -20,10 +22,12 @@ namespace starrocks {
 class LakeServiceTest : public testing::Test {
 public:
     LakeServiceTest() : _lake_service(ExecEnv::GetInstance()), _tablet_id(next_id()) {
-        CHECK_OK(fs::create_directories(kRootLocation));
         _location_provider = new lake::FixedLocationProvider(kRootLocation);
         _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
+        FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
+        FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
+        FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName));
     }
 
     ~LakeServiceTest() override {
@@ -463,6 +467,202 @@ TEST_F(LakeServiceTest, test_drop_table) {
     _lake_service.drop_table(&cntl, &request, &response, nullptr);
     ASSERT_FALSE(cntl.Failed());
     auto st = FileSystem::Default()->path_exists(kRootLocation);
+    ASSERT_TRUE(st.is_not_found()) << st;
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_publish_log_version) {
+    {
+        lake::TxnLog txnlog;
+        txnlog.set_tablet_id(_tablet_id);
+        txnlog.set_txn_id(1001);
+        txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(true);
+        txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(101);
+        txnlog.mutable_op_write()->mutable_rowset()->set_data_size(4096);
+        txnlog.mutable_op_write()->mutable_rowset()->add_segments("1.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segments("2.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
+    }
+    {
+        lake::PublishLogVersionRequest request;
+        lake::PublishLogVersionResponse response;
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing tablet_ids", cntl.ErrorText());
+    }
+    {
+        lake::PublishLogVersionRequest request;
+        lake::PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing txn_id", cntl.ErrorText());
+    }
+    {
+        lake::PublishLogVersionRequest request;
+        lake::PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(1001);
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing version", cntl.ErrorText());
+    }
+    {
+        lake::PublishLogVersionRequest request;
+        lake::PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(1001);
+        request.set_version(10);
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(0, response.failed_tablets_size());
+
+        _tablet_mgr->prune_metacache();
+        ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1001).status().is_not_found())
+                << _tablet_mgr->get_txn_log(_tablet_id, 1001).status();
+
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_vlog(_tablet_id, 10));
+        ASSERT_EQ(_tablet_id, txn_log->tablet_id());
+        ASSERT_EQ(1001, txn_log->txn_id());
+    }
+    // duplicate request
+    {
+        lake::PublishLogVersionRequest request;
+        lake::PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(1001);
+        request.set_version(10);
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(0, response.failed_tablets_size());
+
+        _tablet_mgr->prune_metacache();
+        ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1001).status().is_not_found())
+                << _tablet_mgr->get_txn_log(_tablet_id, 1001).status();
+
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_vlog(_tablet_id, 10));
+        ASSERT_EQ(_tablet_id, txn_log->tablet_id());
+        ASSERT_EQ(1001, txn_log->txn_id());
+    }
+}
+
+TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
+    // write 1 rowset when schema change
+    {
+        lake::TxnLog txnlog;
+        txnlog.set_tablet_id(_tablet_id);
+        txnlog.set_txn_id(1000);
+        txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+        txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(4);
+        txnlog.mutable_op_write()->mutable_rowset()->set_data_size(14);
+        txnlog.mutable_op_write()->mutable_rowset()->add_segments("4.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segments("5.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segments("6.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
+
+        lake::PublishLogVersionRequest request;
+        lake::PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(1000);
+        request.set_version(4);
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    // schema change with 2 rowsets
+    {
+        lake::TxnLog txnlog;
+        txnlog.set_tablet_id(_tablet_id);
+        txnlog.set_txn_id(1001);
+        auto op_schema_change = txnlog.mutable_op_schema_change();
+        op_schema_change->set_alter_version(3);
+        auto rowset0 = op_schema_change->add_rowsets();
+        rowset0->set_overlapped(true);
+        rowset0->set_num_rows(2);
+        rowset0->set_data_size(12);
+        rowset0->add_segments("1.dat");
+        rowset0->add_segments("2.dat");
+        auto rowset1 = op_schema_change->add_rowsets();
+        rowset1->set_overlapped(false);
+        rowset1->set_num_rows(3);
+        rowset1->set_data_size(13);
+        rowset1->add_segments("3.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
+
+        lake::PublishVersionRequest request;
+        lake::PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(5);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(1001);
+        brpc::Controller cntl;
+        _lake_service.publish_version(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    _tablet_mgr->prune_metacache();
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(5));
+    ASSERT_EQ(5, metadata->version());
+    ASSERT_EQ(3, metadata->rowsets().size());
+    const auto& rowset0 = metadata->rowsets(0);
+    ASSERT_TRUE(rowset0.overlapped());
+    ASSERT_EQ(2, rowset0.num_rows());
+    ASSERT_EQ(12, rowset0.data_size());
+    ASSERT_EQ(2, rowset0.segments_size());
+    const auto& rowset1 = metadata->rowsets(1);
+    ASSERT_FALSE(rowset1.overlapped());
+    ASSERT_EQ(3, rowset1.num_rows());
+    ASSERT_EQ(13, rowset1.data_size());
+    ASSERT_EQ(1, rowset1.segments_size());
+    const auto& rowset2 = metadata->rowsets(2);
+    ASSERT_FALSE(rowset2.overlapped());
+    ASSERT_EQ(4, rowset2.num_rows());
+    ASSERT_EQ(14, rowset2.data_size());
+    ASSERT_EQ(3, rowset2.segments_size());
+}
+
+TEST_F(LakeServiceTest, test_lock_unlock_tablet_metadata) {
+    ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
+    lake::LockTabletMetadataRequest lock_request;
+    lake::LockTabletMetadataResponse lock_response;
+
+    brpc::Controller cntl;
+    _lake_service.lock_tablet_metadata(&cntl, &lock_request, &lock_response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("missing version", cntl.ErrorText());
+
+    cntl.Reset();
+    lock_request.set_tablet_id(_tablet_id);
+    lock_request.set_version(1);
+    lock_request.set_expire_time(1);
+    _lake_service.lock_tablet_metadata(&cntl, &lock_request, &lock_response, nullptr);
+    ASSERT_FALSE(cntl.Failed());
+    std::string tablet_metadata_lock_path = _location_provider->tablet_metadata_lock_location(_tablet_id, 1, 1);
+    ASSERT_OK(FileSystem::Default()->path_exists(tablet_metadata_lock_path));
+
+    cntl.Reset();
+    lake::UnlockTabletMetadataRequest unlock_request;
+    lake::UnlockTabletMetadataResponse unlock_response;
+    _lake_service.unlock_tablet_metadata(&cntl, &unlock_request, &unlock_response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("missing version", cntl.ErrorText());
+
+    cntl.Reset();
+    unlock_request.set_tablet_id(_tablet_id);
+    unlock_request.set_expire_time(1);
+    unlock_request.set_version(1);
+    _lake_service.unlock_tablet_metadata(&cntl, &unlock_request, &unlock_response, nullptr);
+    ASSERT_FALSE(cntl.Failed());
+    auto st = FileSystem::Default()->path_exists(tablet_metadata_lock_path);
     ASSERT_TRUE(st.is_not_found()) << st;
 }
 

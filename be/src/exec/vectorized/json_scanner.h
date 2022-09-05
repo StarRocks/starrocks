@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -34,7 +34,7 @@ public:
 private:
     Status _construct_json_types();
     Status _construct_cast_exprs();
-    Status _parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs);
+    static Status _parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs);
     Status _create_src_chunk(ChunkPtr* chunk);
     Status _open_next_reader();
     ChunkPtr _cast_chunk(const ChunkPtr& src_chunk);
@@ -101,7 +101,7 @@ private:
     bool _strict_mode = false;
 
     std::shared_ptr<SequentialFile> _file;
-    bool _closed;
+    bool _closed = false;
     std::vector<SlotDescriptor*> _slot_descs;
     std::unordered_map<std::string, SlotDescriptor*> _slot_desc_dict;
 

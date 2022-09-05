@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "util/json.h"
 
@@ -24,6 +24,9 @@ static bool is_json_start_char(char ch) {
 }
 
 StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
+    if (src.size > kJSONLengthLimit) {
+        return Status::NotSupported("JSON string exceed maximum length 16MB");
+    }
     try {
         if (src.empty()) {
             return JsonValue(noneJsonSlice());
@@ -52,6 +55,9 @@ Status JsonValue::parse(const Slice& src, JsonValue* out) {
         if (src.empty()) {
             *out = JsonValue(noneJsonSlice());
             return Status::OK();
+        }
+        if (src.size > kJSONLengthLimit) {
+            return Status::NotSupported("JSON string exceed maximum length 16MB");
         }
         auto b = vpack::Parser::fromJson(src.get_data(), src.get_size());
         out->assign(*b);

@@ -1,7 +1,7 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -18,14 +18,14 @@ public class AdminSetTest {
     }
 
     @Test
-    public void TestAdminSetConfig() {
+    public void testAdminSetConfig() {
         analyzeSuccess("admin set frontend config(\"alter_table_timeout_second\" = \"60\");");
-        analyzeFail("admin set frontend config;", "Syntax error in line 1");
+        analyzeFail("admin set frontend config;", "the right syntax to use near '<EOF>'");
     }
 
     @Test
-    public void TestAdminSetReplicaStatus() {
-        AdminSetReplicaStatusStmt stmt = (AdminSetReplicaStatusStmt)analyzeSuccess(
+    public void testAdminSetReplicaStatus() {
+        AdminSetReplicaStatusStmt stmt = (AdminSetReplicaStatusStmt) analyzeSuccess(
                 "admin set replica status properties(\"tablet_id\" = \"10003\",\"backend_id\" = \"10001\",\"status\" = \"ok\");");
         Assert.assertEquals(10003, stmt.getTabletId());
         Assert.assertEquals(10001, stmt.getBackendId());
@@ -37,7 +37,8 @@ public class AdminSetTest {
                 "Should add following properties: TABLET_ID, BACKEND_ID and STATUS");
         analyzeFail("admin set replica status properties(\"tablet_id\" = \"10003\",\"backend_id\" = \"10001\");",
                 "Should add following properties: TABLET_ID, BACKEND_ID and STATUS");
-        analyzeFail("admin set replica status properties(\"tablet_id\" = \"10003\",\"backend_id\" = \"10001\",\"status\" = \"MISSING\");",
+        analyzeFail("admin set replica status " +
+                        "properties(\"tablet_id\" = \"10003\",\"backend_id\" = \"10001\",\"status\" = \"MISSING\");",
                 "Do not support setting replica status as MISSING");
         analyzeFail("admin set replica status properties(\"unknown_config\" = \"10003\");",
                 "Unknown property: unknown_config");

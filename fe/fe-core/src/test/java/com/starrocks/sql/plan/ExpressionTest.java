@@ -1,16 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -149,7 +153,8 @@ public class ExpressionTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         System.out.println("planFragment = " + planFragment);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL64(7,2)) AS DECIMAL64(10,2)) + CAST(CAST(2: v2 AS DECIMAL64(9,3)) AS DECIMAL64(10,3))\n"));
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL64(7,2)) AS DECIMAL64(10,2)) + " +
+                "CAST(CAST(2: v2 AS DECIMAL64(9,3)) AS DECIMAL64(10,3))\n"));
     }
 
     @Test
@@ -157,7 +162,8 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select cast(v1 as decimal128(27,2)) - cast(v2 as decimal64(10,3)) from t0";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(27,2)) AS DECIMAL128(38,2)) - CAST(CAST(2: v2 AS DECIMAL64(10,3)) AS DECIMAL128(38,3))\n"));
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(27,2)) AS DECIMAL128(38,2)) - " +
+                "CAST(CAST(2: v2 AS DECIMAL64(10,3)) AS DECIMAL128(38,3))\n"));
     }
 
     @Test
@@ -165,7 +171,8 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select cast(v1 as decimal128(10,5)) * cast(v2 as decimal64(9,7)) from t0";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL128(10,5)) * CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(9,7))"));
+                "  |  <slot 4> : CAST(1: v1 AS DECIMAL128(10,5)) * " +
+                "CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(9,7))"));
     }
 
     @Test
@@ -173,7 +180,8 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select cast(v1 as decimal128(18,5)) / cast(v2 as decimal32(9,7)) from t0";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(18,5)) AS DECIMAL128(38,5)) / CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL128(38,7))\n"));
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(18,5)) AS DECIMAL128(38,5)) / " +
+                "CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL128(38,7))\n"));
     }
 
     @Test
@@ -216,6 +224,21 @@ public class ExpressionTest extends PlanTestBase {
         Expr castExpression = ScalarOperatorToExpr.buildExecExpression(castColumnRef, context);
 
         Assert.assertTrue(castExpression instanceof CastExpr);
+
+        // lambda functions
+        ScalarOperator lambdaExpr = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                new ColumnRefOperator(100000, Type.INT, "x", true),
+                ConstantOperator.createInt(1));
+        ColumnRefOperator colRef = new ColumnRefOperator(100000, Type.INT, "x", true);
+        LambdaFunctionOperator lambda = new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, Type.BOOLEAN);
+        variableToSlotRef.clear();
+        projectMap.clear();
+        context = new ScalarOperatorToExpr.FormatterContext(variableToSlotRef, projectMap);
+
+        Expr lambdaFunc = ScalarOperatorToExpr.buildExecExpression(lambda, context);
+
+        Assert.assertTrue(lambdaFunc instanceof LambdaFunctionExpr);
+        Assert.assertEquals("<slot 100000> -> <slot 100000> = 1", lambdaFunc.toSql());
     }
 
     @Test
@@ -293,7 +316,8 @@ public class ExpressionTest extends PlanTestBase {
                 "(((CASE WHEN false THEN -843579223 ELSE -1859488192 END)+(((-406527105)+(540481936))))) ;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(
-                "PREDICATES: CAST(if(CAST(1: v1 AS BOOLEAN), -345600.0, NULL) AS DOUBLE) >= 1.341067345E9, CAST(if(CAST(1: v1 AS BOOLEAN), -345600.0, NULL) AS DOUBLE) <= -1.725533361E9"));
+                "PREDICATES: CAST(if(CAST(1: v1 AS BOOLEAN), -345600.0, NULL) AS DOUBLE) >= 1.341067345E9, " +
+                        "CAST(if(CAST(1: v1 AS BOOLEAN), -345600.0, NULL) AS DOUBLE) <= -1.725533361E9"));
     }
 
     @Test
@@ -389,8 +413,8 @@ public class ExpressionTest extends PlanTestBase {
 
     @Test
     public void testDateTypeReduceCast() throws Exception {
-        String sql =
-                "select * from test_all_type_distributed_by_datetime where cast(cast(id_datetime as date) as datetime) >= '1970-01-01 12:00:00' " +
+        String sql = "select * from test_all_type_distributed_by_datetime " +
+                "where cast(cast(id_datetime as date) as datetime) >= '1970-01-01 12:00:00' " +
                         "and cast(cast(id_datetime as date) as datetime) <= '1970-01-01 18:00:00'";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(
@@ -701,9 +725,9 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
-    public void TestGISConstantConjunct() throws Exception {
-        String sql =
-                "select * from  test.join1 where ST_Contains(\"\", APPEND_TRAILING_CHAR_IF_ABSENT(-1338745708, \"RDBLIQK\") )";
+    public void testGISConstantConjunct() throws Exception {
+        String sql = "select * from  test.join1 where ST_Contains(\"\", " +
+                "APPEND_TRAILING_CHAR_IF_ABSENT(-1338745708, \"RDBLIQK\") )";
         String explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString
                 .contains("PREDICATES: st_contains('', append_trailing_char_if_absent('-1338745708', 'RDBLIQK'))"));
@@ -730,8 +754,8 @@ public class ExpressionTest extends PlanTestBase {
         String caseWhenSql = "select "
                 + "case when date_format(now(),'%H%i')  < 123 then 1 else 0 end as col "
                 + "from test.baseall "
-                +
-                "where k11 = case when date_format(now(),'%H%i') < 123 then date_format(date_sub(now(),2),'%Y%m%d') else date_format(date_sub(now(),1),'%Y%m%d') end";
+                + "where k11 = case when date_format(now(),'%H%i') < 123 " +
+                "then date_format(date_sub(now(),2),'%Y%m%d') else date_format(date_sub(now(),1),'%Y%m%d') end";
         Assert.assertFalse(StringUtils.containsIgnoreCase(getFragmentPlan(caseWhenSql), "CASE WHEN"));
 
         // test 1: case when then
@@ -769,8 +793,8 @@ public class ExpressionTest extends PlanTestBase {
         Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql14), "2"));
 
         // 1.5 nest `case when` and can not be converted to constants
-        String sql15 =
-                "select case when case when substr(k7,2,1) then true else false end then 2 when false then 3 else 0 end as col from test.baseall";
+        String sql15 = "select case when case when substr(k7,2,1) then true else false end " +
+                "then 2 when false then 3 else 0 end as col from test.baseall";
         Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql15),
                 "if(if(CAST(substr(9: k7, 2, 1) AS BOOLEAN), TRUE, FALSE), 2, 0)"));
 
@@ -788,8 +812,8 @@ public class ExpressionTest extends PlanTestBase {
                 "CASE WHEN CAST(substr(9: k7, 2, 1) AS BOOLEAN) THEN 3 WHEN TRUE THEN 1 ELSE 2 END"));
 
         // 1.9 test remove when clause when is false/null
-        String sql19 =
-                "select case when substr(k7,2,1) then 3 when false then 1 when null then 5 else 2 end as col16 from test.baseall;";
+        String sql19 = "select case when substr(k7,2,1) then 3 " +
+                "when false then 1 when null then 5 else 2 end as col16 from test.baseall;";
         Assert.assertTrue(StringUtils
                 .containsIgnoreCase(getFragmentPlan(sql19), "if(CAST(substr(9: k7, 2, 1) AS BOOLEAN), 3, 2)"));
 
@@ -813,22 +837,23 @@ public class ExpressionTest extends PlanTestBase {
                 StringUtils.containsIgnoreCase(getFragmentPlan(sql222), "'other'"));
 
         // 2.3 test can not convert to constant,middle when expr is not constant
-        String sql23 =
-                "select case 'a' when 'b' then 'a' when substr(k7,2,1) then 2 when false then 3 else 0 end as col23 from test.baseall";
+        String sql23 = "select case 'a' when 'b' then 'a' " +
+                "when substr(k7,2,1) then 2 when false then 3 else 0 end as col23 from test.baseall";
         Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql23),
                 "if(substr(9: k7, 2, 1) = 'a', '2', '0')"));
 
         // 2.3.1  first when expr is not constant
-        String sql231 =
-                "select case 'a' when substr(k7,2,1) then 2 when 1 then 'a' when false then 3 else 0 end as col231 from test.baseall";
+        String sql231 = "select case 'a' when substr(k7,2,1) then 2 " +
+                "when 1 then 'a' when false then 3 else 0 end as col231 from test.baseall";
         Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql231),
                 "if(substr(9: k7, 2, 1) = 'a', '2', '0')"));
 
         // 2.3.2 case expr is not constant
-        String sql232 =
-                "select case k1 when substr(k7,2,1) then 2 when 1 then 'a' when false then 3 else 0 end as col232 from test.baseall";
+        String sql232 = "select case k1 when substr(k7,2,1) then 2 when 1 " +
+                "then 'a' when false then 3 else 0 end as col232 from test.baseall";
         Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql232),
-                "CASE CAST(1: k1 AS VARCHAR) WHEN substr(9: k7, 2, 1) THEN '2' WHEN '1' THEN 'a' WHEN '0' THEN '3' ELSE '0' END"));
+                "CASE CAST(1: k1 AS VARCHAR) " +
+                        "WHEN substr(9: k7, 2, 1) THEN '2' WHEN '1' THEN 'a' WHEN '0' THEN '3' ELSE '0' END"));
 
         // 2.4 when expr has true but not equals case expr
         String sql24 = "select case 10 when true then 'a' when 2 then 'b' else 'other' end as col2;";
@@ -841,14 +866,14 @@ public class ExpressionTest extends PlanTestBase {
                 "'a'"));
 
         // 2.6 when expr equals case expr in middle
-        String sql26 =
-                "select case 'a' when substr(k7,2,1) then 2 when 'a' then 'b' else 'other' end as col2 from test.baseall;";
+        String sql26 = "select case 'a' when substr(k7,2,1) then 2 " +
+                "when 'a' then 'b' else 'other' end as col2 from test.baseall;";
         Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql26),
                 "CASE 'a' WHEN substr(9: k7, 2, 1) THEN '2' WHEN 'a' THEN 'b' ELSE 'other' END"));
 
         // 2.7 test remove when clause not equals case expr
-        String sql27 =
-                "select case 'a' when substr(k7,2,1) then 3 when false then 1 when null then 5 else 2 end as col16 from test.baseall;";
+        String sql27 = "select case 'a' when substr(k7,2,1) then 3 " +
+                "when false then 1 when null then 5 else 2 end as col16 from test.baseall;";
         Assert.assertTrue(
                 StringUtils.containsIgnoreCase(getFragmentPlan(sql27), "if(substr(9: k7, 2, 1) = 'a', 3, 2)"));
 
@@ -882,8 +907,8 @@ public class ExpressionTest extends PlanTestBase {
 
     @Test
     public void testLargeIntLiteralCompare() throws Exception {
-        String sql =
-                "select k2 from baseall group by ((10800861)/(((NULL)%(((-1114980787)+(-1182952114)))))), ((10800861)*(-9223372036854775808)), k2";
+        String sql = "select k2 from baseall group by ((10800861)/(((NULL)%(((-1114980787)+(-1182952114)))))), " +
+                "((10800861)*(-9223372036854775808)), k2";
         starRocksAssert.query(sql).explainContains("group by: 2: k2");
     }
 

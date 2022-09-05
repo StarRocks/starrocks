@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
@@ -36,8 +36,8 @@ import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -49,13 +49,13 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
-import com.starrocks.sql.optimizer.base.SetQualifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -79,14 +79,15 @@ public class AST2SQL {
                     sb.append(", ");
                 }
                 // `SET DEFAULT` is not supported
-                if (! setVar.getType().equals(SetType.DEFAULT)) {
+                if (!setVar.getType().equals(SetType.DEFAULT)) {
                     sb.append(setVar.getType().toString() + " ");
                 }
-                sb.append(setVar.getVariable() + " = " + setVar.getValue().toSql());
+                sb.append(setVar.getVariable() + " = " + setVar.getExpression().toSql());
                 idx++;
             }
             return sb.toString();
         }
+
         @Override
         public String visitQueryStatement(QueryStatement stmt, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
@@ -387,8 +388,9 @@ public class AST2SQL {
             return visit(node.getChild(0)) + "[" + visit(node.getChild(1)) + "]";
         }
 
+        @Override
         public String visitArrowExpr(ArrowExpr node, Void context) {
-            return visitExpression(node, context);
+            return String.format("%s->%s", visit(node.getItem(), context), visit(node.getKey(), context));
         }
 
         @Override
@@ -486,7 +488,7 @@ public class AST2SQL {
         }
 
         public String visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {
-            return visitExpression(node, context);
+            return visitFunctionCall(node, context);
         }
 
         public String visitInformationFunction(InformationFunction node, Void context) {
@@ -536,7 +538,7 @@ public class AST2SQL {
             return "(" + visit(node.getQueryStatement()) + ")";
         }
 
-        public String visitSysVariableDesc(SysVariableDesc node, Void context) {
+        public String visitVariableExpr(VariableExpr node, Void context) {
             return visitExpression(node, context);
         }
 

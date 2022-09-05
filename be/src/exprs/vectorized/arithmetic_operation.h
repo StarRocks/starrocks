@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -229,7 +229,7 @@ public:
     }
 
     Type value() const { return _value; }
-    Type double_value() const {
+    double double_value() const {
         double result = 0;
         DecimalV3Cast::to_float<Type, double>(_value, scale_factor, &result);
         return result;

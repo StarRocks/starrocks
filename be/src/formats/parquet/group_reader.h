@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -60,6 +60,8 @@ struct GroupReaderParam {
     RandomAccessFile* file = nullptr;
 
     FileMetaData* file_metadata = nullptr;
+
+    bool case_sensitive = false;
 };
 
 class GroupReader {

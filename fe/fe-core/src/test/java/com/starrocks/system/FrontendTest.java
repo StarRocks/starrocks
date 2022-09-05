@@ -1,9 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.system;
 
 import com.starrocks.ha.FrontendNodeType;
-
 import org.junit.Assert;
 import org.junit.Test;
 

@@ -29,11 +29,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
-import com.starrocks.proto.PTriggerProfileReportRequest;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -226,8 +226,8 @@ public class CurrentQueryInfoProvider {
         final List<Pair<Request, Future<PTriggerProfileReportResult>>> futures = Lists.newArrayList();
         for (TNetworkAddress address : requests.keySet()) {
             final Request request = requests.get(address);
-            final PTriggerProfileReportRequest pbRequest = new PTriggerProfileReportRequest();
-            pbRequest.instanceIds.addAll(request.getInstanceIds());
+            final PTriggerProfileReportRequest pbRequest =
+                    new PTriggerProfileReportRequest(request.getInstanceIds());
             try {
                 futures.add(Pair.create(request, BackendServiceClient.getInstance().
                         triggerProfileReportAsync(address, pbRequest)));

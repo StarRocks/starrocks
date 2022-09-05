@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.planner;
 
@@ -218,6 +218,10 @@ public class RuntimeFilterDescription {
 
     public void setBroadcastGRFDestinations(List<TRuntimeFilterDestination> broadcastGRFDestinations) {
         this.broadcastGRFDestinations = broadcastGRFDestinations;
+    }
+
+    public List<TRuntimeFilterDestination> getBroadcastGRFDestinations() {
+        return broadcastGRFDestinations;
     }
 
     public String toExplainString(int probeNodeId) {

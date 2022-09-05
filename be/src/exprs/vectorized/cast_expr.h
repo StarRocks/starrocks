@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -15,9 +15,10 @@ namespace vectorized {
 
 class VectorizedCastExprFactory {
 public:
-    static Expr* from_thrift(const TExprNode& node);
+    static Expr* from_thrift(const TExprNode& node, bool exception_if_failed = false);
 
-    static Expr* from_type(const TypeDescriptor& from, const TypeDescriptor& to, Expr* child, ObjectPool* pool);
+    static Expr* from_type(const TypeDescriptor& from, const TypeDescriptor& to, Expr* child, ObjectPool* pool,
+                           bool exception_if_failed = false);
 };
 
 // cast Array to Array.

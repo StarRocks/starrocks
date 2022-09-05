@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rewrite.physical;
 
@@ -10,45 +10,45 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
-/**
+/*
  * Because of local property, we could generate three/four stage plan like:
  * three stage:
- * Agg(Global)
- * |
- * Agg(Distinct Global)
- * |
- * Agg(Local)
- * <p>
+ *      Agg(Global)
+ *           |
+ *   Agg(Distinct Global)
+ *           |
+ *      Agg(Local)
+ *
  * four stage:
- * Agg(Global)
- * |
- * Distribution
- * |
- * Agg（Distinct Local)
- * |
- * Agg (Distinct Global)
- * |
- * Agg (Local)
+ *      Agg(Global)
+ *           |
+ *      Distribution
+ *           |
+ *   Agg（Distinct Local)
+ *           |
+ *  Agg (Distinct Global)
+ *           |
+ *       Agg (Local)
  * Because of there is no shuffle between the Agg(Distinct Global) and Agg(Local), the update/merge procedure is not
  * really required here. We could optimize the two aggregate node(Agg(Distinct Global) - Agg(Local)) to one aggregate node.
  * This optimization avoids serialization and deserialization of data.
  * Optimized plan：
  * three stage:
- * Agg(Global)
- * |
- * Agg(Local)
- * <p>
+ *      Agg(Global)
+ *           |
+ *      Agg(Local)
+
  * four stage:
- * Agg(Global)
- * |
- * Distribution
- * |
- * Agg（Distinct Local)
- * |
- * Agg (Local)
+ *      Agg(Global)
+ *          |
+ *     Distribution
+ *          |
+ *   Agg（Distinct Local)
+ *          |
+ *      Agg (Local)
  **/
 public class PruneAggregateNodeRule implements PhysicalOperatorTreeRewriteRule {
-    private static final PruneAggVisitor pruneAggVisitor = new PruneAggVisitor();
+    private static final PruneAggVisitor PRUNE_AGG_VISITOR = new PruneAggVisitor();
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
@@ -57,7 +57,7 @@ public class PruneAggregateNodeRule implements PhysicalOperatorTreeRewriteRule {
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() != 0 && !FeConstants.runningUnitTest) {
             return root;
         }
-        return root.getOp().accept(pruneAggVisitor, root, null);
+        return root.getOp().accept(PRUNE_AGG_VISITOR, root, null);
     }
 
     private static class PruneAggVisitor extends OptExpressionVisitor<OptExpression, Void> {

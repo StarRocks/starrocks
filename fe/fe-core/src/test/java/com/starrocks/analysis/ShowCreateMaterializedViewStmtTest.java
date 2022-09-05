@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
@@ -9,6 +9,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -54,7 +55,6 @@ public class ShowCreateMaterializedViewStmtTest {
                 new ShowCreateTableStmt(new TableName("test", "mv1"),
                         ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW CREATE MATERIALIZED VIEW test.mv1", stmt.toString());
         Assert.assertEquals("test", stmt.getDb());
         Assert.assertEquals("mv1", stmt.getTable());
         Assert.assertEquals(2, ShowCreateTableStmt.getMaterializedViewMetaData().getColumnCount());

@@ -30,7 +30,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
-import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
@@ -57,11 +56,13 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.DropReplicaTask;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTable;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
@@ -700,6 +701,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return defaultDistributionInfo;
     }
 
+    @Override
     public Set<String> getDistributionColumnNames() {
         Set<String> distributionColumnNames = Sets.newHashSet();
         if (defaultDistributionInfo instanceof RandomDistributionInfo) {
@@ -759,7 +761,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
                         rangePartitionInfo.getRange(partition.getId()),
                         rangePartitionInfo.getDataProperty(partition.getId()),
                         rangePartitionInfo.getReplicationNum(partition.getId()),
-                        rangePartitionInfo.getIsInMemory(partition.getId()));
+                        rangePartitionInfo.getIsInMemory(partition.getId()),
+                        rangePartitionInfo.getStorageInfo(partition.getId()),
+                        isLakeTable());
             } else if (!reserveTablets) {
                 tabletIds = GlobalStateMgr.getCurrentState().onErasePartition(partition);
             }
@@ -853,6 +857,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     // get all partitions except temp partitions
+    @Override
     public Collection<Partition> getPartitions() {
         return idToPartition.values();
     }
@@ -1344,7 +1349,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
     }
 
-    protected OlapTable selectiveCopyInternal(OlapTable copied, Collection<String> reservedPartitions, boolean resetState,
+    protected OlapTable selectiveCopyInternal(OlapTable copied, Collection<String> reservedPartitions,
+                                              boolean resetState,
                                               IndexExtState extState) {
         if (resetState) {
             // remove shadow index from copied table
@@ -1611,28 +1617,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         tableProperty.buildEnablePersistentIndex();
     }
 
-    public Boolean checkPersistentIndex() {
-        // check key type and length
-        int keyLength = 0;
-        for (Column column : getFullSchema()) {
-            if (!column.isKey()) {
-                continue;
-            }
-            if (column.getPrimitiveType() == PrimitiveType.VARCHAR
-                    || column.getPrimitiveType() == PrimitiveType.CHAR) {
-                LOG.warn("PrimaryKey table using persistent index doesn't support varchar(char) so far");
-                return false;
-            }
-            // calculate key size
-            keyLength += column.getOlapColumnIndexSize();
-        }
-        if (keyLength > 64) {
-            LOG.warn("Primary key size of primaryKey table using persistent index should be no more than 64Bytes");
-            return false;
-        }
-        return true;
-    }
-
     public void setStorageMedium(TStorageMedium storageMedium) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -1839,6 +1823,21 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getStorageFormat();
     }
 
+    public void setCompressionType(TCompressionType compressionType) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_COMPRESSION, compressionType.name());
+        tableProperty.buildCompressionType();
+    }
+
+    public TCompressionType getCompressionType() {
+        if (tableProperty == null) {
+            return TCompressionType.LZ4_FRAME;
+        }
+        return tableProperty.getCompressionType();
+    }
+
     // should call this when create materialized view
     public void addRelatedMaterializedView(long mvId) {
         relatedMaterializedViews.add(mvId);
@@ -1867,6 +1866,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
             if (tmpTable != null) {
                 MaterializedView mv = (MaterializedView) tmpTable;
                 mv.setActive(false);
+            } else {
+                LOG.warn("Ignore materialized view {} does not exists", mvId);
             }
         }
     }
@@ -1899,7 +1900,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
             // drop all replicas
             for (Partition partition : table.getAllPartitions()) {
-                List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                List<MaterializedIndex> allIndices =
+                        partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 for (MaterializedIndex materializedIndex : allIndices) {
                     long indexId = materializedIndex.getId();
                     int schemaHash = table.getSchemaHashByIndexId(indexId);
@@ -1944,5 +1946,20 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 }
             }
         }
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        Map<String, String> properties = Maps.newHashMap();
+
+        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, getDefaultReplicationNum().toString());
+        properties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, isInMemory().toString());
+
+        Map<String, String> tableProperty = getTableProperty().getProperties();
+        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
+                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        }
+        return properties;
     }
 }

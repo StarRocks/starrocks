@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -182,6 +182,19 @@ public:
      * @return: JsonColumn
      */
     DEFINE_VECTORIZED_FN(json_array_empty);
+
+    /**
+     * Return number of elements in a JSON object/array
+     * @param JSON, JSONPath
+     * @return number of elements if it's object or array, otherwise return 1
+     */
+    DEFINE_VECTORIZED_FN(json_length);
+
+    /**
+     * Returns the keys from the top-level value of a JSON object as a JSON array
+     * 
+     */
+    DEFINE_VECTORIZED_FN(json_keys);
 
     static Status native_json_path_prepare(starrocks_udf::FunctionContext* context,
                                            starrocks_udf::FunctionContext::FunctionStateScope scope);

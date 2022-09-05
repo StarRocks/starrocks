@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "connector/es_connector.h"
 
@@ -193,7 +193,6 @@ void ESDataSource::close(RuntimeState* state) {
     if (_es_reader != nullptr) {
         _es_reader->close();
     }
-    Expr::close(_conjunct_ctxs, state);
 }
 
 void ESDataSource::_init_counter() {

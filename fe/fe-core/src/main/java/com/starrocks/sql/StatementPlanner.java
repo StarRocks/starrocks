@@ -1,21 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql;
 
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.DeleteStmt;
-import com.starrocks.analysis.DmlStmt;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -29,6 +25,7 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
 import java.util.Map;
@@ -36,47 +33,49 @@ import java.util.stream.Collectors;
 
 public class StatementPlanner {
 
-    public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
+    public static ExecPlan plan(StatementBase stmt, ConnectContext session) {
+        return plan(stmt, session, true, TResultSinkType.MYSQL_PROTOCAL);
+    }
+
+    public static ExecPlan plan(StatementBase stmt, ConnectContext session, boolean lockDb, TResultSinkType resultSinkType) {
         if (stmt instanceof QueryStatement) {
             OptimizerTraceUtil.logQueryStatement(session, "after parse:\n%s", (QueryStatement) stmt);
         }
-        Analyzer.analyze(stmt, session);
-        PrivilegeChecker.check(stmt, session);
-        if (stmt instanceof QueryStatement) {
-            OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
-        }
 
-        if (stmt instanceof QueryStatement) {
-            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
-            try {
-                lock(dbs);
+        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
+        Map<String, Database> dbLocks = null;
+        if (lockDb) {
+            dbLocks = dbs;
+        }
+        try {
+            lock(dbLocks);
+            Analyzer.analyze(stmt, session);
+            PrivilegeChecker.check(stmt, session);
+            if (stmt instanceof QueryStatement) {
+                OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
+            }
+
+            if (stmt instanceof QueryStatement) {
                 session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
-                ExecPlan plan = createQueryPlan(((QueryStatement) stmt).getQueryRelation(), session);
+                ExecPlan plan = createQueryPlan(((QueryStatement) stmt).getQueryRelation(), session, resultSinkType);
                 setOutfileSink((QueryStatement) stmt, plan);
 
                 return plan;
-            } finally {
-                unLock(dbs);
+            } else if (stmt instanceof InsertStmt) {
+                return new InsertPlanner().plan((InsertStmt) stmt, session);
+            } else if (stmt instanceof UpdateStmt) {
+                return new UpdatePlanner().plan((UpdateStmt) stmt, session);
+            } else if (stmt instanceof DeleteStmt) {
+                return new DeletePlanner().plan((DeleteStmt) stmt, session);
             }
-        } else if (stmt instanceof DmlStmt) {
-            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
-            try {
-                lock(dbs);
-                if (stmt instanceof InsertStmt) {
-                    return new InsertPlanner().plan((InsertStmt) stmt, session);
-                } else if (stmt instanceof UpdateStmt) {
-                    return new UpdatePlanner().plan((UpdateStmt) stmt, session);
-                } else if (stmt instanceof DeleteStmt) {
-                    return new DeletePlanner().plan((DeleteStmt) stmt, session);
-                }
-            } finally {
-                unLock(dbs);
-            }
+        } finally {
+            unLock(dbLocks);
         }
         return null;
     }
 
-    private ExecPlan createQueryPlan(Relation relation, ConnectContext session) {
+
+    public static ExecPlan createQueryPlan(Relation relation, ConnectContext session, TResultSinkType resultSinkType) {
         QueryRelation query = (QueryRelation) relation;
         List<String> colNames = query.getColumnOutputNames();
 
@@ -99,17 +98,14 @@ public class StatementPlanner {
          * currently only used in Spark/Flink Connector
          * Because the connector sends only simple queries, it only needs to remove the output fragment
          */
-        if (session.getSessionVariable().isSingleNodeExecPlan()) {
-            return new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
-        } else {
-            return new PlanFragmentBuilder().createPhysicalPlan(
-                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
-        }
+        return new PlanFragmentBuilder().createPhysicalPlan(
+                optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
+                resultSinkType,
+                !session.getSessionVariable().isSingleNodeExecPlan());
     }
 
     // Lock all database before analyze
-    private void lock(Map<String, Database> dbs) {
+    private static void lock(Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }
@@ -119,7 +115,7 @@ public class StatementPlanner {
     }
 
     // unLock all database after analyze
-    private void unLock(Map<String, Database> dbs) {
+    private static void unLock(Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }
@@ -130,7 +126,7 @@ public class StatementPlanner {
 
     // if query stmt has OUTFILE clause, set info into ResultSink.
     // this should be done after fragments are generated.
-    private void setOutfileSink(QueryStatement queryStmt, ExecPlan plan) throws AnalysisException {
+    private static void setOutfileSink(QueryStatement queryStmt, ExecPlan plan) {
         if (!queryStmt.hasOutFileClause()) {
             return;
         }
@@ -144,8 +140,6 @@ public class StatementPlanner {
     }
 
     public static boolean supportedByNewPlanner(StatementBase statement) {
-        return AlterTableStmt.isSupportNewPlanner(statement)
-                || AlterSystemStmt.isSupportNewPlanner(statement)
-                || statement.isSupportNewPlanner();
+        return statement.isSupportNewPlanner();
     }
 }

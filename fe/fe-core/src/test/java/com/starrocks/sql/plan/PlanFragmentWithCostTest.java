@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -11,7 +11,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -486,8 +485,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select s_name, s_address from supplier, nation where s_suppkey in " +
-                "( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'forest%' ) and ps_availqty > " +
-                "( select 0.5 * sum(l_quantity) from lineitem where l_partkey = ps_partkey and l_suppkey = ps_suppkey and " +
+                "( select ps_suppkey from partsupp where ps_partkey " +
+                "in ( select p_partkey from part where p_name like 'forest%' ) and ps_availqty > " +
+                "( select 0.5 * sum(l_quantity) from lineitem " +
+                "where l_partkey = ps_partkey and l_suppkey = ps_suppkey and " +
                 "l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year ) ) " +
                 "and s_nationkey = n_nationkey and n_name = 'CANADA' order by s_name;";
         String plan = getFragmentPlan(sql);
@@ -590,8 +591,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
         sql = "select count(distinct O_ORDERKEY) from orders group by O_CUSTKEY, O_ORDERDATE";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (merge serialize)\n" +
-                "  |  group by: 1: O_ORDERKEY, 2: O_CUSTKEY, 5: O_ORDERDATE"));
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 2: O_CUSTKEY, 5: O_ORDERDATE, 1: O_ORDERKEY\n");
     }
 
     @Test
@@ -602,8 +603,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
         sql = "select count(distinct v1) from t0 group by v2";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (merge serialize)\n" +
-                "  |  group by: 1: v1, 2: v2"));
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 2: v2, 1: v1");
     }
 
     @Test
@@ -684,8 +685,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         setTableStatistics(t1, 1000000000L);
 
-        String sql =
-                "select t0.v1 from (select v4 from t1 order by v4 limit 1000000000) as t1x join [broadcast] t0 where t0.v1 = t1x.v4";
+        String sql = "select t0.v1 from (select v4 from t1 order by v4 limit 1000000000) as t1x " +
+                "join [broadcast] t0 where t0.v1 = t1x.v4";
         String planFragment = getVerboseExplain(sql);
 
         Assert.assertTrue(planFragment.contains("  1:TOP-N\n" +
@@ -729,8 +730,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t0, 400000);
         setTableStatistics(t1, 400000);
 
-        String sql =
-                "select * from (select v1+1 as v1 ,v2,v3 from t0 union select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        String sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 union " +
+                "select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
         String plan = getVerboseExplain(sql);
         plans.add(plan);
 
@@ -738,8 +739,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t2, 200000);
         setTableStatistics(t0, 800000);
         setTableStatistics(t1, 400000);
-        sql =
-                "select * from (select v1+1 as v1 ,v2,v3 from t0 except select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 except " +
+                "select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
         plan = getVerboseExplain(sql);
         plans.add(plan);
 
@@ -748,8 +749,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t0, 400000);
         setTableStatistics(t1, 400000);
 
-        sql =
-                "select * from (select v1+1 as v1 ,v2,v3 from t0 intersect select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 intersect " +
+                "select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
         plan = getVerboseExplain(sql);
         plans.add(plan);
 
@@ -890,13 +891,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "    select * from cte union all\n" +
                 "    select cte.v4, cte.v5, cte.v6 from t2 join cte on cte.v4 = t2.v7 and t2.v8 < 10) as t\n";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+        assertContains(plan, "  0:OlapScanNode\n" +
                 "     table: t1, rollup: t1\n" +
                 "     preAggregation: on\n" +
                 "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                 "     tabletList=10015,10017,10019\n" +
                 "     actualRows=0, avgRowSize=1.0\n" +
-                "     cardinality: 400000"));
+                "     cardinality: 400000");
 
         Assert.assertTrue(plan.contains("5:EXCHANGE\n" +
                 "     cardinality: 400000\n" +
@@ -1120,4 +1121,184 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     - filter_id = 0, probe_expr = (2: v2)");
     }
 
+    @Test
+    public void testGroupByDistinct1() throws Exception {
+        String sql = "select count(distinct v1), sum(v3), count(v3), max(v3), min(v3)" +
+                "from t0 group by v2;";
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1: v1), sum(9: sum), sum(10: count), max(11: max), min(12: min)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: v3), count(3: v3), max(3: v3), min(3: v3)\n" +
+                "  |  group by: 2: v2, 1: v1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
+
+    @Test
+    public void testGroupByDistinct2() throws Exception {
+        String sql = "select count(distinct v1), sum(distinct v1), sum(v3), count(v3), max(v3), min(v3)" +
+                "from t0 group by v2;";
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1: v1), sum(1: v1), sum(10: sum), sum(11: count), max(12: max), min(13: min)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: v3), count(3: v3), max(3: v3), min(3: v3)\n" +
+                "  |  group by: 2: v2, 1: v1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
+
+    @Test
+    public void testExpressionWithCTE() throws Exception {
+        String sql = "WITH x1 as (" +
+                "   select * from t0" +
+                ") " +
+                "select sum(k2) from (" +
+                "   SELECT * " +
+                "   from x1 join[bucket] " +
+                "   (SELECT v1 + 1 as k1, v2 + 2 as k2, v3 + 3 as k3 from x1) as y1 on x1.v1 = y1.k1" +
+                ") d group by v3, k3";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v1 = 10: expr\n" +
+                "  |  \n" +
+                "  |----3:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+        assertContains(plan, "    BUCKET_SHUFFLE_HASH_PARTITIONED: 10: expr\n" +
+                "\n" +
+                "  2:Project\n" +
+                "  |  <slot 10> : 7: v1 + 1\n" +
+                "  |  <slot 11> : 8: v2 + 2\n" +
+                "  |  <slot 12> : 9: v3 + 3\n" +
+                "  |  \n" +
+                "  1:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
+
+    @Test
+    public void testRemoveAggFromAggTable() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW agg_mv as select" +
+                " LO_ORDERDATE," +
+                " LO_ORDERKEY," +
+                " sum(LO_REVENUE)," +
+                " count(C_NAME)" +
+                " from lineorder_flat_for_mv" +
+                " group by LO_ORDERDATE, LO_ORDERKEY");
+
+        String sql = "select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: LO_ORDERDATE\n" +
+                "  |  <slot 2> : 2: LO_ORDERKEY\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: lineorder_flat_for_mv\n" +
+                "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
+                "     partitions=7/7\n" +
+                "     rollup: agg_mv");
+
+        String sql2 = "select LO_ORDERDATE, LO_ORDERKEY, sum(LO_REVENUE)" +
+                " from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
+        String plan2 = getFragmentPlan(sql2);
+        assertContains(plan2, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: LO_ORDERDATE | 2: LO_ORDERKEY | 41: sum\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: LO_ORDERDATE\n" +
+                "  |  <slot 2> : 2: LO_ORDERKEY\n" +
+                "  |  <slot 41> : 13: LO_REVENUE\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: lineorder_flat_for_mv\n" +
+                "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
+                "     partitions=7/7\n" +
+                "     rollup: agg_mv\n" +
+                "     tabletRatio=1050/1050");
+
+        String sql3 = "select LO_ORDERDATE, LO_ORDERKEY, sum(LO_REVENUE), count(C_NAME)" +
+                " from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
+        String plan3 = getFragmentPlan(sql3);
+        assertContains(plan3, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: LO_ORDERDATE | 2: LO_ORDERKEY | 41: sum | 42: count\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: LO_ORDERDATE\n" +
+                "  |  <slot 2> : 2: LO_ORDERKEY\n" +
+                "  |  <slot 41> : 13: LO_REVENUE\n" +
+                "  |  <slot 42> : 39: mv_count_c_name\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: lineorder_flat_for_mv\n" +
+                "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
+                "     partitions=7/7\n" +
+                "     rollup: agg_mv\n" +
+                "     tabletRatio=1050/1050");
+
+        String sql4 = "select LO_ORDERDATE, LO_ORDERKEY, sum(LO_REVENUE) + 1, count(C_NAME) * 3" +
+                " from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
+        String plan4 = getFragmentPlan(sql4);
+        assertContains(plan4, "1:Project\n" +
+                "  |  <slot 1> : 1: LO_ORDERDATE\n" +
+                "  |  <slot 2> : 2: LO_ORDERKEY\n" +
+                "  |  <slot 43> : 13: LO_REVENUE + 1\n" +
+                "  |  <slot 44> : 39: mv_count_c_name * 3\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: lineorder_flat_for_mv\n" +
+                "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
+                "     partitions=7/7\n" +
+                "     rollup: agg_mv\n" +
+                "     tabletRatio=1050/1050");
+    }
 }

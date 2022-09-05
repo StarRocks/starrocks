@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.operator.physical;
 
@@ -21,6 +21,10 @@ import java.util.Objects;
 import java.util.Set;
 
 public class PhysicalHashAggregateOperator extends PhysicalOperator {
+    public static final Set<String> COULD_APPLY_LOW_CARD_AGGREGATE_FUNCTION = Sets.newHashSet(
+            FunctionSet.COUNT, FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.MAX, FunctionSet.MIN
+    );
+
     private final AggType type;
     private final List<ColumnRefOperator> groupBys;
     // For normal aggregate function, partitionByColumns are same with groupingKeys
@@ -172,10 +176,6 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return false;
     }
 
-    public static final Set<String> couldApplyLowCardAggregateFunction = Sets.newHashSet(
-            FunctionSet.COUNT, FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.MAX, FunctionSet.MIN
-    );
-
     private boolean couldApplyStringDict(CallOperator operator, ColumnRefSet dictSet) {
         for (ScalarOperator child : operator.getChildren()) {
             if (!(child instanceof ColumnRefOperator)) {
@@ -184,7 +184,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         }
         ColumnRefSet usedColumns = operator.getUsedColumns();
         if (usedColumns.isIntersect(dictSet)) {
-            return couldApplyLowCardAggregateFunction.contains(operator.getFnName());
+            return COULD_APPLY_LOW_CARD_AGGREGATE_FUNCTION.contains(operator.getFnName());
         }
         return true;
     }

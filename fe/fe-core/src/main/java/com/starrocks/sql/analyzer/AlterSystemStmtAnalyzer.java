@@ -1,20 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.BackendClause;
-import com.starrocks.analysis.ComputeNodeClause;
 import com.starrocks.analysis.DdlStmt;
-import com.starrocks.analysis.FrontendClause;
-import com.starrocks.analysis.ModifyBackendAddressClause;
-import com.starrocks.analysis.ModifyBrokerClause;
-import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BackendClause;
+import com.starrocks.sql.ast.ComputeNodeClause;
+import com.starrocks.sql.ast.FrontendClause;
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBrokerClause;
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.validator.routines.InetAddressValidator;
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.operator.physical;
 
@@ -12,15 +12,21 @@ import java.util.Objects;
 
 public class PhysicalCTEAnchorOperator extends PhysicalOperator {
     private final int cteId;
+    private final int consumeNum;
 
-    public PhysicalCTEAnchorOperator(int cteId, Projection projection) {
+    public PhysicalCTEAnchorOperator(int cteId, int consumeNum, Projection projection) {
         super(OperatorType.PHYSICAL_CTE_ANCHOR);
         this.cteId = cteId;
+        this.consumeNum = consumeNum;
         this.projection = projection;
     }
 
     public int getCteId() {
         return cteId;
+    }
+
+    public int getConsumeNum() {
+        return consumeNum;
     }
 
     @Override

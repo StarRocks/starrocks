@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.statistic;
 
@@ -128,7 +128,7 @@ public class AnalyzeJob implements Writable {
 
         boolean hasFailedCollectJob = false;
         for (StatisticsCollectJob statsJob : statisticsCollectJobList) {
-            AnalyzeStatus analyzeStatus = statisticExecutor.collectStatistics(statsJob);
+            AnalyzeStatus analyzeStatus = statisticExecutor.collectStatistics(statsJob, true);
             if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FAILED)) {
                 setStatus(StatsConstants.ScheduleStatus.FAILED);
                 setWorkTime(LocalDateTime.now());

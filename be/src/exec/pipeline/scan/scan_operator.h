@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -83,6 +83,8 @@ private:
     void _close_chunk_source(RuntimeState* state, int index);
     void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
                                    int64_t scan_bytes);
+    void _detach_chunk_sources();
+
     void _merge_chunk_source_profiles();
     size_t _buffer_unplug_threshold() const;
 

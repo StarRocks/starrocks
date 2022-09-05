@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -6,6 +6,7 @@
 
 #include "column/column.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 
 namespace starrocks::vectorized {
 
@@ -160,6 +161,9 @@ public:
     bool has_large_column() const override { return _elements->has_large_column(); }
 
     void check_or_die() const override;
+
+    // null map is null, but the corresponding array may not empty, so need empty the unexpected array.
+    bool empty_null_array(NullColumnPtr null_map);
 
 private:
     // _elements must be NullableColumn

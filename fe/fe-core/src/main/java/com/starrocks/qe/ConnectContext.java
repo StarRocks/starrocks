@@ -39,9 +39,10 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -118,6 +119,8 @@ public class ConnectContext {
     protected SessionVariable sessionVariable;
     // all the modified session variables, will forward to leader
     protected Map<String, SetVar> modifiedSessionVariables = new HashMap<>();
+    // user define variable in this session
+    protected HashMap<String, UserVariable> userVariables;
     // Scheduler this connection belongs to
     protected ConnectScheduler connectScheduler;
     // Executor
@@ -183,6 +186,7 @@ public class ConnectContext {
         isKilled = false;
         serializer = MysqlSerializer.newInstance();
         sessionVariable = VariableMgr.newSessionVariable();
+        userVariables = new HashMap<>();
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
         dumpInfo = new QueryDumpInfo(sessionVariable);
@@ -271,6 +275,14 @@ public class ConnectContext {
         }
     }
 
+    public void modifyUserVariable(SetVar setVar) {
+        UserVariable userDefineVariable = (UserVariable) setVar;
+        if (userVariables.size() > 1024 && !userVariables.containsKey(setVar.getVariable())) {
+            throw new SemanticException("User variable exceeds the maximum limit of 1024");
+        }
+        userVariables.put(setVar.getVariable(), userDefineVariable);
+    }
+
     public SetStmt getModifiedSessionVariables() {
         if (!modifiedSessionVariables.isEmpty()) {
             return new SetStmt(new ArrayList<>(modifiedSessionVariables.values()));
@@ -280,6 +292,10 @@ public class ConnectContext {
 
     public SessionVariable getSessionVariable() {
         return sessionVariable;
+    }
+
+    public UserVariable getUserVariables(String variable) {
+        return userVariables.get(variable);
     }
 
     public void resetSessionVariable() {
@@ -566,12 +582,15 @@ public class ConnectContext {
     }
 
     public class ThreadInfo {
+        public boolean isRunning() {
+            return state.isRunning();
+        }
+
         public List<String> toRow(long nowMs, boolean full) {
             List<String> row = Lists.newArrayList();
             row.add("" + connectionId);
             row.add(ClusterNamespace.getNameFromFullName(qualifiedUser));
             row.add(getMysqlChannel().getRemoteHostPortString());
-            row.add(SystemInfoService.DEFAULT_CLUSTER);
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
             // Command
             row.add(command.toString());
@@ -580,7 +599,7 @@ public class ConnectContext {
             // Time
             row.add("" + (nowMs - startTime) / 1000);
             // State
-            row.add("");
+            row.add(state.toString());
             // Info
             String stmt = "";
             if (executor != null) {

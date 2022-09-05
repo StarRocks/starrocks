@@ -27,8 +27,6 @@ import com.sleepycat.je.rep.MemberNotFoundException;
 import com.sleepycat.je.rep.ReplicaStateException;
 import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
-import com.starrocks.analysis.ModifyFrontendAddressClause;
-
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -40,18 +38,14 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Frontend;
-
-
-
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-
 import org.junit.Assert;
 import org.junit.Before;
-
 import org.junit.Test;
 
 import java.io.BufferedInputStream;
@@ -192,7 +186,7 @@ public class GlobalStateMgrTest {
         frontends.put("testName", fe1);
         field1.set(nodeMgr, frontends);
 
-        Pair<String, Integer> selfNode = new Pair<String,Integer>("test-address", 1000);
+        Pair<String, Integer> selfNode = new Pair<>("test-address", 1000);
         Field field2 = nodeMgr.getClass().getDeclaredField("selfNode");
         field2.setAccessible(true);
         field2.set(nodeMgr, selfNode);
@@ -220,7 +214,7 @@ public class GlobalStateMgrTest {
     @Test
     public void testGetFeByHost() throws Exception {
         mockNet();
-        new Expectations(){
+        new Expectations() {
             {
                 addr1.getHostAddress();
                 result = "127.0.0.1";
@@ -246,7 +240,7 @@ public class GlobalStateMgrTest {
         Assert.assertEquals("testHost", updatedfFe.getHost());
         Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
     }
-    
+
     @Mocked
     BDBEnvironment env;
 
@@ -258,8 +252,8 @@ public class GlobalStateMgrTest {
 
     @Test
     public void testUpdateFrontend() throws Exception {
-        
-        new Expectations(){
+
+        new Expectations() {
             {
                 env.getReplicationGroupAdmin();
                 result = replicationGroupAdmin;
@@ -269,16 +263,18 @@ public class GlobalStateMgrTest {
         new MockUp<ReplicationGroupAdmin>() {
             @Mock
             public void updateAddress(String nodeName, String newHostName, int newPort)
-                throws EnvironmentFailureException,
+                    throws EnvironmentFailureException,
                     MasterStateException,
                     MemberNotFoundException,
                     ReplicaStateException,
-                    UnknownMasterException {}
+                    UnknownMasterException {
+            }
         };
 
         new MockUp<EditLog>() {
             @Mock
-            public void logUpdateFrontend(Frontend fe) {}
+            public void logUpdateFrontend(Frontend fe) {
+            }
         };
 
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();

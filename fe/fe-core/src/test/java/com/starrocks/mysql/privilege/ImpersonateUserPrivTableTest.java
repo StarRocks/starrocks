@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.mysql.privilege;
 
@@ -60,7 +60,7 @@ public class ImpersonateUserPrivTableTest {
         long readChecksum = -1;
         readChecksum = newAuth.readAsGson(dis, readChecksum);
         // 4.3 verify the consistency of metadata between the two
-        assert(writeChecksum == readChecksum);
+        assert (writeChecksum == readChecksum);
         Assert.assertTrue(auth.canImpersonate(harry, gregory));
 
         // TEAR DOWN

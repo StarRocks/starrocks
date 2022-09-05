@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -23,6 +23,9 @@ public:
     static Status list_table_status(const std::string& ip, const int32_t port, const TGetTablesParams& table_params,
                                     TListTableStatusResult* table_result);
 
+    static Status get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
+                                  TGetTablesInfoResponse* response);
+
     static Status describe_table(const std::string& ip, const int32_t port, const TDescribeTableParams& desc_params,
                                  TDescribeTableResult* desc_result);
 
@@ -45,6 +48,9 @@ public:
 
     static Status get_task_runs(const std::string& ip, const int32_t port, const TGetTasksParams& var_params,
                                 TGetTaskRunInfoResult* var_result);
+
+    static Status get_tables_config(const std::string& ip, const int32_t port,
+                                    const TGetTablesConfigRequest& var_params, TGetTablesConfigResponse* var_result);
 };
 
 template <PrimitiveType SlotType>

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive;
 
@@ -323,7 +323,7 @@ public class HiveMetaCache {
     private Table loadTable(HiveTableName hiveTableName) throws TException, DdlException {
         org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(hiveTableName);
         Table table = null;
-        if (HudiTable.fromInputFormat(hiveTable.getSd().getInputFormat()) != HudiTable.HoodieTableType.UNKNOWN) {
+        if (HudiTable.fromInputFormat(hiveTable.getSd().getInputFormat()) != HudiTable.HudiTableType.UNKNOWN) {
             table = HiveMetaStoreTableUtils.convertHudiConnTableToSRTable(hiveTable, resourceName);
         } else {
             table = HiveMetaStoreTableUtils.convertHiveConnTableToSRTable(hiveTable, resourceName);

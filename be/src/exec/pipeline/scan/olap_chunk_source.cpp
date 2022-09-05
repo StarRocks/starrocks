@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
@@ -26,8 +26,7 @@ using namespace vectorized;
 
 OlapChunkSource::OlapChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                                  vectorized::OlapScanNode* scan_node, OlapScanContext* scan_ctx)
-        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer(),
-                      workgroup::TypeOlapScanExecutor),
+        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()),
           _scan_node(scan_node),
           _scan_ctx(scan_ctx),
           _limit(scan_node->limit()),

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -24,10 +24,10 @@ public class LimitPruneTabletsRule extends TransformationRule {
         super(RuleType.TF_LIMIT_TABLETS_PRUNE, Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
     }
 
-    private static final LimitPruneTabletsRule instance = new LimitPruneTabletsRule();
+    private static final LimitPruneTabletsRule INSTANCE = new LimitPruneTabletsRule();
 
     public static LimitPruneTabletsRule getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     @Override

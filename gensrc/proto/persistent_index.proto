@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 syntax = "proto3";
 
 package starrocks;
@@ -8,6 +8,7 @@ import "olap_common.proto";
 message IndexSnapshotMetaPB {
     EditVersionPB version = 1;
     PagePointerPB data = 2;
+    repeated uint32 dumped_shard_idxes = 3;
 }
 
 message IndexWalMetaPB {
@@ -19,6 +20,7 @@ message MutableIndexMetaPB {
     uint32 format_version = 1;
     IndexSnapshotMetaPB snapshot = 2;
     repeated IndexWalMetaPB wals = 3;
+    repeated ShardInfoPB shard_infos = 4;
 }
 
 // Do not modify the parameters order because of compatibility
@@ -43,11 +45,7 @@ message ImmutableIndexMetaPB {
     EditVersionPB version = 2;
     uint64 size = 3;
     repeated ImmutableIndexShardMetaPB shards = 4;
-    // only support fixed length KVs currently
-    // will add varlen KV in future
-    uint64 fixed_key_size = 5; // Deprecated, will be delete in future
-    uint64 fixed_value_size = 6; // Deprecated, will be delete in future
-    repeated ShardInfoPB shard_info = 7;
+    repeated ShardInfoPB shard_info = 5;
 }
 
 message PersistentIndexMetaPB {
@@ -58,4 +56,5 @@ message PersistentIndexMetaPB {
     // l1's meta stored in l1 file
     // only store a version to get file name
     EditVersionPB l1_version = 5;
+    uint32 format_version = 6;
 }

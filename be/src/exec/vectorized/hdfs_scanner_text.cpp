@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/hdfs_scanner_text.h"
 
@@ -130,6 +130,7 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
 }
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
+    RETURN_IF_ERROR(open_random_access_file());
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     for (const auto slot : _scanner_params.materialize_slots) {

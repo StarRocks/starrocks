@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.scheduler;
 
@@ -8,13 +8,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.HashDistributionDesc;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
@@ -28,6 +25,7 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -45,6 +43,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.DropPartitionClause;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
@@ -149,11 +150,18 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
     private void updateMeta(ExecPlan execPlan) {
         // update the meta if succeed
-        database.writeLock();
+        if (!database.writeLockAndCheckExist()) {
+            throw new DmlException("update meta failed. database:" + database.getFullName() + " not exist");
+        }
         try {
+            // check
+            Table mv = database.getTable(materializedView.getId());
+            if (mv == null) {
+                throw new DmlException("update meta failed. materialized view:" + materializedView.getName() + " not exist");
+            }
             MaterializedView.AsyncRefreshContext refreshContext =
                     materializedView.getRefreshScheme().getAsyncRefreshContext();
-            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> currentlVersionMap =
+            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
                     refreshContext.getBaseTableVisibleVersionMap();
             // should write this to log at one time
             Map<Long, Map<String, MaterializedView.BasePartitionInfo>> changedTablePartitionInfos =
@@ -162,10 +170,10 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             for (Map.Entry<Long, Map<String, MaterializedView.BasePartitionInfo>> tableEntry
                     : changedTablePartitionInfos.entrySet()) {
                 Long tableId = tableEntry.getKey();
-                if (!currentlVersionMap.containsKey(tableId)) {
-                    currentlVersionMap.put(tableId, Maps.newHashMap());
+                if (!currentVersionMap.containsKey(tableId)) {
+                    currentVersionMap.put(tableId, Maps.newHashMap());
                 }
-                Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo = currentlVersionMap.get(tableId);
+                Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo = currentVersionMap.get(tableId);
                 Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = tableEntry.getValue();
                 currentTablePartitionInfo.putAll(partitionInfoMap);
 
@@ -321,13 +329,24 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         return false;
     }
 
+    private boolean needToRefreshNonPartitionTable() {
+        for (OlapTable olapTable : snapshotBaseTables.values()) {
+            if (needToRefreshTable(olapTable)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private Set<String> getPartitionsToRefreshForMaterializedView() {
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
 
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
-            needRefreshMvPartitionNames.addAll(materializedView.getPartitionNames());
+            if (needToRefreshNonPartitionTable()) {
+                needRefreshMvPartitionNames.addAll(materializedView.getPartitionNames());
+            }
         } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             Expr partitionExpr = getPartitionExpr();
             Pair<OlapTable, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
@@ -402,7 +421,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         ctx.setThreadLocalInfo();
         String definition = mvContext.getDefinition();
         InsertStmt insertStmt =
-                (InsertStmt) SqlParser.parse(definition, ctx.getSessionVariable().getSqlMode()).get(0);
+                (InsertStmt) SqlParser.parse(definition, ctx.getSessionVariable()).get(0);
         insertStmt.setTargetPartitionNames(new PartitionNames(false, new ArrayList<>(materializedViewPartitions)));
         QueryStatement queryStatement = insertStmt.getQueryStatement();
         Map<String, TableRelation> tableRelations =
@@ -568,8 +587,20 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
     private void dropPartition(Database database, MaterializedView materializedView, String mvPartitionName) {
         String dropPartitionName = materializedView.getPartition(mvPartitionName).getName();
-        database.writeLock();
+        if (!database.writeLockAndCheckExist()) {
+            throw new DmlException("drop partition failed. database:" + database.getFullName() + " not exist");
+        }
         try {
+            // check
+            Table mv = database.getTable(materializedView.getId());
+            if (mv == null) {
+                throw new DmlException("drop partition failed. mv:" + materializedView.getName() + " not exist");
+            }
+            Partition mvPartition = mv.getPartition(dropPartitionName);
+            if (mvPartition == null) {
+                throw new DmlException("drop partition failed. partition:" + dropPartitionName + " not exist");
+            }
+
             GlobalStateMgr.getCurrentState().dropPartition(
                     database, materializedView,
                     new DropPartitionClause(false, dropPartitionName, false, true));

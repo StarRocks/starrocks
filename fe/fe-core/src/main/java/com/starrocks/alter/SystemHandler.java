@@ -23,22 +23,8 @@ package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AddBackendClause;
-import com.starrocks.analysis.AddComputeNodeClause;
-import com.starrocks.analysis.AddFollowerClause;
-import com.starrocks.analysis.AddObserverClause;
-import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.AlterLoadErrorUrlClause;
 import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelStmt;
-import com.starrocks.analysis.DecommissionBackendClause;
-import com.starrocks.analysis.DropBackendClause;
-import com.starrocks.analysis.DropComputeNodeClause;
-import com.starrocks.analysis.DropFollowerClause;
-import com.starrocks.analysis.DropObserverClause;
-import com.starrocks.analysis.ModifyBackendAddressClause;
-import com.starrocks.analysis.ModifyBrokerClause;
-import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -49,6 +35,20 @@ import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AddComputeNodeClause;
+import com.starrocks.sql.ast.AddFollowerClause;
+import com.starrocks.sql.ast.AddObserverClause;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
+import com.starrocks.sql.ast.DecommissionBackendClause;
+import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.ast.DropComputeNodeClause;
+import com.starrocks.sql.ast.DropFollowerClause;
+import com.starrocks.sql.ast.DropObserverClause;
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBrokerClause;
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
@@ -113,7 +113,7 @@ public class SystemHandler extends AlterHandler {
     @Override
     // add synchronized to avoid process 2 or more stmts at same time
     public synchronized ShowResultSet process(List<AlterClause> alterClauses, Database dummyDb,
-                                     OlapTable dummyTbl) throws UserException {
+                                              OlapTable dummyTbl) throws UserException {
         Preconditions.checkArgument(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
         if (alterClause instanceof AddBackendClause) {

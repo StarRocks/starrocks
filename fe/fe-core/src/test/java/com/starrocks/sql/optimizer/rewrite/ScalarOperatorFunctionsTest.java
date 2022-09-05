@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rewrite;
 
@@ -26,27 +26,27 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class ScalarOperatorFunctionsTest {
-    private ConstantOperator O_DT_20101102_183010;
+    private static ConstantOperator O_DT_20101102_183010;
 
-    private ConstantOperator O_DT_20101202_023010;
+    private static ConstantOperator O_DT_20101202_023010;
 
-    private ConstantOperator O_DT_20150323_092355;
+    private static ConstantOperator O_DT_20150323_092355;
 
-    private ConstantOperator O_TI_10;
-    private ConstantOperator O_SI_10;
-    private ConstantOperator O_INT_10;
-    private ConstantOperator O_FLOAT_100;
-    private ConstantOperator O_DOUBLE_100;
-    private ConstantOperator O_BI_100;
-    private ConstantOperator O_BI_3;
-    private ConstantOperator O_LI_100;
-    private ConstantOperator O_DECIMAL_100;
-    private ConstantOperator O_DECIMAL32P7S2_100;
-    private ConstantOperator O_DECIMAL32P9S0_100;
-    private ConstantOperator O_DECIMAL64P18S15_100;
-    private ConstantOperator O_DECIMAL64P15S10_100;
-    private ConstantOperator O_DECIMAL128P38S20_100;
-    private ConstantOperator O_DECIMAL128P30S2_100;
+    private static ConstantOperator O_TI_10;
+    private static ConstantOperator O_SI_10;
+    private static ConstantOperator O_INT_10;
+    private static ConstantOperator O_FLOAT_100;
+    private static ConstantOperator O_DOUBLE_100;
+    private static ConstantOperator O_BI_100;
+    private static ConstantOperator O_BI_3;
+    private static ConstantOperator O_LI_100;
+    private static ConstantOperator O_DECIMAL_100;
+    private static ConstantOperator O_DECIMAL32P7S2_100;
+    private static ConstantOperator O_DECIMAL32P9S0_100;
+    private static ConstantOperator O_DECIMAL64P18S15_100;
+    private static ConstantOperator O_DECIMAL64P15S10_100;
+    private static ConstantOperator O_DECIMAL128P38S20_100;
+    private static ConstantOperator O_DECIMAL128P30S2_100;
 
     @Before
     public void setUp() throws AnalysisException {
@@ -863,11 +863,11 @@ public class ScalarOperatorFunctionsTest {
 
     @Test
     public void concat_ws_with_null() {
-        ConstantOperator[] arg_with_null = {ConstantOperator.createVarchar("star"),
+        ConstantOperator[] argWithNull = {ConstantOperator.createVarchar("star"),
                 ConstantOperator.createNull(Type.VARCHAR),
                 ConstantOperator.createVarchar("cks")};
         ConstantOperator result =
-                ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar("ro"), arg_with_null);
+                ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar("ro"), argWithNull);
         assertEquals(Type.VARCHAR, result.getType());
         assertEquals("starrocks", result.getVarchar());
 
@@ -875,9 +875,9 @@ public class ScalarOperatorFunctionsTest {
                 ConstantOperator.createNull(Type.VARCHAR));
         assertEquals("", result.getVarchar());
 
-        ConstantOperator[] arg_without_null = {ConstantOperator.createVarchar("star"),
+        ConstantOperator[] argWithoutNull = {ConstantOperator.createVarchar("star"),
                 ConstantOperator.createVarchar("cks")};
-        result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createNull(Type.VARCHAR), arg_without_null);
+        result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createNull(Type.VARCHAR), argWithoutNull);
         assertTrue(result.isNull());
     }
 

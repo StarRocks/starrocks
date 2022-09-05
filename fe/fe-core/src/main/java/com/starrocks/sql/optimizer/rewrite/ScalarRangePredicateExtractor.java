@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
@@ -234,7 +234,8 @@ public class ScalarRangePredicateExtractor {
 
         public static ValueDescriptor in(ScalarOperator operator) {
             MultiValuesDescriptor d = new MultiValuesDescriptor(operator.getChild(0));
-            operator.getChildren().stream().skip(1).map(c -> (ConstantOperator) c).forEach(d.values::add);
+            operator.getChildren().stream().skip(1).map(c -> (ConstantOperator) c)
+                    .filter(c -> !c.isNull()).forEach(d.values::add);
             return d;
         }
 

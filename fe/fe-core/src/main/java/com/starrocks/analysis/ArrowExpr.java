@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.analysis;
 
@@ -24,12 +24,12 @@ public class ArrowExpr extends Expr {
         super(rhs);
     }
 
-    private Expr getItem() {
+    public Expr getItem() {
         Preconditions.checkState(getChildren().size() == 2);
         return getChild(0);
     }
 
-    private Expr getKey() {
+    public Expr getKey() {
         Preconditions.checkState(getChildren().size() == 2);
         return getChild(1);
     }

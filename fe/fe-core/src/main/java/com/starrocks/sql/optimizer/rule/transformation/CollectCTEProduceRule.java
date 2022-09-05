@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -20,7 +20,7 @@ public class CollectCTEProduceRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) input.getOp();
-        context.getCteContext().addCTEProduce(produce.getCteId(), input);
+        context.getCteContext().addCTEProduce(produce.getCteId());
         return Collections.emptyList();
     }
 }

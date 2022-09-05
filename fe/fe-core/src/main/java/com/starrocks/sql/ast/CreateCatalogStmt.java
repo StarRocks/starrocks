@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
@@ -10,7 +10,7 @@ import java.util.Map;
 
 public class CreateCatalogStmt extends DdlStmt {
     public static final String TYPE = "type";
-    public static final List<String> supportedCatalog = Lists.newArrayList("hive", "iceberg", "hudi");
+    public static final List<String> SUPPORTED_CATALOG = Lists.newArrayList("hive", "iceberg", "hudi", "jdbc");
 
     private final String catalogName;
     private final String comment;

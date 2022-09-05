@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/tablet_updates.h"
 
@@ -2833,6 +2833,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
         index_entry->value().unload();
         index_cache.release(index_entry);
+        _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
 
         _apply_version_changed.notify_all();
 
@@ -2963,8 +2964,8 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
         }
         std::string seg_path =
                 Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
-        auto segment = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path,
-                                     rssid - iter->first, &rowset->schema());
+        auto segment = Segment::open(ExecEnv::GetInstance()->metadata_mem_tracker(), fs, seg_path, rssid - iter->first,
+                                     &rowset->schema());
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();

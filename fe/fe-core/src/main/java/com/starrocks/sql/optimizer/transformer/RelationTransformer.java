@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
@@ -12,6 +12,8 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
@@ -26,6 +28,7 @@ import com.starrocks.external.elasticsearch.EsTablePartitions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
@@ -40,6 +43,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -56,7 +60,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.Ordering;
-import com.starrocks.sql.optimizer.base.SetQualifier;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -94,6 +97,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -316,7 +320,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
             for (OrderByElement item : setOperationRelation.getOrderBy()) {
                 ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(item.getExpr(),
-                        root.getExpressionMapping());
+                        root.getExpressionMapping(), columnRefFactory);
                 Ordering ordering = new Ordering(column, item.getIsAsc(),
                         OrderByElement.nullsFirst(item.getNullsFirstParam()));
                 if (!orderByColumns.contains(column)) {
@@ -359,7 +363,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 }
 
                 ScalarOperator constant = SqlToScalarOperatorTranslator.translate(row.get(fieldIdx),
-                        new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())));
+                        new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                        columnRefFactory);
                 valuesRow.add(constant);
 
                 if (constant.isNullable()) {
@@ -547,6 +552,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
         LogicalPlan leftPlan = visit(node.getLeft());
         LogicalPlan rightPlan = visit(node.getRight());
+        OptExprBuilder leftOpt = leftPlan.getRootBuilder();
+        OptExprBuilder rightOpt = rightPlan.getRootBuilder();
 
         // The scope needs to be rebuilt here, because the scope of Semi/Anti Join
         // only has a child field. Bug on predicate needs to see the two child field
@@ -554,15 +561,22 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields()));
         joinScope.setParent(node.getScope().getParent());
         ExpressionMapping expressionMapping = new ExpressionMapping(joinScope, Streams.concat(
-                        leftPlan.getRootBuilder().getFieldMappings().stream(),
-                        rightPlan.getRootBuilder().getFieldMappings().stream())
+                        leftOpt.getFieldMappings().stream(),
+                        rightOpt.getFieldMappings().stream())
                 .collect(Collectors.toList()));
 
+        Pair<OptExprBuilder, OptExprBuilder> pair = processOnClauseSubquery(node, leftOpt, rightOpt, expressionMapping);
+        leftOpt = pair.first;
+        rightOpt = pair.second;
+
+        // There are two cases where join on predicate is null
+        // case 1: no join on predicate
+        // case 2: one join on predicate containing existential/quantified subquery which will be removed after subquery rewrite procedure
         if (node.getOnPredicate() == null) {
             OptExprBuilder joinOptExprBuilder = new OptExprBuilder(new LogicalJoinOperator.Builder()
                     .setJoinType(JoinOperator.CROSS_JOIN)
                     .setJoinHint(node.getJoinHint())
-                    .build(), Lists.newArrayList(leftPlan.getRootBuilder(), rightPlan.getRootBuilder()),
+                    .build(), Lists.newArrayList(leftOpt, rightOpt),
                     expressionMapping);
 
             LogicalProjectOperator projectOperator =
@@ -573,8 +587,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         }
 
         ScalarOperator onPredicateWithoutRewrite = SqlToScalarOperatorTranslator
-                .translateWithoutRewrite(node.getOnPredicate(), expressionMapping);
-        ScalarOperator onPredicate = SqlToScalarOperatorTranslator.translate(node.getOnPredicate(), expressionMapping);
+                .translateWithoutRewrite(node.getOnPredicate(), expressionMapping, columnRefFactory);
+        ScalarOperator onPredicate = SqlToScalarOperatorTranslator.translate(node.getOnPredicate(), expressionMapping,
+                columnRefFactory);
 
         /*
          * If the on-predicate condition is rewrite to false.
@@ -583,12 +598,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
          */
         if (onPredicate.isConstant() && onPredicate.getType().isBoolean()
                 && !node.getJoinOp().isCrossJoin() && !node.getJoinOp().isInnerJoin()) {
-
-            List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicateWithoutRewrite);
-
             List<BinaryPredicateOperator> eqPredicate = JoinHelper.getEqualsPredicate(
                     new ColumnRefSet(leftPlan.getOutputColumn()),
-                    new ColumnRefSet(rightPlan.getOutputColumn()), conjuncts);
+                    new ColumnRefSet(rightPlan.getOutputColumn()),
+                    Utils.extractConjuncts(onPredicateWithoutRewrite));
 
             if (eqPredicate.size() > 0) {
                 onPredicate = Utils.compoundAnd(eqPredicate.get(0), onPredicate);
@@ -598,14 +611,14 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         ExpressionMapping outputExpressionMapping;
         if (node.getJoinOp().isLeftSemiAntiJoin()) {
             outputExpressionMapping = new ExpressionMapping(node.getScope(),
-                    Lists.newArrayList(leftPlan.getRootBuilder().getFieldMappings()));
+                    Lists.newArrayList(leftOpt.getFieldMappings()));
         } else if (node.getJoinOp().isRightSemiAntiJoin()) {
             outputExpressionMapping = new ExpressionMapping(node.getScope(),
-                    Lists.newArrayList(rightPlan.getRootBuilder().getFieldMappings()));
+                    Lists.newArrayList(rightOpt.getFieldMappings()));
         } else {
             outputExpressionMapping = new ExpressionMapping(node.getScope(), Streams.concat(
-                            leftPlan.getRootBuilder().getFieldMappings().stream(),
-                            rightPlan.getRootBuilder().getFieldMappings().stream())
+                            leftOpt.getFieldMappings().stream(),
+                            rightOpt.getFieldMappings().stream())
                     .collect(Collectors.toList()));
         }
 
@@ -617,7 +630,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
         OptExprBuilder joinOptExprBuilder =
                 new OptExprBuilder(joinOperator,
-                        Lists.newArrayList(leftPlan.getRootBuilder(), rightPlan.getRootBuilder()),
+                        Lists.newArrayList(leftOpt, rightOpt),
                         outputExpressionMapping);
         LogicalProjectOperator projectOperator =
                 new LogicalProjectOperator(outputExpressionMapping.getFieldMappings().stream().distinct()
@@ -640,7 +653,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
         FunctionCallExpr expr = new FunctionCallExpr(tableFunction.getFunctionName(), node.getChildExpressions());
         expr.setFn(tableFunction);
-        ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr, context);
+        ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr, context, columnRefFactory);
 
         if (operator.isConstantRef() && ((ConstantOperator) operator).isNull()) {
             throw new StarRocksPlannerException("table function not support null parameter", ErrorType.USER_ERROR);
@@ -662,5 +675,99 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         return new LogicalPlan(new OptExprBuilder(root, Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputColumns)),
                 null, null);
+    }
+
+    private Pair<OptExprBuilder, OptExprBuilder> processOnClauseSubquery(JoinRelation node, OptExprBuilder leftOpt,
+                                                                         OptExprBuilder rightOpt,
+                                                                         ExpressionMapping expressionMapping) {
+        if (node.getOnPredicate() == null) {
+            return Pair.create(leftOpt, rightOpt);
+        }
+        List<Expr> joinOnConjuncts = Expr.extractConjuncts(node.getOnPredicate());
+        OptExprBuilder newLeftOpt = leftOpt;
+        OptExprBuilder newRightOpt = rightOpt;
+        List<Expr> newJoinOnConjuncts = Lists.newArrayList();
+        for (Expr joinOnConjunct : joinOnConjuncts) {
+            Subquery subquery = joinOnConjunct.getSubquery();
+            if (subquery == null) {
+                newJoinOnConjuncts.add(joinOnConjunct);
+                continue;
+            }
+            QueryStatement subqueryStmt = subquery.getQueryStatement();
+            SelectRelation selectRelation = (SelectRelation) subqueryStmt.getQueryRelation();
+            RelationId subqueryRelationId = selectRelation.getRelation().getScope().getRelationId();
+            List<FieldId> correlatedFieldIds = selectRelation.getColumnReferences().values().stream()
+                    .filter(field -> !Objects.equals(subqueryRelationId, field.getRelationId()))
+                    .collect(Collectors.toList());
+
+            /*
+             * Apply comprises two children, R and E(r) respectively
+             *         ApplyOperator
+             *       /              \
+             *   Outer:R        Inner: E(r)
+             * Since join node has two relation, we should to determine which one(left or right or both)
+             * is the outer relation of ApplyOperator
+             * kind == LEFT, then the left relation of join will be the outer relation of apply
+             * kind == RIGHT, then the right relation of join will be the outer relation of apply
+             * TODO, kind == BOTH, both of the left and right relations should be taken into account
+             */
+            final int LEFT = 1;
+            final int RIGHT = 2;
+            final int BOTH = 3;
+            final int kind;
+            SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
+            if (correlatedFieldIds.isEmpty()) {
+                List<SlotRef> slotRefs = Lists.newArrayList();
+                joinOnConjunct.collect(SlotRef.class, slotRefs);
+                RelationFields leftRelationFields = node.getLeft().getRelationFields();
+                RelationFields rightRelationFields = node.getRight().getRelationFields();
+                boolean leftContainsJoinOnSlotRef =
+                        slotRefs.stream().anyMatch(slotRef -> !leftRelationFields.resolveFields(slotRef).isEmpty());
+                boolean rightContainsJoinOnSlotRef =
+                        slotRefs.stream().anyMatch(slotRef -> !rightRelationFields.resolveFields(slotRef).isEmpty());
+
+                Preconditions.checkState(!(leftContainsJoinOnSlotRef && rightContainsJoinOnSlotRef),
+                        "Not support ON Clause un-correlated subquery referencing columns of two or more tables");
+                if (leftContainsJoinOnSlotRef) {
+                    kind = LEFT;
+                } else {
+                    kind = RIGHT;
+                }
+            } else {
+                boolean isJoinLeftCorrelated = false;
+                boolean isJoinRightCorrelated = false;
+                for (FieldId correlatedFieldId : correlatedFieldIds) {
+                    Field field = node.getRelationFields().getAllFields().get(correlatedFieldId.getFieldIndex());
+                    if (node.getLeft().getRelationFields().getAllFields().contains(field)) {
+                        isJoinLeftCorrelated = true;
+                    }
+                    if (node.getRight().getRelationFields().getAllFields().contains(field)) {
+                        isJoinRightCorrelated = true;
+                    }
+                }
+                Preconditions.checkState(isJoinLeftCorrelated || isJoinRightCorrelated);
+                Preconditions.checkState(!(isJoinLeftCorrelated && isJoinRightCorrelated),
+                        "Not support ON Clause correlated subquery referencing columns of two or more tables");
+                if (isJoinLeftCorrelated) {
+                    kind = LEFT;
+                } else {
+                    kind = RIGHT;
+                }
+            }
+            if (kind == LEFT) {
+                newLeftOpt = subqueryTransformer.handleSubqueries(columnRefFactory, newLeftOpt,
+                        joinOnConjunct, cteContext);
+                newJoinOnConjuncts.add(subqueryTransformer.rewriteJoinOnPredicate(joinOnConjunct));
+                expressionMapping.putAll(newLeftOpt.getExpressionMapping());
+            } else {
+                Preconditions.checkState(kind == RIGHT);
+                newRightOpt = subqueryTransformer.handleSubqueries(columnRefFactory, newRightOpt,
+                        joinOnConjunct, cteContext);
+                newJoinOnConjuncts.add(subqueryTransformer.rewriteJoinOnPredicate(joinOnConjunct));
+                expressionMapping.putAll(newRightOpt.getExpressionMapping());
+            }
+        }
+        node.setOnPredicate(Expr.compoundAnd(newJoinOnConjuncts));
+        return Pair.create(newLeftOpt, newRightOpt);
     }
 }

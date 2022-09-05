@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/bitmap_functions.h"
 
@@ -144,6 +144,11 @@ ColumnPtr BitmapFunctions::bitmap_and(FunctionContext* context, const starrocks:
 
 // bitmap_to_string
 DEFINE_STRING_UNARY_FN_WITH_IMPL(bitmapToStingImpl, bitmap_ptr) {
+    if (bitmap_ptr->cardinality() > config::max_length_for_bitmap_function) {
+        std::stringstream ss;
+        ss << "bitmap_to_string not supported size > " << config::max_length_for_bitmap_function;
+        throw std::runtime_error(ss.str());
+    }
     return bitmap_ptr->to_string();
 }
 
@@ -275,6 +280,15 @@ ColumnPtr BitmapFunctions::bitmap_remove(FunctionContext* context, const starroc
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+void BitmapFunctions::detect_bitmap_cardinality(size_t* data_size, const int64_t cardinality) {
+    if (cardinality > config::max_length_for_bitmap_function) {
+        std::stringstream ss;
+        ss << "bitmap_to_array not supported size > " << config::max_length_for_bitmap_function;
+        throw std::runtime_error(ss.str());
+    }
+    (*data_size) += cardinality;
+}
+
 ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
@@ -289,12 +303,14 @@ ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starr
     if (columns[0]->has_null()) {
         for (int row = 0; row < size; ++row) {
             if (!lhs.is_null(row)) {
-                data_size += lhs.value(row)->cardinality();
+                const auto cardinality = lhs.value(row)->cardinality();
+                detect_bitmap_cardinality(&data_size, cardinality);
             }
         }
     } else {
         for (int row = 0; row < size; ++row) {
-            data_size += lhs.value(row)->cardinality();
+            const auto cardinality = lhs.value(row)->cardinality();
+            detect_bitmap_cardinality(&data_size, cardinality);
         }
     }
 

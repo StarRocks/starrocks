@@ -988,7 +988,7 @@ public class MVRewriteTest {
         String plan = starRocksAssert.withMaterializedView(createMVSQL).query(union).explainQuery();
         Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
                 "     TABLE: emps\n" +
-                "     PREAGGREGATION: ON\n" +
+                "     PREAGGREGATION: OFF. Reason: Predicates include the value column\n" +
                 "     PREDICATES: 4: deptno > 300\n" +
                 "     partitions=1/1\n" +
                 "     rollup: emps_mv"));
@@ -1064,7 +1064,8 @@ public class MVRewriteTest {
                 "       0 AS `c1`,\n" +
                 "       0 AS `c2`,\n" +
                 "       bitmap_count ( BITMAP_UNION (T1.user_id_td)) AS `c3`,\n" +
-                "       bitmap_count ( BITMAP_UNION ( CASE WHEN (T1.is_finish = '1') THEN T1.user_id_td ELSE NULL END)) AS `c4`\n" +
+                "       bitmap_count ( BITMAP_UNION ( CASE WHEN (T1.is_finish = '1') " +
+                "THEN T1.user_id_td ELSE NULL END)) AS `c4`\n" +
                 "FROM kkk AS T1\n" +
                 "GROUP BY T1.dt";
         System.out.println(starRocksAssert.query(query).explainQuery());
@@ -1196,8 +1197,8 @@ public class MVRewriteTest {
     public void testWithMysql() throws Exception {
         String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select empid, deptno, sum(salary) "
                 + "from " + EMPS_TABLE_NAME + " group by empid, deptno;";
-        String query =
-                "select * from ods_order where bank_transaction_id not in (select sum(cast(salary as smallint)) as ssalary from " +
+        String query = "select * from ods_order where bank_transaction_id " +
+                "not in (select sum(cast(salary as smallint)) as ssalary from " +
                         EMPS_TABLE_NAME + " group by deptno)";
         starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
     }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/json_column.h"
 
@@ -38,6 +38,14 @@ PARALLEL_TEST(JsonColumnTest, test_parse) {
         ASSERT_TRUE(json.ok());
         ASSERT_TRUE(json.value().to_string().ok());
         ASSERT_EQ(json_str, json.value().to_string().value());
+    }
+    {
+        // Exceed length limitation
+        Slice slice;
+        slice.data = json_str.data();
+        slice.size = kJSONLengthLimit + 1;
+        auto maybe_json = JsonValue::parse_json_or_string(slice);
+        ASSERT_FALSE(maybe_json.ok());
     }
 }
 

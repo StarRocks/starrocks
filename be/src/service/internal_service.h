@@ -85,6 +85,10 @@ public:
                                  const PTabletWriterAddChunkRequest* request, PTabletWriterAddBatchResult* response,
                                  google::protobuf::Closure* done) override;
 
+    void tablet_writer_add_chunks(google::protobuf::RpcController* controller,
+                                  const PTabletWriterAddChunksRequest* request, PTabletWriterAddBatchResult* response,
+                                  google::protobuf::Closure* done) override;
+
     void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
                               PTabletWriterCancelResult* response, google::protobuf::Closure* done) override;
 
@@ -97,7 +101,7 @@ public:
 
 private:
     void _get_info_impl(const PProxyRequest* request, PProxyResult* response,
-                        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout);
+                        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms);
 
     Status _exec_plan_fragment(brpc::Controller* cntl);
     Status _exec_batch_plan_fragments(brpc::Controller* cntl);

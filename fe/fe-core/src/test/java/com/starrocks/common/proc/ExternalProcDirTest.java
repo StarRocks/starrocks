@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.common.proc;
 
@@ -108,9 +108,8 @@ public class ExternalProcDirTest {
         Assert.assertNotNull(result);
         Assert.assertTrue(result instanceof BaseProcResult);
         Assert.assertEquals(Lists.newArrayList("Nodes"), result.getColumnNames());
-        Assert.assertEquals(2, result.getRows().size());
+        Assert.assertEquals(1, result.getRows().size());
         List<List<String>> rows = Lists.newArrayList();
-        rows.add(Arrays.asList("partitions"));
         rows.add(Arrays.asList("schema"));
         Assert.assertEquals(rows, result.getRows());
     }

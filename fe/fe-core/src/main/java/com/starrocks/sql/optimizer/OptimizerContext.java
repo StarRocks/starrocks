@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer;
 
@@ -46,6 +46,7 @@ public class OptimizerContext {
         cteContext.reset();
         this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
         this.cteContext.setInlineCTERatio(sessionVariable.getCboCTERuseRatio());
+        this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
     }
 
     public Memo getMemo() {

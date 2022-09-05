@@ -24,7 +24,6 @@
 #include <bthread/sys_futex.h>
 
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/column_block.h"
 #include "storage/olap_define.h"
 #include "storage/olap_type_infra.h"
@@ -191,12 +190,14 @@ Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMeta
 }
 
 StatusOr<bool> ZoneMapIndexReader::load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB& meta,
-                                        bool use_page_cache, bool kept_in_memory) {
-    return success_once(_load_once, [&]() { return do_load(fs, filename, meta, use_page_cache, kept_in_memory); });
+                                        bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker) {
+    return success_once(_load_once,
+                        [&]() { return do_load(fs, filename, meta, use_page_cache, kept_in_memory, mem_tracker); });
 }
 
 Status ZoneMapIndexReader::do_load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB& meta,
-                                   bool use_page_cache, bool kept_in_memory) {
+                                   bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker) {
+    auto old_mem_usage = mem_usage();
     IndexedColumnReader reader(fs, filename, meta.page_zone_maps());
     RETURN_IF_ERROR(reader.load(use_page_cache, kept_in_memory));
     std::unique_ptr<IndexedColumnIterator> iter;
@@ -224,6 +225,8 @@ Status ZoneMapIndexReader::do_load(FileSystem* fs, const std::string& filename, 
         }
         pool.clear();
     }
+    auto new_mem_usage = mem_usage();
+    mem_tracker->consume(new_mem_usage - old_mem_usage);
     return Status::OK();
 }
 

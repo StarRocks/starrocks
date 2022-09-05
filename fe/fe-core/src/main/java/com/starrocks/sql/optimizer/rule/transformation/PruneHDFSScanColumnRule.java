@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import avro.shaded.com.google.common.base.Preconditions;
@@ -113,8 +113,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                     logicalIcebergScanOperator.getLimit(),
                     logicalIcebergScanOperator.getPredicate());
 
-            icebergScanOperator.getMinMaxConjuncts().addAll(logicalIcebergScanOperator.getMinMaxConjuncts());
-            icebergScanOperator.getMinMaxColumnRefMap().putAll(logicalIcebergScanOperator.getMinMaxColumnRefMap());
+            icebergScanOperator.setScanOperatorPredicates(logicalIcebergScanOperator.getScanOperatorPredicates());
 
             return Lists.newArrayList(new OptExpression(icebergScanOperator));
         } else if (scanOperator instanceof LogicalHudiScanOperator) {

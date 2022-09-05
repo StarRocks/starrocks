@@ -49,7 +49,7 @@ public class AlterRoutineLoadStmtTest {
 
     @Before
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
 
         new Expectations() {
             {

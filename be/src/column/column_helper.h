@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -40,6 +40,9 @@ public:
     static void merge_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected,
                                   bool* all_zero = nullptr);
 
+    // Like merge_filters but use OR operator to merge them
+    static void or_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected);
+    static void or_two_filters(size_t count, uint8_t* __restrict filter, const uint8_t* __restrict selected);
     static size_t count_nulls(const ColumnPtr& col);
 
     /**
@@ -128,6 +131,14 @@ public:
         }
 
         return dst_column;
+    }
+    static ColumnPtr duplicate_column(ColumnPtr src, MutableColumnPtr desc, UInt32Column::Ptr offsets) {
+        auto desc_size = offsets->size() - 1;
+        DCHECK(src->size() >= desc_size) << "The size of the source column is less when duplicating it.";
+        for (int i = 0; i < offsets->size() - 1; ++i) {
+            desc->append_value_multiple_times(*src, i, offsets->get_data()[i + 1] - offsets->get_data()[i]);
+        }
+        return desc;
     }
 
     // Update column according to whether the dest column and source column are nullable or not.
@@ -382,6 +393,18 @@ public:
     static NullColumnPtr one_size_not_null_column;
 
     static NullColumnPtr one_size_null_column;
+};
+
+// Hold a slice of chunk
+struct ChunkSlice {
+    ChunkUniquePtr chunk;
+    size_t offset = 0;
+
+    bool empty() const;
+    size_t rows() const;
+    size_t skip(size_t skip_rows);
+    vectorized::ChunkPtr cutoff(size_t required_rows);
+    void reset(vectorized::ChunkUniquePtr input);
 };
 
 } // namespace starrocks::vectorized

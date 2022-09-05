@@ -156,6 +156,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
+    public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
 
@@ -209,6 +210,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
+    public static final String CBO_CTE_MAX_LIMIT = "cbo_cte_max_limit";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
@@ -243,12 +245,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
+    public static final String JOIN_IMPLEMENTATION_MODE_V2 = "join_implementation_mode_v2";
 
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
 
     public static final String ENABLE_SHOW_ALL_VARIABLES = "enable_show_all_variables";
 
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
+
+    public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -295,8 +300,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
     private boolean enableResourceGroup = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_TABLET_INTERNAL_PARALLEL)
-    private boolean enableTabletInternalParallel = false;
+    @VariableMgr.VarAttr(name = ENABLE_TABLET_INTERNAL_PARALLEL_V2,
+            alias = ENABLE_TABLET_INTERNAL_PARALLEL, show = ENABLE_TABLET_INTERNAL_PARALLEL)
+    private boolean enableTabletInternalParallel = true;
 
     @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN)
     private boolean enableSharedScan = false;
@@ -435,6 +441,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_CTE_REUSE_RATE, flag = VariableMgr.INVISIBLE)
     private double cboCTERuseRatio = 1.2;
+
+    @VarAttr(name = CBO_CTE_MAX_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int cboCTEMaxLimit = 10;
 
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
@@ -579,8 +588,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
 
-    @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE)
-    private String joinImplementationMode = "hash"; // auto, merge, hash
+    @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE_V2, alias = JOIN_IMPLEMENTATION_MODE)
+    private String joinImplementationMode = "auto"; // auto, merge, hash, nestloop
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;
@@ -596,6 +605,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PRUNE_SHUFFLE_COLUMN_RATE, flag = VariableMgr.INVISIBLE)
     private double cboPruneShuffleColumnRate = 0.1;
+
+    @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
+    private int parseTokensLimit = 3500000;
+
+    public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
+        this.cboCTEMaxLimit = cboCTEMaxLimit;
+    }
+
+    public int getCboCTEMaxLimit() {
+        return cboCTEMaxLimit;
+    }
 
     public double getCboPruneShuffleColumnRate() {
         return cboPruneShuffleColumnRate;
@@ -730,7 +750,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public int getDegreeOfParallelism() {
         if (enablePipelineEngine) {
             if (pipelineDop > 0) {
-                return pipelineDop * parallelExecInstanceNum;
+                return pipelineDop;
             }
             return BackendCoreStat.getDefaultDOP();
         } else {
@@ -868,6 +888,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setMaxTransformReorderJoins(int maxReorderNodeUseExhaustive) {
         this.cboMaxReorderNodeUseExhaustive = maxReorderNodeUseExhaustive;
+    }
+
+    public int getMaxTransformReorderJoins() {
+        return this.cboMaxReorderNodeUseExhaustive;
     }
 
     public long getBroadcastRowCountLimit() {
@@ -1071,6 +1095,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getloadTransmissionCompressionType() {
         return loadTransmissionCompressionType;
+    }
+
+    public int getParseTokensLimit() {
+        return parseTokensLimit;
+    }
+
+    public void setParseTokensLimit(int parseTokensLimit) {
+        this.parseTokensLimit = parseTokensLimit;
     }
 
     // Serialize to thrift object

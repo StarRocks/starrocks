@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.transformer;
 
 import com.clearspring.analytics.util.Lists;
@@ -243,7 +243,8 @@ public class WindowTransformer {
                 // in the aggregation and be converted into the expression generated on agg
                 // eg. select sum(v1), sum(v1) over(order by v2) from foo
                 ScalarOperator agg =
-                        SqlToScalarOperatorTranslator.translate(analyticExpr, subOpt.getExpressionMapping());
+                        SqlToScalarOperatorTranslator.translate(analyticExpr, subOpt.getExpressionMapping(),
+                                columnRefFactory);
                 ColumnRefOperator columnRefOperator =
                         columnRefFactory.create(agg.toString(), agg.getType(), agg.isNullable());
                 analyticCall.put(columnRefOperator, (CallOperator) agg);
@@ -253,7 +254,7 @@ public class WindowTransformer {
             List<ScalarOperator> partitions = new ArrayList<>();
             for (Expr partitionExpression : windowOperator.getPartitionExprs()) {
                 ScalarOperator operator = SqlToScalarOperatorTranslator
-                        .translate(partitionExpression, subOpt.getExpressionMapping());
+                        .translate(partitionExpression, subOpt.getExpressionMapping(), columnRefFactory);
                 partitions.add(operator);
             }
 
@@ -261,7 +262,7 @@ public class WindowTransformer {
             for (OrderByElement orderByElement : windowOperator.getOrderByElements()) {
                 ColumnRefOperator col =
                         (ColumnRefOperator) SqlToScalarOperatorTranslator
-                                .translate(orderByElement.getExpr(), subOpt.getExpressionMapping());
+                                .translate(orderByElement.getExpr(), subOpt.getExpressionMapping(), columnRefFactory);
                 orderings.add(new Ordering(col, orderByElement.getIsAsc(),
                         OrderByElement.nullsFirst(orderByElement.getNullsFirstParam())));
             }

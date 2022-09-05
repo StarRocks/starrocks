@@ -955,9 +955,74 @@ struct TSetConfigResponse {
     1: required Status.TStatus status
 }
 
+struct TGetTablesConfigRequest {
+
+}
+
+struct TGetTablesConfigResponse {
+    1: optional list<TTableConfigInfo> tables_config_infos
+}
+
+struct TTableConfigInfo {
+    1: optional string table_schema
+    2: optional string table_name
+    3: optional string primary_key
+    4: optional string partition_key
+    5: optional string distribute_key
+    6: optional string distribute_type
+    7: optional i32 distribute_bucket
+    8: optional string sort_key
+    9: optional string properties
+}
+
+
+struct TAuthInfo {
+    // If not set, match every database
+    1: optional string pattern
+    2: optional string user   // deprecated
+    3: optional string user_ip    // deprecated
+    4: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
+}
+
+struct TGetTablesInfoRequest {
+    1: optional TAuthInfo auth_info
+}
+
+struct TGetTablesInfoResponse {
+    1: optional list<TTableInfo> tables_infos
+}
+
+struct TTableInfo {
+    1: optional string table_catalog
+    2: optional string table_schema
+    3: optional string table_name
+    4: optional string table_type
+    5: optional string engine
+    6: optional i64 version
+    7: optional string row_format
+    8: optional i64 table_rows
+    9: optional i64 avg_row_length
+    10: optional i64 data_length
+    11: optional i64 max_data_length
+    12: optional i64 index_length
+    13: optional i64 data_free
+    14: optional i64 auto_increment
+    15: optional i64 create_time
+    16: optional i64 update_time
+    17: optional i64 check_time
+    18: optional string table_collation
+    19: optional i64 checksum
+    20: optional string create_options
+    21: optional string table_comment
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
+  
+    TGetTablesInfoResponse getTablesInfo(1: TGetTablesInfoRequest request)
+
+    TGetTablesConfigResponse getTablesConfig(1: TGetTablesConfigRequest request)
 
     TGetUserPrivsResult getUserPrivs(1:TGetUserPrivsParams params)
     TGetDBPrivsResult getDBPrivs(1:TGetDBPrivsParams params)

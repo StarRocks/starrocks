@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
@@ -92,7 +92,7 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::next() {
     if (!is_data_ready() || is_eos()) {
         return ChunkUniquePtr();
     }
-    if (!move_cursor()) {
+    if (move_cursor()) {
         return ChunkUniquePtr();
     }
     return merge_sorted_cursor_two_way();
@@ -163,27 +163,27 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
     return result;
 }
 
-// @return true if data ready, else return false
 bool MergeTwoCursor::move_cursor() {
     DCHECK(is_data_ready());
     DCHECK(!is_eos());
 
+    bool eos = _left_run.empty() && _right_run.empty();
     if (_left_run.empty() && !_left_cursor->is_eos()) {
         auto chunk = _left_cursor->try_get_next();
-        if (!chunk.first) {
-            return false;
+        if (chunk.first) {
+            _left_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
+            eos = false;
         }
-        _left_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
     }
     if (_right_run.empty() && !_right_cursor->is_eos()) {
         auto chunk = _right_cursor->try_get_next();
-        if (!chunk.first) {
-            return false;
+        if (chunk.first) {
+            _right_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
+            eos = false;
         }
-        _right_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
     }
 
-    return true;
+    return eos;
 }
 
 // TODO: avoid copy the whole chunk in cascade merge, but copy order-by column only

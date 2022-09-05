@@ -1,10 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "exec/vectorized/hdfs_scanner.h"
+
 namespace starrocks {
 
 namespace connector {
@@ -100,6 +101,7 @@ private:
     bool _has_partition_columns = false;
 
     std::vector<std::string> _hive_column_names;
+    bool _case_sensitive = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
     // ======================================

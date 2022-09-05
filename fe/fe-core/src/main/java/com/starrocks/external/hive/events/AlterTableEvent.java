@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive.events;
 
@@ -111,6 +111,8 @@ public class AlterTableEvent extends MetastoreTableEvent {
     @Override
     protected void process() throws MetastoreNotificationException {
         if (!existInCache()) {
+            LOG.warn("Table [{}.{}.{}] doesn't exist in cache on event id: [{}]",
+                    cache.getResourceName(), getDbName(), getTblName(), getEventId());
             return;
         }
 

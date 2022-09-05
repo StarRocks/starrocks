@@ -28,7 +28,6 @@ import com.starrocks.common.util.JdkUtils;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.ha.FrontendNodeType;
-import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalException;
@@ -216,7 +215,7 @@ public class MockedFrontend {
 
                 // check it after Config is initialized, otherwise the config 'check_java_version' won't work.
                 if (!JdkUtils.checkJavaVersion()) {
-//                    throw new IllegalArgumentException("Java version doesn't match");
+                // throw new IllegalArgumentException("Java version doesn't match");
                 }
 
                 // set dns cache ttl
@@ -280,7 +279,7 @@ public class MockedFrontend {
         int tryCount = 0;
         while (!GlobalStateMgr.getCurrentState().isReady() && tryCount < 600) {
             try {
-                tryCount ++;
+                tryCount++;
                 Thread.sleep(1000);
                 System.out.println("globalStateMgr is not ready, wait for 1 second");
             } catch (InterruptedException e) {

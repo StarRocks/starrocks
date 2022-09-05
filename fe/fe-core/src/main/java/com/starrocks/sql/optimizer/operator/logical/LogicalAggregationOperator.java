@@ -1,6 +1,7 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -169,6 +170,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
         @Override
         public LogicalAggregationOperator build() {
+            Preconditions.checkNotNull(type);
+            Preconditions.checkNotNull(aggregations);
+            Preconditions.checkNotNull(groupingKeys);
+            Preconditions.checkNotNull(partitionByColumns);
             return new LogicalAggregationOperator(this);
         }
 

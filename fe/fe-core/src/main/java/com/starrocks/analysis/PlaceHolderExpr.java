@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.analysis;
 
@@ -13,7 +13,7 @@ import org.apache.logging.log4j.Logger;
 
 // placeholder is mainly used for function calls.
 // Unlike a slotRef, it does not represent a real column, but is only used as an input column for function calls.
-// now it was only used in global dictionary optimization
+// now it was only used in global dictionary optimization, and express lambda inputs.
 public class PlaceHolderExpr extends Expr {
     private static final Logger LOG = LogManager.getLogger(PlaceHolderExpr.class);
 

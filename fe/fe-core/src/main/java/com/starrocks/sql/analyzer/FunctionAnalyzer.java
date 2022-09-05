@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
@@ -60,6 +60,10 @@ public class FunctionAnalyzer {
             }
         }
 
+        if (fnName.getFunction().equals(FunctionSet.ARRAY_MAP)) {
+            Preconditions.checkState(functionCallExpr.getChildren().size() > 1);
+            functionCallExpr.setType(new ArrayType(functionCallExpr.getChild(0).getChild(1).getType()));
+        }
     }
 
     private static void analyzeBuiltinAggFunction(FunctionCallExpr functionCallExpr) {
@@ -206,7 +210,7 @@ public class FunctionAnalyzer {
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.NDV)
                 || fnName.getFunction().equalsIgnoreCase(FunctionSet.APPROX_COUNT_DISTINCT))
                 && !arg.getType().canApplyToNumeric()) {
-            throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
+            throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
         }
 
         if ((fnName.getFunction().equalsIgnoreCase(FunctionSet.BITMAP_UNION_INT) && !arg.getType().isIntegerType())) {

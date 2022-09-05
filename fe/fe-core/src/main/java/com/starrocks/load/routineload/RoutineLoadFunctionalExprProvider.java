@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.load.routineload;
 
 import com.google.common.collect.ImmutableList;
@@ -22,7 +22,7 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
 
     private static final Logger LOG = LogManager.getLogger(RoutineLoadFunctionalExprProvider.class);
 
-    private static final ColumnValueSupplier<RoutineLoadJob> jobIdSupplier = new ColumnValueSupplier<RoutineLoadJob>() {
+    private static final ColumnValueSupplier<RoutineLoadJob> JOB_ID_SUPPLIER = new ColumnValueSupplier<RoutineLoadJob>() {
         @Override
         public String getColumnName() {
             return "Id";
@@ -39,7 +39,7 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
             return job.getId();
         }
     };
-    private static final ColumnValueSupplier<RoutineLoadJob> jobNameSupplier =
+    private static final ColumnValueSupplier<RoutineLoadJob> JOB_NAME_SUPPLIER =
             new ColumnValueSupplier<RoutineLoadJob>() {
                 @Override
                 public String getColumnName() {
@@ -57,7 +57,7 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
                     return job.getName();
                 }
             };
-    private static final ColumnValueSupplier<RoutineLoadJob> jobCreateTimeSupplier =
+    private static final ColumnValueSupplier<RoutineLoadJob> JOB_CREATE_TIME_SUPPLIER =
             new ColumnValueSupplier<RoutineLoadJob>() {
                 @Override
                 public String getColumnName() {
@@ -75,7 +75,7 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
                     return job.getCreateTimestamp() / 1000 * 1000;
                 }
             };
-    private static final ColumnValueSupplier<RoutineLoadJob> jobPauseTimeSupplier =
+    private static final ColumnValueSupplier<RoutineLoadJob> JOB_PAUSE_TIME_SUPPLIER =
             new ColumnValueSupplier<RoutineLoadJob>() {
                 @Override
                 public String getColumnName() {
@@ -93,7 +93,7 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
                     return job.getPauseTimestamp() / 1000 * 1000;
                 }
             };
-    private static final ColumnValueSupplier<RoutineLoadJob> jobEndTimeSupplier =
+    private static final ColumnValueSupplier<RoutineLoadJob> JOB_END_TIME_SUPPLIER =
             new ColumnValueSupplier<RoutineLoadJob>() {
                 @Override
                 public String getColumnName() {
@@ -111,7 +111,7 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
                     return job.getEndTimestamp() / 1000 * 1000;
                 }
             };
-    private static final ColumnValueSupplier<RoutineLoadJob> jobTaskNumSupplier =
+    private static final ColumnValueSupplier<RoutineLoadJob> JOB_TASK_NUM_SUPPLIER =
             new ColumnValueSupplier<RoutineLoadJob>() {
                 @Override
                 public String getColumnName() {
@@ -130,7 +130,7 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
                 }
             };
 
-    private static final ColumnValueSupplier<RoutineLoadJob> tableNameSupplier =
+    private static final ColumnValueSupplier<RoutineLoadJob> TABLE_NAME_SUPPLIER =
             new ColumnValueSupplier<RoutineLoadJob>() {
                 @Override
                 public String getColumnName() {
@@ -157,7 +157,7 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
                 }
             };
 
-    private static final ColumnValueSupplier<RoutineLoadJob> stateSupplier = new ColumnValueSupplier<RoutineLoadJob>() {
+    private static final ColumnValueSupplier<RoutineLoadJob> STATE_SUPPLIER = new ColumnValueSupplier<RoutineLoadJob>() {
         @Override
         public String getColumnName() {
             return "State";
@@ -175,7 +175,7 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
         }
     };
 
-    private static final ColumnValueSupplier<RoutineLoadJob> reasonSupplier =
+    private static final ColumnValueSupplier<RoutineLoadJob> REASON_SUPPLIER =
             new ColumnValueSupplier<RoutineLoadJob>() {
                 @Override
                 public String getColumnName() {
@@ -194,7 +194,7 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
                 }
             };
 
-    private static final ColumnValueSupplier<RoutineLoadJob> otherMsgSupplier =
+    private static final ColumnValueSupplier<RoutineLoadJob> OTHER_MSG_SUPPLIER =
             new ColumnValueSupplier<RoutineLoadJob>() {
                 @Override
                 public String getColumnName() {
@@ -217,16 +217,16 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
     protected ImmutableList<ColumnValueSupplier<RoutineLoadJob>> delegateWhereSuppliers() {
         // return a group of ColumnValueSuppliers which are abled to be filtered and ordered.
         return new ImmutableList.Builder<ColumnValueSupplier<RoutineLoadJob>>()
-                .add(jobIdSupplier)
-                .add(jobNameSupplier)
-                .add(jobCreateTimeSupplier)
-                .add(jobPauseTimeSupplier)
-                .add(jobEndTimeSupplier)
-                .add(jobTaskNumSupplier)
-                .add(tableNameSupplier)
-                .add(stateSupplier)
-                .add(reasonSupplier)
-                .add(otherMsgSupplier)
+                .add(JOB_ID_SUPPLIER)
+                .add(JOB_NAME_SUPPLIER)
+                .add(JOB_CREATE_TIME_SUPPLIER)
+                .add(JOB_PAUSE_TIME_SUPPLIER)
+                .add(JOB_END_TIME_SUPPLIER)
+                .add(JOB_TASK_NUM_SUPPLIER)
+                .add(TABLE_NAME_SUPPLIER)
+                .add(STATE_SUPPLIER)
+                .add(REASON_SUPPLIER)
+                .add(OTHER_MSG_SUPPLIER)
                 .build();
     }
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/java_function_call_expr.h"
 
@@ -161,7 +161,7 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
                                   FunctionContext::FunctionStateScope scope) {
     // init parent open
     RETURN_IF_ERROR(Expr::open(state, context, scope));
-
+    RETURN_IF_ERROR(detect_java_runtime());
     // init function context
     Columns const_columns;
     if (scope == FunctionContext::FRAGMENT_LOCAL) {

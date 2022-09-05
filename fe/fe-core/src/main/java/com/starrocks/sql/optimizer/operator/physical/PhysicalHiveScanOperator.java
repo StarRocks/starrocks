@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.operator.physical;
 
@@ -64,13 +64,7 @@ public class PhysicalHiveScanOperator extends PhysicalScanOperator {
 
         PhysicalHiveScanOperator that = (PhysicalHiveScanOperator) o;
         ScanOperatorPredicates targetPredicts = ((PhysicalHiveScanOperator) o).getScanOperatorPredicates();
-        return Objects.equal(table, that.table) &&
-                Objects.equal(predicates.getSelectedPartitionIds(), targetPredicts.getSelectedPartitionIds()) &&
-                Objects.equal(predicates.getIdToPartitionKey(), targetPredicts.getIdToPartitionKey()) &&
-                Objects.equal(predicates.getNoEvalPartitionConjuncts(), targetPredicts.getNoEvalPartitionConjuncts()) &&
-                Objects.equal(predicates.getPartitionConjuncts(), targetPredicts.getPartitionConjuncts()) &&
-                Objects.equal(predicates.getMinMaxConjuncts(), targetPredicts.getMinMaxConjuncts()) &&
-                Objects.equal(predicates.getMinMaxColumnRefMap(), targetPredicts.getMinMaxColumnRefMap());
+        return Objects.equal(table, that.table) && predicates.equals(targetPredicts);
     }
 
     @Override

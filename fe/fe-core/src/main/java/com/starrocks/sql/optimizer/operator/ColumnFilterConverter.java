@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.operator;
 
@@ -54,7 +54,7 @@ public class ColumnFilterConverter {
     private static final ColumnFilterVisitor COLUMN_FILTER_VISITOR = new ColumnFilterVisitor();
 
     // "week" can not exist in timeMap due "month" not sure contains week
-    private static final ImmutableMap<String, Integer> timeMap =
+    private static final ImmutableMap<String, Integer> TIME_MAP =
             new ImmutableMap.Builder<String, Integer>()
                     .put("second", 1)
                     .put("minute", 2)
@@ -175,8 +175,8 @@ public class ColumnFilterConverter {
 
         return Objects.equals(exprColumnNameArg, callColumnNameArg) &&
                 (Objects.equals(exprTimeArg, callTimeArg) ||
-                        (timeMap.containsKey(exprTimeArg) && timeMap.containsKey(callTimeArg) &&
-                                timeMap.get(exprTimeArg) > timeMap.get(callTimeArg)));
+                        (TIME_MAP.containsKey(exprTimeArg) && TIME_MAP.containsKey(callTimeArg) &&
+                                TIME_MAP.get(exprTimeArg) > TIME_MAP.get(callTimeArg)));
     }
 
     private static class ColumnFilterVisitor
@@ -285,7 +285,7 @@ public class ColumnFilterConverter {
         }
     }
 
-    private static LiteralExpr convertLiteral(ConstantOperator operator) throws AnalysisException {
+    public static LiteralExpr convertLiteral(ConstantOperator operator) throws AnalysisException {
         Preconditions.checkArgument(!operator.getType().isInvalid());
 
         if (operator.isNull()) {

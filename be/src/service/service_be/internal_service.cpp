@@ -63,10 +63,19 @@ void BackendInternalServiceImpl<T>::tablet_writer_add_chunk(google::protobuf::Rp
                                                             const PTabletWriterAddChunkRequest* request,
                                                             PTabletWriterAddBatchResult* response,
                                                             google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
     VLOG_RPC << "tablet writer add chunk, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
              << ", sender_id=" << request->sender_id();
-    PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunk(static_cast<brpc::Controller*>(cntl_base),
-                                                                          *request, response, done);
+    PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunk(*request, response);
+}
+
+template <typename T>
+void BackendInternalServiceImpl<T>::tablet_writer_add_chunks(google::protobuf::RpcController* cntl_base,
+                                                             const PTabletWriterAddChunksRequest* request,
+                                                             PTabletWriterAddBatchResult* response,
+                                                             google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->add_chunks(*request, response);
 }
 
 template <typename T>

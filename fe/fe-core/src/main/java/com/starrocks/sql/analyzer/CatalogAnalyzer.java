@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.analyzer;
 
@@ -48,7 +48,7 @@ public class CatalogAnalyzer {
                 throw new SemanticException("'type' can not be null or empty");
             }
             statement.setCatalogType(catalogType);
-            if (!CreateCatalogStmt.supportedCatalog.contains(catalogType)) {
+            if (!CreateCatalogStmt.SUPPORTED_CATALOG.contains(catalogType)) {
                 throw new SemanticException("[type : %s] is not supported", catalogType);
             }
             return null;

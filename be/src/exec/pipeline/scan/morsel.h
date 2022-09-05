@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -111,7 +111,9 @@ public:
     virtual MorselQueue* create(int driver_sequence) = 0;
     virtual size_t size() const = 0;
     virtual size_t num_original_morsels() const = 0;
+
     virtual bool is_shared() const = 0;
+    virtual bool need_local_shuffle() const = 0;
 };
 
 class SharedMorselQueueFactory final : public MorselQueueFactory {
@@ -122,7 +124,9 @@ public:
     MorselQueue* create(int driver_sequence) override { return _queue.get(); }
     size_t size() const override { return _size; }
     size_t num_original_morsels() const override;
+
     bool is_shared() const override { return true; }
+    bool need_local_shuffle() const override { return true; }
 
 private:
     MorselQueuePtr _queue;
@@ -131,7 +135,7 @@ private:
 
 class IndividualMorselQueueFactory final : public MorselQueueFactory {
 public:
-    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq);
+    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool need_local_shuffle);
     ~IndividualMorselQueueFactory() override = default;
 
     MorselQueue* create(int driver_sequence) override {
@@ -144,9 +148,11 @@ public:
     size_t num_original_morsels() const override;
 
     bool is_shared() const override { return false; }
+    bool need_local_shuffle() const override { return _need_local_shuffle; }
 
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
+    const bool _need_local_shuffle;
 };
 
 /// MorselQueue.
