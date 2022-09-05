@@ -6,24 +6,15 @@
 
 ## 语法
 
-- 查看当前 StarRocks 集群中的数据库。
-
-    ```SQL
-    SHOW DATABASES;
-    ```
-
-- 查看指定 catalog 中的数据库。
-
-    ```SQL
-    SHOW DATABASES FROM catalog_name;
-    ```
+```SQL
+SHOW DATABASES [FROM catalog_name];
+```
 
 ## 参数说明
 
-`catalog_name`：internal catalog 或 external catalog 的名称。
-
-- 如指定 internal catalog 名称，即 `default_catalog`，则查看当前 StarRocks 集群中的数据库。
-- 如指定 external catalog 名称，则查看外部数据源中的数据库。
+| **参数**          | **必选** | **说明**                                                     |
+| ----------------- | -------- | ------------------------------------------------------------ |
+| FROM catalog_name | 否       | Internal catalog 或 external catalog 的名称。<ul><li>如不指定或指定为 internal catalog 名称，即 `default_catalog`，则查看当前 StarRocks 集群中的数据库。</li><li>如指定 external catalog 名称，则查看外部数据源中的数据库。</li></ul> |
 
 ## 示例
 
@@ -31,7 +22,17 @@
 
 ```SQL
 SHOW DATABASES;
+```
 
+或
+
+```SQL
+SHOW DATABASES FROM default_catalog;
+```
+
+返回信息如下：
+
+```SQL
 +----------+
 | Database |
 +----------+
@@ -39,12 +40,6 @@ SHOW DATABASES;
 | db2      |
 | db3      |
 +----------+
-```
-
-或
-
-```SQL
-SHOW DATABASES FROM default_catalog;
 ```
 
 示例二：通过 external catalog `hive1`查看 Apache Hive™ 中的数据库。

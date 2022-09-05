@@ -2,21 +2,22 @@
 
 本文介绍如何创建 Hudi catalog，以及需要做哪些相应的配置。
 
-Hudi catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中，您可以通过该目录直接查询 Apache Hudi 集群中的数据，无需数据导入或创建外部表。在查询数据时，Hudi catalog 会用到以下两个 Hudi 组件：
+Hudi catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中，您可以通过该目录直接查询 Apache Hudi 集群中的数据，无需数据导入或创建外部表。在查询数据时，StarRocks 会用到以下两个 Hudi 组件：
 
-- **元数据服务**：用于将 Hudi 元数据暴露出来供 StarRocks 的 leader FE 进行查询规划。
-- **存储系统**：用于存储 Hudi 表数据。数据文件以不同的格式存储在分布式文件系统或对象存储系统中。当 leader FE 将生成的查询计划分发给各个 BE 后，各个 BE 会并行扫描 Hudi 存储系统中的目标数据，并执行计算返回查询结果。
+- **元数据服务**：用于将 Hudi 元数据暴露出来供 StarRocks 的 FE 进行查询规划。
+- **存储系统**：用于存储 Hudi 表数据。数据文件以不同的格式存储在分布式文件系统或对象存储系统中。当 FE 将生成的查询计划分发给各个 BE 后，各个 BE 会并行扫描 Hudi 存储系统中的目标数据，并执行计算返回查询结果。
 
 ## 使用限制
 
-- StarRocks 支持查询如下格式的 Hudi 数据：Parquet、ORC、gzip、Zstd、LZ4 和 Snappy。
-- StarRocks 支持查询如下类型的 Hudi 数据：BOOLEAN、INT、DATE、TimeMillis、TimeMicros、LONG、FLOAT、DOUBLE、STRING、ARRAY 和 DECIMAL。注意查询命中不支持的数据类型（FIXED、ENUM、UNION、MAP 和 BYTES）会报错。
+- StarRocks 支持查询如下格式的 Hudi 数据文件：Parquet 和 ORC。
+- StarRocks 支持查询如下压缩格式的 Hudi 数据文件：gzip、Zstd、LZ4 和 Snappy。
+- StarRocks 支持查询如下类型的 Hudi 数据：BOOLEAN、INT、DATE、TIME、BIGINT、FLOAT、DOUBLE、DECIMAL、CHAR 和 VARCHAR。注意查询命中不支持的数据类型（ARRAY、MAP 和 STRUCT）会报错。
 - StarRocks 支持查询 Copy on write 表。暂不支持查询 Merge on read 表。有关这两种表的详细信息，请参见 [Table & Query Types](https://hudi.apache.org/docs/table_types)。
 - StarRocks 2.4 及以上版本支持创建 Hudi catalog，以及使用 [DESC](/sql-reference/sql-statements/Utility/DESCRIBE.md) 语句查看 Hudi 表结构。查看时，不支持的数据类型会显示成`unknown`。
 
 ## 前提条件
 
-在创建 Hudi catalog 前，您需要根据 Hudi 使用的存储系统、元数据服务和认证方式在 StarRocks 中进行相应的配置。StarRocks 当前支持的 Hudi 存储系统包括：HDFS、Amazon S3、阿里云对象存储 OSS 和腾讯云对象存储 COS；支持的 Hudi 元数据服务为 Hive metastore。具体配置步骤和 Hive catalog 相同，详细信息请参见 [Hive catalog](../catalog/hive_catalog.md#前提条件)。
+在创建 Hudi catalog 前，您需要StarRocks 中进行相应的配置，以便能够访问 Hudi 的存储系统和元数据服务。StarRocks 当前支持的 Hudi 存储系统包括：HDFS、Amazon S3、阿里云对象存储 OSS 和腾讯云对象存储 COS；支持的 Hudi 元数据服务为 Hive metastore。具体配置步骤和 Hive catalog 相同，详细信息请参见 [Hive catalog](../catalog/hive_catalog.md#前提条件)。
 
 ## 创建 Hudi catalog
 
@@ -29,18 +30,18 @@ PROPERTIES ("key"="value", ...);
 
 参数说明：
 
-- `catalog_name`：Hudi catalog 的名称，必选参数。命名要求如下：
+- `catalog_name`：Hudi catalog 的名称，必选参数。<br>命名要求如下：
   - 必须由字母(a-z或A-Z)、数字(0-9)或下划线(_)组成，且只能以字母开头。
   - 总长度不能超过 64 个字符。
 
-- `PROPERTIES`：Hudi catalog 的属性，必选参数，支持配置如下：
+- `PROPERTIES`：Hudi catalog 的属性，必选参数。<br>支持配置如下：
 
     | **参数**            | **必选** | **说明**                                                     |
     | ------------------- | -------- | ------------------------------------------------------------ |
     | type                | 是       | 数据源类型，取值为`hudi`。                                   |
     | hive.metastore.uris | 是       | Hive metastore 的 URI。格式为 `thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
 
-> 注意：需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
+> 注意：查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
 
 ## 元数据异步更新
 

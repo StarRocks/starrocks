@@ -2,33 +2,41 @@
 
 本文介绍如何创建 Hive catalog，以及需要做哪些相应的配置。
 
-Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中，您可以通过该目录直接查询 Apache Hive™ 集群中的数据，无需数据导入或创建外部表。在查询数据时，Hive catalog 会用到以下两个 Hive 组件：
+Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中，您可以通过该目录直接查询 Apache Hive™ 集群中的数据，无需数据导入或创建外部表。在查询数据时，StarRocks 会用到以下两个 Hive 组件：
 
-- **元数据服务**：Hive 元数据会存储在关系型数据库中（如 MySQL），并通过元数据服务将元数据暴露出来供 StarRocks 的 leader FE 进行查询规划。
-- **存储系统**：用于存储 Hive 数据。数据文件以不同的格式存储在分布式文件系统或对象存储系统中。当 leader FE 将生成的查询计划分发给各个 BE 后，各个 BE 会并行扫描 Hive 存储系统中的目标数据，并执行计算返回查询结果。
+- **元数据服务**：Hive 元数据会存储在关系型数据库中（如 MySQL），并通过元数据服务将元数据暴露出来供 StarRocks 的 FE 进行查询规划。
+- **存储系统**：用于存储 Hive 数据。数据文件以不同的格式存储在分布式文件系统或对象存储系统中。当 FE 将生成的查询计划分发给各个 BE 后，各个 BE 会并行扫描 Hive 存储系统中的目标数据，并执行计算返回查询结果。
 
 ## 使用限制
 
 - StarRocks 支持查询如下格式的 Hive 数据：Parquet、ORC 和 CSV。
-- StarRocks 支持查询如下类型的 Hive 数据：INT、INTEGER、BIGINT、TIMESTAMP、STRING、VARCHAR、CHAR、DOUBLE、FLOAT、DECIMAL 和 ARRAY。注意查询命中不支持的数据类型会报错，不支持的数据类型包括：TINYINT、SMALLINT、NUMERIC、DATE、INTERVAL、BOOLEAN、BINARY 、MAP、 STRUCT 和 UNION。
+- StarRocks 支持查询如下类型的 Hive 数据：TINYINT、SMALLINT、DATE、BOOLEAN、INT、INTEGER、BIGINT、TIMESTAMP、STRING、VARCHAR、CHAR、DOUBLE、FLOAT、DECIMAL 和 ARRAY。注意查询命中不支持的数据类型会报错，不支持的数据类型包括：INTERVAL、BINARY、MAP、 STRUCT 和 UNION。
 - StarRocks 2.4 及以上版本支持使用 [DESC](/sql-reference/sql-statements/Utility/DESCRIBE.md) 语句查看 Hive 表结构。查看时，不支持的数据类型会显示成`unknown`。
 
 ## 前提条件
 
-在创建 Hive catalog 前，您需要根据 Hive 使用的存储系统、元数据服务和认证方式在 StarRocks 中进行相应的配置。StarRocks 当前支持的 Hive 存储系统包括：HDFS、Amazon S3、阿里云对象存储 OSS 和腾讯云对象存储 COS；支持的 Hive 元数据服务为 Hive metastore。
+在创建 Hive catalog 前，您需要StarRocks 中进行相应的配置，以便能够访问 Hive 的存储系统和元数据服务。StarRocks 当前支持的 Hive 存储系统包括：HDFS、Amazon S3、阿里云对象存储 OSS 和腾讯云对象存储 COS；支持的 Hive 元数据服务为 Hive metastore。
 
 ### HDFS
 
 如使用 HDFS 作为存储系统，则需要在 StarRocks 中做如下配置。
 
-- （可选）设置 StarRocks 访问 HDFS 和 Hive metastore 的用户名。 您可以在每个 BE 的 **be/conf/hadoop_env.sh** 文件中通过配置`HADOOP_USERNAME`来设置该用户名，设置后重启各个 BE 生效。如不设置，则默认使用 FE 进程的用户名进行访问。
+- （可选）设置 StarRocks 访问 HDFS 和 Hive metastore 的用户名。 您可以在每个 FE 的**fe/conf/hadoop_env.sh** 和每个 BE 的 **be/conf/hadoop_env.sh** 文件中通过配置`HADOOP_USERNAME`来设置该用户名，设置后重启各个 FE 和 BE 生效。如不设置，则默认使用 FE 和 BE 进程的用户名进行访问。
+
   > 注意：一个 StarRocks 集群仅支持配置一个用户名。
 
 - 查询时，StarRocks 的 FE 和 BE 都会通过 HDFS 客户端访问 HDFS。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
   - 如 HDFS 开启了 HA（高可用）模式，则需要将 HDFS 集群中的 **hdfs-site.xml** 文件放到每一个 FE 的 **$FE_HOME/conf** 下以及每个 BE 的 **$BE_HOME/conf** 下。  
   - 如 HDFS 配置了 ViewFs，则需要将 HDFS 集群中的 **core-site.xml** 文件放到每一个 FE 的 **$FE_HOME/conf** 下以及每个 BE 的 **$BE_HOME/conf** 下。
 
-- 将 HDFS 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
+> 注意：如果查询时因为域名无法识别而访问失败 (unknown host)，则需要将 HDFS 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中。
+
+### Kerberos 认证
+
+如 HDFS 或 Hive metastore 开启了 Kerberos 认证，则需要在 StarRocks 中做如下配置。
+
+- 在每个 FE 和 每个 BE 机器上执行 `kinit -kt keytab_path principal` 命令从Key Distribution Center (KDC) 获取到 Ticket Granting Ticket。注意使用该命令访问 KDC 具有时效性，所以需要使用 cron 定期执行该命令。执行命令的用户需要有访问 Hive metastore 和 HDFS 的权限。
+- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 和每个 BE 的 **$BE_HOME/conf/be.conf** 文件中设置`JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中 `/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可修改。
 
 ### Amazon S3
 
@@ -40,30 +48,30 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 
       ```XML
       <configuration>
-        <property>
-        <name>fs.s3a.impl</name>
-        <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
-      </property>
-      <property>
-        <name>fs.AbstractFileSystem.s3a.impl</name>
-        <value>org.apache.hadoop.fs.s3a.S3A</value>
-      </property>
-      <property>
-        <name>fs.s3a.access.key</name>
-        <value>******</value>
-      </property>
-      <property>
-        <name>fs.s3a.secret.key</name>
-        <value>******</value>
-      </property>
-      <property>
-        <name>fs.s3a.endpoint</name>
-        <value>******</value>
-      </property>
-      <property>
-        <name>fs.s3a.connection.maximum</name>
-        <value>500</value>
-      </property>
+          <property>
+              <name>fs.s3a.impl</name>
+              <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+          </property>
+          <property>
+              <name>fs.AbstractFileSystem.s3a.impl</name>
+              <value>org.apache.hadoop.fs.s3a.S3A</value>
+          </property>
+          <property>
+              <name>fs.s3a.access.key</name>
+              <value>******</value>
+          </property>
+          <property>
+              <name>fs.s3a.secret.key</name>
+              <value>******</value>
+          </property>
+          <property>
+              <name>fs.s3a.endpoint</name>
+              <value>******</value>
+          </property>
+          <property>
+              <name>fs.s3a.connection.maximum</name>
+              <value>500</value>
+          </property>
       </configuration>
       ```
 
@@ -94,43 +102,43 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 
 2. 在每个 FE 的 **$FE_HOME/conf/core-site.xml** 文件中添加如下配置。
 
-      ```XML
-      <configuration>
-      <property>
-        <name>fs.s3a.impl</name>
-        <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
-      </property>
-      <property>
-        <name>fs.AbstractFileSystem.s3a.impl</name>
-        <value>org.apache.hadoop.fs.s3a.S3A</value>
-      </property>
-      <property>
-        <name>fs.s3a.access.key</name>
-        <value>******</value>
-      </property>
-      <property>
-        <name>fs.s3a.secret.key</name>
-        <value>******</value>
-      </property>
-      <property>
-        <name>fs.s3a.endpoint</name>
-        <value>******</value>
-      </property>
-      <property>
-        <name>fs.s3a.connection.maximum</name>
-        <value>500</value>
-      </property>
-      </configuration>
-      ```
+    ```XML
+    <configuration>
+        <property>
+            <name>fs.s3a.impl</name>
+            <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+        </property>
+        <property>
+            <name>fs.AbstractFileSystem.s3a.impl</name>
+            <value>org.apache.hadoop.fs.s3a.S3A</value>
+        </property>
+        <property>
+            <name>fs.s3a.access.key</name>
+            <value>******</value>
+        </property>
+        <property>
+            <name>fs.s3a.secret.key</name>
+            <value>******</value>
+        </property>
+        <property>
+            <name>fs.s3a.endpoint</name>
+            <value>******</value>
+        </property>
+        <property>
+            <name>fs.s3a.connection.maximum</name>
+            <value>500</value>
+        </property>
+    </configuration>
+    ```
 
-      配置项说明：
+    配置项说明：
 
-      | **配置项**                | **说明**                                                     |
-      | ------------------------- | ------------------------------------------------------------ |
-      | fs.s3a.access.key         | COS 永久密钥的 SecretId。获取方式，请参见[使用永久密钥访问 COS](https://cloud.tencent.com/document/product/436/68282)。 |
-      | fs.s3a.secret.key         | COS 永久密钥的 SecretKey。获取方式，请参见[使用永久密钥访问 COS](https://cloud.tencent.com/document/product/436/68282)。 |
-      | fs.s3a.endpoint           | COS 存储桶所在地域对应的 endpoint（即访问域名），您可以根据 endpoint 与地域的对应关系进行查找，详情参见[地域和访问域名](https://cloud.tencent.com/document/product/436/6224)。 |
-      | fs.s3a.connection.maximum | COS 的最大连接数， 默认值为 500。如果查询过程中有报错 `Timeout waiting for connection from poll`，可适当调高该连接数。 |
+    | **配置项**                | **说明**                                                     |
+    | ------------------------- | ------------------------------------------------------------ |
+    | fs.s3a.access.key         | COS 永久密钥的 SecretId。获取方式，请参见[使用永久密钥访问 COS](https://cloud.tencent.com/document/product/436/68282)。 |
+    | fs.s3a.secret.key         | COS 永久密钥的 SecretKey。获取方式，请参见[使用永久密钥访问 COS](https://cloud.tencent.com/document/product/436/68282)。 |
+    | fs.s3a.endpoint           | COS 存储桶所在地域对应的 endpoint（即访问域名），您可以根据 endpoint 与地域的对应关系进行查找，详情参见[地域和访问域名](https://cloud.tencent.com/document/product/436/6224)。 |
+    | fs.s3a.connection.maximum | COS 的最大连接数， 默认值为 500。如果查询过程中有报错 `Timeout waiting for connection from poll`，可适当调高该连接数。 |
 
 3. 在每个 BE 的 **$BE_HOME/conf/be.conf** 文件中添加如下配置项。
 
@@ -149,38 +157,38 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 
 1. 在每个 FE 的 **$FE_HOME/conf/core-site.xml** 文件中添加如下配置。
 
-      ```XML
-      <configuration>
-      <property>
-        <name>fs.oss.impl</name>
-        <value>org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem</value>
-      </property>
-      <property>
-        <name>fs.AbstractFileSystem.oss.impl</name>
-        <value>com.aliyun.emr.fs.oss.OSS</value>
-      </property>
-      <property>
-        <name>fs.oss.accessKeyId</name>
-        <value>*****</value>
-      </property>
-      <property>
-        <name>fs.oss.accessKeySecret</name>
-        <value>*****</value>
-      </property>
-      <property>
-        <name>fs.oss.endpoint</name>
-        <value>*****</value>
-      </property>
-      </configuration>
-      ```
+    ```XML
+    <configuration>
+        <property>
+            <name>fs.oss.impl</name>
+            <value>org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem</value>
+        </property>
+        <property>
+            <name>fs.AbstractFileSystem.oss.impl</name>
+            <value>com.aliyun.emr.fs.oss.OSS</value>
+        </property>
+        <property>
+            <name>fs.oss.accessKeyId</name>
+            <value>*****</value>
+        </property>
+        <property>
+            <name>fs.oss.accessKeySecret</name>
+            <value>*****</value>
+        </property>
+        <property>
+            <name>fs.oss.endpoint</name>
+            <value>*****</value>
+        </property>
+    </configuration>
+    ```
 
-     配置项说明：
+    配置项说明：
 
-      | **配置项**             | **说明**                                                     |
-      | ---------------------- | ------------------------------------------------------------ |
-      | fs.oss.accessKeyId     | 阿里云账号或 RAM 用户的 AccessKey ID。获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。 |
-      | fs.oss.accessKeySecret | 阿里云账号或 RAM 用户的 AccessKey Secret。获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。 |
-      | fs.oss.endpoint        | OSS bucket 所在地域对应的外网 endpoint。 您可以通过以下方式查询 endpoint：根据 endpoint 与地域的对应关系进行查找，详情参见[访问域名和数据中心](https://help.aliyun.com/document_detail/31837.htm#concept-zt4-cvy-5db)。登录 [OSS 管理控制台](https://oss.console.aliyun.com/index?spm=a2c4g.11186623.0.0.11d24772leoEEg#/)，并进入 bucket 概览页。一个 bucket 域名的后缀部分即为该 bucket 的外网 endpoint。例如，一个 bucket 域名为 examplebucket.oss-cn-hangzhou.aliyuncs.com，那么 oss-cn-hangzhou.aliyuncs.com 即为该 bucket 的外网 endpoint。 |
+    | **配置项**             | **说明**                                                     |
+    | ---------------------- | ------------------------------------------------------------ |
+    | fs.oss.accessKeyId     | 阿里云账号或 RAM 用户的 AccessKey ID。获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。 |
+    | fs.oss.accessKeySecret | 阿里云账号或 RAM 用户的 AccessKey Secret。获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。 |
+    | fs.oss.endpoint        | OSS bucket 所在地域对应的外网 endpoint。 您可以通过以下方式查询 endpoint：根据 endpoint 与地域的对应关系进行查找，详情参见[访问域名和数据中心](https://help.aliyun.com/document_detail/31837.htm#concept-zt4-cvy-5db)。登录 [OSS 管理控制台](https://oss.console.aliyun.com/index?spm=a2c4g.11186623.0.0.11d24772leoEEg#/)，并进入 bucket 概览页。一个 bucket 域名的后缀部分即为该 bucket 的外网 endpoint。例如，一个 bucket 域名为 examplebucket.oss-cn-hangzhou.aliyuncs.com，那么 oss-cn-hangzhou.aliyuncs.com 即为该 bucket 的外网 endpoint。 |
 
 2. 在每个 BE 的 **$BE_HOME/conf/be.conf** 中添加如下配置。
 
@@ -191,13 +199,6 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
       | object_storage_endpoint          | OSS bucket 所在地域对应的外网 endpoint，取值和 `fs.oss.endpoint` 相同。 |
 
 3. 重启所有 FE 和 BE。
-
-### Kerberos 认证
-
-如 HDFS 或 Hive metastore 开启了 Kerberos 认证，则需要在 StarRocks 中做如下配置。
-
-- 在每个 FE 和 每个 BE 机器上执行 `kinit -kt keytab_path principal` 命令从Key Distribution Center 获取到 Ticket Granting Ticket。注意使用该命令访问 KDC 具有时效性，所以需要使用 `crontab` 定期执行该命令。执行命令的用户需要有访问 Hive metastore 和 HDFS 的权限。
-- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 和每个 BE 的 **$BE_HOME/conf/be.conf** 文件中设置`JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中 `/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可修改。
 
 ## 创建Hive catalog
 
@@ -210,18 +211,18 @@ PROPERTIES ("key"="value", ...);
 
 参数说明：
 
-- `catalog_name`：Hive catalog 的名称，必选参数，命名要求如下：
+- `catalog_name`：Hive catalog 的名称，必选参数。<br>命名要求如下：
   - 必须由字母(a-z或A-Z)、数字(0-9)或下划线(_)组成，且只能以字母开头。
   - 总长度不能超过 64 个字符。
 
-- `PROPERTIES`：Hive catalog 的属性，必选参数，支持配置如下：
+- `PROPERTIES`：Hive catalog 的属性，必选参数。<br>支持配置如下：
 
     | **参数**            | **必选** | **说明**                                                     |
     | ------------------- | -------- | ------------------------------------------------------------ |
     | type                | 是       | 数据源类型，取值为`hive`。                                   |
     | hive.metastore.uris | 是       | Hive metastore 的 URI。格式为 `thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
 
-> 注意：需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
+> 注意：查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
 
 ## 元数据同步
 
@@ -276,32 +277,32 @@ Event listener 可以对 Hive metastore 中的 event（例如增减分区、增�
 
 ```XML
 <property>
-  <name>hive.metastore.event.db.notification.api.auth</name>
-  <value>false</value>
+    <name>hive.metastore.event.db.notification.api.auth</name>
+    <value>false</value>
 </property>
 <property>
-  <name>hive.metastore.notifications.add.thrift.objects</name>
-  <value>true</value>
+    <name>hive.metastore.notifications.add.thrift.objects</name>
+    <value>true</value>
 </property>
 <property>
-  <name>hive.metastore.alter.notifications.basic</name>
-  <value>false</value>
+    <name>hive.metastore.alter.notifications.basic</name>
+    <value>false</value>
 </property>
 <property>
-  <name>hive.metastore.dml.events</name>
-  <value>true</value>
+    <name>hive.metastore.dml.events</name>
+    <value>true</value>
 </property>
 <property>
-  <name>hive.metastore.transactional.event.listeners</name>
-  <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
+    <name>hive.metastore.transactional.event.listeners</name>
+    <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
 </property>
 <property>
-  <name>hive.metastore.event.db.listener.timetolive</name>
-  <value>172800s</value>
+    <name>hive.metastore.event.db.listener.timetolive</name>
+    <value>172800s</value>
 </property>
 <property>
-  <name>hive.metastore.server.max.message.size</name>
-  <value>858993459</value>
+    <name>hive.metastore.server.max.message.size</name>
+    <value>858993459</value>
 </property>
 ```
 
