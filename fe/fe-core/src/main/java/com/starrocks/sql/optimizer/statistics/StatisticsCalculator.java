@@ -1437,10 +1437,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalStreamJoin(PhysicalStreamJoinOperator node, ExpressionContext context) {
-        Statistics.Builder builder = Statistics.builder();
-        Statistics stat = builder.build();
-        context.setStatistics(stat);
-        return visitOperator(node, context);
+        return computeJoinNode(context, node.getJoinType(), node.getOnPredicate());
     }
 
     @Override

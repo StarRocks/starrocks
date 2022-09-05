@@ -4,8 +4,8 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.KeysType;
@@ -1909,6 +1909,20 @@ public class CreateMaterializedViewTest {
         Assert.assertNotNull(slotRef.getSlotDescriptorWithoutCheck());
         SlotDescriptor slotDescriptor = slotRef.getSlotDescriptorWithoutCheck();
         Assert.assertEquals(1, slotDescriptor.getId().asInt());
+    }
+
+    @Test
+    public void createRealtimeMV() throws Exception {
+        String sql = "create materialized view mv_realtime " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh realtime " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from tbl1";
+
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
     }
 }
 
