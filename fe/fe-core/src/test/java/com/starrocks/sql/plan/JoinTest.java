@@ -435,6 +435,90 @@ public class JoinTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testShuffleBucketShuffle() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql =
+                "select a.v1, a.v4 from (select v1, v2, v4 from t0 join[shuffle] t1 on t0.v1 = t1.v4) a join[shuffle] " +
+                        "(select v7,v8, v10 from t2 join[shuffle] t3 on t2.v7 = t3.v10) b on a.v1 = b.v7 and a.v2 = b.v8";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 11:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 7: v7\n" +
+                "  |  equal join conjunct: 2: v2 = 8: v8\n" +
+                "  |  \n" +
+                "  |----10:Project\n" +
+                "  |    |  <slot 7> : 7: v7\n" +
+                "  |    |  <slot 8> : 8: v8\n" +
+                "  |    |  \n" +
+                "  |    9:HASH JOIN\n" +
+                "  |    |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |    |  colocate: false, reason: \n" +
+                "  |    |  equal join conjunct: 7: v7 = 10: v10\n" +
+                "  |    |  \n" +
+                "  |    |----8:EXCHANGE\n" +
+                "  |    |    \n" +
+                "  |    6:EXCHANGE\n" +
+                "  |    \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4");
+
+        sql = "select a.v1, a.v4 from (select v1, v2, v4 from t0 join[shuffle] t1 on t0.v1 = t1.v4) a join[shuffle] " +
+                "(select v7,v8, v10 from t2 join[shuffle] t3 on t2.v8 = t3.v10) b on a.v1 = b.v7 and a.v2 = b.v8";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  12:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 7: v7\n" +
+                "  |  equal join conjunct: 2: v2 = 8: v8\n" +
+                "  |  \n" +
+                "  |----11:EXCHANGE\n" +
+                "  |    \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n");
+        sql = "select a.v1, a.v4 from (select v1, v2, v4 from t0 join[shuffle] t1 on t0.v1 = t1.v4) a join[shuffle] " +
+                "(select v7,v8 from t2) b on a.v1 = b.v7 and a.v2 = b.v8";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 7:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 7: v7\n" +
+                "  |  equal join conjunct: 2: v2 = 8: v8\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4");
+        assertContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    HASH_PARTITIONED: 7: v7");
+
+        sql = "select a.v1, a.v4 from (select v7,v8 from t2) b " +
+                "join[shuffle] (select v1, v2, v4 from t0 join[shuffle] t1 on t0.v2 = t1.v4) a " +
+                "on a.v1 = b.v7 and a.v2 = b.v8";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 8:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v7 = 4: v1\n" +
+                "  |  equal join conjunct: 2: v8 = 5: v2\n" +
+                "  |  \n" +
+                "  |----7:EXCHANGE\n" +
+                "  |    \n" +
+                "  1:EXCHANGE");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+>>>>>>> f0c05a6ec ([BugFix] Fix semi join with limit reorder error (#10837))
     public void testSemiReorder() throws Exception {
         String sql = "select 0 from t0,t1 left semi join t2 on v4 = v7";
         String plan = getFragmentPlan(sql);
@@ -856,10 +940,17 @@ public class JoinTest extends PlanTestBase {
                 "    EXCHANGE ID: 05\n" +
                 "    HASH_PARTITIONED: 9: v9, 7: v7, 8: v8");
 
+<<<<<<< HEAD
         sql =
                 "select a.v1, a.v4, b.v7, b.v10 from (select v1, v2, v4 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
                         "(select v7, v8, v10 from t2 join[shuffle] t3 on t2.v7 = t3.v10 and t2.v8 = t3.v11) b " +
                         "on a.v2 = b.v8 and a.v1 = b.v7";
+=======
+        sql = "select a.v1, a.v4, b.v7, b.v10 " +
+                "from (select v1, v2, v4 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
+                "(select v7, v8, v10 from t2 join[shuffle] t3 on t2.v7 = t3.v10 and t2.v8 = t3.v11) b " +
+                "on a.v2 = b.v8 and a.v1 = b.v7";
+>>>>>>> f0c05a6ec ([BugFix] Fix semi join with limit reorder error (#10837))
         plan = getFragmentPlan(sql);
         assertContains(plan, "12:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
@@ -881,10 +972,17 @@ public class JoinTest extends PlanTestBase {
                 "    HASH_PARTITIONED: 2: v2, 1: v1");
 
         // check can not adjust column orders
+<<<<<<< HEAD
         sql =
                 "select a.v1, a.v4, b.v7, b.v10 from (select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
                         "(select v7, v8, v10, v11 from t2 join[shuffle] t3 on t2.v7 = t3.v10 and t2.v8 = t3.v11) b " +
                         "on a.v2 = b.v8 and a.v4 = b.v8";
+=======
+        sql = "select a.v1, a.v4, b.v7, b.v10 from " +
+                "(select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
+                "(select v7, v8, v10, v11 from t2 join[shuffle] t3 on t2.v7 = t3.v10 and t2.v8 = t3.v11) b " +
+                "on a.v2 = b.v8 and a.v4 = b.v8";
+>>>>>>> f0c05a6ec ([BugFix] Fix semi join with limit reorder error (#10837))
         plan = getFragmentPlan(sql);
         assertContains(plan, "14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
@@ -906,10 +1004,17 @@ public class JoinTest extends PlanTestBase {
                 "    HASH_PARTITIONED: 10: v10, 11: v11");
 
         // check can not adjust column orders
+<<<<<<< HEAD
         sql =
                 "select a.v1, a.v4, b.v7, b.v10 from (select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
                         "(select v7, v8, v10, v11 from t2 join[shuffle] t3 on t2.v7 = t3.v10 and t2.v8 = t3.v11) b " +
                         "on a.v2 = b.v8 and a.v4 = b.v10";
+=======
+        sql = "select a.v1, a.v4, b.v7, b.v10 " +
+                "from (select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
+                "(select v7, v8, v10, v11 from t2 join[shuffle] t3 on t2.v7 = t3.v10 and t2.v8 = t3.v11) b " +
+                "on a.v2 = b.v8 and a.v4 = b.v10";
+>>>>>>> f0c05a6ec ([BugFix] Fix semi join with limit reorder error (#10837))
         plan = getFragmentPlan(sql);
         assertContains(plan, "14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
@@ -1674,9 +1779,15 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testJoinConst() throws Exception {
+<<<<<<< HEAD
         String sql =
                 "with user_info as (select 2 as user_id, 'mike' as user_name), address as (select 1 as user_id, 'newzland' as address_name) \n" +
                         "select * from address a right join user_info b on b.user_id=a.user_id;";
+=======
+        String sql = "with user_info as (select 2 as user_id, 'mike' as user_name), " +
+                "address as (select 1 as user_id, 'newzland' as address_name) \n" +
+                "select * from address a right join user_info b on b.user_id=a.user_id;";
+>>>>>>> f0c05a6ec ([BugFix] Fix semi join with limit reorder error (#10837))
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  6:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
@@ -2451,9 +2562,15 @@ public class JoinTest extends PlanTestBase {
     public void testColocateSingleJoinEqEquivalentPropertyInfo() throws Exception {
         FeConstants.runningUnitTest = true;
         {
+<<<<<<< HEAD
             String sql =
                     "select * from ( select * from colocate_t0 join[colocate] colocate_t1 on colocate_t0.v1 = colocate_t1.v4 ) s1 " +
                             "join[bucket] colocate_t2 on s1.v4 = colocate_t2.v7";
+=======
+            String sql = "select * from ( select * from colocate_t0 " +
+                    "join[colocate] colocate_t1 on colocate_t0.v1 = colocate_t1.v4 ) s1 " +
+                    "join[bucket] colocate_t2 on s1.v4 = colocate_t2.v7";
+>>>>>>> f0c05a6ec ([BugFix] Fix semi join with limit reorder error (#10837))
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                     "  |  hash predicates:\n" +
@@ -2461,10 +2578,18 @@ public class JoinTest extends PlanTestBase {
                     "  |  equal join conjunct: 4: v4 = 7: v7");
         }
         {
+<<<<<<< HEAD
             String sql =
                     "select * from ( select * from colocate_t0 join[colocate] colocate_t1 on colocate_t0.v1 = colocate_t1.v4 ) s1, " +
                             "( select * from colocate_t2 join[colocate] colocate_t3 on colocate_t2.v7 = colocate_t3.v10 ) s2 " +
                             "where s1.v4 = s2.v10";
+=======
+            String sql = "select * from ( select * from colocate_t0 " +
+                    "join[colocate] colocate_t1 on colocate_t0.v1 = colocate_t1.v4 ) s1, " +
+                    "( select * from colocate_t2 join[colocate] colocate_t3 " +
+                    "on colocate_t2.v7 = colocate_t3.v10 ) s2 " +
+                    "where s1.v4 = s2.v10";
+>>>>>>> f0c05a6ec ([BugFix] Fix semi join with limit reorder error (#10837))
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  7:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
