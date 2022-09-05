@@ -127,6 +127,11 @@ public:
     MemTracker* load_mem_tracker() { return _load_mem_tracker; }
     MemTracker* metadata_mem_tracker() { return _metadata_mem_tracker; }
     MemTracker* tablet_schema_mem_tacker() { return _tablet_schema_mem_tracker; }
+    MemTracker* rowset_meta_mem_tracker() { return _rowset_meta_mem_tracker; }
+    MemTracker* segment_meta_mem_tracker() { return _segment_meta_mem_tracker; }
+    MemTracker* segment_index_mem_tracker() { return _segment_index_mem_tracker; }
+    MemTracker* column_reader_meta_mem_tracker() { return _column_reader_meta_mem_tracker; }
+    MemTracker* column_reader_index_mem_tracker() { return _column_reader_index_mem_tracker; }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker; }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker; }
     MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker; }
@@ -217,6 +222,21 @@ private:
     // The memory for tablet meta
     MemTracker* _metadata_mem_tracker = nullptr;
     MemTracker* _tablet_schema_mem_tracker = nullptr;
+
+    // The memory for rowset meta
+    MemTracker* _rowset_meta_mem_tracker = nullptr;
+
+    // The memory for segment meta
+    MemTracker* _segment_meta_mem_tracker = nullptr;
+
+    // The memory for segment index meta
+    MemTracker* _segment_index_mem_tracker = nullptr;
+
+    // The memory for column reader meta
+    MemTracker* _column_reader_meta_mem_tracker = nullptr;
+
+    // The memory for column reader index meta
+    MemTracker* _column_reader_index_mem_tracker = nullptr;
 
     // The memory used for compaction
     MemTracker* _compaction_mem_tracker = nullptr;

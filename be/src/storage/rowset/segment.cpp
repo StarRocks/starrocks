@@ -70,6 +70,7 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, std::s
             new Segment(private_type(0), std::move(fs), path, segment_id, tablet_schema, mem_tracker),
             DeleterWithMemTracker<Segment>(mem_tracker));
     mem_tracker->consume(segment->mem_usage());
+    ExecEnv::GetInstance()->segment_meta_mem_tracker()->consume(segment->meta_mem_usage());
 
     RETURN_IF_ERROR(segment->_open(mem_tracker, footer_length_hint, partial_rowset_footer));
     return std::move(segment);
@@ -195,6 +196,11 @@ Segment::Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::strin
           _segment_id(segment_id),
           _mem_tracker(mem_tracker) {}
 
+Segment::~Segment() {
+    ExecEnv::GetInstance()->segment_meta_mem_tracker()->release(meta_mem_usage());
+    ExecEnv::GetInstance()->segment_index_mem_tracker()->release(index_mem_usage());
+}
+
 Status Segment::_open(MemTracker* mem_tracker, size_t* footer_length_hint,
                       const FooterPointerPB* partial_rowset_footer) {
     SegmentFooterPB footer;
@@ -267,6 +273,7 @@ Status Segment::load_index(MemTracker* mem_tracker) {
         RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &_sk_index_handle, &body, &footer));
 
         mem_tracker->consume(_sk_index_handle.mem_usage());
+        ExecEnv::GetInstance()->segment_index_mem_tracker()->consume(_sk_index_handle.mem_usage());
 
         DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);
         DCHECK(footer.has_short_key_page_footer());
@@ -274,6 +281,7 @@ Status Segment::load_index(MemTracker* mem_tracker) {
         _sk_index_decoder = std::make_unique<ShortKeyIndexDecoder>();
         Status st = _sk_index_decoder->parse(body, footer.short_key_page_footer());
         mem_tracker->consume(_sk_index_decoder->mem_usage());
+        ExecEnv::GetInstance()->segment_index_mem_tracker()->consume(_sk_index_decoder->mem_usage());
 
         return st;
     });

@@ -217,6 +217,11 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("load_mem_bytes", &_memory_metrics->load_mem_bytes);
     registry->register_metric("metadata_mem_bytes", &_memory_metrics->metadata_mem_bytes);
     registry->register_metric("tablet_schema_mem_bytes", &_memory_metrics->tablet_schema_mem_bytes);
+    registry->register_metric("rowset_meta_mem_tracker", &_memory_metrics->rowset_meta_mem_tracker);
+    registry->register_metric("segment_meta_mem_tracker", &_memory_metrics->segment_meta_mem_tracker);
+    registry->register_metric("segment_index_mem_tracker", &_memory_metrics->segment_index_mem_tracker);
+    registry->register_metric("column_reader_meta_mem_tracker", &_memory_metrics->column_reader_meta_mem_tracker);
+    registry->register_metric("column_reader_index_mem_tracker", &_memory_metrics->column_reader_index_mem_tracker);
     registry->register_metric("compaction_mem_bytes", &_memory_metrics->compaction_mem_bytes);
     registry->register_metric("schema_change_mem_bytes", &_memory_metrics->schema_change_mem_bytes);
     registry->register_metric("column_pool_mem_bytes", &_memory_metrics->column_pool_mem_bytes);
@@ -309,6 +314,26 @@ void SystemMetrics::_update_memory_metrics() {
     if (ExecEnv::GetInstance()->tablet_schema_mem_tacker() != nullptr) {
         _memory_metrics->tablet_schema_mem_bytes.set_value(
                 ExecEnv::GetInstance()->tablet_schema_mem_tacker()->consumption());
+    }
+    if (ExecEnv::GetInstance()->rowset_meta_mem_tracker() != nullptr) {
+        _memory_metrics->rowset_meta_mem_tracker.set_value(
+                ExecEnv::GetInstance()->rowset_meta_mem_tracker()->consumption());
+    }
+    if (ExecEnv::GetInstance()->segment_meta_mem_tracker() != nullptr) {
+        _memory_metrics->segment_meta_mem_tracker.set_value(
+                ExecEnv::GetInstance()->segment_meta_mem_tracker()->consumption());
+    }
+    if (ExecEnv::GetInstance()->segment_index_mem_tracker() != nullptr) {
+        _memory_metrics->segment_index_mem_tracker.set_value(
+                ExecEnv::GetInstance()->segment_index_mem_tracker()->consumption());
+    }
+    if (ExecEnv::GetInstance()->column_reader_meta_mem_tracker() != nullptr) {
+        _memory_metrics->column_reader_meta_mem_tracker.set_value(
+                ExecEnv::GetInstance()->column_reader_meta_mem_tracker()->consumption());
+    }
+    if (ExecEnv::GetInstance()->column_reader_index_mem_tracker() != nullptr) {
+        _memory_metrics->column_reader_index_mem_tracker.set_value(
+                ExecEnv::GetInstance()->column_reader_index_mem_tracker()->consumption());
     }
     if (ExecEnv::GetInstance()->compaction_mem_tracker() != nullptr) {
         _memory_metrics->compaction_mem_bytes.set_value(

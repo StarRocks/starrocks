@@ -94,7 +94,7 @@ public:
     Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
             std::shared_ptr<const TabletSchema> tablet_schema, MemTracker* mem_tracker);
 
-    ~Segment() = default;
+    ~Segment();
 
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
@@ -144,6 +144,18 @@ public:
         }
         return size;
     }
+
+    int64_t meta_mem_usage() { return sizeof(Segment); }
+
+    int64_t index_mem_usage() {
+        int64_t size = _sk_index_handle.mem_usage();
+        if (_sk_index_decoder != nullptr) {
+            size += _sk_index_decoder->mem_usage();
+        }
+        return size;
+    }
+
+    inline MemTracker* mem_tracker() { return _mem_tracker; }
 
     MemTracker* mem_tracker() const { return _mem_tracker; }
 

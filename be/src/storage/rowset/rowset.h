@@ -122,7 +122,7 @@ private:
 
 class Rowset : public std::enable_shared_from_this<Rowset> {
 public:
-    virtual ~Rowset() = default;
+    ~Rowset() { ExecEnv::GetInstance()->rowset_meta_mem_tracker()->release(mem_usage()); }
 
     Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
 
@@ -131,6 +131,7 @@ public:
         auto rowset = std::shared_ptr<Rowset>(new Rowset(schema, std::move(rowset_path), std::move(rowset_meta)),
                                               DeleterWithMemTracker<Rowset>(mem_tracker));
         mem_tracker->consume(rowset->mem_usage());
+        ExecEnv::GetInstance()->rowset_meta_mem_tracker()->consume(rowset->mem_usage());
         return rowset;
     }
 

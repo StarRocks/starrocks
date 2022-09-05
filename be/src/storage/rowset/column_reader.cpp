@@ -59,10 +59,12 @@ StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta,
 ColumnReader::ColumnReader(const private_type&, const Segment* segment)
         : _zonemap_index(), _ordinal_index(), _bitmap_index(), _bloom_filter_index(), _segment(segment), _flags(0) {
     mem_tracker()->consume(sizeof(ColumnReader));
+    ExecEnv::GetInstance()->column_reader_meta_mem_tracker()->consume(sizeof(ColumnReader));
 }
 
 ColumnReader::~ColumnReader() {
     int64_t size = sizeof(ColumnReader);
+    ExecEnv::GetInstance()->column_reader_meta_mem_tracker()->release(size);
     if (_segment_zone_map != nullptr) {
         size += _segment_zone_map->SpaceUsedLong();
         _segment_zone_map.reset(nullptr);
@@ -99,6 +101,7 @@ ColumnReader::~ColumnReader() {
         size += _bloom_filter_index->mem_usage();
         _bloom_filter_index.reset(nullptr);
     }
+    ExecEnv::GetInstance()->column_reader_index_mem_tracker()->release(size - sizeof(ColumnReader));
     mem_tracker()->release(size);
 }
 
@@ -116,6 +119,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
         const JsonMetaPB& json_meta = meta->json_meta();
         CHECK_EQ(kJsonMetaDefaultFormatVersion, json_meta.format_version()) << "Only format_version=1 is supported";
     }
+    MemTracker* indexTracker = ExecEnv::GetInstance()->column_reader_index_mem_tracker();
     if (is_scalar_field_type(delegate_type(_column_type))) {
         RETURN_IF_ERROR(EncodingInfo::get(delegate_type(_column_type), meta->encoding(), &_encoding_info));
         RETURN_IF_ERROR(get_block_compression_codec(meta->compression(), &_compress_codec));
@@ -128,6 +132,8 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
                 _ordinal_index = std::make_unique<OrdinalIndexReader>();
                 mem_tracker()->consume(_ordinal_index_meta->SpaceUsedLong());
                 mem_tracker()->consume(_ordinal_index->mem_usage());
+                indexTracker->consume(_ordinal_index.meta->SpaceUsedLong());
+                indexTracker->consume(_ordinal_index->mem_usage());
                 break;
             case ZONE_MAP_INDEX:
                 _zonemap_index_meta.reset(index_meta->release_zone_map_index());
@@ -136,18 +142,25 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
                 mem_tracker()->consume(_zonemap_index_meta->SpaceUsedLong());
                 mem_tracker()->consume(_zonemap_index->mem_usage());
                 mem_tracker()->consume(_segment_zone_map->SpaceUsedLong());
+                indexTracker->consume(_zonemap_index_meta->SpaceUsedLong());
+                indexTracker->consume(_zonemap_index->mem_usage());
+                indexTracker->consume(_segment_zone_map->SpaceUsedLong());
                 break;
             case BITMAP_INDEX:
                 _bitmap_index_meta.reset(index_meta->release_bitmap_index());
                 _bitmap_index = std::make_unique<BitmapIndexReader>();
                 mem_tracker()->consume(_bitmap_index_meta->SpaceUsedLong());
                 mem_tracker()->consume(_bitmap_index->mem_usage());
+                indexTracker->consume(_bitmap_index_meta->SpaceUsedLong());
+                indexTracker->consume(_bitmap_index->mem_usage());
                 break;
             case BLOOM_FILTER_INDEX:
                 _bloom_filter_index_meta.reset(index_meta->release_bloom_filter_index());
                 _bloom_filter_index = std::make_unique<BloomFilterIndexReader>();
                 mem_tracker()->consume(_bloom_filter_index_meta->SpaceUsedLong());
                 mem_tracker()->consume(_bloom_filter_index->mem_usage());
+                indexTracker->consume(_bloom_filter_index_meta->SpaceUsedLong());
+                indexTracker->consume(_bloom_filter_index->mem_usage());
                 break;
             case UNKNOWN_INDEX_TYPE:
                 return Status::Corruption(fmt::format("Bad file {}: unknown index type", file_name()));
@@ -297,6 +310,9 @@ Status ColumnReader::_load_ordinal_index() {
                                                            kept_in_memory, mem_tracker()));
     if (UNLIKELY(first_load)) {
         mem_tracker()->release(_ordinal_index_meta->SpaceUsedLong());
+        ExecEnv::GetInstance()->column_reader_index_mem_tracker()->consume(_ordinal_index->mem_usage() -
+                                                                           unloaded_mem_usage);
+        ExecEnv::GetInstance()->column_reader_index_mem_tracker()->release(_ordinal_index_meta->SpaceUsedLong());
         _ordinal_index_meta.reset();
     }
     return Status::OK();
@@ -313,6 +329,9 @@ Status ColumnReader::_load_zonemap_index() {
                      _zonemap_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory, mem_tracker()));
     if (UNLIKELY(first_load)) {
         mem_tracker()->release(_zonemap_index_meta->SpaceUsedLong());
+        ExecEnv::GetInstance()->column_reader_index_mem_tracker()->consume(_zonemap_index->mem_usage() -
+                                                                           unloaded_mem_usage);
+        ExecEnv::GetInstance()->column_reader_index_mem_tracker()->release(_zonemap_index_meta->SpaceUsedLong());
         _zonemap_index_meta.reset();
     }
     return Status::OK();
@@ -329,6 +348,9 @@ Status ColumnReader::_load_bitmap_index() {
                      _bitmap_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory, mem_tracker()));
     if (UNLIKELY(first_load)) {
         mem_tracker()->release(_bitmap_index_meta->SpaceUsedLong());
+        ExecEnv::GetInstance()->column_reader_index_mem_tracker()->consume(_bitmap_index->mem_usage() -
+                                                                           unloaded_mem_usage);
+        ExecEnv::GetInstance()->column_reader_index_mem_tracker()->release(_bitmap_index_meta->SpaceUsedLong());
         _bitmap_index_meta.reset();
     }
     return Status::OK();
@@ -345,6 +367,9 @@ Status ColumnReader::_load_bloom_filter_index() {
                      _bloom_filter_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory, mem_tracker()));
     if (UNLIKELY(first_load)) {
         mem_tracker()->release(_bloom_filter_index_meta->SpaceUsedLong());
+        ExecEnv::GetInstance()->column_reader_index_mem_tracker()->consume(_bloom_filter_index->mem_usage() -
+                                                                           unloaded_mem_usage);
+        ExecEnv::GetInstance()->column_reader_index_mem_tracker()->release(_bloom_filter_index_meta->SpaceUsedLong());
         _bloom_filter_index_meta.reset();
     }
     return Status::OK();
