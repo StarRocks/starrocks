@@ -55,8 +55,8 @@ public class ExportCheckerTest {
 
         ExportJob job = new ExportJob();
         job.setBeStartTime(1, 1000L);
-        boolean cancalled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(cancalled);
+        boolean cancelled = (boolean) method.invoke(checker, job);
+        Assert.assertTrue(cancelled);
 
         new MockUp<Backend>() {
             @Mock
@@ -67,12 +67,12 @@ public class ExportCheckerTest {
 
         be.setLastStartTime(1001L);
 
-        cancalled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(cancalled);
+        cancelled = (boolean) method.invoke(checker, job);
+        Assert.assertTrue(cancelled);
 
         be.setLastStartTime(999L);
 
-        cancalled = (boolean) method.invoke(checker, job);
-        Assert.assertTrue(!cancalled);
+        cancelled = (boolean) method.invoke(checker, job);
+        Assert.assertTrue(!cancelled);
     }
 }
