@@ -346,7 +346,8 @@ void OlapScanNode::enable_shared_scan(bool enable) {
 
 StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
-        bool enable_tablet_internal_parallel, size_t num_total_scan_ranges) {
+        bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+        size_t num_total_scan_ranges) {
     pipeline::Morsels morsels;
     for (const auto& scan_range : scan_ranges) {
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
@@ -364,8 +365,9 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
 
     int64_t scan_dop;
     int64_t splitted_scan_rows;
-    ASSIGN_OR_RETURN(auto could, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
-                                                                 &scan_dop, &splitted_scan_rows));
+    ASSIGN_OR_RETURN(auto could,
+                     _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
+                                                     tablet_internal_parallel_mode, &scan_dop, &splitted_scan_rows));
     if (!could) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
@@ -379,11 +381,13 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     return std::make_unique<pipeline::LogicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
 }
 
-StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
-                                                             int32_t pipeline_dop, size_t num_total_scan_ranges,
-                                                             int64_t* scan_dop, int64_t* splitted_scan_rows) const {
+StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(
+        const std::vector<TScanRangeParams>& scan_ranges, int32_t pipeline_dop, size_t num_total_scan_ranges,
+        TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_dop,
+        int64_t* splitted_scan_rows) const {
+    bool force_split = tablet_internal_parallel_mode == TTabletInternalParallelMode::type::FORCE_SPLIT;
     // The enough number of tablets shouldn't use tablet internal parallel.
-    if (num_total_scan_ranges >= pipeline_dop) {
+    if (!force_split && num_total_scan_ranges >= pipeline_dop) {
         return false;
     }
 
@@ -401,6 +405,10 @@ StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<T
     // scan_dop is restricted in the range [1, dop].
     *scan_dop = num_table_rows / *splitted_scan_rows;
     *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, pipeline_dop));
+
+    if (force_split) {
+        return true;
+    }
 
     bool could = *scan_dop >= pipeline_dop || *scan_dop >= config::tablet_internal_parallel_min_scan_dop;
     return could;
