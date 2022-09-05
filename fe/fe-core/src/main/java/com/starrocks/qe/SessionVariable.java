@@ -33,6 +33,7 @@ import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
+import com.starrocks.thrift.TTabletInternalParallelMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
@@ -157,6 +158,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
+
+    public static final String TABLET_INTERNAL_PARALLEL_MODE = "tablet_internal_parallel_mode";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
 
@@ -303,6 +306,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_TABLET_INTERNAL_PARALLEL_V2,
             alias = ENABLE_TABLET_INTERNAL_PARALLEL, show = ENABLE_TABLET_INTERNAL_PARALLEL)
     private boolean enableTabletInternalParallel = true;
+
+    // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
+    // The optional values are "auto" and "force_split".
+    @VariableMgr.VarAttr(name = TABLET_INTERNAL_PARALLEL_MODE, flag = VariableMgr.INVISIBLE)
+    private String tabletInternalParallelMode = "auto";
 
     @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN)
     private boolean enableSharedScan = false;
@@ -1169,6 +1177,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
 
         tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
+        tResult.setTablet_internal_parallel_mode(
+                TTabletInternalParallelMode.valueOf(tabletInternalParallelMode.toUpperCase()));
+
         tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
 
         return tResult;
