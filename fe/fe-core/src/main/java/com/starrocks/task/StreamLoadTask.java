@@ -77,7 +77,7 @@ public class StreamLoadTask {
     private boolean partialUpdate = false;
     private TCompressionType compressionType = TCompressionType.NO_COMPRESSION;
     private int loadParallelRequestNum = 0;
-    private boolean enableReplicatedStorage = false;
+    private boolean enableReplicatedStorage = true;
 
     public StreamLoadTask(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;

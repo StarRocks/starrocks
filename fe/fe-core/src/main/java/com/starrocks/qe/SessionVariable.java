@@ -589,7 +589,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String loadTransmissionCompressionType = "NO_COMPRESSION";
 
     @VariableMgr.VarAttr(name = ENABLE_REPLICATED_STORAGE)
-    private boolean enableReplicatedStorage = false;
+    private boolean enableReplicatedStorage = true;
 
     @VariableMgr.VarAttr(name = RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT)
     private long runtimeJoinFilterPushDownLimit = 1024000;
