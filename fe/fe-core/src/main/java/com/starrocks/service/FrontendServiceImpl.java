@@ -114,6 +114,8 @@ import com.starrocks.thrift.TGetTablePrivsParams;
 import com.starrocks.thrift.TGetTablePrivsResult;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
+import com.starrocks.thrift.TGetTablesInfoRequest;
+import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TGetTaskInfoResult;
@@ -1452,5 +1454,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         tableConfigInfo.setSort_key("def");
         tableConfigInfo.setProperties("def");
         return tableConfigInfo;
+    }
+
+    @Override
+    public TGetTablesInfoResponse getTablesInfo(TGetTablesInfoRequest request) throws TException {
+
+        return InformationSchemaDataSource.generateTablesInfoResponse(request);
     }
 }
