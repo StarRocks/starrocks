@@ -22,7 +22,6 @@
 #include "exprs/expr_context.h"
 
 #include <fmt/format.h>
-#include <gperftools/profiler.h>
 
 #include <memory>
 #include <sstream>
@@ -35,8 +34,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf_internal.h"
-#include "util/debug_util.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 

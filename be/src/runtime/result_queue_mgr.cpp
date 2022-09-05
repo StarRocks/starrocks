@@ -24,7 +24,6 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
-#include "gen_cpp/Types_types.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {

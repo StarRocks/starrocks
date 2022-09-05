@@ -31,8 +31,6 @@
 #include "agent/task_worker_pool.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "gen_cpp/AgentService_types.h"
-#include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"

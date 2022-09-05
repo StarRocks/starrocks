@@ -23,10 +23,8 @@
 #include <sstream>
 #include <string>
 
-#include "common/logging.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-#include "http/http_response.h"
 #include "http/http_status.h"
 
 namespace starrocks {

@@ -10,11 +10,8 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/anyval_util.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/lambda_function.h"
-#include "gutil/strings/substitute.h"
-#include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
 
 namespace starrocks::vectorized {

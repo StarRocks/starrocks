@@ -22,10 +22,8 @@
 #include "runtime/user_function_cache.h"
 
 #include <atomic>
-#include <boost/algorithm/string/classification.hpp> // boost::is_any_of
-#include <boost/algorithm/string/predicate.hpp>      // boost::algorithm::ends_with
+#include <boost/algorithm/string/predicate.hpp> // boost::algorithm::ends_with
 #include <memory>
-#include <regex>
 #include <utility>
 #include <vector>
 

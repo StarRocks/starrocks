@@ -26,7 +26,6 @@
 
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
-#include "util/debug_util.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

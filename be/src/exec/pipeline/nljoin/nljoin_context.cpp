@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <numeric>
 
-#include "common/global_types.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/vectorized/cross_join_node.h"
 #include "exprs/expr.h"

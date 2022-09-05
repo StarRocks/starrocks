@@ -21,16 +21,10 @@
 
 #include "aes_util.h"
 
-#include <openssl/aes.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 
 #include <cstring>
-#include <iostream>
-#include <memory>
-#include <string>
-
-#include "exprs/base64.h"
 
 namespace starrocks {
 
