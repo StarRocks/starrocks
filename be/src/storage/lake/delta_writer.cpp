@@ -37,7 +37,8 @@ public:
         return _writer->flush();
     }
 
-    Status flush_chunk_with_deletes(const Chunk& /*upserts*/, const Column& /*deletes*/) override {
+    Status flush_chunk_with_deletes(const Chunk& /*upserts*/, const Column& /*deletes*/,
+                                    starrocks::SegmentPB*) override {
         return Status::NotSupported("TabletWriterSink::flush_chunk_with_deletes");
     }
 

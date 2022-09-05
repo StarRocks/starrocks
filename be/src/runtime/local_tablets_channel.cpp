@@ -404,7 +404,8 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
     }
     std::stringstream ss;
-    ss << "open delta writer ";
+    ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id()) << " open delta writer: ";
+
     for (auto& [tablet_id, delta_writer] : _delta_writers) {
         ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
     }

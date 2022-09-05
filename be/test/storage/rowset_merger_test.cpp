@@ -38,7 +38,8 @@ public:
         return Status::NotSupported("");
     }
 
-    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override {
+    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes,
+                                    SegmentPB*) override {
         return Status::NotSupported("");
     }
 

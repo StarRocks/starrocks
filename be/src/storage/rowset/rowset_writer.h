@@ -96,7 +96,8 @@ public:
         return Status::NotSupported("RowsetWriter::flush_chunk");
     }
 
-    virtual Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) {
+    virtual Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes,
+                                            SegmentPB* seg_info = nullptr) {
         return Status::NotSupported("RowsetWriter::flush_chunk_with_deletes");
     }
 

@@ -100,8 +100,8 @@ public:
     Status add_chunk(const vectorized::Chunk& chunk) override;
 
     Status flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info = nullptr) override;
-    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
-
+    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes,
+                                    SegmentPB* seg_info = nullptr) override;
     // add rowset by create hard link
     Status add_rowset(RowsetSharedPtr rowset) override;
     Status add_rowset_for_linked_schema_change(RowsetSharedPtr rowset, const SchemaMapping& schema_mapping) override;

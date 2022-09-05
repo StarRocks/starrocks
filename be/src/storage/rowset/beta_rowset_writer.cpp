@@ -174,46 +174,81 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
 }
 
 Status BetaRowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
-    // 1. create segment file
-    if (data.size() != segment_pb.data_size()) {
-        return Status::InternalError(
-                fmt::format("segment size {} not equal attachment size {}", segment_pb.data_size(), data.size()));
+    if (data.size() != segment_pb.data_size() + segment_pb.delete_data_size()) {
+        return Status::InternalError(fmt::format("segment size {} + delete file size {} not equal attachment size {}",
+                                                 segment_pb.data_size(), segment_pb.delete_data_size(), data.size()));
     }
 
-    auto path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_pb.segment_id());
-    // use MUST_CREATE make sure atomic
-    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
+    if (segment_pb.has_path()) {
+        // 1. create segment file
+        auto path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_pb.segment_id());
+        // use MUST_CREATE make sure atomic
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
 
-    // 2. flush segment file
-    auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
+        // 2. flush segment file
+        auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
 
-    size_t remaining_bytes = segment_pb.data_size();
-    while (remaining_bytes > 0) {
-        auto written_bytes = data.cut_into_writer(writer.get(), remaining_bytes);
-        if (written_bytes < 0) {
-            return io::io_error(wfile->filename(), errno);
+        size_t remaining_bytes = segment_pb.data_size();
+        while (remaining_bytes > 0) {
+            auto written_bytes = data.cut_into_writer(writer.get(), remaining_bytes);
+            if (written_bytes < 0) {
+                return io::io_error(wfile->filename(), errno);
+            }
+            remaining_bytes -= written_bytes;
         }
-        remaining_bytes -= written_bytes;
-    }
-    if (remaining_bytes != 0) {
-        return Status::InternalError(fmt::format("segment {} write size {} not equal expected size {}",
-                                                 wfile->filename(), segment_pb.data_size() - remaining_bytes,
-                                                 segment_pb.data_size()));
+        if (remaining_bytes != 0) {
+            return Status::InternalError(fmt::format("segment {} write size {} not equal expected size {}",
+                                                     wfile->filename(), segment_pb.data_size() - remaining_bytes,
+                                                     segment_pb.data_size()));
+        }
+
+        RETURN_IF_ERROR(wfile->close());
+
+        // 3. update statistic
+        {
+            std::lock_guard<std::mutex> l(_lock);
+            _total_data_size += segment_pb.data_size();
+            _total_index_size += segment_pb.index_size();
+            _num_rows_written += segment_pb.num_rows();
+            _total_row_size += segment_pb.row_size();
+            _num_segment++;
+        }
+
+        VLOG(2) << "Flush segment to " << path << " size " << segment_pb.data_size();
     }
 
-    RETURN_IF_ERROR(wfile->close());
+    if (segment_pb.has_delete_path()) {
+        // 1. create delete file
+        auto path =
+                Rowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_pb.delete_id());
+        // use MUST_CREATE make sure atomic
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
 
-    // 3. update statistic
-    {
-        std::lock_guard<std::mutex> l(_lock);
-        _total_data_size += segment_pb.data_size();
-        _total_index_size += segment_pb.index_size();
-        _num_rows_written += segment_pb.num_rows();
-        _total_row_size += segment_pb.row_size();
-        _num_segment++;
+        // 2. flush delete file
+        auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
+
+        size_t remaining_bytes = segment_pb.delete_data_size();
+        while (remaining_bytes > 0) {
+            auto written_bytes = data.cut_into_writer(writer.get(), remaining_bytes);
+            if (written_bytes < 0) {
+                return io::io_error(wfile->filename(), errno);
+            }
+            remaining_bytes -= written_bytes;
+        }
+        if (remaining_bytes != 0) {
+            return Status::InternalError(fmt::format("segment delete file {} write size {} not equal expected size {}",
+                                                     wfile->filename(), segment_pb.delete_data_size() - remaining_bytes,
+                                                     segment_pb.delete_data_size()));
+        }
+
+        RETURN_IF_ERROR(wfile->close());
+
+        _num_delfile++;
+        _num_rows_del += segment_pb.delete_num_rows();
+
+        VLOG(2) << "Flush delete file to " << path << " size " << segment_pb.delete_data_size();
     }
 
-    VLOG(2) << "Flush segment to " << path << " size " << segment_pb.data_size();
     return Status::OK();
 }
 
@@ -358,8 +393,8 @@ Status HorizontalBetaRowsetWriter::_flush_chunk(const vectorized::Chunk& chunk, 
 }
 
 Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
-                                                            const vectorized::Column& deletes) {
-    auto flush_del_file = [&](const vectorized::Column& deletes) {
+                                                            const vectorized::Column& deletes, SegmentPB* seg_info) {
+    auto flush_del_file = [&](const vectorized::Column& deletes, SegmentPB* seg_info) {
         ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(Rowset::segment_del_file_path(
                                              _context.rowset_path_prefix, _context.rowset_id, _num_delfile)));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
@@ -369,6 +404,12 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         }
         RETURN_IF_ERROR(wfile->append(Slice(content.data(), content.size())));
         RETURN_IF_ERROR(wfile->close());
+        if (seg_info) {
+            seg_info->set_delete_num_rows(deletes.size());
+            seg_info->set_delete_id(_num_delfile);
+            seg_info->set_delete_data_size(content.size());
+            seg_info->set_delete_path(wfile->filename());
+        }
         _num_delfile++;
         _num_rows_del += deletes.size();
         return Status::OK();
@@ -378,7 +419,7 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
     // 2. pure delete, support multi-segment
     // 3. mixed upsert/delete, do not support multi-segment
     if (!upserts.is_empty() && deletes.empty()) {
-        return flush_chunk(upserts);
+        return flush_chunk(upserts, seg_info);
     } else if (upserts.is_empty() && !deletes.empty()) {
         // 2. pure delete
         // once delete, subsequent flush can only do delete
@@ -391,7 +432,7 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         default:
             return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
         }
-        RETURN_IF_ERROR(flush_del_file(deletes));
+        RETURN_IF_ERROR(flush_del_file(deletes, seg_info));
         return Status::OK();
     } else if (!upserts.is_empty() && !deletes.empty()) {
         // 3. mixed upsert/delete, do not support multi-segment, check will there be multi-segment in the following _final_merge
@@ -402,8 +443,8 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         default:
             return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
         }
-        RETURN_IF_ERROR(flush_del_file(deletes));
-        return _flush_chunk(upserts);
+        RETURN_IF_ERROR(flush_del_file(deletes, seg_info));
+        return _flush_chunk(upserts, seg_info);
     } else {
         return Status::OK();
     }
