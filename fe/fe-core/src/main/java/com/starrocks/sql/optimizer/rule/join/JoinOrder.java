@@ -324,7 +324,8 @@ public abstract class JoinOrder {
 
         Operator.Builder builder = OperatorBuilderFactory.build(exprInfo.expr.getOp());
         exprInfo.expr = OptExpression.create(
-                builder.withOperator(exprInfo.expr.getOp()).setProjection(new Projection(resultMap)).build(),
+                builder.withOperator(exprInfo.expr.getOp()).setLimit(Operator.DEFAULT_LIMIT)
+                        .setProjection(new Projection(resultMap)).build(),
                 exprInfo.expr.getInputs());
         exprInfo.expr.deriveLogicalPropertyItself();
     }
