@@ -3,24 +3,37 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerTraceInfo;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Rule;
 
 import java.util.List;
 
-public class RewriteTask extends OptimizerTask {
+/*
+ *
+ * Rewrite whole tree by TopDown way
+ * Rules will be applied to each node from the TopDown, and will repeat
+ * push same task to rewrite whole tree when the task isn't only once and
+ * tree was changed, until the tree is no changed.
+ *
+ */
+public class RewriteTreeTask extends OptimizerTask {
     private final OptExpression planTree;
     private final boolean onlyOnce;
     private final List<Rule> rules;
     private long change = 0;
 
-    public RewriteTask(TaskContext context, OptExpression root, List<Rule> rules, boolean onlyOnce) {
+    public RewriteTreeTask(TaskContext context, OptExpression root, List<Rule> rules, boolean onlyOnce) {
         super(context);
         this.planTree = root;
         this.rules = rules;
         this.onlyOnce = onlyOnce;
+        Preconditions.checkState(planTree.getOp().getOpType() == OperatorType.LOGICAL);
     }
 
     public OptExpression getResult() {
@@ -33,11 +46,13 @@ public class RewriteTask extends OptimizerTask {
         rewrite(planTree, 0, planTree.getInputs().get(0));
 
         if (change > 0 && !onlyOnce) {
-            pushTask(new RewriteTask(context, planTree, rules, onlyOnce));
+            pushTask(new RewriteTreeTask(context, planTree, rules, onlyOnce));
         }
     }
 
     private void rewrite(OptExpression parent, int childIndex, OptExpression root) {
+        SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
+
         for (Rule rule : rules) {
             if (!match(rule.getPattern(), root) || !rule.check(root, context.getOptimizerContext())) {
                 continue;
@@ -45,6 +60,9 @@ public class RewriteTask extends OptimizerTask {
 
             List<OptExpression> result = rule.transform(root, context.getOptimizerContext());
             Preconditions.checkState(result.size() <= 1, "Rewrite rule should provide at most 1 expression");
+
+            OptimizerTraceInfo traceInfo = context.getOptimizerContext().getTraceInfo();
+            OptimizerTraceUtil.logApplyRule(sessionVariable, traceInfo, rule, root, result);
 
             if (result.isEmpty()) {
                 continue;

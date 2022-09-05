@@ -41,7 +41,7 @@ import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
-import com.starrocks.sql.optimizer.task.RewriteTask;
+import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TopDownRewriteIterativeTask;
 import com.starrocks.sql.optimizer.task.TopDownRewriteOnceTask;
@@ -81,7 +81,6 @@ public class Optimizer {
         OptimizerTraceUtil.logOptExpression(connectContext, "origin logicOperatorTree:\n%s", logicOperatorTree);
         // Phase 2: rewrite based on memo and group
         Memo memo = new Memo();
-        //        memo.init(logicOperatorTree);
         OptimizerTraceUtil.log(connectContext, "initial root group:\n%s", memo.getRootGroup());
 
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
@@ -503,25 +502,25 @@ public class Optimizer {
 
     private void ruleRewriteIterative(OptExpression tree, TaskContext rootTaskContext, RuleSetType ruleSetType) {
         List<Rule> rules = rootTaskContext.getOptimizerContext().getRuleSet().getRewriteRulesByType(ruleSetType);
-        context.getTaskScheduler().pushTask(new RewriteTask(rootTaskContext, tree, rules, false));
+        context.getTaskScheduler().pushTask(new RewriteTreeTask(rootTaskContext, tree, rules, false));
         context.getTaskScheduler().executeTasks(rootTaskContext, null);
     }
 
     private void ruleRewriteIterative(OptExpression tree, TaskContext rootTaskContext, Rule rule) {
         List<Rule> rules = Collections.singletonList(rule);
-        context.getTaskScheduler().pushTask(new RewriteTask(rootTaskContext, tree, rules, false));
+        context.getTaskScheduler().pushTask(new RewriteTreeTask(rootTaskContext, tree, rules, false));
         context.getTaskScheduler().executeTasks(rootTaskContext, null);
     }
 
     private void ruleRewriteOnlyOnce(OptExpression tree, TaskContext rootTaskContext, RuleSetType ruleSetType) {
         List<Rule> rules = rootTaskContext.getOptimizerContext().getRuleSet().getRewriteRulesByType(ruleSetType);
-        context.getTaskScheduler().pushTask(new RewriteTask(rootTaskContext, tree, rules, true));
+        context.getTaskScheduler().pushTask(new RewriteTreeTask(rootTaskContext, tree, rules, true));
         context.getTaskScheduler().executeTasks(rootTaskContext, null);
     }
 
     private void ruleRewriteOnlyOnce(OptExpression tree, TaskContext rootTaskContext, Rule rule) {
         List<Rule> rules = Collections.singletonList(rule);
-        context.getTaskScheduler().pushTask(new RewriteTask(rootTaskContext, tree, rules, true));
+        context.getTaskScheduler().pushTask(new RewriteTreeTask(rootTaskContext, tree, rules, true));
         context.getTaskScheduler().executeTasks(rootTaskContext, null);
     }
 }

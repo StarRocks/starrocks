@@ -27,6 +27,7 @@ public class SeriallyTaskScheduler implements TaskScheduler {
         while (!tasks.empty()) {
             if (System.currentTimeMillis() >= endTime) {
                 // Should have at least one valid plan
+                // group will be null when in rewrite phase
                 if (group != null && !group.hasBestExpression(context.getRequiredProperty())) {
                     throw new StarRocksPlannerException("StarRocks planner use long time " + timeout +
                             " ms, This probably because 1. FE Full GC, 2. Hive external table fetch metadata took a long time, " +

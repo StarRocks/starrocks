@@ -60,7 +60,6 @@ public class Pattern {
             return false;
         }
 
-        // special for MergeLimitRule, avoid false when merge limit with scan
         if (expression.getInputs().size() < this.children().size()
                 && children.stream().noneMatch(p -> OperatorType.PATTERN_MULTI_LEAF.equals(p.getOpType()))) {
             return false;
@@ -78,7 +77,6 @@ public class Pattern {
             return false;
         }
 
-        // special for MergeLimitRule, avoid false when merge limit with scan
         if (expression.getInputs().size() < this.children().size()
                 && children.stream().noneMatch(p -> OperatorType.PATTERN_MULTI_LEAF.equals(p.getOpType()))) {
             return false;
