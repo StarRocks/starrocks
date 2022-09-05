@@ -3,12 +3,16 @@
 package com.starrocks.lake.compaction;
 
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 
 import java.util.Objects;
 
 public class PartitionIdentifier {
+    @SerializedName(value = "dbId")
     private final long dbId;
+    @SerializedName(value = "tableId")
     private final long tableId;
+    @SerializedName(value = "partitionId")
     private final long partitionId;
 
     public PartitionIdentifier(long dbId, long tableId, long partitionId) {
