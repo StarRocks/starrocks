@@ -8,6 +8,6 @@
 
 namespace starrocks {
 
-void run_drop_tablet_task(std::shared_ptr<TAgentTaskRequest> agent_task_req);
+void run_drop_tablet_task(std::shared_ptr<DropTabletAgentTaskRequest> agent_task_req);
 
 } // namespace starrocks

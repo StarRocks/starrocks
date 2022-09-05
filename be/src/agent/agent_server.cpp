@@ -324,12 +324,11 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         case TTaskType::DROP:
             for (auto* task : all_tasks) {
                 auto drop_thread_pool = get_thread_pool(task_type);
-                auto new_task = std::make_shared<TAgentTaskRequest>(*task);
                 auto signature = task->signature;
                 if (register_task_info(task_type, signature)) {
                     LOG(INFO) << "Submit drop tablet task success. type=" << TTaskType::DROP
                               << ", signature=" << signature;
-                    drop_thread_pool->submit_func(std::bind(run_drop_tablet_task, new_task));
+                    drop_thread_pool->submit_func(std::bind(run_drop_tablet_task, std::make_shared<DropTabletAgentTaskRequest>(*task, task->drop_tablet_req, time(nullptr))));
                 } else {
                     LOG(INFO) << "Submit drop tablet task failed, already exists type=" << TTaskType::DROP
                               << ", signature=" << signature;

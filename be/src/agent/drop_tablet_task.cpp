@@ -13,8 +13,8 @@
 
 namespace starrocks {
 
-void run_drop_tablet_task(std::shared_ptr<TAgentTaskRequest> agent_task_req) {
-    const TDropTabletReq& drop_tablet_req = agent_task_req->drop_tablet_req;
+void run_drop_tablet_task(std::shared_ptr<DropTabletAgentTaskRequest> agent_task_req) {
+    const TDropTabletReq& drop_tablet_req = agent_task_req->task_req;
 
     bool force_drop = drop_tablet_req.__isset.force && drop_tablet_req.force;
     TStatusCode::type status_code = TStatusCode::OK;
