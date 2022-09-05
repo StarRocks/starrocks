@@ -553,6 +553,21 @@ public class Explain {
         }
 
         @Override
+        public OperatorStr visitPhysicalStreamJoin(OptExpression optExpr, OperatorPrinter.ExplainContext context) {
+            return visitPhysicalJoin(optExpr, context);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalStreamScan(OptExpression optExpr, OperatorPrinter.ExplainContext context) {
+            return new OperatorStr("StreamScan ", context.step + 1, buildChildOperatorStr(optExpr, context.step + 1));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalStreamAgg(OptExpression optExpr, OperatorPrinter.ExplainContext context) {
+            return new OperatorStr("StreamAgg ", context.step + 1, buildChildOperatorStr(optExpr, context.step + 1));
+        }
+
+        @Override
         public OperatorStr visitPhysicalTableFunction(OptExpression optExpression,
                                                       OperatorPrinter.ExplainContext context) {
             PhysicalTableFunctionOperator tableFunction = (PhysicalTableFunctionOperator) optExpression.getOp();

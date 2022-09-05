@@ -64,6 +64,7 @@ import com.starrocks.planner.SetOperationNode;
 import com.starrocks.planner.SortNode;
 import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.planner.UnionNode;
+import com.starrocks.planner.stream.StreamJoinNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -2330,6 +2331,43 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalNoCTE(OptExpression optExpression, ExecPlan context) {
             return visit(optExpression.inputAt(0), context);
+        }
+
+        @Override
+        public PlanFragment visitPhysicalStreamJoin(OptExpression optExpr, ExecPlan context) {
+            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+            JoinNode joinNode =
+                    new StreamJoinNode(context.getNextNodeId(), leftFragment.getPlanRoot(), rightFragment.getPlanRoot(), null);
+            // Connect parent and child fragment
+            rightFragment.getPlanRoot().setFragment(leftFragment);
+
+            // Currently, we always generate new fragment for PhysicalDistribution.
+            // So we need to remove exchange node only fragment for Join.
+            context.getFragments().remove(rightFragment);
+
+            // Move leftFragment to end, it depends on all of its children
+            context.getFragments().remove(leftFragment);
+            context.getFragments().add(leftFragment);
+
+            leftFragment.setPlanRoot(joinNode);
+            if (!rightFragment.getChildren().isEmpty()) {
+                // right table isn't value operator
+                leftFragment.addChild(rightFragment.getChild(0));
+            }
+            return leftFragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalStreamAgg(OptExpression optExpr, ExecPlan context) {
+            Preconditions.checkState(false, "TODO");
+            return null;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalStreamScan(OptExpression optExpr, ExecPlan context) {
+            Preconditions.checkState(false, "TODO");
+            return null;
         }
     }
 }

@@ -225,4 +225,16 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitPhysicalStreamJoin(OptExpression optExpr, C context) {
+        return visit(optExpr, context);
+    }
+
+    public R visitPhysicalStreamScan(OptExpression optExpr, C context) {
+        return visit(optExpr, context);
+    }
+
+    public R visitPhysicalStreamAgg(OptExpression optExpr, C context) {
+        return visit(optExpr, context);
+    }
+
 }

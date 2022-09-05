@@ -89,8 +89,7 @@ public class InsertPlanner {
         // Build logical plan for view query
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory, session).transform(
-                        insertStmt.getQueryStatement().getQueryRelation());
+                new RelationTransformer(columnRefFactory, session).transform(viewStmt.getQueryRelation());
         OptExprBuilder optExprBuilder = fillDefaultValue(logicalPlan, columnRefFactory, insertStmt, outputColumns);
         optExprBuilder = fillShadowColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
         optExprBuilder =

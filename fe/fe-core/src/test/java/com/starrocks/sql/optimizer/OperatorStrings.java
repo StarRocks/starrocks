@@ -29,6 +29,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamAggOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
@@ -470,6 +472,43 @@ public class OperatorStrings {
         @Override
         public OperatorStr visitPhysicalNoCTE(OptExpression optExpression, Integer step) {
             return visit(optExpression.getInputs().get(0), step);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalStreamJoin(OptExpression optExpr, Integer step) {
+            OperatorStr left = visit(optExpr.getInputs().get(0), step + 1);
+            OperatorStr right = visit(optExpr.getInputs().get(1), step + 1);
+
+            PhysicalJoinOperator join = (PhysicalJoinOperator) optExpr.getOp();
+            StringBuilder sb = new StringBuilder("").append(join.getJoinType()).append(" (");
+            sb.append("join-predicate [").append(join.getOnPredicate()).append("] ");
+            sb.append("post-join-predicate [").append(join.getPredicate()).append("]");
+            sb.append(")");
+
+            return new OperatorStr(sb.toString(), step, Arrays.asList(left, right));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalStreamScan(OptExpression optExpression, Integer step) {
+            PhysicalStreamScanOperator scan = (PhysicalStreamScanOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("SCAN (");
+            sb.append(" predicate[").append(scan.getPredicate()).append("]");
+            sb.append(")");
+            if (scan.getLimit() >= 0) {
+                sb.append(" Limit ").append(scan.getLimit());
+            }
+            return new OperatorStr(sb.toString(), step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalStreamAgg(OptExpression optExpression, Integer step) {
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+            PhysicalStreamAggOperator aggregate = (PhysicalStreamAggOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("AGGREGATE ([").append("]");
+            // sb.append(" aggregate [" + aggregate.getAggregations() + "]");
+            // sb.append(" group by [" + aggregate.getGroupBys() + "]");
+            sb.append(" having [" + aggregate.getPredicate() + "]");
+            return new OperatorStr(sb.toString(), step, Collections.singletonList(child));
         }
     }
 }

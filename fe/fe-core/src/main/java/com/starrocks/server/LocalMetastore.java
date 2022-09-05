@@ -3234,12 +3234,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 asyncRefreshContext.setTimeUnit(
                         asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
             }
-        } else if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
-            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-            mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);
         } else {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-            mvRefreshScheme.setType(MaterializedView.RefreshType.MANUAL);
+            mvRefreshScheme.setType(refreshSchemeDesc.getType());
         }
         // create mv
         long mvId = GlobalStateMgr.getCurrentState().getNextId();

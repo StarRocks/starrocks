@@ -52,6 +52,7 @@ public class StatementPlanner {
         try {
             lock(dbs);
             Analyzer.analyze(insertStmt, session);
+            Analyzer.analyze(viewStmt, session);
             PrivilegeChecker.check(insertStmt, session);
 
             return new InsertPlanner().planViewUpdate(insertStmt, viewStmt, view, session);

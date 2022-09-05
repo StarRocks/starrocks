@@ -119,7 +119,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                     List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super(id, planNodename);
 //        Preconditions.checkArgument(eqJoinConjuncts != null && !eqJoinConjuncts.isEmpty());
-        Preconditions.checkArgument(otherJoinConjuncts != null);
+//        Preconditions.checkArgument(otherJoinConjuncts != null);
         tupleIds.addAll(outer.getTupleIds());
         tupleIds.addAll(inner.getTupleIds());
 

@@ -353,8 +353,10 @@ public class StmtExecutor {
                     // Check if contains realtime views
                     if (parsedStmt instanceof InsertStmt) {
                         InsertStmt insertStmt = (InsertStmt) parsedStmt;
-                        Table table = insertStmt.getTargetTable();
-                        if (table.isOlapTable()) {
+                        String tableName = insertStmt.getTableName().getTbl();
+                        Table table = GlobalStateMgr.getCurrentState().getDb(context.getDatabase()).getTable(tableName);
+
+                        if (table != null && table.isOlapTable()) {
                             OlapTable olapTable = (OlapTable) table;
                             Set<Long> views = olapTable.getRelatedMaterializedViews();
                             if (CollectionUtils.isNotEmpty(views)) {

@@ -1909,5 +1909,19 @@ public class CreateMaterializedViewTest {
         SlotDescriptor slotDescriptor = slotRef.getSlotDescriptorWithoutCheck();
         Assert.assertEquals(1, slotDescriptor.getId().asInt());
     }
+
+    @Test
+    public void createRealtimeMV() throws Exception {
+        String sql = "create materialized view mv_realtime " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh realtime " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from tbl1";
+
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+    }
 }
 

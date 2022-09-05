@@ -54,4 +54,35 @@ public class MaterializedViewAnalyzerTest {
         mv.setActive(false);
         analyzeFail("refresh materialized view mv");
     }
+
+    @Test
+    public void testRealtimeMV() throws Exception {
+        String sql = "create materialized view mv_realtime " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh realtime " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from tbl1";
+        Config.enable_experimental_mv = true;
+        StarRocksAssert starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
+        starRocksAssert.withDatabase("test")
+                .withTable("CREATE TABLE test.tbl1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int \n" +
+                        ")\n" +
+                        "DUPLICATE KEY(k1, k2)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withNewMaterializedView("create materialized view mv\n" +
+                        "distributed by hash(k2) buckets 3\n" +
+                        "refresh realtime \n" +
+                        "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
+
+        analyzeSuccess("insert into test.tbl1 values(now(), 1, 1) ");
+    }
+
 }
