@@ -60,7 +60,7 @@ public class ExportCheckerTest {
 
         new MockUp<Backend>() {
             @Mock
-            public boolean isAvailable() {
+            public boolean isAlive() {
                 return true;
             }
         };

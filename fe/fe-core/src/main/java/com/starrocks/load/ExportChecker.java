@@ -160,7 +160,7 @@ public final class ExportChecker extends LeaderDaemon {
         String errMsg = "";
         for (Long beId : job.getBeStartTimeMap().keySet()) {
             Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
-            if (!be.isAvailable()) {
+            if (!be.isAlive()) {
                 beHasErr = true;
                 errMsg = "be not available during exec export job. be:" + beId;
                 LOG.warn(errMsg + " job: {}", job);
