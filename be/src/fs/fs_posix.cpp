@@ -32,6 +32,22 @@
 #include "util/errno.h"
 #include "util/slice.h"
 
+#ifdef USE_STAROS
+#include "fslib/metric_key.h"
+#include "metrics/metrics.h"
+#endif
+
+#ifdef USE_STAROS
+namespace {
+static const staros::starlet::metrics::Labels kSrPosixFsLables({{"fstype", "srposix"}});
+
+DEFINE_SUMMARY_METRIC_KEY_WITH_TAG(s_sr_posix_write_iosize, staros::starlet::fslib::kMKWriteIOSize, kSrPosixFsLables);
+DEFINE_SUMMARY_METRIC_KEY_WITH_TAG(s_sr_posix_write_iolatency, staros::starlet::fslib::kMKWriteIOLatency, kSrPosixFsLables);
+
+DEFINE_COUNTER_METRIC_KEY_WITH_TAG(s_posix_file_open, staros::starlet::fslib::kMKFsOpenFiles, kSrPosixFsLables);
+} // namespace
+#endif
+
 namespace starrocks {
 
 using std::string;
@@ -168,6 +184,9 @@ static Status do_writev_at(int fd, const string& filename, uint64_t offset, cons
     return Status::OK();
 }
 
+#ifdef USE_STAROS
+#endif
+
 class PosixWritableFile : public WritableFile {
 public:
     PosixWritableFile(std::string filename, int fd, uint64_t filesize, bool sync_on_close)
@@ -178,10 +197,16 @@ public:
     Status append(const Slice& data) override { return appendv(&data, 1); }
 
     Status appendv(const Slice* data, size_t cnt) override {
+#ifdef USE_STAROS
+        staros::starlet::metrics::TimeObserver write_latency(s_sr_posix_write_iolatency);
+#endif
         size_t bytes_written = 0;
         RETURN_IF_ERROR(do_writev_at(_fd, _filename, _filesize, data, cnt, &bytes_written));
         _filesize += bytes_written;
         _pending_sync = true;
+#ifdef USE_STAROS
+        s_sr_posix_write_iosize.Observe(bytes_written);
+#endif
         return Status::OK();
     }
 
