@@ -26,14 +26,9 @@
 #include <thread>
 
 #include "common/status.h"
-#include "gen_cpp/BackendService_types.h"
-#include "gen_cpp/FrontendService_types.h"
-#include "gen_cpp/Types_types.h"
-#include "runtime/exec_env.h"
 #include "runtime/routine_load/data_consumer_group.h"
 #include "runtime/routine_load/kafka_consumer_pipe.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "runtime/stream_load/stream_load_executor.h"
 #include "util/defer_op.h"
 #include "util/uid_util.h"
 

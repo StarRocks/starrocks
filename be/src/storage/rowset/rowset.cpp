@@ -23,7 +23,6 @@
 
 #include <unistd.h> // for link()
 
-#include <cstdio> // for remove()
 #include <memory>
 #include <set>
 

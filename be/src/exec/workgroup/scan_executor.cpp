@@ -3,7 +3,6 @@
 #include "exec/workgroup/scan_executor.h"
 
 #include "exec/workgroup/scan_task_queue.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::workgroup {
 

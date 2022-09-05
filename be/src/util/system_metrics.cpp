@@ -26,7 +26,6 @@
 #include <gperftools/malloc_extension.h>
 #endif
 #include <runtime/exec_env.h>
-#include <runtime/mem_tracker.h>
 
 #include <cstdio>
 #include <memory>

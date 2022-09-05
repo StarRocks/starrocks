@@ -5,12 +5,8 @@
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include "agent/master_info.h"
-#include "gen_cpp/FrontendService_types.h"
-#include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/Types_types.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
 #include "service/backend_options.h"
 
 namespace starrocks::pipeline {

@@ -77,7 +77,7 @@ public class ImpersonatePrivInfoTest {
             auth.createUser(createUserStmt);
         }
         String auror = "auror";
-        auth.createRole((CreateRoleStmt) UtFrameUtils.parseAndAnalyzeStmt(
+        auth.createRole((CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                 "CREATE ROLE " + auror, connectContext));
 
         // 1.2 make initialized checkpoint here for later use

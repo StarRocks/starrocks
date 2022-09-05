@@ -30,7 +30,6 @@
 #include "exec/exchange_node.h"
 #include "exec/exec_node.h"
 #include "exec/scan_node.h"
-#include "exprs/expr.h"
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
@@ -42,7 +41,6 @@
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "util/parse_util.h"
-#include "util/pretty_printer.h"
 #include "util/uid_util.h"
 
 namespace starrocks {

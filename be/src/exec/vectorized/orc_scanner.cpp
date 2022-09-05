@@ -3,11 +3,8 @@
 #include "exec/vectorized/orc_scanner.h"
 
 #include <memory>
-#include <type_traits>
 
 #include "column/array_column.h"
-#include "column/column_helper.h"
-#include "exprs/expr.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"

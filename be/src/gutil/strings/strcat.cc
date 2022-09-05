@@ -9,10 +9,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include "gutil/gscoped_ptr.h"
 #include "gutil/stl_util.h"
-#include "gutil/strings/ascii_ctype.h"
-#include "gutil/strings/escaping.h"
 
 AlphaNum gEmptyAlphaNum("");
 

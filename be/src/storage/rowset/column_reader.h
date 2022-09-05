@@ -87,8 +87,12 @@ public:
     static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, const Segment* segment);
 
     ColumnReader(const private_type&, const Segment* segment);
-
     ~ColumnReader();
+
+    ColumnReader(const ColumnReader&) = delete;
+    void operator=(const ColumnReader&) = delete;
+    ColumnReader(ColumnReader&&) = delete;
+    void operator=(ColumnReader&&) = delete;
 
     // create a new column iterator. Caller should free the returned iterator after unused.
     // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_iterator()
@@ -125,10 +129,6 @@ public:
 
     int32_t num_data_pages() { return _ordinal_index ? _ordinal_index->num_data_pages() : 0; }
 
-    ///-----------------------------------
-    /// vectorized APIs
-    ///-----------------------------------
-
     // page-level zone map filter.
     Status zone_map_filter(const std::vector<const ::starrocks::vectorized::ColumnPredicate*>& p,
                            const ::starrocks::vectorized::ColumnPredicate* del_predicate,
@@ -148,9 +148,6 @@ public:
 
     uint32_t num_rows() const { return _segment->num_rows(); }
 
-    // this function is just used for unit test
-    uint32_t num_rows_from_meta_pb(const ColumnMetaPB* meta) const { return meta->num_rows(); }
-
 private:
     const std::string& file_name() const { return _segment->file_name(); }
 
@@ -161,19 +158,12 @@ private:
     bool keep_in_memory() const { return _segment->keep_in_memory(); }
 
     struct private_type {
-        private_type(int) {}
+        explicit private_type(int) {}
     };
 
     constexpr static uint8_t kIsNullableMask = 1;
     constexpr static uint8_t kHasAllDictEncodedMask = 2;
     constexpr static uint8_t kAllDictEncodedMask = 4;
-
-    // Disable copy and assignment
-    ColumnReader(const ColumnReader&) = delete;
-    void operator=(const ColumnReader&) = delete;
-    // Disable move copy and move assignment
-    ColumnReader(ColumnReader&&) = delete;
-    void operator=(ColumnReader&&) = delete;
 
     Status _init(ColumnMetaPB* meta);
 

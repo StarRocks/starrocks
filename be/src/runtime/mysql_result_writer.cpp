@@ -26,7 +26,6 @@
 #include "column/chunk.h"
 #include "column/const_column.h"
 #include "exprs/expr.h"
-#include "gen_cpp/InternalService_types.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/current_thread.h"
 #include "runtime/primitive_type.h"

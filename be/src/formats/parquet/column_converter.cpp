@@ -12,7 +12,6 @@
 #include "column/type_traits.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/stored_column_reader.h"
-#include "gen_cpp/parquet_types.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/decimalv2_value.h"
