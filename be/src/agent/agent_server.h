@@ -25,7 +25,6 @@
 #include <string>
 #include <vector>
 
-#include "gen_cpp/AgentService_types.h"
 #include "gutil/macros.h"
 
 namespace starrocks {
