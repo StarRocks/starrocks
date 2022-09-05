@@ -582,6 +582,7 @@ public class GlobalStateMgr {
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
         this.shardManager = new ShardManager();
+        this.compactionManager = new CompactionManager();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -595,9 +596,6 @@ public class GlobalStateMgr {
                 gsm.transferToNonLeader(newType);
             }
         };
-        if (Config.use_staros) {
-            this.compactionManager = new CompactionManager();
-        }
     }
 
     public static void destroyCheckpoint() {
