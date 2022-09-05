@@ -3,7 +3,6 @@
 #include "exec/vectorized/join_hash_map.h"
 
 #include <column/chunk.h>
-#include <gen_cpp/PlanNodes_types.h>
 #include <runtime/descriptors.h>
 
 #include "exec/vectorized/hash_join_node.h"

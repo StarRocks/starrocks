@@ -10,7 +10,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
-#include "storage/rowset_update_state.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "util/pretty_printer.h"

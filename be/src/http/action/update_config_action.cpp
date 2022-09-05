@@ -23,7 +23,6 @@
 
 #include <rapidjson/document.h>
 #include <rapidjson/prettywriter.h>
-#include <rapidjson/rapidjson.h>
 #include <rapidjson/stringbuffer.h>
 
 #include <mutex>
@@ -36,7 +35,6 @@
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-#include "http/http_response.h"
 #include "http/http_status.h"
 #include "util/priority_thread_pool.hpp"
 

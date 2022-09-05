@@ -5,8 +5,6 @@
 #include <any>
 #include <memory>
 
-#include "column/column_helper.h"
-#include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sort/local_merge_sort_source_operator.h"

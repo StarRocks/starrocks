@@ -2,8 +2,6 @@
 
 #include "exprs/vectorized/encryption_functions.h"
 
-#include <boost/smart_ptr.hpp>
-
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/status.h"

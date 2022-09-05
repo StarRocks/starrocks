@@ -4,14 +4,11 @@
 
 #include <memory>
 
-#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fmt/core.h"
-#include "fmt/format.h"
 #include "jni.h"
-#include "runtime/primitive_type.h"
 #include "runtime/user_function_cache.h"
 
 namespace starrocks::vectorized {

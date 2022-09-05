@@ -47,7 +47,6 @@
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/unique_rowset_id_generator.h"
 #include "storage/tablet_manager.h"
-#include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/task/engine_task.h"
 #include "storage/update_manager.h"

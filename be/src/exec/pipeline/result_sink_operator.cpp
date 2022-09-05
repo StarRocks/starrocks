@@ -5,7 +5,6 @@
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
-#include "runtime/exec_env.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"

@@ -2,7 +2,6 @@
 
 #include "runtime/global_dict/decoder.h"
 
-#include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/type_traits.h"
 #include "gutil/casts.h"
