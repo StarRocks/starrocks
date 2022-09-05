@@ -1185,10 +1185,8 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadShardManager(dis, checksum);
             remoteChecksum = dis.readLong();
-            if (Config.use_staros) {
-                checksum = loadCompactionManager(dis, checksum);
-                remoteChecksum = dis.readLong();
-            }
+            checksum = loadCompactionManager(dis, checksum);
+            remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1423,10 +1421,8 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = shardManager.saveShardManager(dos, checksum);
             dos.writeLong(checksum);
-            if (Config.use_staros) {
-                checksum = compactionManager.saveCompactionManager(dos, checksum);
-                dos.writeLong(checksum);
-            }
+            checksum = compactionManager.saveCompactionManager(dos, checksum);
+            dos.writeLong(checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();
