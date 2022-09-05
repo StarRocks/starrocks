@@ -172,4 +172,16 @@ private:
         return vectorized::ColumnHelper::create_const_null_column(ptr == nullptr ? 1 : ptr->num_rows()); \
     }(ctx, expr, chunk)
 
+#define EVALUATE_NULL_IF_RUNTIME_ERROR(ctx, expr, chunk, status)                                         \
+    [](ExprContext* c, Expr* e, vectorized::Chunk* ptr, Status* s) {                                     \
+        auto st = c->evaluate(e, ptr);                                                                   \
+        if (st.status().is_runtime_error()) {                                                            \
+            *s = st.status();                                                                            \
+        }                                                                                                \
+        if (st.ok()) {                                                                                   \
+            return st.value();                                                                           \
+        }                                                                                                \
+        return vectorized::ColumnHelper::create_const_null_column(ptr == nullptr ? 1 : ptr->num_rows()); \
+    }(ctx, expr, chunk, status)
+
 } // namespace starrocks

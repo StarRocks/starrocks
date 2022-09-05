@@ -284,6 +284,8 @@ protected:
         return out.str();
     }
 
+    Status _status = Status::OK();
+
 private:
     // Create a new vectorized expr
     static Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr);

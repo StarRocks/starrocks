@@ -197,6 +197,9 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
 #endif
     try {
         auto ptr = e->evaluate(this, chunk);
+        if (e->_status.is_runtime_error()) {
+            return e->_status;
+        }
         DCHECK(ptr != nullptr);
         if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant()) {
             ptr->resize(chunk->num_rows());

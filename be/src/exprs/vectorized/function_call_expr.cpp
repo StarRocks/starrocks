@@ -118,9 +118,10 @@ ColumnPtr VectorizedFunctionCallExpr::evaluate(starrocks::ExprContext* context, 
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
 
     Columns args;
+    Status* status = &_status;
     args.reserve(_children.size());
     for (Expr* child : _children) {
-        ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
+        ColumnPtr column = EVALUATE_NULL_IF_RUNTIME_ERROR(context, child, ptr, status);
         args.emplace_back(column);
     }
 
