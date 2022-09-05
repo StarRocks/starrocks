@@ -127,4 +127,31 @@ public class FilterUnusedColumnTest extends PlanTestBase {
         plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
     }
+
+    @Test
+    public void testFilterAggregateKeyColumn() throws Exception {
+        boolean prevEnable = connectContext.getSessionVariable().isAbleFilterUnusedColumnsInScanStage();
+
+        try {
+            connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(true);
+
+            // Key columns cannot be pruned in the non-skip-aggr scan stage.
+            String sql = "select timestamp from metrics_detail where tags_id > 1";
+            String plan = getThriftPlan(sql);
+            System.out.println(plan);
+            Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+
+            // Key columns can be pruned in the skip-aggr scan stage.
+            sql = "select sum(value) from metrics_detail where tags_id > 1";
+            plan = getThriftPlan(sql);
+            Assert.assertTrue(plan.contains("unused_output_column_name:[tags_id]"));
+
+            // Vlue columns cannot be pruned in the non-skip-aggr scan stage.
+            sql = "select max(value) from metrics_detail where tags_id > 1";
+            plan = getThriftPlan(sql);
+            Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+        } finally {
+            connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(prevEnable);
+        }
+    }
 }
