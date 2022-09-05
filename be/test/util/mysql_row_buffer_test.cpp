@@ -380,6 +380,22 @@ TEST_F(MysqlRowBufferTest, test_array) {
         ASSERT_EQ("[[1,2],[],null]", data.value());
         ASSERT_EQ("", slice);
     }
+    // json array
+    {
+        MysqlRowBuffer row_buffer;
+        row_buffer.begin_push_array();
+
+        Slice json = R"({"k1": "v1"})";
+        row_buffer.push_string(json.data, json.size, '\'');
+
+        row_buffer.finish_push_array();
+
+        Slice slice(row_buffer.data());
+        auto data = decode_mysql_row(&slice);
+
+        ASSERT_EQ(R"(['{"k1": "v1"}'])", data.value());
+        ASSERT_EQ("", slice);
+    }
 }
 
 } // namespace starrocks
