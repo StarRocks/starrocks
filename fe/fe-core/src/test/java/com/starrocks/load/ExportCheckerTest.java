@@ -74,5 +74,15 @@ public class ExportCheckerTest {
 
         cancelled = (boolean) method.invoke(checker, job);
         Assert.assertTrue(!cancelled);
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long backendId) {
+                return null;
+            }
+        };
+
+        cancelled = (boolean) method.invoke(checker, job);
+        Assert.assertTrue(cancelled);
     }
 }
