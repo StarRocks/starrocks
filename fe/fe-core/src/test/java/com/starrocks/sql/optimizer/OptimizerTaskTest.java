@@ -82,16 +82,18 @@ public class OptimizerTaskTest {
         ctx.getSessionVariable().setJoinImplementationMode("hash");
         ctx.setDumpInfo(new MockDumpInfo());
         call = new CallOperator(FunctionSet.SUM, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
-        new Expectations(call) {{
-            call.getUsedColumns();
-            result = new ColumnRefSet();
-            minTimes = 0;
+        new Expectations(call) {
+            {
+                call.getUsedColumns();
+                result = new ColumnRefSet();
+                minTimes = 0;
 
-            call.getFunction();
-            minTimes = 0;
-            result = AggregateFunction.createBuiltin(FunctionSet.SUM,
-                    Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
-        }};
+                call.getFunction();
+                minTimes = 0;
+                result = AggregateFunction.createBuiltin(FunctionSet.SUM,
+                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
+            }
+        };
 
         columnRefFactory = new ColumnRefFactory();
         column1 = columnRefFactory.create("t1", ScalarType.INT, true);
@@ -1056,11 +1058,13 @@ public class OptimizerTaskTest {
             }
         };
 
-        new Expectations(call) {{
-            call.isDistinct();
-            result = false;
-            minTimes = 0;
-        }};
+        new Expectations(call) {
+            {
+                call.isDistinct();
+                result = false;
+                minTimes = 0;
+            }
+        };
 
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
@@ -1195,20 +1199,22 @@ public class OptimizerTaskTest {
         CallOperator call =
                 new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(ConstantOperator.createInt(1)));
 
-        new Expectations(call) {{
-            call.getUsedColumns();
-            result = new ColumnRefSet(1);
-            minTimes = 0;
+        new Expectations(call) {
+            {
+                call.getUsedColumns();
+                result = new ColumnRefSet(1);
+                minTimes = 0;
 
-            call.isDistinct();
-            result = true;
-            minTimes = 0;
+                call.isDistinct();
+                result = true;
+                minTimes = 0;
 
-            call.getFunction();
-            result = AggregateFunction.createBuiltin(FunctionSet.COUNT,
-                    Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
-            minTimes = 0;
-        }};
+                call.getFunction();
+                result = AggregateFunction.createBuiltin(FunctionSet.COUNT,
+                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
+                minTimes = 0;
+            }
+        };
 
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
@@ -1568,15 +1574,17 @@ public class OptimizerTaskTest {
         CallOperator add2 = new CallOperator("add", Type.INT,
                 Lists.newArrayList(add1, ConstantOperator.createInt(3)));
 
-        new Expectations(add1, add2) {{
-            add1.getFunction();
-            minTimes = 0;
-            result = new Function(new FunctionName("add"), new Type[] {Type.INT, Type.INT}, Type.INT, false);
+        new Expectations(add1, add2) {
+            {
+                add1.getFunction();
+                minTimes = 0;
+                result = new Function(new FunctionName("add"), new Type[] {Type.INT, Type.INT}, Type.INT, false);
 
-            add2.getFunction();
-            minTimes = 0;
-            result = new Function(new FunctionName("add"), new Type[] {Type.INT, Type.INT}, Type.INT, false);
-        }};
+                add2.getFunction();
+                minTimes = 0;
+                result = new Function(new FunctionName("add"), new Type[] {Type.INT, Type.INT}, Type.INT, false);
+            }
+        };
 
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
         projectMap.put(column4, add1);
