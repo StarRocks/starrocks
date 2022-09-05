@@ -207,11 +207,6 @@ public class SlotRef extends Expr {
     }
 
     @Override
-    public String toColumnLabel() {
-        return label;
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.SLOT_REF;
         if (desc != null) {
