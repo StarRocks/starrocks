@@ -26,10 +26,15 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/**
+/*
  * JoinReorder Rule for Semi/Anti and other JoinNode
- * <p>
  * Semi(Join(X, Y), Z) => Join(Semi(X, Z), Y)
+ *
+ *       Semi-Join                 Join
+ *       /       \               /      \
+ *     Join       Z  ===>    Semi-Join   Y
+ *    /    \                 /       \
+ *   X      Y               X        Z
  */
 public class SemiReorderRule extends TransformationRule {
     public SemiReorderRule() {
@@ -48,7 +53,15 @@ public class SemiReorderRule extends TransformationRule {
         }
 
         LogicalJoinOperator bottomJoin = (LogicalJoinOperator) input.getInputs().get(0).getOp();
+<<<<<<< HEAD
         if (bottomJoin.getJoinType().isOuterJoin()) {
+=======
+        if (!topJoin.getJoinHint().isEmpty() || !bottomJoin.getJoinHint().isEmpty()) {
+            return false;
+        }
+
+        if (bottomJoin.getJoinType().isOuterJoin() || bottomJoin.hasLimit()) {
+>>>>>>> f0c05a6ec ([BugFix] Fix semi join with limit reorder error (#10837))
             return false;
         }
 
@@ -58,11 +71,7 @@ public class SemiReorderRule extends TransformationRule {
         usedInRewriteSemiJoin.union(input.inputAt(0).inputAt(0).getOutputColumns());
         usedInRewriteSemiJoin.union(input.inputAt(1).getOutputColumns());
 
-        if (!usedInRewriteSemiJoin.containsAll(topJoin.getOnPredicate().getUsedColumns())) {
-            return false;
-        }
-
-        return true;
+        return usedInRewriteSemiJoin.containsAll(topJoin.getOnPredicate().getUsedColumns());
     }
 
     @Override
@@ -74,6 +83,7 @@ public class SemiReorderRule extends TransformationRule {
 
         LogicalJoinOperator newTopJoin = new LogicalJoinOperator.Builder().withOperator(leftChildJoin)
                 .setProjection(topJoin.getProjection())
+                .setLimit(topJoin.getLimit())
                 .build();
 
         ColumnRefSet leftChildInputColumns = new ColumnRefSet();
@@ -137,10 +147,12 @@ public class SemiReorderRule extends TransformationRule {
         // build new semi join projection
         if (semiExpression.isEmpty()) {
             newSemiJoin = new LogicalJoinOperator.Builder().withOperator(topJoin)
+                    .setLimit(Operator.DEFAULT_LIMIT)
                     .setProjection(new Projection(projectMap)).build();
         } else {
             semiExpression.putAll(projectMap);
             newSemiJoin = new LogicalJoinOperator.Builder().withOperator(topJoin)
+                    .setLimit(Operator.DEFAULT_LIMIT)
                     .setProjection(new Projection(semiExpression)).build();
         }
 
