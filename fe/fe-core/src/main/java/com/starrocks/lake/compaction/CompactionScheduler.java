@@ -79,10 +79,10 @@ public class CompactionScheduler extends Daemon {
         cleanPartition();
 
         // Schedule compaction tasks only when this is a leader FE and all edit logs have finished replay.
-        if (!stateMgr.isReady()) {
-            return;
-        }
-        if (allCommittedTransactionsBeforeRestartHaveFinished()) {
+        // In order to ensure that the input rowsets of compaction still exists when doing publishing version, it is
+        // necessary to ensure that the compaction task of the same partition is executed serially, that is, the next
+        // compaction task can be executed only after the status of the previous compaction task changes to visible or canceled.
+        if (stateMgr.isLeader() && stateMgr.isReady() && allCommittedTransactionsBeforeRestartHaveFinished()) {
             schedule();
         }
     }
