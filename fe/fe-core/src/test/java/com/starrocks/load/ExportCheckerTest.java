@@ -21,7 +21,6 @@ public class ExportCheckerTest {
     public void testCheckBeStatus() throws NoSuchFieldException, SecurityException, 
         IllegalArgumentException, IllegalAccessException, NoSuchMethodException, InvocationTargetException {
 
-
         new MockUp<ExportJob>() {
             @Mock
             public synchronized void cancel(ExportFailMsg.CancelType type, String msg) throws UserException {
@@ -51,7 +50,7 @@ public class ExportCheckerTest {
         
         Map<JobState, ExportChecker> map = (Map<JobState, ExportChecker>) obj;
         ExportChecker checker = map.get(JobState.EXPORTING);
-        Method method = ExportChecker.class.getDeclaredMethod("checkBeStatus", ExportJob.class);
+        Method method = ExportChecker.class.getDeclaredMethod("checkJobNeedCancel", ExportJob.class);
         method.setAccessible(true);
 
         ExportJob job = new ExportJob();

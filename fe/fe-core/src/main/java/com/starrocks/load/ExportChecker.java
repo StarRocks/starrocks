@@ -139,8 +139,8 @@ public final class ExportChecker extends LeaderDaemon {
         List<ExportJob> jobs = GlobalStateMgr.getCurrentState().getExportMgr().getExportJobs(JobState.EXPORTING);
         LOG.debug("exporting export job num: {}", jobs.size());
         for (ExportJob job : jobs) {
-            boolean cancalled = checkBeStatus(job);
-            if (cancalled) {
+            boolean cancelled = checkJobNeedCancel(job);
+            if (cancelled) {
                 continue;
             }
             try {
@@ -154,7 +154,7 @@ public final class ExportChecker extends LeaderDaemon {
         }
     }
 
-    private boolean checkBeStatus(ExportJob job) {
+    private boolean checkJobNeedCancel(ExportJob job) {
 
         boolean beHasErr = false;
         String errMsg = "";
