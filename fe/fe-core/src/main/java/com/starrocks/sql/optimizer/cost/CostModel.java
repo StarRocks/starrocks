@@ -29,6 +29,9 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamAggOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -333,6 +336,21 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
+            return CostEstimate.zero();
+        }
+
+        @Override
+        public CostEstimate visitPhysicalStreamScan(PhysicalStreamScanOperator node, ExpressionContext context) {
+            return CostEstimate.zero();
+        }
+
+        @Override
+        public CostEstimate visitPhysicalStreamJoin(PhysicalStreamJoinOperator node, ExpressionContext context) {
+            return CostEstimate.zero();
+        }
+
+        @Override
+        public CostEstimate visitPhysicalStreamAgg(PhysicalStreamAggOperator node, ExpressionContext context) {
             return CostEstimate.zero();
         }
     }

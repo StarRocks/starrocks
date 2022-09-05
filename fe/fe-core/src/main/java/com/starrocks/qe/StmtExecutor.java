@@ -43,6 +43,7 @@ import com.starrocks.analysis.UnsupportedStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ScalarType;
@@ -131,6 +132,7 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -344,6 +346,34 @@ public class StmtExecutor {
             if (StatementPlanner.supportedByNewPlanner(parsedStmt)) {
                 try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
                     redirectStatus = parsedStmt.getRedirectStatus();
+
+                    // NOTE: only handle single view update
+                    MaterializedView relatedView = null;
+
+                    // Check if contains realtime views
+                    if (parsedStmt instanceof InsertStmt) {
+                        InsertStmt insertStmt = (InsertStmt) parsedStmt;
+                        Table table = insertStmt.getTargetTable();
+                        if (table.isOlapTable()) {
+                            OlapTable olapTable = (OlapTable) table;
+                            Set<Long> views = olapTable.getRelatedMaterializedViews();
+                            if (CollectionUtils.isNotEmpty(views)) {
+                                for (long viewId : views) {
+                                    MaterializedView viewTable =
+                                            (MaterializedView) GlobalStateMgr.getCurrentState().getDb(context.getDatabase())
+                                                    .getTable(viewId);
+                                    if (viewTable.getRefreshScheme().getType().equals(MaterializedView.RefreshType.REALTIME)) {
+                                        if (relatedView == null) {
+                                            relatedView = viewTable;
+                                        } else {
+                                            throw new StarRocksPlannerException("at most one related view could be updated",
+                                                    ErrorType.USER_ERROR);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if (!isForwardToLeader()) {
                         context.getDumpInfo().reset();
                         context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
@@ -356,8 +386,10 @@ public class StmtExecutor {
                                 parsedStmt = selectStmt;
                                 execPlan = StatementPlanner.plan(parsedStmt, context);
                             }
-                        } else {
+                        } else if (relatedView == null) {
                             execPlan = StatementPlanner.plan(parsedStmt, context);
+                        } else {
+                            execPlan = StatementPlanner.planViewUpdate((InsertStmt) parsedStmt, relatedView, context);
                         }
                         execPlanBuildByNewPlanner = true;
                     }

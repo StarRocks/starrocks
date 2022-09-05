@@ -98,6 +98,9 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamAggOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
@@ -1421,6 +1424,30 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
         context.setStatistics(context.getChildStatistics(0));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalStreamScan(PhysicalStreamScanOperator node, ExpressionContext context) {
+        Statistics.Builder builder = Statistics.builder();
+        Statistics stat = builder.build();
+        context.setStatistics(stat);
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalStreamJoin(PhysicalStreamJoinOperator node, ExpressionContext context) {
+        Statistics.Builder builder = Statistics.builder();
+        Statistics stat = builder.build();
+        context.setStatistics(stat);
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalStreamAgg(PhysicalStreamAggOperator node, ExpressionContext context) {
+        Statistics.Builder builder = Statistics.builder();
+        Statistics stat = builder.build();
+        context.setStatistics(stat);
         return visitOperator(node, context);
     }
 }

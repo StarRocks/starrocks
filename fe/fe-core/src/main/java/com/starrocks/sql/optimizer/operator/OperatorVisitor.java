@@ -54,6 +54,9 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamAggOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
@@ -308,4 +311,15 @@ public abstract class OperatorVisitor<R, C> {
         return visitOperator(node, context);
     }
 
+    public R visitPhysicalStreamScan(PhysicalStreamScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalStreamJoin(PhysicalStreamJoinOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalStreamAgg(PhysicalStreamAggOperator node, C context) {
+        return visitOperator(node, context);
+    }
 }

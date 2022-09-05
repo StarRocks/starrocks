@@ -220,6 +220,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL = "enable_rewrite_groupingsets_to_union_all";
+    public static final String STREAM_PLANNER = "stream_planner";
 
     // --------  New planner session variables end --------
 
@@ -640,6 +641,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
+
+    @VarAttr(name = STREAM_PLANNER)
+    private boolean streamPlanner = false;
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
@@ -1179,6 +1183,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableReplicatedStorage() {
         return enableReplicatedStorage;
+    }
+    
+    public void enableStreamPlanner(boolean enable) {
+        this.streamPlanner = enable;
+    }
+
+    public boolean isStreamPlanner() {
+        return this.streamPlanner;
     }
 
     // Serialize to thrift object
