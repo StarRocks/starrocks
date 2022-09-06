@@ -124,20 +124,25 @@ public:
     TPlanNodeId probe_plan_node_id() const { return _probe_plan_node_id; }
     void set_probe_plan_node_id(TPlanNodeId id) { _probe_plan_node_id = id; }
     const TRuntimeFilterBuildJoinMode::type join_mode() const { return _join_mode; };
-    const std::vector<int32_t>* bucketseq_to_partition() { return &_bucketseq_to_partition; }
-    const std::vector<SlotId>* partition_by_expr_ids() { return &_partition_by_expr_ids; }
-    const std::vector<ExprContext*>* partition_by_expr_contexts() { return &_partition_by_exprs_contexts; }
-    bool is_the_same_partition_by_exprs(RuntimeFilterProbeDescriptor* other) {
-        if (this->partition_by_expr_ids()->empty() || other->partition_by_expr_ids()->empty()) return false;
-        if (!(this->runtime_filter()) || !(other->runtime_filter())) return false;
-        if (*(this->partition_by_expr_ids()) != *(other->partition_by_expr_ids())) {
-            return false;
+    const std::vector<int32_t>* bucketseq_to_partition() const { return &_bucketseq_to_partition; }
+    const std::vector<SlotId>* partition_by_expr_ids() const { return &_partition_by_expr_ids; }
+    const std::vector<ExprContext*>* partition_by_expr_contexts() const { return &_partition_by_exprs_contexts; }
+
+    class Comparator {
+    public:
+        bool operator()(const RuntimeFilterProbeDescriptor* a, const RuntimeFilterProbeDescriptor* b) const {
+            if (!(a->runtime_filter()) || !(a->runtime_filter())) return false;
+            if (a->partition_by_expr_ids()->empty() || b->partition_by_expr_ids()->empty()) return false;
+            if (a->runtime_filter()->num_hash_partitions() != b->runtime_filter()->num_hash_partitions()) {
+                return false;
+            }
+            if (*(a->partition_by_expr_ids()) != *(b->partition_by_expr_ids())) {
+                return false;
+            }
+            return true;
         }
-        if (this->runtime_filter()->num_hash_partitions() != other->runtime_filter()->num_hash_partitions()) {
-            return false;
-        }
-        return true;
-    }
+    };
+    bool is_the_same_partition_by_exprs(RuntimeFilterProbeDescriptor* other) { return Comparator()(this, other); }
 
 private:
     friend class HashJoinNode;
@@ -167,6 +172,7 @@ struct RuntimeBloomFilterEvalContext {
     RuntimeBloomFilterEvalContext() = default;
 
     std::map<double, RuntimeFilterProbeDescriptor*> selectivity;
+    std::vector<RuntimeFilterProbeDescriptor*> descriptors;
     size_t input_chunk_nums = 0;
     int run_filter_nums = 0;
     JoinRuntimeFilter::RunningContext running_context;
@@ -175,6 +181,20 @@ struct RuntimeBloomFilterEvalContext {
     RuntimeProfile::Counter* join_runtime_filter_input_counter = nullptr;
     RuntimeProfile::Counter* join_runtime_filter_output_counter = nullptr;
     RuntimeProfile::Counter* join_runtime_filter_eval_counter = nullptr;
+
+    void do_sort_descriptors_if_needed(bool is_sort) {
+        if (selectivity.size() <= 0) {
+            return;
+        }
+
+        descriptors.clear();
+        for (auto& kv : selectivity) {
+            descriptors.push_back(kv.second);
+        }
+        if (is_sort) {
+            std::sort(descriptors.begin(), descriptors.end(), RuntimeFilterProbeDescriptor::Comparator());
+        }
+    }
 };
 
 // The collection of `RuntimeFilterProbeDescriptor`
@@ -212,6 +232,18 @@ public:
     void set_plan_node_id(int id) { _plan_node_id = id; }
     int plan_node_id() { return _plan_node_id; }
 
+    // sort descriptors to make descriptors which have the same partition_by_exprs adjacent.
+    void do_sort_descriptors_if_needed(bool is_sort) {
+        _sorted_descriptors.clear();
+        for (auto& kv : _descriptors) {
+            _sorted_descriptors.push_back(kv.second);
+        }
+        if (is_sort) {
+            std::sort(_sorted_descriptors.begin(), _sorted_descriptors.end(),
+                      RuntimeFilterProbeDescriptor::Comparator());
+        }
+    }
+
 private:
     void update_selectivity(vectorized::Chunk* chunk);
     void update_selectivity(vectorized::Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
@@ -226,9 +258,9 @@ private:
     RuntimeBloomFilterEvalContext _eval_context;
     int _plan_node_id = -1;
     RuntimeState* _runtime_state = nullptr;
-    // For the same parition by exprs, no need to compute hash values multi times.
-    bool _is_all_the_same_partition_by_exprs = true;
-    RuntimeFilterProbeDescriptor* _prev_rf_desc = nullptr;
+    // Multi-Columns GRFs
+    std::vector<RuntimeFilterProbeDescriptor*> _sorted_descriptors;
+    bool _is_need_sort_descriptors_for_multi_columns = false;
 };
 
 } // namespace vectorized

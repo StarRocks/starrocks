@@ -342,8 +342,8 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
         return;
     }
 
-    auto& seletivity_map = eval_context.selectivity;
-    if (seletivity_map.empty()) {
+    auto& descriptors = eval_context.descriptors;
+    if (descriptors.empty()) {
         return;
     }
 
@@ -353,8 +353,7 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
             _runtime_state->func_version() <= 3 || !_runtime_state->enable_pipeline_engine();
 
     RuntimeFilterProbeDescriptor* prev_rf_desc = nullptr;
-    for (auto& kv : seletivity_map) {
-        RuntimeFilterProbeDescriptor* rf_desc = kv.second;
+    for (auto* rf_desc : descriptors) {
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
         if (filter == nullptr) {
             continue;
@@ -426,8 +425,7 @@ void RuntimeFilterProbeCollector::compute_hash_values(vectorized::Chunk* chunk, 
     if (rf_desc->partition_by_expr_contexts()->empty()) {
         filter->compute_hash({column}, &eval_context.running_context);
     } else {
-        if (prev_rf_desc &&
-            (_is_all_the_same_partition_by_exprs || prev_rf_desc->is_the_same_partition_by_exprs(rf_desc))) {
+        if (prev_rf_desc && prev_rf_desc->is_the_same_partition_by_exprs(rf_desc)) {
             VLOG_FILE << "Skip compute hash_values for the same partition_by_exprs.";
         } else {
             std::vector<Column*> partition_by_columns;
@@ -453,8 +451,7 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
 
     RuntimeFilterProbeDescriptor* prev_rf_desc = nullptr;
     seletivity_map.clear();
-    for (auto& it : _descriptors) {
-        RuntimeFilterProbeDescriptor* rf_desc = it.second;
+    for (RuntimeFilterProbeDescriptor* rf_desc : _sorted_descriptors) {
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
         if (filter == nullptr) {
             continue;
@@ -507,6 +504,7 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
     }
     if (!seletivity_map.empty()) {
         chunk->filter(merged_selection);
+        eval_context.do_sort_descriptors_if_needed(_is_need_sort_descriptors_for_multi_columns);
     }
 }
 
@@ -545,11 +543,11 @@ void RuntimeFilterProbeCollector::add_descriptor(RuntimeFilterProbeDescriptor* d
     VLOG_FILE << "add runtime filter descriptor: filter_id=" << desc->filter_id()
               << ", plan_node_id = " << _plan_node_id;
     _descriptors[desc->filter_id()] = desc;
-    if (!_prev_rf_desc) {
-        _prev_rf_desc = desc;
-    } else if (_is_all_the_same_partition_by_exprs) {
-        _is_all_the_same_partition_by_exprs &= _prev_rf_desc->is_the_same_partition_by_exprs(desc);
+
+    if (!desc->partition_by_expr_ids()->empty()) {
+        _is_need_sort_descriptors_for_multi_columns = true;
     }
+    do_sort_descriptors_if_needed(_is_need_sort_descriptors_for_multi_columns);
 }
 
 void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
