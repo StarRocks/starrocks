@@ -58,6 +58,7 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thread_resource_mgr.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
