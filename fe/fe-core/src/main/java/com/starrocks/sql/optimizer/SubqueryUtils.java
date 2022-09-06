@@ -184,7 +184,7 @@ public class SubqueryUtils {
 
         private final Set<ScalarOperator> innerTableExprSet;
 
-        private InnerTableExprExtractor (List<ColumnRefOperator> correlationCols) {
+        private InnerTableExprExtractor(List<ColumnRefOperator> correlationCols) {
             correlationColSet = new ColumnRefSet(correlationCols);
             innerTableExprSet = Sets.newHashSet();
         }
