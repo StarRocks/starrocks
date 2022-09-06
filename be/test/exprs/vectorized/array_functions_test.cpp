@@ -4353,7 +4353,7 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint_with_nullable) {
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<int8_t>({(int8_t)(5), (int8_t)(6)}, dest_column->get(0).get_array());
-    _check_array<int8_t>({(int8_t)(8)}, dest_column->get(1).get_array());
+    ASSERT_TRUE(dest_column->get(1).get_array().empty());
     ASSERT_TRUE(dest_column->get(2).get_array().empty());
     ASSERT_TRUE(dest_column->get(3).is_null());
     _check_array<int8_t>({(int8_t)(4)}, dest_column->get(4).get_array());
@@ -4387,6 +4387,61 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint) {
     ASSERT_TRUE(dest_column->get(4).get_array().empty());
 }
 
+TEST_F(ArrayFunctionsTest, array_filter_tinyint_with_nullable_notnull) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
+    src_column->append_datum(DatumArray{(int8_t)8});
+    src_column->append_datum(DatumArray{(int8_t)4});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+    src_column2->append_datum(DatumArray{Datum(), (bool)1, (bool)0});
+    src_column2->append_datum(DatumArray{(bool)1});
+    src_column2->append_datum(DatumArray{(bool)0});
+    src_column2->append_datum(DatumArray{Datum()});
+    src_column2->append_datum(DatumArray{(bool)0, Datum()});
+
+    ArrayFilter<PrimitiveType::TYPE_TINYINT> filter;
+    auto dest_column = filter.process(nullptr, {src_column, src_column2});
+
+    ASSERT_TRUE(dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 5);
+    _check_array<int8_t>({(int8_t)(3)}, dest_column->get(0).get_array());
+    _check_array<int8_t>({(int8_t)(8)}, dest_column->get(1).get_array());
+    ASSERT_TRUE(dest_column->get(2).get_array().empty());
+    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_TRUE(dest_column->get(4).get_array().empty());
+}
+
+TEST_F(ArrayFunctionsTest, array_filter_tinyint_notnull_nullable) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
+    src_column->append_datum(DatumArray{(int8_t)8});
+    src_column->append_datum(DatumArray{(int8_t)4});
+    src_column->append_datum(DatumArray{(int8_t)99});
+    src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    src_column2->append_datum(DatumArray{(bool)1, (bool)0, (bool)1});
+    src_column2->append_datum(Datum());
+    src_column2->append_datum(DatumArray{});
+    src_column2->append_datum(Datum());
+    src_column2->append_datum(DatumArray{(bool)1, Datum()});
+
+    ArrayFilter<PrimitiveType::TYPE_TINYINT> filter;
+    auto dest_column = filter.process(nullptr, {src_column, src_column2});
+
+    ASSERT_TRUE(!dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 5);
+
+    _check_array<int8_t>({(int8_t)(5), (int8_t)(6)}, dest_column->get(0).get_array());
+    ASSERT_TRUE(dest_column->get(1).get_array().empty());
+    ASSERT_TRUE(dest_column->get(2).get_array().empty());
+    ASSERT_TRUE(dest_column->get(3).get_array().empty());
+    _check_array<int8_t>({(int8_t)(4)}, dest_column->get(4).get_array());
+}
+
 TEST_F(ArrayFunctionsTest, array_filter_bigint_with_nullable) {
     auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BIGINT, true);
     src_column->append_datum(DatumArray{(int64_t)5, (int64_t)3, (int64_t)6});
@@ -4408,7 +4463,7 @@ TEST_F(ArrayFunctionsTest, array_filter_bigint_with_nullable) {
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<int64_t>({(int64_t)(5), (int64_t)(6)}, dest_column->get(0).get_array());
-    _check_array<int64_t>({(int64_t)(8)}, dest_column->get(1).get_array());
+    ASSERT_TRUE(dest_column->get(1).get_array().empty());
     ASSERT_TRUE(dest_column->get(2).get_array().empty());
     ASSERT_TRUE(dest_column->get(3).is_null());
     _check_array<int64_t>({(int64_t)(4)}, dest_column->get(4).get_array());
@@ -4423,7 +4478,7 @@ TEST_F(ArrayFunctionsTest, array_filter_bigint) {
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)1});
 
     auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
-    src_column2->append_datum(DatumArray{Datum(), (bool)1}); //less one
+    src_column2->append_datum(DatumArray{Datum(), (bool)1});
     src_column2->append_datum(DatumArray{(bool)1});
     src_column2->append_datum(DatumArray{(bool)0});
     src_column2->append_datum(DatumArray{Datum()});
@@ -4463,7 +4518,7 @@ TEST_F(ArrayFunctionsTest, array_filter_double_with_nullable) {
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<double>({(double)(5), (double)(6)}, dest_column->get(0).get_array());
-    _check_array<double>({(double)(8)}, dest_column->get(1).get_array());
+    ASSERT_TRUE(dest_column->get(1).get_array().empty());
     ASSERT_TRUE(dest_column->get(2).get_array().empty());
     ASSERT_TRUE(dest_column->get(3).is_null());
     _check_array<double>({(double)(4)}, dest_column->get(4).get_array());
@@ -4518,7 +4573,7 @@ TEST_F(ArrayFunctionsTest, array_filter_varchar_with_nullable) {
     ASSERT_TRUE(dest_column->is_nullable());
     ASSERT_EQ(dest_column->size(), 5);
     _check_array<Slice>({Slice("5"), Slice("6")}, dest_column->get(0).get_array());
-    _check_array<Slice>({Slice("8")}, dest_column->get(1).get_array());
+    ASSERT_TRUE(dest_column->get(1).get_array().empty());
     ASSERT_TRUE(dest_column->get(2).get_array().empty());
     ASSERT_TRUE(dest_column->get(3).is_null());
     _check_array<Slice>({Slice("4")}, dest_column->get(4).get_array());

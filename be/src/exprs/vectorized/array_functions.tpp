@@ -1076,42 +1076,44 @@ private:
 
 private:
     static void _filter_array_items(const ArrayColumn* src_column, const ColumnPtr raw_filter, ArrayColumn* dest_column,
-                                    NullColumn* desc_null_map) {
+                                    NullColumn* dest_null_map) {
         ArrayColumn* filter;
-        NullColumn* null_map = nullptr;
+        NullColumn* filter_null_map = nullptr;
         auto& dest_offsets = dest_column->offsets_column()->get_data();
 
         if (raw_filter->is_nullable()) {
             auto nullable_column = down_cast<NullableColumn*>(raw_filter.get());
             filter = down_cast<ArrayColumn*>(nullable_column->data_column().get());
-            null_map = nullable_column->null_column().get();
+            filter_null_map = nullable_column->null_column().get();
         } else {
             filter = down_cast<ArrayColumn*>(raw_filter.get());
         }
+        std::vector<uint32_t> indexes;
+        // only keep the elements whose filter is not null and not 0.
         for (size_t i = 0; i < src_column->size(); ++i) {
-            if (desc_null_map == nullptr || !desc_null_map->get_data()[i]) {
-                // null filter is regard as invalid, so does not filter items.
-                if (null_map != nullptr && null_map->get_data()[i]) {
-                    dest_column->append(*src_column, i, 1);
-                } else { // a not-null filter
+            if (dest_null_map == nullptr || !dest_null_map->get_data()[i]) {         // dest_null_map[i] is not null
+                if (filter_null_map == nullptr || !filter_null_map->get_data()[i]) { // filter_null_map[i] is not null
                     size_t elem_size = 0;
                     size_t filter_elem_id = filter->offsets().get_data()[i];
-                    size_t filter_elem_it_limit = filter->offsets().get_data()[i + 1];
+                    size_t filter_elem_limit = filter->offsets().get_data()[i + 1];
                     for (size_t src_elem_id = src_column->offsets().get_data()[i];
                          src_elem_id < src_column->offsets().get_data()[i + 1]; ++filter_elem_id, ++src_elem_id) {
                         // only keep the valid elements
-                        if (filter_elem_id < filter_elem_it_limit && !filter->elements().is_null(filter_elem_id) &&
+                        if (filter_elem_id < filter_elem_limit && !filter->elements().is_null(filter_elem_id) &&
                             filter->elements().get(filter_elem_id).get_int8() != 0) {
-                            dest_column->elements_column()->append(src_column->elements(), src_elem_id, 1);
+                            indexes.emplace_back(src_elem_id);
                             ++elem_size;
                         }
                     }
                     dest_offsets.emplace_back(dest_offsets.back() + elem_size);
+                } else { // filter_null_map[i] is null, empty the array by design[, alternatively keep all elements]
+                    dest_offsets.emplace_back(dest_offsets.back());
                 }
-            } else {
+            } else { // dest_null_map[i] is null
                 dest_offsets.emplace_back(dest_offsets.back());
             }
         }
+        dest_column->elements_column()->append_selective(src_column->elements(), indexes);
     }
 };
 
