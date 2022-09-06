@@ -1713,7 +1713,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             tableName = getQualifiedName(context.table);
         }
 
-        String name = context.name.getText();
+        String name = ((Identifier) visit(context.name)).getValue();
 
         List<ParseNode> loadPropertyList = new ArrayList<>();
         List<StarRocksParser.LoadPropertiesContext> loadPropertiesContexts = context.loadProperties();
