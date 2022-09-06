@@ -633,8 +633,8 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
         if (use_compression_pool(_compress_codec->type())) {
             Slice compressed_slice;
             Slice input(dst->data());
-            _compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
-                                      &_compression_scratch);
+            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
+                                                      &_compression_scratch));
         } else {
             int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
@@ -645,7 +645,7 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
             Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
 
             Slice input(dst->data());
-            _compress_codec->compress(input, &compressed_slice);
+            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice));
             _compression_scratch.resize(compressed_slice.size);
         }
 
