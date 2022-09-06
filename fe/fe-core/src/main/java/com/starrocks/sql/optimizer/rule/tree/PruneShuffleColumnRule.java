@@ -212,7 +212,7 @@ public class PruneShuffleColumnRule implements TreeRewriteRule {
         }
 
         private boolean isShuffle() {
-            if (distributionList.size() < 1) {
+            if (distributionList.isEmpty()) {
                 return false;
             }
 
@@ -230,7 +230,7 @@ public class PruneShuffleColumnRule implements TreeRewriteRule {
         }
 
         private boolean isBroadcast() {
-            if (distributionList.size() < 1) {
+            if (distributionList.isEmpty()) {
                 return false;
             }
 

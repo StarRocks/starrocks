@@ -26,15 +26,19 @@ public class SeriallyTaskScheduler implements TaskScheduler {
         long timeout = context.getOptimizerContext().getSessionVariable().getOptimizerExecuteTimeout();
         Stopwatch watch = context.getOptimizerContext().getTraceInfo().getStopwatch();
         while (!tasks.empty()) {
-            if (System.currentTimeMillis() >= watch.elapsed(TimeUnit.MILLISECONDS)) {
+            if (watch.elapsed(TimeUnit.MILLISECONDS) > timeout) {
                 // Should have at least one valid plan
                 // group will be null when in rewrite phase
                 Group group = context.getOptimizerContext().getMemo().getRootGroup();
                 if (group == null || !group.hasBestExpression(context.getRequiredProperty())) {
                     throw new StarRocksPlannerException("StarRocks planner use long time " + timeout +
-                            " ms, This probably because 1. FE Full GC, 2. Hive external table fetch metadata took a long time, " +
+                            " ms in " + (group == null ? "logical" : "memo") + " phase, This probably because " +
+                            "1. FE Full GC, " +
+                            "2. Hive external table fetch metadata took a long time, " +
                             "3. The SQL is very complex. " +
-                            "You could 1. adjust FE JVM config, 2. try query again, " +
+                            "You could " +
+                            "1. adjust FE JVM config, " +
+                            "2. try query again, " +
                             "3. enlarge new_planner_optimize_timeout session variable",
                             ErrorType.INTERNAL_ERROR);
                 }
