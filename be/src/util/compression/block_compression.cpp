@@ -708,16 +708,8 @@ public:
 
     Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
                     faststring* compressed_body1, raw::RawString* compressed_body2) const override {
-        // For ZSTD_compress, default ZSTD_COMPRESS_HEAPMODE is off, and
-        // allocate ZSTD_CCtx on stack. So here we didn't integrate it into the
-        // compression context pool.
-        size_t ret = ZSTD_compress(output->data, output->size, input.data, input.size, ZSTD_CLEVEL_DEFAULT);
-        if (ZSTD_isError(ret)) {
-            return Status::InvalidArgument(
-                    strings::Substitute("ZSTD compress failed: $0", ZSTD_getErrorString(ZSTD_getErrorCode(ret))));
-        }
-        output->size = ret;
-        return Status::OK();
+        return _compress({input}, output, use_compression_buffer, uncompressed_size, compressed_body1,
+                         compressed_body2);
     }
 
     Status compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
