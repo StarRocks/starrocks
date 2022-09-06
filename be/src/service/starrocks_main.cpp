@@ -43,6 +43,7 @@
 #include "runtime/jdbc_driver_manager.h"
 #include "service/backend_options.h"
 #include "service/service.h"
+#include "service/staros_worker.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
 #include "util/debug_util.h"

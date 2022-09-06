@@ -168,13 +168,30 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
         return;
     }
 
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::DROP);
+    auto latch = BThreadCountDownLatch(request->tablet_ids().size());
+    bthread::Mutex response_mtx;
     for (auto tablet_id : request->tablet_ids()) {
-        auto res = _env->lake_tablet_manager()->delete_tablet(tablet_id);
-        if (!res.ok()) {
-            LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": " << res.get_error_msg();
+        auto task = [&, tablet_id]() {
+            auto res = _env->lake_tablet_manager()->delete_tablet(tablet_id);
+            if (!res.ok()) {
+                LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": " << res.get_error_msg();
+                std::lock_guard l(response_mtx);
+                response->add_failed_tablets(tablet_id);
+            }
+            latch.count_down();
+        };
+
+        auto st = thread_pool->submit_func(task);
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to submit drop tablet task: " << st;
+            std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
+            latch.count_down();
         }
     }
+
+    latch.wait();
 }
 
 void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
@@ -231,12 +248,25 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
     }
 
     // TODO: move the execution to TaskWorkerPool
-    auto location = _env->lake_tablet_manager()->tablet_root_location(request->tablet_id());
-    auto st = fs::remove_all(location);
-    if (!st.ok() && !st.is_not_found()) {
-        LOG(ERROR) << "Fail to remove " << location << ": " << st;
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::DROP);
+    auto latch = BThreadCountDownLatch(1);
+    auto task = [&]() {
+        auto location = _env->lake_tablet_manager()->tablet_root_location(request->tablet_id());
+        auto st = fs::remove_all(location);
+        if (!st.ok() && !st.is_not_found()) {
+            LOG(ERROR) << "Fail to remove " << location << ": " << st;
+            cntl->SetFailed(st.get_error_msg());
+        }
+        latch.count_down();
+    };
+
+    auto st = thread_pool->submit_func(task);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to submit drop table task: " << st;
         cntl->SetFailed(st.get_error_msg());
     }
+
+    latch.wait();
 }
 
 void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
