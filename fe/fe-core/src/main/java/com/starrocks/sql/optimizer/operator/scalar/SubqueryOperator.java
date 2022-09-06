@@ -19,7 +19,7 @@ public class SubqueryOperator extends ScalarOperator {
     private final QueryStatement queryStatement;
 
     public SubqueryOperator(boolean useSemiAnti, QueryStatement queryStatement) {
-        super(OperatorType.SUBQUERY, Type.SUBQUERY_TYPE);
+        super(OperatorType.SUBQUERY, Type.SUBQUERY);
         this.useSemiAnti = useSemiAnti;
         this.queryStatement = queryStatement;
     }

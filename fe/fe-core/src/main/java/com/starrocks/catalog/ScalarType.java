@@ -63,7 +63,6 @@ public class ScalarType extends Type implements Cloneable {
     @SerializedName(value = "len")
     private int len = -1;
     private boolean isAssignedStrLenInColDefinition = false;
-    private boolean isSubquery = false;
 
     // Only used if type is DECIMAL. -1 (for both) is used to represent a
     // decimal with any precision and scale.
@@ -274,12 +273,6 @@ public class ScalarType extends Type implements Cloneable {
     public static ScalarType createHllType() {
         ScalarType type = new ScalarType(PrimitiveType.HLL);
         type.len = MAX_HLL_LENGTH;
-        return type;
-    }
-
-    public static ScalarType createSubqueryType() {
-        ScalarType type = new ScalarType(PrimitiveType.INVALID_TYPE);
-        type.isSubquery = true;
         return type;
     }
 
@@ -656,9 +649,6 @@ public class ScalarType extends Type implements Cloneable {
         if (t.isPseudoType()) {
             return t.matchesType(this);
         }
-        if (Objects.equals(ScalarType.SUBQUERY_TYPE, this) || Objects.equals(SUBQUERY_TYPE, t)) {
-            return true;
-        }
         if (this.getPrimitiveType() == t.getPrimitiveType()) {
             Preconditions.checkArgument(t.isScalarType());
             return !this.isDecimalV3()
@@ -689,9 +679,6 @@ public class ScalarType extends Type implements Cloneable {
         }
         if (type.isDecimalV2Type() || type.isDecimalV3Type()) {
             return precision == other.precision && scale == other.scale;
-        }
-        if (isSubquery != other.isSubquery) {
-            return false;
         }
         return true;
     }

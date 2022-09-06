@@ -111,11 +111,11 @@ public abstract class Type implements Cloneable {
     public static final ScalarType PERCENTILE = new ScalarType(PrimitiveType.PERCENTILE);
     public static final ScalarType JSON = new ScalarType(PrimitiveType.JSON);
     public static final ScalarType UNKNOWN_TYPE = ScalarType.createUnknownType();
-    public static final ScalarType SUBQUERY_TYPE = ScalarType.createSubqueryType();
     public static final ScalarType FUNCTION = new ScalarType(PrimitiveType.FUNCTION);
 
     public static final PseudoType ANY_ELEMENT = PseudoType.ANY_ELEMENT;
     public static final PseudoType ANY_ARRAY = PseudoType.ANY_ARRAY;
+    public static final PseudoType SUBQUERY = PseudoType.SUBQUERY;
 
     public static final Type ARRAY_BOOLEAN = new ArrayType(Type.BOOLEAN);
     public static final Type ARRAY_TINYINT = new ArrayType(Type.TINYINT);
