@@ -281,8 +281,7 @@ nonterminal StatementBase stmt, show_stmt, show_param, help_stmt, create_routine
     show_routine_load_stmt, show_routine_load_task_stmt, alter_stmt,
     drop_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt,
     unsupported_stmt, export_stmt,
-    import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt,
-    alter_resource_group_stmt;
+    import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt;
 
 nonterminal ImportColumnDesc import_column_desc;
 nonterminal List<ImportColumnDesc> import_column_descs;
@@ -385,7 +384,6 @@ nonterminal String keyword, ident, ident_or_text, variable_name, text_or_passwor
 
 nonterminal String opt_db;
 nonterminal Boolean opt_if_exists, opt_if_not_exists;
-nonterminal Boolean externalable_resource;
 
 nonterminal RoutineLoadDataSourceProperties opt_datasource_properties;
 
@@ -562,15 +560,6 @@ alter_stmt ::=
     {:
         RESULT = new AlterRoutineLoadStmt(jobLabel, loadPropertyList, jobProperties, datasourceProperties);
     :}
-    /* resource */
-    | KW_ALTER KW_RESOURCE ident_or_text:resourceName KW_SET opt_properties:properties
-    {:
-        RESULT = new AlterResourceStmt(resourceName, properties);
-    :}
-    | alter_resource_group_stmt:stmt
-    {:
-        RESULT = stmt;
-    :}
     ;
 
 opt_datasource_properties ::=
@@ -618,11 +607,6 @@ create_stmt ::=
     | KW_CREATE KW_FILE STRING_LITERAL:fileName opt_db:db KW_PROPERTIES LPAREN key_value_map:properties RPAREN
     {:
         RESULT = new CreateFileStmt(fileName, db, properties);
-    :}
-    /* resource */
-    | KW_CREATE externalable_resource:isExternal ident_or_text:resourceName opt_properties:properties
-    {:
-        RESULT = new CreateResourceStmt(isExternal, resourceName, properties);
     :}
     ;
 
@@ -967,10 +951,6 @@ drop_stmt ::=
     {:
         RESULT = new DropMaterializedViewStmt(ifExists, dbMvName, dbTblName);
     :}
-    | KW_DROP KW_RESOURCE ident_or_text:resourceName
-    {:
-        RESULT = new DropResourceStmt(resourceName);
-    :}
     ;
 
 key_value_map ::=
@@ -1016,17 +996,6 @@ opt_if_not_exists ::=
     :}
     ;
 
-externalable_resource ::=
-    KW_RESOURCE
-    {:
-        RESULT = false;
-    :}
-    | KW_EXTERNAL KW_RESOURCE
-    {:
-        RESULT = true;
-    :}
-    ;
-
 // Show statement
 show_stmt ::=
     KW_SHOW show_param:stmt
@@ -1045,62 +1014,10 @@ show_param ::=
     {:
         RESULT = new ShowWhiteListStmt();
     :}
-    /* show variables */
-    | opt_var_type:type KW_VARIABLES opt_wild_where
-    {:
-        RESULT = new ShowVariablesStmt(type, parser.wild, parser.where);
-    :}
     /* show materialized view */
     | KW_MATERIALIZED KW_VIEW opt_db:db
     {:
         RESULT = new ShowMaterializedViewStmt(db);
-    :}
-    /* triggers */
-    | opt_full KW_TRIGGERS opt_db:db opt_wild_where
-    {:
-        RESULT = new ShowTriggersStmt();
-    :}
-    /* events */
-    | KW_EVENTS opt_db:db opt_wild_where
-    {:
-        RESULT = new ShowEventsStmt();
-    :}
-    /* plugins */
-    | KW_PLUGINS
-    {:
-        RESULT = new ShowPluginsStmt();
-    :}
-    /* engines */
-    | opt_storage KW_ENGINES
-    {:
-        RESULT = new ShowEnginesStmt();
-    :}
-    /* Authors */
-    | KW_AUTHORS
-    {:
-        RESULT = new ShowAuthorStmt();
-    :}
-    /* Database */
-    | KW_DATABASES opt_wild_where
-    {:
-        RESULT = new ShowDbStmt(parser.wild, parser.where);
-    :}
-    | KW_SCHEMAS opt_wild_where
-    {:
-        RESULT = new ShowDbStmt(parser.wild, parser.where);
-    :}
-    /* collation */
-    | KW_COLLATION opt_wild_where
-    {:
-        RESULT = new ShowCollationStmt(parser.wild);
-    :}
-    | KW_WARNINGS limit_clause
-    {:
-        RESULT = new ShowWarningStmt();
-    :}
-    | KW_ERRORS limit_clause
-    {:
-        RESULT = new ShowWarningStmt();
     :}
     /* Show export statement */
     | KW_EXPORT opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
@@ -1110,26 +1027,6 @@ show_param ::=
     | KW_RESTORE opt_db:db opt_wild_where
     {:
         RESULT = new ShowRestoreStmt(db, parser.where);
-    :}
-    | KW_RESOURCES
-    {:
-        RESULT = new ShowResourcesStmt();
-    :}
-    | KW_BACKENDS
-    {:
-        RESULT = new ShowBackendsStmt();
-    :}
-    | KW_FRONTENDS
-    {:
-        RESULT = new ShowFrontendsStmt();
-    :}
-    | KW_USER
-    {:
-        RESULT = new ShowUserStmt();
-    :}
-    | KW_REPOSITORIES
-    {:
-       RESULT = new ShowRepositoriesStmt();
     :}
     | KW_SNAPSHOT KW_ON ident:repo opt_wild_where
     {:

@@ -92,6 +92,8 @@ public enum OperatorType {
     DICT_MAPPING,
     CLONE,
     LAMBDA_FUNCTION,
+    SUBQUERY,
+
     /**
      * PATTERN
      */

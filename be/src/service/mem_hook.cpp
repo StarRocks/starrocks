@@ -9,7 +9,6 @@
 
 #include <atomic>
 #include <iostream>
-#include <new>
 
 #include "common/compiler_util.h"
 

@@ -494,7 +494,7 @@ select case (v3 in (select v7 from t2 where t0.v2 = t2.v8)) when TRUE then 1 whe
 [result]
 CTEAnchor(cteid=3)
     CTEProducer(cteid=3)
-        SCAN (columns[4: v7, 5: v8] predicate[null])
+        SCAN (columns[5: v7, 6: v8] predicate[null])
     LEFT OUTER JOIN (join-predicate [2: v2 = 12: v8] post-join-predicate [null])
         LEFT OUTER JOIN (join-predicate [3: v3 = 9: v7 AND 2: v2 = 10: v8] post-join-predicate [null])
             SCAN (columns[2: v2, 3: v3] predicate[null])
@@ -515,7 +515,7 @@ select not (v3 in (select v7 from t2 where t0.v2 = t2.v8)) from t0;
 [result]
 CTEAnchor(cteid=3)
     CTEProducer(cteid=3)
-        SCAN (columns[4: v7, 5: v8] predicate[null])
+        SCAN (columns[5: v7, 6: v8] predicate[null])
     LEFT OUTER JOIN (join-predicate [2: v2 = 12: v8] post-join-predicate [null])
         LEFT OUTER JOIN (join-predicate [3: v3 = 9: v7 AND 2: v2 = 10: v8] post-join-predicate [null])
             SCAN (columns[2: v2, 3: v3] predicate[null])

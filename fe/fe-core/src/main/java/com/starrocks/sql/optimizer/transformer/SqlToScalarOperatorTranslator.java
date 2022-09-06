@@ -35,7 +35,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.ResolvedField;
@@ -66,6 +65,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
 import java.math.BigDecimal;
@@ -536,7 +536,7 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitSubquery(Subquery node, Void context) {
-            throw unsupportedException("complex subquery on " + AST2SQL.toString(node));
+            return new SubqueryOperator(node.isUseSemiAnti(), node.getQueryStatement());
         }
 
         @Override

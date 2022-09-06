@@ -29,7 +29,6 @@
 #endif
 
 #include <curl/curl.h>
-#include <gperftools/profiler.h>
 #include <thrift/TOutput.h>
 
 #include "agent/heartbeat_server.h"
@@ -39,7 +38,6 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
-#include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
@@ -50,11 +48,8 @@
 #include "storage/storage_engine.h"
 #include "util/debug_util.h"
 #include "util/logging.h"
-#include "util/network_util.h"
-#include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"
-#include "util/thrift_util.h"
 #include "util/uid_util.h"
 
 DECLARE_bool(s2debug);

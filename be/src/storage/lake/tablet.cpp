@@ -8,7 +8,6 @@
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/rowset.h"
-#include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment.h"

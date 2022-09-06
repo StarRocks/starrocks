@@ -123,7 +123,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long slow_lock_log_every_ms = 3000L;
 
-
     /**
      * dump_log_dir:
      * This specifies FE dump log dir.
@@ -1688,13 +1687,26 @@ public class Config extends ConfigBase {
     public static String jaeger_grpc_endpoint = "";
 
     @ConfField
-    public static long experimental_lake_compaction_max_version_count = 10;
+    public static String lake_compaction_selector = "SimpleSelector";
 
     @ConfField
-    public static long experimental_lake_compaction_min_version_count = 3;
+    public static String lake_compaction_sorter = "RandomSorter";
 
     @ConfField
-    public static long experimental_lake_compaction_max_interval_seconds = 300;
+    public static long lake_compaction_simple_selector_min_versions = 3;
+
+    @ConfField
+    public static long lake_compaction_simple_selector_threshold_versions = 10;
+
+    @ConfField
+    public static long lake_compaction_simple_selector_threshold_seconds = 300;
+
+    /**
+     * -1 means calculate the value in an adaptive way.
+     * 0 will disable compaction.
+     */
+    @ConfField
+    public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;

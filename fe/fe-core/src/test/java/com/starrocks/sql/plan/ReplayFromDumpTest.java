@@ -302,20 +302,21 @@ public class ReplayFromDumpTest {
         // check outer join with isNull predicate on inner table
         // The estimate cardinality of join should not be 0.
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"));
+        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [257: ss_ticket_number, INT, false] = [280: sr_ticket_number, INT, true]\n" +
                 "  |  equal join conjunct: [256: ss_item_sk, INT, false] = [279: sr_item_sk, INT, true]\n" +
                 "  |  other predicates: 280: sr_ticket_number IS NULL\n" +
                 "  |  output columns: 256, 258, 260, 266, 267, 269\n" +
-                "  |  cardinality: 39142590"));
+                "  |  cardinality: 37372757"));
         Assert.assertTrue(replayPair.second.contains("15:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [331: ws_order_number, INT, false] = [365: wr_order_number, INT, true]\n" +
                 "  |  equal join conjunct: [330: ws_item_sk, INT, false] = [364: wr_item_sk, INT, true]\n" +
                 "  |  other predicates: 365: wr_order_number IS NULL\n" +
                 "  |  output columns: 330, 332, 335, 348, 349, 351\n" +
-                "  |  cardinality: 7916106"));
+                "  |  cardinality: 7914602"));
     }
 
     @Test
@@ -482,7 +483,7 @@ public class ReplayFromDumpTest {
                 getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), null,
                         TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  20:Project\n" +
-                "  |  <slot 33> : bitmap_and(21: expr, 29: bitmap_union)\n" +
+                "  |  <slot 6> : bitmap_and(24: bitmap_union, 32: bitmap_union)\n" +
                 "  |  \n" +
                 "  19:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
@@ -491,7 +492,7 @@ public class ReplayFromDumpTest {
                 "  |----18:EXCHANGE\n" +
                 "  |    \n" +
                 "  11:Project\n" +
-                "  |  <slot 21> : 18: bitmap_union"));
+                "  |  <slot 24> : 21: bitmap_union"));
     }
 
     @Test

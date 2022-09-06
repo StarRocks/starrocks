@@ -19,10 +19,8 @@
 #include "orc/ColumnPrinter.hh"
 
 #include <ctime>
-#include <limits>
 #include <sstream>
 #include <stdexcept>
-#include <typeinfo>
 
 #include "Adaptor.hh"
 #include "orc/orc-config.hh"

@@ -55,7 +55,8 @@ public:
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
-            bool enable_tablet_internal_parallel, size_t num_total_scan_ranges) override;
+            bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+            size_t num_total_scan_ranges) override;
 
     void debug_string(int indentation_level, std::stringstream* out) const override {
         *out << "vectorized::OlapScanNode";
@@ -138,6 +139,7 @@ private:
 
     StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
                                                    int32_t pipeline_dop, size_t num_total_scan_ranges,
+                                                   TTabletInternalParallelMode::type tablet_internal_parallel_mode,
                                                    int64_t* scan_dop, int64_t* splitted_scan_rows) const;
     StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
 

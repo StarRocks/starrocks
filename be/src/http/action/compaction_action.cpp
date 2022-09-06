@@ -45,7 +45,6 @@
 #include "storage/tablet_updates.h"
 #include "util/defer_op.h"
 #include "util/json_util.h"
-#include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 

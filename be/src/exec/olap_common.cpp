@@ -21,7 +21,6 @@
 
 #include "exec/olap_common.h"
 
-#include <boost/lexical_cast.hpp>
 #include <string>
 #include <utility>
 #include <vector>

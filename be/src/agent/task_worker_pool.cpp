@@ -34,6 +34,7 @@
 #include "agent/master_info.h"
 #include "agent/publish_version.h"
 #include "agent/report_task.h"
+#include "agent/task_singatures_manager.h"
 #include "common/status.h"
 #include "exec/workgroup/work_group.h"
 #include "fs/fs.h"
@@ -64,8 +65,6 @@ namespace starrocks {
 const size_t PUBLISH_VERSION_BATCH_SIZE = 10;
 
 std::atomic<int64_t> TaskWorkerPoolBase::_s_report_version(time(nullptr) * 10000);
-std::mutex TaskWorkerPoolBase::_s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
-std::set<int64_t> TaskWorkerPoolBase::_s_task_signatures[TTaskType::type::NUM_TASK_TYPE];
 
 using std::swap;
 
@@ -168,23 +167,9 @@ void TaskWorkerPool<AgentTaskRequest>::submit_tasks(const std::vector<const TAge
     std::string type_str;
     size_t task_count = tasks.size();
     const TTaskType::type task_type = tasks[0]->task_type;
-    std::vector<uint8_t> failed_task(task_count);
     EnumToString(TTaskType, task_type, type_str);
     const auto recv_time = time(nullptr);
-    {
-        std::lock_guard task_signatures_lock(_s_task_signatures_locks[task_type]);
-        for (size_t i = 0; i < tasks.size(); i++) {
-            int64_t signature = tasks[i]->signature;
-
-            // batch register task info
-            std::set<int64_t>& signature_set = _s_task_signatures[task_type];
-            if (signature_set.insert(signature).second) {
-                failed_task[i] = 0;
-            } else {
-                failed_task[i] = 1;
-            }
-        }
-    }
+    auto failed_task = batch_register_task_info(tasks);
 
     size_t non_zeros = SIMD::count_nonzero(failed_task);
 
@@ -246,17 +231,6 @@ size_t TaskWorkerPool<AgentTaskRequest>::num_queued_tasks() const {
     return _tasks.size();
 }
 
-bool TaskWorkerPoolBase::register_task_info(TTaskType::type task_type, int64_t signature) {
-    std::lock_guard task_signatures_lock(_s_task_signatures_locks[task_type]);
-    std::set<int64_t>& signature_set = _s_task_signatures[task_type];
-    return signature_set.insert(signature).second;
-}
-
-void TaskWorkerPoolBase::remove_task_info(TTaskType::type task_type, int64_t signature) {
-    std::lock_guard task_signatures_lock(_s_task_signatures_locks[task_type]);
-    _s_task_signatures[task_type].erase(signature);
-}
-
 template <class AgentTaskRequest>
 void TaskWorkerPool<AgentTaskRequest>::_spawn_callback_worker_thread(CALLBACK_FUNCTION callback_func) {
     std::thread worker_thread(callback_func, this);
@@ -309,50 +283,6 @@ void* CreateTabletTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
         finish_task_request.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
-        finish_task_request.__set_task_type(agent_task_req->task_type);
-        finish_task_request.__set_signature(agent_task_req->signature);
-        finish_task_request.__set_task_status(task_status);
-
-        finish_task(finish_task_request);
-        remove_task_info(agent_task_req->task_type, agent_task_req->signature);
-    }
-    return nullptr;
-}
-
-void* DropTabletTaskWorkerPool::_worker_thread_callback(void* arg_this) {
-    auto* worker_pool_this = (DropTabletTaskWorkerPool*)arg_this;
-
-    while (true) {
-        AgentTaskRequestPtr agent_task_req = worker_pool_this->_pop_task();
-        if (agent_task_req == nullptr) {
-            break;
-        }
-        const TDropTabletReq& drop_tablet_req = agent_task_req->task_req;
-
-        bool force_drop = drop_tablet_req.__isset.force && drop_tablet_req.force;
-        TStatusCode::type status_code = TStatusCode::OK;
-        std::vector<std::string> error_msgs;
-        TStatus task_status;
-
-        auto dropped_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(drop_tablet_req.tablet_id);
-        if (dropped_tablet != nullptr) {
-            TabletDropFlag flag = force_drop ? kDeleteFiles : kMoveFilesToTrash;
-            auto st = StorageEngine::instance()->tablet_manager()->drop_tablet(drop_tablet_req.tablet_id, flag);
-            if (!st.ok()) {
-                LOG(WARNING) << "drop table failed! signature: " << agent_task_req->signature;
-                error_msgs.emplace_back("drop table failed!");
-                status_code = TStatusCode::RUNTIME_ERROR;
-            }
-            // if tablet is dropped by fe, then the related txn should also be removed
-            StorageEngine::instance()->txn_manager()->force_rollback_tablet_related_txns(
-                    dropped_tablet->data_dir()->get_meta(), drop_tablet_req.tablet_id, drop_tablet_req.schema_hash,
-                    dropped_tablet->tablet_uid());
-        }
-        task_status.__set_status_code(status_code);
-        task_status.__set_error_msgs(error_msgs);
-
-        TFinishTaskRequest finish_task_request;
-        finish_task_request.__set_backend(BackendOptions::get_localBackend());
         finish_task_request.__set_task_type(agent_task_req->task_type);
         finish_task_request.__set_signature(agent_task_req->signature);
         finish_task_request.__set_task_status(task_status);
@@ -1054,13 +984,7 @@ void* ReportTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             sleep(1);
             continue;
         }
-        std::map<TTaskType::type, std::set<int64_t>> tasks;
-        for (int i = 0; i < TTaskType::type::NUM_TASK_TYPE; i++) {
-            std::lock_guard task_signatures_lock(_s_task_signatures_locks[i]);
-            if (!_s_task_signatures[i].empty()) {
-                tasks.emplace(static_cast<TTaskType::type>(i), _s_task_signatures[i]);
-            }
-        }
+        auto tasks = count_all_tasks();
         request.__set_tasks(tasks);
         request.__set_backend(BackendOptions::get_localBackend());
 
@@ -1466,7 +1390,7 @@ void* MoveTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_task_status(task_status);
 
         finish_task(finish_task_request);
-        worker_pool_this->remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+        remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
     return nullptr;
 }
@@ -1494,7 +1418,6 @@ AgentStatus MoveTaskWorkerPool::_move_dir(TTabletId tablet_id, TSchemaHash schem
 }
 
 template class TaskWorkerPool<CreateTabletAgentTaskRequest>;
-template class TaskWorkerPool<DropTabletAgentTaskRequest>;
 template class TaskWorkerPool<PushReqAgentTaskRequest>;
 template class TaskWorkerPool<PublishVersionAgentTaskRequest>;
 template class TaskWorkerPool<ClearTransactionAgentTaskRequest>;

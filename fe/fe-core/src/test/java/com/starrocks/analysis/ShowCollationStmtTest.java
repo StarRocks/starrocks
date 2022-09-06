@@ -2,6 +2,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -16,7 +17,6 @@ public class ShowCollationStmtTest {
         {
             ShowCollationStmt stmt = (ShowCollationStmt) SqlParser.parse("SHOW COLLATION", 32).get(0);
             Analyzer.analyze(stmt, ctx);
-            Assert.assertEquals("SHOW COLLATION", stmt.toString());
             Assert.assertNull(stmt.getPattern());
             Assert.assertNull(stmt.getWhere());
         }
@@ -24,7 +24,6 @@ public class ShowCollationStmtTest {
         {
             ShowCollationStmt stmt = (ShowCollationStmt) SqlParser.parse("SHOW COLLATION LIKE 'abc'", 32).get(0);
             Analyzer.analyze(stmt, ctx);
-            Assert.assertEquals("SHOW COLLATION LIKE 'abc'", stmt.toString());
             Assert.assertEquals("abc", stmt.getPattern());
             Assert.assertNull(stmt.getWhere());
         }
@@ -32,7 +31,6 @@ public class ShowCollationStmtTest {
         {
             ShowCollationStmt stmt = (ShowCollationStmt) SqlParser.parse("SHOW COLLATION WHERE Sortlen>1", 32).get(0);
             Analyzer.analyze(stmt, ctx);
-            Assert.assertEquals("SHOW COLLATION WHERE Sortlen > 1", stmt.toString());
             Assert.assertNull(stmt.getPattern());
             Assert.assertEquals("Sortlen > 1", stmt.getWhere().toSql());
         }
@@ -40,7 +38,6 @@ public class ShowCollationStmtTest {
         {
             ShowCollationStmt stmt = new ShowCollationStmt();
             Analyzer.analyze(stmt, ctx);
-            Assert.assertEquals("SHOW COLLATION", stmt.toString());
             Assert.assertNull(stmt.getPattern());
             Assert.assertNull(stmt.getWhere());
         }

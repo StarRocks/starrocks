@@ -2,7 +2,6 @@
 
 #include "exec/vectorized/analytor.h"
 
-#include <algorithm>
 #include <cmath>
 #include <ios>
 #include <memory>

@@ -46,6 +46,10 @@ public class HdfsScanNode extends ScanNode {
         return scanNodePredicates;
     }
 
+    public HiveTable getHiveTable() {
+        return hiveTable;
+    }
+
     @Override
     protected String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
