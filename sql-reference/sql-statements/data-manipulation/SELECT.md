@@ -6,15 +6,13 @@ Select 语句由 select，from，where，group by，having，order by，union �
 
 StarRocks 的查询语句基本符合 SQL92 标准，下面简要介绍支持的 select 用法。
 
-### 连接(Join)
+### 连接 (Join)
 
 连接操作是合并 2 个或多个表的数据，然后返回其中某些表中的某些列的结果集。
 
-目前 StarRocks 支持 inner join，outer join，semi join，anti join，cross join。
+目前 StarRocks 支持 Self Join、Cross Join、Inner Join、Outer Join、Semi Join 和 Anti Join。其中， Outer Join 包括 Left Join、Right Join 和 Full Join。
 
-在 inner join 条件里除了支持等值 join，还支持不等值 join，为了性能考虑，推荐使用等值 join。
-
-其它 join 只支持等值 join。连接的语法定义如下：
+连接的语法定义如下：
 
 ```sql
 SELECT select_list FROM
@@ -43,11 +41,11 @@ table_or_subquery1 CROSS JOIN table_or_subquery2
 [ WHERE where_clauses ]
 ```
 
-#### Self-Join
+#### Self Join
 
-StarRocks 支持 self-joins，即自己和自己 join。例如同一张表的不同列进行 join。
+StarRocks 支持 Self Join，即自己和自己 Join。例如同一张表的不同列进行 Join。
 
-实际上没有特殊的语法标识 self-join。self-join 中 join 两边的条件都来自同一张表，
+实际上没有特殊的语法标识 Self Join。Self Join 中 Join 两边的条件都来自同一张表，
 
 我们需要给他们分配不同的别名。
 
@@ -57,11 +55,11 @@ StarRocks 支持 self-joins，即自己和自己 join。例如同一张表的不
 SELECT lhs.id, rhs.parent, lhs.c1, rhs.c2 FROM tree_data lhs, tree_data rhs WHERE lhs.id = rhs.parent;
 ```
 
-#### 笛卡尔积(Cross Join)
+#### 笛卡尔积 (Cross Join)
 
 Cross join 会产生大量的结果，须慎用 cross join,
 
-即使需要使用 cross join 时也需要使用过滤条件并且确保返回结果数较少。例如：
+即使需要使用 Cross Join 时也需要使用过滤条件并且确保返回结果数较少。例如：
 
 ```sql
 SELECT * FROM t1, t2;
@@ -69,9 +67,9 @@ SELECT * FROM t1, t2;
 SELECT * FROM t1 CROSS JOIN t2;
 ```
 
-#### Inner join
+#### Inner Join
 
-Inner join 是大家最熟知，最常用的 join。返回的结果来自相近的 2 张表所请求的列，join 的条件为两个表的列包含有相同的值。
+Inner Inner Join 是大家最熟知，最常用的 Join。返回的结果来自相近的两张表所请求的列，Join 的条件为两个表的列包含有相同的值。
 
 如果两个表的某个列名相同，我们需要使用全名（table_name.column_name 形式）或者给列名起别名。
 
@@ -87,9 +85,9 @@ SELECT t1.id, c1, c2 FROM t1 JOIN t2 ON t1.id = t2.id;
 SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
 ```
 
-#### Outer join
+#### Outer Join
 
-Outer join 返回左表或者右表或者两者所有的行。如果在另一张表中没有匹配的数据，则将其设置为 NULL。例如：
+Outer Join 返回左表或者右表或者两者所有的行。如果在另一张表中没有匹配的数据，则将其设置为 `NULL`。例如：
 
 ```sql
 SELECT * FROM t1 LEFT OUTER JOIN t2 ON t1.id = t2.id;
@@ -99,25 +97,11 @@ SELECT * FROM t1 RIGHT OUTER JOIN t2 ON t1.id = t2.id;
 SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.id = t2.id;
 ```
 
-#### 等值和不等值 join
+#### Semi Join
 
-通常情况下，用户使用等值 join 居多，等值 join 要求 join 条件的操作符是等号。
+Left Semi Join 只返回左表中能匹配右表数据的行，不管能匹配右表多少行数据，
 
-不等值 join 在 join 条件上可以使用!=，等符号。不等值 join 会产生大量的结果，在计算过程中可能超过内存限额。
-
-因此需要谨慎使用。不等值 join 只支持 inner join。例如：
-
-```sql
-SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
-
-SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id > t2.id;
-```
-
-#### Semi join
-
-Left semi join 只返回左表中能匹配右表数据的行，不管能匹配右表多少行数据，
-
-左表的该行最多只返回一次。Right semi join 原理相似，只是返回的数据是右表的。
+左表的该行最多只返回一次。Right Semi Join 原理相似，只是返回的数据是右表的。
 
 例如：
 
@@ -125,15 +109,43 @@ Left semi join 只返回左表中能匹配右表数据的行，不管能匹配�
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT SEMI JOIN t2 ON t1.id = t2.id;
 ```
 
-#### Anti join
+#### Anti Join
 
-Left anti join 只返回左表中不能匹配右表的行。
+Left Anti Join 只返回左表中不能匹配右表的行。
 
-Right anti join 反转了这个比较，只返回右表中不能匹配左表的行。例如：
+Right Anti Join 反转了这个比较，只返回右表中不能匹配左表的行。例如：
 
 ```sql
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
 ```
+
+#### 等值 Join 和非等值 Join
+
+根据 Join 条件的不同，StarRocks 支持的上述各种类型的 Join 可以分为等值 Join 和非等值 Join，如下表所示：
+
+| **等值 Join**   | Self Join、Cross Join、Inner Join、Outer Join、Semi Join 和 Anti Join |
+| --------------- | ------------------------------------------------------------ |
+| **非等值 Join** | Cross Join、Inner Join 和 Outer Join                         |
+
+- 等值 Join
+  
+  等值 Join 使用等值条件作为连接条件，例如 `a JOIN b ON a.id = b.id`。
+
+- 非等值 Join
+  
+  非等值 Join 不使用等值条件，使用 `<`、`<=`、`>`、`>=`、`<>` 等比较操作符，例如 `a JOIN b ON a.id < b.id`。与等值 Join 相比，非等值 Join 目前效率较低，建议您谨慎使用。
+
+  以下为非等值 Join 的两个使用示例：
+
+  ```SQL
+  SELECT t1.id, c1, c2 
+  FROM t1 
+  INNER JOIN t2 ON t1.id < t2.id;
+    
+  SELECT t1.id, c1, c2 
+  FROM t1 
+  LEFT JOIN t2 ON t1.id > t2.id;
+  ```
 
 ### Order by
 
