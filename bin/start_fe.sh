@@ -24,16 +24,19 @@ OPTS=$(getopt \
   -o '' \
   -l 'daemon' \
   -l 'helper:' \
+  -l 'host_type:' \
   -- "$@")
 
 eval set -- "$OPTS"
 
 RUN_DAEMON=0
 HELPER=
+HOST_TYPE=
 while true; do
     case "$1" in
         --daemon) RUN_DAEMON=1 ; shift ;;
         --helper) HELPER=$2 ; shift 2 ;;
+        --host_type) HOST_TYPE=$2 ; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -114,10 +117,15 @@ if [ x"$HELPER" != x"" ]; then
     HELPER="-helper $HELPER"
 fi
 
+if [ x"$HOST_TYPE" != x"" ]; then
+    # change it to '-host_type' to be compatible with code in Frontend
+    HOST_TYPE="-host_type $HOST_TYPE"
+fi
+
 if [ ${RUN_DAEMON} -eq 1 ]; then
-    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} "$@" >> $LOG_DIR/fe.out 2>&1 </dev/null &
+    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" >> $LOG_DIR/fe.out 2>&1 </dev/null &
 else
-    $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} "$@" >> $LOG_DIR/fe.out 2>&1 </dev/null
+    $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" >> $LOG_DIR/fe.out 2>&1 </dev/null
 fi
 
 echo $! > $pidfile
