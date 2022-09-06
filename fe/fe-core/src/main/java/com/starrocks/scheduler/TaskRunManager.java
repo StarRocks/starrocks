@@ -44,7 +44,7 @@ public class TaskRunManager {
         int validPendingCount = 0;
         for (Long taskId : pendingTaskRunMap.keySet()) {
             Queue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
-            if (taskRuns != null && taskRuns.isEmpty()) {
+            if (taskRuns != null && !taskRuns.isEmpty()) {
                 validPendingCount++;
             }
         }
