@@ -2172,17 +2172,20 @@ public class AuthTest {
      @Test
      public void testGrantRevokeImpersonate() throws Exception {
          // 1. prepare
-         // 1.1create harry, gregory, albert
+         // 1.1 create harry, gregory, albert, neville
          UserIdentity harry = new UserIdentity("Harry", "%");
          harry.analyze(SystemInfoService.DEFAULT_CLUSTER);
          UserIdentity gregory = new UserIdentity("Gregory", "%");
          gregory.analyze(SystemInfoService.DEFAULT_CLUSTER);
          UserIdentity albert = new UserIdentity("Albert", "%");
          gregory.analyze(SystemInfoService.DEFAULT_CLUSTER);
+         UserIdentity neville = new UserIdentity("Neville", "%");
+         neville.analyze(SystemInfoService.DEFAULT_CLUSTER);
          List<UserIdentity> userToBeCreated = new ArrayList<>();
          userToBeCreated.add(harry);
          userToBeCreated.add(gregory);
          userToBeCreated.add(albert);
+         userToBeCreated.add(neville);
          for (UserIdentity userIdentity : userToBeCreated) {
              UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
              CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
@@ -2221,6 +2224,47 @@ public class AuthTest {
          // 4.2 assert
          Assert.assertFalse(auth.canImpersonate(harry, gregory));
          Assert.assertTrue(auth.canImpersonate(harry, albert));
+
+         // Auror usually has the ability to impersonate to others..
+         // 5.1 create role
+         String auror = "auror";
+         CreateRoleStmt roleStmt = new CreateRoleStmt(auror);
+         roleStmt.analyze(analyzer);
+         auth.createRole(roleStmt);
+         // 5.2 grant impersonate to gregory on role auror
+         grantStmt = new GrantImpersonateStmt(auror, gregory);
+         com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+         auth.grantImpersonate(grantStmt);
+         // 5.3 grant auror to neiville
+         GrantRoleStmt grantRoleStmt = new GrantRoleStmt(auror, neville);
+         com.starrocks.sql.analyzer.Analyzer.analyze(grantRoleStmt, ctx);
+         auth.grantRole(grantRoleStmt);
+         // 5.4 assert
+         Assert.assertTrue(auth.canImpersonate(neville, gregory));
+
+         // 6. grant impersonate to albert on role auror
+         // 6.1 grant
+         grantStmt = new GrantImpersonateStmt(auror, albert);
+         com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+         auth.grantImpersonate(grantStmt);
+         // 6.2 assert
+         Assert.assertTrue(auth.canImpersonate(neville, albert));
+
+         // 7. revert impersonate to gregory from role auror
+         // 7.1 revoke
+         revokeStmt = new RevokeImpersonateStmt(auror, gregory);
+         com.starrocks.sql.analyzer.Analyzer.analyze(revokeStmt, ctx);
+         auth.revokeImpersonate(revokeStmt);
+         // 7.2 assert
+         Assert.assertFalse(auth.canImpersonate(neville, gregory));
+
+         // 8. revoke role from neville
+         // 8.2 revoke
+         RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(auror, neville);
+         com.starrocks.sql.analyzer.Analyzer.analyze(revokeRoleStmt, ctx);
+         auth.revokeRole(revokeRoleStmt);
+         // 8.2 assert
+         Assert.assertFalse(auth.canImpersonate(neville, albert));
      }
 
     @Test
@@ -2332,7 +2376,7 @@ public class AuthTest {
         };
 
         // 1. prepare
-        // 1.1create harry, gregory
+        // 1.1 create harry, gregory
         UserIdentity harry = new UserIdentity("Harry", "%");
         harry.analyze(SystemInfoService.DEFAULT_CLUSTER);
         UserIdentity gregory = new UserIdentity("Gregory", "%");

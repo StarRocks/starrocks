@@ -14,6 +14,7 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.util.List;
 
 public class ImpersonateUserPrivTableTest {
     private static final Logger LOG = LogManager.getLogger(ImpersonateUserPrivTableTest.class);
@@ -36,16 +37,12 @@ public class ImpersonateUserPrivTableTest {
         Assert.assertEquals(1, table.size());
         LOG.info("current table: {}", table);
 
-        // 1.2 dump to file
-        File tempFile = File.createTempFile("ImpersonateUserPrivTableTest", ".image");
-        LOG.info("dump to file {}", tempFile.getAbsolutePath());
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
-        table.write(dos);
-        dos.close();
+        // 1.2 dump to entries
+        List<ImpersonateUserPrivEntry> entries = table.dumpEntries();
 
-        // 1.3 load from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
-        ImpersonateUserPrivTable loadTable = ImpersonateUserPrivTable.read(dis);
+        // 1.3 load from entries
+        ImpersonateUserPrivTable loadTable = new ImpersonateUserPrivTable();
+        loadTable.loadEntries(entries);
         LOG.info("load table: {}", loadTable);
 
         // 1.4 check & cleanup
@@ -54,7 +51,6 @@ public class ImpersonateUserPrivTableTest {
         loadTable.getPrivs(harry, gregory, privBitSet);
         Assert.assertTrue(privBitSet.satisfy(ONLY_IMPERSONATE));
         Assert.assertTrue(loadTable.canImpersonate(harry, gregory));
-        tempFile.delete();
 
         // 2. grant impersonate on Albert to Harry
         // 2.1 grant
@@ -63,16 +59,12 @@ public class ImpersonateUserPrivTableTest {
         table.addEntry(entry, true, false);
         LOG.info("current table: {}", table);
 
-        // 2.2. dump to file
-        tempFile = File.createTempFile("ImpersonateUserPrivTableTest", ".image");
-        LOG.info("dump to file {}", tempFile.getAbsolutePath());
-        dos = new DataOutputStream(new FileOutputStream(tempFile));
-        table.write(dos);
-        dos.close();
+        // 2.2. dump to entries
+        entries = table.dumpEntries();
 
-        // 2.3 load from file
-        dis = new DataInputStream(new FileInputStream(tempFile));
-        loadTable = ImpersonateUserPrivTable.read(dis);
+        // 2.3 load from entries
+        loadTable = new ImpersonateUserPrivTable();
+        loadTable.loadEntries(entries);
         LOG.info("load table: {}", loadTable);
 
         // 2.4 check & cleanup
@@ -85,7 +77,6 @@ public class ImpersonateUserPrivTableTest {
         loadTable.getPrivs(harry, albert, privBitSet);
         Assert.assertTrue(privBitSet.satisfy(ONLY_IMPERSONATE));
         Assert.assertTrue(loadTable.canImpersonate(harry, albert));
-        tempFile.delete();
 
         // 3. grant impersonate on Vincent to Ron
         // 3.1 grant
@@ -95,16 +86,12 @@ public class ImpersonateUserPrivTableTest {
         table.addEntry(entry, true, false);
         LOG.info("current table: {}", table);
 
-        // 3.2 dump to file
-        tempFile = File.createTempFile("ImpersonateUserPrivTableTest", ".image");
-        LOG.info("dump to file {}", tempFile.getAbsolutePath());
-        dos = new DataOutputStream(new FileOutputStream(tempFile));
-        table.write(dos);
-        dos.close();
+        // 3.2. dump to entries
+        entries = table.dumpEntries();
 
-        // 3.3 load from file
-        dis = new DataInputStream(new FileInputStream(tempFile));
-        loadTable = ImpersonateUserPrivTable.read(dis);
+        // 3.3 load from entries
+        loadTable = new ImpersonateUserPrivTable();
+        loadTable.loadEntries(entries);
         LOG.info("load table: {}", loadTable);
 
         // 3.4 check & cleanup
@@ -121,6 +108,5 @@ public class ImpersonateUserPrivTableTest {
         loadTable.getPrivs(ron, vincent, privBitSet);
         Assert.assertTrue(privBitSet.satisfy(ONLY_IMPERSONATE));
         Assert.assertTrue(loadTable.canImpersonate(ron, vincent));
-        tempFile.delete();
     }
 }

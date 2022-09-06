@@ -2666,6 +2666,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
         index_entry->value().unload();
         index_cache.release(index_entry);
+        _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
 
         _apply_version_changed.notify_all();
 
