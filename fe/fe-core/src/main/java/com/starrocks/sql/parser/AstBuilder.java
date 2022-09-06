@@ -1731,19 +1731,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
             if (loadPropertiesContext.columnProperties() != null) {
                 List<ImportColumnDesc> columns = new ArrayList<>();
-                for (int i = 0; i < loadPropertiesContext.columnProperties().getChildCount(); i++) {
-                    ParseTree node = loadPropertiesContext.columnProperties().getChild(i);
-                    if (node instanceof StarRocksParser.IdentifierContext) {
-                        String column = ((Identifier) (visit(node))).getValue();
-                        ImportColumnDesc columnDesc = new ImportColumnDesc(column);
-                        columns.add(columnDesc);
-                    }
-                    if (node instanceof StarRocksParser.AssignmentContext) {
-                        ColumnAssignment columnAssignment = (ColumnAssignment) (visit(node));
-                        Expr expr = columnAssignment.getExpr();
-                        ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
-                        columns.add(columnDesc);
-                    }
+                for (StarRocksParser.QualifiedNameContext qualifiedNameContext :
+                        loadPropertiesContext.columnProperties().qualifiedName()) {
+                    String column = ((Identifier) (visit(qualifiedNameContext))).getValue();
+                    ImportColumnDesc columnDesc = new ImportColumnDesc(column);
+                    columns.add(columnDesc);
+                }
+
+                for (StarRocksParser.AssignmentListContext assignmentListContext :
+                        loadPropertiesContext.columnProperties().assignmentList()) {
+                    ColumnAssignment columnAssignment = (ColumnAssignment) (visit(assignmentListContext));
+                    Expr expr = columnAssignment.getExpr();
+                    ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
+                    columns.add(columnDesc);
                 }
                 loadPropertyList.add(new ImportColumnsStmt(columns));
             }
