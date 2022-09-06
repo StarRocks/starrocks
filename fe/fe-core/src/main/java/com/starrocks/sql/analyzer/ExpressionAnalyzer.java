@@ -157,6 +157,10 @@ public class ExpressionAnalyzer {
                 throw new SemanticException("Lambda inputs should be arrays.");
             }
             Type itemType = ((ArrayType) expr.getType()).getItemType();
+            if (itemType == Type.NULL) { // Since slot_ref with Type.NULL is rewritten to Literal in toThrift(),
+                // rather than a common columnRef, so change its type here.
+                itemType = Type.BOOLEAN;
+            }
             scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
         }
         // visit LambdaFunction

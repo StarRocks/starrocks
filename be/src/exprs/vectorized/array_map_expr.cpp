@@ -27,7 +27,7 @@ inline bool offsets_equal(UInt32Column::Ptr array1, UInt32Column::Ptr array2) {
 }
 
 // The input array column maybe nullable, so first remove the wrap of nullable property.
-// The result of lambda expressions does not change the offsets of the current array and the null map.
+// The result of lambda expressions do not change the offsets of the current array and the null map.
 ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> inputs;
     NullColumnPtr input_null_map = nullptr;
@@ -88,7 +88,7 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
     for (int i = 0; i < argument_num; ++i) {
         cur_chunk->append_column(inputs[i], arguments_ids[i]); // column ref
     }
-    // put captured columns into the new chunks aligning with the first array's offsets
+    // put captured columns into the new chunk aligning with the first array's offsets
     vector<SlotId> slot_ids;
     _children[0]->get_slot_ids(&slot_ids);
     for (auto id : slot_ids) {
