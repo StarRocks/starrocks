@@ -13,6 +13,7 @@ import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.common.util.RendezvousHashRing;
 import com.starrocks.planner.HdfsScanNode;
@@ -34,6 +35,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Hybrid backend selector for hive table.
@@ -60,6 +62,8 @@ public class HDFSBackendSelector implements BackendSelector {
     private boolean forceScheduleLocal;
     private final int kCandidateNumber = 3;
     private final int kMaxImbalanceRatio = 3;
+    private final int kMaxNodeSizeUseRendezvousHashRing = 64;
+    private final int kConsistenHashRingVirtualNumber = 32;
 
     class HdfsScanRangeHasher {
         String basePath;
@@ -165,9 +169,16 @@ public class HDFSBackendSelector implements BackendSelector {
     }
 
     private HashRing makeHashRing() {
-        RendezvousHashRing hashRing =
-                new RendezvousHashRing(Hashing.murmur3_128(), new TScanRangeLocationsFunnel(), new ComputeNodeFunnel(),
-                        assignedScansPerComputeNode.keySet());
+        Set<ComputeNode> nodes = assignedScansPerComputeNode.keySet();
+        HashRing hashRing = null;
+        if (nodes.size() > kMaxNodeSizeUseRendezvousHashRing) {
+            hashRing = new ConsistentHashRing(Hashing.murmur3_128(), new TScanRangeLocationsFunnel(),
+                    new ComputeNodeFunnel(), nodes, kConsistenHashRingVirtualNumber);
+        } else {
+            hashRing = new RendezvousHashRing(Hashing.murmur3_128(), new TScanRangeLocationsFunnel(),
+                    new ComputeNodeFunnel(),
+                    nodes);
+        }
         return hashRing;
     }
 
