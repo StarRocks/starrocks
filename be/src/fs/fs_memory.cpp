@@ -49,7 +49,7 @@ public:
 
     Status appendv(const Slice* data, size_t cnt) override {
         for (size_t i = 0; i < cnt; i++) {
-            (void)append(data[i]);
+            RETURN_IF_ERROR(append(data[i]));
         }
         return Status::OK();
     }
