@@ -3,6 +3,7 @@
 #include "exprs/vectorized/lambda_function.h"
 
 #include <fmt/format.h>
+
 #include <iostream>
 
 namespace starrocks::vectorized {
