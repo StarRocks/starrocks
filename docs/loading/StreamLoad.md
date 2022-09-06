@@ -14,7 +14,7 @@ Stream Load is suitable for the following business scenarios:
   
   In most cases, we recommend that you use programs such as Apache Flink® to submit a load job, within which a series of tasks can be generated to continuously load streaming data in real time into StarRocks.
 
-Additionally, Stream Load supports data transformation at data loading. For more information, see [Transform data at data loading](/docs/loading/Etl_in_loading.md).
+Additionally, Stream Load supports data transformation at data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md).
 
 > Note: After you load data into a StarRocks table by using Stream Load, the data of the materialized views that are created on that table is also updated.
 
@@ -26,7 +26,7 @@ Stream Load supports the following data file formats:
 
 - JSON
 
-You can use the `streaming_load_max_mb` parameter to specify the maximum size of each data file you want to load. The default maximum size is 10 GB. We recommend that you retain the default value of this parameter. For more information, see the "[Parameter configurations](/docs/loading/StreamLoad.md#parameter-configurations)" section of this topic.
+You can use the `streaming_load_max_mb` parameter to specify the maximum size of each data file you want to load. The default maximum size is 10 GB. We recommend that you retain the default value of this parameter. For more information, see the "[Parameter configurations](../loading/StreamLoad.md#parameter-configurations)" section of this topic.
 
 ## Limits
 
@@ -44,13 +44,13 @@ The BE that receives the load request runs as the Coordinator BE to split data b
 
 The following figure shows the workflow of a Stream Load job.
 
-![Workflow of Stream Load](/docs/assets/4.2-1.png)
+![Workflow of Stream Load](../assets/4.2-1.png)
 
 ## Load a local data file
 
 ### Create a load job
 
-This section uses curl as an example to describe how to load the data of a CSV or JSON file from your local file system into StarRocks. For detailed syntax and parameter descriptions, see [STREAM LOAD](/docs/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+This section uses curl as an example to describe how to load the data of a CSV or JSON file from your local file system into StarRocks. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
 #### Load CSV data
 
@@ -147,7 +147,7 @@ curl -v --location-trusted -u root: -H "strict_mode: true" \
 
 `example2.json` consists of two keys, `name` and `code`, which are mapped onto the `id` and `city` columns of `table2`, as shown in the following figure.
 
-![img](/docs/assets/4.2-2en.png)
+![img](../assets/4.2-2en.png)
 
 The mappings shown in the preceding figure are described as follows:
 
@@ -159,7 +159,7 @@ The mappings shown in the preceding figure are described as follows:
 
 > Note: In the preceding example, the value of `code` in `example2.json` is multiplied by 100 before it is loaded into the `id` column of `table2`.
 
-For detailed mappings between `jsonpaths`, `columns`, and the columns of the StarRocks table, see the "Usage notes" section in [STREAM LOAD](/docs/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+For detailed mappings between `jsonpaths`, `columns`, and the columns of the StarRocks table, see the "Usage notes" section in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
 ##### Query data
 
@@ -177,7 +177,7 @@ MySQL [test_db]> SELECT * FROM table2;
 
 ### View a load job
 
-After a load job is complete, StarRocks returns the result of the job in JSON format. For more information, see the "Return value" section in [STREAM LOAD](/docs/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+After a load job is complete, StarRocks returns the result of the job in JSON format. For more information, see the "Return value" section in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
 Stream Load does not allow you to query the result of a load job by using the SHOW LOAD statement.
 
@@ -189,7 +189,7 @@ Stream Load does not allow you to cancel a load job. If a load job times out or 
 
 Stream Load allows you to load streaming data into StarRocks in real time by using programs. For more information, see the following topics:
 
-- For information about how to run Stream Load jobs by using Flink, see [Load data by using flink-connector-starrocks](/docs/loading/Flink-connector-starrocks.md).
+- For information about how to run Stream Load jobs by using Flink, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
 
 - For information about how to run Stream Load jobs by using Java programs, visit [https://github.com/StarRocks/demo/MiscDemo/stream_load](https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load).
 
@@ -199,7 +199,7 @@ Stream Load allows you to load streaming data into StarRocks in real time by usi
 
 This section describes some system parameters that you need to configure if you choose the loading method Stream Load. These parameter configurations take effect on all Stream Load jobs.
 
-- `streaming_load_max_mb`: the maximum size of each data file you want to load. The default maximum size is 10 GB. For more information, see [BE configuration items](/docs/administration/Configuration.md#be-configuration-items).
+- `streaming_load_max_mb`: the maximum size of each data file you want to load. The default maximum size is 10 GB. For more information, see [BE configuration items](../administration/Configuration.md#be-configuration-items).
   
   We recommend that you do not load more than 10 GB of data at a time. If the size of a data file exceeds 10 GB, we recommend that you split the data file into small files that each are less than 10 GB in size and then load these files one by one. If you cannot split a data file greater than 10 GB, you can increase the value of this parameter based on the file size.
 
@@ -207,7 +207,7 @@ This section describes some system parameters that you need to configure if you 
 
   > Note: When you load the data of a JSON file, make sure that the size of each JSON object in the file does not exceed 4 GB. If any JSON object in the file exceeds 4 GB, StarRocks throws an error "This parser can't support a document that big."
 
-- `stream_load_default_timeout_second`: the timeout period of each load job. The default timeout period is 600 seconds. For more information, see [FE configuration items](/docs/administration/Configuration.md#fe-configuration-items).
+- `stream_load_default_timeout_second`: the timeout period of each load job. The default timeout period is 600 seconds. For more information, see [FE configuration items](../administration/Configuration.md#fe-configuration-items).
   
   If many of the load jobs that you create time out, you can increase the value of this parameter based on the calculation result that you obtain from the following formula:
 
@@ -217,7 +217,7 @@ This section describes some system parameters that you need to configure if you 
 
   For example, if the size of the data file that you want to load is 10 GB and the average loading speed of your StarRocks cluster is 10 MB/s, set the timeout period to more than 1024 seconds.
 
-  Stream Load also provides the `timeout` parameter, which allows you to specify the timeout period of an individual load job. For more information, see [STREAM LOAD](/docs/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+  Stream Load also provides the `timeout` parameter, which allows you to specify the timeout period of an individual load job. For more information, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
 ## Usage notes
 
