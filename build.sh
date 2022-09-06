@@ -47,6 +47,11 @@ if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib64/libbenchmark.a ]]; then
     ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
 fi
 
+if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]]; then
+    echo "Thirdparty libraries need to be build ..."
+    ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
+fi
+
 PARALLEL=$[$(nproc)/4+1]
 
 # Check args
