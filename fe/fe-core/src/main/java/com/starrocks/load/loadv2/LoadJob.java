@@ -666,7 +666,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             // label
             jobInfo.add(label);
             // state
-            if (state.name() == "COMMITTED") {
+            if (state == JobState.COMMITTED) {
                 jobInfo.add("PREPARED");
             } else {
                 jobInfo.add(state.name());
