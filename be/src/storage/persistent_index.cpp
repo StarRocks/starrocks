@@ -1676,7 +1676,7 @@ bool ShardByLengthMutableIndex::load_snapshot(phmap::BinaryInputArchive& ar, con
 
 size_t ShardByLengthMutableIndex::dump_bound() {
     return std::accumulate(_shards.begin(), _shards.end(), 0,
-                           [](size_t s, const auto& e) { return e->size() > 0 ? s + e->size() : s; });
+                           [](size_t s, const auto& e) { return e->size() > 0 ? s + e->dump_bound() : s; });
 }
 
 bool ShardByLengthMutableIndex::dump(phmap::BinaryOutputArchive& ar_out, std::set<uint32_t>& dumped_shard_idxes) {
