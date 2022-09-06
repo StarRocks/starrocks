@@ -1742,6 +1742,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         PagePointerPB* data = snapshot->mutable_data();
         data->set_offset(0);
         data->set_size(snapshot_size);
+        snapshot->clear_dumped_shard_idxes();
         snapshot->mutable_dumped_shard_idxes()->Add(dumped_shard_idxes.begin(), dumped_shard_idxes.end());
         meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
         _offset = snapshot_size;
@@ -1774,7 +1775,11 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
     const auto snapshot_size = page_pb.size();
     std::set<uint32_t> dumped_shard_idxes;
     for (auto i = 0; i < snapshot_meta.dumped_shard_idxes_size(); ++i) {
-        dumped_shard_idxes.insert(snapshot_meta.dumped_shard_idxes(i));
+        auto [_, insert] = dumped_shard_idxes.insert(snapshot_meta.dumped_shard_idxes(i));
+        if (!insert) {
+            LOG(WARNING) << "duplicate shard idx: " << snapshot_meta.dumped_shard_idxes(i);
+            return Status::InternalError("duplicate shard idx");
+        }
     }
     std::string index_file_name = get_l0_index_file_name(_path, start_version);
     std::shared_ptr<FileSystem> fs;
@@ -2490,6 +2495,8 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     //   2. delete WALs because maybe PersistentIndexMetaPB has expired wals
     //   3. reset SnapshotMeta
     //   4. write all data into new tmp _l0 index file (tmp file will be delete in _build_commit())
+    index_meta.clear_l0_meta();
+    index_meta.clear_l1_version();
     index_meta.set_key_size(_key_size);
     index_meta.set_format_version(PERSISTENT_INDEX_VERSION_2);
     lastest_applied_version.to_pb(index_meta.mutable_version());
