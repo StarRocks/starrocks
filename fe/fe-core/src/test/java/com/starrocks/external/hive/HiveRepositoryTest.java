@@ -3,7 +3,6 @@
 package com.starrocks.external.hive;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ResourceMgr;
@@ -12,6 +11,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 
 public class HiveRepositoryTest extends DDLTestBase {
     private static ConnectContext connectContext;
+
     @Before
     public void setUp() throws Exception {
         connectContext = UtFrameUtils.createDefaultCtx();

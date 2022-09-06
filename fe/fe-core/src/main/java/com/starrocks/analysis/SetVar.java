@@ -35,6 +35,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.HeartbeatFlags;
+import com.starrocks.thrift.TTabletInternalParallelMode;
 import org.apache.commons.lang3.StringUtils;
 
 // change one variable.
@@ -179,6 +180,10 @@ public class SetVar implements ParseNode {
                 }
             }
         }
+
+        if (getVariable().equalsIgnoreCase(SessionVariable.TABLET_INTERNAL_PARALLEL_MODE)) {
+            validateTabletInternalParallelModeValue(getResolvedExpression().getStringValue());
+        }
     }
 
     public String toSql() {
@@ -199,6 +204,14 @@ public class SetVar implements ParseNode {
             }
         } catch (NumberFormatException ex) {
             throw new SemanticException(field + " is not a number");
+        }
+    }
+
+    private void validateTabletInternalParallelModeValue(String val) {
+        try {
+            TTabletInternalParallelMode.valueOf(val.toUpperCase());
+        } catch (Exception ignored) {
+            throw new SemanticException("Invalid tablet_internal_parallel_mode, now we support {auto, force_split}.");
         }
     }
 }

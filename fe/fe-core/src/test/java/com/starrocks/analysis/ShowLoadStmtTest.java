@@ -27,6 +27,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.ShowLoadStmt;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -43,10 +44,7 @@ public class ShowLoadStmtTest {
     @Test
     public void testNormal() throws Exception {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
-        ShowLoadStmt stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD");
-        Assert.assertEquals("SHOW LOAD FROM `test`", stmt.toString());
-        stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD FROM test");
-        Assert.assertEquals("SHOW LOAD FROM `test`", stmt.toString());
+        ShowLoadStmt stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD FROM test");
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);
         Assert.assertEquals(15, metaData.getColumnCount());

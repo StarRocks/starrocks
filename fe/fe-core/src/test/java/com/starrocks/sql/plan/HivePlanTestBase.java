@@ -3,9 +3,9 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.ast.CreateResourceStmt;
 import org.junit.BeforeClass;
 
 import java.util.Map;

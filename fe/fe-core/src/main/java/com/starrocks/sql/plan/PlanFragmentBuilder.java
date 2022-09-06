@@ -5,7 +5,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.AssertNumRowsElement;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
@@ -70,6 +69,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -247,6 +247,14 @@ public class PlanFragmentBuilder {
             if (!ConnectContext.get().getSessionVariable().isAbleFilterUnusedColumnsInScanStage()) {
                 return;
             }
+
+            // Key columns and value columns cannot be pruned in the non-skip-aggr scan stage.
+            // - All the keys columns must be retained to merge and aggregate rows.
+            // - Value columns can only be used after merging and aggregating.
+            if (referenceTable.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
+                return;
+            }
+
             List<ColumnRefOperator> outputColumns = node.getOutputColumns();
             // if outputColumns is empty, skip this optimization
             if (outputColumns.isEmpty()) {

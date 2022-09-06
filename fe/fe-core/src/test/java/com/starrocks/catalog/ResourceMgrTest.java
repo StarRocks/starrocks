@@ -23,8 +23,6 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AlterResourceStmt;
-import com.starrocks.analysis.CreateResourceStmt;
-import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.proc.ProcResult;
@@ -34,6 +32,8 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -194,7 +194,7 @@ public class ResourceMgrTest {
 
     @Test
     public void testReplayCreateResource(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr,
-                                                  @Injectable Auth auth) throws UserException {
+                                         @Injectable Auth auth) throws UserException {
         ResourceMgr mgr = new ResourceMgr();
         type = "hive";
         name = "hive0";
