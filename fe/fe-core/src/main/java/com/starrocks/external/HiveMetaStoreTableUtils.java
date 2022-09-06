@@ -218,6 +218,11 @@ public class HiveMetaStoreTableUtils {
                 if (type.isArrayType()) {
                     return type;
                 }
+            case "STRUCT":
+                type = Utils.convertToStructType(hiveType);
+                if (type.isStructType()) {
+                    return type;
+                }
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;

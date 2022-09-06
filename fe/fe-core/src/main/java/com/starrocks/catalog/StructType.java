@@ -26,6 +26,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
@@ -38,7 +39,12 @@ import java.util.HashMap;
  * Describes a STRUCT type. STRUCT types have a list of named struct fields.
  */
 public class StructType extends Type {
+
+    @SerializedName(value = "fieldMap")
     private final HashMap<String, StructField> fieldMap = Maps.newHashMap();
+
+    // Use to access StructField by pos.
+    @SerializedName(value = "fields")
     private final ArrayList<StructField> fields;
 
     public StructType(ArrayList<StructField> fields) {
@@ -64,6 +70,21 @@ public class StructType extends Type {
             fieldsSql.add(f.toSql(depth + 1));
         }
         return String.format("STRUCT<%s>", Joiner.on(",").join(fieldsSql));
+    }
+
+    @Override
+    public String toString() {
+        // TODO(SmithCruise): Lazy here, should write recursive toString() by myself.
+        return toSql();
+    }
+
+    @Override
+    public int getTypeSize() {
+        int size = 0;
+        for (StructField structField : fields) {
+            size += structField.getType().getTypeSize();
+        }
+        return size;
     }
 
     @Override
@@ -110,7 +131,7 @@ public class StructType extends Type {
         TTypeNode node = new TTypeNode();
         container.types.add(node);
         Preconditions.checkNotNull(fields);
-        Preconditions.checkNotNull(!fields.isEmpty());
+        Preconditions.checkState(!fields.isEmpty(), "StructType must contains at least one StructField.");
         node.setType(TTypeNodeType.STRUCT);
         node.setStruct_fields(new ArrayList<TStructField>());
         for (StructField field : fields) {

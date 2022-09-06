@@ -37,6 +37,7 @@ import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DereferenceExpr;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -139,6 +140,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -3770,21 +3773,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new SlotRef(null, identifier.getValue(), identifier.getValue());
         } else {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-            List<String> parts = qualifiedName.getParts();
-            TableName tableName;
-            if (parts.size() == 4) {
-                tableName = new TableName(qualifiedName.getParts().get(0),
-                        qualifiedName.getParts().get(1), qualifiedName.getParts().get(2));
-                return new SlotRef(tableName, parts.get(3), parts.get(3));
-            } else if (parts.size() == 3) {
-                tableName = new TableName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
-                return new SlotRef(tableName, parts.get(2), parts.get(2));
-            } else if (parts.size() == 2) {
-                tableName = new TableName(null, qualifiedName.getParts().get(0));
-                return new SlotRef(tableName, parts.get(1), parts.get(1));
-            } else {
-                throw new ParsingException("Unqualified column reference " + qualifiedName);
-            }
+            return new DereferenceExpr(qualifiedName);
         }
     }
 
@@ -4200,6 +4189,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return getDecimalType(context.decimalType());
         } else if (context.arrayType() != null) {
             return getArrayType(context.arrayType());
+        } else if (context.structType() != null) {
+            return getStructType(context.structType());
         }
         throw new IllegalArgumentException("Unsupported type specification: " + context.getText());
     }
@@ -4286,6 +4277,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public ArrayType getArrayType(StarRocksParser.ArrayTypeContext context) {
         return new ArrayType(getType(context.type()));
+    }
+
+    public StructType getStructType(StarRocksParser.StructTypeContext context) {
+        StructType structType = new StructType();
+
+        List<StarRocksParser.ColumnNameColonTypeContext> typeLists =
+                context.columnNameColonTypeList().columnNameColonType();
+        for (StarRocksParser.ColumnNameColonTypeContext type : typeLists) {
+            String comment = (type.comment() == null) ? null :
+                    ((StringLiteral) visit(type.comment().string())).getStringValue();
+            structType.addField(
+                    new StructField(type.identifier().getText(), getType(type.type()), comment)
+            );
+        }
+
+        return structType;
     }
 
     @Override

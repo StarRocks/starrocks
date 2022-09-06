@@ -41,10 +41,10 @@ import java.io.IOException;
 import java.util.List;
 
 public class SlotRef extends Expr {
-    private TableName tblName;
-    private String col;
+    protected TableName tblName;
+    protected String col;
     // Used in toSql
-    private String label;
+    protected String label;
 
     // results of analysis
     protected SlotDescriptor desc;

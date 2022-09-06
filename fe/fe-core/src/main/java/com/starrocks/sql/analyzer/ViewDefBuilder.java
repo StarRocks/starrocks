@@ -2,6 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
+import com.starrocks.analysis.DereferenceExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SelectList;
@@ -143,6 +144,11 @@ public class ViewDefBuilder {
         @Override
         public String visitSlot(SlotRef expr, Void context) {
             return expr.toSql();
+        }
+
+        @Override
+        public String visitDereferenceExpr(DereferenceExpr expr, Void context) {
+            return visitSlot(expr.getSlotRef(), context);
         }
     }
 }

@@ -14,6 +14,7 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.DereferenceExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -261,6 +262,11 @@ public class AggregationAnalyzer {
         @Override
         public Boolean visitSlot(SlotRef node, Void context) {
             return isGroupingKey(node);
+        }
+
+        @Override
+        public Boolean visitDereferenceExpr(DereferenceExpr expr, Void context) {
+            return visitSlot(expr.getSlotRef(), context);
         }
 
         @Override

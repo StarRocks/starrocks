@@ -327,9 +327,15 @@ int TypeDescriptor::get_slot_size() const {
         return 16;
     case TYPE_ARRAY:
         return sizeof(void*); // sizeof(Collection*)
+    case TYPE_STRUCT: {
+        int struct_size = 0;
+        for (const TypeDescriptor& type_descriptor : children) {
+            struct_size += type_descriptor.get_slot_size();
+        }
+        return struct_size;
+    }
     case INVALID_TYPE:
     case TYPE_BINARY:
-    case TYPE_STRUCT:
     case TYPE_MAP:
     case TYPE_FUNCTION:
         DCHECK(false);

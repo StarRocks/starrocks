@@ -1,10 +1,14 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.DereferenceExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.QualifiedName;
 
 public class Field {
     // The name here is a column name, not qualified name.
@@ -59,6 +63,9 @@ public class Field {
     }
 
     public boolean canResolve(SlotRef expr) {
+        if (expr instanceof DereferenceExpr && !((DereferenceExpr) expr).isParsed()) {
+            return canResolve((DereferenceExpr) expr);
+        }
         TableName tableName = expr.getTblNameWithoutAnalyzed();
         if (tableName != null) {
             if (relationAlias == null) {
@@ -69,6 +76,67 @@ public class Field {
         } else {
             return expr.getColumnName().equalsIgnoreCase(this.name);
         }
+    }
+
+    private boolean canResolve(DereferenceExpr expr) {
+        if (relationAlias == null) {
+            return false;
+        }
+
+        String[] fieldFullQualifiedName = new String[] {
+                relationAlias.getCatalog(),
+                relationAlias.getDb(),
+                relationAlias.getTbl(),
+                name
+        };
+
+        for (int i = 0; i < 4; i++) {
+            if (tryToMatch(fieldFullQualifiedName, i, expr.getQualifiedName())) {
+                expr.setSlotRef(relationAlias, name, name);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean tryToMatch(String[] fieldFullQualifiedName, int index, QualifiedName qualifiedName) {
+        String[] partsArray = qualifiedName.getParts().toArray(new String[0]);
+        int partsIndex = 0;
+        for (int i = index; i < 4 && partsIndex < partsArray.length; i++) {
+            if (fieldFullQualifiedName[i] == null) {
+                return false;
+            }
+
+            String part = partsArray[partsIndex++];
+            String comparedPart = fieldFullQualifiedName[i];
+            // Only table name is case-sensitive.
+            if (i != 2) {
+                part = part.toLowerCase();
+                comparedPart = comparedPart.toLowerCase();
+            }
+            if (!part.equals(comparedPart)) {
+                return false;
+            }
+        }
+
+        // partsIndex reach end of partsArray, means match all part.
+        if (partsIndex == partsArray.length) {
+            return true;
+        }
+
+        // partsIndex not reach end of partsArray, maybe it's a struct type.
+        Type tmpType = type;
+        for (; partsIndex < partsArray.length; partsIndex++) {
+            if (!tmpType.isStructType()) {
+                return false;
+            }
+            StructField structField = ((StructType) tmpType).getField(partsArray[partsIndex]);
+            if (structField == null) {
+                return false;
+            }
+            tmpType = structField.getType();
+        }
+        return true;
     }
 
     public boolean matchesPrefix(TableName prefix) {

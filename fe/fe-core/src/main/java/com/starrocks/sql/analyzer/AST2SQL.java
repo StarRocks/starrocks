@@ -15,6 +15,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
+import com.starrocks.analysis.DereferenceExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -44,6 +45,7 @@ import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -487,6 +489,21 @@ public class AST2SQL {
             return sb.toString();
         }
 
+        @Override
+        public String visitLambdaFunctionExpr(LambdaFunctionExpr node, Void context) {
+            List<Expr> children = node.getChildren();
+            String names = visit(children.get(1));
+
+            if (children.size() > 2) {
+                names = "(" + visit(children.get(1));
+                for (int i = 2; i < children.size(); ++i) {
+                    names = names + ", " + visit(children.get(i));
+                }
+                names = names + ")";
+            }
+            return String.format("%s -> %s", names, visit(children.get(0)));
+        }
+
         public String visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {
             return visitFunctionCall(node, context);
         }
@@ -527,6 +544,15 @@ public class AST2SQL {
                 }
             } else {
                 return visitExpression(node, context);
+            }
+        }
+
+        @Override
+        public String visitDereferenceExpr(DereferenceExpr node, Void context) {
+            if (node.isParsed()) {
+                return visitSlot(node.getSlotRef(), context);
+            } else {
+                return null;
             }
         }
 

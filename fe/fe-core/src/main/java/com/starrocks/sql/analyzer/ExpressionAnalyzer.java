@@ -17,6 +17,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DefaultValueExpr;
+import com.starrocks.analysis.DereferenceExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprId;
@@ -179,6 +180,11 @@ public class ExpressionAnalyzer {
             node.setTblName(resolvedField.getField().getRelationAlias());
             handleResolvedField(node, resolvedField);
             return null;
+        }
+
+        @Override
+        public Void visitDereferenceExpr(DereferenceExpr node, Scope scope) {
+            return visitSlot(node, scope);
         }
 
         @Override
@@ -1012,6 +1018,11 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitSlot(SlotRef node, Scope scope) {
             return null;
+        }
+
+        @Override
+        public Void visitDereferenceExpr(DereferenceExpr node, Scope scope) {
+            return visitSlot(node.getSlotRef(), scope);
         }
     }
 

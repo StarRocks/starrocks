@@ -22,6 +22,7 @@ import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DereferenceExpr;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropResourceStmt;
@@ -799,6 +800,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitSlot(SlotRef node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitDereferenceExpr(DereferenceExpr node, C context) {
         return visitExpression(node, context);
     }
 

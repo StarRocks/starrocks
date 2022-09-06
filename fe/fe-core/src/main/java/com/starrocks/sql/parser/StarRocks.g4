@@ -1511,10 +1511,23 @@ type
     : baseType
     | decimalType
     | arrayType
+    | structType
     ;
 
 arrayType
     : ARRAY '<' type '>'
+    ;
+
+columnNameColonType
+    : identifier ':' type comment?
+    ;
+
+columnNameColonTypeList
+    : columnNameColonType (',' columnNameColonType)*
+    ;
+
+structType
+    : STRUCT '<' columnNameColonTypeList '>'
     ;
 
 typeParameter

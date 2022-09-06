@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.DereferenceExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
@@ -225,17 +226,21 @@ public class SelectAnalyzer {
                 outputFields.addAll(fields);
 
             } else {
-                // The name here only refer to column name.
-                String name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
-
                 analyzeExpression(item.getExpr(), analyzeState, scope);
                 outputExpressionBuilder.add(item.getExpr());
 
+                // The name here only refer to column name.
+                String columnName = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
+
                 if (item.getExpr() instanceof SlotRef) {
-                    outputFields.add(new Field(name, item.getExpr().getType(),
+                    outputFields.add(new Field(columnName, item.getExpr().getType(),
                             ((SlotRef) item.getExpr()).getTblNameWithoutAnalyzed(), item.getExpr()));
+                } else if (item.getExpr() instanceof DereferenceExpr) {
+                    SlotRef slotRef = ((DereferenceExpr) item.getExpr()).getSlotRef();
+                    outputFields.add(new Field(columnName, slotRef.getType(), slotRef.getTblNameWithoutAnalyzed(),
+                            item.getExpr()));
                 } else {
-                    outputFields.add(new Field(name, item.getExpr().getType(), null, item.getExpr()));
+                    outputFields.add(new Field(columnName, item.getExpr().getType(), null, item.getExpr()));
                 }
             }
 
@@ -535,6 +540,11 @@ public class SelectAnalyzer {
             }
             return slotRef;
         }
+
+        @Override
+        public Expr visitDereferenceExpr(DereferenceExpr expr, Void context) {
+            return visitSlot(expr, context);
+        }
     }
 
     private static class NotFullGroupByRewriter extends AstVisitor<Expr, Void> {
@@ -588,6 +598,11 @@ public class SelectAnalyzer {
                 return columnsNotInGroupBy.get(slotRef);
             }
             return slotRef;
+        }
+
+        @Override
+        public Expr visitDereferenceExpr(DereferenceExpr expr, Void context) {
+            return visit(expr.getSlotRef(), context);
         }
     }
 

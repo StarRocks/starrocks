@@ -6,6 +6,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.Iterables.isEmpty;
@@ -30,6 +31,17 @@ public class QualifiedName {
 
     public List<String> getParts() {
         return parts;
+    }
+
+    public String toSqlImpl() {
+        List<String> backtick = parts.stream().map(s -> "`" + s + "`").collect(Collectors.toList());
+        return Joiner.on('.').join(backtick);
+    }
+
+    public String getProbablyColumnName() {
+        // If the column type is not struct type, the last part of QualifiedName must be column name.
+        // Buf if column type is struct type, the last part may be a column name.
+        return parts.get(parts.size() - 1);
     }
 
     @Override

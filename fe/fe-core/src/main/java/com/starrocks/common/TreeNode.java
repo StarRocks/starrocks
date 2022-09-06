@@ -23,7 +23,9 @@ package com.starrocks.common;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.DereferenceExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.SlotRef;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -107,6 +109,10 @@ public class TreeNode<NodeType extends TreeNode<NodeType>> {
      */
     public <C extends TreeNode<NodeType>, D extends C> void collect(
             Class cl, Collection<D> matches) {
+        if (cl == SlotRef.class && getClass() == DereferenceExpr.class) {
+            //TODO(SmithCruise) Trick now, used to support "expr.collect(SlotRef.class, matches)".
+            cl = DereferenceExpr.class;
+        }
         if (cl.equals(getClass())) {
             matches.add((D) this);
             return;

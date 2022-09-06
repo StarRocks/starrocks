@@ -16,6 +16,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.DereferenceExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -195,6 +196,11 @@ public final class SqlToScalarOperatorTranslator {
                 correlation.add(columnRefOperator);
             }
             return columnRefOperator;
+        }
+
+        @Override
+        public ScalarOperator visitDereferenceExpr(DereferenceExpr node, Void context) {
+            return visitSlot(node.getSlotRef(), context);
         }
 
         @Override
@@ -555,6 +561,11 @@ public final class SqlToScalarOperatorTranslator {
         public ScalarOperator visitSlot(SlotRef node, Void context) {
             return new ColumnRefOperator(node.getSlotId().asInt(),
                     node.getType(), node.getColumnName(), node.isNullable());
+        }
+
+        @Override
+        public ScalarOperator visitDereferenceExpr(DereferenceExpr node, Void context) {
+            return visitSlot(node.getSlotRef(), context);
         }
     }
 }

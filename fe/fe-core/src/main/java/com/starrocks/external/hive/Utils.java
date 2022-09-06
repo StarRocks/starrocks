@@ -7,6 +7,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
@@ -14,6 +15,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.parser.SqlParser;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 
 import java.util.ArrayList;
@@ -184,6 +187,22 @@ public class Utils {
             itemType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         }
         return itemType;
+    }
+
+    // Struct string like struct<cc0:int,cc1:struct<cc0:int,cc1:string>>
+    public static Type convertToStructType(String typeStr) {
+        //TODO(SmithCruise) Trick method.
+        final String STMT = String.format("CREATE TABLE $DUMMY ($DUMMY %s)", typeStr);
+        CreateTableStmt createTableStmt;
+        try {
+            List<StatementBase> statementBases = SqlParser.parse(STMT, 0);
+            StatementBase statementBase = statementBases.get(0);
+            createTableStmt = (CreateTableStmt) statementBase;
+        } catch (Exception e) {
+            //TODO(SmithCruise) LOG INFO error format, "String.format("Invalid struct type at: %s", typeStr)"
+            return Type.UNKNOWN_TYPE;
+        }
+        return createTableStmt.getColumnDefs().get(0).getType();
     }
 
     // Char string like char(100)
