@@ -28,41 +28,39 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-// Push down ApplyNode and AggregationNode as a whole
-// Pattern:
-//      ApplyNode
-//      /      \
-//  LEFT     Aggregation(scalar aggregation)
-//               \
-//               Filter
-//                 \
-//                 ....
-//
-// Before:
-//      ApplyNode
-//      /      \
-//  LEFT     Aggregate(scalar aggregation)
-//               \
-//               Filter
-//                 \
-//                 ....
-//
-// After:
-//      ApplyNode
-//      /      \
-//  LEFT      Filter(correlation)
-//               \
-//            Aggregate(vector aggregation, group by correlation columns)
-//                 \
-//              Project(correlation columns: expression)[optional]
-//                   \
-//               Filter(un-correlation)[optional]
-//                     \
-//                      ....
-//
-// Requirements:
-// 1. All predicate is Binary.EQ in correlation filter
-//
+/**
+ * Push down ApplyNode and AggregationNode as a whole
+ * Pattern:
+ *      ApplyNode
+ *      /      \
+ *  LEFT     Aggregation(scalar aggregation)
+ *               \
+ *               Filter
+ *                 \
+ *                 ....
+ * Before:
+ *      ApplyNode
+ *      /      \
+ *  LEFT     Aggregate(scalar aggregation)
+ *               \
+ *               Filter
+ *                 \
+ *                 ....
+ * After:
+ *      ApplyNode
+ *      /      \
+ *  LEFT      Filter(correlation)
+ *               \
+ *            Aggregate(vector aggregation, group by correlation columns)
+ *                 \
+ *              Project(correlation columns: expression)[optional]
+ *                   \
+ *               Filter(un-correlation)[optional]
+ *                     \
+ *                      ....
+ * Requirements:
+ * 1. All predicate is Binary.EQ in correlation filter
+ */
 public class PushDownApplyAggFilterRule extends TransformationRule {
     public PushDownApplyAggFilterRule() {
         super(RuleType.TF_PUSH_DOWN_APPLY_AGG, Pattern.create(OperatorType.LOGICAL_APPLY).addChildren(
@@ -115,7 +113,7 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
         // @Todo: Can be support contain one EQ predicate
         // check correlation filter
         if (!SubqueryUtils.checkAllIsBinaryEQ(correlationPredicate, apply.getCorrelationColumnRefs())) {
-            throw new SemanticException("Not support Non-EQ correlation predicate correlation subquery");
+            throw new SemanticException(SubqueryUtils.UNSUPPORTED_CORRELATED_PREDICATE);
         }
 
         // extract group columns

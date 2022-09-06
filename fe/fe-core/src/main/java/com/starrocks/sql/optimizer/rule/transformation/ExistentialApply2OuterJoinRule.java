@@ -239,7 +239,7 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
             // 2. for other binary predicate rewrite rule
             //  a. outer-key < inner key -> outer-key < aggregate MAX(key)
             //  b. outer-key > inner key -> outer-key > aggregate MIN(key)
-            throw new SemanticException("Not support Non-EQ correlation predicate correlation subquery");
+            throw new SemanticException(SubqueryUtils.UNSUPPORTED_CORRELATED_PREDICATE);
         }
 
         // extract join-key

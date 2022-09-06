@@ -71,7 +71,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
         // check correlation filter
         if (!SubqueryUtils.checkAllIsBinaryEQ(Utils.extractConjuncts(apply.getCorrelationConjuncts()),
                 apply.getCorrelationColumnRefs())) {
-            throw new SemanticException("Not support Non-EQ correlation predicate correlation scalar-subquery");
+            throw new SemanticException(SubqueryUtils.UNSUPPORTED_CORRELATED_PREDICATE);
         }
 
         if (apply.isNeedCheckMaxRows()) {

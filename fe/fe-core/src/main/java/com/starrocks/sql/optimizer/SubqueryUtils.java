@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
@@ -13,7 +14,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -24,6 +24,10 @@ import java.util.List;
 import java.util.Map;
 
 public class SubqueryUtils {
+
+    public static String UNSUPPORTED_CORRELATED_PREDICATE = "Only support correlation scalar-subquery with EQ type " +
+            "and outer reference column in one side of correlation predicate conjunction";
+
 
     private static Function getAggregateFunction(String functionName, Type[] argTypes) {
         Function func = Expr.getBuiltinFunction(functionName, argTypes,
@@ -171,5 +175,37 @@ public class SubqueryUtils {
         }
 
         return false;
+    }
+
+
+    static class InnerTableExprExtractor extends ScalarOperatorVisitor<Void, Void> {
+
+        private final ColumnRefSet correlationColSet;
+
+        private final Set<ScalarOperator> innerTableExprSet;
+
+        private InnerTableExprExtractor (List<ColumnRefOperator> correlationCols) {
+            correlationColSet = new ColumnRefSet(correlationCols);
+            innerTableExprSet = Sets.newHashSet();
+        }
+
+        @Override
+        public Void visit(ScalarOperator scalarOperator, Void context) {
+            return null;
+        }
+
+        @Override
+        public Void visitCall(CallOperator call, Void context) {
+            ColumnRefSet usedColumns = call.getUsedColumns();
+            if (correlationColSet.containsAll(usedColumns)) {
+                return null;
+            }
+
+            if (!correlationColSet.isIntersect(usedColumns)) {
+                innerTableExprSet.add(call);
+            }
+            call.getChildren().stream().map(e -> e.accept(this, null));
+            return null;
+        }
     }
 }
