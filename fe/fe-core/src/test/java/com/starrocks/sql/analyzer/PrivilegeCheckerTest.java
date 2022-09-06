@@ -142,6 +142,16 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+    public void testShowRoles() throws Exception {
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        String sql = "SHOW ROLES";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
     public void testShowCreateDb() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
