@@ -238,9 +238,6 @@ The calculation formula is
 
 `max_filter_ratio = (dpp.abnorm.ALL / (dpp.abnorm.ALL + dpp.norm.ALL ) )`
 
-<<<<<<< HEAD
-`dpp.abnorm.ALL` is the number of rows with unqualified data quality, such as type mismatch, column mismatch, length mismatch, etc.
-=======
 | **Parameter** | **Description**                                              |
 | ------------- | ------------------------------------------------------------ |
 | dbName        | The name of the database into which data is loaded           |
@@ -251,7 +248,6 @@ The calculation formula is
 | trackingUrl   | The URL that is used to access the unqualified data detected in the load job. You can use the `curl` or `wget` command to access the URL and obtain the unqualified data. If no unqualified data is detected, `NULL` is returned for the `trackingUrl` parameter. |
 | status        | The status of the HTTP request for the load job. Valid values: `OK` and `Fail`. |
 | msg           | The error information of the HTTP request for the load job.  |
->>>>>>> 1b4edf85c (add </li> in BrokerLoad (#10759))
 
 `dpp.norm.ALL` is the number of rows with correct data during the import. Users can use the `SHOW LOAD` command to check the correct amount of data for the import job.
 
