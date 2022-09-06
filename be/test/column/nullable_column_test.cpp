@@ -322,7 +322,7 @@ PARALLEL_TEST(NullableColumnTest, test_compare_row) {
     };
     auto execute = [&](Datum rhs_value, int sort_order, int null_first) {
         CompareVector cmp_result(c0->size(), 0);
-        compare_column(c0, cmp_result, rhs_value, sort_order, null_first);
+        compare_column(c0, cmp_result, rhs_value, SortDesc(sort_order, null_first));
         return cmp_result;
     };
 
