@@ -613,14 +613,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
          * We need to extract the equivalence conditions to meet query analysis and
          * avoid hash joins without equivalence conditions
          */
-        if (onPredicate.isConstant() && onPredicate.getType().
-
-                isBoolean()
-                && !node.getJoinOp().
-
-                isCrossJoin() && !node.getJoinOp().
-
-                isInnerJoin()) {
+        if (onPredicate.isConstant() && onPredicate.getType().isBoolean()
+                && !node.getJoinOp().isCrossJoin() && !node.getJoinOp().isInnerJoin()) {
             List<BinaryPredicateOperator> eqPredicate = JoinHelper.getEqualsPredicate(
                     new ColumnRefSet(leftPlan.getOutputColumn()),
                     new ColumnRefSet(rightPlan.getOutputColumn()),
