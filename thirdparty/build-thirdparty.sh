@@ -904,6 +904,31 @@ build_jemalloc() {
     export CFLAGS=$OLD_CFLAGS
 }
 
+<<<<<<< HEAD
+=======
+# google benchmark
+build_benchmark() {
+    check_if_source_exist $BENCHMARK_SOURCE
+    cd $TP_SOURCE_DIR/$BENCHMARK_SOURCE
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    rm -rf CMakeCache.txt CMakeFiles/
+    cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=off \
+          -DBENCHMARK_ENABLE_GTEST_TESTS=off \
+          -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+          -DCMAKE_BUILD_TYPE=Release ../
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
+# fast float
+build_fast_float() {
+    check_if_source_exist $FAST_FLOAT_SOURCE
+    cd $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE
+    cp -r $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE/include $STARROCKS_THIRDPARTY/installed
+}
+
+>>>>>>> b3b4263d2 ([BugFix] string_to_float_internal may lose some precision (#9634))
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
 export CPPFLAGS=$CXXFLAGS
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
@@ -948,6 +973,11 @@ build_aws_cpp_sdk
 build_vpack
 build_opentelemetry
 build_jemalloc
+<<<<<<< HEAD
+=======
+build_benchmark
+build_fast_float
+>>>>>>> b3b4263d2 ([BugFix] string_to_float_internal may lose some precision (#9634))
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
