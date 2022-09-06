@@ -1,6 +1,6 @@
 # Change data through loading
 
-The [Primary Key](/docs/table_design/Data_model.md#primary-key-model) model provided by StarRocks allows you to make data changes to StarRocks tables by running [Stream Load](/docs/loading/StreamLoad.md), [Broker Load](/docs/loading/BrokerLoad.md), or [Routine Load](/docs/loading/RoutineLoad.md) jobs. These data changes include inserts, updates, and deletions.
+The [Primary Key](../table_design/Data_model.md#primary-key-model) model provided by StarRocks allows you to make data changes to StarRocks tables by running [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), or [Routine Load](../loading/RoutineLoad.md) jobs. These data changes include inserts, updates, and deletions.
 
 StarRocks also supports partial updates. This feature is in preview.
 
@@ -10,11 +10,7 @@ This topic uses CSV data as an example to describe how to make data changes to a
 
 ## Implementation
 
-<<<<<<< HEAD
-- > You cannot insert, update, or delete data by executing the following SQL DML statements: INSERT, UPDATE, and DELETE. These operations will be supported in future StarRocks versions.
-=======
 The Primary Key model of StarRocks supports UPSERT and DELETE operations and does not distinguish INSERT operations from UPDATE operations.
->>>>>>> 8b82c7c39 (update Etl_in_loading&Load_to_Primary_Key_tabes&Sort_key (#10749))
 
 When you create a load job, StarRocks supports adding a field named `__op` to the job creation statement or command. The `__op` field is used to specify the type of operation you want to perform.
 
@@ -44,13 +40,13 @@ You can decide whether to add the `__op` field based on the data changes you wan
 
 ## Prerequisites
 
-If you choose Broker Load, make sure that a broker is deployed in your StarRocks cluster. You can use the [SHOW BROKER](/docs/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no broker is deployed, you must deploy a broker by following the instructions provided in [Deploy a broker](/docs/quick_start/Deploy.md#deploy-broker). Assume that you have deployed a broker named `broker1`.
+If you choose Broker Load, make sure that a broker is deployed in your StarRocks cluster. You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no broker is deployed, you must deploy a broker by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#broker-deployment). Assume that you have deployed a broker named `broker1`.
 
 If you choose Routine Load, make sure that topics are created in your Apache Kafka® cluster. Assume that you have created four topics: `topic1`, `topic2`, `topic3`, and `topic4`.
 
 ## Examples
 
-This section provides examples of how to make data changes to a StarRocks table through loading. For detailed syntax and parameter descriptions, see [STREAM LOAD](/docs/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [BROKER LOAD](/docs/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), and [CREATE ROUTINE LOAD](/docs/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+This section provides examples of how to make data changes to a StarRocks table through loading. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), and [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
 
 ### UPSERT
 
@@ -274,9 +270,6 @@ Run a load job to delete the record whose `id` is `101` in `example2.csv` from `
 
 - Run a Broker Load job.
 
-<<<<<<< HEAD
-    > Note: In the preceding statement, you must specify the `-H "partial_update:true"` setting, and specify the columns that you want to update in the `COLUMNS (id, name)` format. For more information about the parameter settings for a stream load job, see [Routine Load](./RoutineLoad.md).
-=======
   ```SQL
   LOAD LABEL test_db.label3
   (
@@ -549,5 +542,4 @@ MySQL [test_db]> SELECT * FROM table4;
 3 rows in set (0.01 sec)
 ```
 
-As shown in the preceding query result, the record whose `id` is `101` in `example4.csv` has been updated to `table4`, and the records whose `id` are `102` and `103` in `example4.csv` have been Inserted into `table4`.
->>>>>>> 8b82c7c39 (update Etl_in_loading&Load_to_Primary_Key_tabes&Sort_key (#10749))
+As shown in the preceding query result, the record whose `id` is `101` in `example4.csv` has been updated to `table4`, and the records whose `id` are `102` and `103` in `example4.csv` have been inserted into `table4`.
