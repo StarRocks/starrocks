@@ -629,9 +629,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         if (node.getJoinOp().isLeftSemiAntiJoin()) {
             outputExpressionMapping = new ExpressionMapping(node.getScope(),
                     Lists.newArrayList(leftOpt.getFieldMappings()));
-        } else if (node.getJoinOp().
-
-                isRightSemiAntiJoin()) {
+        } else if (node.getJoinOp().isRightSemiAntiJoin()) {
             outputExpressionMapping = new ExpressionMapping(node.getScope(),
                     Lists.newArrayList(rightOpt.getFieldMappings()));
         } else {
