@@ -362,7 +362,7 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
         // for colocate grf
         eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
-        compute_hash_values(chunk, column.get(), rf_desc, prev_rf_desc, eval_context);
+        compute_hash_values(chunk, column.get(), rf_desc, &prev_rf_desc, eval_context);
         filter->evaluate(column.get(), &eval_context.running_context);
 
         auto true_count = SIMD::count_nonzero(selection);
@@ -413,7 +413,7 @@ void RuntimeFilterProbeCollector::evaluate(vectorized::Chunk* chunk, RuntimeBloo
 
 void RuntimeFilterProbeCollector::compute_hash_values(vectorized::Chunk* chunk, Column* column,
                                                       RuntimeFilterProbeDescriptor* rf_desc,
-                                                      RuntimeFilterProbeDescriptor* prev_rf_desc,
+                                                      RuntimeFilterProbeDescriptor** prev_rf_desc,
                                                       RuntimeBloomFilterEvalContext& eval_context) {
     // compute hash used for multi-part
     SCOPED_TIMER(eval_context.join_runtime_filter_hash_timer);
@@ -425,7 +425,7 @@ void RuntimeFilterProbeCollector::compute_hash_values(vectorized::Chunk* chunk, 
     if (rf_desc->partition_by_expr_contexts()->empty()) {
         filter->compute_hash({column}, &eval_context.running_context);
     } else {
-        if (prev_rf_desc && prev_rf_desc->is_the_same_partition_by_exprs(rf_desc)) {
+        if (prev_rf_desc && *prev_rf_desc && (*prev_rf_desc)->is_the_same_partition_by_exprs(rf_desc)) {
             VLOG_FILE << "Skip compute hash_values for the same partition_by_exprs.";
         } else {
             std::vector<Column*> partition_by_columns;
@@ -434,7 +434,7 @@ void RuntimeFilterProbeCollector::compute_hash_values(vectorized::Chunk* chunk, 
                 partition_by_columns.push_back(partition_column.get());
             }
             filter->compute_hash(std::move(partition_by_columns), &eval_context.running_context);
-            prev_rf_desc = rf_desc;
+            *prev_rf_desc = rf_desc;
         }
     }
 }
@@ -463,7 +463,7 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
         // for colocate grf
         eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
-        compute_hash_values(chunk, column.get(), rf_desc, prev_rf_desc, eval_context);
+        compute_hash_values(chunk, column.get(), rf_desc, &prev_rf_desc, eval_context);
         // true count is not accummulated, it is evaluated for each RF respectively
         filter->evaluate(column.get(), &eval_context.running_context);
         auto true_count = SIMD::count_nonzero(selection);

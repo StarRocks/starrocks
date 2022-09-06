@@ -147,6 +147,7 @@ public:
 private:
     friend class HashJoinNode;
     friend class hashJoiner;
+    friend class RuntimeFilterTest;
     int32_t _filter_id;
     ExprContext* _probe_expr_ctx = nullptr;
     bool _is_local;
@@ -208,7 +209,7 @@ public:
     void close(RuntimeState* state);
 
     void compute_hash_values(vectorized::Chunk* chunk, Column* column, RuntimeFilterProbeDescriptor* rf_desc,
-                             RuntimeFilterProbeDescriptor* prev_rf_desc, RuntimeBloomFilterEvalContext& eval_context);
+                             RuntimeFilterProbeDescriptor** prev_rf_desc, RuntimeBloomFilterEvalContext& eval_context);
     void evaluate(vectorized::Chunk* chunk);
     void evaluate(vectorized::Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
     void add_descriptor(RuntimeFilterProbeDescriptor* desc);
