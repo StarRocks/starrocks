@@ -257,7 +257,8 @@ The number of scan instances determines the number of other execution nodes in t
 Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical usage.
 
 * prefer_compute_node
-Whether the FEs distribute query execution plans to CN nodes. Valid values are:
+
+  Whether the FEs distribute query execution plans to CN nodes. Valid values are:
 
   * true: indicates that the FEs distribute query execution plans to CN nodes.
   * false: indicates that the FEs do not distribute query execution plans to CN nodes.
@@ -313,7 +314,8 @@ Used to set the time zone of the current session. The time zone can affect the r
 Used for MySQL client compatibility. No practical usage.
 
 * use_compute_nodes
-The maximum number of CN nodes that can be used. This parameter is valid when `prefer_compute_node=true`. Valid values are:
+
+  The maximum number of CN nodes that can be used. This parameter is valid when `prefer_compute_node=true`. Valid values are:
 
   * `-1`: indicates that all CN nodes are used.
   * `0`: indicates that no CN nodes are used.
