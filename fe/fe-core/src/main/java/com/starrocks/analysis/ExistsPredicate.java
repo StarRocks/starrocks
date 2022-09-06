@@ -73,18 +73,6 @@ public class ExistsPredicate extends Predicate {
     }
 
     @Override
-    public String toDigestImpl() {
-        StringBuilder strBuilder = new StringBuilder();
-        if (notExists) {
-            strBuilder.append("not ");
-
-        }
-        strBuilder.append("exists ");
-        strBuilder.append(getChild(0).toDigest());
-        return strBuilder.toString();
-    }
-
-    @Override
     public int hashCode() {
         return 31 * super.hashCode() + Boolean.hashCode(notExists);
     }

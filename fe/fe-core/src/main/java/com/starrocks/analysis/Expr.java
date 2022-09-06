@@ -674,10 +674,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return (printSqlInParens) ? "(" + toSqlImpl() + ")" : toSqlImpl();
     }
 
-    public String toDigest() {
-        return (printSqlInParens) ? "(" + toDigestImpl() + ")" : toDigestImpl();
-    }
-
     public String explain() {
         return (printSqlInParens) ? "(" + explainImpl() + ")" : explainImpl();
     }
@@ -687,10 +683,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      * instead of toSql() to ensure that parenthesis are properly added around the toSql().
      */
     protected abstract String toSqlImpl();
-
-    protected String toDigestImpl() {
-        return toSqlImpl();
-    }
 
     protected String explainImpl() {
         return toSqlImpl();
@@ -759,14 +751,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         List<String> result = Lists.newArrayList();
         for (Expr child : children) {
             result.add(child.toSql());
-        }
-        return result;
-    }
-
-    public List<String> childrenToDigest() {
-        List<String> result = Lists.newArrayList();
-        for (Expr child : children) {
-            result.add(child.toDigest());
         }
         return result;
     }
