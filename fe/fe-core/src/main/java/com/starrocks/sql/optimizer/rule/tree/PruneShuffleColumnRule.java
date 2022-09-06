@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.sql.optimizer.rewrite.physical;
+package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -43,7 +43,7 @@ import java.util.stream.Collectors;
  * before: t1 x t2 x t3 join required shuffle by (v1, v2)
  * after:  t1 x t2 x t3 join required shuffle by (v1) or (v2)
  */
-public class PruneShuffleColumnRule implements PhysicalOperatorTreeRewriteRule {
+public class PruneShuffleColumnRule implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         PruneShuffleColumnVisitor visitor = new PruneShuffleColumnVisitor(taskContext);

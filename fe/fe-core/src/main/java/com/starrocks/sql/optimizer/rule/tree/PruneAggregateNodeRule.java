@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.sql.optimizer.rewrite.physical;
+package com.starrocks.sql.optimizer.rule.tree;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
@@ -47,7 +47,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
  *          |
  *      Agg (Local)
  **/
-public class PruneAggregateNodeRule implements PhysicalOperatorTreeRewriteRule {
+public class PruneAggregateNodeRule implements TreeRewriteRule {
     private static final PruneAggVisitor PRUNE_AGG_VISITOR = new PruneAggVisitor();
 
     @Override

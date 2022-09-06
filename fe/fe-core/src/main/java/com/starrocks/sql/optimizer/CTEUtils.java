@@ -17,12 +17,6 @@ import java.util.LinkedList;
 
 public class CTEUtils {
 
-    public static void collectCteOperators(Memo memo, OptimizerContext context) {
-        context.getCteContext().reset();
-        collectCteProduce(memo.getRootGroup(), context);
-        collectCteConsume(memo.getRootGroup(), context);
-    }
-
     public static void collectCteOperators(OptExpression anchor, OptimizerContext context) {
         context.getCteContext().reset();
         collectCteProduce(anchor, context);
@@ -44,54 +38,12 @@ public class CTEUtils {
         }
     }
 
-    /*
-     * Estimate the complexity of the produce plan
-     * */
-    private static void collectCteProduce(Group root, OptimizerContext context) {
-        GroupExpression expression = root.getFirstLogicalExpression();
-
-        for (Group group : expression.getInputs()) {
-            collectCteProduce(group, context);
-        }
-
-        if (OperatorType.LOGICAL_CTE_PRODUCE.equals(expression.getOp().getOpType())) {
-            // produce
-            LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) expression.getOp();
-            context.getCteContext().addCTEProduce(produce.getCteId());
-        }
-    }
-
     private static void collectCteConsume(OptExpression root, OptimizerContext context) {
         for (Integer cteId : context.getCteContext().getAllCTEProduce()) {
             OptExpression anchor = findCteAnchor(root, cteId);
             Preconditions.checkNotNull(anchor);
             collectCteConsumeImpl(anchor, cteId, context);
         }
-    }
-
-    private static void collectCteConsume(Group root, OptimizerContext context) {
-        for (Integer cteId : context.getCteContext().getAllCTEProduce()) {
-            Group anchor = findCteAnchor(root, cteId);
-            Preconditions.checkNotNull(anchor);
-            collectCteConsumeImpl(anchor, cteId, context);
-        }
-    }
-
-    private static Group findCteAnchor(Group root, Integer cteId) {
-        LinkedList<Group> queue = Lists.newLinkedList();
-        queue.addLast(root);
-
-        while (!queue.isEmpty()) {
-            Group group = queue.pollFirst();
-            GroupExpression expression = group.getFirstLogicalExpression();
-            if (OperatorType.LOGICAL_CTE_ANCHOR.equals(expression.getOp().getOpType()) &&
-                    ((LogicalCTEAnchorOperator) expression.getOp()).getCteId() == cteId) {
-                return group.getFirstLogicalExpression().inputAt(1);
-            }
-
-            expression.getInputs().forEach(queue::addLast);
-        }
-        return null;
     }
 
     private static OptExpression findCteAnchor(OptExpression root, Integer cteId) {
@@ -132,33 +84,6 @@ public class CTEUtils {
 
         for (OptExpression child : root.getInputs()) {
             collectCteConsumeImpl(child, cteId, context);
-        }
-    }
-
-    private static void collectCteConsumeImpl(Group root, Integer cteId, OptimizerContext context) {
-        GroupExpression expression = root.getFirstLogicalExpression();
-
-        if (OperatorType.LOGICAL_CTE_CONSUME.equals(expression.getOp().getOpType())) {
-            if (((LogicalCTEConsumeOperator) expression.getOp()).getCteId() != cteId) {
-                // not ask children
-                return;
-            }
-            // consumer
-            LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) expression.getOp();
-            context.getCteContext().addCTEConsume(consume.getCteId());
-
-            // required columns
-            ColumnRefSet requiredColumnRef =
-                    context.getCteContext().getRequiredColumns().getOrDefault(consume.getCteId(), new ColumnRefSet());
-            consume.getCteOutputColumnRefMap().values().forEach(requiredColumnRef::union);
-            context.getCteContext().getRequiredColumns().put(consume.getCteId(), requiredColumnRef);
-
-            // not ask children
-            return;
-        }
-
-        for (Group group : expression.getInputs()) {
-            collectCteConsumeImpl(group, cteId, context);
         }
     }
 
