@@ -6,6 +6,13 @@ Creates a materialized view. Creating a materialized view is asynchronous operat
 >
 > Only users with the `CREATE_PRIV` privilege in the database where the base table resides can create a materialized view.
 
+StarRocks supports multi-table materialized views from v2.4. The major differences between multi-table materialized views and single-table materialized views in previous versions are as follows:
+
+|                              | **ASYNC and MANUAL Refresh** | **Aggregated Column** | **Partitioning and Bucketing Changes** | **JOIN, WHERE, and GROUP BY clause** |
+| ---------------------------- | ---------------------------- | ------------ | -------------------- | ------------------------------ |
+| **Single-table materialized view** | No (Materialized view in v2.3 and earlier only supports SYNC refresh)| No | No  | No |
+| **Multi-table materialized view** | Yes | Yes | Yes  | Yes  |
+
 ## Syntax
 
 ```SQL
@@ -13,7 +20,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
 AS (query)
 [distribution_desc]
 [REFRESH refresh_scheme_desc]
-[primary_expression]
+[partition_expression]
 [COMMENT ""]
 [PROPERTIES ("key"="value", ...)];
 ```
@@ -39,8 +46,8 @@ The query statement to create the materialized view. Its result is the data in t
 
 ```SQL
 SELECT select_expr[, select_expr ...]
-GROUP BY column_name[, column_name ...]
-ORDER BY column_name[, column_name ...]
+[GROUP BY column_name[, column_name ...]]
+[ORDER BY column_name[, column_name ...]]
 ```
 
 - select_expr (required)
@@ -81,7 +88,7 @@ The refresh strategy of the materialized view. This parameter supports the follo
 
 If this parameter is not specified, the SYNC mode is used by default.
 
-**primary_expression** (optional)
+**partition_expression** (optional)
 
 The partitioning strategy of the materialized view. As for the current version of StarRocks, only one partition expression is supported when creating a materialized view. This parameter supports the following values:
 
@@ -102,14 +109,6 @@ Properties of the materialized view.
 - `timeout`: The timeout for building the materialized view. The unit is second.
 - `replication_num`: The number of materialized view replicas to create.
 - `storage_medium`: Storage medium type. `HDD` and `SSD` are supported.
-
-**pattern** (optional)
-
-The regular expression indicating the name of the materialized view to query.
-
-**expression** (optional)
-
-The condition indicating the name of the materialized view to query.
 
 ### Correspondence of aggregate functions
 
@@ -262,7 +261,7 @@ PROPERTIES (
 );
 ```
 
-### Example 1: Create a non-partitioned materialized view
+Example 1: Create a non-partitioned materialized view.
 
 ```SQL
 CREATE MATERIALIZED VIEW lo_mv1
@@ -280,7 +279,7 @@ group by lo_orderkey, lo_custkey
 order by lo_orderkey;
 ```
 
-### Example 2: Create a partitioned materialized view
+Example 2: Create a partitioned materialized view.
 
 ```SQL
 CREATE MATERIALIZED VIEW lo_mv2
@@ -316,7 +315,7 @@ from orders
 group by dt, order_id, user_id;
 ```
 
-### Example 3: Create a synchronous refresh materialized view
+Example 3: Create a synchronous refresh materialized view.
 
 ```SQL
 CREATE MATERIALIZED VIEW lo_mv_sync_1
@@ -345,7 +344,7 @@ from lineorder
 group by lo_orderkey, lo_orderdate, lo_custkey;
 ```
 
-### Example 4: Create a multi-table materialized view
+Example 4: Create a multi-table materialized view.
 
 ```SQL
 CREATE MATERIALIZED VIEW flat_lineorder
@@ -395,3 +394,140 @@ INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY
 INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 ```
+
+Example 5: Create synchronous refresh materialized views for a base table.
+
+Base table schema is as follows:
+
+```Plain Text
+mysql> desc duplicate_table;
++-------+--------+------+------+---------+-------+
+| Field | Type   | Null | Key  | Default | Extra |
++-------+--------+------+------+---------+-------+
+| k1    | INT    | Yes  | true | N/A     |       |
+| k2    | INT    | Yes  | true | N/A     |       |
+| k3    | BIGINT | Yes  | true | N/A     |       |
+| k4    | BIGINT | Yes  | true | N/A     |       |
++-------+--------+------+------+---------+-------+
+```
+
+1. Create a materialized view that only contains the columns of the original table (k1, k2).
+
+    ```sql
+    create materialized view k1_k2 as
+    select k1, k2 from duplicate_table;
+    ```
+
+    The materialized view contains only two columns k1, k2 without any aggregation.
+
+    ```plain text
+    +-----------------+-------+--------+------+------+---------+-------+
+    | IndexName       | Field | Type   | Null | Key  | Default | Extra |
+    +-----------------+-------+--------+------+------+---------+-------+
+    | k1_k2           | k1    | INT    | Yes  | true | N/A     |       |
+    |                 | k2    | INT    | Yes  | true | N/A     |       |
+    +-----------------+-------+--------+------+------+---------+-------+
+    ```
+
+2. Create a materialized view sorted by k2.
+
+    ```sql
+    create materialized view k2_order as
+    select k2, k1 from duplicate_table order by k2;
+    ```
+
+    The materialized view's schema is shown below. The materialized view contains only two columns k2, k1, where column k2 is a sort column without any aggregation.
+
+    ```plain text
+    +-----------------+-------+--------+------+-------+---------+-------+
+    | IndexName       | Field | Type   | Null | Key   | Default | Extra |
+    +-----------------+-------+--------+------+-------+---------+-------+
+    | k2_order        | k2    | INT    | Yes  | true  | N/A     |       |
+    |                 | k1    | INT    | Yes  | false | N/A     | NONE  |
+    +-----------------+-------+--------+------+-------+---------+-------+
+    ```
+
+3. Create a materialized view grouped by k1, k2 with k3 as the SUM aggregate.
+
+    ```sql
+    create materialized view k1_k2_sumk3 as
+    select k1, k2, sum(k3) from duplicate_table group by k1, k2;
+    ```
+
+    The materialized view's schema is shown below. The materialized view contains two columns k1, k2 and sum (k3), where k1, k2 are grouped columns, and sum (k3) is the sum of the k3 columns grouped according to k1, k2.
+
+    ```plain text
+    +-----------------+-------+--------+------+-------+---------+-------+
+    | IndexName       | Field | Type   | Null | Key   | Default | Extra |
+    +-----------------+-------+--------+------+-------+---------+-------+
+    | k1_k2_sumk3     | k1    | INT    | Yes  | true  | N/A     |       |
+    |                 | k2    | INT    | Yes  | true  | N/A     |       |
+    |                 | k3    | BIGINT | Yes  | false | N/A     | SUM   |
+    +-----------------+-------+--------+------+-------+---------+-------+
+    ```
+
+    Because the materialized view does not declare a sort column, and the materialized view has aggregate data, the system supplements the grouped columns k1 and k2 by default.
+
+4. Create a materialized view to remove duplicate rows.
+
+    ```sql
+    create materialized view deduplicate as
+    select k1, k2, k3, k4 from duplicate_table group by k1, k2, k3, k4;
+    ```
+
+    The materialized view's schema is shown below. The materialized view contains k1, k2, k3, and k4 columns, and there are no duplicate rows.
+
+    ```plain text
+    +-----------------+-------+--------+------+-------+---------+-------+
+    | IndexName       | Field | Type   | Null | Key   | Default | Extra |
+    +-----------------+-------+--------+------+-------+---------+-------+
+    | deduplicate     | k1    | INT    | Yes  | true  | N/A     |       |
+    |                 | k2    | INT    | Yes  | true  | N/A     |       |
+    |                 | k3    | BIGINT | Yes  | true  | N/A     |       |
+    |                 | k4    | BIGINT | Yes  | true  | N/A     |       |
+    +-----------------+-------+--------+------+-------+---------+-------+
+    
+    ```
+
+5. Create a non-aggregated materialized view that does not declare a sort column.
+
+    The schema of all_type_table is shown below:
+
+    ```plain text
+    +-------+--------------+------+-------+---------+-------+
+    | Field | Type         | Null | Key   | Default | Extra |
+    +-------+--------------+------+-------+---------+-------+
+    | k1    | TINYINT      | Yes  | true  | N/A     |       |
+    | k2    | SMALLINT     | Yes  | true  | N/A     |       |
+    | k3    | INT          | Yes  | true  | N/A     |       |
+    | k4    | BIGINT       | Yes  | true  | N/A     |       |
+    | k5    | DECIMAL(9,0) | Yes  | true  | N/A     |       |
+    | k6    | DOUBLE       | Yes  | false | N/A     | NONE  |
+    | k7    | VARCHAR(20)  | Yes  | false | N/A     | NONE  |
+    +-------+--------------+------+-------+---------+-------+
+    ```
+
+    The materialized view contains k3, k4, k5, k6, k7 columns, and no sort column is declared. The creation statement is as follows:
+
+    ```sql
+    create materialized view mv_1 as
+    select k3, k4, k5, k6, k7 from all_type_table;
+    ```
+
+    The system's default supplementary sort columns are k3, k4, and k5. The sum of the number of bytes for these three column types is 4 (INT) + 8 (BIGINT) + 16 (DECIMAL) = 28 < 36. So these three columns are added as sort columns.
+
+    The materialized view's schema is as follows.
+
+    ```plain text
+    +----------------+-------+--------------+------+-------+---------+-------+
+    | IndexName      | Field | Type         | Null | Key   | Default | Extra |
+    +----------------+-------+--------------+------+-------+---------+-------+
+    | mv_1           | k3    | INT          | Yes  | true  | N/A     |       |
+    |                | k4    | BIGINT       | Yes  | true  | N/A     |       |
+    |                | k5    | DECIMAL(9,0) | Yes  | true  | N/A     |       |
+    |                | k6    | DOUBLE       | Yes  | false | N/A     | NONE  |
+    |                | k7    | VARCHAR(20)  | Yes  | false | N/A     | NONE  |
+    +----------------+-------+--------------+------+-------+---------+-------+
+    ```
+
+    It can be observed that the key fields of the k3, k4, and k5 columns are true, which is the sort order. The key field of the k6, k7 columns is false, which is the non-sort order.

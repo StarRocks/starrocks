@@ -7,8 +7,9 @@
   + [Introduction](./introduction/what_is_starrocks.md)
   + [Concepts](./quick_start/Concepts.md)
   + [Architecture](./quick_start/Architecture.md)
-  + [Deploy](./quick_start/Deploy.md)
   + [Data flow and control flow](./quick_start/Data_flow_and_control_flow.md)
+  + [Deploy](./quick_start/Deploy.md)
+  + [Create a table](./quick_start/Create_table.md)
   + [Import and query](./quick_start/Import_and_query.md)
   + [Test FAQs](./quick_start/Test_faq.md)
 + Table Design
