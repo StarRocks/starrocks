@@ -254,8 +254,16 @@ public class ExchangeNode extends PlanNode {
             }
         }
 
-        if (!crossExchange && !ConnectContext.get().getSessionVariable().isEnableMultiColumnsOnGlobbalRuntimeFilter()) {
-            return false;
+        if (!crossExchange) {
+            // If partitionByExprs's size is 1 and it is not the probeExpr, don't push down it
+            // because multi GRFs will cause performance decrease which multi GRFs will increase
+            // scan's wait time.
+            if (partitionByExprs.size() == 1) {
+                return false;
+            }
+            if (!ConnectContext.get().getSessionVariable().isEnableMultiColumnsOnGlobbalRuntimeFilter()) {
+                return false;
+            }
         }
 
         boolean accept = false;
