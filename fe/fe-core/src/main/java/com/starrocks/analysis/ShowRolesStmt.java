@@ -23,13 +23,8 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowRolesStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA;
@@ -52,15 +47,18 @@ public class ShowRolesStmt extends ShowStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-        }
+    public ShowResultSetMetaData getMetaData() {
+        return META_DATA;
     }
 
     @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowRolesStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
 }
