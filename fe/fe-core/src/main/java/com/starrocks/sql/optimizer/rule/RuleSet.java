@@ -35,7 +35,6 @@ import com.starrocks.sql.optimizer.rule.implementation.TopNImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.UnionImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ValuesImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.WindowImplementationRule;
-import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
 import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
@@ -273,8 +272,7 @@ public class RuleSet {
                 new ExistentialApply2JoinRule(),
                 new ScalarApply2JoinRule(),
                 new ExistentialApply2OuterJoinRule(),
-                new QuantifiedApply2OuterJoinRule(),
-                new ApplyExceptionRule()
+                new QuantifiedApply2OuterJoinRule()
         ));
 
         REWRITE_RULES.put(RuleSetType.PRUNE_ASSERT_ROW, ImmutableList.of(

@@ -1201,7 +1201,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 " count(C_NAME)" +
                 " from lineorder_flat_for_mv" +
                 " group by LO_ORDERDATE, LO_ORDERKEY");
-
+        Thread.sleep(3000);
         String sql = "select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "PLAN FRAGMENT 1\n" +
