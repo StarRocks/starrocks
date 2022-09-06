@@ -557,7 +557,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     private static void supplyOrderColumn(CreateMaterializedViewStmt statement) {
         List<MVColumnItem> mvColumnItemList = statement.getMVColumnItemList();
 
-        /**
+        /*
          * The keys type of Materialized view is aggregation.
          * All of group by columns are keys of materialized view.
          */
@@ -570,7 +570,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 mvColumnItem.setIsKey(true);
             }
         } else if (statement.getMVKeysType() == KeysType.DUP_KEYS) {
-            /**
+            /*
              * There is no aggregation function in materialized view.
              * Supplement key of MV columns
              * The key is same as the short key in duplicate table

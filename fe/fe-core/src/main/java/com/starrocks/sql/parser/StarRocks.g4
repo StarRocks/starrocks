@@ -134,24 +134,30 @@ statement
     | showLoadWarningsStatement
     | cancelLoadStatement
 
-    // Other statement
-    | showVariablesStatement
-    | showProcesslistStatement
-    | showUserPropertyStatement
-    | killStatement
-    | setUserPropertyStatement
-    | showStatusStatement
-    | showCharsetStatement
-    | showBrokerStatement
-    | showCollationStatement
-    | setStatement
-
     //Show Statement
-    | showWarningStatement
-    | showTabletStatement
+    | showAuthorStatement
+    | showBackendsStatement
+    | showBrokerStatement
+    | showCharsetStatement
+    | showCollationStatement
     | showDeleteStatement
-    | showOpenTableStatement
     | showDynamicPartitionStatement
+    | showEventsStatement
+    | showEnginesStatement
+    | showFrontendsStatement
+    | showPluginsStatement
+    | showRepositoriesStatement
+    | showOpenTableStatement
+    | showProcedureStatement
+    | showProcStatement
+    | showProcesslistStatement
+    | showStatusStatement
+    | showTabletStatement
+    | showTriggersStatement
+    | showUserStatement
+    | showUserPropertyStatement
+    | showVariablesStatement
+    | showWarningStatement
 
     // privilege
     | grantRoleStatement
@@ -165,15 +171,15 @@ statement
     | showAuthenticationStatement
     | createRoleStatement
 
-    // procedure
-    | showProcedureStatement
-
-    // proc
-    | showProcStatement
-
     // Backup Restore Satement
     | backupStatement
     | showBackupStatement
+
+    // Other statement
+    | killStatement
+    | setUserPropertyStatement
+    | setStatement
+    | syncStatement
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -184,6 +190,11 @@ useDatabaseStatement
 
 useCatalogStatement
     : USE CATALOG identifierOrString
+    ;
+
+showDatabasesStatement
+    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 alterDbQuotaStmtatement
@@ -328,11 +339,6 @@ showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
-showTabletStatement
-    : SHOW TABLET INTEGER_VALUE
-    | SHOW TABLET FROM qualifiedName partitionNames? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
-    ;
-
 showCreateTableStatement
     : SHOW CREATE (TABLE | VIEW | MATERIALIZED VIEW) table=qualifiedName
     ;
@@ -355,10 +361,6 @@ showAlterStatement
         (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     | SHOW ALTER MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
               (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
-    ;
-
-showDeleteStatement
-    : SHOW DELETE ((FROM | IN) db=qualifiedName)?
     ;
 
 descTableStatement
@@ -392,9 +394,6 @@ showPartitionsStatement
     (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
-showOpenTableStatement
-    : SHOW OPEN TABLES
-    ;
 recoverPartitionStatement
     : RECOVER PARTITION identifier FROM table=qualifiedName
     ;
@@ -876,6 +875,84 @@ cancelLoadStatement
     : CANCEL LOAD (FROM identifier)? (WHERE expression)?
     ;
 
+// ------------------------------------------- Show Statement ----------------------------------------------------------
+
+showAuthorStatement
+    : SHOW AUTHORS
+    ;
+
+showBackendsStatement
+    : SHOW BACKENDS
+    ;
+
+showCharsetStatement
+    : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showCollationStatement
+    : SHOW COLLATION ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showDeleteStatement
+    : SHOW DELETE ((FROM | IN) db=qualifiedName)?
+    ;
+
+showDynamicPartitionStatement
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
+    ;
+
+showEventsStatement
+    : SHOW EVENTS ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showEnginesStatement
+    : SHOW ENGINES
+    ;
+
+showFrontendsStatement
+    : SHOW FRONTENDS
+    ;
+
+showPluginsStatement
+    : SHOW PLUGINS
+    ;
+
+showRepositoriesStatement
+    : SHOW REPOSITORIES
+    ;
+
+showOpenTableStatement
+    : SHOW OPEN TABLES
+    ;
+
+showProcedureStatement
+    : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
+    ;
+
+showProcStatement
+    : SHOW PROC path=string
+    ;
+
+showTriggersStatement
+    : SHOW FULL? TRIGGERS ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showUserStatement
+    : SHOW USER
+    ;
+
+showUserPropertyStatement
+    : SHOW PROPERTY (FOR string)? (LIKE string)?
+    ;
+
+showVariablesStatement
+    : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showWarningStatement
+    : SHOW (WARNINGS | ERRORS) (limitElement)?
+    ;
+
 // ------------------------------------------- Privilege Statement -----------------------------------------------------
 
 grantRoleStatement
@@ -921,22 +998,17 @@ createRoleStatement
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
-showDatabasesStatement
-    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
-    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
-    ;
-
-showVariablesStatement
-    : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
-    ;
-
 showProcesslistStatement
     : SHOW FULL? PROCESSLIST
     ;
 
+showStatusStatement
+    : SHOW varType? STATUS ((LIKE pattern=string) | (WHERE expression))?
+    ;
 
-showUserPropertyStatement
-    : SHOW PROPERTY (FOR string)? (LIKE string)?
+showTabletStatement
+    : SHOW TABLET INTEGER_VALUE
+    | SHOW TABLET FROM qualifiedName partitionNames? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 killStatement
@@ -947,28 +1019,12 @@ setUserPropertyStatement
     : SET PROPERTY (FOR string)? userPropertyList
     ;
 
-showStatusStatement
-    : SHOW varType? STATUS ((LIKE pattern=string) | (WHERE expression))?
-    ;
-
-showCharsetStatement
-    : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
-    ;
-
-showWarningStatement
-    : SHOW (WARNINGS | ERRORS) (limitElement)?
-    ;
-
 showNodesStatement
     : SHOW COMPUTE NODES                                                       #showComputeNodes
     ;
 
 showBrokerStatement
     : SHOW BROKER
-    ;
-
-showCollationStatement
-    : SHOW COLLATION ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 setStatement
@@ -982,7 +1038,7 @@ setVar
     | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
     | PASSWORD FOR user '=' (string | PASSWORD '(' string ')')                                  #setPassword
     | varType? identifier '=' setExprOrDefault                                                  #setVariable
-    | userVariable '=' expression                                                         #setVariable
+    | userVariable '=' expression                                                               #setVariable
     | systemVariable '=' setExprOrDefault                                                       #setVariable
     ;
 
@@ -993,8 +1049,8 @@ setExprOrDefault
     | expression
     ;
 
-showDynamicPartitionStatement
-    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
+syncStatement
+    : SYNC
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -1150,16 +1206,6 @@ partitionNames
 
 tabletList
     : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
-    ;
-
-// ------------------------------------------- Procedure Statement ---------------------------------------------------------
-showProcedureStatement
-    : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
-    ;
-
-// ------------------------------------------- Proc Statement ---------------------------------------------------------
-showProcStatement
-    : SHOW PROC path=string
     ;
 
 // ---------------------------------------- Backup Restore Statement -----------------------------------------------------

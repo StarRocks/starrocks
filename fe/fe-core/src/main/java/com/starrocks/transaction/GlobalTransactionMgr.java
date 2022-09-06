@@ -317,9 +317,9 @@ public class GlobalTransactionMgr implements Writable {
         }
     }
 
-    public void commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos)
+    public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos)
             throws UserException {
-        commitTransaction(dbId, transactionId, tabletCommitInfos, null);
+        return commitTransaction(dbId, transactionId, tabletCommitInfos, null);
     }
 
     /**
@@ -545,7 +545,6 @@ public class GlobalTransactionMgr implements Writable {
     public Long getMinActiveTxnId() {
         long result = Long.MAX_VALUE;
         for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
-            long dbId = entry.getKey();
             DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
             result = min(result, dbTransactionMgr.getMinActiveTxnId());
         }
