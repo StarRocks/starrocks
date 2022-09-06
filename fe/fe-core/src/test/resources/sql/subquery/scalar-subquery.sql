@@ -421,13 +421,13 @@ LEFT OUTER JOIN (join-predicate [3: v3 = 5: v5] post-join-predicate [if(7: max >
 [sql]
 select t0.v1, case when (select max(v4) from t1 where t0.v3 = t1.v5) > 1 then 4 else 5 end from t0;
 [result]
-LEFT OUTER JOIN (join-predicate [3: v3 = 5: v5] post-join-predicate [null])
+LEFT OUTER JOIN (join-predicate [3: v3 = 6: v5] post-join-predicate [null])
     SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{7: max=max(7: max)}] group by [[5: v5]] having [null]
-            EXCHANGE SHUFFLE[5]
-                AGGREGATE ([LOCAL] aggregate [{7: max=max(4: v4)}] group by [[5: v5]] having [null]
-                    SCAN (columns[4: v4, 5: v5] predicate[null])
+        AGGREGATE ([GLOBAL] aggregate [{8: max=max(8: max)}] group by [[6: v5]] having [null]
+            EXCHANGE SHUFFLE[6]
+                AGGREGATE ([LOCAL] aggregate [{8: max=max(5: v4)}] group by [[6: v5]] having [null]
+                    SCAN (columns[5: v4, 6: v5] predicate[null])
 [end]
 
 [sql]
@@ -437,10 +437,10 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1] predicate[null])
     EXCHANGE BROADCAST
         ASSERT LE 1
-            AGGREGATE ([GLOBAL] aggregate [{7: max=max(7: max)}] group by [[]] having [null]
+            AGGREGATE ([GLOBAL] aggregate [{8: max=max(8: max)}] group by [[]] having [null]
                 EXCHANGE GATHER
-                    AGGREGATE ([LOCAL] aggregate [{7: max=max(4: v4)}] group by [[]] having [null]
-                        SCAN (columns[4: v4] predicate[null])
+                    AGGREGATE ([LOCAL] aggregate [{8: max=max(5: v4)}] group by [[]] having [null]
+                        SCAN (columns[5: v4] predicate[null])
 [end]
 
 [sql]
@@ -451,7 +451,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
     EXCHANGE BROADCAST
         ASSERT LE 1
             EXCHANGE GATHER
-                SCAN (columns[4: v4] predicate[null])
+                SCAN (columns[5: v4] predicate[null])
 [end]
 
 [sql]
@@ -471,7 +471,7 @@ INNER JOIN (join-predicate [9: cast = 10: divide] post-join-predicate [null])
 [sql]
 select * from t0 where (select v4 from t1) = (select v7 from t2)
 [result]
-INNER JOIN (join-predicate [7: expr = 8: v7] post-join-predicate [null])
+INNER JOIN (join-predicate [7: v4 = 8: v7] post-join-predicate [null])
     CROSS JOIN (join-predicate [null] post-join-predicate [null])
         SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
         EXCHANGE BROADCAST
@@ -489,7 +489,7 @@ INNER JOIN (join-predicate [7: expr = 8: v7] post-join-predicate [null])
 [sql]
 select * from t0 where (select SUM(v4) from t1 where t0.v1 = t1.v4) = (select SUM(v7) from t2 where t0.v2 = t2.v8)
 [result]
-INNER JOIN (join-predicate [2: v2 = 10: v8 AND 8: expr = 12: sum] post-join-predicate [null])
+INNER JOIN (join-predicate [2: v2 = 10: v8 AND 8: sum = 12: sum] post-join-predicate [null])
     INNER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
         SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 IS NOT NULL])
         EXCHANGE SHUFFLE[4]

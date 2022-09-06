@@ -349,8 +349,8 @@ public class CTEPlanTest extends PlanTestBase {
                 "  ) as count \n" +
                 "FROM (SELECT t1.v4 FROM t1) t1";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  33:Project\n" +
-                "  |  <slot 12> : CAST((7: expr) AND (CASE WHEN (16: countRows IS NULL) OR (16: countRows = 0) " +
+        assertContains(plan, "33:Project\n" +
+                "  |  <slot 4> : CAST((8: expr) AND (CASE WHEN (16: countRows IS NULL) OR (16: countRows = 0) " +
                 "THEN FALSE WHEN CAST(CAST(1: v4 AS FLOAT) AS DOUBLE) IS NULL THEN NULL WHEN 14: cast IS NOT NULL " +
                 "THEN TRUE WHEN 17: countNotNulls < 16: countRows THEN NULL ELSE FALSE END) AS INT)\n");
     }
@@ -361,9 +361,9 @@ public class CTEPlanTest extends PlanTestBase {
                 "FROM t1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "16:Project\n" +
-                "  |  <slot 8> : CASE WHEN (11: countRows IS NULL) OR (11: countRows = 0) " +
+                "  |  <slot 4> : CASE WHEN (11: countRows IS NULL) OR (11: countRows = 0) " +
                 "THEN FALSE WHEN 1: v4 IS NULL THEN NULL WHEN 9: v1 IS NOT NULL " +
-                "THEN TRUE WHEN 12: countNotNulls < 11: countRows THEN NULL ELSE FALSE END IS NULL");
+                "THEN TRUE WHEN 12: countNotNulls < 11: countRows THEN NULL ELSE FALSE END IS NULL\n");
     }
 
     @Test

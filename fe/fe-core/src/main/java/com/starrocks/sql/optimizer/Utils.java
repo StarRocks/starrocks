@@ -583,4 +583,18 @@ public class Utils {
         }
         return predicates;
     }
+
+    public static <T extends ScalarOperator> List<T> collect(ScalarOperator root, Class<T> clazz) {
+        List<T> output = Lists.newArrayList();
+        collect(root, clazz, output);
+        return output;
+    }
+
+    private static <T extends ScalarOperator> void collect(ScalarOperator root, Class<T> clazz, List<T> output) {
+        if (clazz.isInstance(root)) {
+            output.add(clazz.cast(root));
+        }
+
+        root.getChildren().forEach(child -> collect(child, clazz, output));
+    }
 }

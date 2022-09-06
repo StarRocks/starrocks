@@ -49,7 +49,7 @@ public class AggregateTest extends PlanTestBase {
             String plan = getVerboseExplain(sql);
             assertContains(plan, "  7:AGGREGATE (update finalize)\n" +
                     "  |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; " +
-                    "result nullable: false], any_value[([22: expr, BOOLEAN, true]); args: BOOLEAN; " +
+                    "result nullable: false], any_value[([11: expr, BOOLEAN, true]); args: BOOLEAN; " +
                     "result: BOOLEAN; args nullable: true; result nullable: true]\n" +
                     "  |  group by: [1: t1a, VARCHAR, false]\n" +
                     "  |  having: [24: any_value, BOOLEAN, true]\n" +
@@ -58,7 +58,7 @@ public class AggregateTest extends PlanTestBase {
                     "  6:Project\n" +
                     "  |  output columns:\n" +
                     "  |  1 <-> [1: t1a, VARCHAR, false]\n" +
-                    "  |  22 <-> [1: t1a, VARCHAR, false] <= [11: t1a, VARCHAR, true]\n" +
+                    "  |  11 <-> [1: t1a, VARCHAR, false] <= [12: t1a, VARCHAR, true]\n" +
                     "  |  cardinality: 1");
         }
         {
@@ -976,11 +976,11 @@ public class AggregateTest extends PlanTestBase {
         System.out.println(plan);
 
         Assert.assertTrue(plan.contains("  7:AGGREGATE (update serialize)\n" +
-                "  |  output: sum(8: case)\n" +
+                "  |  output: sum(4: case)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  6:Project\n" +
-                "  |  <slot 8> : if(1: v4 = 4: v1, 1: v4, NULL)\n" +
+                "  |  <slot 4> : if(1: v4 = 5: v1, 1: v4, NULL)\n" +
                 "  |  \n" +
                 "  5:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
