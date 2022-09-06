@@ -369,23 +369,23 @@ LEFT OUTER JOIN (join-predicate [2: v2 = 5: v8] post-join-predicate [3: v3 > 3 =
 [sql]
 select case (exists (select v7 from t2 where t0.v2 = t2.v8)) when TRUE then 1 when FALSE then 2 end from t0;
 [result]
-LEFT OUTER JOIN (join-predicate [2: v2 = 5: v8] post-join-predicate [null])
+LEFT OUTER JOIN (join-predicate [2: v2 = 6: v8] post-join-predicate [null])
     EXCHANGE SHUFFLE[2]
         SCAN (columns[2: v2] predicate[null])
-    AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v8]] having [null]
-        EXCHANGE SHUFFLE[5]
-            AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v8]] having [null]
-                SCAN (columns[5: v8] predicate[null])
+    AGGREGATE ([GLOBAL] aggregate [{}] group by [[6: v8]] having [null]
+        EXCHANGE SHUFFLE[6]
+            AGGREGATE ([LOCAL] aggregate [{}] group by [[6: v8]] having [null]
+                SCAN (columns[6: v8] predicate[null])
 [end]
 
 [sql]
 select not (exists (select v7 from t2 where t0.v2 = t2.v8)) from t0;
 [result]
-LEFT OUTER JOIN (join-predicate [2: v2 = 5: v8] post-join-predicate [null])
+LEFT OUTER JOIN (join-predicate [2: v2 = 6: v8] post-join-predicate [null])
     EXCHANGE SHUFFLE[2]
         SCAN (columns[2: v2] predicate[null])
-    AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v8]] having [null]
-        EXCHANGE SHUFFLE[5]
-            AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v8]] having [null]
-                SCAN (columns[5: v8] predicate[null])
+    AGGREGATE ([GLOBAL] aggregate [{}] group by [[6: v8]] having [null]
+        EXCHANGE SHUFFLE[6]
+            AGGREGATE ([LOCAL] aggregate [{}] group by [[6: v8]] having [null]
+                SCAN (columns[6: v8] predicate[null])
 [end]
