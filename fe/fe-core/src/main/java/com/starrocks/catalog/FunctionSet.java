@@ -278,6 +278,7 @@ public class FunctionSet {
     public static final String ARRAY_SORT = "array_sort";
     public static final String ARRAY_SUM = "array_sum";
     public static final String ARRAY_REMOVE = "array_remove";
+    public static final String ARRAY_FILTER = "array_filter";
 
     // Bit functions:
     public static final String BITAND = "bitand";
