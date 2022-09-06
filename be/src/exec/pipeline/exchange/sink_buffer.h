@@ -165,6 +165,9 @@ private:
     int64_t _pending_timestamp = -1;
     mutable std::atomic<int64_t> _last_full_timestamp = -1;
     mutable std::atomic<int64_t> _full_time = 0;
+
+    std::atomic<int64_t> _first_send_time = -1;
+    std::atomic<int64_t> _last_receive_time = -1;
 }; // namespace starrocks::pipeline
 
 } // namespace starrocks::pipeline
