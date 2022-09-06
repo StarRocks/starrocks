@@ -156,12 +156,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     auto* runtime_state = fragment_ctx->runtime_state();
     int func_version = request.__isset.func_version ? request.func_version : 2;
     runtime_state->set_func_version(func_version);
-    // instance_mem_limit is user-designated mem_limit scaled by degree_of_parallelism times.
-    auto instance_mem_limit = query_options.__isset.mem_limit && query_options.mem_limit > 0
-                                      ? query_options.mem_limit * degree_of_parallelism
-                                      : -1L;
-    runtime_state->init_mem_trackers(instance_mem_limit, _query_ctx->mem_tracker());
-    runtime_state->set_be_number(backend_num);
+    runtime_state->init_mem_trackers(query_mem_tracker);
+    runtime_state->set_be_number(request.backend_num);
     runtime_state->set_query_ctx(_query_ctx);
 
     // RuntimeFilterWorker::open_query is idempotent
