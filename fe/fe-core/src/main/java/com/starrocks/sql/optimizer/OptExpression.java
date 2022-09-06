@@ -104,7 +104,7 @@ public class OptExpression {
 
     // Note: Required this OptExpression produced by {@Binder}
     public ColumnRefSet getChildOutputColumns(int index) {
-        return inputAt(index).getGroupExpression().getGroup().getLogicalProperty().getOutputColumns();
+        return inputAt(index).getOutputColumns();
     }
 
     public ColumnRefSet getOutputColumns() {

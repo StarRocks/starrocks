@@ -82,7 +82,8 @@ public class OptimizerTaskTest {
         ctx.getSessionVariable().setJoinImplementationMode("hash");
         ctx.setDumpInfo(new MockDumpInfo());
         call = new CallOperator(FunctionSet.SUM, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
-        new Expectations(call) {{
+        new Expectations(call) {
+            {
                 call.getUsedColumns();
                 result = new ColumnRefSet();
                 minTimes = 0;
@@ -91,7 +92,8 @@ public class OptimizerTaskTest {
                 minTimes = 0;
                 result = AggregateFunction.createBuiltin(FunctionSet.SUM,
                         Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
-            }};
+            }
+        };
 
         columnRefFactory = new ColumnRefFactory();
         column1 = columnRefFactory.create("t1", ScalarType.INT, true);
@@ -1056,11 +1058,13 @@ public class OptimizerTaskTest {
             }
         };
 
-        new Expectations(call) {{
+        new Expectations(call) {
+            {
                 call.isDistinct();
                 result = false;
                 minTimes = 0;
-            }};
+            }
+        };
 
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
@@ -1195,7 +1199,8 @@ public class OptimizerTaskTest {
         CallOperator call =
                 new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(ConstantOperator.createInt(1)));
 
-        new Expectations(call) {{
+        new Expectations(call) {
+            {
                 call.getUsedColumns();
                 result = new ColumnRefSet(1);
                 minTimes = 0;
@@ -1208,7 +1213,8 @@ public class OptimizerTaskTest {
                 result = AggregateFunction.createBuiltin(FunctionSet.COUNT,
                         Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
                 minTimes = 0;
-            }};
+            }
+        };
 
         List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
 
@@ -1568,7 +1574,8 @@ public class OptimizerTaskTest {
         CallOperator add2 = new CallOperator("add", Type.INT,
                 Lists.newArrayList(add1, ConstantOperator.createInt(3)));
 
-        new Expectations(add1, add2) {{
+        new Expectations(add1, add2) {
+            {
                 add1.getFunction();
                 minTimes = 0;
                 result = new Function(new FunctionName("add"), new Type[] {Type.INT, Type.INT}, Type.INT, false);
@@ -1576,7 +1583,8 @@ public class OptimizerTaskTest {
                 add2.getFunction();
                 minTimes = 0;
                 result = new Function(new FunctionName("add"), new Type[] {Type.INT, Type.INT}, Type.INT, false);
-            }};
+            }
+        };
 
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
         projectMap.put(column4, add1);
@@ -2154,6 +2162,15 @@ public class OptimizerTaskTest {
         };
 
         optimizer = new Optimizer();
+        expression = OptExpression.create(new LogicalJoinOperator(JoinOperator.INNER_JOIN, predicate),
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scan1ColumnMap, Maps.newHashMap(),
+                        DistributionSpec.createHashDistributionSpec(
+                                new HashDistributionDesc(Lists.newArrayList(this.column2.getId()),
+                                        HashDistributionDesc.SourceType.LOCAL)), -1, null)),
+                OptExpression.create(new LogicalOlapScanOperator(olapTable2, scan2ColumnMap, Maps.newHashMap(),
+                        DistributionSpec.createHashDistributionSpec(
+                                new HashDistributionDesc(Lists.newArrayList(this.column4.getId()),
+                                        HashDistributionDesc.SourceType.LOCAL)), -1, null)));
         physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
                 new ColumnRefSet(outputColumns), columnRefFactory);
         assertEquals(physicalTree.getInputs().get(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
