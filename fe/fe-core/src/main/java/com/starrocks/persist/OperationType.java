@@ -258,4 +258,8 @@ public class OperationType {
 
     // integrate with starmgr
     public static final short OP_STARMGR = 11000;
+
+    // alter load
+    public static final short OP_ALTER_LOAD_JOB = 11100;
+
 }

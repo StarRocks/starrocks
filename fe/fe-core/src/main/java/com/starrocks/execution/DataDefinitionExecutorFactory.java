@@ -10,6 +10,7 @@ import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
+import com.starrocks.analysis.AlterLoadStmt;
 import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.AlterSystemStmt;
@@ -155,6 +156,7 @@ public class DataDefinitionExecutorFactory {
                     .put(CreateCatalogStmt.class, new CreateCatalogExecutor())
                     .put(DropCatalogStmt.class, new DropCatalogExecutor())
                     .put(SubmitTaskStmt.class, new SubmitTaskExecutor())
+                    .put(AlterLoadStmt.class, new AlterLoadExecutor())
                     .build();
 
     public static ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
