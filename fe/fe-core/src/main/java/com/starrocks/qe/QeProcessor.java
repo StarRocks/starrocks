@@ -18,6 +18,8 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.UserException;
+import com.starrocks.thrift.TBatchReportExecStatusParams;
+import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
@@ -28,6 +30,8 @@ import java.util.Map;
 public interface QeProcessor {
 
     TReportExecStatusResult reportExecStatus(TReportExecStatusParams params, TNetworkAddress beAddr);
+
+    TBatchReportExecStatusResult batchReportExecStatus(TBatchReportExecStatusParams params, TNetworkAddress beAddr);
 
     void registerQuery(TUniqueId queryId, Coordinator coord) throws UserException;
 

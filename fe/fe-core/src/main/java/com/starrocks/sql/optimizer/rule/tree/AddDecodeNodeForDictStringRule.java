@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.sql.optimizer.rewrite.physical;
+package com.starrocks.sql.optimizer.rule.tree;
 
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
@@ -83,7 +83,7 @@ import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperato
  * <p>
  * The concrete example could refer to LowCardinalityTest
  */
-public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewriteRule {
+public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
     private static final Logger LOG = LogManager.getLogger(AddDecodeNodeForDictStringRule.class);
 
     private final Map<Long, List<Integer>> tableIdToStringColumnIds = Maps.newHashMap();
@@ -187,8 +187,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             }
         }
 
-        private boolean projectionNeedDecode(OptExpression optExpression, DecodeContext context,
-                                             Projection projection) {
+        private boolean projectionNeedDecode(DecodeContext context, Projection projection) {
             Set<Integer> stringColumnIds = context.stringColumnIdToDictColumnIds.keySet();
             Collection<Integer> dictColumnIds = context.stringColumnIdToDictColumnIds.values();
             // if projection has not supported operator in dict column,
@@ -234,7 +233,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 Projection projection = optExpression.getOp().getProjection();
                 Set<Integer> stringColumnIds = context.stringColumnIdToDictColumnIds.keySet();
 
-                if (projectionNeedDecode(optExpression, context, projection)) {
+                if (projectionNeedDecode(context, projection)) {
                     // child has dict columns
                     OptExpression decodeExp = generateDecodeOExpr(context, Collections.singletonList(optExpression));
                     decodeExp.getOp().setProjection(optExpression.getOp().getProjection());
@@ -625,7 +624,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         AggregateFunction newFunction =
                                 (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
                                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                        Type newReturnType = null;
+                        Type newReturnType;
 
                         ColumnRefOperator outputColumn = kv.getKey();
 

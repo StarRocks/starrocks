@@ -19,6 +19,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateRoleStmt;
+import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
@@ -46,6 +47,7 @@ import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SlotRef;
@@ -350,6 +352,10 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -450,6 +456,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowRolesStatement(ShowRolesStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

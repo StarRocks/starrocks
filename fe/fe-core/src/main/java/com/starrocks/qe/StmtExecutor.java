@@ -81,6 +81,7 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
@@ -121,6 +122,7 @@ import com.starrocks.statistic.StatisticsCollectJobFactory;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
+import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TResultBatch;
@@ -136,10 +138,12 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -783,25 +787,55 @@ public class StmtExecutor {
             return;
         }
 
-        AnalyzeStatus analyzeStatus;
-        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        StatsConstants.AnalyzeType analyzeType;
         if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
-            analyzeStatus = statisticExecutor.collectStatistics(
-                    new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                            analyzeStmt.getProperties()),
-                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
-                    false);
+            analyzeType = StatsConstants.AnalyzeType.HISTOGRAM;
         } else {
-            analyzeStatus = statisticExecutor.collectStatistics(
-                    StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
-                            analyzeStmt.getColumnNames(),
-                            analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
-                                    StatsConstants.AnalyzeType.FULL,
-                            StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
-                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
-                    false);
+            if (analyzeStmt.isSample()) {
+                analyzeType = StatsConstants.AnalyzeType.SAMPLE;
+            } else {
+                analyzeType = StatsConstants.AnalyzeType.FULL;
+            }
         }
+
+        //Only for send sync command to client
+        AnalyzeStatus analyzeStatus = new AnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), table.getId(), analyzeStmt.getColumnNames(),
+                analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+        GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+
+        try {
+            GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool().submit(() -> {
+                StatisticExecutor statisticExecutor = new StatisticExecutor();
+                if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
+                    statisticExecutor.collectStatistics(
+                            new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
+                                    StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                                    analyzeStmt.getProperties()),
+                            analyzeStatus,
+                            //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                            false);
+                } else {
+                    statisticExecutor.collectStatistics(
+                            StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
+                                    analyzeStmt.getColumnNames(),
+                                    analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
+                                            StatsConstants.AnalyzeType.FULL,
+                                    StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
+                            analyzeStatus,
+                            //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                            false);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+            analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        }
+
         ShowResultSet resultSet = analyzeStatus.toShowResult();
         if (isProxy) {
             proxyResultSet = resultSet;
@@ -1182,7 +1216,10 @@ public class StmtExecutor {
 
         long loadedRows = 0;
         int filteredRows = 0;
+        long jobId = -1;
+        long estimateScanRows = -1;
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
+        boolean insertError = false;
         try {
             if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
                 //if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
@@ -1194,9 +1231,40 @@ public class StmtExecutor {
                 dataSink.complete();
             }
 
+
+
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
                     execPlan.getDescTbl().toThrift());
             coord.setQueryType(TQueryType.LOAD);
+
+
+            List<ScanNode> scanNodes = execPlan.getScanNodes();
+
+            boolean containOlapScanNode = false;
+            for (int i = 0; i < scanNodes.size(); i++) {
+                if (scanNodes.get(i) instanceof OlapScanNode) {
+                    estimateScanRows += ((OlapScanNode) scanNodes.get(i)).getActualRows();
+                    containOlapScanNode = true;
+                }
+            }
+
+            if (containOlapScanNode) {
+                coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
+            } else {
+                estimateScanRows = execPlan.getFragments().get(0).getPlanRoot().getCardinality();
+                coord.setLoadJobType(TLoadJobType.INSERT_VALUES);
+            }
+
+            jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
+                    label,
+                    database.getFullName(),
+                    targetTable.getId(),
+                    EtlJobType.INSERT,
+                    createTime,
+                    estimateScanRows);
+            coord.setJobId(jobId);
+
+
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
             coord.exec();
 
@@ -1241,20 +1309,20 @@ public class StmtExecutor {
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE  + ", tracking_url = " 
-                                + coord.getTrackingUrl()
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = "
+                                        + coord.getTrackingUrl()
                         );
                     } else {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(),
                                 transactionId,
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = " 
-                                + coord.getTrackingUrl()
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = "
+                                        + coord.getTrackingUrl()
                         );
                     }
-                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " + 
+                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " +
                             transactionId + " tracking_url = " + coord.getTrackingUrl());
-                    
+                    insertError = true;
                     return;
                 }
             }
@@ -1276,6 +1344,7 @@ public class StmtExecutor {
                     );
                 }
                 context.getState().setOk();
+                insertError = true;
                 return;
             }
 
@@ -1340,17 +1409,36 @@ public class StmtExecutor {
                 sb.append(". url: ").append(coord.getTrackingUrl());
             }
             context.getState().setError(sb.toString());
+
+            // cancel insert load job
+            try {
+                if (jobId != -1) {
+                    context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
+                            "Cancelled, msg: " + t.getMessage(), coord.getTrackingUrl());
+                    jobId = -1;
+                }
+            } catch (Exception abortTxnException) {
+                LOG.warn("errors when cancel insert load job {}", jobId);
+            }
             return;
+        } finally {
+            if (insertError) {
+                try {
+                    if (jobId != -1) {
+                        context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
+                                "Cancelled", coord.getTrackingUrl());
+                        jobId = -1;
+                    }
+                } catch (Exception abortTxnException) {
+                    LOG.warn("errors when cancel insert load job {}", jobId);
+                }
+            }
         }
 
         String errMsg = "";
         try {
-            context.getGlobalStateMgr().getLoadManager().recordFinishedLoadJob(
-                    label,
-                    database.getFullName(),
-                    targetTable.getId(),
+            context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId,
                     EtlJobType.INSERT,
-                    createTime,
                     "",
                     coord.getTrackingUrl());
         } catch (MetaNotFoundException e) {

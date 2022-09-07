@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -33,7 +34,7 @@ public class QuantifiedApply2JoinRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
         return apply.isUseSemiAnti() && apply.isQuantified()
-                && !Utils.containsCorrelationSubquery(input.getGroupExpression());
+                && !SubqueryUtils.containsCorrelationSubquery(input);
     }
 
     @Override

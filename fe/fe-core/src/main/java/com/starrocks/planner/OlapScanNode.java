@@ -164,6 +164,10 @@ public class OlapScanNode extends ScanNode {
         this.dictStringIdToIntIds = dictStringIdToIntIds;
     }
 
+    public long getActualRows() {
+        return actualRows;
+    }
+
     // The column names applied dict optimization
     // used for explain
     private final List<String> appliedDictStringColumns = new ArrayList<>();

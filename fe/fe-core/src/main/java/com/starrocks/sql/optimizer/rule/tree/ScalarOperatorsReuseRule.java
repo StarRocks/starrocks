@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.sql.optimizer.rewrite.physical;
+package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -22,7 +22,7 @@ import java.util.Map;
 
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 
-public class ScalarOperatorsReuseRule implements PhysicalOperatorTreeRewriteRule {
+public class ScalarOperatorsReuseRule implements TreeRewriteRule {
     public static final ReuseVisitor HANDLER = new ReuseVisitor();
 
     @Override

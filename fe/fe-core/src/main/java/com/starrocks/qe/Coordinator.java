@@ -88,6 +88,7 @@ import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TInternalScanRange;
+import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TPlanFragmentDestination;
@@ -321,6 +322,10 @@ public class Coordinator {
                 this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
             }
         }
+        if (sessionVariables.containsKey(SessionVariable.ENABLE_REPLICATED_STORAGE)) {
+            this.queryOptions.setEnable_replicated_storage(
+                    Boolean.parseBoolean(sessionVariables.get(SessionVariable.ENABLE_REPLICATED_STORAGE)));
+        }
         String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
         this.queryGlobals.setNow_string(nowString);
         this.queryGlobals.setTimestamp_ms(startTime);
@@ -345,8 +350,16 @@ public class Coordinator {
         this.queryId = queryId;
     }
 
+    public void setJobId(Long jobId) {
+        this.jobId = jobId;
+    }
+
     public void setQueryType(TQueryType type) {
         this.queryOptions.setQuery_type(type);
+    }
+
+    public void setLoadJobType(TLoadJobType type) {
+        this.queryOptions.setLoad_job_type(type);
     }
 
     public Status getExecStatus() {
@@ -2194,10 +2207,11 @@ public class Coordinator {
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }
 
-        if (params.isSetLoaded_rows()) {
+        if (params.isSetLoaded_rows() && params.isSetLoaded_bytes()) {
+
             GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
                     jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
-                    params.done);
+                    params.done, params.loaded_bytes);
         }
     }
 

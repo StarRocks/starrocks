@@ -44,6 +44,7 @@
 #include "util/compression/block_compression.h"
 #include "util/raw_container.h"
 #include "util/ref_count_closure.h"
+#include "util/reusable_closure.h"
 
 namespace starrocks {
 
@@ -80,61 +81,13 @@ struct AddBatchCounter {
     }
 };
 
-template <typename T>
-class ReusableClosure : public google::protobuf::Closure {
-public:
-    ReusableClosure() : cid(INVALID_BTHREAD_ID), _refs(0) {}
-    ~ReusableClosure() override = default;
-
-    int count() { return _refs.load(); }
-
-    void ref() { _refs.fetch_add(1); }
-
-    // If unref() returns true, this object should be delete
-    bool unref() { return _refs.fetch_sub(1) == 1; }
-
-    void Run() override {
-        if (unref()) {
-            delete this;
-        }
-    }
-
-    bool join() {
-        if (cid != INVALID_BTHREAD_ID) {
-            brpc::Join(cid);
-            cid = INVALID_BTHREAD_ID;
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    void cancel() {
-        if (cid != INVALID_BTHREAD_ID) {
-            brpc::StartCancel(cid);
-        }
-    }
-
-    void reset() {
-        cntl.Reset();
-        cid = cntl.call_id();
-    }
-
-    brpc::Controller cntl;
-    T result;
-
-private:
-    brpc::CallId cid;
-    std::atomic<int> _refs;
-};
-
 class NodeChannel {
 public:
     NodeChannel(OlapTableSink* parent, int64_t node_id);
     ~NodeChannel() noexcept;
 
     // called before open, used to add tablet loacted in this backend
-    void add_tablet(const int64_t index_id, const TTabletWithPartition& tablet) {
+    void add_tablet(const int64_t index_id, const PTabletWithPartition& tablet) {
         _index_tablets_map[index_id].emplace_back(tablet);
     }
 
@@ -220,7 +173,7 @@ private:
     doris::PBackendService_Stub* _stub = nullptr;
     std::vector<RefCountClosure<PTabletWriterOpenResult>*> _open_closures;
 
-    std::map<int64_t, std::vector<TTabletWithPartition>> _index_tablets_map;
+    std::map<int64_t, std::vector<PTabletWithPartition>> _index_tablets_map;
 
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
 
@@ -251,7 +204,7 @@ public:
     IndexChannel(OlapTableSink* parent, int64_t index_id) : _parent(parent), _index_id(index_id) {}
     ~IndexChannel();
 
-    Status init(RuntimeState* state, const std::vector<TTabletWithPartition>& tablets);
+    Status init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets);
 
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
         for (auto& it : _node_channels) {
@@ -260,6 +213,9 @@ public:
     }
 
     void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
+
+    bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
+
     bool has_intolerable_failure();
 
 private:
@@ -271,6 +227,8 @@ private:
     std::unordered_map<int64_t, std::unique_ptr<NodeChannel>> _node_channels;
     // map tablet_id to backend id
     std::unordered_map<int64_t, std::vector<int64_t>> _tablet_to_be;
+    // map be_id to tablet num
+    std::unordered_map<int64_t, int64_t> _be_to_tablet_num;
     // BeId
     std::set<int64_t> _failed_channels;
 };
@@ -346,6 +304,7 @@ private:
     Status _send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel* channel, std::vector<uint16_t>& selection_idx);
 
     void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
+    bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
     bool has_intolerable_failure() { return _failed_channels.size() >= ((_num_repicas + 1) / 2); }
 
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
@@ -384,6 +343,8 @@ private:
     int _sender_id = -1;
     int _num_senders = -1;
     bool _is_lake_table = false;
+
+    TKeysType::type _keys_type;
 
     // TODO(zc): think about cache this data
     std::shared_ptr<OlapTableSchemaParam> _schema;
@@ -453,6 +414,8 @@ private:
     std::set<int64_t> _failed_channels;
     // enable colocate index
     bool _colocate_mv_index = config::enable_load_colocate_mv;
+
+    bool _enable_replicated_storage = false;
 };
 
 } // namespace stream_load

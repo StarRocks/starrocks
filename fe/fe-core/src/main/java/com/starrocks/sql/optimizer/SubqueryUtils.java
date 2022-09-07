@@ -13,6 +13,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -138,5 +139,37 @@ public class SubqueryUtils {
         // only un-correlation scalar subquery
         return apply.getUnCorrelationSubqueryPredicateColumns() != null &&
                 !apply.getUnCorrelationSubqueryPredicateColumns().isEmpty();
+    }
+
+    // check the ApplyNode's children contains correlation subquery
+    public static boolean containsCorrelationSubquery(OptExpression expression) {
+        if (expression.getOp().isLogical() && OperatorType.LOGICAL_APPLY.equals(expression.getOp().getOpType())) {
+            LogicalApplyOperator apply = (LogicalApplyOperator) expression.getOp();
+
+            if (apply.getCorrelationColumnRefs().isEmpty()) {
+                return false;
+            }
+
+            // only check right child
+            return checkPredicateContainColumnRef(apply.getCorrelationColumnRefs(), expression.getInputs().get(1));
+        }
+        return false;
+    }
+
+    // GroupExpression
+    private static boolean checkPredicateContainColumnRef(List<ColumnRefOperator> cro, OptExpression expression) {
+        LogicalOperator logicalOperator = (LogicalOperator) expression.getOp();
+
+        if (Utils.containAnyColumnRefs(cro, logicalOperator.getPredicate())) {
+            return true;
+        }
+
+        for (OptExpression child : expression.getInputs()) {
+            if (checkPredicateContainColumnRef(cro, child)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

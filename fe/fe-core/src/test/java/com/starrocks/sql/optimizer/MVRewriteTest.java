@@ -23,6 +23,8 @@ package com.starrocks.sql.optimizer;
 
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
@@ -54,6 +56,7 @@ public class MVRewriteTest {
         FeConstants.default_scheduler_interval_millisecond = 1;
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
+        GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withEnableMV().withDatabase(HR_DB_NAME).useDatabase(HR_DB_NAME);
         starRocksAssert.withTable("CREATE TABLE `ods_order` (\n" +

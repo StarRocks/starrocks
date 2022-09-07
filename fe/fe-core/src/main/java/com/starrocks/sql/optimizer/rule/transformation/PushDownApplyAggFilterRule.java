@@ -74,7 +74,7 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         // must be correlation subquery
-        if (!Utils.containsCorrelationSubquery(input.getGroupExpression())) {
+        if (!SubqueryUtils.containsCorrelationSubquery(input)) {
             return false;
         }
 
