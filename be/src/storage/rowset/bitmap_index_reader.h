@@ -50,7 +50,8 @@ class IndexedColumnIterator;
 
 class BitmapIndexReader {
 public:
-    BitmapIndexReader() = default;
+    BitmapIndexReader();
+    ~BitmapIndexReader();
 
     // Load index data into memory.
     //
@@ -60,8 +61,8 @@ public:
     //
     // Return true if the index data was successfully loaded by the caller, false if
     // the data was loaded by another caller.
-    StatusOr<bool> load(fs::BlockManager* fs, const std::string& filename, const BitmapIndexPB& meta,
-                        bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker);
+    StatusOr<bool> load(fs::BlockManager* fs, const std::string& filename, const BitmapIndexPB& meta, bool use_page_cache,
+                        bool kept_in_memory);
 
     // create a new column iterator. Client should delete returned iterator
     // REQUIRES: the index data has been successfully `load()`ed into memory.
@@ -72,7 +73,12 @@ public:
 
     const TypeInfoPtr& type_info() { return _typeinfo; }
 
-    size_t mem_usage() const {
+    bool loaded() const { return invoked(_load_once); }
+
+private:
+    friend class BitmapIndexIterator;
+
+    size_t _mem_usage() const {
         size_t size = sizeof(BitmapIndexReader);
         if (_dict_column_reader != nullptr) {
             size += _dict_column_reader->mem_usage();
@@ -82,17 +88,6 @@ public:
         }
         return size;
     }
-
-    bool loaded() const { return invoked(_load_once); }
-
-private:
-    friend class BitmapIndexIterator;
-
-    enum State : int {
-        kUnloaded = 0, // data has not been loaded into memory
-        kLoading = 1,  // loading in process
-        kLoaded = 2,   // data was successfully loaded in memory
-    };
 
     void _reset();
 

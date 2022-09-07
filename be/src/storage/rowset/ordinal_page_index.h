@@ -67,7 +67,8 @@ class OrdinalPageIndexIterator;
 
 class OrdinalIndexReader {
 public:
-    OrdinalIndexReader() = default;
+    OrdinalIndexReader();
+    ~OrdinalIndexReader();
 
     // Multiple callers may call this method concurrently, but only the first one
     // can load the data, the others will wait until the first one finished loading
@@ -75,8 +76,8 @@ public:
     //
     // Return true if the index data was successfully loaded by the caller, false if
     // the data was loaded by another caller.
-    StatusOr<bool> load(fs::BlockManager* fs, const std::string& filename, const OrdinalIndexPB& meta,
-                        ordinal_t num_values, bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker);
+    StatusOr<bool> load(fs::BlockManager* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
+                        bool use_page_cache, bool kept_in_memory);
 
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     OrdinalPageIndexIterator seek_at_or_before(ordinal_t ordinal);
@@ -100,10 +101,6 @@ public:
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     size_t num_rows() const { return _ordinals.back() - _ordinals.front(); }
 
-    size_t mem_usage() const {
-        return sizeof(OrdinalIndexReader) + _ordinals.size() * sizeof(ordinal_t) + _pages.size() * sizeof(PagePointer);
-    }
-
     bool loaded() const { return invoked(_load_once); }
 
 private:
@@ -116,6 +113,10 @@ private:
     };
 
     void _reset();
+
+    size_t _mem_usage() const {
+        return sizeof(OrdinalIndexReader) + _ordinals.size() * sizeof(ordinal_t) + _pages.size() * sizeof(PagePointer);
+    }
 
     Status _do_load(fs::BlockManager* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
                     bool use_page_cache, bool kept_in_memory);
