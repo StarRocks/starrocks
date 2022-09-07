@@ -10,6 +10,8 @@
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exec/vectorized/sorting/sorting.h"
+#include "runtime/primitive_type.h"
+#include "simd/selector.h"
 
 namespace starrocks::vectorized {
 
@@ -85,14 +87,25 @@ public:
         size_t null_equal_count = compare_column_helper(null_vector, null_cmp);
 
         int notnull_equal_count = 0;
+
+        CompareVector cmp_vector(null_data.size());
+        // TODO: use IMD select_if
+        auto merge_cmp_vector = [](CompareVector& a, CompareVector& b) {
+            for (int i = 0; i < a.size(); ++i) {
+                a[i] = a[i] == 0 ? b[i] : a[i];
+            }
+        };
         if (_rhs_value.is_null()) {
             for (size_t i = 0; i < null_data.size(); i++) {
                 if (null_data[i] == 0) {
-                    _cmp_vector[i] = -_null_first;
+                    cmp_vector[i] = -_null_first;
                 } else {
-                    _cmp_vector[i] = null_vector[i];
+                    cmp_vector[i] = null_vector[i];
                 }
             }
+            // merge cmp_vector
+            // _cmp_vector[i] = _cmp_vector[i] == 0 ? cmp_vector[i]: _cmp_vector[i];
+            merge_cmp_vector(_cmp_vector, cmp_vector);
         } else {
             // 0 means not null, so compare it
             // 1 means null, not compare it for not-null values
@@ -105,11 +118,12 @@ public:
                                                  SortDesc(_sort_order, _null_first));
             for (size_t i = 0; i < null_data.size(); i++) {
                 if (null_data[i] == 0) {
-                    _cmp_vector[i] = notnull_vector[i];
+                    cmp_vector[i] = notnull_vector[i];
                 } else {
-                    _cmp_vector[i] = null_vector[i];
+                    cmp_vector[i] = null_vector[i];
                 }
             }
+            merge_cmp_vector(_cmp_vector, cmp_vector);
         }
 
         _equal_count = null_equal_count + notnull_equal_count;
