@@ -42,18 +42,22 @@ public:
     METRIC_DEFINE_INT_GAUGE(pageheap_unmapped_bytes, MetricUnit::BYTES);
 
     // MemPool metrics
-    // Process memory usage
     METRIC_DEFINE_INT_GAUGE(process_mem_bytes, MetricUnit::BYTES);
-    // Query memory usage
     METRIC_DEFINE_INT_GAUGE(query_mem_bytes, MetricUnit::BYTES);
-    // Load memory usage
     METRIC_DEFINE_INT_GAUGE(load_mem_bytes, MetricUnit::BYTES);
-    // Tablet meta memory usage
     METRIC_DEFINE_INT_GAUGE(metadata_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(tablet_metadata_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(rowset_metadata_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(segment_metadata_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(column_metadata_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(tablet_schema_mem_bytes, MetricUnit::BYTES);
-    // Compaction memory usage
+    METRIC_DEFINE_INT_GAUGE(column_zonemap_index_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(ordinal_index_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(bitmap_index_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(bloom_filter_index_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(segment_zonemap_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(short_key_index_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(compaction_mem_bytes, MetricUnit::BYTES);
-    // SchemaChange memory usage
     METRIC_DEFINE_INT_GAUGE(schema_change_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(column_pool_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(storage_page_cache_mem_bytes, MetricUnit::BYTES);
