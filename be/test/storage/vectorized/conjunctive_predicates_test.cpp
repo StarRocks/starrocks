@@ -323,7 +323,7 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     std::vector<std::string> key_column_names = {"c1"};
     SlotDescriptor* slot = tuple_desc->slots()[0];
     std::vector<ExprContext*> conjunct_ctxs = {_pool.add(new ExprContext(build_predicate(ptype, op, slot)))};
-    auto tablet_schema = TabletSchema::create(&mem_tracker, create_tablet_schema(ptype));
+    auto tablet_schema = TabletSchema::create(create_tablet_schema(ptype));
 
     OlapScanConjunctsManager cm;
     cm.conjunct_ctxs_ptr = &conjunct_ctxs;

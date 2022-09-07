@@ -181,8 +181,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     }
     ASSERT_OK(SegmentRewriter::rewrite(file_name, *tablet_schema, read_column_ids, new_write_columns,
                                        partial_segment->id(), partial_rowset_footer));
-    auto rewrite_segment =
-            *Segment::open(_tablet_meta_mem_tracker.get(), _block_mgr, file_name, 0, tablet_schema.get());
+    auto rewrite_segment = *Segment::open(_metadata_mem_tracker.get(), _block_mgr, file_name, 0, tablet_schema.get());
 
     ASSERT_EQ(rewrite_segment->num_rows(), num_rows);
     res = rewrite_segment->new_iterator(schema, seg_options);
