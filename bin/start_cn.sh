@@ -43,15 +43,8 @@ export STARROCKS_HOME=`cd "$curdir/.."; pwd`
 export DORIS_HOME="$STARROCKS_HOME"
 source $STARROCKS_HOME/bin/common.sh
 
-# export env variables from cn.conf
-#
-# UDF_RUNTIME_DIR
-# LOG_DIR
-# PID_DIR
-export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
-export LOG_DIR=${STARROCKS_HOME}/log
-export PID_DIR=`cd "$curdir"; pwd`
-
+# actions shared between start_be.sh & start_cn.sh
+export_shared_envvars
 export_env_from_conf $STARROCKS_HOME/conf/cn.conf
 export_mem_limit_from_conf $STARROCKS_HOME/conf/cn.conf
 
