@@ -228,11 +228,15 @@ public class HDFSBackendSelector implements BackendSelector {
         for (TScanRangeLocations scanRangeLocations : locations) {
             size += scanRangeLocations.scan_range.hdfs_scan_range.getLength();
         }
-        return size / locations.size();
+        return size / (locations.size() + 1);
     }
 
     @Override
     public void computeScanRangeAssignment() throws Exception {
+        if (locations.size() == 0) {
+            return;
+        }
+
         long avgScanRangeBytes = computeAverageScanRangeBytes();
         long maxImbalanceBytes = avgScanRangeBytes * kMaxImbalanceRatio;
 
