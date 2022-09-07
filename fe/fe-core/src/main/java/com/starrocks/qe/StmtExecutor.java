@@ -582,7 +582,7 @@ public class StmtExecutor {
         initProfile(beginTimeInNanoSecond);
         profile.computeTimeInChildProfile();
         long profileEndTime = System.currentTimeMillis();
-        profile.getChildMap().get("Summary")
+        profile.getChild("Summary")
                 .addInfoString(ProfileManager.PROFILE_TIME,
                         DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
         StringBuilder builder = new StringBuilder();
@@ -1231,12 +1231,9 @@ public class StmtExecutor {
                 dataSink.complete();
             }
 
-
-
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
                     execPlan.getDescTbl().toThrift());
             coord.setQueryType(TQueryType.LOAD);
-
 
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
@@ -1263,7 +1260,6 @@ public class StmtExecutor {
                     createTime,
                     estimateScanRows);
             coord.setJobId(jobId);
-
 
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
             coord.exec();
@@ -1413,8 +1409,9 @@ public class StmtExecutor {
             // cancel insert load job
             try {
                 if (jobId != -1) {
-                    context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
-                            "Cancelled, msg: " + t.getMessage(), coord.getTrackingUrl());
+                    context.getGlobalStateMgr().getLoadManager()
+                            .recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
+                                    "Cancelled, msg: " + t.getMessage(), coord.getTrackingUrl());
                     jobId = -1;
                 }
             } catch (Exception abortTxnException) {
@@ -1425,8 +1422,9 @@ public class StmtExecutor {
             if (insertError) {
                 try {
                     if (jobId != -1) {
-                        context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
-                                "Cancelled", coord.getTrackingUrl());
+                        context.getGlobalStateMgr().getLoadManager()
+                                .recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
+                                        "Cancelled", coord.getTrackingUrl());
                         jobId = -1;
                     }
                 } catch (Exception abortTxnException) {
