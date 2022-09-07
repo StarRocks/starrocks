@@ -53,7 +53,7 @@ public:
         UniformInt uniform_int;
         uniform_int.param(UniformInt::param_type(1, 100'000 * std::pow(2, slot_index)));
 
-        int null_count = uniform_int(rng) % (config::vector_chunk_size / 100); // make 1/100 datums are null
+        int null_count = config::vector_chunk_size / 100;
         std::vector<int32_t> elements(config::vector_chunk_size - null_count);
         std::generate(elements.begin(), elements.end(), [&]() { return uniform_int(rng); });
         std::sort(elements.begin(), elements.end());
@@ -62,6 +62,7 @@ public:
         for (int32_t x : elements) {
             column->append_datum(Datum((int32_t)x));
         }
+        down_cast<NullableColumn*>(column.get())->update_has_null();
 
         return {column, std::move(expr)};
     }

@@ -170,10 +170,10 @@ public:
         // Fast path
         if (!_left_col->has_null() && !_right_col->has_null()) {
             DCHECK(_left_col->is_nullable() && _right_col->is_nullable());
-            const auto& lhs_data = down_cast<const NullableColumn*>(_left_col)->data_column_ref();
-            const auto& rhs_data = down_cast<const NullableColumn*>(_right_col)->data_column_ref();
-            MergeTwoColumn merge2({_sort_order, _null_first}, &lhs_data, &rhs_data, _equal_ranges, _perm);
-            return _left_col->accept(&merge2);
+            const auto* lhs_data = down_cast<const NullableColumn*>(_left_col)->data_column().get();
+            const auto* rhs_data = down_cast<const NullableColumn*>(_right_col)->data_column().get();
+            MergeTwoColumn merge2({_sort_order, _null_first}, lhs_data, rhs_data, _equal_ranges, _perm);
+            return lhs_data->accept(&merge2);
         }
 
         // Slow path
