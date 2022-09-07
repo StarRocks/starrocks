@@ -1,5 +1,24 @@
 # StarRocks version 2.1
 
+## 2.1.13
+
+发布日期：2022年9月6日
+
+### 功能优化
+
+- 增加 BE 配置项 `enable_check_string_lengths` 来控制是否进行导入时数据长度检查，以解决 VARCHAR 类型数据越界导致的 Compaction 失败问题。[#10380](https://github.com/StarRocks/starrocks/issues/10380)
+- 优化了查询中包含1000个以上的 OR 子句时的查询性能。[#9332](https://github.com/StarRocks/starrocks/pull/9332)
+
+### 问题修复
+
+修复了如下问题：
+
+- 在查询聚合模型表中 ARRAY 类型的列时，如该列使用 REPLACE_IF_NOT_NULL 聚合函数，那么查询可能会报错，并导致 BE 停止服务。[#10144](https://github.com/StarRocks/starrocks/issues/10144)
+- 查询中嵌套 1 个以上的 IFNULL 函数时，查询结果不正确。[#5028](https://github.com/StarRocks/starrocks/issues/5028) [#10486](https://github.com/StarRocks/starrocks/pull/10486)
+- Truncate 动态创建的分区后，其分桶数会从动态分区设置的分桶数变成默认分桶数。[#10435](https://github.com/StarRocks/starrocks/issues/10435)
+- 在使用 Routine Load 导入的过程中，如出现 Kafka 服务下线的情况， StarRocks 集群可能会出现暂时性死锁，影响查询。[#8947](https://github.com/StarRocks/starrocks/issues/8947)
+- 查询语句中同时有子查询和 ORDER BY 子句时会报错。[#10066](https://github.com/StarRocks/starrocks/pull/10066)
+
 ## 2.1.12
 
 发布日期：2022年8月9日
