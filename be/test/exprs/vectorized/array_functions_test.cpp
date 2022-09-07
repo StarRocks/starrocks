@@ -7,6 +7,8 @@
 
 #include <unordered_set>
 
+#include "column/const_column.h"
+
 namespace starrocks::vectorized {
 
 namespace {
