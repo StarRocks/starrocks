@@ -204,6 +204,9 @@ public class AnalyzerUtils {
             }
 
             Database db = session.getGlobalStateMgr().getDb(dbName);
+            if (db == null) {
+                return;
+            }
             dbs.put(db.getFullName(), db);
         }
     }

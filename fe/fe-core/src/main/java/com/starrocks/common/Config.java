@@ -1287,6 +1287,12 @@ public class Config extends ConfigBase {
     public static long max_planner_scalar_rewrite_num = 100000;
 
     /**
+     * statistic collect flag
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_statistic_collect = true;
+
+    /**
      * a period of create statistics table automatically by the StatisticsMetaManager
      */
     @ConfField(mutable = true)
@@ -1298,13 +1304,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3d
 
-    // The statistic
-    @ConfField
-    public static long statistic_cache_columns = 100000;
-
-    @ConfField
-    public static long statistic_dict_columns = 100000;
-
     /**
      * The collect thread work interval
      */
@@ -1312,22 +1311,28 @@ public class Config extends ConfigBase {
     public static long statistic_collect_interval_sec = 5 * 60; // 5m
 
     /**
-     * The column statistic update interval
+     * Num of thread to handle statistic collect
+     */
+    @ConfField(mutable = true)
+    public static int statistic_collect_concurrency = 3;
+
+    /**
+     * statistic collect query timeout
+     */
+    @ConfField(mutable = true)
+    public static long statistic_collect_query_timeout = 3600; // 1h
+
+    @ConfField
+    public static long statistic_cache_columns = 100000;
+
+    @ConfField
+    public static long statistic_dict_columns = 100000;
+
+    /**
+     * The column statistic cache update interval
      */
     @ConfField(mutable = true)
     public static long statistic_update_interval_sec = 24 * 60 * 60;
-
-    /**
-     * The row number of sample collect, default 20w rows
-     */
-    @ConfField(mutable = true)
-    public static long statistic_sample_collect_rows = 200000;
-
-    /**
-     * statistic collect flag
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_statistic_collect = true;
 
     /**
      * Enable full statistics collection
@@ -1347,14 +1352,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_max_full_collect_data_size = 100L * 1024 * 1024 * 1024; // 100G
 
-    @ConfField(mutable = true)
-    public static long statistic_collect_query_timeout = 3600; // 1h
-
     /**
      * Max row count in statistics collect per query
      */
     @ConfField(mutable = true)
     public static long statistic_collect_max_row_count_per_query = 5000000000L; //5 billion
+
+    /**
+     * The row number of sample collect, default 20w rows
+     */
+    @ConfField(mutable = true)
+    public static long statistic_sample_collect_rows = 200000;
 
     /**
      * default bucket size of histogram statistics

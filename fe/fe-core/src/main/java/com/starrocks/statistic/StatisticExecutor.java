@@ -176,18 +176,9 @@ public class StatisticExecutor {
         return statistics;
     }
 
-    public AnalyzeStatus collectStatistics(StatisticsCollectJob statsJob, boolean refreshAsync) {
+    public AnalyzeStatus collectStatistics(StatisticsCollectJob statsJob, AnalyzeStatus analyzeStatus, boolean refreshAsync) {
         Database db = statsJob.getDb();
         Table table = statsJob.getTable();
-        List<String> columns = statsJob.getColumns();
-
-        AnalyzeStatus analyzeStatus = new AnalyzeStatus(
-                GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), columns,
-                statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(),
-                LocalDateTime.now());
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
         //Only update running status without edit log, make restart job status is failed
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
@@ -196,7 +187,7 @@ public class StatisticExecutor {
         try {
             ConnectContext context = StatisticUtils.buildConnectContext();
             GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), context);
-            statsJob.collect(context);
+            statsJob.collect(context, analyzeStatus);
         } catch (Exception e) {
             LOG.warn("Collect statistics error ", e);
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);

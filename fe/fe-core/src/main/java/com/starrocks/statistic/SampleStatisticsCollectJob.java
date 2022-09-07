@@ -46,13 +46,21 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @Override
-    public void collect(ConnectContext context) throws Exception {
+    public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         long sampleRowCount = Long.parseLong(properties.getOrDefault(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
                 String.valueOf(Config.statistic_sample_collect_rows)));
 
-        for (List<String> splitColItem : Lists.partition(columns, splitColumns(sampleRowCount))) {
+        List<List<String>> collectSQLList = Lists.partition(columns, splitColumns(sampleRowCount));
+        long finishedSQLNum = 0;
+        long totalCollectSQL = collectSQLList.size();
+
+        for (List<String> splitColItem : collectSQLList) {
             String sql = buildSampleInsertSQL(db.getId(), table.getId(), splitColItem, sampleRowCount);
             collectStatisticSync(sql, context);
+
+            finishedSQLNum++;
+            analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         }
     }
 

@@ -7,6 +7,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.velocity.VelocityContext;
 
@@ -46,12 +47,15 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @Override
-    public void collect(ConnectContext context) throws Exception {
+    public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         context.getSessionVariable().setNewPlanerAggStage(1);
 
         double sampleRatio = Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
         long bucketNum = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_BUCKET_NUM));
         long mcvSize = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_MCV_SIZE));
+
+        long finishedSQLNum = 0;
+        long totalCollectSQL = columns.size();
 
         for (String column : columns) {
             String sql = buildCollectMCV(db, table, mcvSize, column);
@@ -65,6 +69,10 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
             sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, column);
             collectStatisticSync(sql, context);
+
+            finishedSQLNum++;
+            analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         }
     }
 
