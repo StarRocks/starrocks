@@ -11,7 +11,7 @@
   },
   "MESSAGES": {
     "success": "All OK",
-    "failure": "Add type in the title of the pull request, [BugFix],[Enhancement],[Feature],[Refactor],[UT],[Doc] or [any_self_define_tag] will be ok",
+    "failure": "Add type in the title of the pull request. [BugFix], [Enhancement], [Feature], [Refactor], [UT], [Doc], [any_self_define_tag] will be ok",
     "notice": ""
   }
 }
