@@ -183,7 +183,7 @@ public:
 
     // Append multiple `null` values into this column.
     // Return false if this is a non-nullable column, i.e, if `is_nullable` return false.
-    [[nodiscard]] virtual bool append_nulls(size_t count) = 0;
+    virtual bool append_nulls(size_t count) = 0;
 
     // Append multiple strings into this column.
     // Return false if the column is not a binary column.
