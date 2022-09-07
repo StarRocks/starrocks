@@ -294,7 +294,7 @@ void SystemMetrics::_update_memory_metrics() {
     SET_MEM_METRIC_VALUE(update_mem_tracker, update_mem_bytes)
     SET_MEM_METRIC_VALUE(chunk_allocator_mem_tracker, chunk_allocator_mem_bytes)
     SET_MEM_METRIC_VALUE(clone_mem_tracker, clone_mem_bytes)
-    SET_MEM_METRIC_VALUE(column_pool_mem_tracker, compaction_mem_bytes)
+    SET_MEM_METRIC_VALUE(column_pool_mem_tracker, column_pool_mem_bytes)
     SET_MEM_METRIC_VALUE(consistency_mem_tracker, consistency_mem_bytes)
 #undef SET_MEM_METRIC_VALUE
 

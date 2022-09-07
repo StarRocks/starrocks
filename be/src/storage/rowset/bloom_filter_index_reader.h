@@ -47,7 +47,8 @@ class BloomFilterIndexReader {
     friend class BloomFilterIndexIterator;
 
 public:
-    BloomFilterIndexReader() = default;
+    BloomFilterIndexReader();
+    ~BloomFilterIndexReader();
 
     // Multiple callers may call this method concurrently, but only the first one
     // can load the data, the others will wait until the first one finished loading
@@ -56,21 +57,13 @@ public:
     // Return true if the index data was successfully loaded by the caller, false if
     // the data was loaded by another caller.
     StatusOr<bool> load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                        bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker);
+                        bool use_page_cache, bool kept_in_memory);
 
     // create a new column iterator.
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     Status new_iterator(std::unique_ptr<BloomFilterIndexIterator>* iterator);
 
     const TypeInfoPtr& type_info() const { return _typeinfo; }
-
-    size_t mem_usage() const {
-        size_t size = sizeof(BloomFilterIndexReader);
-        if (_bloom_filter_reader != nullptr) {
-            size += _bloom_filter_reader->mem_usage();
-        }
-        return size;
-    }
 
     bool loaded() const { return invoked(_load_once); }
 
@@ -79,6 +72,14 @@ private:
                     bool kept_in_memory);
 
     void _reset();
+
+    size_t _mem_usage() const {
+        size_t size = sizeof(BloomFilterIndexReader);
+        if (_bloom_filter_reader != nullptr) {
+            size += _bloom_filter_reader->mem_usage();
+        }
+        return size;
+    }
 
     OnceFlag _load_once;
     TypeInfoPtr _typeinfo;
