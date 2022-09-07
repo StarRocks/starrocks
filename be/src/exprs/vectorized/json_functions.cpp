@@ -122,8 +122,8 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
     do {                                                                                                          \
         const simdjson::error_code& _err = err;                                                                   \
         const std::string& _msg = msg;                                                                            \
-        if (UNLIKELY(err)) {                                                                                      \
-            if (_err == simdjson::NO_SUCH_FIELD) {                                                                \
+        if (UNLIKELY(_err)) {                                                                                      \
+            if (_err == simdjson::NO_SUCH_FIELD || _err == simdjson::INDEX_OUT_OF_BOUNDS) {                       \
                 return Status::NotFound(fmt::format("err: {}, msg: {}", simdjson::error_message(_err), msg));     \
             }                                                                                                     \
             return Status::DataQualityError(fmt::format("err: {}, msg: {}", simdjson::error_message(_err), msg)); \
@@ -162,14 +162,6 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
             simdjson::ondemand::array arr;
             HANDLE_SIMDJSON_ERROR(tvalue.get_array().get(arr),
                                   fmt::format("failed to access field as array, field: {}", col));
-
-            size_t sz;
-            HANDLE_SIMDJSON_ERROR(arr.count_elements().get(sz), fmt::format("failed to get array size, field: ", col));
-
-            if (index >= sz) {
-                return Status::NotFound(
-                        fmt::format("index beyond array size, field: {}, index: {}, array size: {}", col, index, sz));
-            }
 
             HANDLE_SIMDJSON_ERROR(arr.at(index).get(tvalue),
                                   fmt::format("failed to access array field: {}, index: {}", col, index));
