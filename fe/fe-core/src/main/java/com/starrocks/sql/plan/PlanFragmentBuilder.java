@@ -1645,10 +1645,13 @@ public class PlanFragmentBuilder {
                 // When left table's distribution is HashPartition, need to record probe's partitionByExprs to
                 // compute hash, and then check whether GRF can push down ExchangeNode.
                 List<Expr> probePartitionByExprs = Lists.newArrayList();
-                DistributionSpec distributionSpec =
+                DistributionSpec leftDistributionSpec =
                         optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
-                if (distributionSpec instanceof HashDistributionSpec) {
-                    probePartitionByExprs = getHashDistributionSpecPartitionByExprs((HashDistributionSpec) distributionSpec,
+                DistributionSpec rightDistributionSpec =
+                        optExpr.getRequiredProperties().get(1).getDistributionProperty().getSpec();
+                if (leftDistributionSpec instanceof HashDistributionSpec && 
+                        rightDistributionSpec instanceof HashDistributionSpec) {
+                    probePartitionByExprs = getHashDistributionSpecPartitionByExprs((HashDistributionSpec) leftDistributionSpec,
                             context);
                 }
 
