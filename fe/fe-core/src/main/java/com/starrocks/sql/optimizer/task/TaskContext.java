@@ -17,8 +17,6 @@ public class TaskContext {
     private ColumnRefSet requiredColumns;
     private double upperBoundCost;
     private List<LogicalOlapScanOperator> allScanOperators;
-    // record rewrite phase plan change
-    private int rewriteNum;
 
     public TaskContext(OptimizerContext context,
                        PhysicalPropertySet physicalPropertySet,
@@ -29,7 +27,6 @@ public class TaskContext {
         this.requiredColumns = requiredColumns;
         this.upperBoundCost = cost;
         this.allScanOperators = Collections.emptyList();
-        this.rewriteNum = 0;
     }
 
     public TaskContext(OptimizerContext optimizerContext,
@@ -41,7 +38,6 @@ public class TaskContext {
         this.requiredColumns = requiredColumns;
         this.upperBoundCost = upperBoundCost;
         this.allScanOperators = allScanOperators;
-        this.rewriteNum = 0;
     }
 
     public OptimizerContext getOptimizerContext() {
@@ -74,17 +70,5 @@ public class TaskContext {
 
     public List<LogicalOlapScanOperator> getAllScanOperators() {
         return allScanOperators;
-    }
-
-    public void resetRewriteNum() {
-        rewriteNum = 0;
-    }
-
-    public void incrementRewriteNum() {
-        rewriteNum++;
-    }
-
-    public boolean hasRewrite() {
-        return rewriteNum > 0;
     }
 }

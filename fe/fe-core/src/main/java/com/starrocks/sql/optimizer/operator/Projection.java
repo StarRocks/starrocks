@@ -5,7 +5,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.physical.AddDecodeNodeForDictStringRule;
+import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 
 import java.util.ArrayList;
 import java.util.HashMap;
