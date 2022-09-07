@@ -113,4 +113,21 @@ public class AnalyzeExprTest {
         analyzeFail("select array_map((x,y) -> x+1)");
         analyzeFail("select array_map((x,x) -> x+1, [1], x ->x+1)");
     }
+
+    @Test
+    public void testLambdaFunctionArrayFilter() {
+        analyzeSuccess("select array_filter(x -> x,[])");
+        analyzeSuccess("select array_filter(x -> x,[null])");
+        analyzeSuccess("select array_filter(x -> x,[1])");
+        analyzeSuccess("select array_filter(x -> x is null,null)");
+        analyzeSuccess("select array_filter(x -> x is null,[null]),array_map(x -> x is null,null)");
+        analyzeSuccess("select array_filter((x,y) -> x + y, [], [])");
+        analyzeSuccess("select array_filter((x,y) -> x, [], [])");
+
+        analyzeFail("select array_filter(x,y -> x + y, [], [])"); // should be (x,y)
+        analyzeFail("select array_filter((x,y,z) -> x + y, [], [])");
+        analyzeFail("select arrayFilter([1], x -> x)");
+        analyzeFail("select array_filter(x -> z,[1])");
+        analyzeFail("select array_filter(x -> x,[1],null)");
+    }
 }

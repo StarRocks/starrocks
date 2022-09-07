@@ -219,22 +219,6 @@ public class FunctionCallExpr extends Expr {
     }
 
     @Override
-    public String toDigestImpl() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(fnName);
-
-        sb.append("(");
-        if (fnParams.isStar()) {
-            sb.append("*");
-        }
-        if (fnParams.isDistinct()) {
-            sb.append("distinct ");
-        }
-        sb.append(Joiner.on(", ").join(childrenToDigest())).append(")");
-        return sb.toString();
-    }
-
-    @Override
     public String explainImpl() {
         StringBuilder sb = new StringBuilder();
         sb.append(fnName);

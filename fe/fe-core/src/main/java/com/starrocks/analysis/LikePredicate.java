@@ -88,11 +88,6 @@ public class LikePredicate extends Predicate {
     }
 
     @Override
-    public String toDigestImpl() {
-        return getChild(0).toDigest() + " " + op.toString().toLowerCase() + " " + getChild(1).toDigest();
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.FUNCTION_CALL;
     }

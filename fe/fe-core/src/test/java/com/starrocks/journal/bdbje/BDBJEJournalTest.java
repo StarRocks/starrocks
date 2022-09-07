@@ -17,8 +17,11 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.journal.JournalException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -802,6 +805,13 @@ public class BDBJEJournalTest {
         writable.write(buffer);
 
         BDBEnvironment environment = initBDBEnv("testJournalWithPrefix");
+
+        new MockUp<StarMgrServer>() {
+            @Mock
+            public long getReplayId() {
+                return 0;
+            }
+        };
 
         // test journal with prefix works fine
         {

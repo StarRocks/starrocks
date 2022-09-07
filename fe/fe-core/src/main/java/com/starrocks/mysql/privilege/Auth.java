@@ -28,7 +28,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.StarRocksFE;
-import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DropRoleStmt;
@@ -55,6 +54,7 @@ import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
@@ -1271,10 +1271,9 @@ public class Auth implements Writable {
     /**
      * check password complexity if `enable_validate_password` is set
      * only check for plain text
-     *
+     * <p>
      * TODO The rules is hard-coded for temporary
      *      We will refactor the whole user privilege framework later to ultimately fix this.
-     *
      **/
     public static void validatePassword(String password) throws DdlException {
         if (!Config.enable_validate_password) {
@@ -1290,7 +1289,7 @@ public class Auth implements Writable {
         boolean hasDigit = false;
         boolean hasUpper = false;
         boolean hasLower = false;
-        for (int i = 0; i != password.length(); ++ i) {
+        for (int i = 0; i != password.length(); ++i) {
             char c = password.charAt(i);
             if (c >= '0' && c <= '9') {
                 hasDigit = true;
@@ -1640,7 +1639,7 @@ public class Auth implements Writable {
                     userAuthInfo.add(password.getUserForAuthPlugin());
                 }
             }
-            if (! onlyAuthenticationInfo) {
+            if (!onlyAuthenticationInfo) {
                 //GlobalPrivs
                 userAuthInfo.add(gEntry.getPrivSet().toString() + " (" + gEntry.isSetByDomainResolver() + ")");
             }
@@ -1663,7 +1662,7 @@ public class Auth implements Writable {
                 userAuthInfo.add(FeConstants.null_string);
                 userAuthInfo.add(FeConstants.null_string);
             }
-            if (! onlyAuthenticationInfo) {
+            if (!onlyAuthenticationInfo) {
                 userAuthInfo.add(FeConstants.null_string);
             }
         }
@@ -1905,6 +1904,7 @@ public class Auth implements Writable {
         sb.append(propertyMgr).append("\n");
         return sb.toString();
     }
+
     private static class SerializeData {
         @SerializedName("entries")
         public List<ImpersonateUserPrivEntry> entries = new ArrayList<>();

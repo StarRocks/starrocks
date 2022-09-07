@@ -51,7 +51,7 @@ public class AnalyzeManager implements Writable {
     //ConnectContext of all currently running analyze tasks
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
     private static final ExecutorService ANALYZE_TASK_THREAD_POOL = ThreadPoolManager.newDaemonFixedThreadPool(
-            Config.statistic_collect_concurrency, Config.statistic_collect_concurrency * 3,
+            Config.statistic_collect_concurrency, 100,
             "analyze-task-concurrency-pool", true);
 
     public AnalyzeManager() {

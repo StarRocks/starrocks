@@ -35,6 +35,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -59,6 +60,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunctionBinaryType;
 
@@ -527,6 +529,13 @@ public class ScalarOperatorToExpr {
         @Override
         public Expr visitCloneOperator(CloneOperator operator, FormatterContext context) {
             return new CloneExpr(buildExpr.build(operator.getChild(0), context));
+        }
+
+        @Override
+        public Expr visitSubqueryOperator(SubqueryOperator operator, FormatterContext context) {
+            Subquery subquery = new Subquery(operator.getQueryStatement());
+            subquery.setUseSemiAnti(operator.isUseSemiAnti());
+            return subquery;
         }
     }
 
