@@ -33,6 +33,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddBackendClause;
@@ -52,6 +53,7 @@ import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
+import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -169,7 +171,11 @@ public class SystemHandler extends AlterHandler {
             GlobalStateMgr.getCurrentState().getLoadInstance().setLoadErrorHubInfo(clause.getProperties());
         } else if (alterClause instanceof AddComputeNodeClause) {
             AddComputeNodeClause addComputeNodeClause = (AddComputeNodeClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addComputeNodeClause.getHostPortPairs());
+            String label = addComputeNodeClause.getProperties().get("label");
+            if (StringUtils.isBlank(label)) {
+                label = SessionVariable.DEFAULT_COMPUTE_NODE_SELECTOR;
+            }
+            GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addComputeNodeClause.getHostPortPairs(), label);
         } else if (alterClause instanceof DropComputeNodeClause) {
             DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) alterClause;
             GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs());

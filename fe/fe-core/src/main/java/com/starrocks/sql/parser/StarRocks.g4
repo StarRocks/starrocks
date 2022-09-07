@@ -608,7 +608,7 @@ modifyBackendHostClause
    ;
 
 addComputeNodeClause
-   : ADD COMPUTE NODE string (',' string)*
+   : ADD COMPUTE NODE string (',' string)* properties?
    ;
 
 dropComputeNodeClause

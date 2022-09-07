@@ -27,7 +27,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("ComputeNodeId").add("IP").add("HeartbeatPort")
             .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat").add("Alive")
-            .add("SystemDecommissioned").add("ClusterDecommissioned").add("ErrMsg")
+            .add("Label").add("SystemDecommissioned").add("ClusterDecommissioned").add("ErrMsg")
             .add("Version").build();
 
     private SystemInfoService clusterInfoService;
@@ -86,6 +86,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
             computeNodeInfo.add(TimeUtils.longToTimeString(computeNode.getLastStartTime()));
             computeNodeInfo.add(TimeUtils.longToTimeString(computeNode.getLastUpdateMs()));
             computeNodeInfo.add(String.valueOf(computeNode.isAlive()));
+            computeNodeInfo.add(String.valueOf(computeNode.getLabel()));
             if (computeNode.isDecommissioned()
                     && computeNode.getDecommissionType() == DecommissionType.ClusterDecommission) {
                 computeNodeInfo.add("false");

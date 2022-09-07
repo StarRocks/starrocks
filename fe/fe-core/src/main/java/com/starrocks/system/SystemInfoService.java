@@ -50,6 +50,7 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -59,6 +60,7 @@ import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -87,6 +89,7 @@ public class SystemInfoService {
     private volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
 
     private volatile ImmutableMap<Long, ComputeNode> idToComputeNodeRef;
+    private volatile ImmutableMap<String, ImmutableMap<Long, ComputeNode>> labelToComputeNodeRef;
 
     private long lastBackendIdForCreation = -1;
     private long lastBackendIdForOther = -1;
@@ -98,11 +101,12 @@ public class SystemInfoService {
         idToReportVersionRef = ImmutableMap.<Long, AtomicLong>of();
 
         idToComputeNodeRef = ImmutableMap.<Long, ComputeNode>of();
+        labelToComputeNodeRef = ImmutableMap.<String, ImmutableMap<Long, ComputeNode>>of();
 
         pathHashToDishInfoRef = ImmutableMap.<Long, DiskInfo>of();
     }
 
-    public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
+    public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs, String label)
             throws DdlException {
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
@@ -115,7 +119,7 @@ public class SystemInfoService {
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            addComputeNode(pair.first, pair.second);
+            addComputeNode(pair.first, pair.second, label);
         }
     }
 
@@ -130,18 +134,34 @@ public class SystemInfoService {
     }
 
     // Final entry of adding compute node
-    private void addComputeNode(String host, int heartbeatPort) throws DdlException {
+    private void addComputeNode(String host, int heartbeatPort, String label) {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
+        newComputeNode.setLabel(label);
         // update idToComputor
         Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
         copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
         idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
 
-        setComputeNodeOwner(newComputeNode);
+        addComputeNodeToLabelQueue(newComputeNode, label);
 
+        setComputeNodeOwner(newComputeNode);
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
         LOG.info("finished to add {} ", newComputeNode);
+    }
+
+    private void addComputeNodeToLabelQueue(ComputeNode newComputeNode, String label) {
+        ImmutableMap<Long, ComputeNode> idToComputorByLabel = labelToComputeNodeRef.get(label);
+        if (idToComputorByLabel == null) {
+            idToComputorByLabel = ImmutableMap.of();
+        }
+        Map<Long, ComputeNode> copiedIdToComputorByLabel = Maps.newHashMap(idToComputorByLabel);
+        copiedIdToComputorByLabel.put(newComputeNode.getId(), newComputeNode);
+        idToComputorByLabel = ImmutableMap.copyOf(copiedIdToComputorByLabel);
+
+        Map<String, ImmutableMap<Long, ComputeNode>> copiedLabelToComputeNodes = Maps.newHashMap(labelToComputeNodeRef);
+        copiedLabelToComputeNodes.put(label, idToComputorByLabel);
+        labelToComputeNodeRef = ImmutableMap.copyOf(copiedLabelToComputeNodes);
     }
 
     private void setComputeNodeOwner(ComputeNode computeNode) {
@@ -290,6 +310,9 @@ public class SystemInfoService {
         copiedComputeNodes.remove(dropComputeNode.getId());
         idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
 
+        String label = dropComputeNode.getLabel();
+        dropComputeNodeFromLabelQueue(dropComputeNode, label);
+
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
@@ -301,6 +324,18 @@ public class SystemInfoService {
         GlobalStateMgr.getCurrentState().getEditLog()
                 .logDropComputeNode(new DropComputeNodeLog(dropComputeNode.getId()));
         LOG.info("finished to drop {}", dropComputeNode);
+    }
+
+    private void dropComputeNodeFromLabelQueue(ComputeNode dropComputeNode, String label) {
+        ImmutableMap<Long, ComputeNode> idToComputeNodeByLabel = labelToComputeNodeRef.get(label);
+
+        Map<Long, ComputeNode> copiedidToComputeNodes = Maps.newHashMap(idToComputeNodeByLabel);
+        copiedidToComputeNodes.remove(dropComputeNode.getId());
+        idToComputeNodeByLabel = ImmutableMap.copyOf(copiedidToComputeNodes);
+
+        Map<String, ImmutableMap<Long, ComputeNode>> copiedlabelToComputeNodes = Maps.newHashMap(labelToComputeNodeRef);
+        copiedlabelToComputeNodes.put(label, idToComputeNodeByLabel);
+        labelToComputeNodeRef = ImmutableMap.copyOf(copiedlabelToComputeNodes);
     }
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
@@ -726,6 +761,10 @@ public class SystemInfoService {
         return idToComputeNodeRef;
     }
 
+    public ImmutableMap<Long, ComputeNode> getIdComputeNode(String label) {
+        return labelToComputeNodeRef.get(label) == null ? ImmutableMap.of() : labelToComputeNodeRef.get(label);
+    }
+
     public ImmutableCollection<ComputeNode> getComputeNodes() {
         List<Long> computeNodeIds = getComputeNodeIds(true);
         if (computeNodeIds != null && computeNodeIds.size() > 0) {
@@ -899,6 +938,13 @@ public class SystemInfoService {
         copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
         idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
 
+        String label = newComputeNode.getLabel();
+        if (StringUtils.isBlank(label)) {
+            label = SessionVariable.DEFAULT_COMPUTE_NODE_SELECTOR;
+            newComputeNode.setLabel(label);
+        }
+        addComputeNodeToLabelQueue(newComputeNode, label);
+
         // to add compute to DEFAULT_CLUSTER
         if (newComputeNode.getBackendState() == BackendState.using) {
             final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
@@ -941,6 +987,15 @@ public class SystemInfoService {
 
     public void replayDropComputeNode(long computeNodeId) {
         LOG.debug("replayDropComputeNode: {}", computeNodeId);
+
+        ComputeNode computeNode = idToComputeNodeRef.get(computeNodeId);
+        if (null != computeNode) {
+            String label = computeNode.getLabel();
+            if (StringUtils.isBlank(label)) {
+                dropComputeNodeFromLabelQueue(computeNode, label);
+            }
+        }
+
         // update idToComputeNode
         Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
         copiedComputeNodes.remove(computeNodeId);

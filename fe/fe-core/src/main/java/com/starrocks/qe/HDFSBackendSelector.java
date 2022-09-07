@@ -252,7 +252,9 @@ public class HDFSBackendSelector implements BackendSelector {
             hostToBackends.put(computeNode.getHost(), computeNode);
         }
         if (hostToBackends.isEmpty()) {
-            throw new UserException("Backend not found. Check if any backend is down or not");
+            throw new UserException("Backend not found. Check if any backend is down or not." +
+                    " if the cluster has Compute nodes,Check any Compute Node belongs to the label" +
+                    " is down or not");
         }
 
         // schedule scan ranges to co-located backends.

@@ -213,6 +213,7 @@ public class Coordinator {
     private TUniqueId queryId;
     private final ConnectContext connectContext;
     private final boolean needReport;
+    private final String computeNodeSelector;
     private final boolean preferComputeNode;
     //this query use compute node number
     private final int useComputeNodeNumber;
@@ -267,6 +268,7 @@ public class Coordinator {
         this.needReport = context.getSessionVariable().isReportSucc();
         this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();
         this.useComputeNodeNumber = context.getSessionVariable().getUseComputeNodes();
+        this.computeNodeSelector = context.getSessionVariable().getComputeNodeSelector();
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
@@ -302,6 +304,7 @@ public class Coordinator {
         this.needReport = true;
         this.preferComputeNode = false;
         this.useComputeNodeNumber = -1;
+        this.computeNodeSelector = SessionVariable.DEFAULT_COMPUTE_NODE_SELECTOR;
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
@@ -340,6 +343,7 @@ public class Coordinator {
         this.needReport = true;
         this.preferComputeNode = false;
         this.useComputeNodeNumber = -1;
+        this.computeNodeSelector = SessionVariable.DEFAULT_COMPUTE_NODE_SELECTOR;
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
@@ -431,7 +435,7 @@ public class Coordinator {
     }
 
     // Initialize
-    private void prepare() {
+    private void prepare() throws UserException {
         for (PlanFragment fragment : fragments) {
             fragmentExecParamsMap.put(fragment.getFragmentId(), new FragmentExecParams(fragment));
         }
@@ -449,12 +453,17 @@ public class Coordinator {
 
         this.idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
         this.idToComputeNode = getIdToComputeNode();
+        this.hasComputeNode = !GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode().isEmpty();
 
         //if it has compute node and contains hdfsScanNode,will use compute node,even though preferComputeNode is false
         if (idToComputeNode != null && idToComputeNode.size() > 0) {
-            hasComputeNode = true;
             if (preferComputeNode) {
                 usedComputeNode = true;
+            }
+        } else {
+            if (hasComputeNode && preferComputeNode) {
+                throw new UserException("the Compute Node belongs to the label \'" + computeNodeSelector
+                        + "\' is not found. Check if any Compute Node of the label is down or label is error");
             }
         }
 
@@ -469,14 +478,14 @@ public class Coordinator {
     }
 
     private ImmutableMap<Long, ComputeNode> getIdToComputeNode() {
-        ImmutableMap<Long, ComputeNode> idToComputeNode
-                = ImmutableMap.copyOf(GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode());
-        if (useComputeNodeNumber < 0 || useComputeNodeNumber >= idToComputeNode.size()) {
-            return idToComputeNode;
+        ImmutableMap<Long, ComputeNode> idToComputeNodeOfSelector =
+                ImmutableMap.copyOf(GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode(computeNodeSelector));
+        if (useComputeNodeNumber < 0 || useComputeNodeNumber >= idToComputeNodeOfSelector.size()) {
+            return idToComputeNodeOfSelector;
         } else {
             Map<Long, ComputeNode> computeNodes = new HashMap<>();
             for (int i = 0; i < useComputeNodeNumber; i++) {
-                ComputeNode computeNode = SimpleScheduler.getComputeNode(idToComputeNode);
+                ComputeNode computeNode = SimpleScheduler.getComputeNode(idToComputeNodeOfSelector);
                 if (computeNode == null) {
                     continue;
                 }

@@ -15,6 +15,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.external.PredicateUtils;
 import com.starrocks.external.iceberg.ExpressionConverter;
 import com.starrocks.external.iceberg.IcebergUtil;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
@@ -71,8 +72,9 @@ public class IcebergScanNode extends ScanNode {
     }
 
     private void getAliveBackends() throws UserException {
-        ImmutableCollection<ComputeNode> computeNodes =
-                ImmutableList.copyOf(GlobalStateMgr.getCurrentSystemInfo().getComputeNodes());
+        String label = ConnectContext.get().getSessionVariable().getComputeNodeSelector();
+        ImmutableCollection<ComputeNode> computeNodes = ImmutableList.copyOf(
+                GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode(label).values());
 
         for (ComputeNode computeNode : computeNodes) {
             if (computeNode.isAlive()) {

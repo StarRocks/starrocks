@@ -48,6 +48,8 @@ import java.util.List;
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
 public class SessionVariable implements Serializable, Writable, Cloneable {
+    public static final String DEFAULT_COMPUTE_NODE_SELECTOR = "default";
+    public static final String COMPUTE_NODE_SELECTOR = "compute_node_selector";
     private static final Logger LOG = LogManager.getLogger(SessionVariable.class);
 
     public static final String USE_COMPUTE_NODES = "use_compute_nodes";
@@ -300,6 +302,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add("vectorized_insert_enable")
             .add("prefer_join_method")
             .add("rewrite_count_distinct_to_bitmap_hll").build();
+
+    @VariableMgr.VarAttr(name = COMPUTE_NODE_SELECTOR)
+    private String computeNodeSelector = DEFAULT_COMPUTE_NODE_SELECTOR;
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
@@ -682,6 +687,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = QUERY_CACHE_ENTRY_MAX_ROWS)
     private long queryCacheEntryMaxRows = 409600;
+
+    public String getComputeNodeSelector() {
+        return computeNodeSelector;
+    }
+
+    public void setComputeNodeSelector(String computeNodeSelector) {
+        this.computeNodeSelector = computeNodeSelector;
+    }
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
