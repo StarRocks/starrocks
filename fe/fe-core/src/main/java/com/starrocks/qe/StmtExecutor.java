@@ -138,10 +138,12 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -785,25 +787,55 @@ public class StmtExecutor {
             return;
         }
 
-        AnalyzeStatus analyzeStatus;
-        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        StatsConstants.AnalyzeType analyzeType;
         if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
-            analyzeStatus = statisticExecutor.collectStatistics(
-                    new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                            analyzeStmt.getProperties()),
-                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
-                    false);
+            analyzeType = StatsConstants.AnalyzeType.HISTOGRAM;
         } else {
-            analyzeStatus = statisticExecutor.collectStatistics(
-                    StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
-                            analyzeStmt.getColumnNames(),
-                            analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
-                                    StatsConstants.AnalyzeType.FULL,
-                            StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
-                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
-                    false);
+            if (analyzeStmt.isSample()) {
+                analyzeType = StatsConstants.AnalyzeType.SAMPLE;
+            } else {
+                analyzeType = StatsConstants.AnalyzeType.FULL;
+            }
         }
+
+        //Only for send sync command to client
+        AnalyzeStatus analyzeStatus = new AnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), table.getId(), analyzeStmt.getColumnNames(),
+                analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+        GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+
+        try {
+            GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool().submit(() -> {
+                StatisticExecutor statisticExecutor = new StatisticExecutor();
+                if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
+                    statisticExecutor.collectStatistics(
+                            new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
+                                    StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                                    analyzeStmt.getProperties()),
+                            analyzeStatus,
+                            //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                            false);
+                } else {
+                    statisticExecutor.collectStatistics(
+                            StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
+                                    analyzeStmt.getColumnNames(),
+                                    analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
+                                            StatsConstants.AnalyzeType.FULL,
+                                    StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
+                            analyzeStatus,
+                            //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                            false);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+            analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        }
+
         ShowResultSet resultSet = analyzeStatus.toShowResult();
         if (isProxy) {
             proxyResultSet = resultSet;
@@ -1199,7 +1231,7 @@ public class StmtExecutor {
                 dataSink.complete();
             }
 
-            
+
 
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
                     execPlan.getDescTbl().toThrift());
@@ -1277,18 +1309,18 @@ public class StmtExecutor {
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE  + ", tracking_url = " 
-                                + coord.getTrackingUrl()
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = "
+                                        + coord.getTrackingUrl()
                         );
                     } else {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(),
                                 transactionId,
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = " 
-                                + coord.getTrackingUrl()
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = "
+                                        + coord.getTrackingUrl()
                         );
                     }
-                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " + 
+                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " +
                             transactionId + " tracking_url = " + coord.getTrackingUrl());
                     insertError = true;
                     return;
@@ -1381,7 +1413,7 @@ public class StmtExecutor {
             // cancel insert load job
             try {
                 if (jobId != -1) {
-                    context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT, 
+                    context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
                             "Cancelled, msg: " + t.getMessage(), coord.getTrackingUrl());
                     jobId = -1;
                 }
@@ -1393,7 +1425,7 @@ public class StmtExecutor {
             if (insertError) {
                 try {
                     if (jobId != -1) {
-                        context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT, 
+                        context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
                                 "Cancelled", coord.getTrackingUrl());
                         jobId = -1;
                     }
