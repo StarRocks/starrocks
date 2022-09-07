@@ -1556,11 +1556,7 @@ public class PlanFragmentBuilder {
             return planFragment;
         }
 
-        private List<Expr> getHashDistributionSpecPartitionByExprs(OptExpression optExpr, ExecPlan context) {
-            DistributionSpec distributionSpec =
-                    optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
-            Preconditions.checkState(distributionSpec instanceof HashDistributionSpec);
-            HashDistributionSpec hashDistributionSpec = (HashDistributionSpec) distributionSpec;
+        private List<Expr> getHashDistributionSpecPartitionByExprs(HashDistributionSpec hashDistributionSpec, ExecPlan context) {
             List<Integer> columnRefSet = hashDistributionSpec.getHashDistributionDesc().getColumns();
             Preconditions.checkState(!columnRefSet.isEmpty());
             List<ColumnRefOperator> partitionColumns = new ArrayList<>();
@@ -1646,11 +1642,14 @@ public class PlanFragmentBuilder {
 
                 // 1. Get distributionMode
 
-                // When right table's distribution is HashPartition(shuffle), need to record probe's partitionByExprs to
+                // When left table's distribution is HashPartition, need to record probe's partitionByExprs to
                 // compute hash, and then check whether GRF can push down ExchangeNode.
                 List<Expr> probePartitionByExprs = Lists.newArrayList();
-                if (isExchangeWithDistributionType(rightFragmentPlanRoot, DistributionSpec.DistributionType.SHUFFLE)) {
-                    probePartitionByExprs = getHashDistributionSpecPartitionByExprs(optExpr, context);
+                DistributionSpec distributionSpec =
+                        optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
+                if (distributionSpec instanceof HashDistributionSpec) {
+                    probePartitionByExprs = getHashDistributionSpecPartitionByExprs((HashDistributionSpec) distributionSpec,
+                            context);
                 }
 
                 JoinNode.DistributionMode distributionMode;
