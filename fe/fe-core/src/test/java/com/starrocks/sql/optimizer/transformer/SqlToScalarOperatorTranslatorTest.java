@@ -42,8 +42,8 @@ public class SqlToScalarOperatorTranslatorTest {
         for (int i = 0; i < 100; i++) {
             complexFunc = new FunctionCallExpr("if",  ImmutableList.of(predicate, test, complexFunc));
         }
-        CallOperator so = (CallOperator) SqlToScalarOperatorTranslator.translate
-                (complexFunc, new ExpressionMapping(null, Collections.emptyList()), new ColumnRefFactory());
+        CallOperator so = (CallOperator) SqlToScalarOperatorTranslator.translate(complexFunc,
+                new ExpressionMapping(null, Collections.emptyList()), new ColumnRefFactory());
         assertEquals("if", so.getFnName());
     }
 }

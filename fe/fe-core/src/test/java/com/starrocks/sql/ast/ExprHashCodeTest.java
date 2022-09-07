@@ -43,18 +43,17 @@ class ExprHashCodeTest {
         assertTrue(exprSet.add(expr));
     }
 
-
-    private static Stream<Arguments> generateExprStream() throws Exception{
+    private static Stream<Arguments> generateExprStream() throws Exception {
         FloatLiteral floatLiteral = new FloatLiteral(1.0d);
         IntLiteral intLiteral = new IntLiteral(1);
         LargeIntLiteral largeIntLiteral = new LargeIntLiteral("123");
         StringLiteral stringLiteral = new StringLiteral("test");
-        DateLiteral dateLiteral = new DateLiteral(2000L,10L,10L);
+        DateLiteral dateLiteral = new DateLiteral(2000L, 10L, 10L);
         DecimalLiteral decimalLiteral = new DecimalLiteral(new BigDecimal(100));
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("abs", ImmutableList.of(intLiteral));
         LikePredicate likePredicate = new LikePredicate(LikePredicate.Operator.LIKE, stringLiteral, stringLiteral);
-        SelectRelation selectRelation = new SelectRelation
-                (new SelectList(), null, null, null, null);
+        SelectRelation selectRelation = new SelectRelation(new SelectList(),
+                null, null, null, null);
         ExistsPredicate existsPredicate = new ExistsPredicate(new Subquery(new QueryStatement(selectRelation)), false);
         BinaryPredicate predicate = new BinaryPredicate(BinaryPredicate.Operator.EQ, stringLiteral, stringLiteral);
         CompoundPredicate compoundPredicate = new CompoundPredicate(CompoundPredicate.Operator.OR,
