@@ -5,7 +5,7 @@
 You can use the statement to perform the following operations:
 
 - View the schema of a table stored in your StarRocks cluster, along with the type of the [sort key](https://docs.starrocks.com/en-us/latest/table_design/Sort_key) and [materialized view](https://docs.starrocks.com/en-us/latest/using_starrocks/Materialized_view) of the table.
-- View the schema of a table stored in an external data source, such as Apache Hive™, Apache Iceberg, or Apache Hudi. Note that you can perform this operation only in StarRocks 2.4 and later versions.
+- View the schema of a table stored in the following external data sources: Apache Hive™, Apache Iceberg, and Apache Hudi. Note that you can perform this operation only in StarRocks 2.4 and later versions.
 
 ## Syntax
 
@@ -39,9 +39,9 @@ The following table describes the parameters returned by this statement.
 | Field         | The column name.                                             |
 | Type          | The data type of the column.                                 |
 | Null          | Whether the column values can be NULL. <ul><li>`yes`: indicates the values can be NULL. </li><li>`no`： indicates the values cannot be NULL. </li></ul>|
-| Key           | Whether the column is the sort key. <ul><li>`true`: indicates the column is sort key. </li><li>`false`: indicates the column is not sort key. </li></ul>|
+| Key           | Whether the column is used as the sort key. <ul><li>`true`: indicates the column is used as the sort key. </li><li>`false`: indicates the column is not used as the sort key. </li></ul>|
 | Default       | The default value for the data type of the column. If the data type does not have a default value, a NULL returned. |
-| Extra         | <ul><li>If you see the schema of a table stored in your StarRocks cluster, this field indicates the following information about the column: <ul><li>The aggregate function used by the column, such as `SUM` and `MIN`. </li><li>Whether a bloom filter index is created on the column. If so, the value of `Extra` is `BLOOM_FILTER`. </li></ul></li><li>If you see the schema of a table stored in external data sources, this field indicates whether the column is the partition column. If the column is the partition column, the value of `Extra` is `partition key`. </li></ul>|
+| Extra         | <ul><li>If you see the schema of a table stored in your StarRocks cluster, this field displays the following information about the column: <ul><li>The aggregate function used by the column, such as `SUM` and `MIN`. </li><li>Whether a bloom filter index is created on the column. If so, the value of `Extra` is `BLOOM_FILTER`. </li></ul></li><li>If you see the schema of a table stored in external data sources, this field displays whether the column is the partition column. If the column is the partition column, the value of `Extra` is `partition key`. </li></ul>|
 
 > Note: For information about how a materialized view is displayed in the output, see Example 2.
 
