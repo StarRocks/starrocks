@@ -815,10 +815,13 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
     size_t serialize_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
     // update incrementally so that FE can get the progress.
     // the real 'num_rows_load_total' will be set when sink being closed.
-    state->update_num_rows_load_total(num_rows);
-    state->update_num_bytes_load_total(serialize_size);
-    StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
-    StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
+    const TQueryOptions& query_options = state->query_options();
+    if (!query_options.__isset.load_job_type || query_options.load_job_type == TLoadJobType::INSERT_VALUES) {
+        state->update_num_rows_load_total(num_rows);
+        state->update_num_bytes_load_total(serialize_size);
+        StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
+        StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
+    }
 
     {
         SCOPED_RAW_TIMER(&_convert_batch_ns);

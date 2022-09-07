@@ -105,12 +105,23 @@ Status FileDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
         }
         *chunk = std::move(res).value();
 
+        size_t before_rows = (*chunk)->num_rows();
+
+        const TQueryOptions& query_options = state->query_options();
+        if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::Broker) {
+            size_t before_size = (*chunk)->bytes_usage();
+
+            state->update_num_rows_load_total(before_rows);
+            state->update_num_bytes_load_total(before_size);
+            StarRocksMetrics::instance()->load_rows_total.increment(before_rows);
+            StarRocksMetrics::instance()->load_bytes_total.increment(before_size);
+        }
+
+        _counter.filtered_rows_read += before_rows;
         // eval conjuncts
-        size_t before = (*chunk)->num_rows();
-        _counter.filtered_rows_read += before;
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
         _counter.num_rows_read += (*chunk)->num_rows();
-        _counter.num_rows_unselected += (before - (*chunk)->num_rows());
+        _counter.num_rows_unselected += (before_rows - (*chunk)->num_rows());
         _counter.num_bytes_read += (*chunk)->bytes_usage();
 
         // Row batch has been filled, return this

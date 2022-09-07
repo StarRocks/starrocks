@@ -50,6 +50,13 @@ enum TQueryType {
     EXTERNAL
 }
 
+enum TLoadJobType {
+    Broker,
+    Spark,
+    INSERT_QUERY,
+    INSERT_VALUES
+}
+
 enum TErrorHubType {
     MYSQL,
     BROKER,
@@ -181,7 +188,11 @@ struct TQueryOptions {
 
   63: optional TTabletInternalParallelMode tablet_internal_parallel_mode;
 
+<<<<<<< HEAD
   67: optional bool enable_pipeline_query_statistic;
+=======
+  64: optional TLoadJobType load_job_type
+>>>>>>> 8689e6df9 ([Feature] support report for large dataset (#10232))
 }
 
 

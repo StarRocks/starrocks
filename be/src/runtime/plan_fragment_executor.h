@@ -134,6 +134,13 @@ public:
 
     void set_is_report_on_cancel(bool val) { _is_report_on_cancel = val; }
 
+    bool is_done() { return _done; }
+
+    Status status() {
+        std::lock_guard<std::mutex> l(_status_lock);
+        return _status;
+    }
+
 private:
     ExecEnv* _exec_env;        // not owned
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
@@ -170,6 +177,8 @@ private:
     // 1. _report_thread_lock
     // 2. _status_lock
     std::mutex _status_lock;
+
+    std::mutex _cancel_lock;
 
     // note that RuntimeState should be constructed before and destructed after `_sink' and `_row_batch',
     // therefore we declare it before `_sink' and `_row_batch'

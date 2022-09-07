@@ -378,6 +378,11 @@ struct TGetTablesResult {
   1: list<string> tables
 }
 
+struct TBatchReportExecStatusResult {
+  // required in V1
+  1: optional list<Status.TStatus> status_list
+}
+
 struct TReportExecStatusResult {
   // required in V1
   1: optional Status.TStatus status
@@ -386,6 +391,10 @@ struct TReportExecStatusResult {
 // Service Protocol Details
 enum FrontendServiceVersion {
   V1
+}
+
+struct TBatchReportExecStatusParams {
+  1: required list<TReportExecStatusParams> params_list
 }
 
 // The results of an INSERT query, sent to the coordinator as part of
@@ -433,6 +442,8 @@ struct TReportExecStatusParams {
   15: optional i64 loaded_rows
 
   16: optional i64 backend_id
+
+  17: optional i64 loaded_bytes
 }
 
 struct TFeResult {
@@ -972,6 +983,7 @@ service FrontendService {
     TDescribeTableResult describeTable(1:TDescribeTableParams params)
     TShowVariableResult showVariables(1:TShowVariableRequest params)
     TReportExecStatusResult reportExecStatus(1:TReportExecStatusParams params)
+    TBatchReportExecStatusResult batchReportExecStatus(1:TBatchReportExecStatusParams params)
 
     MasterService.TMasterResult finishTask(1:MasterService.TFinishTaskRequest request)
     MasterService.TMasterResult report(1:MasterService.TReportRequest request)

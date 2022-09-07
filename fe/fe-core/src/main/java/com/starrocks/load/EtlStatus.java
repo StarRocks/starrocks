@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Consumer;
 
 public class EtlStatus implements Writable {
@@ -320,14 +321,23 @@ public class EtlStatus implements Writable {
         @SerializedName("totalFileSizeB")
         public long totalFileSizeB = 0;
 
+        @SerializedName("bytesCounterTbl")
+        private Table<String, String, Long> bytesCounterTbl = HashBasedTable.create();
+
+        @SerializedName("loadFinish")
+        private boolean loadFinish = false;
 
         // init the statistic of specified load task
         public synchronized void initLoad(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedBackendIds) {
             String loadStr = DebugUtil.printId(loadId);
             counterTbl.rowMap().remove(loadStr);
+            bytesCounterTbl.rowMap().remove(loadStr);
+
             for (TUniqueId fragId : fragmentIds) {
                 counterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
+                bytesCounterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
             }
+            
             allBackendIds.put(loadStr, relatedBackendIds);
             // need to get a copy of relatedBackendIds, so that when we modify the "relatedBackendIds" in
             // allBackendIds, the list in unfinishedBackendIds will not be changed.
@@ -337,8 +347,57 @@ public class EtlStatus implements Writable {
         public synchronized void removeLoad(TUniqueId loadId) {
             String loadStr = DebugUtil.printId(loadId);
             counterTbl.rowMap().remove(loadStr);
+            bytesCounterTbl.rowMap().remove(loadStr);
+            
             unfinishedBackendIds.remove(loadStr);
             allBackendIds.remove(loadStr);
+        }
+
+        public synchronized long totalFileSize() {
+            return totalFileSizeB;
+        }
+
+        public synchronized long totalLoadBytes() {
+            if (loadFinish) {
+                return totalFileSizeB;
+            }
+            long totalBytes = 0;
+            for (long bytes : bytesCounterTbl.values()) {
+                totalBytes += bytes;
+            }
+            return totalBytes;
+        }
+
+        public synchronized long totalRows() {
+            long totalRows = 0;
+            for (long row : counterTbl.values()) {
+                totalRows += row;
+            }
+            return totalRows;
+        }
+
+        public synchronized void setLoadFinish() {
+            loadFinish = true;
+        }
+
+        public synchronized boolean getLoadFinish() {
+            return loadFinish;
+        }
+
+        public synchronized void updateLoadProgress(long backendId, TUniqueId loadId, TUniqueId fragmentId,
+                                                    long rows, boolean isDone, long bytes) {
+            String loadStr = DebugUtil.printId(loadId);
+            String fragmentStr = DebugUtil.printId(fragmentId);
+            if (counterTbl.contains(loadStr, fragmentStr)) {
+                counterTbl.put(loadStr, fragmentStr, rows);
+            }
+            if (bytesCounterTbl.contains(loadStr, fragmentStr)) {
+                bytesCounterTbl.put(loadStr, fragmentStr, bytes);
+            }
+
+            if (isDone && unfinishedBackendIds.containsKey(loadStr)) {
+                unfinishedBackendIds.get(loadStr).remove(backendId);
+            }
         }
 
         public synchronized void updateLoadProgress(long backendId, TUniqueId loadId, TUniqueId fragmentId,
@@ -348,6 +407,10 @@ public class EtlStatus implements Writable {
             if (counterTbl.contains(loadStr, fragmentStr)) {
                 counterTbl.put(loadStr, fragmentStr, rows);
             }
+            if (bytesCounterTbl.contains(loadStr, fragmentStr)) {
+                bytesCounterTbl.put(loadStr, fragmentStr, 0L);
+            }
+
             if (isDone && unfinishedBackendIds.containsKey(loadStr)) {
                 unfinishedBackendIds.get(loadStr).remove(backendId);
             }
@@ -359,9 +422,18 @@ public class EtlStatus implements Writable {
             for (long rows : counterTbl.values()) {
                 total += rows;
             }
+            long totalBytes = 0;
+            if (loadFinish) {
+                totalBytes = totalFileSizeB;
+            } else {
+                for (long bytes : bytesCounterTbl.values()) {
+                    totalBytes += bytes;
+                }
+            }
 
-            Map<String, Object> details = Maps.newHashMap();
+            TreeMap<String, Object> details = Maps.newTreeMap();
             details.put("ScannedRows", total);
+            details.put("ScannedBytes", totalBytes);
             details.put("FileNumber", fileNum);
             details.put("FileSize", totalFileSizeB);
             details.put("TaskNumber", counterTbl.rowMap().size());
@@ -376,7 +448,14 @@ public class EtlStatus implements Writable {
         }
 
         public static LoadStatistic fromJson(String json) {
-            return GsonUtils.GSON.fromJson(json, LoadStatistic.class);
+            LoadStatistic loadStatistic = GsonUtils.GSON.fromJson(json, LoadStatistic.class);
+            if (!json.contains("bytesCounterTbl")) {
+                loadStatistic.bytesCounterTbl = HashBasedTable.create();
+            }
+            if (!json.contains("loadFinish")) {
+                loadStatistic.loadFinish = false;
+            }
+            return loadStatistic;
         }
 
     }

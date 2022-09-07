@@ -354,10 +354,20 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
 
 void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
     auto& stats = _reader->stats();
-    _num_rows_read += chunk->num_rows();
+    size_t num_rows = chunk->num_rows();
+    _num_rows_read += num_rows;
     _scan_rows_num = stats.raw_rows_read;
     _scan_bytes = stats.bytes_read;
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
+
+    const TQueryOptions& query_options = _runtime_state->query_options();
+    if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::INSERT_QUERY) {
+        size_t bytes_usage = chunk->bytes_usage();
+        _runtime_state->update_num_rows_load_total(num_rows);
+        _runtime_state->update_num_bytes_load_total(bytes_usage);
+        StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
+        StarRocksMetrics::instance()->load_bytes_total.increment(bytes_usage);
+    }
 
     // Update local counters.
     _local_sum_row_bytes += chunk->memory_usage();

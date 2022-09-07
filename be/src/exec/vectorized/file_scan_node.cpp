@@ -228,10 +228,21 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
         }
         ChunkPtr temp_chunk = std::move(res.value());
 
+        size_t before_rows = temp_chunk->num_rows();
+
+        const TQueryOptions& query_options = runtime_state()->query_options();
+        if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::Broker) {
+            size_t before_size = temp_chunk->bytes_usage();
+
+            runtime_state()->update_num_rows_load_total(before_rows);
+            runtime_state()->update_num_bytes_load_total(before_size);
+            StarRocksMetrics::instance()->load_rows_total.increment(before_rows);
+            StarRocksMetrics::instance()->load_bytes_total.increment(before_size);
+        }
+
         // eval conjuncts
-        size_t before = temp_chunk->num_rows();
         RETURN_IF_ERROR(eval_conjuncts(conjunct_ctxs, temp_chunk.get()));
-        counter->num_rows_unselected += (before - temp_chunk->num_rows());
+        counter->num_rows_unselected += (before_rows - temp_chunk->num_rows());
 
         // Row batch has been filled, push this to the queue
         if (temp_chunk->num_rows() > 0) {

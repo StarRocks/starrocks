@@ -23,6 +23,7 @@
 
 #include <atomic>
 #include <memory>
+#include <unordered_map>
 
 #include "common/status.h"
 #include "exec/workgroup/work_group_fwd.h"
@@ -61,6 +62,7 @@ class SmallFileMgr;
 class PluginMgr;
 class RuntimeFilterWorker;
 class RuntimeFilterCache;
+class ProfileReportWorker;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -185,6 +187,9 @@ public:
     Status init_mem_tracker();
 
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
+
+    ProfileReportWorker* profile_report_worker() { return _profile_report_worker; }
+
     void add_rf_event(const RfTracePoint& pt);
 
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
@@ -304,6 +309,8 @@ private:
 
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
+
+    ProfileReportWorker* _profile_report_worker = nullptr;
 
     lake::TabletManager* _lake_tablet_manager = nullptr;
     lake::LocationProvider* _lake_location_provider = nullptr;

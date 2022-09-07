@@ -96,6 +96,11 @@ set(RUNTIME_FILES
     current_thread.cpp
     runtime_filter_cache.cpp
     lake_tablets_channel.cpp
+<<<<<<< HEAD
+=======
+    lake_snapshot_loader.cpp
+    profile_report_worker.cpp
+>>>>>>> 8689e6df9 ([Feature] support report for large dataset (#10232))
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

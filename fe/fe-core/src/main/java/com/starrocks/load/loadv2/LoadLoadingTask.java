@@ -36,6 +36,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -68,6 +69,7 @@ public class LoadLoadingTask extends LoadTask {
     // timeout of load job, in seconds
     private final long timeoutS;
     private final Map<String, String> sessionVariables;
+    private final TLoadJobType loadJobType;
 
     private LoadingTaskPlanner planner;
 
@@ -75,8 +77,13 @@ public class LoadLoadingTask extends LoadTask {
             long jobDeadlineMs, long execMemLimit, boolean strictMode,
             long txnId, LoadTaskCallback callback, String timezone,
             long timeoutS, long createTimestamp, boolean partialUpdate, Map<String, String> sessionVariables, 
+<<<<<<< HEAD
             ConnectContext context, int priority) {
         super(callback, TaskType.LOADING, priority);
+=======
+            ConnectContext context, TLoadJobType loadJobType) {
+        super(callback, TaskType.LOADING);
+>>>>>>> 8689e6df9 ([Feature] support report for large dataset (#10232))
         this.db = db;
         this.table = table;
         this.brokerDesc = brokerDesc;
@@ -92,6 +99,11 @@ public class LoadLoadingTask extends LoadTask {
         this.createTimestamp = createTimestamp;
         this.partialUpdate = partialUpdate;
         this.sessionVariables = sessionVariables;
+<<<<<<< HEAD
+=======
+        this.context = context;
+        this.loadJobType = loadJobType;
+>>>>>>> 8689e6df9 ([Feature] support report for large dataset (#10232))
     }
 
     public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
@@ -123,6 +135,7 @@ public class LoadLoadingTask extends LoadTask {
                 planner.getFragments(), planner.getScanNodes(),
                 planner.getTimezone(), planner.getStartTime(), sessionVariables);
         curCoordinator.setQueryType(TQueryType.LOAD);
+        curCoordinator.setLoadJobType(loadJobType);
         curCoordinator.setExecMemoryLimit(execMemLimit);
         /*
          * For broker load job, user only need to set mem limit by 'exec_mem_limit' property.

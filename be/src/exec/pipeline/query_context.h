@@ -11,7 +11,11 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+<<<<<<< HEAD
 #include "runtime/query_statistics.h"
+=======
+#include "runtime/profile_report_worker.h"
+>>>>>>> 8689e6df9 ([Feature] support report for large dataset (#10232))
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
 #include "util/hash_util.hpp"
@@ -184,6 +188,14 @@ public:
     bool remove(const TUniqueId& query_id);
     // used for graceful exit
     void clear();
+
+    void report_fragments(const std::vector<starrocks::PipeLineReportTaskKey>& non_pipeline_need_report_fragment_ids);
+
+    void report_fragments_with_same_host(
+            const std::vector<std::shared_ptr<FragmentContext>>& need_report_fragment_context,
+            std::vector<bool>& reported, const TNetworkAddress& last_coord_addr,
+            std::vector<TReportExecStatusParams>& report_exec_status_params_vector,
+            std::vector<int32_t>& cur_batch_report_indexes);
 
 private:
     static void _clean_func(QueryContextManager* manager);

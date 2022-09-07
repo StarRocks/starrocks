@@ -282,6 +282,16 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
 }
 
 void TabletScanner::_update_realtime_counter(Chunk* chunk) {
+    long num_rows = chunk->num_rows();
+    const TQueryOptions& query_options = runtime_state()->query_options();
+    if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::INSERT_QUERY) {
+        size_t bytes_usage = chunk->bytes_usage();
+
+        runtime_state()->update_num_rows_load_total(num_rows);
+        runtime_state()->update_num_bytes_load_total(bytes_usage);
+        StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
+        StarRocksMetrics::instance()->load_bytes_total.increment(bytes_usage);
+    }
     COUNTER_UPDATE(_parent->_read_compressed_counter, _reader->stats().compressed_bytes_read);
     _compressed_bytes_read += _reader->stats().compressed_bytes_read;
     _reader->mutable_stats()->compressed_bytes_read = 0;
@@ -289,7 +299,7 @@ void TabletScanner::_update_realtime_counter(Chunk* chunk) {
     COUNTER_UPDATE(_parent->_raw_rows_counter, _reader->stats().raw_rows_read);
     _raw_rows_read += _reader->stats().raw_rows_read;
     _reader->mutable_stats()->raw_rows_read = 0;
-    _num_rows_read += chunk->num_rows();
+    _num_rows_read += num_rows;
 }
 
 void TabletScanner::update_counter() {

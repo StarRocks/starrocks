@@ -232,6 +232,7 @@ CONF_mDouble(memory_ratio_for_sorting_schema_change, "0.8");
 CONF_mInt32(update_cache_expire_sec, "360");
 CONF_mInt32(file_descriptor_cache_clean_interval, "3600");
 CONF_mInt32(disk_stat_monitor_interval, "5");
+CONF_mInt32(profile_report_interval, "30");
 CONF_mInt32(unused_rowset_monitor_interval, "30");
 CONF_String(storage_root_path, "${STARROCKS_HOME}/storage");
 // BE process will exit if the percentage of error disk reach this value.

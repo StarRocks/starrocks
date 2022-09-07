@@ -34,6 +34,7 @@ import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.LabelAlreadyUsedException;
+import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.UserException;
@@ -182,9 +183,30 @@ public class LoadManager implements Writable {
         labelToLoadJobs.get(loadJob.getLabel()).add(loadJob);
     }
 
-    public void recordFinishedLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
-                                      long createTimestamp, String failMsg, String trackingUrl)
-            throws MetaNotFoundException {
+    public void recordFinishedOrCacnelledLoadJob(long jobId,  EtlJobType jobType, String failMsg, String trackingUrl)
+            throws UserException {
+        LoadJob loadJob = getLoadJob(jobId);
+        if (loadJob.isTxnDone() && !Strings.isNullOrEmpty(failMsg)) {
+            throw new LoadException("LoadJob " + jobId +  " state " + loadJob.getState().name() + ", can not be cancal");
+        }
+        if (loadJob.isCompleted()) {
+            throw new LoadException("LoadJob " + jobId +  " state " + loadJob.getState().name() + ", can not be cancal/publish");
+        }
+        switch (jobType) {
+            case INSERT:
+                InsertLoadJob insertLoadJob = (InsertLoadJob) loadJob;
+                insertLoadJob.setLoadFinishOrCancel(failMsg, trackingUrl);
+                break;
+            default:
+                throw new LoadException("Unknown job type [" + jobType.name() + "]");
+        }
+        return;
+    }
+
+
+    public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
+                                      long createTimestamp, long estimateScanRows)
+            throws UserException {
 
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -195,14 +217,15 @@ public class LoadManager implements Writable {
         LoadJob loadJob;
         switch (jobType) {
             case INSERT:
-                loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, failMsg, trackingUrl);
+                loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows);
                 break;
             default:
-                return;
+                throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
         addLoadJob(loadJob);
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
+        return loadJob.getId();
     }
 
     public void cancelLoadJob(CancelLoadStmt stmt) throws DdlException {
@@ -619,10 +642,12 @@ public class LoadManager implements Writable {
     }
 
     public void updateJobPrgress(Long jobId, Long beId, TUniqueId loadId, TUniqueId fragmentId,
-                                 long scannedRows, boolean isDone) {
+                                 long scannedRows, boolean isDone, long scannedBytes) {
+        // LOG.warn("jobId: {} beId: {}, scannedRows: {}, scannedBytes: {}", jobId, beId, scannedRows, scannedBytes);
         LoadJob job = idToLoadJob.get(jobId);
         if (job != null) {
-            job.updateProgess(beId, loadId, fragmentId, scannedRows, isDone);
+            LOG.warn("find");
+            job.updateProgess(beId, loadId, fragmentId, scannedRows, isDone, scannedBytes);
         }
     }
 

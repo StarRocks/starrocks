@@ -85,7 +85,12 @@ import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
+<<<<<<< HEAD
 import com.starrocks.thrift.TAuthenticateParams;
+=======
+import com.starrocks.thrift.TBatchReportExecStatusParams;
+import com.starrocks.thrift.TBatchReportExecStatusResult;
+>>>>>>> 8689e6df9 ([Feature] support report for large dataset (#10232))
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
 import com.starrocks.thrift.TColumnDef;
@@ -792,6 +797,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TReportExecStatusResult reportExecStatus(TReportExecStatusParams params) throws TException {
         return QeProcessorImpl.INSTANCE.reportExecStatus(params, getClientAddr());
+    }
+
+    @Override
+    public TBatchReportExecStatusResult batchReportExecStatus(TBatchReportExecStatusParams params) throws TException {
+        return QeProcessorImpl.INSTANCE.batchReportExecStatus(params, getClientAddr());
     }
 
     @Override

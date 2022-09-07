@@ -53,6 +53,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.TransactionState;
@@ -230,7 +231,11 @@ public class BrokerLoadJob extends BulkLoadJob {
                 LoadLoadingTask task = new LoadLoadingTask(db, table, brokerDesc,
                         brokerFileGroups, getDeadlineMs(), loadMemLimit,
                         strictMode, transactionId, this, timezone, timeoutSecond, createTimestamp, partialUpdate,
+<<<<<<< HEAD
                         sessionVariables, context, priority);
+=======
+                        sessionVariables, context, TLoadJobType.Broker);
+>>>>>>> 8689e6df9 ([Feature] support report for large dataset (#10232))
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
                 task.init(loadId, attachment.getFileStatusByTable(aggKey), attachment.getFileNumByTable(aggKey));
@@ -367,6 +372,7 @@ public class BrokerLoadJob extends BulkLoadJob {
         commitInfos.addAll(attachment.getCommitInfoList());
         progress = (int) ((double) finishedTaskIds.size() / idToTasks.size() * 100);
         if (progress == 100) {
+            loadingStatus.getLoadStatistic().setLoadFinish();
             progress = 99;
         }
         // collect table-level metrics
@@ -388,6 +394,24 @@ public class BrokerLoadJob extends BulkLoadJob {
                     Long.parseLong(attachment.getCounter(LOADED_BYTES)));
         }
         loadingStatus.increaseTableCounter(tableId, TableMetricsEntity.TABLE_LOAD_FINISHED, 1L);
+    }
+
+    @Override
+    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId, 
+            long scannedRows, boolean isDone, long scannedBytes) {
+        writeLock();
+        try {
+            super.updateProgess(beId, loadId, fragmentId, scannedRows, isDone, scannedBytes);
+            if (!loadingStatus.getLoadStatistic().getLoadFinish()) {
+                progress = (int) ((double) loadingStatus.getLoadStatistic().totalLoadBytes() / 
+                loadingStatus.getLoadStatistic().totalFileSize() * 100);
+                if (progress >= 100) {
+                    progress = 99;
+                }
+            }
+        } finally {
+            writeUnlock();
+        }
     }
 
     private String increaseCounter(String key, String deltaValue) {

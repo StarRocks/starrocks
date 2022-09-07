@@ -41,14 +41,21 @@ FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragme
     }
 }
 
-void FragmentContextManager::register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx) {
+Status FragmentContextManager::register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx) {
     std::lock_guard<std::mutex> lock(_lock);
 
     if (_fragment_contexts.find(fragment_id) != _fragment_contexts.end()) {
-        return;
+        std::stringstream msg;
+        msg << "Fragment " << fragment_id << " has been registered";
+        LOG(WARNING) << msg.str();
+        return Status::InternalError(msg.str());
     }
-
+    if (fragment_ctx->runtime_state()->query_options().query_type == TQueryType::LOAD) {
+        RETURN_IF_ERROR(starrocks::ExecEnv::GetInstance()->profile_report_worker()->register_pipeline_load(
+                fragment_ctx->query_id(), fragment_id));
+    }
     _fragment_contexts.emplace(fragment_id, std::move(fragment_ctx));
+    return Status::OK();
 }
 
 FragmentContextPtr FragmentContextManager::get(const TUniqueId& fragment_id) {
@@ -67,6 +74,10 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
     if (it != _fragment_contexts.end()) {
         it->second->_finish_promise.set_value();
         _fragment_contexts.erase(it);
+        if (it->second->runtime_state()->query_options().query_type == TQueryType::LOAD) {
+            starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
+                                                                                                 fragment_id);
+        }
     }
 }
 

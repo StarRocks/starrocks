@@ -506,7 +506,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     RETURN_IF_ERROR(_prepare_global_dict(request));
     RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
 
-    _query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx);
+    RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     prepare_success = true;
 
     return Status::OK();

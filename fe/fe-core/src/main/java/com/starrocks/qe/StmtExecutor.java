@@ -85,6 +85,7 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
@@ -124,6 +125,7 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TDescriptorTable;
+import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TResultBatch;
@@ -1298,7 +1300,10 @@ public class StmtExecutor {
 
         long loadedRows = 0;
         int filteredRows = 0;
+        long jobId = -1;
+        long estimateScanRows = -1;
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
+        boolean insertError = false;
         try {
             if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
                 //if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
@@ -1310,9 +1315,40 @@ public class StmtExecutor {
                 dataSink.complete();
             }
 
+            
+
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
                     execPlan.getDescTbl().toThrift());
             coord.setQueryType(TQueryType.LOAD);
+
+
+            List<ScanNode> scanNodes = execPlan.getScanNodes();
+
+            boolean containOlapScanNode = false;
+            for (int i = 0; i < scanNodes.size(); i++) {
+                if (scanNodes.get(i) instanceof OlapScanNode) {
+                    estimateScanRows += ((OlapScanNode) scanNodes.get(i)).getActualRows();
+                    containOlapScanNode = true;
+                }
+            }
+
+            if (containOlapScanNode) {
+                coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
+            } else {
+                estimateScanRows = execPlan.getFragments().get(0).getPlanRoot().getCardinality();
+                coord.setLoadJobType(TLoadJobType.INSERT_VALUES);
+            }
+
+            jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
+                    label,
+                    database.getFullName(),
+                    targetTable.getId(),
+                    EtlJobType.INSERT,
+                    createTime,
+                    estimateScanRows);
+            coord.setJobId(jobId);
+
+
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
             coord.exec();
 
@@ -1351,8 +1387,31 @@ public class StmtExecutor {
             // if in strict mode, insert will fail if there are filtered rows
             if (context.getSessionVariable().getEnableInsertStrict()) {
                 if (filteredRows > 0) {
+<<<<<<< HEAD
                     context.getState().setError("Insert has filtered data in strict mode, tracking_url="
                             + coord.getTrackingUrl());
+=======
+                    if (targetTable instanceof ExternalOlapTable) {
+                        ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                                externalTable.getSourceTableDbId(), transactionId,
+                                externalTable.getSourceTableHost(),
+                                externalTable.getSourceTablePort(),
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE  + ", tracking_url = " 
+                                + coord.getTrackingUrl()
+                        );
+                    } else {
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
+                                database.getId(),
+                                transactionId,
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = " 
+                                + coord.getTrackingUrl()
+                        );
+                    }
+                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " + 
+                            transactionId + " tracking_url = " + coord.getTrackingUrl());
+                    insertError = true;
+>>>>>>> 8689e6df9 ([Feature] support report for large dataset (#10232))
                     return;
                 }
             }
@@ -1374,6 +1433,7 @@ public class StmtExecutor {
                     );
                 }
                 context.getState().setOk();
+                insertError = true;
                 return;
             }
 
@@ -1438,7 +1498,30 @@ public class StmtExecutor {
                 sb.append(". url: ").append(coord.getTrackingUrl());
             }
             context.getState().setError(sb.toString());
+
+            // cancel insert load job
+            try {
+                if (jobId != -1) {
+                    context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT, 
+                            "Cancelled, msg: " + t.getMessage(), coord.getTrackingUrl());
+                    jobId = -1;
+                }
+            } catch (Exception abortTxnException) {
+                LOG.warn("errors when cancel insert load job {}", jobId);
+            }
             return;
+        } finally {
+            if (insertError) {
+                try {
+                    if (jobId != -1) {
+                        context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT, 
+                                "Cancelled", coord.getTrackingUrl());
+                        jobId = -1;
+                    }
+                } catch (Exception abortTxnException) {
+                    LOG.warn("errors when cancel insert load job {}", jobId);
+                }
+            }
         }
 
         String errMsg = "";
@@ -1452,12 +1535,8 @@ public class StmtExecutor {
             errMsg = "Publish timeout " + timeoutInfo;
         }
         try {
-            context.getGlobalStateMgr().getLoadManager().recordFinishedLoadJob(
-                    label,
-                    database.getFullName(),
-                    targetTable.getId(),
+            context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId,
                     EtlJobType.INSERT,
-                    createTime,
                     "",
                     coord.getTrackingUrl());
         } catch (MetaNotFoundException e) {

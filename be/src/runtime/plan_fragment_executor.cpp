@@ -37,6 +37,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/profile_report_worker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_filter_cache.h"
@@ -181,7 +182,10 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 Status PlanFragmentExecutor::open() {
     LOG(INFO) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
     tls_thread_status.set_query_id(_runtime_state->query_id());
-
+    if (_runtime_state->query_options().query_type == TQueryType::LOAD) {
+        RETURN_IF_ERROR(starrocks::ExecEnv::GetInstance()->profile_report_worker()->register_non_pipeline_load(
+                _runtime_state->fragment_instance_id()));
+    }
     Status status = _open_internal_vectorized();
     if (!status.ok() && !status.is_cancelled() && _runtime_state->log_has_space()) {
         LOG(WARNING) << "Fail to open fragment, instance_id=" << print_id(_runtime_state->fragment_instance_id())
@@ -365,7 +369,17 @@ void PlanFragmentExecutor::update_status(const Status& new_status) {
 void PlanFragmentExecutor::cancel() {
     LOG(INFO) << "cancel(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
     DCHECK(_prepared);
-    _runtime_state->set_is_cancelled(true);
+    {
+        std::lock_guard<std::mutex> l(_status_lock);
+        if (_runtime_state->is_cancelled()) {
+            return;
+        }
+        _runtime_state->set_is_cancelled(true);
+    }
+    if (_runtime_state->query_options().query_type == TQueryType::LOAD) {
+        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                _runtime_state->fragment_instance_id());
+    }
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
     _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
 
@@ -418,6 +432,10 @@ void PlanFragmentExecutor::close() {
 
     // Prepare may not have been called, which sets _runtime_state
     if (_runtime_state != nullptr) {
+        if (_runtime_state->query_options().query_type == TQueryType::LOAD && !_runtime_state->is_cancelled()) {
+            starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                    _runtime_state->fragment_instance_id());
+        }
         // _runtime_state init failed
         if (_plan != nullptr) {
             _plan->close(_runtime_state);

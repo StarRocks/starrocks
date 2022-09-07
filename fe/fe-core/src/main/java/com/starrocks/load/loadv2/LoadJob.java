@@ -227,8 +227,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         startLoad = true;
     }
 
-    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId, long scannedRows, boolean isDone) {
-        loadingStatus.getLoadStatistic().updateLoadProgress(beId, loadId, fragmentId, scannedRows, isDone);
+    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId, 
+            long scannedRows, boolean isDone, long scannedBytes) {
+        loadingStatus.getLoadStatistic().updateLoadProgress(beId, loadId, fragmentId, scannedRows, isDone, scannedBytes);
     }
 
     public void setLoadFileInfo(int fileNum, long fileSize) {

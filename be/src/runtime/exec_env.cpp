@@ -49,6 +49,7 @@
 #include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"
+#include "runtime/profile_report_worker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
@@ -230,6 +231,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _runtime_filter_worker = new RuntimeFilterWorker(this);
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
+    _profile_report_worker = new ProfileReportWorker(this);
 
     _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
@@ -418,6 +420,7 @@ Status ExecEnv::_init_storage_page_cache() {
 }
 
 void ExecEnv::_destroy() {
+<<<<<<< HEAD
     SAFE_DELETE(_agent_server);
     SAFE_DELETE(_runtime_filter_worker);
     SAFE_DELETE(_heartbeat_flags);
@@ -474,6 +477,159 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_metadata_mem_tracker);
 
     SAFE_DELETE(_load_mem_tracker);
+=======
+    if (_agent_server) {
+        delete _agent_server;
+        _agent_server = nullptr;
+    }
+    if (_runtime_filter_worker) {
+        delete _runtime_filter_worker;
+        _runtime_filter_worker = nullptr;
+    }
+    if (_profile_report_worker) {
+        delete _profile_report_worker;
+        _profile_report_worker = nullptr;
+    }
+    if (_heartbeat_flags) {
+        delete _heartbeat_flags;
+        _heartbeat_flags = nullptr;
+    }
+    if (_small_file_mgr) {
+        delete _small_file_mgr;
+        _small_file_mgr = nullptr;
+    }
+    if (_transaction_mgr) {
+        delete _transaction_mgr;
+        _transaction_mgr = nullptr;
+    }
+    if (_stream_context_mgr) {
+        delete _stream_context_mgr;
+        _stream_context_mgr = nullptr;
+    }
+    if (_routine_load_task_executor) {
+        delete _routine_load_task_executor;
+        _routine_load_task_executor = nullptr;
+    }
+    if (_stream_load_executor) {
+        delete _stream_load_executor;
+        _stream_load_executor = nullptr;
+    }
+    if (_brpc_stub_cache) {
+        delete _brpc_stub_cache;
+        _brpc_stub_cache = nullptr;
+    }
+    if (_load_stream_mgr) {
+        delete _load_stream_mgr;
+        _load_stream_mgr = nullptr;
+    }
+    if (_load_channel_mgr) {
+        delete _load_channel_mgr;
+        _load_channel_mgr = nullptr;
+    }
+    if (_broker_mgr) {
+        delete _broker_mgr;
+        _broker_mgr = nullptr;
+    }
+    if (_bfd_parser) {
+        delete _bfd_parser;
+        _bfd_parser = nullptr;
+    }
+    if (_load_path_mgr) {
+        delete _load_path_mgr;
+        _load_path_mgr = nullptr;
+    }
+    if (_driver_executor) {
+        delete _driver_executor;
+        _driver_executor = nullptr;
+    }
+    if (_wg_driver_executor) {
+        delete _wg_driver_executor;
+        _wg_driver_executor = nullptr;
+    }
+    if (_driver_limiter) {
+        delete _driver_limiter;
+        _driver_limiter = nullptr;
+    }
+    if (_fragment_mgr) {
+        delete _fragment_mgr;
+        _fragment_mgr = nullptr;
+    }
+    if (_udf_call_pool) {
+        delete _udf_call_pool;
+        _udf_call_pool = nullptr;
+    }
+    if (_pipeline_prepare_pool) {
+        delete _pipeline_prepare_pool;
+        _pipeline_prepare_pool = nullptr;
+    }
+    if (_scan_executor_without_workgroup) {
+        delete _scan_executor_without_workgroup;
+        _scan_executor_without_workgroup = nullptr;
+    }
+    if (_scan_executor_with_workgroup) {
+        delete _scan_executor_with_workgroup;
+        _scan_executor_with_workgroup = nullptr;
+    }
+    if (_connector_scan_executor_without_workgroup) {
+        delete _connector_scan_executor_without_workgroup;
+        _connector_scan_executor_without_workgroup = nullptr;
+    }
+    if (_connector_scan_executor_with_workgroup) {
+        delete _connector_scan_executor_with_workgroup;
+        _connector_scan_executor_with_workgroup = nullptr;
+    }
+    if (_runtime_filter_cache) {
+        delete _runtime_filter_cache;
+        _runtime_filter_cache = nullptr;
+    }
+    if (_thread_pool) {
+        delete _thread_pool;
+        _thread_pool = nullptr;
+    }
+    if (_thread_mgr) {
+        delete _thread_mgr;
+        _thread_mgr = nullptr;
+    }
+    if (_consistency_mem_tracker) {
+        delete _consistency_mem_tracker;
+        _consistency_mem_tracker = nullptr;
+    }
+    if (_clone_mem_tracker) {
+        delete _clone_mem_tracker;
+        _clone_mem_tracker = nullptr;
+    }
+    if (_chunk_allocator_mem_tracker) {
+        delete _chunk_allocator_mem_tracker;
+        _chunk_allocator_mem_tracker = nullptr;
+    }
+    if (_update_mem_tracker) {
+        delete _update_mem_tracker;
+        _update_mem_tracker = nullptr;
+    }
+    if (_page_cache_mem_tracker) {
+        delete _page_cache_mem_tracker;
+        _page_cache_mem_tracker = nullptr;
+    }
+    if (_column_pool_mem_tracker) {
+        delete _column_pool_mem_tracker;
+        _column_pool_mem_tracker = nullptr;
+    }
+    if (_schema_change_mem_tracker) {
+        delete _schema_change_mem_tracker;
+        _schema_change_mem_tracker = nullptr;
+    }
+    if (_compaction_mem_tracker) {
+        delete _compaction_mem_tracker;
+        _compaction_mem_tracker = nullptr;
+    }
+
+    _lake_tablet_manager->prune_metacache();
+
+    if (_tablet_schema_mem_tracker) {
+        delete _tablet_schema_mem_tracker;
+        _tablet_schema_mem_tracker = nullptr;
+    }
+>>>>>>> 8689e6df9 ([Feature] support report for large dataset (#10232))
 
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate _query_pool_mem_tracker.
     workgroup::WorkGroupManager::instance()->destroy();
