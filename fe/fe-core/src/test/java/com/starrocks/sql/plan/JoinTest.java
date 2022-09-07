@@ -2674,6 +2674,6 @@ public class JoinTest extends PlanTestBase {
                 "if( v5 = 32, '国外', if( v5 = 33, '台湾', if(v5 = 34, '香港', if(v5 = 35, '澳门', 'Default')) ) ) ) ) ) ) " +
                 ") ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) as k from t1 ) B on A.v1 = B.k ) C group by v4;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "if(5: v5 = 0, '未知',");
+        assertContains(plan, "if(5: v5 = 0, '未知'");
     }
 }
