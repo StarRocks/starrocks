@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.lake;
+package com.starrocks.lake.backup;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableRef;
@@ -15,6 +15,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.proto.LockTabletMetadataRequest;
 import com.starrocks.lake.proto.LockTabletMetadataResponse;
 import com.starrocks.lake.proto.Snapshot;
@@ -48,7 +50,7 @@ public class LakeBackupJob extends BackupJob {
 
     private Map<Backend, UploadSnapshotsRequest> uploadRequests = Maps.newHashMap();
 
-    private Map<Long, Future<LockTabletMetadataResponse>> lockResponses = Maps.newHashMap();
+    private Map<SnapshotInfo, Future<LockTabletMetadataResponse>> lockResponses = Maps.newHashMap();
 
     private Map<Long, Future<UploadSnapshotsResponse>> uploadResponses = Maps.newHashMap();
 
@@ -119,7 +121,7 @@ public class LakeBackupJob extends BackupJob {
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey().getBeId());
             LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
             Future<LockTabletMetadataResponse> response = lakeService.lockTabletMetadata(entry.getValue());
-            lockResponses.put(entry.getKey().getTabletId(), response);
+            lockResponses.put(entry.getKey(), response);
         }
     }
 
@@ -187,12 +189,14 @@ public class LakeBackupJob extends BackupJob {
     @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
     protected void waitingAllSnapshotsFinished() {
         try {
-            Iterator<Map.Entry<Long, Future<LockTabletMetadataResponse>>> entries = lockResponses.entrySet().iterator();
+            Iterator<Map.Entry<SnapshotInfo, Future<LockTabletMetadataResponse>>> entries = lockResponses.entrySet().iterator();
             while (entries.hasNext()) {
                 try {
-                    Map.Entry<Long, Future<LockTabletMetadataResponse>> entry = entries.next();
+                    Map.Entry<SnapshotInfo, Future<LockTabletMetadataResponse>> entry = entries.next();
                     entry.getValue().get(1000, TimeUnit.MILLISECONDS);
-                    unfinishedTaskIds.remove(entry.getKey());
+                    unfinishedTaskIds.remove(entry.getKey().getTabletId());
+                    taskProgress.remove(entry.getKey().getTabletId());
+                    snapshotInfos.put(entry.getKey().getTabletId(), entry.getKey());
                     entries.remove();
                 } catch (TimeoutException e) {
                     // Maybe there are many snapshot tasks, so we ignore timeout exception.

@@ -52,7 +52,8 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.lake.LakeBackupJob;
+import com.starrocks.lake.backup.LakeBackupJob;
+import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
@@ -417,17 +418,50 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         BackupJobInfo jobInfo = infos.get(0);
         checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs());
 
+        TableType t = TableType.OLAP;
+        BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
         // Create a restore job
-        RestoreJob restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
-                db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
-                stmt.getTimeoutMs(), stmt.getMetaVersion(), stmt.getStarRocksMetaVersion(), globalStateMgr,
-                repository.getId());
+        RestoreJob restoreJob = null;
+        if (backupMeta != null) {
+            for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
+                Table remoteTbl = backupMeta.getTable(tblInfo.name);
+                if (remoteTbl.isLakeTable()) {
+                    t = TableType.LAKE;
+                }
+                if (t == TableType.LAKE && remoteTbl.isOlapTable()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, remoteTbl.getName());
+                }
+            }
+        }
+        if (t == TableType.OLAP) {
+            restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
+                    db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
+                    stmt.getTimeoutMs(), stmt.getMetaVersion(), stmt.getStarRocksMetaVersion(), globalStateMgr,
+                    repository.getId(), backupMeta);
+        } else {
+            restoreJob = new LakeRestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
+                    db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
+                    stmt.getTimeoutMs(), stmt.getMetaVersion(), stmt.getStarRocksMetaVersion(), globalStateMgr,
+                    repository.getId(), backupMeta);
+        }
         globalStateMgr.getEditLog().logRestoreJob(restoreJob);
 
         // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
         dbIdToBackupOrRestoreJob.put(db.getId(), restoreJob);
 
         LOG.info("finished to submit restore job: {}", restoreJob);
+    }
+
+    private BackupMeta downloadAndDeserializeMetaInfo(BackupJobInfo jobInfo, Repository repo, RestoreStmt stmt) {
+        List<BackupMeta> backupMetas = Lists.newArrayList();
+        Status st = repo.getSnapshotMetaFile(jobInfo.name, backupMetas,
+                stmt.getMetaVersion() == -1 ? jobInfo.metaVersion : stmt.getMetaVersion(),
+                stmt.getStarRocksMetaVersion() == -1 ? jobInfo.starrocksMetaVersion : stmt.getStarRocksMetaVersion());
+        if (!st.ok()) {
+            return null;
+        }
+        Preconditions.checkState(backupMetas.size() == 1);
+        return backupMetas.get(0);
     }
 
     private void checkAndFilterRestoreObjsExistInSnapshot(BackupJobInfo jobInfo, List<TableRef> tblRefs)
