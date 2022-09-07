@@ -1019,7 +1019,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         // process refresh
         RefreshSchemeDesc refreshSchemeDesc;
         if (context.refreshSchemeDesc() == null) {
-            refreshSchemeDesc = new SyncRefreshSchemeDesc();
+            if (context.distributionDesc() == null) {
+                // use old materialized index
+                refreshSchemeDesc = new SyncRefreshSchemeDesc();
+            } else {
+                // use new manual refresh
+                refreshSchemeDesc = new ManualRefreshSchemeDesc();
+            }
         } else {
             refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
         }
@@ -4237,8 +4243,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
             }
             return new AsyncRefreshSchemeDesc(defineStartTime, startTime, intervalLiteral);
-        } else if (context.SYNC() != null) {
-            return new SyncRefreshSchemeDesc();
         } else if (context.MANUAL() != null) {
             return new ManualRefreshSchemeDesc();
         }
