@@ -1168,47 +1168,6 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testRefreshSync() {
-        String sql = "create materialized view mv1 " +
-                "refresh sync " +
-                "as select k2 from tbl1 group by k2;";
-        try {
-            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assert.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
-        }
-    }
-
-    @Test
-    public void testRefreshSyncHasPartition() {
-        String sql = "create materialized view mv1 " +
-                "partition by ss " +
-                "refresh sync " +
-                "as select tbl1.k1 ss, k2 from tbl1 group by k2;";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            Assert.assertEquals("Partition by is not supported by SYNC " +
-                    "refresh type int materialized view", e.getMessage());
-        }
-    }
-
-    @Test
-    public void testRefreshSyncHasDistribution() {
-        String sql = "create materialized view mv1 " +
-                "distributed by hash(k2) " +
-                "refresh sync " +
-                "as select tbl1.k1 ss, k2 from tbl1 group by k2;";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            Assert.assertEquals("Distribution by is not supported by SYNC " +
-                    "refresh type in materialized view", e.getMessage());
-        }
-    }
-
-    @Test
     public void testNoRefresh() {
         String sql = "create materialized view mv1 " +
                 "as select tbl1.k1 ss, k2 from tbl1 group by k1, k2;";
