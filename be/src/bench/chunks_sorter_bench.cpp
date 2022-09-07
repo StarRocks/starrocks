@@ -40,11 +40,12 @@ public:
     void TearDown() { _runtime_state.reset(); }
 
     static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_sorted_column(TypeDescriptor type_desc,
-                                                                                 int slot_index) {
+                                                                                 int slot_index, bool low_card,
+                                                                                 bool nullable) {
         DCHECK_EQ(TYPE_INT, type_desc.type);
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
 
-        ColumnPtr column = ColumnHelper::create_column(type_desc, false);
+        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
         auto expr = std::make_unique<ColumnRef>(type_desc, slot_index);
 
         std::random_device dev;
@@ -52,10 +53,12 @@ public:
         UniformInt uniform_int;
         uniform_int.param(UniformInt::param_type(1, 100'000 * std::pow(2, slot_index)));
 
-        std::vector<int32_t> elements(config::vector_chunk_size);
+        int null_count = uniform_int(rng) % (config::vector_chunk_size / 100); // make 1/100 datums are null
+        std::vector<int32_t> elements(config::vector_chunk_size - null_count);
         std::generate(elements.begin(), elements.end(), [&]() { return uniform_int(rng); });
         std::sort(elements.begin(), elements.end());
 
+        column->append_nulls(null_count);
         for (int32_t x : elements) {
             column->append_datum(Datum((int32_t)x));
         }
@@ -285,7 +288,7 @@ static void do_heap_merge(benchmark::State& state, int num_runs, bool use_merger
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
 
     for (int i = 0; i < num_columns; i++) {
-        auto [column, expr] = suite.build_sorted_column(type_desc, i);
+        auto [column, expr] = suite.build_sorted_column(type_desc, i, false, false);
         columns.push_back(column);
         exprs.emplace_back(std::move(expr));
         sort_exprs.push_back(new ExprContext(exprs.back().get()));
@@ -352,7 +355,7 @@ static void do_heap_merge(benchmark::State& state, int num_runs, bool use_merger
     suite.TearDown();
 }
 
-static void do_merge_columnwise(benchmark::State& state, int num_runs) {
+static void do_merge_columnwise(benchmark::State& state, int num_runs, bool nullable) {
     ChunkSorterBase suite;
     suite.SetUp();
 
@@ -366,7 +369,7 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs) {
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
 
     for (int i = 0; i < num_columns; i++) {
-        auto [column, expr] = suite.build_sorted_column(type_desc, i);
+        auto [column, expr] = suite.build_sorted_column(type_desc, i, false, nullable);
         columns.push_back(column);
         exprs.emplace_back(std::move(expr));
         sort_exprs.push_back(new ExprContext(exprs.back().get()));
@@ -451,7 +454,10 @@ static void BM_merge_heap(benchmark::State& state) {
     do_heap_merge(state, state.range(0), true);
 }
 static void BM_merge_columnwise(benchmark::State& state) {
-    do_merge_columnwise(state, state.range(0));
+    do_merge_columnwise(state, state.range(0), false);
+}
+static void BM_merge_columnwise_nullable(benchmark::State& state) {
+    do_merge_columnwise(state, state.range(0), true);
 }
 
 static void CustomArgsFull(benchmark::internal::Benchmark* b) {
@@ -497,6 +503,7 @@ BENCHMARK(BM_topn_buffered_chunks_tunned)->RangeMultiplier(4)->Ranges({{10, 10'0
 // Merge
 BENCHMARK(BM_merge_heap)->DenseRange(2, 64, 4);
 BENCHMARK(BM_merge_columnwise)->DenseRange(2, 64, 4);
+BENCHMARK(BM_merge_columnwise_nullable)->DenseRange(2, 64, 4);
 
 static size_t plain_find_zero(const std::vector<uint8_t>& bytes) {
     for (size_t i = 0; i < bytes.size(); i++) {

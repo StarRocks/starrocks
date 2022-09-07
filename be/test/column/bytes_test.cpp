@@ -326,7 +326,7 @@ TEST(BytesTest, test_hook_pvalloc) {
 TEST(BytesTest, test_hook_posix_memalign) {
     srand((int)time(NULL));
 
-    void* ptr;
+    void* ptr = nullptr;
     int before;
     int after;
     int size;
