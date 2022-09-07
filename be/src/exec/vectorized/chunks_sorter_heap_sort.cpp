@@ -30,8 +30,7 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
     DeferOp defer([&] { chunk_holder->unref(); });
     int row_sz = chunk_holder->value()->chunk->num_rows();
     if (_sort_heap == nullptr) {
-        _sort_heap = std::make_unique<CommonCursorSortHeap>(
-                detail::ChunkCursorComparator(_sort_order_flag.data(), _null_first_flag.data()));
+        _sort_heap = std::make_unique<CommonCursorSortHeap>(detail::ChunkCursorComparator(_sort_desc));
         _sort_heap->reserve(_number_of_rows_to_sort());
         // build heap
         size_t direct_push = std::min<size_t>(_number_of_rows_to_sort(), row_sz);
@@ -164,7 +163,8 @@ void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_h
         auto* __restrict__ filter_data = filter->data();
 
         // null compare flag
-        int null_compare_flag = _null_first_flag[0] * _sort_order_flag[0];
+        int null_compare_flag = _sort_desc.get_column_desc(0).nan_direction();
+        int sort_order_flag = _sort_desc.get_column_desc(0).sort_order;
         for (int i = 0; i < row_sz; ++i) {
             // data is null
             if (null_data[i] && !top_is_null) {
@@ -175,7 +175,7 @@ void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_h
                 filter_data[i] = null_compare_flag > 0;
             } else {
                 DCHECK(!null_data[i] && !top_is_null);
-                if (_sort_order_flag[0] > 0) {
+                if (sort_order_flag > 0) {
                     filter_data[i] = order_by_data[i] < need_filter_data;
                 } else {
                     filter_data[i] = order_by_data[i] > need_filter_data;
@@ -189,8 +189,9 @@ void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_h
 
         const auto* __restrict__ order_by_data = order_by_column->get_data().data();
         auto* __restrict__ filter_data = filter->data();
+        int sort_order_flag = _sort_desc.get_column_desc(0).sort_order;
 
-        if (_sort_order_flag[0] > 0) {
+        if (sort_order_flag > 0) {
             for (int i = 0; i < row_sz; ++i) {
                 filter_data[i] = order_by_data[i] < need_filter_data;
             }
@@ -218,9 +219,10 @@ int ChunksSorterHeapSort::_filter_data(detail::ChunkHolder* chunk_holder, int ro
         for (int i = 0; i < row_sz; ++i) {
             for (int j = 0; j < column_sz; ++j) {
                 int res = chunk_holder->value()->order_by_columns[j]->compare_at(
-                        i, cursor_rid, *top_cursor.data_segment()->order_by_columns[j], _null_first_flag[j]);
+                        i, cursor_rid, *top_cursor.data_segment()->order_by_columns[j],
+                        _sort_desc.get_column_desc(j).null_first);
                 if (res != 0) {
-                    filter[i] = res * _sort_order_flag[j] < 0;
+                    filter[i] = (res * _sort_desc.get_column_desc(j).sort_order) < 0;
                     break;
                 }
             }
