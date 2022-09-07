@@ -38,10 +38,15 @@ WorkGroup::WorkGroup(const std::string& name, int64_t id, int64_t version, size_
           _memory_limit(memory_limit),
           _concurrency_limit(concurrency),
           _driver_sched_entity(this),
-          _scan_sched_entity(this) {}
+          _scan_sched_entity(this),
+          _connector_scan_sched_entity(this) {}
 
 WorkGroup::WorkGroup(const TWorkGroup& twg)
-        : _name(twg.name), _id(twg.id), _driver_sched_entity(this), _scan_sched_entity(this) {
+        : _name(twg.name),
+          _id(twg.id),
+          _driver_sched_entity(this),
+          _scan_sched_entity(this),
+          _connector_scan_sched_entity(this) {
     if (twg.__isset.cpu_core_limit) {
         _cpu_limit = twg.cpu_core_limit;
     } else {
@@ -111,6 +116,8 @@ void WorkGroup::init() {
                                                            ExecEnv::GetInstance()->query_pool_mem_tracker());
     _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>());
     _scan_sched_entity.set_queue(std::make_unique<PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size));
+    _connector_scan_sched_entity.set_queue(
+            std::make_unique<PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size));
 }
 
 std::string WorkGroup::to_string() const {
