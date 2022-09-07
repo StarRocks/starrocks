@@ -294,7 +294,7 @@ TEST_F(RowsetTest, FinalMergeTest) {
     std::string segment_file =
             Rowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
 
-    auto segment = *Segment::open(_metadata_mem_tracker.get(), seg_options.fs, segment_file, 0, tablet_schema.get());
+    auto segment = *Segment::open(seg_options.fs, segment_file, 0, tablet_schema.get());
     ASSERT_NE(segment->num_rows(), 0);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
@@ -393,8 +393,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
 
     std::string segment_file =
             Rowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
-    auto segment =
-            *Segment::open(_metadata_mem_tracker.get(), seg_options.fs, segment_file, 0, &tablet->tablet_schema());
+    auto segment = *Segment::open(seg_options.fs, segment_file, 0, &tablet->tablet_schema());
     ASSERT_NE(segment->num_rows(), 0);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
@@ -731,7 +730,7 @@ TEST_F(RowsetTest, SegmentWriteTest) {
 
         butil::IOBuf data;
         auto buf = new uint8[seg_info->data_size()];
-        data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[] (uint8*)buf; });
+        data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[](uint8*) buf; });
 
         ASSERT_TRUE(rfile->read_fully(buf, seg_info->data_size()).ok());
         auto st = segment_rowset_writer->flush_segment(*seg_info, data);
@@ -774,6 +773,5 @@ TEST_F(RowsetTest, SegmentWriteTest) {
         EXPECT_EQ(count, num_rows);
     }
 }
-
 
 } // namespace starrocks

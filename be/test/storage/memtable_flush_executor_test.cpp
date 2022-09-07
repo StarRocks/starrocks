@@ -305,11 +305,13 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
 
     size_t ret_num_rows = 0;
     bool ret_eos = true;
-    ASSERT_TRUE(flush_token->submit(std::move(mem_table), false,
-        [&](std::unique_ptr<SegmentPB> seg, bool eos){
-            ret_num_rows = seg->num_rows();
-            ret_eos = eos;
-    }).ok());
+    ASSERT_TRUE(flush_token
+                        ->submit(std::move(mem_table), false,
+                                 [&](std::unique_ptr<SegmentPB> seg, bool eos) {
+                                     ret_num_rows = seg->num_rows();
+                                     ret_eos = eos;
+                                 })
+                        .ok());
 
     ASSERT_TRUE(flush_token->wait().ok());
 
@@ -335,11 +337,13 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithNullSeg) {
 
     bool ret_eos = false;
     std::unique_ptr<SegmentPB> ret_seg = make_unique<SegmentPB>();
-    ASSERT_TRUE(flush_token->submit(std::move(mem_table), true,
-        [&](std::unique_ptr<SegmentPB> seg, bool eos){
-            ret_seg = std::move(seg);
-            ret_eos = eos;
-    }).ok());
+    ASSERT_TRUE(flush_token
+                        ->submit(std::move(mem_table), true,
+                                 [&](std::unique_ptr<SegmentPB> seg, bool eos) {
+                                     ret_seg = std::move(seg);
+                                     ret_eos = eos;
+                                 })
+                        .ok());
 
     ASSERT_TRUE(flush_token->wait().ok());
 
