@@ -136,6 +136,7 @@ statement
     | showLoadStatement
     | showLoadWarningsStatement
     | cancelLoadStatement
+    | alterLoadStatement
 
     //Show Statement
     | showAuthorStatement
@@ -956,6 +957,11 @@ showLoadWarningsStatement
 
 cancelLoadStatement
     : CANCEL LOAD (FROM identifier)? (WHERE expression)?
+    ;
+
+alterLoadStatement
+    : ALTER LOAD FOR (db=qualifiedName '.')? name=identifier
+        jobProperties?
     ;
 
 // ------------------------------------------- Show Statement ----------------------------------------------------------

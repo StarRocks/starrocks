@@ -20,7 +20,7 @@ package com.starrocks.task;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public abstract class LeaderTask implements Runnable {
+public abstract class LeaderTask extends PriorityLeaderTask {
     private static final Logger LOG = LogManager.getLogger(LeaderTask.class);
 
     protected long signature;

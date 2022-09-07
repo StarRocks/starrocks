@@ -228,6 +228,7 @@ import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.LeaderTaskExecutor;
+import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshTableRequest;
@@ -378,7 +379,7 @@ public class GlobalStateMgr {
 
     // Thread pools for pending and loading task, separately
     private LeaderTaskExecutor pendingLoadTaskScheduler;
-    private LeaderTaskExecutor loadingLoadTaskScheduler;
+    private PriorityLeaderTaskExecutor loadingLoadTaskScheduler;
 
     private LoadJobScheduler loadJobScheduler;
 
@@ -562,10 +563,11 @@ public class GlobalStateMgr {
         this.pendingLoadTaskScheduler =
                 new LeaderTaskExecutor("pending_load_task_scheduler", Config.async_load_task_pool_size,
                         Config.desired_max_waiting_jobs, !isCheckpointCatalog);
-        // One load job will be split into multiple loading tasks, the queue size is not determined, so set Integer.MAX_VALUE.
-        this.loadingLoadTaskScheduler =
-                new LeaderTaskExecutor("loading_load_task_scheduler", Config.async_load_task_pool_size,
-                        Integer.MAX_VALUE, !isCheckpointCatalog);
+        // One load job will be split into multiple loading tasks, the queue size is not
+        // determined, so set async_load_task_pool_size * 10
+        this.loadingLoadTaskScheduler = new PriorityLeaderTaskExecutor("loading_load_task_scheduler",
+                Config.async_load_task_pool_size,
+                Config.async_load_task_pool_size * 10, !isCheckpointCatalog);
         this.loadJobScheduler = new LoadJobScheduler();
         this.loadManager = new LoadManager(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadManager);
@@ -2565,7 +2567,7 @@ public class GlobalStateMgr {
         return pendingLoadTaskScheduler;
     }
 
-    public LeaderTaskExecutor getLoadingLoadTaskScheduler() {
+    public PriorityLeaderTaskExecutor getLoadingLoadTaskScheduler() {
         return loadingLoadTaskScheduler;
     }
 
