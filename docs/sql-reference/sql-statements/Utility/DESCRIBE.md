@@ -17,10 +17,10 @@ DESC[RIBE] [catalog_name.][db_name.]table_name [ALL];
 
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
-| catalog_name  | No           | The name of the internal catalog or an external catalog.If you set the value of the parameter to the name of the internal catalog, which is `default_catalog`, you can view the schema of the table stored in your StarRocks cluster.If you set the value of the parameter to the name of an external catalog, you can view the schema of the table stored in the external data source. |
+| catalog_name  | No           | The name of the internal catalog or an external catalog. <ul><li>If you set the value of the parameter to the name of the internal catalog, which is `default_catalog`, you can view the schema of the table stored in your StarRocks cluster. </li><li>If you set the value of the parameter to the name of an external catalog, you can view the schema of the table stored in the external data source.</li></ul> |
 | db_name       | No           | The database name.                                           |
 | table_name    | Yes          | The table name.                                              |
-| ALL           | No           | <ul><li>If specified, you can view the type of the sort key, materialized view, and schema of a table stored in your StarRocks cluster. If not specified, you only view the table schema. </li><li>Do not specify this keyword when you view the schema of a table stored in an external data source.</li></ul> |
+| ALL           | No           | <ul><li>If this keyword is specified, you can view the type of the sort key, materialized view, and schema of a table stored in your StarRocks cluster. If this keyword is not specified, you only view the table schema. </li><li>Do not specify this keyword when you view the schema of a table stored in an external data source.</li></ul> |
 
 ## Output
 
@@ -38,7 +38,7 @@ The following table describes the parameters returned by this statement.
 | IndexKeysType | The type of the sort key of the table. If you view the schema of a table stored in an external data source, this parameter is not returned. |
 | Field         | The column name.                                             |
 | Type          | The data type of the column.                                 |
-| Null          | Whether the column values can be NULL. <ul><li>`yes`: indicates the values can be NULL. </li><li>`no`： indicates the values cannot be NULL. </li></ul>|
+| Null          | Whether the column values can be NULL. <ul><li>`yes`: indicates the values can be NULL. </li><li>`no`: indicates the values cannot be NULL. </li></ul>|
 | Key           | Whether the column is used as the sort key. <ul><li>`true`: indicates the column is used as the sort key. </li><li>`false`: indicates the column is not used as the sort key. </li></ul>|
 | Default       | The default value for the data type of the column. If the data type does not have a default value, a NULL returned. |
 | Extra         | <ul><li>If you see the schema of a table stored in your StarRocks cluster, this field displays the following information about the column: <ul><li>The aggregate function used by the column, such as `SUM` and `MIN`. </li><li>Whether a bloom filter index is created on the column. If so, the value of `Extra` is `BLOOM_FILTER`. </li></ul></li><li>If you see the schema of a table stored in external data sources, this field displays whether the column is the partition column. If the column is the partition column, the value of `Extra` is `partition key`. </li></ul>|

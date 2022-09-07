@@ -258,7 +258,7 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 
 * prefer_compute_node
 
-  Whether the FEs distribute query execution plans to CN nodes. Valid values are:
+  Whether the FEs distribute query execution plans to CN nodes. Valid values:
 
   * true: indicates that the FEs distribute query execution plans to CN nodes.
   * false: indicates that the FEs do not distribute query execution plans to CN nodes.
@@ -315,7 +315,7 @@ Used for MySQL client compatibility. No practical usage.
 
 * use_compute_nodes
 
-  The maximum number of CN nodes that can be used. This parameter is valid when `prefer_compute_node=true`. Valid values are:
+  The maximum number of CN nodes that can be used. This parameter is valid when `prefer_compute_node=true`. Valid values:
 
   * `-1`: indicates that all CN nodes are used.
   * `0`: indicates that no CN nodes are used.
