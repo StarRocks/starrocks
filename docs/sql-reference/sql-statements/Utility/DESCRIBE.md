@@ -20,7 +20,7 @@ DESC[RIBE] [catalog_name.][db_name.]table_name [ALL];
 | catalog_name  | No           | The name of the internal catalog or an external catalog.If you set the value of the parameter to the name of the internal catalog, which is `default_catalog`, you can view the schema of the table stored in your StarRocks cluster.If you set the value of the parameter to the name of an external catalog, you can view the schema of the table stored in the external data source. |
 | db_name       | No           | The database name.                                           |
 | table_name    | Yes          | The table name.                                              |
-| ALL           | No           | <ul><li>If specified, you can view the type of the sort key, materialized view, and schema of a table stored in your StarRocks cluster. If not specified, you only view the table schema. </li><li>Do not specify this parameter when you view the schema of a table stored in an external data source.</li></ul> |
+| ALL           | No           | <ul><li>If specified, you can view the type of the sort key, materialized view, and schema of a table stored in your StarRocks cluster. If not specified, you only view the table schema. </li><li>Do not specify this keyword when you view the schema of a table stored in an external data source.</li></ul> |
 
 ## Output
 
