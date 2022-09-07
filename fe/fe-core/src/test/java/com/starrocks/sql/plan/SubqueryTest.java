@@ -1419,4 +1419,14 @@ public class SubqueryTest extends PlanTestBase {
                     "WHEN 17: count > 20 THEN 22: avg ELSE CAST(26: min AS DOUBLE) END");
         }
     }
+
+    @Test
+    public void testSubqueryTypeCast() throws Exception {
+        String sql = "select * from test_all_type where t1a like (select t1a from test_all_type_not_null);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "   5:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other join predicates: 1: t1a LIKE 11: t1a");
+    }
 }
