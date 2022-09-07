@@ -45,6 +45,9 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
         Function fn = call.getFunction();
+        if (fn.functionName().equals(FunctionSet.ARRAY_MAP)) { // array_map does not need to implicit cast.
+            return call;
+        }
         if (fn == null) {
             for (int i = 0; i < call.getChildren().size(); ++i) {
                 Type type = call.getType();
