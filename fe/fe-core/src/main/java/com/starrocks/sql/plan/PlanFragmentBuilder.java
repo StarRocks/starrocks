@@ -1556,12 +1556,9 @@ public class PlanFragmentBuilder {
             return planFragment;
         }
 
-        private List<Expr> getHashDistributionSpecPartitionByExprsOfChild(OptExpression optExpr,
-                                                                          ExecPlan context,
-                                                                          int childIdx) {
-            Preconditions.checkState(optExpr.getRequiredProperties().size() > childIdx);
+        private List<Expr> getHashDistributionSpecPartitionByExprs(OptExpression optExpr, ExecPlan context) {
             DistributionSpec distributionSpec =
-                    optExpr.getRequiredProperties().get(childIdx).getDistributionProperty().getSpec();
+                    optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
             Preconditions.checkState(distributionSpec instanceof HashDistributionSpec);
             HashDistributionSpec hashDistributionSpec = (HashDistributionSpec) distributionSpec;
             List<Integer> columnRefSet = hashDistributionSpec.getHashDistributionDesc().getColumns();
@@ -1570,12 +1567,11 @@ public class PlanFragmentBuilder {
             for (int columnId : columnRefSet) {
                 partitionColumns.add(columnRefFactory.getColumnRef(columnId));
             }
-            List<Expr> distributeExpressions =
-                    partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                            .collect(Collectors.toList());
-            return distributeExpressions;
+            return partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                    .collect(Collectors.toList());
         }
+
         private PlanFragment visitPhysicalJoin(PlanFragment leftFragment, PlanFragment rightFragment,
                                                OptExpression optExpr, ExecPlan context) {
             PhysicalJoinOperator node = (PhysicalJoinOperator) optExpr.getOp();
@@ -1653,12 +1649,15 @@ public class PlanFragmentBuilder {
                 // When right table's distribution is HashPartition(shuffle), need to record probe's partitionByExprs to
                 // compute hash, and then check whether GRF can push down ExchangeNode.
                 List<Expr> probePartitionByExprs = Lists.newArrayList();
+                if (isExchangeWithDistributionType(rightFragmentPlanRoot, DistributionSpec.DistributionType.SHUFFLE)) {
+                    probePartitionByExprs = getHashDistributionSpecPartitionByExprs(optExpr, context);
+                }
+
                 JoinNode.DistributionMode distributionMode;
                 if (isExchangeWithDistributionType(leftFragmentPlanRoot, DistributionSpec.DistributionType.SHUFFLE) &&
                         isExchangeWithDistributionType(rightFragmentPlanRoot,
                                 DistributionSpec.DistributionType.SHUFFLE)) {
                     distributionMode = JoinNode.DistributionMode.PARTITIONED;
-                    probePartitionByExprs = leftFragment.getDataPartition().getPartitionExprs();
                 } else if (isExchangeWithDistributionType(rightFragmentPlanRoot,
                         DistributionSpec.DistributionType.BROADCAST)) {
                     distributionMode = JoinNode.DistributionMode.BROADCAST;
@@ -1670,17 +1669,14 @@ public class PlanFragmentBuilder {
                             rightFragmentPlanRoot.canDoReplicatedJoin()) {
                         distributionMode = JoinNode.DistributionMode.REPLICATED;
                     } else if (isShuffleJoin(optExpr)) {
-                        probePartitionByExprs = getHashDistributionSpecPartitionByExprsOfChild(optExpr, context, 0);
                         distributionMode = JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                     } else {
                         Preconditions.checkState(false, "Must be replicate join or colocate join");
                         distributionMode = JoinNode.DistributionMode.COLOCATE;
                     }
                 } else if (isShuffleJoin(optExpr)) {
-                    probePartitionByExprs = getHashDistributionSpecPartitionByExprsOfChild(optExpr, context, 0);
                     distributionMode = JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                 } else {
-                    probePartitionByExprs = getHashDistributionSpecPartitionByExprsOfChild(optExpr, context, 0);
                     distributionMode = JoinNode.DistributionMode.LOCAL_HASH_BUCKET;
                 }
 

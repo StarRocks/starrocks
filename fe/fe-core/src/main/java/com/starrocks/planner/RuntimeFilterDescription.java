@@ -2,7 +2,6 @@
 
 package com.starrocks.planner;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
@@ -237,10 +236,8 @@ public class RuntimeFilterDescription {
         return broadcastGRFDestinations;
     }
 
-    /**
-     * Only use partition_by_exprs when the grf is remote and joinMode is partitioned.
-     */
-    private boolean needUsePartitionByExprs() {
+    // Only use partition_by_exprs when the grf is remote and joinMode is partitioned.
+    private boolean isCanUsePartitionByExprs() {
         return hasRemoteTargets && joinMode != JoinNode.DistributionMode.BROADCAST
                 && joinMode != JoinNode.DistributionMode.COLOCATE;
     }
@@ -250,8 +247,8 @@ public class RuntimeFilterDescription {
         sb.append("filter_id = ").append(filterId);
         if (probeNodeId >= 0) {
             sb.append(", probe_expr = (").append(nodeIdToProbeExpr.get(probeNodeId).toSql()).append(")");
-            if (needUsePartitionByExprs() && nodeIdToParitionByExprs.containsKey(probeNodeId) &&
-                    nodeIdToParitionByExprs.get(probeNodeId).size() > 0) {
+            if (isCanUsePartitionByExprs() && nodeIdToParitionByExprs.containsKey(probeNodeId) &&
+                    !nodeIdToParitionByExprs.get(probeNodeId).isEmpty()) {
                 sb.append(", partition_exprs = (");
                 List<Expr> partitionByExprs = nodeIdToParitionByExprs.get(probeNodeId);
                 for (int i = 0; i < partitionByExprs.size(); i++) {
@@ -312,9 +309,9 @@ public class RuntimeFilterDescription {
         } else if (joinMode.equals(JoinNode.DistributionMode.REPLICATED)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.REPLICATED);
         }
-        if (needUsePartitionByExprs()) {
+        if (isCanUsePartitionByExprs()) {
             for (Map.Entry<Integer, List<Expr>> entry : nodeIdToParitionByExprs.entrySet()) {
-                if (entry.getValue() != null && entry.getValue().size() > 0) {
+                if (entry.getValue() != null && !entry.getValue().isEmpty()) {
                     t.putToPlan_node_id_to_partition_by_exprs(entry.getKey(),
                             Expr.treesToThrift(entry.getValue()));
                 }

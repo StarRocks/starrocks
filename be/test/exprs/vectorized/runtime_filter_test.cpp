@@ -729,44 +729,5 @@ TEST_F(RuntimeFilterTest, TestMultiColumnsOnRuntimeFilter_ShuffleJoin) {
                                            {});
 }
 
-TEST_F(RuntimeFilterTest, RuntimeFilterProbeCollector) {
-    RuntimeFilterProbeCollector rf_collector;
-    ColumnPtr column = CreateSeriesColumnInt32(100, true);
-    Chunk chunk;
-    chunk.append_column(column, 0);
-
-    auto type_desc = TypeDescriptor(TYPE_INT);
-    auto expr = std::make_unique<ColumnRef>(type_desc, 0);
-
-    RuntimeBloomFilter<TYPE_INT> bf1;
-    RuntimeBloomFilter<TYPE_INT> bf;
-    JoinRuntimeFilter* rf = &bf;
-    rf->concat(&bf1);
-
-    RuntimeFilterProbeDescriptor rf_desc1;
-    rf_desc1._runtime_filter.store(rf);
-    rf_desc1._partition_by_expr_ids = {0};
-    auto expr_context1 = std::make_unique<ExprContext>(expr.get());
-    rf_desc1._partition_by_exprs_contexts.push_back(expr_context1.get());
-    RuntimeFilterProbeDescriptor rf_desc2;
-    rf_desc2._runtime_filter.store(rf);
-    rf_desc2._partition_by_expr_ids = {0};
-    auto expr_context2 = std::make_unique<ExprContext>(expr.get());
-    rf_desc2._partition_by_exprs_contexts.push_back(expr_context2.get());
-
-    RuntimeBloomFilterEvalContext eval_ctx;
-    auto runtime_profile = std::make_unique<RuntimeProfile>("test_prof", true);
-    eval_ctx.join_runtime_filter_hash_timer = ADD_TIMER(runtime_profile.get(), "JoinRuntimeFilterHashTime");
-
-    RuntimeFilterProbeDescriptor* prev_rf_desc = nullptr;
-    rf_collector.compute_hash_values(&chunk, column.get(), &rf_desc1, &prev_rf_desc, eval_ctx);
-    DCHECK(prev_rf_desc);
-    DCHECK(prev_rf_desc->is_the_same_partition_by_exprs(&rf_desc1));
-    rf_collector.compute_hash_values(&chunk, column.get(), &rf_desc2, &prev_rf_desc, eval_ctx);
-    DCHECK(prev_rf_desc);
-    DCHECK(prev_rf_desc->is_the_same_partition_by_exprs(&rf_desc1));
-    DCHECK(prev_rf_desc->is_the_same_partition_by_exprs(&rf_desc2));
-}
-
 } // namespace vectorized
 } // namespace starrocks

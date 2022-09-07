@@ -342,8 +342,8 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
         return;
     }
 
-    auto& descriptors = eval_context.descriptors;
-    if (descriptors.empty()) {
+    auto& seletivity_map = eval_context.selectivity;
+    if (seletivity_map.empty()) {
         return;
     }
 
@@ -352,8 +352,8 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
     eval_context.running_context.compatibility =
             _runtime_state->func_version() <= 3 || !_runtime_state->enable_pipeline_engine();
 
-    RuntimeFilterProbeDescriptor* prev_rf_desc = nullptr;
-    for (auto* rf_desc : descriptors) {
+    for (auto& kv : seletivity_map) {
+        RuntimeFilterProbeDescriptor* rf_desc = kv.second;
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
         if (filter == nullptr) {
             continue;
@@ -362,7 +362,7 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
         // for colocate grf
         eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
-        compute_hash_values(chunk, column.get(), rf_desc, &prev_rf_desc, eval_context);
+        compute_hash_values(chunk, column.get(), rf_desc, eval_context);
         filter->evaluate(column.get(), &eval_context.running_context);
 
         auto true_count = SIMD::count_nonzero(selection);
@@ -413,9 +413,8 @@ void RuntimeFilterProbeCollector::evaluate(vectorized::Chunk* chunk, RuntimeBloo
 
 void RuntimeFilterProbeCollector::compute_hash_values(vectorized::Chunk* chunk, Column* column,
                                                       RuntimeFilterProbeDescriptor* rf_desc,
-                                                      RuntimeFilterProbeDescriptor** prev_rf_desc,
                                                       RuntimeBloomFilterEvalContext& eval_context) {
-    // compute hash used for multi-part
+    // TODO: Hash values will be computed multi times for runtime filters with the same partition_by_exprs.
     SCOPED_TIMER(eval_context.join_runtime_filter_hash_timer);
     const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
     DCHECK(filter);
@@ -425,17 +424,12 @@ void RuntimeFilterProbeCollector::compute_hash_values(vectorized::Chunk* chunk, 
     if (rf_desc->partition_by_expr_contexts()->empty()) {
         filter->compute_hash({column}, &eval_context.running_context);
     } else {
-        if (prev_rf_desc && *prev_rf_desc && (*prev_rf_desc)->is_the_same_partition_by_exprs(rf_desc)) {
-            VLOG_FILE << "Skip compute hash_values for the same partition_by_exprs.";
-        } else {
-            std::vector<Column*> partition_by_columns;
-            for (auto& partition_ctx : *(rf_desc->partition_by_expr_contexts())) {
-                ColumnPtr partition_column = EVALUATE_NULL_IF_ERROR(partition_ctx, partition_ctx->root(), chunk);
-                partition_by_columns.push_back(partition_column.get());
-            }
-            filter->compute_hash(std::move(partition_by_columns), &eval_context.running_context);
-            *prev_rf_desc = rf_desc;
+        std::vector<Column*> partition_by_columns;
+        for (auto& partition_ctx : *(rf_desc->partition_by_expr_contexts())) {
+            ColumnPtr partition_column = EVALUATE_NULL_IF_ERROR(partition_ctx, partition_ctx->root(), chunk);
+            partition_by_columns.push_back(partition_column.get());
         }
+        filter->compute_hash(std::move(partition_by_columns), &eval_context.running_context);
     }
 }
 
@@ -449,9 +443,9 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
     auto& seletivity_map = eval_context.selectivity;
     use_merged_selection = true;
 
-    RuntimeFilterProbeDescriptor* prev_rf_desc = nullptr;
     seletivity_map.clear();
-    for (RuntimeFilterProbeDescriptor* rf_desc : _sorted_descriptors) {
+    for (auto& kv : _descriptors) {
+        RuntimeFilterProbeDescriptor* rf_desc = kv.second;
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
         if (filter == nullptr) {
             continue;
@@ -463,7 +457,7 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
         // for colocate grf
         eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
-        compute_hash_values(chunk, column.get(), rf_desc, &prev_rf_desc, eval_context);
+        compute_hash_values(chunk, column.get(), rf_desc, eval_context);
         // true count is not accummulated, it is evaluated for each RF respectively
         filter->evaluate(column.get(), &eval_context.running_context);
         auto true_count = SIMD::count_nonzero(selection);
@@ -504,7 +498,6 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
     }
     if (!seletivity_map.empty()) {
         chunk->filter(merged_selection);
-        eval_context.do_sort_descriptors_if_needed(_is_need_sort_descriptors_for_multi_columns);
     }
 }
 
@@ -514,6 +507,9 @@ void RuntimeFilterProbeCollector::push_down(RuntimeFilterProbeCollector* parent,
     auto iter = parent->_descriptors.begin();
     while (iter != parent->_descriptors.end()) {
         RuntimeFilterProbeDescriptor* desc = iter->second;
+        if (!desc->can_push_down_runtime_filter()) {
+            continue;
+        }
         if (desc->is_bound(tuple_ids)) {
             add_descriptor(desc);
             if (desc->is_local()) {
@@ -543,11 +539,6 @@ void RuntimeFilterProbeCollector::add_descriptor(RuntimeFilterProbeDescriptor* d
     VLOG_FILE << "add runtime filter descriptor: filter_id=" << desc->filter_id()
               << ", plan_node_id = " << _plan_node_id;
     _descriptors[desc->filter_id()] = desc;
-
-    if (!desc->partition_by_expr_ids()->empty()) {
-        _is_need_sort_descriptors_for_multi_columns = true;
-    }
-    do_sort_descriptors_if_needed(_is_need_sort_descriptors_for_multi_columns);
 }
 
 void RuntimeFilterProbeCollector::wait(bool on_scan_node) {

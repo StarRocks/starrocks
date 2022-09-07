@@ -24,20 +24,16 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.UserException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -49,7 +45,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -747,7 +742,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return permutaionsOfPartitionByExprs(candidatesOfSlotExprs);
     }
 
-    static public List<List<Expr>> permutaionsOfPartitionByExprs(List<List<Expr>> partitionByExprs) {
+    public static List<List<Expr>> permutaionsOfPartitionByExprs(List<List<Expr>> partitionByExprs) {
         if (partitionByExprs.isEmpty()) {
             return Lists.newArrayList();
         }
@@ -761,6 +756,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         boolean isGreaterThanExpect = totalCount > 16;
         if (isGreaterThanExpect) {
             totalCount = 16;
+        }
+
+        if (totalCount <= 0) {
+            return Lists.newArrayList();
         }
 
         for (int i = 0; i < totalCount; i++) {
@@ -791,16 +790,13 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         if (isGreaterThanExpect) {
             return permutations.stream().filter(perm -> perm.size() == partitionByExprs.size()).collect(Collectors.toList());
         }
-        for (List<Expr> perm: permutations) {
-            Preconditions.checkState(perm.size() == partitionByExprs.size());
-        }
         return permutations;
     }
 
-    public Pair<Boolean, List<List<Expr>>> canPushDownRuntimeFilterCrossExchange(RuntimeFilterDescription description,
-                                                                                 List<Expr> partitionByExprs) {
+    public Pair<Boolean, List<List<Expr>>> canPushDownRuntimeFilterCrossExchange(
+            List<Expr> partitionByExprs) {
         List<List<Expr>> candidates = Lists.newArrayList();
-        if (partitionByExprs.size() == 0) {
+        if (partitionByExprs.isEmpty()) {
             return Pair.create(true, candidates);
         }
 
@@ -808,9 +804,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         candidates = candidatesOfSlotExprs(partitionByExprs);
         if (candidates.isEmpty()) {
             return Pair.create(false, candidates);
+        } else {
+            return Pair.create(true, candidates);
         }
-
-        return Pair.create(true, candidates);
     }
 
     /**
@@ -822,8 +818,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         }
 
         Pair<Boolean, List<List<Expr>>> canPushDownPartitionByExprsCandidatesPair =
-                canPushDownRuntimeFilterCrossExchange(description, partitionByExprs);
-        if (!canPushDownPartitionByExprsCandidatesPair.first) {
+                canPushDownRuntimeFilterCrossExchange(partitionByExprs);
+        if (canPushDownPartitionByExprsCandidatesPair.first != true) {
             return false;
         }
 
