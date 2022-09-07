@@ -8,6 +8,7 @@
 #include "formats/orc/orc_chunk_reader.h"
 #include "fs/fs.h"
 #include "gen_cpp/orc_proto.pb.h"
+#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "util/buffered_stream.h"
 #include "util/runtime_profile.h"
@@ -499,15 +500,18 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         orc::RowReader::ReadPosition position;
         size_t read_num_values = 0;
         bool has_used_dict_filter = false;
+        ColumnPtr row_delete_filter = BooleanColumn::create();
         {
             SCOPED_RAW_TIMER(&_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->read_next(&position));
+            row_delete_filter = _orc_reader->get_row_delete_filter(_deleted_position_set);
             // read num values is how many rows actually read before doing dict filtering.
             read_num_values = position.num_values;
             RETURN_IF_ERROR(_orc_reader->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache,
                                                                       &_dict_filter));
             if (_orc_reader->get_cvb_size() != read_num_values) {
                 has_used_dict_filter = true;
+                row_delete_filter->filter(_dict_filter);
             }
         }
 
@@ -547,6 +551,10 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                     }
                 }
             }
+
+            ColumnHelper::merge_two_filters(row_delete_filter, &_chunk_filter, nullptr);
+            chunk_size = SIMD::count_nonzero(_chunk_filter);
+
             if (chunk_size != 0 && chunk_size != ck->num_rows()) {
                 ck->filter(_chunk_filter);
             }
@@ -586,7 +594,61 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _should_skip_file = false;
     _use_orc_sargs = true;
+    build_row_delete_set(scanner_params);
     // todo: build predicate hook and ranges hook.
     return Status::OK();
 }
+
+Status HdfsOrcScanner::build_row_delete_set(const HdfsScannerParams& scanner_params) {
+    for (const auto& tdelete_file : scanner_params.deletes) {
+        scan_pos_delete_file(*tdelete_file);
+    }
+
+    return Status::OK();
+}
+
+Status HdfsOrcScanner::scan_pos_delete_file(const TIcebergDeleteFile& delete_file) {
+    std::unique_ptr<RandomAccessFile> file;
+    ASSIGN_OR_RETURN(file, _scanner_params.fs->new_random_access_file(delete_file.full_path));
+    auto input_stream = std::make_unique<ORCHdfsFileStream>(file.get(), delete_file.length);
+    std::unique_ptr<orc::Reader> reader;
+    try {
+        orc::ReaderOptions options;
+        reader = orc::createReader(std::move(input_stream), options);
+    } catch (std::exception& e) {
+        auto s = strings::Substitute("createReader throws. reason = $0", e.what());
+        LOG(WARNING) << s;
+        return Status::InternalError(s);
+    }
+    auto row_reader = reader->createRowReader(orc::RowReaderOptions{});
+    auto batch = row_reader->createRowBatch(1024);
+
+    try {
+        while (row_reader->next(*batch)) {
+            auto* struct_batch = down_cast<orc::StructVectorBatch*>(batch.get());
+
+            // position-delete file_path
+            auto* path_batch = down_cast<orc::StringVectorBatch*>(struct_batch->fields[0]);
+            // position-delete pos
+            auto* pos_batch = down_cast<orc::LongVectorBatch*>(struct_batch->fields[1]);
+
+            for (size_t row = 0; row < path_batch->numElements; row++) {
+                std::string s(path_batch->data[row], path_batch->length[row]);
+                if (s != _scanner_params.path) {
+                    continue;
+                }
+
+                int64_t position = pos_batch->data[row];
+                _deleted_position_set.emplace(position);
+            }
+        }
+    } catch (std::exception& e) {
+        auto s = strings::Substitute("read next failed, reason=$0", e.what());
+        LOG(WARNING) << s;
+        return Status::InternalError(s);
+    }
+
+    return Status::OK();
+}
+
 } // namespace starrocks::vectorized

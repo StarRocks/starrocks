@@ -13,12 +13,14 @@
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
 #include "column/array_column.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/literal.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
+#include "orc/Vector.hh"
 #include "runtime/primitive_type.h"
 #include "simd/simd.h"
 #include "util/timezone_utils.h"
@@ -2203,6 +2205,26 @@ int OrcChunkReader::get_column_id_by_name(const std::string& name) const {
         return it->second;
     }
     return -1;
+}
+
+ColumnPtr OrcChunkReader::get_row_delete_filter(const std::set<int64_t>& deleted_pos) {
+    int64_t start_pos = _row_reader->getRowNumber();
+    auto num_rows = _batch->numElements;
+    ColumnPtr filter_column = BooleanColumn::create(num_rows, 1);
+    Filter& filter = static_cast<BooleanColumn*>(filter_column.get())->get_data();
+
+    auto iter = deleted_pos.lower_bound(start_pos);
+    for (; iter != deleted_pos.end(); iter++) {
+        const int64_t file_pos = *iter - start_pos;
+
+        if (file_pos >= num_rows) {
+            break;
+        }
+
+        filter[file_pos] = 0;
+    }
+
+    return filter_column;
 }
 
 } // namespace starrocks::vectorized

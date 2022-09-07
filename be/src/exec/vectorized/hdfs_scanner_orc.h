@@ -24,6 +24,10 @@ public:
     void disable_use_orc_sargs() { _use_orc_sargs = false; }
 
 private:
+    Status build_row_delete_set(const HdfsScannerParams& scanner_params);
+    Status scan_pos_delete_file(const TIcebergDeleteFile& delete_file);
+
+private:
     // it means if we can skip this file without reading.
     // Normally it happens when we peek file column statistics,
     // and if we are sure there is no row matches, we can skip this file.
@@ -39,6 +43,7 @@ private:
     std::shared_ptr<OrcRowReaderFilter> _orc_row_reader_filter;
     Filter _dict_filter;
     Filter _chunk_filter;
+    std::set<int64_t> _deleted_position_set;
 };
 
 } // namespace starrocks::vectorized

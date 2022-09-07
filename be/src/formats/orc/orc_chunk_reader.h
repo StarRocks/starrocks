@@ -118,6 +118,7 @@ public:
     void lazy_seek_to(uint64_t rowInStripe);
     void lazy_filter_on_cvb(Filter* filter);
     StatusOr<ChunkPtr> get_lazy_chunk();
+    ColumnPtr get_row_delete_filter(const std::set<int64_t>& deleted_pos);
 
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);

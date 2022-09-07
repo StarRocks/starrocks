@@ -256,6 +256,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.open_limit = nullptr;
+    for (const auto& delete_file : scan_range.delete_files) {
+        scanner_params.deletes.emplace_back(&delete_file);
+    }
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;

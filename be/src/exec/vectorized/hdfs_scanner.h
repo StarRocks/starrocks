@@ -118,6 +118,8 @@ struct HdfsScannerParams {
     HdfsScanProfile* profile = nullptr;
 
     std::atomic<int32_t>* open_limit;
+
+    std::vector<const TIcebergDeleteFile*> deletes;
 };
 
 struct HdfsScannerContext {
