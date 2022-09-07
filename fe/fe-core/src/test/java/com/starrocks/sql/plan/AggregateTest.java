@@ -912,7 +912,8 @@ public class AggregateTest extends PlanTestBase {
         expectedException.expect(SemanticException.class);
         expectedException.expectMessage("mode argument's range must be [0-7]");
         String sql =
-                "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 8, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+                "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 8, [L_PARTKEY = 1]) from lineitem_partition_colocate" +
+                " group by L_ORDERKEY;";
         try {
             getFragmentPlan(sql);
         } finally {
