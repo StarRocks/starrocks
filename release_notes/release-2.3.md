@@ -1,5 +1,41 @@
 # StarRocks version 2.3
 
+## 2.3.2
+
+发布日期： 2022 年 9 月 7 日
+
+### 新特性
+
+- 支持延迟物化，提升小范围过滤场景下 Parquet 外表的查询性能。 [#9738](https://github.com/StarRocks/starrocks/pull/9738)
+
+- 新增 SHOW AUTHENTICATION 语句，用于查询用户认证相关的信息。 [#9996](https://github.com/StarRocks/starrocks/pull/9996)
+
+### 功能优化
+
+- 查询 HDFS 集群里配置了分桶的 Hive 表时，支持设置是否递归遍历该分桶 Hive 表的所有数据文件。 [#10239](https://github.com/StarRocks/starrocks/pull/10239)
+
+- 修改资源组类型 `realtime` 为 `short_query`。 [#10247](https://github.com/StarRocks/starrocks/pull/10247)
+
+- 优化外表查询机制，在查询 Hive 外表时默认忽略大小写。 [#10187](https://github.com/StarRocks/starrocks/pull/10187)
+
+### 问题修复
+
+- 修复 Elasticsearch 外表在多个 Shard 下时查询可能意外退出的问题。 [#10369](https://github.com/StarRocks/starrocks/pull/10369)
+
+- 修复重写子查询为公用表表达式 (CTE) 时报错的问题。 [#10397](https://github.com/StarRocks/starrocks/pull/10397)
+
+- 修复导入大批量数据时报错的问题。 [#10370](https://github.com/StarRocks/starrocks/issues/10370) [#10380](https://github.com/StarRocks/starrocks/issues/10380)
+
+- 修复多个 Catalog 配置为相同 Thrift 服务地址时，删除其中一个 Catalog 会导致其他 Catalog 的增量元数据同步失效的问题。 [#10511](https://github.com/StarRocks/starrocks/pull/10511)
+
+- 修复 BE 内存占用统计不准确的问题。 [#9837](https://github.com/StarRocks/starrocks/pull/9837)
+
+- 修复完整克隆 (Full Clone) 后，查询主键模型表时报错的问题。[#10811](https://github.com/StarRocks/starrocks/pull/10811)
+
+- 修复拥有逻辑视图的 SELECT 权限但无法查询的问题。[#10563](https://github.com/StarRocks/starrocks/pull/10563)
+
+- 修复逻辑视图命名无限制的问题。逻辑视图的命名规范同数据库表的命名规范。[#10558](https://github.com/StarRocks/starrocks/pull/10558)
+
 ## 2.3.1
 
 发布日期： 2022 年 8 月 22 日
