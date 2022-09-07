@@ -47,6 +47,8 @@ public:
 
     StatusOr<RowsetSharedPtr> build() override;
 
+    Status flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data) override;
+
     Version version() override { return _context.version; }
     int64_t num_rows() override { return _num_rows_written; }
     int64_t total_data_size() override { return _total_data_size; }
@@ -97,7 +99,7 @@ public:
 
     Status add_chunk(const vectorized::Chunk& chunk) override;
 
-    Status flush_chunk(const vectorized::Chunk& chunk) override;
+    Status flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info = nullptr) override;
     Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
 
     // add rowset by create hard link
@@ -111,11 +113,11 @@ public:
 private:
     StatusOr<std::unique_ptr<SegmentWriter>> _create_segment_writer();
 
-    Status _flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer);
+    Status _flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer, SegmentPB* seg_info = nullptr);
 
     Status _final_merge();
 
-    Status _flush_chunk(const vectorized::Chunk& chunk);
+    Status _flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info = nullptr);
 
     std::string _dump_mixed_segment_delfile_not_supported();
 

@@ -28,6 +28,8 @@ class OlapTableSchemaParam;
 class PTabletWriterOpenRequest;
 class PTabletWriterAddBatchResult;
 class PTabletWriterAddChunkRequest;
+class PTabletWriterAddSegmentRequest;
+class PTabletWriterAddSegmentResult;
 
 class TabletsChannel {
 public:

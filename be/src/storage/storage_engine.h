@@ -61,6 +61,8 @@ class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;
 class CompactionManager;
+class SegmentFlushExecutor;
+class SegmentReplicateExecutor;
 
 // StorageEngine singleton to manage all Table pointers.
 // Providing add/drop/get operations.
@@ -159,6 +161,10 @@ public:
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
+
+    SegmentReplicateExecutor* segment_replicate_executor() { return _segment_replicate_executor.get(); }
+
+    SegmentFlushExecutor* segment_flush_executor() { return _segment_flush_executor.get(); }
 
     UpdateManager* update_manager() { return _update_manager.get(); }
 
@@ -344,6 +350,10 @@ private:
     std::unique_ptr<bthread::Executor> _async_delta_writer_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
+
+    std::unique_ptr<SegmentReplicateExecutor> _segment_replicate_executor;
+
+    std::unique_ptr<SegmentFlushExecutor> _segment_flush_executor;
 
     std::unique_ptr<UpdateManager> _update_manager;
 
