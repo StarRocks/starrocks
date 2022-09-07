@@ -22,9 +22,9 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
 注：方括号 [] 中内容可省略不写。
 
-### 参数说明
+## 参数说明
 
-#### **column_definition**
+### **column_definition**
 
 语法：
 
@@ -111,7 +111,7 @@ bitmap列类型，不需要指定长度和默认值。表示整型的集合，�
 
 **NULL | NOT NULL**：是否允许为 NULL: 默认为 NULL, PRIMARY KEY的key列默认为NOT NULL, NULL 值在导入数据中用 \N 来表示。
 
-#### **index_definition**
+### **index_definition**
 
 语法：
 
@@ -128,7 +128,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 注意：
 当前仅支持 BITMAP 索引， BITMAP 索引仅支持应用于单列。
 
-#### **ENGINE 类型**
+### **ENGINE 类型**
 
 默认为 olap。可选 mysql, elasticsearch, hive。
 
@@ -178,7 +178,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 
     其中 database 是 hive 表对应的库名字，table 是 hive 表的名字，hive.metastore.uris 是 hive metastore 服务地址。
 
-#### **key_desc**
+### **key_desc**
 
 语法：
 
@@ -203,7 +203,7 @@ DUPLICATE KEY:key列相同的记录，同时存在于StarRocks中，
 除AGGREGATE KEY外，其他key_type在建表时，value列不需要指定聚合类型。
 ```
 
-#### **partition_desc**
+### **partition_desc**
 
 partition 描述有三种使用方式，分别为：`LESS THAN，Fixed Range，批量创建分区`。以下为不同方式的详细使用方法：
 
@@ -269,9 +269,9 @@ PARTITION BY RANGE (datekey) (
 1. 当前分区键仅支持 **日期类型** 和 **整数类型**，分区类型需要与 EVERY 里的表达式匹配。
 2. 当分区键为日期类型的时候需要指定 `INTERVAL` 关键字来表示日期间隔，目前日期仅支持 `day、week、month、year`，分区的命名规则同动态分区一样。
 
-更详细的语法规则请参考：（[数据分布-批量创建和修改分区](../table_design/Data_distribution.md)）。
+更详细的语法规则请参考[数据分布-批量创建分区](/table_design/Data_distribution.md#批量创建分区）。
 
-#### **distribution_desc**
+### **distribution_desc**
 
 Hash 分桶
 
@@ -284,9 +284,9 @@ DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
 说明：
 使用指定的 key 列进行哈希分桶。默认分桶数为 10。`DISTRIBUTED BY` 为必填字段。有关如何确定分桶数量，请参见[数据分布](/table_design/Data_distribution#确定分桶数量)。建议使用 Hash 分桶方式。
 
-#### **PROPERTIES**
+### **PROPERTIES**
 
-##### 设置数据的初始存储介质、存储降冷时间和副本数
+#### 设置数据的初始存储介质、存储降冷时间和副本数
 
 如果 ENGINE 类型为 olap, 可以在 properties 设置该表数据的初始存储介质、存储降冷时间和副本数。
 
@@ -326,7 +326,7 @@ PROPERTIES (
 
 <br/>
 
-##### 创建表时为列添加 bloom filter
+#### 创建表时为列添加 bloom filter
 
 如果 Engine 类型为 olap, 可以指定某列使用 bloom filter 索引。bloom filter 索引仅适用于查询条件为 `in` 和 `equal` 的情况，该列的值越分散效果越好。
 
@@ -338,7 +338,7 @@ PROPERTIES (
 )
 ```
 
-##### 添加属性支持 Colocate Join
+#### 添加属性支持 Colocate Join
 
 如果希望使用 Colocate Join 特性，需要在 properties 中指定:
 
@@ -350,7 +350,7 @@ PROPERTIES (
 
 详细的 Colocate Join 使用方法及应用场景请参考 [Colocate Join](/using_starrocks/Colocate_join.md) 章节。
 
-##### 设置动态分区
+#### 设置动态分区
 
 如果希望使用动态分区特性，需要在 properties 中指定：
 
@@ -377,7 +377,7 @@ dynamic_partition.prefix: 用于指定创建的分区名前缀，例如分区名
 
 dynamic_partition.buckets: 用于指定自动创建的分区分桶数量。
 
-##### 建表时可以批量创建多个 Rollup
+#### 建表时可以批量创建多个 Rollup
 
 语法：
 
@@ -387,7 +387,7 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 [PROPERTIES ("key" = "value", ...)],...)
 ```
 
-##### 创建表时增加内存表特性
+#### 创建表时增加内存表特性
 
 如果希望使用 内存表 特性，需要在 properties 中指定
 
