@@ -230,13 +230,12 @@ public:
 
         int ret;
         RETRY_ON_EINTR(ret, ::close(_fd));
+        _closed = true;
         if (ret < 0) {
             if (s.ok()) {
                 s = io_error(_filename, errno);
             }
         }
-
-        _closed = true;
         return s;
     }
 
