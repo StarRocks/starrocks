@@ -53,8 +53,8 @@ void BitmapIndexReader::_reset() {
     _has_null = false;
 }
 
-Status BitmapIndexReader::_do_load(fs::BlockManager* fs, const std::string& filename,
-                                   const BitmapIndexPB& meta, bool use_page_cache, bool kept_in_memory) {
+Status BitmapIndexReader::_do_load(fs::BlockManager* fs, const std::string& filename, const BitmapIndexPB& meta,
+                                   bool use_page_cache, bool kept_in_memory) {
     _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
     const IndexedColumnMetaPB& dict_meta = meta.dict_column();
     const IndexedColumnMetaPB& bitmap_meta = meta.bitmap_column();
