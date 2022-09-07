@@ -1548,4 +1548,7 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int quorom_publish_wait_time_ms = 500;
+ 
+    @ConfField(mutable = true)
+    public static boolean recursive_dir_search_enabled = false;
 }
