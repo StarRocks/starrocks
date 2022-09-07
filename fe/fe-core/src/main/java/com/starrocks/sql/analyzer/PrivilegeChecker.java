@@ -11,6 +11,7 @@ import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
+import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
@@ -21,6 +22,7 @@ import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
@@ -59,7 +61,7 @@ import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
-import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
+import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
@@ -578,11 +580,48 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt statement, ConnectContext session) {
-            // check if current user has GRANT priv on GLOBAL level.
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(
-                    ConnectContext.get(), PrivPredicate.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+            if (stmt.getRole() != null || stmt.getPrivType().equals("USER")) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(
+                        session, PrivPredicate.GRANT)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                }
+            } else {
+                if (stmt.getPrivType().equals("TABLE")) {
+                    TablePattern tblPattern = stmt.getTblPattern();
+                    if (tblPattern.getPrivLevel() == Auth.PrivLevel.GLOBAL) {
+                        if (!GlobalStateMgr.getCurrentState().getAuth()
+                                .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                        }
+                    } else if (tblPattern.getPrivLevel() == Auth.PrivLevel.DATABASE) {
+                        if (!GlobalStateMgr.getCurrentState().getAuth()
+                                .checkDbPriv(ConnectContext.get(), tblPattern.getQuolifiedDb(), PrivPredicate.GRANT)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                        }
+                    } else {
+                        // table level
+                        if (!GlobalStateMgr.getCurrentState().getAuth()
+                                .checkTblPriv(ConnectContext.get(), tblPattern.getQuolifiedDb(), tblPattern.getTbl(),
+                                        PrivPredicate.GRANT)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                        }
+                    }
+                } else {
+                    ResourcePattern resourcePattern = stmt.getResourcePattern();
+                    if (resourcePattern.getPrivLevel() == Auth.PrivLevel.GLOBAL) {
+                        if (!GlobalStateMgr.getCurrentState().getAuth()
+                                .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                        }
+                    } else {
+                        if (!GlobalStateMgr.getCurrentState().getAuth()
+                                .checkResourcePriv(ConnectContext.get(), resourcePattern.getResourceName(),
+                                        PrivPredicate.GRANT)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                        }
+                    }
+                }
             }
             return null;
         }

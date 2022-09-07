@@ -17,12 +17,13 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
+import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -133,6 +134,8 @@ public class ResourcePrivEntry extends PrivEntry {
 
     @Override
     public String toGrantSQL() {
-        return new GrantStmt(getUserIdent(), new ResourcePattern(origResource), privSet).toSql();
+        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "RESOURCE", getUserIdent());
+        stmt.setAnalysedResource(privSet, new ResourcePattern(origResource));
+        return AST2SQL.toString(stmt);
     }
 }

@@ -43,7 +43,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
-import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
+import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.BaseViewStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
@@ -323,13 +323,13 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt stmt, ConnectContext session) {
+        public Void visitExecuteAsStatement(ExecuteAsStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }
 
         @Override
-        public Void visitExecuteAsStatement(ExecuteAsStmt stmt, ConnectContext session) {
+        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }

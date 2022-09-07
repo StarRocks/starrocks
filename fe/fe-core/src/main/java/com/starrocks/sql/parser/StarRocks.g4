@@ -161,16 +161,17 @@ statement
 
     // privilege
     | grantRoleStatement
-    | grantImpersonateStatement
     | revokeRoleStatement
-    | revokeImpersonateStatement
     | executeAsStatement
     | alterUserStatement
     | createUserStatement
     | dropUserStatement
-    | showAuthenticationStatement
     | createRoleStatement
+    | grantPrivilegeStatement
+    | revokePrivilegeStatement
+    | showAuthenticationStatement
     | showRolesStatement
+
 
     // Backup Restore Satement
     | backupStatement
@@ -1051,6 +1052,54 @@ setExprOrDefault
     | ON
     | ALL
     | expression
+    ;
+
+privilegeObjectName
+    : identifierOrString
+    | tablePrivilegeObjectName
+    | user
+    ;
+
+tablePrivilegeObjectName
+    : identifierOrStringOrStar
+    | identifierOrStringOrStar '.' identifierOrStringOrStar
+    ;
+
+identifierOrStringOrStar
+    : ASTERISK_SYMBOL
+    | identifier
+    | string
+    ;
+
+privilegeActionReserved
+    : ADMIN
+    | ALTER
+    | CREATE
+    | DROP
+    | GRANT
+    | LOAD
+    | SELECT
+    ;
+
+privilegeActionList
+    :  privilegeAction (',' privilegeAction)*
+    ;
+
+privilegeAction
+    : privilegeActionReserved
+    | identifier
+    ;
+
+grantPrivilegeStatement
+    : GRANT IMPERSONATE ON user TO ( user | ROLE identifierOrString )                                       #grantImpersonateBrief
+    | GRANT privilegeActionList ON tablePrivilegeObjectName TO (user | ROLE identifierOrString)        #grantTablePrivBrief
+    | GRANT privilegeActionList ON identifier privilegeObjectName TO (user | ROLE identifierOrString)  #grantPrivWithType
+    ;
+
+revokePrivilegeStatement
+    : REVOKE IMPERSONATE ON user FROM ( user | ROLE identifierOrString )                                  #revokeImpersonateBrief
+    | REVOKE privilegeActionList ON tablePrivilegeObjectName FROM (user | ROLE identifierOrString)   #revokeTablePrivBrief
+    | REVOKE privilegeActionList ON identifier privilegeObjectName FROM (user | ROLE identifierOrString) #revokePrivWithType
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
