@@ -1,10 +1,10 @@
 # CREATE TABLE
 
-## description
+## 功能
 
 该语句用于创建 table。
 
-语法：
+## 语法
 
 ```sql
 CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
@@ -19,6 +19,8 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [PROPERTIES ("key"="value", ...)]
 [BROKER PROPERTIES ("key"="value", ...)]
 ```
+
+## 参数说明
 
 1. column_definition
 
@@ -131,7 +133,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     默认为 olap。可选 mysql, elasticsearch, hive
 
-## Example
+## 示例
 
 1. 如果是 mysql，则需要在 properties 提供以下信息：
 
@@ -179,7 +181,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     其中 database 是 hive 表对应的库名字，table 是 hive 表的名字，hive.metastore.uris 是 hive metastore 服务地址。
 
-### Syntax
+### 语法
 
 1. key_desc
 
@@ -251,9 +253,9 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     ```
 
     说明：
-    1. Fixed Range比LESS THAN相对灵活些，左右区间完全由用户自己确定
+    1. Fixed Range比LESS THAN相对灵活些，左右区间完全由用户自己确定。
 
-    2. 其他与LESS THAN保持同步
+    2. 其他与LESS THAN保持同步。
 
     **批量创建分区**
 
@@ -270,9 +272,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     1. 当前分区键仅支持日期类型和整数类型，分区类型需要与EVERY里的表达式匹配。
     2. 当分区键为日期类型的时候需要指定INTERVAL关键字来表示日期间隔，目前日期仅支持day、week、month、year，分区的命名规则同动态分区一样。
 
-    更详细的语法规则请参考：（[数据分布-批量创建和修改分区](../table_design/Data_distribution.md)）。
-
-3. distribution_des
+    更详细的语法规则请参考[数据分布-批量创建分区](/table_design/Data_distribution.md#批量创建分区）。
 
     Hash 分桶
 
@@ -284,7 +284,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     说明：使用指定的 key 列进行哈希分桶。默认分桶数为10。`DISTRIBUTED BY` 为必填字段。有关如何确定分桶数量，请参见[数据分布](/table_design/Data_distribution#id-4-分桶数如何确定)。建议使用 Hash 分桶方式。
 
-4. PROPERTIES
+3. PROPERTIES
 
     1.如果 ENGINE 类型为 olap,可以在 properties 设置该表数据的初始存储介质、存储到期时间和副本数。
 
@@ -328,7 +328,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     )
     ```
 
-    3.如果希望使用 Colocate Join 特性，需要在 properties 中指定
+    3.如果希望使用 Colocate Join 特性，需要在 properties 中指定。
 
     ```sql
     PROPERTIES (
@@ -336,7 +336,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     )
     ```
 
-    4.如果希望使用动态分区特性，需要在properties 中指定
+    4.如果希望使用动态分区特性，需要在properties 中指定。
 
     ```sql
     PROPERTIES (
@@ -361,7 +361,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     dynamic_partition.buckets: 用于指定自动创建的分区分桶数量。
 
-    5.建表时可以批量创建多个 Rollup
+    5.建表时可以批量创建多个 Rollup。
 
     语法：
 
@@ -381,9 +381,9 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     当 in_memory 属性为 true 时，StarRocks会尽可能将该表的数据和索引Cache到BE 内存中
 
-## example
+## 示例
 
-1. 创建一个 olap 表，使用 HASH 分桶，使用列存，相同key的记录进行聚合
+1. 创建一个 olap 表，使用 HASH 分桶，使用列存，相同key的记录进行聚合。
 
     ```sql
     CREATE TABLE example_db.table_hash
@@ -401,7 +401,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     ```
 
 2. 创建一个 olap 表，使用 Hash 分桶，使用列存，相同key的记录进行覆盖，
-    设置初始存储介质和冷却时间
+    设置初始存储介质和冷却时间。
 
     ```sql
     CREATE TABLE example_db.table_hash
@@ -441,7 +441,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     );
     ```
 
-3. 创建一个 olap 表，使用 Range 分区，使用Hash分桶，默认使用列存，相同key的记录同时存在，设置初始存储介质和冷却时间
+3. 创建一个 olap 表，使用 Range 分区，使用Hash分桶，默认使用列存，相同key的记录同时存在，设置初始存储介质和冷却时间。
 
     LESS THAN
 
@@ -503,7 +503,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     );
     ```
 
-4. 创建一个 mysql 表
+4. 创建一个 mysql 表。
 
     ```sql
     CREATE TABLE example_db.table_mysql
@@ -526,7 +526,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     )
     ```
 
-5. 创建一张含有HLL列的表
+5. 创建一张含有HLL列的表。
 
     ```sql
     CREATE TABLE example_db.example_table
@@ -542,7 +542,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     PROPERTIES ("storage_type"="column");
     ```
 
-6. 创建一张含有BITMAP_UNION聚合类型的表（v1和v2列的原始数据类型必须是TINYINT,SMALLINT,INT）
+6. 创建一张含有BITMAP_UNION聚合类型的表（v1和v2列的原始数据类型必须是TINYINT,SMALLINT,INT）。
 
     ```sql
     CREATE TABLE example_db.example_table
@@ -558,7 +558,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     PROPERTIES ("storage_type"="column");
     ```
 
-7. 创建两张支持Colocat Join的表t1 和t2
+7. 创建两张支持Colocat Join的表t1 和t2。
 
     ```sql
     CREATE TABLE `t1` (
