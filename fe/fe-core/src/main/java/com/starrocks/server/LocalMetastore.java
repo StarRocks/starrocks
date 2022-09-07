@@ -938,14 +938,25 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private int calAvgBucketNumOfLastFivePartitions(OlapTable olapTable) {
+    private int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum) {
         int avgBucketNum = 0;
         if (olapTable.getPartitions().size() < 5) {
-            avgBucketNum = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds().size();
+            int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+            // When POC, the backends is not greater than three most of the time.
+            // The bucketNum will be given a small multiplier factor for small backends.
+            if (backendNum <= recentPartitionNum) {
+                avgBucketNum = 2 * backendNum;
+            } else if (backendNum <= 6) {
+                avgBucketNum = (int) (1.5 * backendNum);
+            } else if (backendNum <= 12) {
+                avgBucketNum = (int) (1.2 * backendNum);
+            } else {
+                avgBucketNum = backendNum;
+            }
             return avgBucketNum;
         }
 
-        List<Partition> partitions = (List<Partition>) olapTable.getLastFivePartitions();
+        List<Partition> partitions = (List<Partition>) olapTable.getRecentPartitions(recentPartitionNum);
 
         int totalDataSize = 0;
         for (Partition partition : partitions) {
@@ -1271,7 +1282,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // get distributionInfo
             distributionInfo = getDistributionInfo(olapTable, addPartitionClause);
 
-            int numBucket = calAvgBucketNumOfLastFivePartitions(olapTable);
+            int numBucket = calAvgBucketNumOfRecentPartitions(olapTable, 5);
             distributionInfo.setBucketNum(numBucket);
 
             // check colocation
@@ -1986,12 +1997,22 @@ public class LocalMetastore implements ConnectorMetadata {
 
             if (!enableStorageCache && allowAsyncWriteBack) {
                 throw new DdlException("storage allow_async_write_back can't be enabled when cache is disabled");
-                ((LakeTable) olapTable)
-                        .setStorageInfo(shardStorageInfo, enableStorageCache, storageCacheTtlS, allowAsyncWriteBack);
             } else {
                 if (distributionInfo.getBucketNum() == 0) {
-                    int numBucket = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds().size();
-                    distributionInfo.setBucketNum(numBucket);
+                    int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+                    int bucketNum = 0;
+                    // When POC, the backends is not greater than three most of the time.
+                    // The bucketNum will be given a multiplier factor for small backends.
+                    if (backendNum <= 3) {
+                        bucketNum = 2 * backendNum;
+                    } else if (backendNum <= 6) {
+                        bucketNum = (int) (1.5 * backendNum);
+                    } else if (backendNum <= 12) {
+                        bucketNum = (int) (1.2 * backendNum);
+                    } else {
+                        bucketNum = backendNum;
+                    }
+                    distributionInfo.setBucketNum(bucketNum);
                 }
 
                 Preconditions.checkState(stmt.isOlapEngine());

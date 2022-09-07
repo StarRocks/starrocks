@@ -38,19 +38,20 @@ public class CreateTableTest {
             return;
         }
         db.readLock();
-        int bucket_num = 0;
+        int bucketNum = 0;
         try {
             OlapTable table = (OlapTable) db.getTable("test_table1");
             if (table == null) {
                 return;
             }
             for (Partition partition : table.getPartitions()) {
-                bucket_num += partition.getDistributionInfo().getBucketNum();
+                bucketNum += partition.getDistributionInfo().getBucketNum();
             }
         } finally {
             db.readUnlock();
         }
-        Assert.assertEquals(cluster.getBackends().size(), bucket_num);
+        int expectBucketNum = (int) (1.2 * cluster.getBackends().size());
+        Assert.assertEquals(expectBucketNum, bucketNum);
     }
 
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {
