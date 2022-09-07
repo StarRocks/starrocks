@@ -358,16 +358,12 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
 
 void MemTable::_sort_column_inc() {
     Columns columns;
-    std::vector<int> sort_orders;
-    std::vector<int> null_firsts;
+    int sort_columns = _vectorized_schema->num_key_fields();
     for (int i = 0; i < _vectorized_schema->num_key_fields(); i++) {
         columns.push_back(_chunk->get_column_by_index(i));
-        // Ascending, null first
-        sort_orders.push_back(1);
-        null_firsts.push_back(-1);
     }
 
-    Status st = stable_sort_and_tie_columns(false, columns, sort_orders, null_firsts, &_permutations);
+    Status st = stable_sort_and_tie_columns(false, columns, SortDescs::asc_null_first(sort_columns), &_permutations);
     CHECK(st.ok());
 }
 
