@@ -1,5 +1,43 @@
 # StarRocks version 2.3
 
+## 2.3.2
+
+Release date: September 7, 2022
+
+### New Features
+
+- Late materialization is supported to accelerate range filter-based queries on external tables in Parquet format. [#9738](https://github.com/StarRocks/starrocks/pull/9738)
+
+- The SHOW AUTHENTICATION statement is added to display user authentication-related information. [#9996](https://github.com/StarRocks/starrocks/pull/9996)
+
+### Improvements
+
+- A configuration item is provided to control whether StarRocks recursively traverses all data files for the bucketed Hive table from which StarRocks queries data. [#10239](https://github.com/StarRocks/starrocks/pull/10239)
+
+- The resource group type `realtime` is renamed as `short_query`. [#10247](https://github.com/StarRocks/starrocks/pull/10247)
+
+- StarRocks no longer distinguishes between uppercase letters and lowercase letters in Hive external tables by default. [#10187](https://github.com/StarRocks/starrocks/pull/10187)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Queries on an Elasticsearch external table may unexpectedly exit when the table is divided into multiple shards. [#10369](https://github.com/StarRocks/starrocks/pull/10369)
+
+- StarRocks throws errors when sub-queries are rewritten as common table expressions (CTEs). [#10397](https://github.com/StarRocks/starrocks/pull/10397)
+
+- StarRocks throws errors when a large amount of data is loaded. [#10370](https://github.com/StarRocks/starrocks/issues/10370) [#10380](https://github.com/StarRocks/starrocks/issues/10380)
+
+- When the same Thrift service IP address is configured for multiple catalogs, deleting one catalog invalidates the incremental metadata updates in the other catalogs. [#10511](https://github.com/StarRocks/starrocks/pull/10511)
+
+- The statistics of memory consumption from BEs are inaccurate. [#9837](https://github.com/StarRocks/starrocks/pull/9837)
+
+- StarRocks throws errors for queries on Primary Key tables. [#10811](https://github.com/StarRocks/starrocks/pull/10811)
+
+- Queries on logical views are not allowed even when you have SELECT permissions on these views. [#10563](https://github.com/StarRocks/starrocks/pull/10563)
+
+- StarRocks does not impose limits on the naming of logical views. Now logical views need to follow the same naming conventions as tables. [#10558](https://github.com/StarRocks/starrocks/pull/10558)
+
 ## 2.3.1
 
 Release date: August 22, 2022
