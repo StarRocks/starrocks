@@ -117,6 +117,9 @@ public class ExportJob implements Writable {
     private final AtomicInteger nextId = new AtomicInteger(0);
     // backedn_address => snapshot path
     private final List<Pair<TNetworkAddress, String>> snapshotPaths = Lists.newArrayList();
+    // backend id => backend lastStartTime 
+    private final Map<Long, Long> beLastStartTime = Maps.newHashMap();
+
     private long id;
     private UUID queryId;
     private long dbId;
@@ -404,6 +407,14 @@ public class ExportJob implements Writable {
                     id, i, DebugUtil.printId(queryId));
         }
         LOG.info("create {} coordintors for export job: {}", coordList.size(), id);
+    }
+
+    public void setBeStartTime(long beId, long lastStartTime) {
+        this.beLastStartTime.put(beId, lastStartTime);
+    }
+
+    public Map<Long, Long> getBeStartTimeMap() {
+        return this.beLastStartTime;
     }
 
     public long getId() {
