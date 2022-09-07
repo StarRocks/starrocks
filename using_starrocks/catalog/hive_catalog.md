@@ -35,7 +35,7 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 
 如 HDFS 或 Hive metastore 开启了 Kerberos 认证，则需要在 StarRocks 中做如下配置。
 
-- 在每个 FE 和 每个 BE 机器上执行 `kinit -kt keytab_path principal` 命令从Key Distribution Center (KDC) 获取到 Ticket Granting Ticket。注意使用该命令访问 KDC 具有时效性，所以需要使用 cron 定期执行该命令。执行命令的用户需要有访问 Hive metastore 和 HDFS 的权限。
+- 在每个 FE 和 每个 BE 机器上执行 `kinit -kt keytab_path principal` 命令从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket。注意使用该命令访问 KDC 具有时效性，所以需要使用 cron 定期执行该命令。执行命令的用户需要有访问 Hive metastore 和 HDFS 的权限。
 - 在每个 FE 的 **$FE_HOME/conf/fe.conf** 和每个 BE 的 **$BE_HOME/conf/be.conf** 文件中设置`JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中 `/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可修改。
 
 ### Amazon S3
@@ -186,8 +186,8 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 
     | **配置项**             | **说明**                                                     |
     | ---------------------- | ------------------------------------------------------------ |
-    | fs.oss.accessKeyId     | 阿里云账号或 RAM 用户的 AccessKey ID。获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。 |
-    | fs.oss.accessKeySecret | 阿里云账号或 RAM 用户的 AccessKey Secret。获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。 |
+    | fs.oss.accessKeyId     | 阿里云账号或 RAM 用户的 AccessKey ID。获取方式，请参见[获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。 |
+    | fs.oss.accessKeySecret | 阿里云账号或 RAM 用户的 AccessKey Secret。获取方式，请参见[获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。 |
     | fs.oss.endpoint        | OSS bucket 所在地域对应的外网 endpoint。 您可以通过以下方式查询 endpoint：根据 endpoint 与地域的对应关系进行查找，详情参见[访问域名和数据中心](https://help.aliyun.com/document_detail/31837.htm#concept-zt4-cvy-5db)。登录 [OSS 管理控制台](https://oss.console.aliyun.com/index?spm=a2c4g.11186623.0.0.11d24772leoEEg#/)，并进入 bucket 概览页。一个 bucket 域名的后缀部分即为该 bucket 的外网 endpoint。例如，一个 bucket 域名为 examplebucket.oss-cn-hangzhou.aliyuncs.com，那么 oss-cn-hangzhou.aliyuncs.com 即为该 bucket 的外网 endpoint。 |
 
 2. 在每个 BE 的 **$BE_HOME/conf/be.conf** 中添加如下配置。
