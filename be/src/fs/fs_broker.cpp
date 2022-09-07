@@ -235,7 +235,7 @@ public:
             return Status::OK();
         }
         Status st = broker_close_writer(_broker, _fd, _timeout_ms);
-        _closed = st.ok();
+        _closed = true;
         return st;
     }
 
