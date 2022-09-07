@@ -1359,7 +1359,7 @@ public class Config extends ConfigBase {
      * Enable full statistics collection
      */
     @ConfField(mutable = true)
-    public static boolean enable_collect_full_statistic = false;
+    public static boolean enable_collect_full_statistic = true;
 
     /**
      * Statistics collection threshold
