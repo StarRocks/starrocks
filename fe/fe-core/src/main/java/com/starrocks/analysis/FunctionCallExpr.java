@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
@@ -440,12 +439,8 @@ public class FunctionCallExpr extends Expr {
 
     @Override
     public int hashCode() {
-        int result = super.hashCode();
-        result = 31 * result + Objects.hashCode(opcode);
-        result = 31 * result + Objects.hashCode(fnName);
-        result = 31 * result + Objects.hashCode(fnParams);
-        result = 31 * result + Objects.hashCode(nondeterministicId);
-        return result;
+        // fnParams contains all information of children Expr. No need to calculate super's hashcode again.
+        return java.util.Objects.hash(type, opcode, fnName, fnParams, nondeterministicId);
     }
 
     /**
