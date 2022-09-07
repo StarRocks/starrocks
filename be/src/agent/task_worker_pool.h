@@ -46,13 +46,9 @@ class TaskWorkerPoolBase {
 public:
     static AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
                                        TTabletInfo* tablet_info);
-    static bool register_task_info(TTaskType::type task_type, int64_t signature);
-    static void remove_task_info(TTaskType::type task_type, int64_t signature);
 
 protected:
     static std::atomic<int64_t> _s_report_version;
-    static std::mutex _s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
-    static std::set<int64_t> _s_task_signatures[TTaskType::type::NUM_TASK_TYPE];
 };
 
 template <class AgentTaskRequest>
@@ -118,20 +114,6 @@ private:
 
     AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
         return std::make_shared<CreateTabletAgentTaskRequest>(task, task.create_tablet_req, recv_time);
-    }
-};
-
-class DropTabletTaskWorkerPool : public TaskWorkerPool<DropTabletAgentTaskRequest> {
-public:
-    DropTabletTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
-        _callback_function = _worker_thread_callback;
-    }
-
-private:
-    static void* _worker_thread_callback(void* arg_this);
-
-    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
-        return std::make_shared<DropTabletAgentTaskRequest>(task, task.drop_tablet_req, recv_time);
     }
 };
 

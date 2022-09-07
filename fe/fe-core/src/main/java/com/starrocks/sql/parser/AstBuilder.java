@@ -86,6 +86,8 @@ import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
@@ -2635,6 +2637,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitCreateRole(StarRocksParser.CreateRoleContext context) {
         Identifier role = (Identifier) visit(context.identifierOrString());
         return new CreateRoleStmt(role.getValue());
+    }
+
+    @Override
+    public ParseNode visitShowRolesStatement(StarRocksParser.ShowRolesStatementContext context) {
+        return new ShowRolesStmt();
     }
 
     @Override

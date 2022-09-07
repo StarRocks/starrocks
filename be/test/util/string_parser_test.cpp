@@ -26,6 +26,7 @@
 #include <boost/lexical_cast.hpp>
 #include <cstdint>
 #include <cstdio>
+#include <random>
 #include <string>
 
 #include "util/logging.h"
@@ -100,7 +101,8 @@ void test_float_value(const std::string& s, StringParser::ParseResult exp_result
     T val = StringParser::string_to_float<T>(s.data(), s.length(), &result);
     EXPECT_EQ(exp_result, result);
 
-    if (exp_result == StringParser::PARSE_SUCCESS && result == exp_result) {
+    if ((exp_result == StringParser::PARSE_SUCCESS || exp_result == StringParser::PARSE_OVERFLOW) &&
+        result == exp_result) {
         T exp_val = strtod(s.c_str(), NULL);
         EXPECT_EQ(exp_val, val);
     }
@@ -442,14 +444,25 @@ TEST(StringToFloat, Basic) {
     test_all_float_variants("1.7E-294", StringParser::PARSE_SUCCESS);
 
     // Min/max values.
-    std::string float_min = boost::lexical_cast<std::string>(std::numeric_limits<float>::lowest());
+    std::string float_lowest = boost::lexical_cast<std::string>(std::numeric_limits<float>::lowest());
     std::string float_max = boost::lexical_cast<std::string>(std::numeric_limits<float>::max());
-    test_float_value<float>(float_min, StringParser::PARSE_SUCCESS);
+    test_float_value<float>(float_lowest, StringParser::PARSE_SUCCESS);
     test_float_value<float>(float_max, StringParser::PARSE_SUCCESS);
-    std::string double_min = boost::lexical_cast<std::string>(std::numeric_limits<double>::lowest());
+    std::string double_lowest = boost::lexical_cast<std::string>(std::numeric_limits<double>::lowest());
     std::string double_max = boost::lexical_cast<std::string>(std::numeric_limits<double>::max());
-    test_float_value<double>(double_min, StringParser::PARSE_SUCCESS);
+    test_float_value<double>(double_lowest, StringParser::PARSE_SUCCESS);
     test_float_value<double>(double_max, StringParser::PARSE_SUCCESS);
+    test_float_value<double>("2.97", StringParser::PARSE_SUCCESS);
+    test_float_value<double>("2.78", StringParser::PARSE_SUCCESS);
+    test_float_value<double>("2.72", StringParser::PARSE_SUCCESS);
+    test_float_value<double>("2.53", StringParser::PARSE_SUCCESS);
+    test_float_value<double>("2.47", StringParser::PARSE_SUCCESS);
+    test_float_value<double>("2.28", StringParser::PARSE_SUCCESS);
+    test_float_value<double>("1.93", StringParser::PARSE_SUCCESS);
+    test_float_value<double>("1.91", StringParser::PARSE_SUCCESS);
+    test_float_value<double>("1.86", StringParser::PARSE_SUCCESS);
+    test_float_value<double>("1.84", StringParser::PARSE_SUCCESS);
+    test_float_value<double>("1.82", StringParser::PARSE_SUCCESS);
 
     // Non-finite values
     test_all_float_variants("INFinity", StringParser::PARSE_SUCCESS);
@@ -537,4 +550,22 @@ TEST(StringToFloat, BruteForce) {
     TestFloatBruteForce<double>();
 }
 
+double random_range(double const range_min, double const range_max) {
+    return (range_max - range_min) * ((double)rand() / (double)RAND_MAX) + range_min;
+}
+
+TEST(StringToFloat, Random) {
+    double lower_bound = 0;
+    double upper_bound = 10000;
+    srand(time(0));
+    for (int i = 0; i < 5000; i++) {
+        double random_double = random_range(lower_bound, upper_bound);
+
+        std::stringstream str;
+        str << random_double;
+        std::string buffer = str.str();
+
+        test_float_value<double>(buffer, StringParser::PARSE_SUCCESS);
+    }
+}
 } // end namespace starrocks

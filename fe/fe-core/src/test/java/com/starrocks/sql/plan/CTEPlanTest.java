@@ -179,10 +179,10 @@ public class CTEPlanTest extends PlanTestBase {
         String sql = "with xx as (select * from t0) " +
                 "select x1.v1 from xx x1 join xx x2 on x1.v2=x2.v3 where x1.v3 = 4 and x2.v2=3;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+        assertContains(plan, "  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: (2: v2 = 3) OR (3: v3 = 4)"));
+                "     PREDICATES: (2: v2 = 3) OR (3: v3 = 4)");
     }
 
     @Test
@@ -205,7 +205,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "(select * from xx where xx.v2 = 2 limit 1) x1 join " +
                 "(select * from xx where xx.v3 = 4 limit 3) x2 on x1.v2=x2.v3;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+        assertContains(plan, "  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: (3: v3 = 4) OR (2: v2 = 2)\n" +
@@ -216,7 +216,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "     cardinality=0\n" +
                 "     avgRowSize=24.0\n" +
                 "     numNodes=0\n" +
-                "     limit: 3"));
+                "     limit: 3");
     }
 
     @Test
@@ -349,8 +349,8 @@ public class CTEPlanTest extends PlanTestBase {
                 "  ) as count \n" +
                 "FROM (SELECT t1.v4 FROM t1) t1";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  33:Project\n" +
-                "  |  <slot 12> : CAST((7: expr) AND (CASE WHEN (16: countRows IS NULL) OR (16: countRows = 0) " +
+        assertContains(plan, "33:Project\n" +
+                "  |  <slot 4> : CAST((8: expr) AND (CASE WHEN (16: countRows IS NULL) OR (16: countRows = 0) " +
                 "THEN FALSE WHEN CAST(CAST(1: v4 AS FLOAT) AS DOUBLE) IS NULL THEN NULL WHEN 14: cast IS NOT NULL " +
                 "THEN TRUE WHEN 17: countNotNulls < 16: countRows THEN NULL ELSE FALSE END) AS INT)\n");
     }
@@ -361,9 +361,9 @@ public class CTEPlanTest extends PlanTestBase {
                 "FROM t1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "16:Project\n" +
-                "  |  <slot 8> : CASE WHEN (11: countRows IS NULL) OR (11: countRows = 0) " +
+                "  |  <slot 4> : CASE WHEN (11: countRows IS NULL) OR (11: countRows = 0) " +
                 "THEN FALSE WHEN 1: v4 IS NULL THEN NULL WHEN 9: v1 IS NOT NULL " +
-                "THEN TRUE WHEN 12: countNotNulls < 11: countRows THEN NULL ELSE FALSE END IS NULL");
+                "THEN TRUE WHEN 12: countNotNulls < 11: countRows THEN NULL ELSE FALSE END IS NULL\n");
     }
 
     @Test

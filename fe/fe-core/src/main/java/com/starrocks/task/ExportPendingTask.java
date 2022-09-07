@@ -117,6 +117,7 @@ public class ExportPendingTask extends LeaderTask {
                 if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
                     return Status.CANCELLED;
                 }
+                this.job.setBeStartTime(backendId, backend.getLastStartTime());
                 Status status;
                 if (job.exportLakeTable()) {
                     status = lockTabletMetadata(internalScanRange, backend);

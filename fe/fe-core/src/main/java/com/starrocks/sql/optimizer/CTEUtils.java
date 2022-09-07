@@ -23,6 +23,27 @@ public class CTEUtils {
         collectCteConsume(memo.getRootGroup(), context);
     }
 
+    public static void collectCteOperators(OptExpression anchor, OptimizerContext context) {
+        context.getCteContext().reset();
+        collectCteProduce(anchor, context);
+        collectCteConsume(anchor, context);
+    }
+
+    /*
+     * Estimate the complexity of the produce plan
+     * */
+    private static void collectCteProduce(OptExpression root, OptimizerContext context) {
+        for (OptExpression child : root.getInputs()) {
+            collectCteProduce(child, context);
+        }
+
+        if (OperatorType.LOGICAL_CTE_PRODUCE.equals(root.getOp().getOpType())) {
+            // produce
+            LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) root.getOp();
+            context.getCteContext().addCTEProduce(produce.getCteId());
+        }
+    }
+
     /*
      * Estimate the complexity of the produce plan
      * */
@@ -37,6 +58,14 @@ public class CTEUtils {
             // produce
             LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) expression.getOp();
             context.getCteContext().addCTEProduce(produce.getCteId());
+        }
+    }
+
+    private static void collectCteConsume(OptExpression root, OptimizerContext context) {
+        for (Integer cteId : context.getCteContext().getAllCTEProduce()) {
+            OptExpression anchor = findCteAnchor(root, cteId);
+            Preconditions.checkNotNull(anchor);
+            collectCteConsumeImpl(anchor, cteId, context);
         }
     }
 
@@ -63,6 +92,47 @@ public class CTEUtils {
             expression.getInputs().forEach(queue::addLast);
         }
         return null;
+    }
+
+    private static OptExpression findCteAnchor(OptExpression root, Integer cteId) {
+        LinkedList<OptExpression> queue = Lists.newLinkedList();
+        queue.addLast(root);
+
+        while (!queue.isEmpty()) {
+            OptExpression expression = queue.pollFirst();
+            if (OperatorType.LOGICAL_CTE_ANCHOR.equals(expression.getOp().getOpType()) &&
+                    ((LogicalCTEAnchorOperator) expression.getOp()).getCteId() == cteId) {
+                return expression.getInputs().get(1);
+            }
+
+            expression.getInputs().forEach(queue::addLast);
+        }
+        return null;
+    }
+
+    private static void collectCteConsumeImpl(OptExpression root, Integer cteId, OptimizerContext context) {
+        if (OperatorType.LOGICAL_CTE_CONSUME.equals(root.getOp().getOpType())) {
+            if (((LogicalCTEConsumeOperator) root.getOp()).getCteId() != cteId) {
+                // not ask children
+                return;
+            }
+            // consumer
+            LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) root.getOp();
+            context.getCteContext().addCTEConsume(consume.getCteId());
+
+            // required columns
+            ColumnRefSet requiredColumnRef =
+                    context.getCteContext().getRequiredColumns().getOrDefault(consume.getCteId(), new ColumnRefSet());
+            consume.getCteOutputColumnRefMap().values().forEach(requiredColumnRef::union);
+            context.getCteContext().getRequiredColumns().put(consume.getCteId(), requiredColumnRef);
+
+            // not ask children
+            return;
+        }
+
+        for (OptExpression child : root.getInputs()) {
+            collectCteConsumeImpl(child, cteId, context);
+        }
     }
 
     private static void collectCteConsumeImpl(Group root, Integer cteId, OptimizerContext context) {

@@ -47,6 +47,7 @@
 #include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"
+#include "runtime/profile_report_worker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
@@ -58,6 +59,7 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thread_resource_mgr.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
@@ -181,6 +183,34 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _wg_driver_executor =
             new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
     _wg_driver_executor->initialize(_max_executor_threads);
+
+    int connector_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
+    CHECK_GT(connector_num_io_threads, 0) << "pipeline_hdfs_scan_thread_pool_thread_num should greater than 0";
+
+    std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_without_workgroup;
+    RETURN_IF_ERROR(ThreadPoolBuilder("con_scan_io")
+                            .set_min_threads(0)
+                            .set_max_threads(connector_num_io_threads)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&connector_scan_worker_thread_pool_without_workgroup));
+    _connector_scan_executor_without_workgroup = new workgroup::ScanExecutor(
+            std::move(connector_scan_worker_thread_pool_without_workgroup),
+            std::make_unique<workgroup::PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size));
+    _connector_scan_executor_without_workgroup->initialize(connector_num_io_threads);
+
+    std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_with_workgroup;
+    RETURN_IF_ERROR(ThreadPoolBuilder("con_wg_scan_io")
+                            .set_min_threads(0)
+                            .set_max_threads(connector_num_io_threads)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&connector_scan_worker_thread_pool_with_workgroup));
+    _connector_scan_executor_with_workgroup =
+            new workgroup::ScanExecutor(std::move(connector_scan_worker_thread_pool_with_workgroup),
+                                        std::make_unique<workgroup::WorkGroupScanTaskQueue>());
+    _connector_scan_executor_with_workgroup->initialize(connector_num_io_threads);
+
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
     _load_path_mgr = new LoadPathMgr(this);
@@ -197,6 +227,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _runtime_filter_worker = new RuntimeFilterWorker(this);
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
+    _profile_report_worker = new ProfileReportWorker(this);
 
     _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
@@ -231,33 +262,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                 new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_with_workgroup),
                                             std::make_unique<workgroup::WorkGroupScanTaskQueue>());
         _scan_executor_with_workgroup->initialize(num_io_threads);
-
-        int connector_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
-        CHECK_GT(connector_num_io_threads, 0) << "pipeline_hdfs_scan_thread_pool_thread_num should greater than 0";
-
-        std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_without_workgroup;
-        RETURN_IF_ERROR(ThreadPoolBuilder("con_scan_io")
-                                .set_min_threads(0)
-                                .set_max_threads(connector_num_io_threads)
-                                .set_max_queue_size(1000)
-                                .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                                .build(&connector_scan_worker_thread_pool_without_workgroup));
-        _connector_scan_executor_without_workgroup = new workgroup::ScanExecutor(
-                std::move(connector_scan_worker_thread_pool_without_workgroup),
-                std::make_unique<workgroup::PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size));
-        _connector_scan_executor_without_workgroup->initialize(connector_num_io_threads);
-
-        std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_with_workgroup;
-        RETURN_IF_ERROR(ThreadPoolBuilder("con_wg_scan_io")
-                                .set_min_threads(0)
-                                .set_max_threads(connector_num_io_threads)
-                                .set_max_queue_size(1000)
-                                .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                                .build(&connector_scan_worker_thread_pool_with_workgroup));
-        _connector_scan_executor_with_workgroup =
-                new workgroup::ScanExecutor(std::move(connector_scan_worker_thread_pool_with_workgroup),
-                                            std::make_unique<workgroup::WorkGroupScanTaskQueue>());
-        _connector_scan_executor_with_workgroup->initialize(connector_num_io_threads);
 
         Status status = _load_path_mgr->init();
         if (!status.ok()) {
@@ -384,6 +388,10 @@ void ExecEnv::_destroy() {
     if (_runtime_filter_worker) {
         delete _runtime_filter_worker;
         _runtime_filter_worker = nullptr;
+    }
+    if (_profile_report_worker) {
+        delete _profile_report_worker;
+        _profile_report_worker = nullptr;
     }
     if (_heartbeat_flags) {
         delete _heartbeat_flags;

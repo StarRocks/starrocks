@@ -30,6 +30,7 @@
 #include "agent/agent_common.h"
 #include "agent/finish_task.h"
 #include "agent/master_info.h"
+#include "agent/task_singatures_manager.h"
 #include "common/status.h"
 #include "engine_storage_migration_task.h"
 #include "fs/fs.h"
@@ -134,7 +135,7 @@ void run_clone_task(std::shared_ptr<CloneAgentTaskRequest> agent_task_req) {
     finish_task_request.__set_task_status(task_status);
 
     finish_task(finish_task_request);
-    TaskWorkerPoolBase::remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
 EngineCloneTask::EngineCloneTask(MemTracker* mem_tracker, const TCloneReq& clone_req, int64_t signature,

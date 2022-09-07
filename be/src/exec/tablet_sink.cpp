@@ -285,8 +285,8 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
         if (use_compression_pool(_compress_codec->type())) {
             Slice compressed_slice;
             Slice input(dst->data());
-            _compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
-                                      &_compression_scratch);
+            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
+                                                      &_compression_scratch));
         } else {
             int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
@@ -297,7 +297,7 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
             Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
 
             Slice input(dst->data());
-            _compress_codec->compress(input, &compressed_slice);
+            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice));
             _compression_scratch.resize(compressed_slice.size);
         }
 
@@ -994,10 +994,13 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
     size_t serialize_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
     // update incrementally so that FE can get the progress.
     // the real 'num_rows_load_total' will be set when sink being closed.
-    state->update_num_rows_load_total(num_rows);
-    state->update_num_bytes_load_total(serialize_size);
-    StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
-    StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
+    const TQueryOptions& query_options = state->query_options();
+    if (!query_options.__isset.load_job_type || query_options.load_job_type == TLoadJobType::INSERT_VALUES) {
+        state->update_num_rows_load_total(num_rows);
+        state->update_num_bytes_load_total(serialize_size);
+        StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
+        StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
+    }
 
     {
         SCOPED_RAW_TIMER(&_convert_batch_ns);

@@ -2,6 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
@@ -101,7 +102,8 @@ public class ExpressionAnalyzer {
     private boolean isHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
             // expand this in the future.
-            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP)) {
+            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)) {
                 return true;
             } else if (((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.TRANSFORM)) {
                 // transform just a alias of array_map
@@ -110,6 +112,24 @@ public class ExpressionAnalyzer {
             }
         }
         return false;
+    }
+
+    private Expr rewriteHighOrderFunction(Expr expr) {
+        Preconditions.checkState(expr instanceof FunctionCallExpr);
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+        if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)
+                && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
+            // array_filter(lambda_func_expr, arr1...) -> array_filter(arr1, array_map(lambda_func_expr, arr1...))
+            FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
+                    Lists.newArrayList(functionCallExpr.getChildren()));
+            arrayMap.setType(Type.BOOLEAN);
+            Expr arr1 = functionCallExpr.getChild(1);
+            functionCallExpr.clearChildren();
+            functionCallExpr.addChild(arr1);
+            functionCallExpr.addChild(arrayMap);
+            return arrayMap;
+        }
+        return null;
     }
 
     // only high-order functions can use lambda functions.
@@ -141,6 +161,10 @@ public class ExpressionAnalyzer {
         }
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
+        Expr res = rewriteHighOrderFunction(expression);
+        if (res != null) {
+            visitor.visit(res, scope);
+        }
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {

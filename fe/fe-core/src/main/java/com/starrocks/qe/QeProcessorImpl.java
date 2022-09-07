@@ -24,6 +24,8 @@ package com.starrocks.qe;
 import com.google.common.collect.Maps;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.thrift.TBatchReportExecStatusParams;
+import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
@@ -33,6 +35,7 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Iterator;
 import java.util.Map;
 
 public final class QeProcessorImpl implements QeProcessor {
@@ -133,6 +136,47 @@ public final class QeProcessorImpl implements QeProcessor {
         }
         result.setStatus(new TStatus(TStatusCode.OK));
         return result;
+    }
+
+    @Override
+    public TBatchReportExecStatusResult batchReportExecStatus(TBatchReportExecStatusParams paramsList, TNetworkAddress beAddr) {
+        TBatchReportExecStatusResult resultList = new TBatchReportExecStatusResult();
+        Iterator<TReportExecStatusParams> iters = paramsList.getParams_listIterator();
+        while (iters.hasNext()) {
+            TReportExecStatusParams params = iters.next();
+            if (LOG.isDebugEnabled() && params.isSetProfile()) {
+                LOG.debug("ReportExecStatus(): fragment_instance_id={}, query_id={}, backend num: {}, ip: {}",
+                        DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id),
+                        params.backend_num, beAddr);
+                LOG.debug("params: {}", params);
+            }
+            TReportExecStatusResult result = new TReportExecStatusResult();
+            final QueryInfo info = coordinatorMap.get(params.query_id);
+            if (info == null) {
+                LOG.info("ReportExecStatus() failed, query does not exist, fragment_instance_id={}, query_id={},",
+                        DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
+                result.setStatus(new TStatus(TStatusCode.NOT_FOUND));
+                result.status.addToError_msgs("query id " + DebugUtil.printId(params.query_id) + " not found");
+                resultList.addToStatus_list(result.getStatus());
+                continue;
+            }
+            try {
+                info.getCoord().updateFragmentExecStatus(params);
+            } catch (Exception e) {
+                LOG.warn("ReportExecStatus() failed, fragment_instance_id={}, query_id={}, error: {}",
+                        DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id),
+                        e.getMessage());
+                LOG.warn("stack:", e);
+                result.setStatus(new TStatus(TStatusCode.INTERNAL_ERROR));
+                result.status.addToError_msgs(e.getMessage());
+                resultList.addToStatus_list(result.getStatus());
+                continue;
+            }
+            result.setStatus(new TStatus(TStatusCode.OK));
+            resultList.addToStatus_list(result.getStatus());
+        }
+
+        return resultList;
     }
 
     public static final class QueryInfo {

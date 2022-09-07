@@ -7,18 +7,13 @@
 - kangkaisen
 
 ### Committers
-- amber-create
 - Astralidea
 - caneGuy
 - choury
 - decster
 - dirtysalt
-- EsoragotoSpirit
-- evelynzhaojie
-- femiiii
 - gengjun-git
 - HangyuanLiu
-- hellolilyliuyi
 - liuyehcf
 - meegoo
 - mofeiatwork
@@ -33,6 +28,7 @@
 
 ### Active Contributors
 - aaawuanjun
+- amber-create
 - ABingHuang
 - adzfolc
 - blackstar-baba
@@ -43,6 +39,9 @@
 - dixingxing0
 - dq1201
 - DorianZheng
+- EsoragotoSpirit
+- evelynzhaojie
+- femiii
 - Gri-ffin
 - harui7890
 - hffariel

@@ -1369,6 +1369,15 @@ public class PlanTestBase {
         }
     }
 
+    protected void assertExceptionMessage(String sql, String message) {
+        try {
+            getFragmentPlan(sql);
+            throw new Error();
+        } catch (Exception e) {
+            Assert.assertEquals(message, e.getMessage());
+        }
+    }
+
     public Table getTable(String t) {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         return globalStateMgr.getDb("test").getTable(t);

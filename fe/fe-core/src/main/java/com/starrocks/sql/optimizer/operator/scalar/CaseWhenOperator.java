@@ -25,6 +25,14 @@ public class CaseWhenOperator extends CallOperator {
         this.whenEnd = other.whenEnd;
     }
 
+    public CaseWhenOperator(Type returnType, CaseWhenOperator other) {
+        super("CaseWhen", returnType, other.arguments);
+        this.hasCase = other.hasCase;
+        this.hasElse = other.hasElse;
+        this.whenStart = other.whenStart;
+        this.whenEnd = other.whenEnd;
+    }
+
     public CaseWhenOperator(Type returnType, ScalarOperator caseClause, ScalarOperator elseClause,
                             List<ScalarOperator> whenThenClauses) {
         super("CaseWhen", returnType, Lists.newArrayList());
