@@ -30,14 +30,21 @@
 
 namespace starrocks {
 
+BloomFilterIndexReader::BloomFilterIndexReader() {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(), sizeof(BloomFilterIndexReader));
+}
+
+BloomFilterIndexReader::~BloomFilterIndexReader() {
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(), _mem_usage());
+}
+
 StatusOr<bool> BloomFilterIndexReader::load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                                            bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker) {
+                                            bool use_page_cache, bool kept_in_memory) {
     return success_once(_load_once, [&]() {
-        size_t old_mem_usage = mem_usage();
         Status st = _do_load(fs, filename, meta, use_page_cache, kept_in_memory);
         if (st.ok()) {
-            size_t new_mem_usage = mem_usage();
-            MEM_TRACKER_SAFE_CONSUME(mem_tracker, new_mem_usage - old_mem_usage);
+            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+                                     _mem_usage() - sizeof(BloomFilterIndexReader));
         } else {
             _reset();
         }
@@ -83,7 +90,7 @@ Status BloomFilterIndexIterator::read_bloom_filter(rowid_t ordinal, std::unique_
     DCHECK(num_to_read == num_read);
     // construct bloom filter
     BloomFilter::create(_reader->_algorithm, bf);
-    const Slice* value_ptr = reinterpret_cast<const Slice*>(block.data());
+    const auto* value_ptr = reinterpret_cast<const Slice*>(block.data());
     RETURN_IF_ERROR((*bf)->init(value_ptr->data, value_ptr->size, _reader->_hash_strategy));
     _pool->clear();
     return Status::OK();

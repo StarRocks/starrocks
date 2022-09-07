@@ -23,22 +23,22 @@
 
 #include <algorithm>
 #include <bitset>
-#include <cstddef> // for size_t
-#include <cstdint> // for uint32_t
-#include <memory>  // for unique_ptr
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <utility>
 
 #include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/statusor.h"    // for Status
-#include "gen_cpp/segment.pb.h" // for ColumnMetaPB
+#include "common/statusor.h"
+#include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "storage/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/common.h"
-#include "storage/rowset/ordinal_page_index.h" // for OrdinalPageIndexIterator
+#include "storage/rowset/ordinal_page_index.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/zone_map_index.h"
@@ -151,8 +151,6 @@ public:
 private:
     const std::string& file_name() const { return _segment->file_name(); }
 
-    MemTracker* mem_tracker() const { return _segment->mem_tracker(); }
-
     FileSystem* file_system() const { return _segment->file_system(); }
 
     bool keep_in_memory() const { return _segment->keep_in_memory(); }
@@ -211,7 +209,7 @@ private:
     // so here we just use a normal pointer
     const Segment* _segment = nullptr;
 
-    uint8_t _flags;
+    uint8_t _flags = 0;
 };
 
 } // namespace starrocks
