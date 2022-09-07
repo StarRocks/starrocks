@@ -1,6 +1,14 @@
 # Deploy a Compute Node
 
-A Compute Node (CN) is responsible for SQL execution. It helps improve the computing capacity of a StarRocks cluster. This topic describes how to configure and deploy a CN node. You can add multiple CN nodes by repeating the following steps.
+A Compute Node (CN) is responsible for part of the execution plan. It can help improve the computing capacity of a StarRocks cluster. This topic describes how to configure and deploy a CN node. You can add multiple CN nodes by repeating the following steps.
+
+## Principle
+
+The life cycle of SQL statements in StarRocks can be divided into three phases: query parsing, planning, and execution. CN takes some or all of the computation tasks in the execution phase. Its working processing is as follows: firstly, FE distributes the parsed SQL statements into logical execution units, and then splits them into physical execution units according to the data distribution and operator types, and assigns them to BEs and CNs.
+
+In the execution phase, BEs perform the computation tasks before data shuffle, and write data to and read data from disks. CNs receive data from BEs after data is shuffled, perform some computation tasks (e.g. JOIN), and return the computation results to FE.
+
+In addition, to query data from external data source (e.g., HDFS, AWS S3), FE assigns the execution plan to CNs. CNs directly access external data source and perform all computation tasks, and finally returns the computation results to FE.
 
 ## Download and decompress the installer
 
