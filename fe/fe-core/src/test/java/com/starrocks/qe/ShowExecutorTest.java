@@ -27,16 +27,8 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.HelpStmt;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.ShowAuthorStmt;
-import com.starrocks.analysis.ShowBackendsStmt;
-import com.starrocks.analysis.ShowDbStmt;
-import com.starrocks.analysis.ShowEnginesStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowPartitionsStmt;
-import com.starrocks.analysis.ShowProcedureStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
-import com.starrocks.analysis.ShowUserStmt;
-import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -66,10 +58,18 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.ShowAuthorStmt;
+import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.ShowEnginesStmt;
+import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowProcedureStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
+import com.starrocks.sql.ast.ShowUserStmt;
+import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
@@ -374,7 +374,7 @@ public class ShowExecutorTest {
         new MockUp<SystemInfoService>() {
             @Mock
             public List<Long> getAvailableBackendIds() {
-                return Arrays.asList(10001L, 10002L, 10003L);       
+                return Arrays.asList(10001L, 10002L, 10003L);
             }
         };
         // Prepare to Test
@@ -570,7 +570,7 @@ public class ShowExecutorTest {
         ctx.setQualifiedUser("testUser");
 
         ShowColumnStmt stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show columns from testTbl in testDb",
-                ctx.getSessionVariable().getSqlMode()).get(0);
+                ctx.getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -585,7 +585,7 @@ public class ShowExecutorTest {
 
         // verbose
         stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb",
-                ctx.getSessionVariable().getSqlMode()).get(0);
+                ctx.getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         executor = new ShowExecutor(ctx, stmt);

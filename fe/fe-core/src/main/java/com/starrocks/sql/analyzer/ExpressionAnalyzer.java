@@ -2,6 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
@@ -31,6 +32,7 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SlotRef;
@@ -56,8 +58,11 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.LambdaArgument;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -65,7 +70,9 @@ import com.starrocks.sql.parser.ParsingException;
 
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
@@ -92,11 +99,82 @@ public class ExpressionAnalyzer {
         bottomUpAnalyze(visitor, expression, scope);
     }
 
-    private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
-        for (Expr expr : expression.getChildren()) {
-            bottomUpAnalyze(visitor, expr, scope);
+    private boolean isHighOrderFunction(Expr expr) {
+        if (expr instanceof FunctionCallExpr) {
+            // expand this in the future.
+            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)) {
+                return true;
+            } else if (((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.TRANSFORM)) {
+                // transform just a alias of array_map
+                ((FunctionCallExpr) expr).resetFnName("", FunctionSet.ARRAY_MAP);
+                return true;
+            }
         }
+        return false;
+    }
 
+    private Expr rewriteHighOrderFunction(Expr expr) {
+        Preconditions.checkState(expr instanceof FunctionCallExpr);
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+        if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)
+                && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
+            // array_filter(lambda_func_expr, arr1...) -> array_filter(arr1, array_map(lambda_func_expr, arr1...))
+            FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
+                    Lists.newArrayList(functionCallExpr.getChildren()));
+            arrayMap.setType(Type.BOOLEAN);
+            Expr arr1 = functionCallExpr.getChild(1);
+            functionCallExpr.clearChildren();
+            functionCallExpr.addChild(arr1);
+            functionCallExpr.addChild(arrayMap);
+            return arrayMap;
+        }
+        return null;
+    }
+
+    // only high-order functions can use lambda functions.
+    void analyzeHighOrderFunction(Visitor visitor, Expr expression, Scope scope) {
+        if (!isHighOrderFunction(expression)) {
+            throw new SemanticException("Lambda Functions can only be used in supported high-order functions.");
+        }
+        int childSize = expression.getChildren().size();
+        // move the lambda function to the first if it is at the last.
+        if (expression.getChild(childSize - 1) instanceof LambdaFunctionExpr) {
+            Expr last = expression.getChild(childSize - 1);
+            for (int i = childSize - 1; i > 0; i--) {
+                expression.setChild(i, expression.getChild(i - 1));
+            }
+            expression.setChild(0, last);
+        }
+        // the first child is lambdaFunction, following input arrays
+        for (int i = 1; i < childSize; ++i) {
+            Expr expr = expression.getChild(i);
+            bottomUpAnalyze(visitor, expr, scope);
+            if (expr instanceof NullLiteral) {
+                expr.setType(Type.ARRAY_INT); // Let it have item type.
+            }
+            if (!expr.getType().isArrayType()) {
+                throw new SemanticException("Lambda inputs should be arrays.");
+            }
+            Type itemType = ((ArrayType) expr.getType()).getItemType();
+            scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
+        }
+        // visit LambdaFunction
+        visitor.visit(expression.getChild(0), scope);
+        Expr res = rewriteHighOrderFunction(expression);
+        if (res != null) {
+            visitor.visit(res, scope);
+        }
+    }
+
+    private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
+        if (expression.hasLambdaFunction()) {
+            analyzeHighOrderFunction(visitor, expression, scope);
+        } else {
+            for (Expr expr : expression.getChildren()) {
+                bottomUpAnalyze(visitor, expr, scope);
+            }
+        }
         visitor.visit(expression, scope);
     }
 
@@ -212,6 +290,37 @@ public class ExpressionAnalyzer {
                         "-> operator could only be used for json column, but got " + item.getType());
             }
             node.setType(Type.JSON);
+            return null;
+        }
+
+        @Override
+        public Void visitLambdaFunctionExpr(LambdaFunctionExpr node, Scope scope) {
+            if (scope.getLambdaInputs().size() == 0) {
+                throw new SemanticException("Lambda Functions can only be used in high-order functions with arrays.");
+            }
+            if (scope.getLambdaInputs().size() != node.getChildren().size() - 1) {
+                throw new SemanticException("Lambda arguments should equal to lambda input arrays.");
+            }
+            // process lambda arguments
+            Set<String> set = new HashSet<>();
+            List<LambdaArgument> args = Lists.newArrayList();
+            for (int i = 1; i < node.getChildren().size(); ++i) {
+                args.add((LambdaArgument) node.getChild(i));
+                String name = ((LambdaArgument) node.getChild(i)).getName();
+                if (set.contains(name)) {
+                    throw new SemanticException("Lambda argument: " + name + " is duplicated.");
+                }
+                set.add(name);
+                // bind argument with input arrays' data type and nullable info
+                ((LambdaArgument) node.getChild(i)).setNullable(scope.getLambdaInputs().get(i - 1).isNullable());
+                node.getChild(i).setType(scope.getLambdaInputs().get(i - 1).getType());
+            }
+
+            // construct a new scope to analyze the lambda function
+            Scope lambdaScope = new Scope(args, scope);
+            ExpressionAnalyzer.analyzeExpression(node.getChild(0), this.analyzeState, lambdaScope, this.session);
+            node.setType(Type.FUNCTION);
+            scope.clearLambdaInputs();
             return null;
         }
 
@@ -637,7 +746,8 @@ public class ExpressionAnalyzer {
                     new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
                             com.google.common.collect.Lists.newArrayList());
 
-            ScalarOperator format = SqlToScalarOperatorTranslator.translate(node.getChild(1), expressionMapping);
+            ScalarOperator format = SqlToScalarOperatorTranslator.translate(node.getChild(1), expressionMapping,
+                    new ColumnRefFactory());
             if (format.isConstantRef() && !HAS_TIME_PART.matcher(format.toString()).matches()) {
                 return Expr.getBuiltinFunction("str2date", argumentTypes,
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

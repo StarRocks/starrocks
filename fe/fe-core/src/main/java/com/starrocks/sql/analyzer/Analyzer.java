@@ -2,17 +2,14 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AlterResourceStmt;
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.CreateResourceStmt;
+import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LoadStmt;
@@ -21,12 +18,7 @@ import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
-import com.starrocks.analysis.ShowAuthenticationStmt;
-import com.starrocks.analysis.ShowBackupStmt;
-import com.starrocks.analysis.ShowDynamicPartitionStmt;
-import com.starrocks.analysis.ShowResourcesStmt;
 import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.UpdateStmt;
@@ -46,6 +38,8 @@ import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
@@ -59,12 +53,14 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
+import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
@@ -77,9 +73,14 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.sql.ast.ShowResourcesStmt;
+import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 
@@ -206,21 +207,25 @@ public class Analyzer {
             statement.analyze();
             return null;
         }
+
         @Override
         public Void visitCreateResourceStatement(CreateResourceStmt stmt, ConnectContext session) {
             ResourceAnalyzer.analyze(stmt, session);
             return null;
         }
+
         @Override
         public Void visitDropResourceStatement(DropResourceStmt stmt, ConnectContext session) {
             ResourceAnalyzer.analyze(stmt, session);
             return null;
         }
+
         @Override
         public Void visitAlterResourceStatement(AlterResourceStmt stmt, ConnectContext session) {
             ResourceAnalyzer.analyze(stmt, session);
             return null;
         }
+
         @Override
         public Void visitShowResourceStatement(ShowResourcesStmt stmt, ConnectContext session) {
             ResourceAnalyzer.analyze(stmt, session);
@@ -301,6 +306,12 @@ public class Analyzer {
 
         @Override
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
+            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }

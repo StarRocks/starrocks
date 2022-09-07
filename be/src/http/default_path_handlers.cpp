@@ -38,7 +38,6 @@
 #include "runtime/mem_tracker.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "util/debug_util.h"
 #include "util/pretty_printer.h"
 
 namespace starrocks {

@@ -919,6 +919,13 @@ build_benchmark() {
     ${BUILD_SYSTEM} install
 }
 
+# fast float
+build_fast_float() {
+    check_if_source_exist $FAST_FLOAT_SOURCE
+    cd $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE
+    cp -r $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE/include $STARROCKS_THIRDPARTY/installed
+}
+
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
 export CPPFLAGS=$CXXFLAGS
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
@@ -964,6 +971,7 @@ build_vpack
 build_opentelemetry
 build_jemalloc
 build_benchmark
+build_fast_float
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

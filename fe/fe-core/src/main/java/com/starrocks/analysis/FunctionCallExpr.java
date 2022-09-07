@@ -87,6 +87,10 @@ public class FunctionCallExpr extends Expr {
         return fnName;
     }
 
+    public void resetFnName(String db, String name) {
+        this.fnName = new FunctionName(db, name);
+    }
+
     // only used restore from readFields.
     private FunctionCallExpr() {
         super();
@@ -211,22 +215,6 @@ public class FunctionCallExpr extends Expr {
             sb.append("DISTINCT ");
         }
         sb.append(Joiner.on(", ").join(childrenToSql())).append(")");
-        return sb.toString();
-    }
-
-    @Override
-    public String toDigestImpl() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(fnName);
-
-        sb.append("(");
-        if (fnParams.isStar()) {
-            sb.append("*");
-        }
-        if (fnParams.isDistinct()) {
-            sb.append("distinct ");
-        }
-        sb.append(Joiner.on(", ").join(childrenToDigest())).append(")");
         return sb.toString();
     }
 

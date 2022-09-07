@@ -22,10 +22,9 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.sql.analyzer.DDLTestBase;
+import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -36,14 +35,6 @@ public class ShowFunctionsStmtTest extends DDLTestBase {
     public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
-    public void testNormal() throws Exception {
-        String originSql = "SHOW FULL BUILTIN FUNCTIONS FROM `testDb1` LIKE '%year%'";
-        StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(originSql, ctx);
-        Assert.assertEquals(originSql, stmt.toSql());
-
-    }
-
-    @Test
     public void testUnsupportFilter() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
         expectedEx.expect(AnalysisException.class);
@@ -52,5 +43,4 @@ public class ShowFunctionsStmtTest extends DDLTestBase {
         String showSQL = "SHOW FULL BUILTIN FUNCTIONS FROM `testDb` where a = 1";
         ShowFunctionsStmt stmt = (ShowFunctionsStmt) UtFrameUtils.parseStmtWithNewParser(showSQL, ctx);
     }
-
 }

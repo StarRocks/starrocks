@@ -18,7 +18,6 @@
 
 #include "Adaptor.hh"
 
-#include <iomanip>
 #include <sstream>
 
 #ifndef HAS_STOLL

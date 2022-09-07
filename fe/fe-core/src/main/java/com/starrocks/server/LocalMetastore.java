@@ -33,27 +33,18 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.staros.proto.CacheInfo;
 import com.staros.proto.ShardStorageInfo;
-import com.starrocks.analysis.AddPartitionClause;
-import com.starrocks.analysis.AddRollupClause;
-import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.ColumnRenameClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.ListPartitionDesc;
 import com.starrocks.analysis.MultiItemListPartitionDesc;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.PartitionDesc;
-import com.starrocks.analysis.PartitionRenameClause;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.RecoverPartitionStmt;
-import com.starrocks.analysis.ReplacePartitionClause;
-import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
@@ -61,7 +52,6 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.CatalogUtils;
@@ -160,25 +150,35 @@ import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.ReplacePartitionClause;
+import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -535,7 +535,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     taskManager.createTask(task, false);
                 }
             }
-            
+
 
             // log
             RecoverInfo recoverInfo = new RecoverInfo(db.getId(), -1L, -1L);
@@ -807,7 +807,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 db.readUnlock();
             }
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(createTableStmt.get(0),
-                    ConnectContext.get().getSessionVariable().getSqlMode()).get(0);
+                    ConnectContext.get().getSessionVariable()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ConnectContext.get());
             if (statementBase instanceof CreateTableStmt) {
                 CreateTableStmt parsedCreateTableStmt = (CreateTableStmt) statementBase;

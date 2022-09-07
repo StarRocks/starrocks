@@ -5,7 +5,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SetUserPropertyStmt;
-import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -21,6 +20,7 @@ import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -166,15 +166,13 @@ public class AnalyzeStmtTest {
                 Lists.newArrayList(10003L),
                 Lists.newArrayList("v1", "v2"), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap());
-        Assert.assertEquals("INSERT INTO column_statistics  SELECT 10004, 10003, 'v1', 10002, 'test.t0', 't0', " +
+        Assert.assertEquals("INSERT INTO column_statistics SELECT 10004, 10003, 'v1', 10002, 'test.t0', 't0', " +
                         "COUNT(1), COUNT(1) * 8, IFNULL(hll_union(hll_hash(`v1`)), hll_empty()), COUNT(1) - COUNT(`v1`), " +
                         "IFNULL(MAX(`v1`), ''), IFNULL(MIN(`v1`), ''), NOW() FROM test.t0 partition t0 " +
-                        "UNION ALL  " +
-                        "SELECT 10004, 10003, 'v2', 10002, 'test.t0', 't0', COUNT(1), COUNT(1) * 8, " +
-                        "IFNULL(hll_union(hll_hash(`v2`)), " +
-                        "hll_empty()), COUNT(1) - COUNT(`v2`), IFNULL(MAX(`v2`), ''), IFNULL(MIN(`v2`), ''), NOW() " +
-                        "FROM test.t0 partition t0 ",
-                collectJob.buildCollectFullStatisticSQL(database, table, partition, Lists.newArrayList("v1", "v2")));
+                        "UNION ALL SELECT 10004, 10003, 'v2', 10002, 'test.t0', 't0', COUNT(1), COUNT(1) * 8, " +
+                        "IFNULL(hll_union(hll_hash(`v2`)), hll_empty()), COUNT(1) - COUNT(`v2`), IFNULL(MAX(`v2`), ''), " +
+                        "IFNULL(MIN(`v2`), ''), NOW() FROM test.t0 partition t0",
+                collectJob.buildCollectSQLList().get(0));
     }
 
     @Test

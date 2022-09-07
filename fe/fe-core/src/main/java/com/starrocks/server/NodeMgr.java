@@ -24,7 +24,6 @@ package com.starrocks.server;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
@@ -49,6 +48,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
@@ -704,8 +704,8 @@ public class NodeMgr {
             unlock();
         }
     }
-    
-    public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException { 
+
+    public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
         String toBeModifyHost = modifyFrontendAddressClause.getSrcHost();
         String fqdn = modifyFrontendAddressClause.getDestHost();
         if (toBeModifyHost.equals(selfNode.first) && role == FrontendNodeType.LEADER) {
@@ -725,7 +725,7 @@ public class NodeMgr {
             // step 2 update the fe information stored in memory
             preUpdateFe.updateHostAndEditLogPort(fqdn, preUpdateFe.getEditLogPort());
             frontends.put(preUpdateFe.getNodeName(), preUpdateFe);
-            
+
             // editLog
             stateMgr.getEditLog().logUpdateFrontend(preUpdateFe);
             LOG.info("send update fe editlog success, fe info is [{}]", preUpdateFe.toString());

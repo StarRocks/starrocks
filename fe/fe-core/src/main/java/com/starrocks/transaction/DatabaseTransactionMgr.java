@@ -77,6 +77,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
+import static java.lang.Long.min;
+
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
  * DatabaseTransactionMgr mainly be responsible for the following content:
@@ -231,6 +233,14 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         return infos;
+    }
+
+    public long getMinActiveTxnId() {
+        long result = Long.MAX_VALUE;
+        for (Long txnId : idToRunningTransactionState.keySet()) {
+            result = min(result, txnId);
+        }
+        return result;
     }
 
     private void getTxnStateInfo(TransactionState txnState, List<String> info) {

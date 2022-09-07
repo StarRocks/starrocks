@@ -22,7 +22,6 @@
 package com.starrocks.mysql.privilege;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateUserStmt;
@@ -49,6 +48,7 @@ import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
@@ -612,7 +612,7 @@ public class AuthTest {
         currentUser2.clear();
         auth.checkPlainPassword("zhangsan", "192.1.1.1", "12345", currentUser2);
         Assert.assertEquals(1, currentUser2.size());
-        Assert.assertTrue(auth.checkTblPriv(currentUser2.get(0),  "db2",
+        Assert.assertTrue(auth.checkTblPriv(currentUser2.get(0), "db2",
                 "tbl2", PrivPredicate.ALTER));
         try {
             auth.revoke(revokeStmt);
@@ -718,32 +718,33 @@ public class AuthTest {
          */
 
         // 23. create admin role, which is not allowed
-        CreateRoleStmt roleStmt = new CreateRoleStmt(Role.ADMIN_ROLE);
+        String createRoleSql = "CREATE ROLE admin";
+        CreateRoleStmt roleStmt = null;
         hasException = false;
         try {
-            roleStmt.analyze(analyzer);
-        } catch (UserException e1) {
+            UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
+        } catch (Exception e1) {
             e1.printStackTrace();
             hasException = true;
         }
         Assert.assertTrue(hasException);
 
         // 23. create operator role, which is not allowed
-        roleStmt = new CreateRoleStmt(Role.OPERATOR_ROLE);
+        createRoleSql = "CREATE ROLE operator";
         hasException = false;
         try {
-            roleStmt.analyze(analyzer);
-        } catch (UserException e1) {
+            UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
+        } catch (Exception e1) {
             e1.printStackTrace();
             hasException = true;
         }
         Assert.assertTrue(hasException);
 
         // 24. create role
-        roleStmt = new CreateRoleStmt("role1");
+        createRoleSql = "CREATE ROLE role1";
         try {
-            roleStmt.analyze(analyzer);
-        } catch (UserException e1) {
+            roleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
+        } catch (Exception e1) {
             e1.printStackTrace();
             Assert.fail();
         }
@@ -1148,9 +1149,9 @@ public class AuthTest {
         Assert.assertEquals(0, auth.getRoleNamesByUser(userIdentity).size());
 
         // 2. add a role with select privilege
-        String selectRoleName = new String("select_role");
-        CreateRoleStmt createRoleStmt = new CreateRoleStmt(selectRoleName);
-        createRoleStmt.analyze(analyzer);
+        String selectRoleName = "select_role";
+        String createRoleSql = String.format("CREATE ROLE %s", selectRoleName);
+        CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
         Assert.assertEquals(false, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
         auth.createRole(createRoleStmt);
         Assert.assertEquals(true, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
@@ -1175,8 +1176,8 @@ public class AuthTest {
 
         // 5. add a new role with load privilege & spark resource usage
         String loadRoleName = "load_role";
-        createRoleStmt = new CreateRoleStmt(loadRoleName);
-        createRoleStmt.analyze(analyzer);
+        createRoleSql = String.format("CREATE ROLE %s", loadRoleName);
+        createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
         auth.createRole(createRoleStmt);
 
         // 6. grant load privilege to role
@@ -1290,11 +1291,12 @@ public class AuthTest {
 
         // ------ grant|revoke resource to|from role ------
         // 1. create role
-        CreateRoleStmt roleStmt = new CreateRoleStmt(role);
+        String createRoleSql = String.format("CREATE ROLE %s", role);
+        CreateRoleStmt roleStmt;
         try {
-            roleStmt.analyze(analyzer);
+            roleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
             auth.createRole(roleStmt);
-        } catch (UserException e1) {
+        } catch (Exception e1) {
             e1.printStackTrace();
             Assert.fail();
         }
@@ -1398,11 +1400,12 @@ public class AuthTest {
 
         // ------ grant|revoke any resource to|from role ------
         // 1. create role
-        roleStmt = new CreateRoleStmt(role);
+        createRoleSql = String.format("CREATE ROLE %s", role);
         try {
+            roleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
             roleStmt.analyze(analyzer);
             auth.createRole(roleStmt);
-        } catch (UserException e1) {
+        } catch (Exception e1) {
             e1.printStackTrace();
             Assert.fail();
         }
@@ -1795,6 +1798,7 @@ public class AuthTest {
     }
 
     private static final Logger LOG = LogManager.getLogger(AuthTest.class);
+
     @Test
     public void testManyUsersAndTables() throws Exception {
         int bigNumber = 500;
@@ -1841,7 +1845,7 @@ public class AuthTest {
             }
         }
         long end = System.currentTimeMillis();
-        LOG.info("add privilege: {} entries, total {} ms",  auth.getTablePrivTable().size(), end - start);
+        LOG.info("add privilege: {} entries, total {} ms", auth.getTablePrivTable().size(), end - start);
 
         start = System.currentTimeMillis();
         for (int i = 0; i != bigNumber; i++) {
@@ -2027,15 +2031,17 @@ public class AuthTest {
     @Test
     public void testGrantRevokeImpersonate() throws Exception {
         // 1. prepare
-        // 1.1create harry, gregory, albert
+        // 1.1create harry, gregory, albert, neville
         UserIdentity harry = new UserIdentity("Harry", "%");
         harry.analyze();
         UserIdentity gregory = new UserIdentity("Gregory", "%");
         gregory.analyze();
         UserIdentity albert = new UserIdentity("Albert", "%");
         albert.analyze();
+        UserIdentity neville = new UserIdentity("Neville", "%");
+        neville.analyze();
         String createUserSql = "CREATE USER '%s' IDENTIFIED BY '12345'";
-        String[] userNames = {"Harry", "Gregory", "Albert"};
+        String[] userNames = {"Harry", "Gregory", "Albert", "Neville"};
         for (String userName : userNames) {
             CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils
                     .parseStmtWithNewParser(String.format(createUserSql, userName), ctx);
@@ -2073,6 +2079,47 @@ public class AuthTest {
         // 4.2 assert
         Assert.assertFalse(auth.canImpersonate(harry, gregory));
         Assert.assertTrue(auth.canImpersonate(harry, albert));
+
+        // Auror usually has the ability to impersonate to others..
+        // 5.1 create role
+        String auror = "auror";
+        String createRoleSql = String.format("CREATE ROLE %s", auror);
+        CreateRoleStmt roleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
+        auth.createRole(roleStmt);
+        // 5.2 grant impersonate to gregory on role auror
+        grantStmt = new GrantImpersonateStmt(auror, gregory);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+        auth.grantImpersonate(grantStmt);
+        // 5.3 grant auror to neiville
+        GrantRoleStmt grantRoleStmt = new GrantRoleStmt(auror, neville);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantRoleStmt, ctx);
+        auth.grantRole(grantRoleStmt);
+        // 5.4 assert
+        Assert.assertTrue(auth.canImpersonate(neville, gregory));
+
+        // 6. grant impersonate to albert on role auror
+        // 6.1 grant
+        grantStmt = new GrantImpersonateStmt(auror, albert);
+        com.starrocks.sql.analyzer.Analyzer.analyze(grantStmt, ctx);
+        auth.grantImpersonate(grantStmt);
+        // 6.2 assert
+        Assert.assertTrue(auth.canImpersonate(neville, albert));
+
+        // 7. revert impersonate to gregory from role auror
+        // 7.1 revoke
+        revokeStmt = new RevokeImpersonateStmt(auror, gregory);
+        com.starrocks.sql.analyzer.Analyzer.analyze(revokeStmt, ctx);
+        auth.revokeImpersonate(revokeStmt);
+        // 7.2 assert
+        Assert.assertFalse(auth.canImpersonate(neville, gregory));
+
+        // 8. revoke role from neville
+        // 8.2 revoke
+        RevokeRoleStmt revokeRoleStmt = new RevokeRoleStmt(auror, neville);
+        com.starrocks.sql.analyzer.Analyzer.analyze(revokeRoleStmt, ctx);
+        auth.revokeRole(revokeRoleStmt);
+        // 8.2 assert
+        Assert.assertFalse(auth.canImpersonate(neville, albert));
     }
 
     @Test
@@ -2168,6 +2215,7 @@ public class AuthTest {
                     }
                 };
             }
+
             {
                 editLog.logRevokeImpersonate((ImpersonatePrivInfo) any);
                 minTimes = 0;
@@ -2177,6 +2225,7 @@ public class AuthTest {
                     }
                 };
             }
+
             {
                 editLog.logCreateUser((PrivInfo) any);
                 minTimes = 0;
@@ -2184,7 +2233,7 @@ public class AuthTest {
         };
 
         // 1. prepare
-        // 1.1create harry, gregory
+        // 1.1 create harry, gregory
         UserIdentity harry = new UserIdentity("Harry", "%");
         harry.analyze();
         UserIdentity gregory = new UserIdentity("Gregory", "%");

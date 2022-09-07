@@ -2,8 +2,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AlterResourceStmt;
-import com.starrocks.analysis.CreateResourceStmt;
-import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.AnalysisException;
@@ -11,6 +9,8 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.DropResourceStmt;
 
 import java.util.Arrays;
 import java.util.Map;

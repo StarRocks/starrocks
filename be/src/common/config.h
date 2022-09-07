@@ -810,12 +810,19 @@ CONF_Int32(internal_service_async_thread_num, "10");
  * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject
  * to inject error through return random status(except ok).
  */
-CONF_Int32(cardinality_of_inject, "100");
+CONF_Int32(cardinality_of_inject, "10");
 
 /*
  * Config range for inject erros,
  * Specify the source code directory,
  * Split by "," strictly.
  */
-CONF_String(directory_of_inject, "/src/exec,/src/exprs");
+CONF_String(directory_of_inject,
+            "/src/exec/pipeline/hashjoin,/src/exec/pipeline/scan,/src/exec/pipeline/aggregate,/src/exec/pipeline/"
+            "crossjoin,/src/exec/pipeline/sort,/src/exec/pipeline/exchange,/src/exec/pipeline/analysis");
+
+// Used by to_base64
+CONF_Int64(max_length_for_to_base64, "200000");
+// Used by bitmap functions
+CONF_Int64(max_length_for_bitmap_function, "1000000");
 } // namespace starrocks::config

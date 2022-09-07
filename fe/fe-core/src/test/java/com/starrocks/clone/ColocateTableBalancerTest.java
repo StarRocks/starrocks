@@ -28,17 +28,27 @@ import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.HashSet;
@@ -61,8 +71,19 @@ public class ColocateTableBalancerTest {
 
     private Map<Long, Double> mixLoadScores;
 
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+        starRocksAssert.withDatabase("db1").useDatabase("db1")
+                .withTable("CREATE TABLE db1.tbl(id INT NOT NULL) " +
+                        "distributed by hash(`id`) buckets 3 " +
+                        "properties('replication_num' = '1', 'colocate_with' = 'group1');");
+    }
+
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
         backend1 = new Backend(1L, "192.168.1.1", 9050);
         backend2 = new Backend(2L, "192.168.1.2", 9050);
         backend3 = new Backend(3L, "192.168.1.3", 9050);
@@ -517,5 +538,34 @@ public class ColocateTableBalancerTest {
         List<List<Long>> expected = Lists.partition(
                 Lists.newArrayList(5L, 8L, 7L, 8L, 6L, 5L, 6L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L), 3);
         Assert.assertEquals(expected, balancedBackendsPerBucketSeq);
+    }
+
+    @Test
+    public void testMatchGroup() throws Exception {
+        Database database = GlobalStateMgr.getCurrentState().getDb("db1");
+        OlapTable table = (OlapTable) database.getTable("tbl");
+        // add its tablet to TabletScheduler
+        TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
+        for (Partition partition : table.getPartitions()) {
+            MaterializedIndex materializedIndex = partition.getBaseIndex();
+            for (Tablet tablet : materializedIndex.getTablets()) {
+                TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
+                        database.getId(),
+                        table.getId(),
+                        partition.getId(),
+                        materializedIndex.getId(),
+                        tablet.getId(),
+                        System.currentTimeMillis());
+                ctx.setOrigPriority(TabletSchedCtx.Priority.LOW);
+                tabletScheduler.addTablet(ctx, false);
+            }
+        }
+
+        // test if group is unstable when all its tablets are in TabletScheduler
+        long tableId = table.getId();
+        ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
+        colocateTableBalancer.runAfterCatalogReady();
+        GroupId groupId = GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(tableId);
+        Assert.assertTrue(GlobalStateMgr.getCurrentState().getColocateTableIndex().isGroupUnstable(groupId));
     }
 }

@@ -88,6 +88,11 @@ enum TPipelineProfileLevel {
   DETAIL
 }
 
+enum TTabletInternalParallelMode {
+  AUTO,
+  FORCE_SPLIT
+}
+
 // Query options with their respective defaults
 struct TQueryOptions {
   1: optional bool abort_on_error = 0
@@ -173,6 +178,8 @@ struct TQueryOptions {
   61: optional bool enable_query_debug_trace;
 
   62: optional Types.TCompressionType load_transmission_compression_type;
+
+  63: optional TTabletInternalParallelMode tablet_internal_parallel_mode;
 }
 
 

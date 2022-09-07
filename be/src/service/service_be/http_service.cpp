@@ -41,7 +41,6 @@
 #include "http/download_action.h"
 #include "http/ev_http_server.h"
 #include "http/http_method.h"
-#include "http/monitor_action.h"
 #include "http/web_page_handler.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"

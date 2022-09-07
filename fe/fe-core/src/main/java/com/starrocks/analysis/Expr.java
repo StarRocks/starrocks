@@ -37,7 +37,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -246,10 +248,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return opcode;
     }
 
-    public double getSelectivity() {
-        return selectivity;
-    }
-
     public long getNumDistinctValues() {
         return numDistinctValues;
     }
@@ -408,10 +406,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public static Expr compoundAnd(Collection<Expr> conjuncts) {
         return createCompound(CompoundPredicate.Operator.AND, conjuncts);
-    }
-
-    public static Expr compoundOr(Collection<Expr> conjuncts) {
-        return createCompound(CompoundPredicate.Operator.OR, conjuncts);
     }
 
     // Build a compound tree by bottom up
@@ -676,22 +670,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
     }
 
-    public static <C extends Expr> void getIds(List<? extends Expr> exprs, List<TupleId> tupleIds,
-                                               List<SlotId> slotIds) {
-        if (exprs == null) {
-            return;
-        }
-        for (Expr e : exprs) {
-            e.getIds(tupleIds, slotIds);
-        }
-    }
-
     public String toSql() {
         return (printSqlInParens) ? "(" + toSqlImpl() + ")" : toSqlImpl();
-    }
-
-    public String toDigest() {
-        return (printSqlInParens) ? "(" + toDigestImpl() + ")" : toDigestImpl();
     }
 
     public String explain() {
@@ -703,10 +683,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      * instead of toSql() to ensure that parenthesis are properly added around the toSql().
      */
     protected abstract String toSqlImpl();
-
-    protected String toDigestImpl() {
-        return toSqlImpl();
-    }
 
     protected String explainImpl() {
         return toSqlImpl();
@@ -775,14 +751,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         List<String> result = Lists.newArrayList();
         for (Expr child : children) {
             result.add(child.toSql());
-        }
-        return result;
-    }
-
-    public List<String> childrenToDigest() {
-        List<String> result = Lists.newArrayList();
-        for (Expr child : children) {
-            result.add(child.toDigest());
         }
         return result;
     }
@@ -953,19 +921,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return true;
     }
 
-    public boolean isBound(List<SlotId> slotIds) {
-        final List<TupleId> exprTupleIds = Lists.newArrayList();
-        final List<SlotId> exprSlotIds = Lists.newArrayList();
-        getIds(exprTupleIds, exprSlotIds);
-        return !exprSlotIds.retainAll(slotIds);
-    }
-
-    public void getIds(List<TupleId> tupleIds, List<SlotId> slotIds) {
-        for (Expr child : children) {
-            child.getIds(tupleIds, slotIds);
-        }
-    }
-
     /**
      * @return true if this is an instance of LiteralExpr
      */
@@ -1098,31 +1053,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      */
     public Expr ignoreImplicitCast() {
         return this;
-    }
-
-    /**
-     * Cast the operands of a binary operation as necessary,
-     * give their compatible type.
-     * String literals are converted first, to enable casting of the
-     * the other non-string operand.
-     *
-     * @param compatibleType
-     * @return The possibly changed compatibleType
-     * (if a string literal forced casting the other operand)
-     */
-    public Type castBinaryOp(Type compatibleType) throws AnalysisException {
-        Preconditions.checkState(this instanceof BinaryPredicate || this instanceof ArithmeticExpr);
-        Type t1 = getChild(0).getType();
-        Type t2 = getChild(1).getType();
-        // add operand casts
-        Preconditions.checkState(compatibleType.isValid());
-        if (!t1.matchesType(compatibleType)) {
-            castChild(compatibleType, 0);
-        }
-        if (!t2.matchesType(compatibleType)) {
-            castChild(compatibleType, 1);
-        }
-        return compatibleType;
     }
 
     @Override
@@ -1392,6 +1322,30 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public void setFn(Function fn) {
         this.fn = fn;
+    }
+
+    // only the first/last one can be lambda functions.
+    public boolean hasLambdaFunction() {
+        int pos = -1, num = 0;
+        for (int i = 0; i < children.size(); ++i) {
+            if (children.get(i) instanceof LambdaFunctionExpr) {
+                num++;
+                pos = i;
+            }
+        }
+        if (num == 1 && (pos == 0 || pos == children.size() - 1)) {
+            if (children.size() <= 1) {
+                throw new SemanticException("Lambda functions should work with inputs in high-order functions.");
+            }
+            return true;
+        } else if (num > 1) {
+            throw new SemanticException("A high-order function can have one lambda function.");
+        } else if (pos > 0 && pos < children.size() - 1) {
+            throw new SemanticException(
+                    "Lambda functions can only be the first or last argument of any high-order function, " +
+                            "or lambda arguments should be in ().");
+        }
+        return false;
     }
 
     public boolean isSelfMonotonic() {

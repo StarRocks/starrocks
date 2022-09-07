@@ -278,6 +278,7 @@ public class FunctionSet {
     public static final String ARRAY_SORT = "array_sort";
     public static final String ARRAY_SUM = "array_sum";
     public static final String ARRAY_REMOVE = "array_remove";
+    public static final String ARRAY_FILTER = "array_filter";
 
     // Bit functions:
     public static final String BITAND = "bitand";
@@ -370,6 +371,10 @@ public class FunctionSet {
     public static final String HLL_CARDINALITY = "hll_cardinality";
     public static final String DEFAULT_VALUE = "default_value";
     public static final String REPLACE_VALUE = "replace_value";
+
+    // high-order functions related lambda functions
+    public static final String ARRAY_MAP = "array_map";
+    public static final String TRANSFORM = "transform";
 
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
@@ -1026,7 +1031,7 @@ public class FunctionSet {
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion
             // TODO: array/json/pseudo is not supported yet
-            if (t.isNull() || t.isChar() || t.isTime() || t.isArrayType() || t.isJsonType() || t.isPseudoType()) {
+            if (t.isNull() || t.isChar() || t.isTime() || t.isArrayType() || t.isJsonType() || t.isPseudoType() || t.isFunctionType()) {
                 continue;
             }
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
@@ -1144,6 +1149,8 @@ public class FunctionSet {
                     LOGGER.warn("could not determine polymorphic type because input has non-match types");
                     return null;
                 }
+            } else if (declType == Type.FUNCTION) {
+                continue;
             } else {
                 LOGGER.warn("has unhandled pseudo type '{}'", declType);
                 return null;

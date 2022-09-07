@@ -8,7 +8,7 @@ Manually refresh a specific materialized view.
 >
 > You can only manually refresh materialized views that adopt async or manual refresh mode.
 
-## Sytax
+## Syntax
 
 ```SQL
 REFRESH MATERIALIZED VIEW [database.]mv_name
@@ -22,9 +22,9 @@ Parameters in brackets [] is optional.
 | ------------- | ------------ | ------------------------------------------------------ |
 | mv_name       | yes          | The name of the materialized view to refresh manually. |
 
-## Example
+## Examples
 
-### Example 1: Manually refresh a specific materialized view
+Example 1: Manually refresh a specific materialized view
 
 ```Plain
 REFRESH MATERIALIZED VIEW lo_mv1;

@@ -4,7 +4,7 @@
 
 Shows the refresh tasks of the sync refresh materialized views.
 
-## Sytax
+## Syntax
 
 ```SQL
 SHOW ALTER MATERIALIZED VIEW [FROM db_name];
@@ -18,7 +18,7 @@ Parameters in brackets [] is optional.
 | ------------- | ------------ | ------------------------------------------------------------ |
 | db_name       | no           | The name of the database to which the materialized view resides. If this parameter is not specified, the current database is used by default. |
 
-## Return
+## Returns
 
 | **Return**      | **Description**                                  |
 | --------------- | ------------------------------------------------ |
@@ -35,9 +35,9 @@ Parameters in brackets [] is optional.
 | Progress        | Progress of the refresh job.                     |
 | Timeout         | Timeout for the refresh job.                     |
 
-## Example
+## Examples
 
-### Example 1: Show the refresh tasks of the sync refresh materialized views
+Example 1: Show the refresh tasks of the sync refresh materialized views
 
 ```Plain
 MySQL > SHOW ALTER MATERIALIZED VIEW\G

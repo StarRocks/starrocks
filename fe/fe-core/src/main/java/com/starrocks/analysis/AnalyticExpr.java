@@ -374,36 +374,6 @@ public class AnalyticExpr extends Expr {
         return sb.toString();
     }
 
-    @Override
-    public String toDigestImpl() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(fnCall.toDigest()).append(" over (");
-        boolean needsSpace = false;
-        if (!partitionExprs.isEmpty()) {
-            sb.append("partition by ").append(exprListToDigest(partitionExprs));
-            needsSpace = true;
-        }
-        if (!orderByElements.isEmpty()) {
-            List<String> orderByStrings = Lists.newArrayList();
-            for (OrderByElement e : orderByElements) {
-                orderByStrings.add(e.toDigest());
-            }
-            if (needsSpace) {
-                sb.append(" ");
-            }
-            sb.append("order by ").append(Joiner.on(", ").join(orderByStrings));
-            needsSpace = true;
-        }
-        if (window != null) {
-            if (needsSpace) {
-                sb.append(" ");
-            }
-            sb.append(window.toDigest());
-        }
-        sb.append(")");
-        return sb.toString();
-    }
-
     private String exprListToSql(List<? extends Expr> exprs) {
         if (exprs == null || exprs.isEmpty()) {
             return "";
@@ -411,17 +381,6 @@ public class AnalyticExpr extends Expr {
         List<String> strings = Lists.newArrayList();
         for (Expr expr : exprs) {
             strings.add(expr.toSql());
-        }
-        return Joiner.on(", ").join(strings);
-    }
-
-    private String exprListToDigest(List<? extends Expr> exprs) {
-        if (exprs == null || exprs.isEmpty()) {
-            return "";
-        }
-        List<String> strings = Lists.newArrayList();
-        for (Expr expr : exprs) {
-            strings.add(expr.toDigest());
         }
         return Joiner.on(", ").join(strings);
     }

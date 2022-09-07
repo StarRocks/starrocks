@@ -79,6 +79,7 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -106,6 +107,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -545,7 +547,7 @@ public class StmtExecutor {
             List<StatementBase> stmts;
             try {
                 stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt.originStmt,
-                        context.getSessionVariable().getSqlMode());
+                        context.getSessionVariable());
                 parsedStmt = stmts.get(originStmt.idx);
                 parsedStmt.setOrigStmt(originStmt);
             } catch (ParsingException parsingException) {
@@ -1072,11 +1074,22 @@ public class StmtExecutor {
             throw new RuntimeException("not supported table type for insert overwrite");
         }
         OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
-        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
+        InsertOverwriteJob job = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
                 insertStmt, database.getId(), olapTable.getId());
-        insertStmt.setOverwriteJobId(insertOverwriteJob.getJobId());
+        if (!database.writeLockAndCheckExist()) {
+            throw new DmlException("database:%s does not exist.", database.getFullName());
+        }
+        try {
+            // add an edit log
+            CreateInsertOverwriteJobLog info = new CreateInsertOverwriteJobLog(job.getJobId(),
+                    job.getTargetDbId(), job.getTargetTableId(), job.getSourcePartitionIds());
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
+        } finally {
+            database.writeUnlock();
+        }
+        insertStmt.setOverwriteJobId(job.getJobId());
         InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();
-        manager.executeJob(context, this, insertOverwriteJob);
+        manager.executeJob(context, this, job);
     }
 
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
@@ -1222,8 +1235,26 @@ public class StmtExecutor {
             // if in strict mode, insert will fail if there are filtered rows
             if (context.getSessionVariable().getEnableInsertStrict()) {
                 if (filteredRows > 0) {
-                    context.getState().setError("Insert has filtered data in strict mode, tracking_url="
-                            + coord.getTrackingUrl());
+                    if (targetTable instanceof ExternalOlapTable) {
+                        ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                                externalTable.getSourceTableDbId(), transactionId,
+                                externalTable.getSourceTableHost(),
+                                externalTable.getSourceTablePort(),
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE  + ", tracking_url = " 
+                                + coord.getTrackingUrl()
+                        );
+                    } else {
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
+                                database.getId(),
+                                transactionId,
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = " 
+                                + coord.getTrackingUrl()
+                        );
+                    }
+                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " + 
+                            transactionId + " tracking_url = " + coord.getTrackingUrl());
+                    
                     return;
                 }
             }

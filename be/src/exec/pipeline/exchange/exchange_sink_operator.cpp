@@ -13,19 +13,15 @@
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exprs/expr.h"
-#include "gen_cpp/Types_types.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/local_pass_through_buffer.h"
-#include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
 #include "service/brpc.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/compression_utils.h"
-#include "util/debug_util.h"
-#include "util/thrift_client.h"
 
 namespace starrocks::pipeline {
 
@@ -625,8 +621,8 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
         if (use_compression_pool(_compress_codec->type())) {
             Slice compressed_slice;
             Slice input(dst->data());
-            _compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
-                                      &_compression_scratch);
+            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
+                                                      &_compression_scratch));
         } else {
             int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
@@ -637,7 +633,7 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
             Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
 
             Slice input(dst->data());
-            _compress_codec->compress(input, &compressed_slice);
+            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice));
             _compression_scratch.resize(compressed_slice.size);
         }
 

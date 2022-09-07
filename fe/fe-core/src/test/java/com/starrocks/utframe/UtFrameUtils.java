@@ -141,7 +141,7 @@ public class UtFrameUtils {
             ");";
 
     // Help to create a mocked ConnectContext.
-    public static ConnectContext createDefaultCtx() throws IOException {
+    public static ConnectContext createDefaultCtx() {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setQualifiedUser(Auth.ROOT_USER);
@@ -396,7 +396,7 @@ public class UtFrameUtils {
 
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
         StatementBase statementBase =
-                com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())
+                com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable())
                         .get(0);
         Preconditions.checkState(statementBase instanceof QueryStatement);
         QueryStatement queryStmt = (QueryStatement) statementBase;
@@ -551,7 +551,7 @@ public class UtFrameUtils {
         Map<String, Database> dbs = null;
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
-                    connectContext.getSessionVariable().getSqlMode()).get(0);
+                    connectContext.getSessionVariable()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
 
             dbs = AnalyzerUtils.collectAllDatabase(connectContext, statementBase);

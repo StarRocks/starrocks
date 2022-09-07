@@ -96,6 +96,22 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+    public void testCreateRole() throws Exception {
+        starRocksAssert.getCtx().setQualifiedUser("root");
+        starRocksAssert.getCtx().setCurrentUserIdentity(rootUser);
+        String sql = "CREATE ROLE role_test";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertTrue(statementBase.isSupportNewPlanner());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
+    }
+
+    @Test
     public void testAlterUser() throws Exception {
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
@@ -123,6 +139,16 @@ public class PrivilegeCheckerTest {
             auth.replayDropUser(testUser2);
         }
 
+    }
+
+    @Test
+    public void testShowRoles() throws Exception {
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        String sql = "SHOW ROLES";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
     }
 
     @Test
@@ -680,7 +706,8 @@ public class PrivilegeCheckerTest {
         db1TablePattern.analyze();
 
         // Here we hack `create role` statement because it was still in old framework
-        auth.createRole(new CreateRoleStmt("test_role"));
+        String createRoleSql = "CREATE ROLE test_role";
+        auth.createRole((CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSql, starRocksAssert.getCtx()));
 
         String sql = "grant test_role to test;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());

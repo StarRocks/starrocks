@@ -129,7 +129,6 @@ public class SlotRef extends Expr {
     public void setDesc(SlotDescriptor desc) {
         this.desc = desc;
     }
-
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
@@ -205,11 +204,6 @@ public class SlotRef extends Expr {
             return desc.getParent().getRef().getName();
         }
         return tblName;
-    }
-
-    @Override
-    public String toColumnLabel() {
-        return label;
     }
 
     @Override
@@ -291,18 +285,6 @@ public class SlotRef extends Expr {
     public boolean isBound(SlotId slotId) {
         Preconditions.checkState(isAnalyzed);
         return desc.getId().equals(slotId);
-    }
-
-    @Override
-    public void getIds(List<TupleId> tupleIds, List<SlotId> slotIds) {
-        Preconditions.checkState(type.isValid());
-        Preconditions.checkState(desc != null);
-        if (slotIds != null) {
-            slotIds.add(desc.getId());
-        }
-        if (tupleIds != null) {
-            tupleIds.add(desc.getParent().getId());
-        }
     }
 
     public Table getTable() {
