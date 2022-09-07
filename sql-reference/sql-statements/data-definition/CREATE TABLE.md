@@ -128,7 +128,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 注意：
 当前仅支持 BITMAP 索引， BITMAP 索引仅支持应用于单列。
 
-#### **ENGINE 类型**
+### **ENGINE 类型**
 
 默认为 olap。可选 mysql, elasticsearch, hive。
 
@@ -271,7 +271,7 @@ PARTITION BY RANGE (datekey) (
 
 更详细的语法规则请参考[数据分布-批量创建分区](/table_design/Data_distribution.md#批量创建分区）。
 
-#### **distribution_desc**
+### **distribution_desc**
 
 Hash 分桶
 
