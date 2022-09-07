@@ -1,4 +1,4 @@
-// This file is made available under Elastic License 2.0.
+t// This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/exec_env.cpp
 
@@ -302,7 +302,19 @@ Status ExecEnv::init_mem_tracker() {
     _load_mem_tracker = new MemTracker(MemTracker::LOAD, load_mem_limit, "load", _mem_tracker);
     // Metadata statistics memory statistics do not use new mem statistics framework with hook
     _metadata_mem_tracker = new MemTracker(-1, "metadata", nullptr);
-    _tablet_schema_mem_tracker = new MemTracker(-1, "tablet_schema", _metadata_mem_tracker);
+
+    _tablet_metadata_mem_tracker = new MemTracker(-1, "tablet_metadata", _metadata_mem_tracker);
+    _rowset_metadata_mem_tracker = new MemTracker(-1, "rowset_metadata", _metadata_mem_tracker);
+    _segment_metadata_mem_tracker = new MemTracker(-1, "segment_metadata", _metadata_mem_tracker);
+    _column_metadata_mem_tracker = new MemTracker(-1, "column_metadata", _metadata_mem_tracker);
+
+    _tablet_schema_mem_tracker = new MemTracker(-1, "tablet_schema", _tablet_metadata_mem_tracker);
+    _segment_zonemap_mem_tracker = new MemTracker(-1, "segment_zonemap", _segment_metadata_mem_tracker);
+    _short_key_index_mem_tracker = new MemTracker(-1, "short_key_index", _segment_metadata_mem_tracker);
+    _column_zonemap_index_mem_tracker = new MemTracker(-1, "column_zonemap_index", _column_metadata_mem_tracker);
+    _ordinal_index_mem_tracker = new MemTracker(-1, "ordinal_index", _column_metadata_mem_tracker);
+    _bitmap_index_mem_tracker = new MemTracker(-1, "bitmap_index", _column_metadata_mem_tracker);
+    _bloom_filter_index_mem_tracker = new MemTracker(-1, "bloom_filter_index", _column_metadata_mem_tracker);
 
     int64_t compaction_mem_limit = calc_max_compaction_memory(_mem_tracker->limit());
     _compaction_mem_tracker = new MemTracker(compaction_mem_limit, "compaction", _mem_tracker);
@@ -338,197 +350,70 @@ Status ExecEnv::_init_storage_page_cache() {
 }
 
 void ExecEnv::_destroy() {
-    if (_runtime_filter_worker) {
-        delete _runtime_filter_worker;
-        _runtime_filter_worker = nullptr;
-    }
-    if (_heartbeat_flags) {
-        delete _heartbeat_flags;
-        _heartbeat_flags = nullptr;
-    }
-    if (_small_file_mgr) {
-        delete _small_file_mgr;
-        _small_file_mgr = nullptr;
-    }
-    if (_transaction_mgr) {
-        delete _transaction_mgr;
-        _transaction_mgr = nullptr;
-    }
-    if (_stream_context_mgr) {
-        delete _stream_context_mgr;
-        _stream_context_mgr = nullptr;
-    }
-    if (_routine_load_task_executor) {
-        delete _routine_load_task_executor;
-        _routine_load_task_executor = nullptr;
-    }
-    if (_stream_load_executor) {
-        delete _stream_load_executor;
-        _stream_load_executor = nullptr;
-    }
-    if (_brpc_stub_cache) {
-        delete _brpc_stub_cache;
-        _brpc_stub_cache = nullptr;
-    }
-    if (_load_stream_mgr) {
-        delete _load_stream_mgr;
-        _load_stream_mgr = nullptr;
-    }
-    if (_load_channel_mgr) {
-        delete _load_channel_mgr;
-        _load_channel_mgr = nullptr;
-    }
-    if (_broker_mgr) {
-        delete _broker_mgr;
-        _broker_mgr = nullptr;
-    }
-    if (_bfd_parser) {
-        delete _bfd_parser;
-        _bfd_parser = nullptr;
-    }
-    if (_load_path_mgr) {
-        delete _load_path_mgr;
-        _load_path_mgr = nullptr;
-    }
-    if (_master_info) {
-        delete _master_info;
-        _master_info = nullptr;
-    }
-    if (_driver_executor) {
-        delete _driver_executor;
-        _driver_executor = nullptr;
-    }
-    if (_wg_driver_executor) {
-        delete _wg_driver_executor;
-        _wg_driver_executor = nullptr;
-    }
-    if (_driver_limiter) {
-        delete _driver_limiter;
-        _driver_limiter = nullptr;
-    }
-    if (_fragment_mgr) {
-        delete _fragment_mgr;
-        _fragment_mgr = nullptr;
-    }
-    if (_udf_call_pool) {
-        delete _udf_call_pool;
-        _udf_call_pool = nullptr;
-    }
-    if (_pipeline_scan_io_thread_pool) {
-        delete _pipeline_scan_io_thread_pool;
-        _pipeline_scan_io_thread_pool = nullptr;
-    }
-    if (_pipeline_hdfs_scan_io_thread_pool) {
-        delete _pipeline_hdfs_scan_io_thread_pool;
-        _pipeline_hdfs_scan_io_thread_pool = nullptr;
-    }
-    if (_scan_executor) {
-        delete _scan_executor;
-        _scan_executor = nullptr;
-    }
-    if (_hdfs_scan_executor) {
-        delete _hdfs_scan_executor;
-        _hdfs_scan_executor = nullptr;
-    }
-    if (_runtime_filter_cache) {
-        delete _runtime_filter_cache;
-        _runtime_filter_cache = nullptr;
-    }
-    if (_thread_pool) {
-        delete _thread_pool;
-        _thread_pool = nullptr;
-    }
-    if (_thread_mgr) {
-        delete _thread_mgr;
-        _thread_mgr = nullptr;
-    }
-    if (_consistency_mem_tracker) {
-        delete _consistency_mem_tracker;
-        _consistency_mem_tracker = nullptr;
-    }
-    if (_clone_mem_tracker) {
-        delete _clone_mem_tracker;
-        _clone_mem_tracker = nullptr;
-    }
-    if (_chunk_allocator_mem_tracker) {
-        delete _chunk_allocator_mem_tracker;
-        _chunk_allocator_mem_tracker = nullptr;
-    }
-    if (_update_mem_tracker) {
-        delete _update_mem_tracker;
-        _update_mem_tracker = nullptr;
-    }
-    if (_page_cache_mem_tracker) {
-        delete _page_cache_mem_tracker;
-        _page_cache_mem_tracker = nullptr;
-    }
-    if (_column_pool_mem_tracker) {
-        delete _column_pool_mem_tracker;
-        _column_pool_mem_tracker = nullptr;
-    }
-    if (_schema_change_mem_tracker) {
-        delete _schema_change_mem_tracker;
-        _schema_change_mem_tracker = nullptr;
-    }
-    if (_compaction_mem_tracker) {
-        delete _compaction_mem_tracker;
-        _compaction_mem_tracker = nullptr;
-    }
+    SAFE_DELETE(_runtime_filter_worker);
+    SAFE_DELETE(_heartbeat_flags);
+    SAFE_DELETE(_small_file_mgr);
+    SAFE_DELETE(_transaction_mgr);
+    SAFE_DELETE(_stream_context_mgr);
+    SAFE_DELETE(_routine_load_task_executor);
+    SAFE_DELETE(_stream_load_executor);
+    SAFE_DELETE(_brpc_stub_cache);
+    SAFE_DELETE(_load_stream_mgr);
+    SAFE_DELETE(_broker_mgr);
+    SAFE_DELETE(_bfd_parser);
+    SAFE_DELETE(_load_path_mgr);
+    SAFE_DELETE(_master_info);
+    SAFE_DELETE(_driver_executor);
+    SAFE_DELETE(_wg_driver_executor);
+    SAFE_DELETE(_driver_limiter);
+    SAFE_DELETE(_fragment_mgr);
+    SAFE_DELETE(_udf_call_pool);
+    SAFE_DELETE(_pipeline_scan_io_thread_pool);
+    SAFE_DELETE(_pipeline_hdfs_scan_io_thread_pool);
+    SAFE_DELETE(_scan_executor);
+    SAFE_DELETE(_hdfs_scan_executor);
+    SAFE_DELETE(_runtime_filter_cache);
+    SAFE_DELETE(_thread_pool);
+    SAFE_DELETE(_thread_mgr);
+    SAFE_DELETE(_consistency_mem_tracker);
+    SAFE_DELETE(_clone_mem_tracker);
+    SAFE_DELETE(_chunk_allocator_mem_tracker);
+    SAFE_DELETE(_update_mem_tracker);
+    SAFE_DELETE(_page_cache_mem_tracker);
+    SAFE_DELETE(_column_pool_mem_tracker);
+    SAFE_DELETE(_schema_change_mem_tracker);
+    SAFE_DELETE(_compaction_mem_tracker);
 
-    if (_tablet_schema_mem_tracker) {
-        delete _tablet_schema_mem_tracker;
-        _tablet_schema_mem_tracker = nullptr;
-    }
-    if (_metadata_mem_tracker) {
-        delete _metadata_mem_tracker;
-        _metadata_mem_tracker = nullptr;
-    }
-    if (_load_mem_tracker) {
-        delete _load_mem_tracker;
-        _load_mem_tracker = nullptr;
-    }
+    SAFE_DELETE(_bloom_filter_index_mem_tracker);
+    SAFE_DELETE(_bitmap_index_mem_tracker);
+    SAFE_DELETE(_ordinal_index_mem_tracker);
+    SAFE_DELETE(_column_zonemap_index_mem_tracker);
+    SAFE_DELETE(_segment_zonemap_mem_tracker);
+    SAFE_DELETE(_short_key_index_mem_tracker);
+    SAFE_DELETE(_tablet_schema_mem_tracker);
+
+    SAFE_DELETE(_column_metadata_mem_tracker);
+    SAFE_DELETE(_segment_metadata_mem_tracker);
+    SAFE_DELETE(_rowset_metadata_mem_tracker);
+    SAFE_DELETE(_tablet_schema_mem_tracker);
+
+    SAFE_DELETE(_metadata_mem_tracker);
+
+    SAFE_DELETE(_load_mem_tracker);
+
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate _query_pool_mem_tracker.
     workgroup::WorkGroupManager::instance()->destroy();
-    if (_query_pool_mem_tracker) {
-        delete _query_pool_mem_tracker;
-        _query_pool_mem_tracker = nullptr;
-    }
-    if (_query_context_mgr) {
-        delete _query_context_mgr;
-        _query_context_mgr = nullptr;
-    }
-    if (_mem_tracker) {
-        delete _mem_tracker;
-        _mem_tracker = nullptr;
-    }
-    if (_broker_client_cache) {
-        delete _broker_client_cache;
-        _broker_client_cache = nullptr;
-    }
-    if (_frontend_client_cache) {
-        delete _frontend_client_cache;
-        _frontend_client_cache = nullptr;
-    }
-    if (_backend_client_cache) {
-        delete _backend_client_cache;
-        _backend_client_cache = nullptr;
-    }
-    if (_result_queue_mgr) {
-        delete _result_queue_mgr;
-        _result_queue_mgr = nullptr;
-    }
-    if (_result_mgr) {
-        delete _result_mgr;
-        _result_mgr = nullptr;
-    }
-    if (_stream_mgr) {
-        delete _stream_mgr;
-        _stream_mgr = nullptr;
-    }
-    if (_external_scan_context_mgr) {
-        delete _external_scan_context_mgr;
-        _external_scan_context_mgr = nullptr;
-    }
+    SAFE_DELETE(_query_pool_mem_tracker);
+    SAFE_DELETE(_query_context_mgr);
+    SAFE_DELETE(_mem_tracker);
+    SAFE_DELETE(_broker_client_cache);
+    SAFE_DELETE(_frontend_client_cache);
+    SAFE_DELETE(_backend_client_cache);
+    SAFE_DELETE(_result_queue_mgr);
+    SAFE_DELETE(_result_mgr);
+    SAFE_DELETE(_stream_mgr);
+    SAFE_DELETE(_external_scan_context_mgr);
+
     _metrics = nullptr;
 }
 

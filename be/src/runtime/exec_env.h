@@ -118,7 +118,17 @@ public:
     MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker; }
     MemTracker* load_mem_tracker() { return _load_mem_tracker; }
     MemTracker* metadata_mem_tracker() { return _metadata_mem_tracker; }
-    MemTracker* tablet_schema_mem_tacker() { return _tablet_schema_mem_tracker; }
+    MemTracker* tablet_metadata_mem_tracker() { return _tablet_metadata_mem_tracker; }
+    MemTracker* rowset_metadata_mem_tracker() { return _rowset_metadata_mem_tracker; }
+    MemTracker* segment_metadata_mem_tracker() { return _segment_metadata_mem_tracker; }
+    MemTracker* column_metadata_mem_tracker() { return _column_metadata_mem_tracker; }
+    MemTracker* tablet_schema_mem_tracker() { return _tablet_schema_mem_tracker; }
+    MemTracker* column_zonemap_index_mem_tracker() { return _column_zonemap_index_mem_tracker; }
+    MemTracker* ordinal_index_mem_tracker() { return _ordinal_index_mem_tracker; }
+    MemTracker* bitmap_index_mem_tracker() { return _bitmap_index_mem_tracker; }
+    MemTracker* bloom_filter_index_mem_tracker() { return _bloom_filter_index_mem_tracker; }
+    MemTracker* segment_zonemap_mem_tracker() { return _segment_zonemap_mem_tracker; }
+    MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker; }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker; }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker; }
     MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker; }
@@ -200,9 +210,23 @@ private:
     // Limit the memory used by load
     MemTracker* _load_mem_tracker = nullptr;
 
-    // The memory for tablet meta
+    // metadata l0
     MemTracker* _metadata_mem_tracker = nullptr;
+
+    // metadata l1
+    MemTracker* _tablet_metadata_mem_tracker = nullptr;
+    MemTracker* _rowset_metadata_mem_tracker = nullptr;
+    MemTracker* _segment_metadata_mem_tracker = nullptr;
+    MemTracker* _column_metadata_mem_tracker = nullptr;
+
+    // metadata l2
     MemTracker* _tablet_schema_mem_tracker = nullptr;
+    MemTracker* _segment_zonemap_mem_tracker = nullptr;
+    MemTracker* _short_key_index_mem_tracker = nullptr;
+    MemTracker* _column_zonemap_index_mem_tracker = nullptr;
+    MemTracker* _ordinal_index_mem_tracker = nullptr;
+    MemTracker* _bitmap_index_mem_tracker = nullptr;
+    MemTracker* _bloom_filter_index_mem_tracker = nullptr;
 
     // The memory used for compaction
     MemTracker* _compaction_mem_tracker = nullptr;
@@ -235,8 +259,8 @@ private:
     starrocks::pipeline::QueryContextManager* _query_context_mgr = nullptr;
     starrocks::pipeline::DriverExecutor* _driver_executor = nullptr;
     pipeline::DriverExecutor* _wg_driver_executor = nullptr;
-    pipeline::DriverLimiter* _driver_limiter;
-    int64_t _max_executor_threads; // Max thread number of executor
+    pipeline::DriverLimiter* _driver_limiter = nullptr;
+    int64_t _max_executor_threads = 0; // Max thread number of executor
 
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
