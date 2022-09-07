@@ -57,7 +57,9 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 stream load
                 .withProperty("username", "xxx")
                 .withProperty("password", "xxx")
                 .withProperty("table-name", "xxx")
-                .withProperty("database-name", "xxx")
+                // 自 2.4 版本，支持更新主键模型中的部分列。您可以通过以下两个属性指定需要更新的列。
+                // .withProperty("sink.properties.partial_update", "true")
+                // .withProperty("sink.properties.columns", "k1,k2,k3")
                 .withProperty("sink.properties.format", "json")
                 .withProperty("sink.properties.strip_outer_array", "true")
                 // 设置并行度，多并行度情况下需要考虑如何保证数据有序性
@@ -95,6 +97,9 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 stream load
                 .withProperty("password", "xxx")
                 .withProperty("table-name", "xxx")
                 .withProperty("database-name", "xxx")
+                // 自 2.4 版本，支持更新主键模型中的部分列。您可以通过以下两个属性指定需要更新的列。
+                // .withProperty("sink.properties.partial_update", "true")
+                // .withProperty("sink.properties.columns", "k1,k2,k3")
                 .withProperty("sink.properties.column_separator", "\\x01")
                 .withProperty("sink.properties.row_delimiter", "\\x02")
                 .build(),
@@ -129,10 +134,13 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 stream load
             "'sink.buffer-flush.max-rows' = '1000000'," +
             "'sink.buffer-flush.max-bytes' = '300000000'," +
             "'sink.buffer-flush.interval-ms' = '5000'," +
+            // 自 2.4 版本，支持更新主键模型中的部分列。您可以通过以下两个属性指定需要更新的列。
+            // "'sink.properties.partial_update' = 'true'," +
+            // "'sink.properties.row_delimiter' = 'k1,k2,k3'," + 
             "'sink.properties.column_separator' = '\\x01'," +
             "'sink.properties.row_delimiter' = '\\x02'," +
-            "'sink.max-retries' = '3'" +
             "'sink.properties.*' = 'xxx'" + // stream load properties like `'sink.properties.columns' = 'k1, v1'`
+            "'sink.max-retries' = '3'" +
         ")"
     );
     ```
@@ -142,7 +150,7 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 stream load
 其中Sink选项如下：
 
 | Option | Required | Default | Type | Description |
-|  :-----:  | :-----:  | :-----:  | :-----:  | :-----:  |
+|  :-----:  | :-----:  | :-----:  | :-----:  | :-----  |
 | connector | YES | NONE | String |**starrocks**|
 | jdbc-url | YES | NONE | String | this will be used to execute queries in starrocks. |
 | load-url | YES | NONE | String | **fe_ip:http_port;fe_ip:http_port** separated with '**;**', which would be used to do the batch sinking. |
@@ -157,7 +165,7 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 stream load
 | sink.max-retries | NO | 1 | String | max retry times of the stream load request, range: **[0, 10]**. |
 | sink.connect.timeout-ms | NO | 1000 | String | Timeout in millisecond for connecting to the `load-url`, range: **[100, 60000]**. |
 | sink.properties.format|  NO | CSV | String | The file format of data loaded into starrocks. Valid values: **CSV** and **JSON**. Default value: **CSV**. |
-| sink.properties.* | NO | NONE | String | the stream load properties like **'sink.properties.columns' = 'k1, k2, k3'**,details in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。 |
+| sink.properties.* | NO | NONE | String | the stream load properties like **'sink.properties.columns' = 'k1, k2, k3'**,details in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md). Since 2.4, the flink-connector-starrocks supports partial updates for Primary Key model. |
 | sink.properties.ignore_json_size | NO |false| String | ignore the batching size (100MB) of json data |
 
 ## Flink 与 StarRocks 的数据类型映射关系

@@ -42,7 +42,7 @@ StarRocks 提供 Flink CDC connector、flink-connector-starrocks 和 StarRocks-m
     * `Db` 需要修改成 MySQL 的连接信息。  
     * `be_num` 需要配置成 StarRocks 集群的节点数（这个能帮助更合理的设置 bucket 数量）。  
     * `[table-rule.1]` 是匹配规则，可以根据正则表达式匹配数据库和表名生成建表的 SQL，也可以配置多个规则。  
-    * `flink.starrocks.*` 是 StarRocks 的集群配置信息，参考 [Flink-connector-starrocks 配置](../loading/Flink-connector-starrocks.md)。
+    * `flink.starrocks.*` 是 StarRocks 集群配置信息和导入任务的配置信息。配置信息的更多说明，请参见 [Flink-connector-starrocks 配置](../loading/Flink-connector-starrocks.md)。自 2.4 版本起，如果您需要更新主键模型的部分列，则可以配置参数 `flink.starrocks.sink.properties.partial_update=true`、`flink.starrocks.sink.properties.columns=k1,k2,k3`。
   
         ```bash
         [db]
@@ -153,8 +153,6 @@ StarRocks 提供 Flink CDC connector、flink-connector-starrocks 和 StarRocks-m
     flink.starrocks.sink.properties.strip_outer_array=true
     flink.starrocks.sink.properties.format=json
     ```
-
-  > Flink.starrocks.sink 的参数可以参考[参数说明](/loading/Flink-connector-starrocks.md#参数说明)，比如可以给不同的规则配置不同的导入频率等参数。
 
 * 针对分库分表的大表可以单独配置一个规则，比如：有两个数据库 edu_db_1，edu_db_2，每个数据库下面分别有course_1，course_2 两张表，并且所有表的数据结构都是相同的，通过如下配置把他们导入StarRocks的一张表中进行分析。
 
