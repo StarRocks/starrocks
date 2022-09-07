@@ -40,6 +40,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 public class FunctionCallExpr extends Expr {
@@ -440,7 +441,7 @@ public class FunctionCallExpr extends Expr {
     @Override
     public int hashCode() {
         // fnParams contains all information of children Expr. No need to calculate super's hashcode again.
-        return java.util.Objects.hash(type, opcode, fnName, fnParams, nondeterministicId);
+        return Objects.hash(type, opcode, fnName, fnParams, nondeterministicId);
     }
 
     /**
