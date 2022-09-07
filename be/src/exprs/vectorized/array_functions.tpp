@@ -14,6 +14,7 @@ public:
     using CppType = RunTimeCppType<PT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
         if constexpr (pt_is_largeint<PT>) {
             return _array_distinct<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
         } else if constexpr (pt_is_fixedlength<PT>) {
@@ -111,6 +112,7 @@ public:
     using CppType = RunTimeCppType<PT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
         if constexpr (pt_is_arithmetic<PT> || pt_is_decimalv2<PT>) {
             return _array_difference(columns);
         } else {
@@ -358,7 +360,10 @@ class ArrayConcat {
 public:
     using CppType = RunTimeCppType<PT>;
 
-    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) { return _array_concat(columns); }
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+        return _array_concat(columns);
+    }
 
 private:
     static void collect_array_columns_and_null_columns(const Columns& columns, std::vector<ArrayColumn*>* src_columns,
@@ -388,8 +393,6 @@ private:
         if (columns.size() == 1) {
             return columns[0];
         }
-
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
         size_t chunk_size = columns[0]->size();
         bool is_nullable = false;
@@ -453,6 +456,7 @@ public:
     using CppType = RunTimeCppType<PT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
         if constexpr (pt_is_largeint<PT>) {
             return _array_overlap<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
         } else if constexpr (pt_is_fixedlength<PT>) {
@@ -467,8 +471,6 @@ public:
 private:
     template <typename HashSet>
     static ColumnPtr _array_overlap(const Columns& columns) {
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);
-
         size_t chunk_size = columns[0]->size();
         auto result_column = BooleanColumn::create(chunk_size, 0);
 
@@ -715,12 +717,9 @@ public:
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         DCHECK_EQ(columns.size(), 1);
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
         size_t chunk_size = columns[0]->size();
-
-        if (columns[0]->only_null()) {
-            return ColumnHelper::create_const_null_column(chunk_size);
-        }
 
         // TODO: For fixed-length types, you can operate directly on the original column without using sort index,
         //  which will be optimized later
@@ -944,9 +943,7 @@ public:
         DCHECK_GE(columns.size(), 2);
         size_t chunk_size = columns[0]->size();
 
-        if (std::any_of(columns.begin(), columns.end(), [](const auto& col) { return col->only_null(); })) {
-            return ColumnHelper::create_const_null_column(chunk_size);
-        }
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
         ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
         if (columns.size() <= 2) {
