@@ -85,8 +85,8 @@ TEST_F(OrdinalPageIndexTest, normal) {
     }
 
     OrdinalIndexReader index;
-    ASSIGN_OR_ABORT(auto r, index.load(_block_mgr, filename, index_meta.ordinal_index(), 16 * 1024 * 4096 + 1, true,
-                                       false, _mem_tracker.get()));
+    ASSIGN_OR_ABORT(auto r,
+                    index.load(_block_mgr, filename, index_meta.ordinal_index(), 16 * 1024 * 4096 + 1, true, false));
     ASSERT_TRUE(r);
     ASSERT_EQ(16 * 1024, index.num_data_pages());
     ASSERT_EQ(1, index.get_first_ordinal(0));
@@ -141,8 +141,7 @@ TEST_F(OrdinalPageIndexTest, one_data_page) {
     }
 
     OrdinalIndexReader index;
-    ASSIGN_OR_ABORT(auto r, index.load(_block_mgr, "", index_meta.ordinal_index(), num_values, true, false,
-                                       _mem_tracker.get()));
+    ASSIGN_OR_ABORT(auto r, index.load(_block_mgr, "", index_meta.ordinal_index(), num_values, true, false));
     ASSERT_TRUE(r);
     ASSERT_EQ(1, index.num_data_pages());
     ASSERT_EQ(0, index.get_first_ordinal(0));

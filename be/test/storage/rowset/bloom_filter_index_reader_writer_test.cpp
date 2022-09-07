@@ -69,7 +69,7 @@ protected:
             std::unique_ptr<BloomFilterIndexWriter> bloom_filter_index_writer;
             BloomFilterOptions bf_options;
             BloomFilterIndexWriter::create(bf_options, type_info, &bloom_filter_index_writer);
-            const CppType* vals = (const CppType*)values;
+            const auto* vals = (const CppType*)values;
             for (int i = 0; i < value_count;) {
                 size_t num = std::min(1024, (int)value_count - i);
                 bloom_filter_index_writer->add_values(vals + i, num);
@@ -95,8 +95,7 @@ protected:
         std::string fname = kTestDir + "/" + file_name;
 
         *reader = new BloomFilterIndexReader();
-        ASSIGN_OR_ABORT(auto r,
-                        (*reader)->load(_block_mgr, fname, meta.bloom_filter_index(), true, false, _mem_tracker.get()));
+        ASSIGN_OR_ABORT(auto r, (*reader)->load(_block_mgr, fname, meta.bloom_filter_index(), true, false));
         ASSERT_TRUE(r);
         ASSERT_OK((*reader)->new_iterator(iter));
     }
@@ -122,7 +121,7 @@ protected:
             ASSERT_TRUE(st.ok());
             for (int i = 0; i < 1024; ++i) {
                 if (is_slice_type) {
-                    Slice* value = (Slice*)(val + i);
+                    auto* value = (Slice*)(val + i);
                     ASSERT_TRUE(bf->test_bytes(value->data, value->size));
                 } else {
                     ASSERT_TRUE(bf->test_bytes((char*)&val[i], sizeof(CppType)));
@@ -134,7 +133,7 @@ protected:
             ASSERT_TRUE(st.ok());
             for (int i = 1024; i < 2048; ++i) {
                 if (is_slice_type) {
-                    Slice* value = (Slice*)(val + i);
+                    auto* value = (Slice*)(val + i);
                     ASSERT_TRUE(bf->test_bytes(value->data, value->size));
                 } else {
                     ASSERT_TRUE(bf->test_bytes((char*)&val[i], sizeof(CppType)));
@@ -146,7 +145,7 @@ protected:
             ASSERT_TRUE(st.ok());
             for (int i = 2048; i < 3071; ++i) {
                 if (is_slice_type) {
-                    Slice* value = (Slice*)(val + i);
+                    auto* value = (Slice*)(val + i);
                     ASSERT_TRUE(bf->test_bytes(value->data, value->size));
                 } else {
                     ASSERT_TRUE(bf->test_bytes((char*)&val[i], sizeof(CppType)));
