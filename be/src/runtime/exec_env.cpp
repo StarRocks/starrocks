@@ -1,4 +1,4 @@
-t// This file is made available under Elastic License 2.0.
+// This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/exec_env.cpp
 

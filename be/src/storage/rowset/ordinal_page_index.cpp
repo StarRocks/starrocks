@@ -25,7 +25,6 @@
 
 #include "common/logging.h"
 #include "fs/fs.h"
-#include "fs/fs_util.h"
 #include "storage/key_coder.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_io.h"
@@ -63,15 +62,21 @@ Status OrdinalIndexWriter::finish(WritableFile* wfile, ColumnIndexMetaPB* meta) 
     return Status::OK();
 }
 
+OrdinalIndexReader::OrdinalIndexReader() {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->ordinal_index_mem_tracker(), sizeof(OrdinalIndexReader));
+}
+
+OrdinalIndexReader::~OrdinalIndexReader() {
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->ordinal_index_mem_tracker(), _mem_usage());
+}
+
 StatusOr<bool> OrdinalIndexReader::load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta,
-                                        ordinal_t num_values, bool use_page_cache, bool kept_in_memory,
-                                        MemTracker* mem_tracker) {
+                                        ordinal_t num_values, bool use_page_cache, bool kept_in_memory) {
     return success_once(_load_once, [&]() {
-        size_t old_mem_usage = mem_usage();
         Status st = _do_load(fs, filename, meta, num_values, use_page_cache, kept_in_memory);
         if (st.ok()) {
-            size_t new_mem_usage = mem_usage();
-            MEM_TRACKER_SAFE_CONSUME(mem_tracker, new_mem_usage - old_mem_usage);
+            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->ordinal_index_mem_tracker(),
+                                     _mem_usage() - sizeof(OrdinalIndexReader))
         } else {
             _reset();
         }
