@@ -39,8 +39,6 @@ while true; do
 done
 
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
-# compatible with DORIS_HOME: DORIS_HOME still be using in config on the user side, so set DORIS_HOME to the meaningful value in case of wrong envs.
-export DORIS_HOME="$STARROCKS_HOME"
 source $STARROCKS_HOME/bin/common.sh
 
 # actions shared between start_be.sh & start_cn.sh

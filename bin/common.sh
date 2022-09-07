@@ -108,6 +108,9 @@ export_mem_limit_from_conf() {
 }
 
 export_shared_envvars() {
+    # compatible with DORIS_HOME: DORIS_HOME still be using in config on the user side, so set DORIS_HOME to the meaningful value in case of wrong envs.
+    export DORIS_HOME="$STARROCKS_HOME"
+
     # ===================================================================================
     # initialization of environment variables before exporting env variables from be.conf
     # For most cases, you should put default environment variables in this section.
