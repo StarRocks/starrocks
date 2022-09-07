@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
@@ -134,6 +135,7 @@ public class Optimizer {
         tree = OptExpression.create(new LogicalTreeAnchor(), tree);
         deriveLogicalProperty(tree);
 
+        SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
         CTEContext cteContext = context.getCteContext();
         CTEUtils.collectCteOperators(tree, context);
         // inline CTE if consume use once
@@ -175,6 +177,9 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownLimitRankingWindowRule());
+        if (sessionVariable.isEnableRewriteGroupingsetsToUnionAll()) {
+            ruleRewriteIterative(tree, rootTaskContext, new RewriteGroupingSetsByCTERule());
+        }
 
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
