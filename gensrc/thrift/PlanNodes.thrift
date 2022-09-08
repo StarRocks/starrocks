@@ -403,6 +403,8 @@ enum TJoinOp {
   RIGHT_OUTER_JOIN,
   FULL_OUTER_JOIN,
   CROSS_JOIN,
+  // only used for compatibility
+  MERGE_JOIN,
 
   RIGHT_SEMI_JOIN,
   LEFT_ANTI_JOIN,
