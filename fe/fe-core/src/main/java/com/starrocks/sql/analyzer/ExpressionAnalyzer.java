@@ -688,13 +688,14 @@ public class ExpressionAnalyzer {
             } else if (FunctionSet.STR_TO_DATE.equals(fnName)) {
                 fn = getStrToDateFunction(node, argumentTypes);
             } else if (fnName.equals(FunctionSet.ARRAY_FILTER)) {
-                Preconditions.checkState(node.getChildren().size() == 2, "ARRAY_FILTER should have 2 array inputs.");
+                Preconditions.checkState(node.getChildren().size() == 2,
+                        FunctionSet.ARRAY_FILTER + " should have 2 array inputs or lambda functions.");
                 Preconditions.checkState(node.getChild(0).getType().isArrayType() ||
                                 node.getChild(0).getType().isNull(),
-                        "The first input of ARRAY_FILTER() should be an array.");
+                        "The first input of " + FunctionSet.ARRAY_FILTER + " should be an array or a lambda function.");
                 Preconditions.checkState(node.getChild(1).getType().isArrayType() ||
                                 node.getChild(1).getType().isNull(),
-                        "The second input of ARRAY_FILTER() should be an array.");
+                        "The second input of " + FunctionSet.ARRAY_FILTER + " should be an array or a lambda function.");
                 // force the second array be of Type.ARRAY_BOOLEAN
                 node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
                 argumentTypes[1] = Type.ARRAY_BOOLEAN;
