@@ -64,12 +64,12 @@ public:
         }
     }
 
-    void release_memory() {
+    void reset() {
         if (_is_data_owner) {
             delete[] _data.data;
-            _data.data = nullptr;
-            _data.size = 0;
+            _is_data_owner = false;
         }
+        _data.clear();
     }
 
     // the return slice contains uncompressed page body, page footer, and footer size
