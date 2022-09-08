@@ -599,7 +599,7 @@ TEST_F(RuntimeFilterTest, TestGlobalRuntimeFilterMinMax) {
 void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode, std::vector<ColumnPtr> columns,
                                      int64_t num_rows, int64_t num_partitions,
                                      std::vector<int32_t> bucketseq_to_partition) {
-    std::vector<uint32_t> hash_values;
+    std::vector<uint32_t> expected_hash_values;
     std::vector<size_t> num_rows_per_partitions(num_partitions, 0);
 
     switch (join_mode) {
@@ -608,30 +608,30 @@ void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode
     }
     case TRuntimeFilterBuildJoinMode::PARTITIONED:
     case TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET: {
-        hash_values.assign(num_rows, HashUtil::FNV_SEED);
+        expected_hash_values.assign(num_rows, HashUtil::FNV_SEED);
         for (auto& column : columns) {
-            column->fnv_hash(hash_values.data(), 0, num_rows);
+            column->fnv_hash(expected_hash_values.data(), 0, num_rows);
         }
         for (auto i = 0; i < num_rows; ++i) {
-            hash_values[i] %= num_partitions;
-            ++num_rows_per_partitions[hash_values[i]];
+            expected_hash_values[i] %= num_partitions;
+            ++num_rows_per_partitions[expected_hash_values[i]];
         }
         break;
     }
     case TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET:
     case TRuntimeFilterBuildJoinMode::COLOCATE: {
-        hash_values.assign(num_rows, 0);
+        expected_hash_values.assign(num_rows, 0);
         DCHECK_LT(0, bucketseq_to_partition.size());
         auto num_buckets = bucketseq_to_partition.size();
         for (auto& column : columns) {
-            column->crc32_hash(hash_values.data(), 0, num_rows);
+            column->crc32_hash(expected_hash_values.data(), 0, num_rows);
         }
         std::vector<size_t> num_rows_per_bucket(num_buckets, 0);
         for (auto i = 0; i < num_rows; ++i) {
-            hash_values[i] %= num_buckets;
-            ++num_rows_per_bucket[hash_values[i]];
-            hash_values[i] = bucketseq_to_partition[hash_values[i]];
-            ++num_rows_per_partitions[hash_values[i]];
+            expected_hash_values[i] %= num_buckets;
+            ++num_rows_per_bucket[expected_hash_values[i]];
+            expected_hash_values[i] = bucketseq_to_partition[expected_hash_values[i]];
+            ++num_rows_per_partitions[expected_hash_values[i]];
         }
         static constexpr uint32_t BUCKET_ABSENT = 2147483647;
         for (auto b = 0; b < num_buckets; ++b) {
@@ -665,7 +665,7 @@ void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode
         }
         for (auto j = 0; j < num_rows; ++j) {
             auto ele = column->get(j).get_int32();
-            auto pp = hash_values[j] + (i * num_partitions);
+            auto pp = expected_hash_values[j] + (i * num_partitions);
             bfs[pp].insert(&ele);
         }
         for (auto p = 0; p < num_partitions; ++p) {
@@ -682,7 +682,7 @@ void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode
         grf.compute_hash(column_ptrs, &running_ctx);
         auto& ctx_hash_values = running_ctx.hash_values;
         for (auto i = 0; i < num_rows; i++) {
-            DCHECK_EQ(ctx_hash_values[i], hash_values[i]);
+            DCHECK_EQ(ctx_hash_values[i], expected_hash_values[i]);
         }
     }
 

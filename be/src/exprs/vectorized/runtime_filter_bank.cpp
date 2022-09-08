@@ -463,8 +463,6 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
         auto true_count = SIMD::count_nonzero(selection);
         eval_context.run_filter_nums += 1;
         double selectivity = true_count * 1.0 / chunk_size;
-        VLOG_FILE << "update_selectivity, filter_id=" << rf_desc->filter_id() << ", plan_node_id= " << _plan_node_id
-                  << ", selectivity=" << selectivity;
         if (selectivity <= 0.5) {     // useful filter
             if (selectivity < 0.05) { // very useful filter, could early return
                 seletivity_map.clear();
@@ -507,7 +505,7 @@ void RuntimeFilterProbeCollector::push_down(RuntimeFilterProbeCollector* parent,
     auto iter = parent->_descriptors.begin();
     while (iter != parent->_descriptors.end()) {
         RuntimeFilterProbeDescriptor* desc = iter->second;
-        if (desc->runtime_filter_bank.cpp()) {
+        if (desc->is_multi_partition_by_exprs()) {
             continue;
         }
         if (desc->is_bound(tuple_ids)) {
@@ -536,8 +534,6 @@ std::string RuntimeFilterProbeCollector::debug_string() const {
 }
 
 void RuntimeFilterProbeCollector::add_descriptor(RuntimeFilterProbeDescriptor* desc) {
-    VLOG_FILE << "add runtime filter descriptor: filter_id=" << desc->filter_id()
-              << ", plan_node_id = " << _plan_node_id;
     _descriptors[desc->filter_id()] = desc;
 }
 
