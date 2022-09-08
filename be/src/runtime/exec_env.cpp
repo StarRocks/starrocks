@@ -385,29 +385,8 @@ Status ExecEnv::_init_storage_page_cache() {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
                      << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
     }
-
-    // If pagecache is enabled and the value is not set or is set to 0, the max default value is
-    // the smaller of either:
-    // - kcacheMaxRatio * memory tracker limit
-    // - kcacheMaxSize
-    // Too small cache will cause performance degradation, so give up using page cache if cache
-    // limit is too small.
     if (!config::disable_storage_page_cache) {
-        if (storage_cache_limit == 0) {
-            LOG(WARNING) << "No limitation is specified, use default size for storage page cache.";
-            int64_t mem_limit = MemInfo::physical_mem();
-            if (_mem_tracker->has_limit()) {
-                mem_limit = _mem_tracker->limit();
-            }
-            storage_cache_limit = std::min<int64_t>(kcacheMaxRatio * mem_limit, kcacheMaxSize);
-        }
-        if (storage_cache_limit < kcacheMinSize) {
-            LOG(WARNING) << "Storage cache limit is too small, give up using page cache.";
-            config::disable_storage_page_cache = true;
-            storage_cache_limit = 0;
-        } else {
-            LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
-        }
+        LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
     }
     StoragePageCache::create_global_cache(_page_cache_mem_tracker, storage_cache_limit);
 

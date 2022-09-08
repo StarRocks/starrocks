@@ -72,8 +72,8 @@ int main(int argc, char** argv) {
     }
     auto* exec_env = starrocks::ExecEnv::GetInstance();
     // Pagecache is turned on by default, and some test cases require cache to be turned on, 
-    // and some test cases do not. For easy management, we turn cache off during unit test i
-    // nitialization. If there are test cases that require Pagecache, it must be responsible 
+    // and some test cases do not. For easy management, we turn cache off during unit test
+    // initialization. If there are test cases that require Pagecache, it must be responsible 
     // for managing it.
     starrocks::config::disable_storage_page_cache = true;
     exec_env->init_mem_tracker();
