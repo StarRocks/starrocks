@@ -74,27 +74,26 @@ Status CompactionState::_do_load(Rowset* rowset) {
     auto chunk = chunk_shared_ptr.get();
 
     for (size_t i = 0; i < itrs.size(); i++) {
-        auto itr = itrs[i].get();
-        if (itr == nullptr) {
-            continue;
-        }
         auto& dest = pk_cols[i];
         auto col = pk_column->clone();
-        auto num_rows = rowset->segments()[i]->num_rows();
-        col->reserve(num_rows);
-        while (true) {
-            chunk->reset();
-            auto st = itr->get_next(chunk);
-            if (st.is_end_of_file()) {
-                break;
-            } else if (!st.ok()) {
-                return st;
-            } else {
-                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+        auto itr = itrs[i].get();
+        if (itr != nullptr) {
+            const auto num_rows = rowset->segments()[i]->num_rows();
+            col->reserve(num_rows);
+            while (true) {
+                chunk->reset();
+                auto st = itr->get_next(chunk);
+                if (st.is_end_of_file()) {
+                    break;
+                } else if (!st.ok()) {
+                    return st;
+                } else {
+                    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get());
+                }
             }
+            itr->close();
+            CHECK(col->size() == num_rows) << "read segment: iter rows != num rows";
         }
-        itr->close();
-        CHECK(col->size() == num_rows) << "read segment: iter rows != num rows";
         dest = std::move(col);
         _memory_usage += dest->memory_usage();
         tracker->consume(dest->memory_usage());
