@@ -1106,7 +1106,7 @@ public class Auth implements Writable {
     }
 
     // return true if user ident exist
-    private boolean doesUserExist(UserIdentity userIdent) {
+    public boolean doesUserExist(UserIdentity userIdent) {
         if (userIdent.isDomain()) {
             return propertyMgr.doesUserExist(userIdent);
         } else {
