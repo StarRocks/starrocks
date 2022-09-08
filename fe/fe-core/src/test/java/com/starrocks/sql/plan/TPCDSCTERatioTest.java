@@ -139,7 +139,6 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
         QUERY47      6,143          28,724         0.21
      */
 
-    @Test
     public void printCosts() throws Exception {
         System.out.printf("%-10s%-30s%-30s%-30s\n", "Name", "CTE", "Inline", "Inline/CTE");
         List<Boolean> expect = Lists.newArrayList();
