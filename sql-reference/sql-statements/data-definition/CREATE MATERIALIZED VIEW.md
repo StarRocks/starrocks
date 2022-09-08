@@ -84,7 +84,6 @@ SELECT select_expr[, select_expr ...]
 
 物化视图的刷新方式。该参数支持如下值：
 
-- `SYNC`：同步的刷新方式。
 - `ASYNC`：异步的刷新方式。您可以为该方式指定刷新开始时间、刷新间隔或者导入触发刷新方式。刷新间隔仅支持：`DAY`、`HOUR`、`MINUTE` 以及 `SECOND`。
 - `MANUAL`：手动的刷新方式。
 - 如果不指定该参数，则默认使用 SYNC 方式。
@@ -315,36 +314,7 @@ from orders
 group by dt, order_id, user_id;
 ```
 
-示例三：创建同步物化视图
-
-```SQL
-CREATE MATERIALIZED VIEW lo_mv_sync_1
-AS
-select
-    lo_orderkey,
-    lo_orderdate,
-    lo_custkey, 
-    sum(lo_quantity) as total_quantity, 
-    sum(lo_revenue) as total_revenue, 
-    count(lo_shipmode) as shipmode_count
-from lineorder 
-group by lo_orderkey, lo_orderdate, lo_custkey;
-
-CREATE MATERIALIZED VIEW lo_mv_sync_2
-REFRESH SYNC
-AS
-select
-    lo_orderkey,
-    lo_orderdate,
-    lo_custkey, 
-    sum(lo_quantity) as total_quantity, 
-    sum(lo_revenue) as total_revenue, 
-    count(lo_shipmode) as shipmode_count
-from lineorder 
-group by lo_orderkey, lo_orderdate, lo_custkey;
-```
-
-示例四：创建多表物化视图
+示例三：创建多表物化视图
 
 ```SQL
 CREATE MATERIALIZED VIEW flat_lineorder
@@ -395,7 +365,7 @@ INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 ```
 
-示例五：创建单表物化视图
+示例四：创建单表物化视图
 
 基表结构为：
 
