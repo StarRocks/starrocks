@@ -52,7 +52,7 @@ public class PrivilegeStmtAnalyzer {
 
             if (checkExist) {
                 // check if user exists
-                if (!session.getGlobalStateMgr().getAuth().getUserPrivTable().doesUserExist(userIdent)) {
+                if (!session.getGlobalStateMgr().getAuth().doesUserExist(userIdent)) {
                     throw new SemanticException("user " + userIdent + " not exist!");
                 }
             }
