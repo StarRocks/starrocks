@@ -24,7 +24,6 @@ public:
     using segment_rowid_t = uint32_t;
     using DeletesMap = std::unordered_map<uint32_t, vector<segment_rowid_t>>;
     using tablet_rowid_t = uint64_t;
-    using TabletRowidColumn = vectorized::UInt64Column;
 
     PrimaryIndex();
     PrimaryIndex(const vectorized::Schema& pk_schema);

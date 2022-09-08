@@ -164,8 +164,8 @@ public:
             tablet_meta->add_rs_meta(src_rowset->rowset_meta());
         }
 
-        TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta,
-                                                                 starrocks::StorageEngine::instance()->get_stores()[0]);
+        TabletSharedPtr tablet =
+                Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
         tablet->init();
 
         config::cumulative_compaction_skip_window_seconds = -2;
@@ -188,10 +188,8 @@ public:
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
-        options.metadata_mem_tracker = _metadata_mem_tracker.get();
         options.compaction_mem_tracker = _compaction_mem_tracker.get();
         if (_engine == nullptr) {
-            _origin_engine = starrocks::StorageEngine::instance();
             Status s = starrocks::StorageEngine::open(options, &_engine);
             ASSERT_TRUE(s.ok()) << s.to_string();
         }
@@ -213,7 +211,6 @@ public:
 
 protected:
     StorageEngine* _engine = nullptr;
-    StorageEngine* _origin_engine = nullptr;
     std::unique_ptr<TabletSchema> _tablet_schema;
     std::string _schema_hash_path;
     std::unique_ptr<MemTracker> _metadata_mem_tracker;
@@ -223,7 +220,7 @@ protected:
 
 TEST_F(CumulativeCompactionTest, test_init_succeeded) {
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta, nullptr);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
     CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(cumulative_compaction.compact().ok());
 }
@@ -236,7 +233,7 @@ TEST_F(CumulativeCompactionTest, test_candidate_rowsets_empty) {
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
     tablet_meta->set_tablet_schema(schema);
 
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta, nullptr);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
     tablet->init();
     CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(cumulative_compaction.compact().ok());

@@ -93,7 +93,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _effective_cluster_id(-1),
           _is_all_cluster_id_exist(true),
           _file_cache(nullptr),
-          _tablet_manager(new TabletManager(options.metadata_mem_tracker, config::tablet_map_shard_size)),
+          _tablet_manager(new TabletManager(config::tablet_map_shard_size)),
           _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size)),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
