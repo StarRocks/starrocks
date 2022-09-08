@@ -25,7 +25,7 @@ public class IcebergRepository {
                     Integer.MAX_VALUE, "iceberg-refresh-pool", true);
 
     private final Cache<Table, Future> icebergRefreshCache = CacheBuilder.newBuilder()
-            .expireAfterWrite(10, TimeUnit.MINUTES).build();
+            .expireAfterWrite(Config.iceberg_table_refresh_expire_sec, TimeUnit.SECONDS).build();
 
     public void refreshTable(Table table) {
         icebergRefreshCache.put(table, icebergRefreshExecutor.submit(() -> table.refresh()));

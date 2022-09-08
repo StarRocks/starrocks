@@ -1518,8 +1518,12 @@ public class Config extends ConfigBase {
     /**
      * size of iceberg table refresh pool
      */
-    @ConfField(mutable = true)
     public static int iceberg_table_refresh_threads = 128;
+
+    /**
+     * interval to remove cached table in iceberg refresh cache
+     */
+    public static int iceberg_table_refresh_expire_sec = 86400;
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
