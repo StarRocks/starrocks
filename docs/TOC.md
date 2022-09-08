@@ -4,14 +4,9 @@
 
 + [StarRocks](/introduction/StarRocks_intro.md)
 + Quick Start
-  + [Introduction](./introduction/what_is_starrocks.md)
-  + [Concepts](./quick_start/Concepts.md)
-  + [Architecture](./quick_start/Architecture.md)
-  + [Data flow and control flow](./quick_start/Data_flow_and_control_flow.md)
   + [Deploy](./quick_start/Deploy.md)
   + [Create a table](./quick_start/Create_table.md)
   + [Import and query](./quick_start/Import_and_query.md)
-  + [Test FAQs](./quick_start/Test_faq.md)
 + Table Design
   + [StarRocks table design](./table_design/StarRocks_table_design.md)
   + [Data models](./table_design/Data_model.md)
@@ -368,27 +363,32 @@
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
 + Administration
-  + [Build in Docker](./administration/Build_in_docker.md)
-  + [Manage a cluster](./administration/Cluster_administration.md)
-  + [Configuration](./administration/Configuration.md)
-  + [Scale in and out](./administration/Scale_up_down.md)
-  + [Backup and restore](./administration/Backup_and_restore.md)
-  + [Deploy StarRocks with StarGo](./administration/stargo.md)
+  + Deployment
+    + [Deploy StarRocks with StarGo](./administration/stargo.md)
+    + [Build in Docker](./administration/Build_in_docker.md)
+  + Management
+    + [Scale in and out](./administration/Scale_up_down.md)
+    + [Backup and restore](./administration/Backup_and_restore.md)
+    + [Configuration](./administration/Configuration.md)
+    + [Monitor and alert](./administration/Monitor_and_Alert.md)
+    + [Manage a cluster](./administration/Cluster_administration.md)
+    + [Enable FQDN access](./administration/enable_fqdn.md)
+    + Resource Management
+      + [Resource group](./administration/resource_group.md)
+      + [Query management](./administration/Query_management.md)
+      + [Memory management](./administration/Memory_management.md)
+      + [Load balance](./administration/Load_balance.md)
+      + [Replica](./administration/Replica.md)
+      + [Blacklist](./administration/Blacklist.md)
   + Data Recovery
     + [Data recovery](./administration/Data_recovery.md)
     + [Restore FEs](./administration/Metadata_recovery.md)
-  + [Replica](./administration/Replica.md)
-  + [Query planning](./administration/Query_planning.md)
-  + [Profiling](./administration/Profiling.md)
-  + [Monitor and alert](./administration/Monitor_and_Alert.md)
-  + [User privilege](./administration/User_privilege.md)
-  + [Authentication](./administration/Authentication.md)
-  + Resource Management
-    + [Resource group](./administration/resource_group.md)
-    + [Query management](./administration/Query_management.md)
-    + [Blacklist](./administration/Blacklist.md)
-    + [Memory management](./administration/Memory_management.md)
-    + [Load balance](./administration/Load_balance.md)
+  + User privilege and authentication
+    + [User privilege](./administration/User_privilege.md)
+    + [Authentication](./administration/Authentication.md)
+  + Performance
+    + [Query planning](./administration/Query_planning.md)
+    + [Profiling](./administration/Profiling.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
