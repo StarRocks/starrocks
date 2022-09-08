@@ -232,6 +232,6 @@ public class LargeIntLiteral extends LiteralExpr {
 
     @Override
     public int hashCode() {
-        return 31 * super.hashCode() + Objects.hashCode(value);
+        return Objects.hash(super.hashCode(), value);
     }
 }
