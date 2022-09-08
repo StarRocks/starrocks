@@ -139,9 +139,9 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     _rowset_meta_pb->set_rowset_seg_id(0);
     // updatable tablet require extra processing
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        _rowset_meta->set_num_delete_files(_num_delfile);
+        _rowset_meta_pb->set_num_delete_files(_num_delfile);
         if (_num_segment <= 1) {
-            _rowset_meta->set_segments_overlap(NONOVERLAPPING);
+            _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
         }
         // if load only has delete, we can skip the partial update logic
         if (_context.partial_update_tablet_schema && _flush_chunk_state != FlushChunkState::DELETE) {
