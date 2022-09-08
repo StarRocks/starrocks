@@ -33,7 +33,6 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
-#include "storage/data_dir.h"
 #include "storage/empty_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -47,9 +46,7 @@
 #include "storage/tablet_schema_helper.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
-#include "util/defer_op.h"
 
 using std::string;
 
@@ -62,8 +59,6 @@ protected:
     OlapReaderStatistics _stats;
 
     void SetUp() override {
-        _metadata_mem_tracker = std::make_unique<MemTracker>();
-        _schema_change_mem_tracker = std::make_unique<MemTracker>();
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
         config::tablet_map_shard_size = 1;
         config::txn_map_shard_size = 1;
@@ -80,8 +75,6 @@ protected:
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
-        options.metadata_mem_tracker = _metadata_mem_tracker.get();
-        options.schema_change_mem_tracker = _schema_change_mem_tracker.get();
         Status s = starrocks::StorageEngine::open(options, &k_engine);
         ASSERT_TRUE(s.ok()) << s.to_string();
 
@@ -223,8 +216,6 @@ protected:
     }
 
 private:
-    std::unique_ptr<MemTracker> _metadata_mem_tracker = nullptr;
-    std::unique_ptr<MemTracker> _schema_change_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
 };
 
@@ -488,7 +479,7 @@ static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, int64_
 
 static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, std::shared_ptr<TabletSchema> partial_schema,
                                        int64_t version, int64_t nkeys) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema);
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -511,7 +502,7 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-    auto schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
+    auto schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema);
 
     {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
