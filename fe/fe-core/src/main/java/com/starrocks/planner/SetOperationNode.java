@@ -43,6 +43,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -235,14 +236,13 @@ public abstract class SetOperationNode extends PlanNode {
         return false;
     }
 
-    public List<Expr> candidatesOfSlotExprForChild(Expr expr, int childIdx) {
-        List<Expr> newSlotExprs = Lists.newArrayList();
+    public Optional<List<Expr>> candidatesOfSlotExprForChild(Expr expr, int childIdx) {
         Map<Integer, Set<Integer>> slotExprOutputSlotIdsMap = Maps.newHashMap();
         if (!(expr instanceof SlotRef)) {
-            return newSlotExprs;
+            return Optional.empty();
         }
         if (!expr.isBoundByTupleIds(getTupleIds())) {
-            return newSlotExprs;
+            return Optional.empty();
         }
         int slotExprSlotId = ((SlotRef) expr).getSlotId().asInt();
         for (Map<Integer, Integer> map : outputSlotIdToChildSlotIdMaps) {
@@ -251,10 +251,11 @@ public abstract class SetOperationNode extends PlanNode {
                 slotExprOutputSlotIdsMap.get(slotExprSlotId).add(map.get(slotExprSlotId));
             }
         }
-
         if (!slotExprOutputSlotIdsMap.containsKey(slotExprSlotId)) {
-            return newSlotExprs;
+            return Optional.empty();
         }
+
+        List<Expr> newSlotExprs = Lists.newArrayList();
         Set<Integer> mappedSlotIds = slotExprOutputSlotIdsMap.get(slotExprSlotId);
         // try to push all children if any expr of a child can match `probeExpr`
         for (Expr mexpr : materializedResultExprLists_.get(childIdx)) {
@@ -263,19 +264,16 @@ public abstract class SetOperationNode extends PlanNode {
                 newSlotExprs.add(mexpr);
             }
         }
-        return newSlotExprs;
+        return newSlotExprs.size() > 0? Optional.of(newSlotExprs) : Optional.empty();
     }
 
-    public List<List<Expr>> candidatesOfSlotExprsForChild(List<Expr> exprs, int childIdx) {
-        List<List<Expr>> candidatesOfSlotExprs = Lists.newArrayList();
-        for (Expr expr: exprs) {
-            List<Expr> candidates = candidatesOfSlotExprForChild(expr, childIdx);
-            if (candidates.isEmpty()) {
-                return Lists.newArrayList();
-            }
-            candidatesOfSlotExprs.add(candidates);
+    public Optional<List<List<Expr>>> candidatesOfSlotExprsForChild(List<Expr> exprs, int childIdx) {
+        if (!exprs.stream().allMatch(expr -> candidatesOfSlotExprForChild(expr, childIdx).isPresent())) {
+            return Optional.empty();
         }
-        return permutaionsOfPartitionByExprs(candidatesOfSlotExprs);
+        List<List<Expr>> candidatesOfSlotExprs =
+                exprs.stream().map(expr -> candidatesOfSlotExpr(expr).get()).collect(Collectors.toList());
+        return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 
     @Override

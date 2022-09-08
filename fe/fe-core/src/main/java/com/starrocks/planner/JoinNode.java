@@ -43,6 +43,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -232,14 +233,14 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     /**
      * Each slotExpr can deduce many slotExprs which is adjective because each join's conjunct can deduce left/right exprs.
      */
-    public List<Expr> candidatesOfSlotExprForChild(Expr expr, int childIdx) {
-        List<Expr> newSlotExprs = Lists.newArrayList();
+    public Optional<List<Expr>> candidatesOfSlotExprForChild(Expr expr, int childIdx) {
         if (!(expr instanceof SlotRef)) {
-            return newSlotExprs;
+            return Optional.empty();
         }
         if (!expr.isBoundByTupleIds(getTupleIds())) {
-            return newSlotExprs;
+            return Optional.empty();
         }
+        List<Expr> newSlotExprs = Lists.newArrayList();
         for (BinaryPredicate eqConjunct : eqJoinConjuncts) {
             Expr lhs = eqConjunct.getChild(0);
             Expr rhs = eqConjunct.getChild(1);
@@ -254,28 +255,26 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 }
             }
         }
-        return newSlotExprs;
+        return newSlotExprs.size() > 0 ? Optional.of(newSlotExprs) : Optional.empty();
     }
 
-    public List<List<Expr>> candidatesOfSlotExprsForChild(List<Expr> exprs, int childIdx) {
+    public Optional<List<List<Expr>>> candidatesOfSlotExprsForChild(List<Expr> exprs, int childIdx) {
         List<List<Expr>> candidatesOfSlotExprs = Lists.newArrayList();
         for (Expr expr: exprs) {
-            List<Expr> candidates = candidatesOfSlotExprForChild(expr, childIdx);
-            if (candidates.isEmpty()) {
-                return Lists.newArrayList();
+            Optional<List<Expr>> candidates = candidatesOfSlotExprForChild(expr, childIdx);
+            if (!candidates.isPresent()) {
+                return Optional.empty();
             }
-            candidatesOfSlotExprs.add(candidates);
+            candidatesOfSlotExprs.add(candidates.get());
         }
-        return permutaionsOfPartitionByExprs(candidatesOfSlotExprs);
+        return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 
     public boolean pushDownRuntimeFiltersForChild(RuntimeFilterDescription description,
                                                   Expr probeExpr,
                                                   List<Expr> partitionByExprs, int childIdx) {
-        List<Expr> probeExprCandidates = candidatesOfSlotExprForChild(probeExpr, childIdx);
-        List<List<Expr>> partitionByExprsCandidates = candidatesOfSlotExprsForChild(partitionByExprs, childIdx);
-        return canPushDownRuntimeFilterForChild(description, probeExpr, probeExprCandidates,
-                partitionByExprs, partitionByExprsCandidates, childIdx, false);
+        return canPushDownRuntimeFilterForChild(description, probeExpr, candidatesOfSlotExprForChild(probeExpr, childIdx),
+                partitionByExprs, candidatesOfSlotExprsForChild(partitionByExprs, childIdx), childIdx, false);
     }
 
     @Override

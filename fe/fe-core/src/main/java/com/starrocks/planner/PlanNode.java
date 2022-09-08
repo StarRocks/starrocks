@@ -31,9 +31,9 @@ import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -45,6 +45,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -719,94 +720,45 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * @param expr: the slot expr that need to find its candidate slot exprs.
      * @return List<Expr>: all the slot expr's candidate slot exprs.
      */
-    public List<Expr> candidatesOfSlotExpr(Expr expr) {
-        List<Expr> candidateSlotExprs = Lists.newArrayList();
+    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr) {
         // NOTE: No need to check expr is slot or not here, each node should implement its `candidatesOfSlotExpr` itself.
         if (!expr.isBoundByTupleIds(getTupleIds())) {
-            return candidateSlotExprs;
+            return Optional.empty();
         }
-        // only contain the input expr by default.
-        candidateSlotExprs.add(expr);
-        return candidateSlotExprs;
+        return Optional.of(Lists.newArrayList(expr));
     }
 
-    public List<List<Expr>> candidatesOfSlotExprs(List<Expr> exprs) {
-        List<List<Expr>> candidatesOfSlotExprs = Lists.newArrayList();
-        for (Expr expr: exprs) {
-            List<Expr> candidates = candidatesOfSlotExpr(expr);
-            if (candidates.isEmpty()) {
-                return Lists.newArrayList();
-            }
-            candidatesOfSlotExprs.add(candidates);
+    public Optional<List<List<Expr>>> candidatesOfSlotExprs(List<Expr> exprs) {
+        if (!exprs.stream().allMatch(expr -> candidatesOfSlotExpr(expr).isPresent())) {
+            return Optional.empty();
         }
-        return permutaionsOfPartitionByExprs(candidatesOfSlotExprs);
+        List<List<Expr>> candidatesOfSlotExprs =
+                exprs.stream().map(expr -> candidatesOfSlotExpr(expr).get()).collect(Collectors.toList());
+        return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 
-    public static List<List<Expr>> permutaionsOfPartitionByExprs(List<List<Expr>> partitionByExprs) {
+    public static List<List<Expr>> candidateOfPartitionByExprs(List<List<Expr>> partitionByExprs) {
         if (partitionByExprs.isEmpty()) {
             return Lists.newArrayList();
         }
-
-        int totalCount = 1;
-        for (List<Expr> exprs: partitionByExprs) {
-            totalCount *= exprs.size();
-        }
-
-        List<List<Expr>> permutations = Lists.newArrayList();
-        boolean isGreaterThanExpect = totalCount > 16;
-        if (isGreaterThanExpect) {
-            totalCount = 16;
-        }
-
-        if (totalCount <= 0) {
-            return Lists.newArrayList();
-        }
-
-        for (int i = 0; i < totalCount; i++) {
-            permutations.add(Lists.newArrayList());
-        }
-
-        for (int k = 0; k < partitionByExprs.size() - 1; k++) {
-            List<Expr> exprs = partitionByExprs.get(k);
-            int numTimes = totalCount / exprs.size();
-            for (int i = 0; i < exprs.size(); i++) {
-                for (int j = 0; j < numTimes; j++) {
-                    if ((i * numTimes) + j < totalCount) {
-                        permutations.get((i * numTimes) + j).add(exprs.get(i));
-                    }
-                }
-            }
-        }
-        // output the last column
-        List<Expr> exprs = partitionByExprs.get(partitionByExprs.size() - 1);
-        int numTimes = totalCount / exprs.size();
-        for (int i = 0; i < exprs.size(); i++) {
-            for (int j = 0; j < numTimes; j++) {
-                if (i + (j * numTimes) < totalCount) {
-                    permutations.get(i + (j * numTimes)).add(exprs.get(i));
-                }
-            }
-        }
-        if (isGreaterThanExpect) {
-            return permutations.stream().filter(perm -> perm.size() == partitionByExprs.size()).collect(Collectors.toList());
-        }
-        return permutations;
-    }
-
-    public Pair<Boolean, List<List<Expr>>> canPushDownRuntimeFilterCrossExchange(
-            List<Expr> partitionByExprs) {
+        PermutationGenerator generator = new PermutationGenerator<Expr>(partitionByExprs);
+        int totalCount = 0;
         List<List<Expr>> candidates = Lists.newArrayList();
+        while (generator.hasNext() && totalCount < 8) {
+            candidates.add(generator.next());
+            totalCount++;
+        }
+        return candidates;
+    }
+
+    public Optional<List<List<Expr>>> canPushDownRuntimeFilterCrossExchange(
+            List<Expr> partitionByExprs) {
         if (partitionByExprs.isEmpty()) {
-            return Pair.create(true, candidates);
+            return Optional.of(Lists.newArrayList());
         }
 
         // rf be crossed exchange when partitionByExprs are slot refs and bound by the plan node.
-        candidates = candidatesOfSlotExprs(partitionByExprs);
-        if (candidates.isEmpty()) {
-            return Pair.create(false, candidates);
-        } else {
-            return Pair.create(true, candidates);
-        }
+        return candidatesOfSlotExprs(partitionByExprs);
     }
 
     /**
@@ -817,22 +769,22 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             return false;
         }
 
-        Pair<Boolean, List<List<Expr>>> canPushDownPartitionByExprsCandidatesPair =
-                canPushDownRuntimeFilterCrossExchange(partitionByExprs);
-        if (canPushDownPartitionByExprsCandidatesPair.first != true) {
+        Optional<List<List<Expr>>> optCandidatePartitionByExprs = canPushDownRuntimeFilterCrossExchange(partitionByExprs);
+        if (!optCandidatePartitionByExprs.isPresent()) {
             return false;
         }
+        List<List<Expr>> candidatePartitionByExprs = optCandidatePartitionByExprs.get();
 
         // theoretically runtime filter can be applied on multiple child nodes.
         boolean accept = false;
         for (PlanNode node : children) {
-            if (canPushDownPartitionByExprsCandidatesPair.second.isEmpty()) {
+            if (candidatePartitionByExprs.isEmpty()) {
                 if (node.pushDownRuntimeFilters(description, probeExpr, Lists.newArrayList())) {
                     accept = true;
                     break;
                 }
             } else {
-                for (List<Expr> candidateOfPartitionByExprs: canPushDownPartitionByExprsCandidatesPair.second) {
+                for (List<Expr> candidateOfPartitionByExprs: candidatePartitionByExprs) {
                     if (node.pushDownRuntimeFilters(description, probeExpr, candidateOfPartitionByExprs)) {
                         accept = true;
                         break;
@@ -857,12 +809,14 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     private boolean canPushDownRuntimeFilterForChildOfProbeExpr(RuntimeFilterDescription description,
-                                                                List<Expr> probeExprCandidates,
-                                                                List<List<Expr>> partitionByExprsCandidates,
+                                                                Optional<List<Expr>> optProbeExprCandidates,
+                                                                Optional<List<List<Expr>>> optPartitionByExprsCandidates,
                                                                 int childIdx) {
-        if (probeExprCandidates.isEmpty()) {
+        if (!optProbeExprCandidates.isPresent() || !optPartitionByExprsCandidates.isPresent()) {
             return false;
         }
+        List<Expr> probeExprCandidates = optProbeExprCandidates.get();
+        List<List<Expr>> partitionByExprsCandidates = optPartitionByExprsCandidates.get();
 
         for (Expr candidateOfProbeExpr: probeExprCandidates) {
             if (partitionByExprsCandidates.isEmpty()) {
@@ -883,13 +837,13 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     protected boolean canPushDownRuntimeFilterForChild(RuntimeFilterDescription description,
                                                        Expr probeExpr,
-                                                       List<Expr> probeExprCandidates,
+                                                       Optional<List<Expr>> optProbeExprCandidates,
                                                        List<Expr> partitionByExprs,
-                                                       List<List<Expr>> partitionByExprsCandidates,
+                                                       Optional<List<List<Expr>>> optPartitionByExprsCandidates,
                                                        int childIdx,
                                                        boolean addProbeInfo) {
-        boolean accept =
-                canPushDownRuntimeFilterForChildOfProbeExpr(description, probeExprCandidates, partitionByExprsCandidates, childIdx);
+        boolean accept = canPushDownRuntimeFilterForChildOfProbeExpr(description, optProbeExprCandidates,
+                optPartitionByExprsCandidates, childIdx);
         boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds());
         if (isBound) {
             checkRuntimeFilterOnNullValue(description, probeExpr);

@@ -38,6 +38,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStreamingPreaggregationMode;
 
 import java.util.List;
+import java.util.Optional;
 
 public class AggregationNode extends PlanNode {
     private final AggregateInfo aggInfo;
@@ -230,14 +231,14 @@ public class AggregationNode extends PlanNode {
     }
 
     @Override
-    public List<Expr> candidatesOfSlotExpr(Expr expr) {
-        List<Expr> newSlotExprs = Lists.newArrayList();
+    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr) {
         if (!expr.isBoundByTupleIds(getTupleIds())) {
-            return newSlotExprs;
+            return Optional.empty();
         }
         if (!(expr instanceof SlotRef)) {
-            return newSlotExprs;
+            return Optional.empty();
         }
+        List<Expr> newSlotExprs = Lists.newArrayList();
         for (Expr gexpr : aggInfo.getGroupingExprs()) {
             if (!(gexpr instanceof SlotRef)) {
                 continue;
@@ -246,7 +247,7 @@ public class AggregationNode extends PlanNode {
                 newSlotExprs.add(gexpr);
             }
         }
-        return newSlotExprs;
+        return newSlotExprs.size() > 0 ? Optional.of(newSlotExprs) : Optional.empty();
     }
 
     @Override
@@ -259,10 +260,8 @@ public class AggregationNode extends PlanNode {
             return false;
         }
 
-        List<Expr> probeExprCandidates = candidatesOfSlotExpr(probeExpr);
-        List<List<Expr>> partitionByExprsCandidates = candidatesOfSlotExprs(partitionByExprs);
-        return canPushDownRuntimeFilterForChild(description, probeExpr, probeExprCandidates,
-                partitionByExprs, partitionByExprsCandidates, 0, true);
+        return canPushDownRuntimeFilterForChild(description, probeExpr, candidatesOfSlotExpr(probeExpr),
+                partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
     }
 
     @Override

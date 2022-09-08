@@ -17,11 +17,7 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TProjectNode;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 
 public class ProjectNode extends PlanNode {
     private final Map<SlotId, Expr> slotMap;
@@ -123,14 +119,14 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
-    public List<Expr> candidatesOfSlotExpr(Expr expr) {
-        List<Expr> newExprs = Lists.newArrayList();
+    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr) {
         if (!(expr instanceof SlotRef)) {
-            return newExprs;
+            return Optional.empty();
         }
         if (!expr.isBoundByTupleIds(getTupleIds())) {
-            return newExprs;
+            return Optional.empty();
         }
+        List<Expr> newExprs = Lists.newArrayList();
         for (Map.Entry<SlotId, Expr> kv : slotMap.entrySet()) {
             // Replace the probeExpr only when:
             // 1. when probeExpr is slot ref
@@ -146,7 +142,7 @@ public class ProjectNode extends PlanNode {
         if (newExprs.isEmpty()) {
             newExprs.add(expr);
         }
-        return newExprs;
+        return Optional.of(newExprs);
     }
 
     @Override
@@ -161,9 +157,7 @@ public class ProjectNode extends PlanNode {
             return false;
         }
 
-        List<Expr> probeExprCandidates = candidatesOfSlotExpr(probeExpr);
-        List<List<Expr>> partitionByExprsCandidates = candidatesOfSlotExprs(partitionByExprs);
-        return canPushDownRuntimeFilterForChild(description, probeExpr, probeExprCandidates,
-                partitionByExprs, partitionByExprsCandidates, 0, true);
+        return canPushDownRuntimeFilterForChild(description, probeExpr, candidatesOfSlotExpr(probeExpr),
+                partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
     }
 }

@@ -40,6 +40,9 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.stream.Collectors;
 
 public class AnalyticEvalNode extends PlanNode {
     private List<Expr> analyticFnCalls;
@@ -251,15 +254,14 @@ public class AnalyticEvalNode extends PlanNode {
     }
 
     @Override
-    public List<Expr> candidatesOfSlotExpr(Expr expr) {
-        List<Expr> newSlotExprs = Lists.newArrayList();
+    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr) {
         if (!expr.isBoundByTupleIds(getTupleIds())) {
-            return newSlotExprs;
+            return Optional.empty();
         }
         if (!(expr instanceof SlotRef)) {
-            return newSlotExprs;
+            return Optional.empty();
         }
-
+        List<Expr> newSlotExprs = Lists.newArrayList();
         for (Expr pExpr : partitionExprs) {
             // push down only when both of them are slot ref and slot id match.
             if ((pExpr instanceof SlotRef) &&
@@ -267,7 +269,7 @@ public class AnalyticEvalNode extends PlanNode {
                 newSlotExprs.add(pExpr);
             }
         }
-        return newSlotExprs;
+        return newSlotExprs.size() > 0 ? Optional.of(newSlotExprs) : Optional.empty();
     }
 
     @Override
@@ -280,10 +282,8 @@ public class AnalyticEvalNode extends PlanNode {
             return false;
         }
 
-        List<Expr> probeExprCandidates = candidatesOfSlotExpr(probeExpr);
-        List<List<Expr>> partitionByExprsCandidates = candidatesOfSlotExprs(partitionByExprs);
-        return canPushDownRuntimeFilterForChild(description, probeExpr, probeExprCandidates,
-                partitionByExprs, partitionByExprsCandidates, 0, true);
+        return canPushDownRuntimeFilterForChild(description, probeExpr, candidatesOfSlotExpr(probeExpr),
+                partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
     }
 
     @Override
