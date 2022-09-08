@@ -51,13 +51,8 @@ public class AlterRoutineLoadStmtTest {
     private Auth auth;
 
     @Before
-<<<<<<< HEAD
-    public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer();
-=======
     public void setUp() throws IOException {
         connectContext = UtFrameUtils.createDefaultCtx();
->>>>>>> alterroutineload test
 
         new Expectations() {
             {

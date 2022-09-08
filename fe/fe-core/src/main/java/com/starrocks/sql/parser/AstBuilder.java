@@ -71,6 +71,7 @@ import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
+import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
@@ -1828,6 +1829,76 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new CreateRoutineLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
                 tableName == null ? null : tableName.toString(), loadPropertyList, jobProperties, typeName, dataSourceProperties);
+    }
+
+    @Override
+    public ParseNode visitAlterRoutineLoadStatement(StarRocksParser.AlterRoutineLoadStatementContext context) {
+        QualifiedName dbName = null;
+        if (context.db != null) {
+            dbName = getQualifiedName(context.db);
+        }
+
+        String name = ((Identifier) visit(context.name)).getValue();
+
+        List<ParseNode> loadPropertyList = new ArrayList<>();
+        List<StarRocksParser.LoadPropertiesContext> loadPropertiesContexts = context.loadProperties();
+        Preconditions.checkNotNull(loadPropertiesContexts, "load properties is null");
+        for (StarRocksParser.LoadPropertiesContext loadPropertiesContext : loadPropertiesContexts) {
+            if (loadPropertiesContext.colSeparatorProperty() != null) {
+                String literal = ((StringLiteral) visit(loadPropertiesContext.colSeparatorProperty().string())).getValue();
+                loadPropertyList.add(new ColumnSeparator(literal));
+            }
+
+            if (loadPropertiesContext.rowDelimiterProperty() != null) {
+                String literal = ((StringLiteral) visit(loadPropertiesContext.rowDelimiterProperty().string())).getValue();
+                loadPropertyList.add(new RowDelimiter(literal));
+            }
+
+            if (loadPropertiesContext.columnProperties() != null) {
+                List<ImportColumnDesc> columns = new ArrayList<>();
+                for (StarRocksParser.QualifiedNameContext qualifiedNameContext :
+                        loadPropertiesContext.columnProperties().qualifiedName()) {
+                    String column = ((Identifier) (visit(qualifiedNameContext))).getValue();
+                    ImportColumnDesc columnDesc = new ImportColumnDesc(column);
+                    columns.add(columnDesc);
+                }
+
+                for (StarRocksParser.AssignmentListContext assignmentListContext :
+                        loadPropertiesContext.columnProperties().assignmentList()) {
+                    ColumnAssignment columnAssignment = (ColumnAssignment) (visit(assignmentListContext));
+                    Expr expr = columnAssignment.getExpr();
+                    ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
+                    columns.add(columnDesc);
+                }
+                loadPropertyList.add(new ImportColumnsStmt(columns));
+            }
+        }
+
+        Map<String, String> jobProperties = new HashMap<>();
+        if (context.jobProperties() != null) {
+            List<Property> propertyList = visit(context.jobProperties().properties().property(), Property.class);
+            for (Property property : propertyList) {
+                jobProperties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        if (context.dataSource() != null) {
+            String typeName = context.dataSource().source.getText();
+            Map<String, String> properties = new HashMap<>();
+            if (context.dataSource().dataSourceProperties() != null) {
+                List<Property> propertyList =
+                        visit(context.dataSource().dataSourceProperties().propertyList().property(), Property.class);
+                for (Property property : propertyList) {
+                    properties.put(property.getKey(), property.getValue());
+                }
+            }
+            RoutineLoadDataSourceProperties dataSource = new RoutineLoadDataSourceProperties(typeName, properties);
+            return new AlterRoutineLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
+                    loadPropertyList, jobProperties, dataSource);
+        }
+
+        return new AlterRoutineLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
+                loadPropertyList, jobProperties, new RoutineLoadDataSourceProperties());
     }
 
     @Override

@@ -716,6 +716,17 @@ createRoutineLoadStatement
         dataSourceProperties?
     ;
 
+alterRoutineLoadStatement
+    : ALTER ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+        (loadProperties (',' loadProperties)*)?
+        jobProperties?
+        dataSource?
+    ;
+
+dataSource
+    : FROM source=identifier dataSourceProperties
+    ;
+
 loadProperties
     : (colSeparatorProperty)
     | (rowDelimiterProperty)
@@ -736,33 +747,6 @@ columnProperties
     : '('
         (qualifiedName | assignmentList) (',' (qualifiedName | assignmentList))*
       ')'
-    ;
-
-jobProperties
-    : properties
-    ;
-
-dataSourceProperties
-    : propertyList
-    ;
-
-alterRoutineLoadStatement
-    : ALTER ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
-        (loadProperties (',' loadProperties)*)?
-        jobProperties?
-        FROM source=identifier
-        dataSourceProperties?
-    ;
-
-loadProperties
-    : (COLUMNS TERMINATED BY string)
-    | (COLUMNS columnProperties)
-    | (WHERE expression)
-    | (partitionNames)
-    ;
-
-columnProperties
-    : '(' identifier (',' identifier)* (',' assignment)* ')'
     ;
 
 jobProperties
