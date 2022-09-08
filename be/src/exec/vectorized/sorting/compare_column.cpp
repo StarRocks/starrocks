@@ -10,6 +10,7 @@
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exec/vectorized/sorting/sorting.h"
+#include "glog/logging.h"
 #include "runtime/primitive_type.h"
 #include "simd/selector.h"
 
@@ -91,7 +92,8 @@ public:
         CompareVector cmp_vector(null_data.size());
         // TODO: use IMD select_if
         auto merge_cmp_vector = [](CompareVector& a, CompareVector& b) {
-            for (int i = 0; i < a.size(); ++i) {
+            DCHECK_EQ(a.size(), b.size());
+            for (size_t i = 0; i < a.size(); ++i) {
                 a[i] = a[i] == 0 ? b[i] : a[i];
             }
         };
