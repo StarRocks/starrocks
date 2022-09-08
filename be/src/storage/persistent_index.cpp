@@ -1800,18 +1800,20 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
     for (int i = 0; i < n; i++) {
         const auto& page_pointer_pb = meta.wals(i).data();
         auto offset = page_pointer_pb.offset();
-        for (const auto& shard : _shards) {
-            RETURN_IF_ERROR(shard->load(offset, read_file));
+        const auto end = offset + page_pointer_pb.size();
+        std::string buff;
+        raw::stl_string_resize_uninitialized(&buff, 4);
+        while (offset < end) {
+            RETURN_IF_ERROR(read_file->read_at_fully(offset, buff.data(), buff.size()));
+            const auto key_size = UNALIGNED_LOAD32(buff.data());
+            const auto [shard_offset, shard_size] = _shard_info_by_key_size[key_size];
+            for (auto i = 0; i < shard_size; ++i) {
+                RETURN_IF_ERROR(_shards[shard_offset + i]->load(offset, read_file));
+            }
         }
+        _offset += page_pointer_pb.size();
     }
-    if (n == 0) {
-        RETURN_IF_ERROR(FileSystemUtil::resize_file(index_file_name, 0));
-    } else {
-        const auto& last_page_pb = meta.wals(n - 1).data();
-        // the data in the end maybe invalid
-        // so we need to truncate file first
-        RETURN_IF_ERROR(FileSystemUtil::resize_file(index_file_name, last_page_pb.offset() + last_page_pb.size()));
-    }
+    RETURN_IF_ERROR(FileSystemUtil::resize_file(index_file_name, _offset));
     WritableFileOptions wblock_opts;
     wblock_opts.mode = FileSystem::MUST_EXIST;
     ASSIGN_OR_RETURN(_index_file, fs->new_writable_file(wblock_opts, index_file_name));
