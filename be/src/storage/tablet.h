@@ -66,13 +66,15 @@ using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
 
 class Tablet : public BaseTablet {
 public:
-    static TabletSharedPtr create_tablet_from_meta(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta,
-                                                   DataDir* data_dir = nullptr);
+    static TabletSharedPtr create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir = nullptr);
 
-    Tablet(TabletMetaSharedPtr tablet_meta, DataDir* data_dir);
+    Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir);
+
+    Tablet(const Tablet&) = delete;
+    const Tablet& operator=(const Tablet&) = delete;
 
     // for ut
-    Tablet() = default;
+    Tablet();
 
     ~Tablet() override;
 
@@ -86,7 +88,7 @@ public:
 
     void save_meta();
     // Used in clone task, to update local meta when finishing a clone job
-    Status revise_tablet_meta(MemTracker* mem_tracker, const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
+    Status revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                               const std::vector<Version>& versions_to_delete);
 
     const int64_t cumulative_layer_point() const;
@@ -103,9 +105,7 @@ public:
     size_t num_key_columns() const;
     size_t num_short_key_columns() const;
     size_t num_rows_per_row_block() const;
-    CompressKind compress_kind() const;
     size_t next_unique_id() const;
-    size_t row_size() const;
     size_t field_index(const string& field_name) const;
 
     // operation in rowsets
@@ -131,16 +131,12 @@ public:
 
     Status capture_consistent_versions(const Version& spec_version, vector<Version>* version_path) const;
     Status check_version_integrity(const Version& version);
-    bool check_version_exist(const Version& version) const;
     void list_versions(std::vector<Version>* versions) const;
 
     // REQUIRE: `obtain_header_rdlock()`ed
     Status capture_consistent_rowsets(const Version& spec_version, vector<RowsetSharedPtr>* rowsets) const;
 
-    using IteratorList = std::vector<ChunkIteratorPtr>;
-
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
-    void add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version);
     bool version_for_delete_predicate(const Version& version);
 
     // message for alter task
@@ -220,13 +216,6 @@ public:
     void pick_candicate_rowsets_to_base_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
 
     void calculate_cumulative_point();
-    // TODO(ygl):
-    bool is_primary_replica() { return false; }
-
-    // TODO(ygl):
-    // eco mode means power saving in new energy car
-    // eco mode also means save money in starrocks
-    bool in_eco_mode() { return false; }
 
     void do_tablet_meta_checkpoint();
 
@@ -244,8 +233,6 @@ public:
     // updatable tablet specific operations
     TabletUpdates* updates() { return _updates.get(); }
     Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
-
-    int64_t mem_usage() { return sizeof(Tablet); }
 
     // if there is _compaction_task running
     // do not do compaction
@@ -279,6 +266,8 @@ protected:
     void on_shutdown() override;
 
 private:
+    int64_t _mem_usage() { return sizeof(Tablet); }
+
     Status _init_once_action();
     void _print_missed_versions(const std::vector<Version>& missed_versions) const;
     bool _contains_rowset(const RowsetId rowset_id);
@@ -294,8 +283,6 @@ private:
     bool _check_versions_completeness();
 
     std::unique_ptr<CompactionContext> _get_compaction_context();
-
-    bool _is_compacted_singleton(Rowset* rowset);
 
     // protected by _meta_lock
     void _update_tablet_compaction_context();
@@ -360,9 +347,6 @@ private:
     std::atomic<int64_t> _cumulative_point{0};
     std::atomic<int32_t> _newly_created_rowset_num{0};
     std::atomic<int64_t> _last_checkpoint_time{0};
-
-    Tablet(const Tablet&) = delete;
-    const Tablet& operator=(const Tablet&) = delete;
 };
 
 inline bool Tablet::init_succeeded() {
@@ -409,20 +393,12 @@ inline size_t Tablet::num_rows_per_row_block() const {
     return _tablet_meta->tablet_schema().num_rows_per_row_block();
 }
 
-inline CompressKind Tablet::compress_kind() const {
-    return _tablet_meta->tablet_schema().compress_kind();
-}
-
 inline size_t Tablet::next_unique_id() const {
     return _tablet_meta->tablet_schema().next_column_unique_id();
 }
 
 inline size_t Tablet::field_index(const string& field_name) const {
     return _tablet_meta->tablet_schema().field_index(field_name);
-}
-
-inline size_t Tablet::row_size() const {
-    return _tablet_meta->tablet_schema().row_size();
 }
 
 } // namespace starrocks
