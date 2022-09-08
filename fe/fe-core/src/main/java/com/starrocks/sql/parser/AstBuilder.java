@@ -1872,6 +1872,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
                 loadPropertyList.add(new ImportColumnsStmt(columns));
             }
+
+            if (loadPropertiesContext.expression() != null) {
+                Expr where = (Expr) visit(loadPropertiesContext.expression());
+                loadPropertyList.add(new ImportWhereStmt(where));
+            }
+
+            if (loadPropertiesContext.partitionNames() != null) {
+                loadPropertyList.add(visit(loadPropertiesContext.partitionNames()));
+            }
         }
 
         Map<String, String> jobProperties = new HashMap<>();
