@@ -7,6 +7,8 @@
 
 #include <unordered_set>
 
+#include "column/const_column.h"
+
 namespace starrocks::vectorized {
 
 namespace {
@@ -4617,6 +4619,34 @@ TEST_F(ArrayFunctionsTest, array_filter_with_onlynull) {
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(dest_column->only_null());
+}
+
+TEST_F(ArrayFunctionsTest, array_distinct_only_null) {
+    // test only null
+    {
+        auto src_column = ColumnHelper::create_const_null_column(3);
+        auto dest_column = ArrayDistinct<TYPE_VARCHAR>::process(nullptr, {src_column});
+        ASSERT_EQ(dest_column->size(), 3);
+        ASSERT_TRUE(dest_column->only_null());
+    }
+    // test const
+    {
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        src_column->append_datum(DatumArray{"5", "5", "33", "666"});
+        src_column = std::make_shared<ConstColumn>(src_column, 3);
+        auto dest_column = ArrayDistinct<TYPE_VARCHAR>::process(nullptr, {src_column});
+        ASSERT_EQ(dest_column->size(), 3);
+        ASSERT_STREQ(dest_column->debug_string().c_str(),
+                     "[['5', '666', '33'], ['5', '666', '33'], ['5', '666', '33']]");
+    }
+    // test normal
+    {
+        auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        src_column->append_datum(DatumArray{"5", "5", "33", "666"});
+        auto dest_column = ArrayDistinct<TYPE_VARCHAR>::process(nullptr, {src_column});
+        ASSERT_EQ(dest_column->size(), 1);
+        ASSERT_STREQ(dest_column->debug_string().c_str(), "[['5', '666', '33']]");
+    }
 }
 
 } // namespace starrocks::vectorized

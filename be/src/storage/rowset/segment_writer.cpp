@@ -51,6 +51,10 @@ SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segme
 
 SegmentWriter::~SegmentWriter() {}
 
+std::string SegmentWriter::segment_path() const {
+    return _wfile->filename();
+}
+
 void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, const TabletColumn& column) {
     meta->set_column_id(column_id);
     meta->set_unique_id(column.unique_id());

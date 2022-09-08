@@ -161,12 +161,44 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     }
 }
 
+void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
+                              PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    _num_segment++;
+    auto channel = get_tablets_channel(request->index_id());
+    if (channel == nullptr) {
+        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+        response->mutable_status()->add_error_msgs("cannot find the tablets channel associated with the index id");
+        return;
+    }
+    auto local_tablets_channel = down_cast<LocalTabletsChannel*>(channel.get());
+    if (local_tablets_channel == nullptr) {
+        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+        response->mutable_status()->add_error_msgs("channel is not local tablets channel.");
+        return;
+    }
+
+    local_tablets_channel->add_segment(cntl, request, response, done);
+    closure_guard.release();
+}
+
 void LoadChannel::cancel() {
     _span->AddEvent("cancel");
     auto scoped = trace::Scope(_span);
     std::lock_guard l(_lock);
     for (auto& it : _tablets_channels) {
         it.second->cancel();
+    }
+}
+
+void LoadChannel::cancel(int64_t index_id, int64_t tablet_id) {
+    std::lock_guard l(_lock);
+    auto it = _tablets_channels.find(index_id);
+    if (it != _tablets_channels.end()) {
+        auto local_tablets_channel = down_cast<LocalTabletsChannel*>(it->second.get());
+        if (local_tablets_channel != nullptr) {
+            local_tablets_channel->cancel(tablet_id);
+        }
     }
 }
 

@@ -65,3 +65,13 @@ message ChunkPB {
     // we may estimate larger serialized_size but actually don't use that much space.
     optional int64 serialized_size  = 9; // how many bytes are really written into data.
 };
+
+message SegmentPB {
+    optional int64 segment_id = 1;
+    optional bytes data = 2;
+    optional int64 data_size = 3;
+    optional int64 index_size= 4;
+    optional int64 num_rows = 5;
+    optional int64 row_size = 6;
+    optional string path = 7;
+};
