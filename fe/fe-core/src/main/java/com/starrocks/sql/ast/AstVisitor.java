@@ -50,6 +50,7 @@ import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
+import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
@@ -374,6 +375,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowRoutineLoadStatement(ShowRoutineLoadStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
