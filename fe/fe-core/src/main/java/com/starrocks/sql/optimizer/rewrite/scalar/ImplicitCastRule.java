@@ -45,9 +45,6 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
         Function fn = call.getFunction();
-        if (fn.functionName().equals(FunctionSet.ARRAY_MAP)) { // array_map does not need to implicit cast.
-            return call;
-        }
         if (fn == null) {
             for (int i = 0; i < call.getChildren().size(); ++i) {
                 Type type = call.getType();
@@ -56,6 +53,9 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                 }
             }
         } else {
+            if (fn.functionName().equals(FunctionSet.ARRAY_MAP)) { // array_map does not need to implicit cast.
+                return call;
+            }
             if (!call.isAggregate() || FunctionSet.AVG.equalsIgnoreCase(fn.functionName())) {
                 Preconditions.checkArgument(Arrays.stream(fn.getArgs()).noneMatch(Type::isWildcardDecimal),
                         String.format("Resolved function %s has wildcard decimal as argument type", fn.functionName()));
