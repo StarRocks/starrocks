@@ -210,7 +210,7 @@ protected:
         auto path = fmt::format("{}/{}", kTestGroupPath, filename);
         std::cerr << path << '\n';
 
-        ASSIGN_OR_ABORT(auto seg, Segment::open(_mem_tracker.get(), fs, path, 0, _tablet_schema.get()));
+        ASSIGN_OR_ABORT(auto seg, Segment::open(fs, path, 0, _tablet_schema.get()));
 
         OlapReaderStatistics statistics;
         vectorized::SegmentReadOptions opts;
