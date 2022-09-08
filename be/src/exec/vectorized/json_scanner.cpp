@@ -525,7 +525,7 @@ Status JsonReader::_construct_row_in_object_order(simdjson::ondemand::object* ro
         if (col_name == "__op") {
             // special treatment for __op column, fill default value '0' rather than null
             if (column->is_binary()) {
-                column->append_strings(std::vector{Slice{"0"}});
+                std::ignore = column->append_strings(std::vector{Slice{"0"}});
             } else {
                 column->append_datum(Datum((uint8_t)0));
             }
@@ -554,7 +554,7 @@ Status JsonReader::_construct_row_in_slot_order(simdjson::ondemand::object* row,
             if (col_name == "__op") {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {
-                    column->append_strings(std::vector{Slice{"0"}});
+                    std::ignore = column->append_strings(std::vector{Slice{"0"}});
                 } else {
                     column->append_datum(Datum((uint8_t)0));
                 }
