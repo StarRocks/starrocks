@@ -507,7 +507,7 @@ void RuntimeFilterProbeCollector::push_down(RuntimeFilterProbeCollector* parent,
     auto iter = parent->_descriptors.begin();
     while (iter != parent->_descriptors.end()) {
         RuntimeFilterProbeDescriptor* desc = iter->second;
-        if (!desc->can_push_down_runtime_filter()) {
+        if (desc->runtime_filter_bank.cpp()) {
             continue;
         }
         if (desc->is_bound(tuple_ids)) {
