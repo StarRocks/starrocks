@@ -133,15 +133,22 @@ public class IcebergTable extends Table {
     }
 
     // icbTbl is used for caching
+    // TODO: remove synchronized when external table hase been deleted
     public synchronized org.apache.iceberg.Table getIcebergTable() {
         try {
-            if (this.icbTbl == null) {
-                IcebergCatalog catalog = IcebergUtil.getIcebergCatalog(this);
-                this.icbTbl = catalog.loadTable(this);
+            if (isCatalogTbl) {
+                GlobalStateMgr.getCurrentState().getIcebergRepository().getTable(icbTbl).get();
+            } else {
+                if (this.icbTbl == null) {
+                    IcebergCatalog catalog = IcebergUtil.getIcebergCatalog(this);
+                    this.icbTbl = catalog.loadTable(this);
+                }
             }
         } catch (StarRocksIcebergException e) {
             LOG.error("Load iceberg table failure!", e);
             throw e;
+        } catch (Exception e1) {
+            LOG.error("Load iceberg table failure!", e1);
         }
         return icbTbl;
     }

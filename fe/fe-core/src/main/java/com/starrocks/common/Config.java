@@ -1516,6 +1516,12 @@ public class Config extends ConfigBase {
     public static long iceberg_worker_num_threads = 64;
 
     /**
+     * size of iceberg table refresh pool
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_table_refresh_threads = 128;
+
+    /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
      */
     @ConfField
