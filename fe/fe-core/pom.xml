@@ -487,6 +487,11 @@ under the License.
             <artifactId>hadoop-client</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-aws</artifactId>
+        </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.antlr/antlr4 -->
         <dependency>
