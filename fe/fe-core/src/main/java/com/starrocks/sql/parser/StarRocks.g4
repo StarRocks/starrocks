@@ -85,6 +85,7 @@ statement
     | resumeRoutineLoadStatement
     | pauseRoutineLoadStatement
     | showRoutineLoadStatement
+    | showRoutineLoadTaskStatement
 
     // Admin Statement
     | adminSetConfigStatement
@@ -173,6 +174,7 @@ statement
     | revokePrivilegeStatement
     | showRolesStatement
     | showGrantsStatement
+    | dropRoleStatement
 
 
     // Backup Restore Satement
@@ -741,6 +743,11 @@ showRoutineLoadStatement
         (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
+showRoutineLoadTaskStatement
+    : SHOW ROUTINE LOAD TASK
+        (FROM db=qualifiedName)?
+        WHERE expression
+    ;
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
@@ -1037,6 +1044,10 @@ showRolesStatement
 
 showGrantsStatement
     : SHOW ALL? GRANTS (FOR user)?
+    ;
+
+dropRoleStatement
+    : DROP ROLE identifierOrString                                                          #dropRole
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------

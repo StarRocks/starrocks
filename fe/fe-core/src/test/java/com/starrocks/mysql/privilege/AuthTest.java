@@ -36,7 +36,6 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.security.LdapSecurity;
 import com.starrocks.persist.EditLog;
@@ -751,13 +750,17 @@ public class AuthTest {
                 PrivPredicate.DROP));
 
         // 31. drop role, privs remain unchanged
-        DropRoleStmt dropRoleStmt = new DropRoleStmt("role1");
+        /*
+        String dropRoleSql = "DROP ROLE role1";
+        DropRoleStmt dropRoleStmt;
         try {
-            dropRoleStmt.analyze(analyzer);
-        } catch (UserException e) {
+            dropRoleStmt = (DropRoleStmt) UtFrameUtils.parseStmtWithNewParser(dropRoleSql, ctx);
+            auth.dropRole(dropRoleStmt);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
+         */
 
         currentUser2.clear();
         auth.checkPlainPassword("chenliu", "20.1.1.1", "12345", currentUser2);
@@ -1212,11 +1215,12 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        DropRoleStmt dropRoleStmt = new DropRoleStmt(role);
+        String dropRoleSql = "DROP ROLE role0";
+        DropRoleStmt dropRoleStmt;
         try {
-            dropRoleStmt.analyze(analyzer);
+            dropRoleStmt = (DropRoleStmt) UtFrameUtils.parseStmtWithNewParser(dropRoleSql, ctx);
             auth.dropRole(dropRoleStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
