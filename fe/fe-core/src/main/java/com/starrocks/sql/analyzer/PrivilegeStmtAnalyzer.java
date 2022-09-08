@@ -4,6 +4,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.CreateRoleStmt;
+import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.StatementBase;
@@ -227,6 +228,12 @@ public class PrivilegeStmtAnalyzer {
                 }
             }
             Preconditions.checkState(stmt.isAll() || session.getCurrentUserIdentity() != null);
+            return null;
+        }
+
+        @Override
+        public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
+            stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not drop role"));
             return null;
         }
     }
