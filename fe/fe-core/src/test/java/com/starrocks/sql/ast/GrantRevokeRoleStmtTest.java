@@ -5,7 +5,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
-import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -22,8 +21,6 @@ public class GrantRevokeRoleStmtTest {
     @Mocked
     private Auth auth;
     @Mocked
-    private UserPrivTable userPrivTable;
-    @Mocked
     private ConnectContext ctx;
 
     @Before
@@ -34,13 +31,6 @@ public class GrantRevokeRoleStmtTest {
                 globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
-            }
-        };
-        new Expectations(auth) {
-            {
-                auth.getUserPrivTable();
-                minTimes = 0;
-                result = userPrivTable;
             }
         };
 
@@ -60,6 +50,7 @@ public class GrantRevokeRoleStmtTest {
     @Test
     public void testNormal() throws Exception {
         // suppose current user exists
+<<<<<<< HEAD
         new Expectations(userPrivTable) {
             {
                 userPrivTable.doesUserExist((UserIdentity)any);
@@ -68,10 +59,16 @@ public class GrantRevokeRoleStmtTest {
             }
         };
 
+=======
+>>>>>>> 82db084e8 ([BugFix] Fix checking the existance of domained users fails (#10999))
         // suppose current role exists and has GRANT privilege
         new Expectations(auth) {
             {
                 auth.doesRoleExist((String)any);
+                minTimes = 0;
+                result = true;
+
+                auth.doesUserExist((UserIdentity) any);
                 minTimes = 0;
                 result = true;
             }
@@ -102,6 +99,7 @@ public class GrantRevokeRoleStmtTest {
     @Test(expected = SemanticException.class)
     public void testUserNotExist() throws Exception {
         // suppose current user doesn't exist, check for exception
+<<<<<<< HEAD
         new Expectations(userPrivTable) {
             {
                 userPrivTable.doesUserExist((UserIdentity)any);
@@ -113,6 +111,16 @@ public class GrantRevokeRoleStmtTest {
         new Expectations(auth) {
             {
                 auth.doesRoleExist((String)any);
+=======
+        // suppose current role exists
+        new Expectations(auth) {
+            {
+                auth.doesUserExist((UserIdentity) any);
+                minTimes = 0;
+                result = false;
+
+                auth.doesRoleExist((String) any);
+>>>>>>> 82db084e8 ([BugFix] Fix checking the existance of domained users fails (#10999))
                 minTimes = 0;
                 result = true;
             }
@@ -125,6 +133,7 @@ public class GrantRevokeRoleStmtTest {
     @Test(expected = SemanticException.class)
     public void testRoleNotExist() throws Exception {
         // suppose current exists
+<<<<<<< HEAD
         new Expectations(userPrivTable) {
             {
                 userPrivTable.doesUserExist((UserIdentity)any);
@@ -136,6 +145,16 @@ public class GrantRevokeRoleStmtTest {
         new Expectations(auth) {
             {
                 auth.doesRoleExist((String)any);
+=======
+        // suppose current role doesn't exist, check for exception
+        new Expectations(auth) {
+            {
+                auth.doesUserExist((UserIdentity) any);
+                minTimes = 0;
+                result = true;
+
+                auth.doesRoleExist((String) any);
+>>>>>>> 82db084e8 ([BugFix] Fix checking the existance of domained users fails (#10999))
                 minTimes = 0;
                 result = false;
             }

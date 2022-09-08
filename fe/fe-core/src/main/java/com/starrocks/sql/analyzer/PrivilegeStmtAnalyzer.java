@@ -37,9 +37,17 @@ public class PrivilegeStmtAnalyzer {
                 throw new SemanticException(e.getMessage());
             }
 
+<<<<<<< HEAD
             // check if user exists
             if (!session.getGlobalStateMgr().getAuth().getUserPrivTable().doesUserExist(userIdent)) {
                 throw new SemanticException("user " + userIdent + " not exist!");
+=======
+            if (checkExist) {
+                // check if user exists
+                if (!session.getGlobalStateMgr().getAuth().doesUserExist(userIdent)) {
+                    throw new SemanticException("user " + userIdent + " not exist!");
+                }
+>>>>>>> 82db084e8 ([BugFix] Fix checking the existance of domained users fails (#10999))
             }
         }
 

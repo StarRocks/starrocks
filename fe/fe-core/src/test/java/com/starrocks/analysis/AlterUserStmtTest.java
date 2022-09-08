@@ -34,10 +34,14 @@ public class AlterUserStmtTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 analyzer.getClusterName();
                 result = "testCluster";
                 auth.checkHasPriv((ConnectContext) any, PrivPredicate.GRANT, Auth.PrivLevel.GLOBAL, Auth
                         .PrivLevel.DATABASE);
+=======
+                auth.doesUserExist((UserIdentity) any);
+>>>>>>> 82db084e8 ([BugFix] Fix checking the existance of domained users fails (#10999))
                 result = true;
             }
         };
@@ -135,8 +139,13 @@ public class AlterUserStmtTest {
     public void testBadPass(@Injectable Analyzer analyzer) throws UserException, AnalysisException {
         new Expectations() {
             {
+<<<<<<< HEAD
                 analyzer.getClusterName();
                 result = "testCluster";
+=======
+                auth.doesUserExist((UserIdentity) any);
+                result = true;
+>>>>>>> 82db084e8 ([BugFix] Fix checking the existance of domained users fails (#10999))
             }
         };
         AlterUserStmt stmt = new AlterUserStmt(new UserDesc(new UserIdentity("", "%"), "passwd", false));
@@ -148,8 +157,13 @@ public class AlterUserStmtTest {
     public void testInvalidAuthPlugin(@Injectable Analyzer analyzer) throws UserException, AnalysisException {
         new Expectations() {
             {
+<<<<<<< HEAD
                 analyzer.getClusterName();
                 result = "testCluster";
+=======
+                auth.doesUserExist((UserIdentity) any);
+                result = true;
+>>>>>>> 82db084e8 ([BugFix] Fix checking the existance of domained users fails (#10999))
             }
         };
         AlterUserStmt stmt = new AlterUserStmt(new UserDesc(new UserIdentity("user", "%"), "authentication_ldap_sasl"));

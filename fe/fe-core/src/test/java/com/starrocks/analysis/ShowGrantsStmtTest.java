@@ -6,7 +6,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
@@ -23,8 +22,6 @@ public class ShowGrantsStmtTest {
     private GlobalStateMgr globalStateMgr;
     @Mocked
     private Auth auth;
-    @Mocked
-    private UserPrivTable userPrivTable;
     @Mocked
     private ConnectContext ctx;
 
@@ -54,10 +51,6 @@ public class ShowGrantsStmtTest {
         };
         new Expectations(auth) {
             {
-                auth.getUserPrivTable();
-                minTimes = 0;
-                result = userPrivTable;
-
                 auth.checkGlobalPriv(ctx, PrivPredicate.GRANT);
                 minTimes = 0;
                 result = true;
@@ -68,9 +61,9 @@ public class ShowGrantsStmtTest {
     @Test
     public void testNormal() throws Exception {
         // suppose current user exists
-        new Expectations(userPrivTable) {
+        new Expectations(auth) {
             {
-                userPrivTable.doesUserExist((UserIdentity)any);
+                auth.doesUserExist((UserIdentity)any);
                 minTimes = 0;
                 result = true;
             }
@@ -82,9 +75,9 @@ public class ShowGrantsStmtTest {
     @Test(expected = AnalysisException.class)
     public void testUserNotExist() throws Exception {
         // suppose current user doesn't exist, check for exception
-        new Expectations(userPrivTable) {
+        new Expectations(auth) {
             {
-                userPrivTable.doesUserExist((UserIdentity)any);
+                auth.doesUserExist((UserIdentity)any);
                 minTimes = 0;
                 result = false;
             }
