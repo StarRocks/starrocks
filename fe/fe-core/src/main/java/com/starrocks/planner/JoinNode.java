@@ -237,9 +237,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         if (!(expr instanceof SlotRef)) {
             return Optional.empty();
         }
-        if (!expr.isBoundByTupleIds(getTupleIds())) {
-            return Optional.empty();
-        }
         List<Expr> newSlotExprs = Lists.newArrayList();
         for (BinaryPredicate eqConjunct : eqJoinConjuncts) {
             Expr lhs = eqConjunct.getChild(0);
@@ -259,14 +256,11 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     public Optional<List<List<Expr>>> candidatesOfSlotExprsForChild(List<Expr> exprs, int childIdx) {
-        List<List<Expr>> candidatesOfSlotExprs = Lists.newArrayList();
-        for (Expr expr: exprs) {
-            Optional<List<Expr>> candidates = candidatesOfSlotExprForChild(expr, childIdx);
-            if (!candidates.isPresent()) {
-                return Optional.empty();
-            }
-            candidatesOfSlotExprs.add(candidates.get());
+        if (!exprs.stream().allMatch(expr -> candidatesOfSlotExprForChild(expr, childIdx).isPresent())) {
+            return Optional.empty();
         }
+        List<List<Expr>> candidatesOfSlotExprs =
+                exprs.stream().map(expr -> candidatesOfSlotExprForChild(expr, childIdx).get()).collect(Collectors.toList());
         return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 

@@ -272,7 +272,7 @@ public abstract class SetOperationNode extends PlanNode {
             return Optional.empty();
         }
         List<List<Expr>> candidatesOfSlotExprs =
-                exprs.stream().map(expr -> candidatesOfSlotExpr(expr).get()).collect(Collectors.toList());
+                exprs.stream().map(expr -> candidatesOfSlotExprForChild(expr, childIdx).get()).collect(Collectors.toList());
         return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 

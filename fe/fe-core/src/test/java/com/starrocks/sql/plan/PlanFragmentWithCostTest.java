@@ -743,13 +743,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t0, 10000000L);
 
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
-        setTableStatistics(t1, 1000000000L);
+        setTableStatistics(t1, 10000000L);
 
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
-        setTableStatistics(t2, 1000000000L);
+        setTableStatistics(t2, 10000000L);
 
         String sql = "select * from (select t1.v5 as v5, t0.v3 as v3 from t0 join[shuffle] t1 on t0.v2 = " +
-                "t1.v5 and t0.v3 = t1.v6) tt join [shuffle] t2 on tt.v5 = t2.v8 and tt.v3 = t2.v7";
+                "t1.v5 and t0.v3 = t1.v6) tt join[shuffle] t2 on tt.v5 = t2.v8 and tt.v3 = t2.v7";
         String plan = getVerboseExplain(sql);
         System.out.println(plan);
 
@@ -760,14 +760,14 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  - filter_id = 3, build_expr = (7: v7), remote = true");
 
         assertContains(plan, "     probe runtime filters:\n" +
-                "     - filter_id = 2, probe_expr = (5: v5)\n" +
-                "     - filter_id = 3, probe_expr = (6: v6)");
+                "     - filter_id = 2, probe_expr = (5: v5), partition_exprs = (5: v5,6: v6)\n" +
+                "     - filter_id = 3, probe_expr = (6: v6), partition_exprs = (5: v5,6: v6)");
 
         assertContains(plan, "     probe runtime filters:\n" +
                 "     - filter_id = 0, probe_expr = (2: v2), partition_exprs = (2: v2,3: v3)\n" +
                 "     - filter_id = 1, probe_expr = (3: v3), partition_exprs = (2: v2,3: v3)\n" +
-                "     - filter_id = 2, probe_expr = (2: v2)\n" +
-                "     - filter_id = 3, probe_expr = (3: v3)");
+                "     - filter_id = 2, probe_expr = (2: v2), partition_exprs = (2: v2,3: v3)\n" +
+                "     - filter_id = 3, probe_expr = (3: v3), partition_exprs = (2: v2,3: v3)");
     }
 
     @Test

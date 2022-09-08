@@ -4,6 +4,7 @@ package com.starrocks.planner;
 
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
@@ -18,6 +19,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TProjectNode;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class ProjectNode extends PlanNode {
     private final Map<SlotId, Expr> slotMap;
@@ -137,13 +139,21 @@ public class ProjectNode extends PlanNode {
                 newExprs.add(kv.getValue());
             }
         }
-        // NOTE: This is necessary, when expr is partition_by_epxr because
-        // partition_by_exprs may exists in JoinNode below the ProjectNode.
-        if (newExprs.isEmpty()) {
-            newExprs.add(expr);
-        }
-        return Optional.of(newExprs);
+        return newExprs.size() > 0 ? Optional.of(newExprs) : Optional.empty();
     }
+
+    @Override
+    public Optional<List<List<Expr>>> candidatesOfSlotExprs(List<Expr> exprs) {
+        if (!exprs.stream().allMatch(expr -> candidatesOfSlotExpr(expr).isPresent())) {
+            // NOTE: This is necessary, when expr is partition_by_epxr because
+            // partition_by_exprs may exist in JoinNode below the ProjectNode.
+            return Optional.of(ImmutableList.of(exprs));
+        }
+        List<List<Expr>> candidatesOfSlotExprs =
+                exprs.stream().map(expr -> candidatesOfSlotExpr(expr).get()).collect(Collectors.toList());
+        return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
+    }
+
 
     @Override
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description,
