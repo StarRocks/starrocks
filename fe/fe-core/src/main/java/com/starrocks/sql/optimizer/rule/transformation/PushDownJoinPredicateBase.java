@@ -109,7 +109,7 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
         OptExpression root;
         if (joinEqPredicate == null) {
             JoinOperator joinType =
-                    (join.getOnPredicate() == null || join.getJoinType().isCrossJoin() || conjunctList.isEmpty()) ?
+                    (join.getOnPredicate() == null || join.getJoinType().isCrossJoin()) ?
                             JoinOperator.CROSS_JOIN : join.getJoinType();
             LogicalJoinOperator nestLoop = new LogicalJoinOperator.Builder().withOperator(join)
                     .setJoinType(joinType)
