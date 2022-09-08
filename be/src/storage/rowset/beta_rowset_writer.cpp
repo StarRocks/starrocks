@@ -402,9 +402,8 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
         std::string tmp_segment_file =
                 BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-
-        auto segment_ptr = Segment::open(ExecEnv::GetInstance()->metadata_mem_tracker(), fs::fs_util::block_manager(),
-                                         tmp_segment_file, seg_id, _context.tablet_schema);
+        auto segment_ptr =
+                Segment::open(fs::fs_util::block_manager(), tmp_segment_file, seg_id, _context.tablet_schema);
         if (!segment_ptr.ok()) {
             LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
             return segment_ptr.status();

@@ -22,7 +22,7 @@
 #pragma once
 
 #include <cstdint>
-#include <memory> // for unique_ptr
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -74,18 +74,17 @@ class Segment : public std::enable_shared_from_this<Segment> {
     struct private_type;
 
 public:
-    static StatusOr<std::shared_ptr<Segment>> open(MemTracker* mem_tracker, fs::BlockManager* blk_mgr,
-                                                   const std::string& filename, uint32_t segment_id,
-                                                   const TabletSchema* tablet_schema,
+    static StatusOr<std::shared_ptr<Segment>> open(fs::BlockManager* blk_mgr, const std::string& filename,
+                                                   uint32_t segment_id, const TabletSchema* tablet_schema,
                                                    size_t* footer_length_hint = nullptr);
 
     static Status parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB* footer, size_t* footer_length_hint,
                                        uint64_t* segment_data_size);
 
     Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fname, uint32_t segment_id,
-            const TabletSchema* tablet_schema, MemTracker* mem_tracker);
+            const TabletSchema* tablet_schema);
 
-    ~Segment() = default;
+    ~Segment();
 
     // Returns `EndOfFile` if |read_options| has predicate and no record in this segment
     // matched with the predicate.
@@ -129,16 +128,6 @@ public:
 
     const ColumnReader* column(size_t i) const { return _column_readers[i].get(); }
 
-    int64_t mem_usage() {
-        int64_t size = sizeof(Segment) + _sk_index_handle.mem_usage();
-        if (_sk_index_decoder != nullptr) {
-            size += _sk_index_decoder->mem_usage();
-        }
-        return size;
-    }
-
-    MemTracker* mem_tracker() const { return _mem_tracker; }
-
     fs::BlockManager* block_manager() const { return _block_mgr; }
 
     bool keep_in_memory() const { return _tablet_schema->is_in_memory(); }
@@ -146,6 +135,10 @@ public:
     const std::string& file_name() const { return _fname; }
 
     uint32_t num_rows() const { return _num_rows; }
+
+    Status load_index();
+
+    int64_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage(); }
 
 private:
     Segment(const Segment&) = delete;
@@ -155,19 +148,29 @@ private:
         explicit private_type(int) {}
     };
 
+    Status _load_index();
+
+    void _reset();
+
+    int64_t _basic_info_mem_usage() { return static_cast<int64_t>(sizeof(Segment) + _fname.size()); }
+
+    int64_t _short_key_index_mem_usage() {
+        int64_t size = _sk_index_handle.mem_usage();
+        if (_sk_index_decoder != nullptr) {
+            size += _sk_index_decoder->mem_usage();
+        }
+        return size;
+    }
+
     // open segment file and read the minimum amount of necessary information (footer)
-    Status _open(MemTracker* mem_tracker, size_t* footer_length_hint);
-    Status _create_column_readers(MemTracker* mem_tracker, SegmentFooterPB* footer);
-    // Load and decode short key index.
-    // May be called multiple times, subsequent calls will no op.
-    Status _load_index(MemTracker* mem_tracker);
+    Status _open(size_t* footer_length_hint);
+    Status _create_column_readers(SegmentFooterPB* footer);
 
     StatusOr<ChunkIteratorPtr> _new_iterator(const vectorized::Schema& schema,
                                              const vectorized::SegmentReadOptions& read_options);
 
     void _prepare_adapter_info();
 
-    friend class SegmentIterator;
     friend class vectorized::SegmentIterator;
 
     fs::BlockManager* _block_mgr;
