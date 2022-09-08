@@ -225,7 +225,8 @@ public class StmtExecutor {
                     .append(variables.getParallelExecInstanceNum()).append(",");
             sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
             if (context.getResourceGroup() != null) {
-                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName()).append(",");
+                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName())
+                        .append(",");
             }
             sb.deleteCharAt(sb.length() - 1);
             summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
@@ -611,7 +612,7 @@ public class StmtExecutor {
         initProfile(beginTimeInNanoSecond);
         profile.computeTimeInChildProfile();
         long profileEndTime = System.currentTimeMillis();
-        profile.getChildMap().get("Summary")
+        profile.getChild("Summary")
                 .addInfoString(ProfileManager.PROFILE_TIME,
                         DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
         StringBuilder builder = new StringBuilder();
