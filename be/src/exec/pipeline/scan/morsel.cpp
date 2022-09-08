@@ -267,7 +267,7 @@ Status PhysicalSplitMorselQueue::_init_segment() {
     if (_tablet_seek_ranges.empty()) {
         _segment_scan_range.add(vectorized::Range(0, segment->num_rows()));
     } else {
-        RETURN_IF_ERROR(segment->load_index(StorageEngine::instance()->metadata_mem_tracker()));
+        RETURN_IF_ERROR(segment->load_index());
         for (const auto& range : _tablet_seek_ranges) {
             rowid_t lower_rowid = 0;
             rowid_t upper_rowid = segment->num_rows();

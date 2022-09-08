@@ -439,7 +439,7 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         return Status::OK();
     }
     DCHECK_EQ(0, _scan_range.span_size());
-    RETURN_IF_ERROR(_segment->load_index(StorageEngine::instance()->metadata_mem_tracker()));
+    RETURN_IF_ERROR(_segment->load_index());
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
