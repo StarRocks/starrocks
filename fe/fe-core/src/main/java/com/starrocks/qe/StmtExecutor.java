@@ -582,8 +582,14 @@ public class StmtExecutor {
         initProfile(beginTimeInNanoSecond);
         profile.computeTimeInChildProfile();
         long profileEndTime = System.currentTimeMillis();
+<<<<<<< HEAD
         profile.getChildMap().get("Summary")
                 .addInfoString(ProfileManager.PROFILE_TIME, DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
+=======
+        profile.getChild("Summary")
+                .addInfoString(ProfileManager.PROFILE_TIME,
+                        DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
+>>>>>>> 00d29255b ([Enhancement] Fold unnecessary LimitOperator (#10629))
         StringBuilder builder = new StringBuilder();
         profile.prettyPrint(builder, "");
         String profileContent = ProfileManager.getInstance().pushProfile(profile);
@@ -1075,6 +1081,36 @@ public class StmtExecutor {
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
                     execPlan.getDescTbl().toThrift());
             coord.setQueryType(TQueryType.LOAD);
+<<<<<<< HEAD
+=======
+
+            List<ScanNode> scanNodes = execPlan.getScanNodes();
+
+            boolean containOlapScanNode = false;
+            for (int i = 0; i < scanNodes.size(); i++) {
+                if (scanNodes.get(i) instanceof OlapScanNode) {
+                    estimateScanRows += ((OlapScanNode) scanNodes.get(i)).getActualRows();
+                    containOlapScanNode = true;
+                }
+            }
+
+            if (containOlapScanNode) {
+                coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
+            } else {
+                estimateScanRows = execPlan.getFragments().get(0).getPlanRoot().getCardinality();
+                coord.setLoadJobType(TLoadJobType.INSERT_VALUES);
+            }
+
+            jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
+                    label,
+                    database.getFullName(),
+                    targetTable.getId(),
+                    EtlJobType.INSERT,
+                    createTime,
+                    estimateScanRows);
+            coord.setJobId(jobId);
+
+>>>>>>> 00d29255b ([Enhancement] Fold unnecessary LimitOperator (#10629))
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
             coord.exec();
 
@@ -1198,7 +1234,36 @@ public class StmtExecutor {
                 sb.append(". url: ").append(coord.getTrackingUrl());
             }
             context.getState().setError(sb.toString());
+<<<<<<< HEAD
             return;
+=======
+
+            // cancel insert load job
+            try {
+                if (jobId != -1) {
+                    context.getGlobalStateMgr().getLoadManager()
+                            .recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
+                                    "Cancelled, msg: " + t.getMessage(), coord.getTrackingUrl());
+                    jobId = -1;
+                }
+            } catch (Exception abortTxnException) {
+                LOG.warn("errors when cancel insert load job {}", jobId);
+            }
+            return;
+        } finally {
+            if (insertError) {
+                try {
+                    if (jobId != -1) {
+                        context.getGlobalStateMgr().getLoadManager()
+                                .recordFinishedOrCacnelledLoadJob(jobId, EtlJobType.INSERT,
+                                        "Cancelled", coord.getTrackingUrl());
+                        jobId = -1;
+                    }
+                } catch (Exception abortTxnException) {
+                    LOG.warn("errors when cancel insert load job {}", jobId);
+                }
+            }
+>>>>>>> 00d29255b ([Enhancement] Fold unnecessary LimitOperator (#10629))
         }
 
         String errMsg = "";
