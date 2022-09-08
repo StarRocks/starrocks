@@ -84,7 +84,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     = icebergCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
             // Submit a future task for refreshing
             GlobalStateMgr.getCurrentState().getIcebergRepository().refreshTable(icebergTable);
-            
+
             if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.CUSTOM_CATALOG)) {
                 return IcebergUtil.convertCustomCatalogToSRTable(icebergTable, catalogImpl, dbName, tblName, customProperties);
             }

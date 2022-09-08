@@ -2,6 +2,9 @@
 
 package com.starrocks.external.iceberg;
 
+import com.google.common.base.Preconditions;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.Cache;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import org.apache.iceberg.Table;
@@ -9,9 +12,10 @@ import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 public class IcebergRepository {
     private static final Logger LOG = LogManager.getLogger(IcebergRepository.class);
@@ -20,14 +24,17 @@ public class IcebergRepository {
             ThreadPoolManager.newDaemonFixedThreadPool(Config.iceberg_table_refresh_threads,
                     Integer.MAX_VALUE, "iceberg-refresh-pool", true);
 
-    private final Map<Table, Future> icebergRefreshMap = new ConcurrentHashMap<>();
+    private final Cache<Table, Future> icebergRefreshCache = CacheBuilder.newBuilder()
+            .expireAfterWrite(10, TimeUnit.MINUTES).build();
 
     public void refreshTable(Table table) {
-        icebergRefreshMap.put(table, icebergRefreshExecutor.submit(() -> table.refresh()));
+        icebergRefreshCache.put(table, icebergRefreshExecutor.submit(() -> table.refresh()));
     }
 
     public Future getTable(Table table) {
-        return icebergRefreshMap.remove(table);
+        Future res = icebergRefreshCache.getIfPresent(table);
+        Preconditions.checkNotNull(res, "Table must exist in refresh cache " + table.name());
+        return res;
     }
 
     public IcebergRepository() {
