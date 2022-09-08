@@ -58,7 +58,7 @@ enum TabletDropFlag {
 // please uniformly name the method in "xxx_unlocked()" mode
 class TabletManager {
 public:
-    explicit TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size);
+    explicit TabletManager(int32_t tablet_map_lock_shard_size);
     ~TabletManager() = default;
 
     // The param stores holds all candidate data_dirs for this tablet.
@@ -142,8 +142,6 @@ public:
 
     Status delete_shutdown_tablet(int64_t tablet_id);
 
-    MemTracker* metadata_mem_tracker() { return _mem_tracker; }
-
     // return true if all tablets visited
     bool get_next_batch_tablets(size_t batch_size, std::vector<TabletSharedPtr>* tablets);
 
@@ -221,8 +219,6 @@ private:
     static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);
     static Status _move_tablet_directories_to_trash(const TabletSharedPtr& tablet);
-
-    MemTracker* _mem_tracker = nullptr;
 
     std::vector<TabletsShard> _tablets_shards;
     const int32_t _tablets_shards_mask;

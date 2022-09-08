@@ -180,8 +180,6 @@ public:
 
     bool bg_worker_stopped() { return _bg_worker_stopped.load(std::memory_order_consume); }
 
-    MemTracker* metadata_mem_tracker() { return _options.metadata_mem_tracker; }
-
     void compaction_check();
 
 protected:

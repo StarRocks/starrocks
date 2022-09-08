@@ -227,8 +227,6 @@ int main(int argc, char** argv) {
     starrocks::EngineOptions options;
     options.store_paths = paths;
     options.backend_uid = starrocks::UniqueId::gen_uid();
-    options.metadata_mem_tracker = exec_env->metadata_mem_tracker();
-    options.schema_change_mem_tracker = exec_env->schema_change_mem_tracker();
     options.compaction_mem_tracker = exec_env->compaction_mem_tracker();
     options.update_mem_tracker = exec_env->update_mem_tracker();
     options.conf_path = string(getenv("STARROCKS_HOME")) + "/conf/";
