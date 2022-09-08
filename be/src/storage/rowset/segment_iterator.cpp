@@ -467,7 +467,7 @@ Status SegmentIterator::_get_row_ranges_by_key_ranges() {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(_segment->load_index(StorageEngine::instance()->metadata_mem_tracker()));
+    RETURN_IF_ERROR(_segment->load_index());
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -498,7 +498,7 @@ Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(_segment->load_index(StorageEngine::instance()->metadata_mem_tracker()));
+    RETURN_IF_ERROR(_segment->load_index());
     for (const auto& short_key_range : _opts.short_key_ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
