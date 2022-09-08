@@ -25,6 +25,7 @@ import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -50,6 +51,7 @@ import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
+import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
@@ -377,6 +379,10 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     public R visitShowUserPropertyStmt(ShowUserPropertyStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -398,6 +404,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitRecoverPartitionStmt(RecoverPartitionStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropRoleStatement(DropRoleStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

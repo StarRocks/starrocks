@@ -41,6 +41,7 @@ import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -102,6 +103,7 @@ import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
+import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
@@ -1833,6 +1835,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowRoutineLoadStmt(new LabelName(database, name), isVerbose, where, orderByElements, limitElement);
     }
 
+    @Override
+    public ParseNode visitShowRoutineLoadTaskStatement(StarRocksParser.ShowRoutineLoadTaskStatementContext context) {
+        QualifiedName dbName = null;
+        if (context.db != null) {
+            dbName = getQualifiedName(context.db);
+        }
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        return new ShowRoutineLoadTaskStmt(dbName == null ? null : dbName.toString(), where);
+    }
+
     // ------------------------------------------- Analyze Statement ---------------------------------------------------
 
     @Override
@@ -2720,6 +2736,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         UserIdentity userId =
                 context.user() == null ? null : ((UserIdentifier) visit(context.user())).getUserIdentity();
         return new ShowGrantsStmt(userId, isAll);
+    }
+
+    @Override
+    public ParseNode visitDropRole(StarRocksParser.DropRoleContext context) {
+        Identifier role = (Identifier) visit(context.identifierOrString());
+        return new DropRoleStmt(role.getValue());
     }
 
     @Override

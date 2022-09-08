@@ -868,20 +868,16 @@ public class AuthTest {
                 PrivPredicate.DROP));
 
         // 31. drop role, privs remain unchanged
-        DropRoleStmt dropRoleStmt = new DropRoleStmt("role1");
+        String dropRoleSql = "DROP ROLE role1";
+        DropRoleStmt dropRoleStmt;
         try {
-            dropRoleStmt.analyze(analyzer);
-        } catch (UserException e) {
+            dropRoleStmt = (DropRoleStmt) UtFrameUtils.parseStmtWithNewParser(dropRoleSql, ctx);
+            auth.dropRole(dropRoleStmt);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
 
-        try {
-            auth.dropRole(dropRoleStmt);
-        } catch (DdlException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
         currentUser2.clear();
         auth.checkPlainPassword("chenliu", "20.1.1.1", "12345", currentUser2);
         Assert.assertEquals(1, currentUser2.size());
@@ -1344,11 +1340,12 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        DropRoleStmt dropRoleStmt = new DropRoleStmt(role);
+        String dropRoleSql = "DROP ROLE role0";
+        DropRoleStmt dropRoleStmt;
         try {
-            dropRoleStmt.analyze(analyzer);
+            dropRoleStmt = (DropRoleStmt) UtFrameUtils.parseStmtWithNewParser(dropRoleSql, ctx);
             auth.dropRole(dropRoleStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1453,11 +1450,10 @@ public class AuthTest {
             e.printStackTrace();
             Assert.fail();
         }
-        dropRoleStmt = new DropRoleStmt(role);
         try {
-            dropRoleStmt.analyze(analyzer);
+            dropRoleStmt = (DropRoleStmt) UtFrameUtils.parseStmtWithNewParser(dropRoleSql, ctx);
             auth.dropRole(dropRoleStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }

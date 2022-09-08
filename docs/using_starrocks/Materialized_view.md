@@ -427,9 +427,6 @@ StarRocks 2.4 supports creating asynchronous materialized views for multiple bas
 
 As for the current version, materialized views three refresh strategies:
 
-- **Sync refresh**
-  -  With sync refresh strategy, materialized views will be updated synchronously when data is loaded into the base table. This refresh strategy guarantees strict consistency between the base table and its subordinate materialized views. As for the current version, sync refresh strategy is supported only on materialized view for a single base table.
-
 - **Async refresh**
   -  Async refresh strategy allows materialized views refresh through asynchronous tasks, and does not guarantee strict consistency between the base table and its subordinate materialized views. Async refresh strategy is supported on materialized view for multiple base tables.
 
@@ -593,9 +590,9 @@ You can check the SQL statement used to create a materialized view via SHOW CREA
 SHOW CREATE MATERIALIZED VIEW order_mv;
 ```
 
-### Check the refresh tasks of sync materialized views
+### Check the refresh tasks of single-table sync materialized views
 
-You can check the refresh tasks of all sync materialized views in the database.
+You can check the refresh tasks of all single-table sync materialized views in the database.
 
 ```SQL
 SHOW ALTER MATERIALIZED VIEW;
@@ -611,7 +608,7 @@ REFRESH MATERIALIZED VIEW order_mv;
 
 > **CAUTION**
 >
-> You can refresh a materialized view with async or manual refresh strategy via this command. However, you cannot refresh a sync refresh materialized view via this command.
+> You can refresh a materialized view with async or manual refresh strategy via this command. However, you cannot refresh a single-table sync refresh materialized view via this command.
 
 ### Check the execution status of a multi-table materialized view
 

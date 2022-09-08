@@ -2,8 +2,8 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import avro.shaded.com.google.common.collect.ImmutableList;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -110,7 +110,6 @@ import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.mortbay.log.Log;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -310,17 +309,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         tableWithStats.getTableLevelColumnStats(requiredColumns.stream().
                                 map(ColumnRefOperator::getName).collect(Collectors.toList()));
                 optimizerContext.getDumpInfo().getHMSTable(tableWithStats.getResourceName(),
-                        tableWithStats.getDbName(), tableWithStats.getTableName()).
+                                tableWithStats.getDbName(), tableWithStats.getTableName()).
                         addTableLevelColumnStats(hiveColumnStatisticMap);
 
                 List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
                                 computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
                         .collect(Collectors.toList());
                 columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats ->
-                        hiveColumnStats.isUnknown() ? ColumnStatistic.unknown() :
-                        new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
-                                hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
-                                hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues())).
+                                hiveColumnStats.isUnknown() ? ColumnStatistic.unknown() :
+                                        new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
+                                                hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
+                                                hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues())).
                         collect(Collectors.toList());
             } else {
                 LOG.warn("Session variable " + SessionVariable.ENABLE_HIVE_COLUMN_STATS + " is false");
@@ -498,7 +497,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 try {
                     rangeList = rangePartitionInfo.getSortedRangeMap(new HashSet<>(selectedPartitionId));
                 } catch (AnalysisException e) {
-                    Log.warn("get sorted range partition failed, msg : " + e.getMessage());
+                    LOG.warn("get sorted range partition failed, msg : " + e.getMessage());
                     return null;
                 }
                 if (rangeList.isEmpty()) {
