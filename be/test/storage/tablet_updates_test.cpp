@@ -288,9 +288,7 @@ public:
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
-    void SetUp() override {
-        _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
-    }
+    void SetUp() override { _compaction_mem_tracker = std::make_unique<MemTracker>(-1); }
 
     void TearDown() override {
         if (_tablet2) {
