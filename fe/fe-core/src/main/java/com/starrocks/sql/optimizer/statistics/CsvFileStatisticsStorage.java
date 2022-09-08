@@ -16,7 +16,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.mortbay.log.Log;
 
 import java.io.BufferedReader;
 import java.nio.charset.StandardCharsets;
@@ -84,7 +83,7 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
         try {
             return convert2ColumnStatistics(table, statisticsEntry);
         } catch (Exception e) {
-            Log.warn("convert to column statistics failed");
+            LOG.warn("convert to column statistics failed");
         }
         return null;
     }
@@ -167,7 +166,7 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
 
         public void setValue(String[] row) {
             if (row.length != 12) {
-                Log.warn("row miss some field");
+                LOG.warn("row miss some field");
                 return;
             }
             this.tableId = row[0];
