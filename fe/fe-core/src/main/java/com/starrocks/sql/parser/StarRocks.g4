@@ -172,6 +172,7 @@ statement
     | showAuthenticationStatement
     | createRoleStatement
     | showRolesStatement
+    | showGrantsStatement
 
     // Backup Restore Satement
     | backupStatement
@@ -1031,6 +1032,10 @@ createRoleStatement
 
 showRolesStatement
     : SHOW ROLES
+    ;
+
+showGrantsStatement
+    : SHOW ALL? GRANTS (FOR user)?
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------

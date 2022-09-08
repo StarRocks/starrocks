@@ -9,6 +9,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -68,8 +69,8 @@ public class ShowGrantsStmtTest {
                 result = true;
             }
         };
-        ShowGrantsStmt stmt = new ShowGrantsStmt(new UserIdentity("test_user", "localhost"), false);
-        stmt.analyze(analyzer);
+        String revokeSql = "SHOW GRANTS FOR test_user@'localhost'";
+        UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
     }
 
     @Test(expected = AnalysisException.class)
@@ -82,8 +83,8 @@ public class ShowGrantsStmtTest {
                 result = false;
             }
         };
-        ShowGrantsStmt stmt = new ShowGrantsStmt(new UserIdentity("fake_user", "localhost"), false);
-        stmt.analyze(analyzer);
+        String revokeSql = "SHOW GRANTS FOR fake_user@'localhost'";
+        UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
         Assert.fail("No exception throws.");
     }
 }
