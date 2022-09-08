@@ -110,20 +110,20 @@ using AlterTabletTaskSharedPtr = std::shared_ptr<AlterTabletTask>;
 // The concurrency control is handled in Tablet Class, not in this class.
 class TabletMeta {
 public:
-    static Status create(MemTracker* mem_tracker, const TCreateTabletReq& request, const TabletUid& tablet_uid,
-                         uint64_t shard_id, uint32_t next_unique_id,
+    static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
+                         uint32_t next_unique_id,
                          const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                          RowsetTypePB rowset_type, TabletMetaSharedPtr* tablet_meta);
 
-    static TabletMetaSharedPtr create(MemTracker* mem_tracker);
+    static TabletMetaSharedPtr create();
 
-    explicit TabletMeta() : _tablet_uid(0, 0) {}
+    explicit TabletMeta();
     TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash, uint64_t shard_id,
                const TTabletSchema& tablet_schema, uint32_t next_unique_id, bool enable_persistent_index,
                const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id, const TabletUid& tablet_uid,
                TTabletType::type tabletType, RowsetTypePB roset_type);
 
-    virtual ~TabletMeta() {}
+    virtual ~TabletMeta();
 
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
@@ -217,8 +217,6 @@ public:
         return _updatesPB.release();
     }
 
-    int64_t mem_usage() const { return sizeof(TabletMeta); }
-
     bool get_enable_persistent_index() const { return _enable_persistent_index; }
 
     void set_enable_persistent_index(bool enable_persistent_index) {
@@ -226,6 +224,8 @@ public:
     }
 
 private:
+    int64_t _mem_usage() const { return sizeof(TabletMeta); }
+
     Status _save_meta(DataDir* data_dir);
 
     static int64_t calc_mem_usage_of_rs_metas(const std::vector<RowsetMetaSharedPtr>& rs_metas) {

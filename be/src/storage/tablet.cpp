@@ -48,15 +48,11 @@
 
 namespace starrocks {
 
-TabletSharedPtr Tablet::create_tablet_from_meta(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta,
-                                                DataDir* data_dir) {
-    auto tablet =
-            std::shared_ptr<Tablet>(new Tablet(tablet_meta, data_dir), DeleterWithMemTracker<Tablet>(mem_tracker));
-    mem_tracker->consume(tablet->mem_usage());
-    return tablet;
+TabletSharedPtr Tablet::create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir) {
+    return std::make_shared<Tablet>(tablet_meta, data_dir);
 }
 
-Tablet::Tablet(TabletMetaSharedPtr tablet_meta, DataDir* data_dir)
+Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
         : BaseTablet(tablet_meta, data_dir),
           _last_cumu_compaction_failure_millis(0),
           _last_base_compaction_failure_millis(0),
@@ -65,9 +61,16 @@ Tablet::Tablet(TabletMetaSharedPtr tablet_meta, DataDir* data_dir)
           _cumulative_point(kInvalidCumulativePoint) {
     // change _rs_graph to _timestamped_version_tracker
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
-Tablet::~Tablet() {}
+Tablet::Tablet() {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+}
+
+Tablet::~Tablet() {
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+}
 
 Status Tablet::_init_once_action() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
@@ -119,7 +122,7 @@ void Tablet::save_meta() {
     CHECK(st.ok()) << "fail to save tablet_meta: " << st;
 }
 
-Status Tablet::revise_tablet_meta(MemTracker* mem_tracker, const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
+Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                                   const std::vector<Version>& versions_to_delete) {
     LOG(INFO) << "begin to clone data to tablet. tablet=" << full_name()
               << ", rowsets_to_clone=" << rowsets_to_clone.size()
@@ -132,7 +135,7 @@ Status Tablet::revise_tablet_meta(MemTracker* mem_tracker, const std::vector<Row
     Status st;
     do {
         // load new local tablet_meta to operate on
-        auto new_tablet_meta = TabletMeta::create(mem_tracker);
+        auto new_tablet_meta = TabletMeta::create();
 
         generate_tablet_meta_copy_unlocked(new_tablet_meta);
         // Segment store the pointer of TabletSchema, so don't release the TabletSchema of old TabletMeta
@@ -495,16 +498,6 @@ Status Tablet::check_version_integrity(const Version& version) {
     return capture_consistent_versions(version, nullptr);
 }
 
-// If any rowset contains the specific version, it means the version already exist
-bool Tablet::check_version_exist(const Version& version) const {
-    for (auto& it : _rs_version_map) {
-        if (it.first.contains(version)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 void Tablet::list_versions(vector<Version>* versions) const {
     DCHECK(versions != nullptr && versions->empty());
 
@@ -555,11 +548,6 @@ Status Tablet::_capture_consistent_rowsets_unlocked(const std::vector<Version>& 
         }
     }
     return Status::OK();
-}
-
-void Tablet::add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version) {
-    CHECK(!_updates) << "updatable tablet should not call add_delete_predicate";
-    _tablet_meta->add_delete_predicate(delete_predicate, version);
 }
 
 // TODO(lingbin): what is the difference between version_for_delete_predicate() and
@@ -1172,11 +1160,6 @@ void Tablet::_update_tablet_compaction_context() {
     } else {
         _compaction_context.reset();
     }
-}
-
-bool Tablet::_is_compacted_singleton(Rowset* rowset) {
-    DCHECK(rowset) << "invalid rowset";
-    return rowset->num_segments() > 1 && rowset->rowset_meta()->segments_overlap() == NONOVERLAPPING;
 }
 
 // protected by meta lock
