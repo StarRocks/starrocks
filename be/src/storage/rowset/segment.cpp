@@ -62,16 +62,12 @@ namespace starrocks {
 
 using strings::Substitute;
 
-StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, std::shared_ptr<FileSystem> blk_mgr,
-                                                 const std::string& filename, uint32_t segment_id,
-                                                 const TabletSchema* tablet_schema, size_t* footer_length_hint,
+StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> blk_mgr, const std::string& filename,
+                                                 uint32_t segment_id, const TabletSchema* tablet_schema,
+                                                 size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer) {
-    auto segment = std::shared_ptr<Segment>(
-            new Segment(private_type(0), blk_mgr, filename, segment_id, tablet_schema, mem_tracker),
-            DeleterWithMemTracker<Segment>(mem_tracker));
-    mem_tracker->consume(segment->mem_usage());
-
-    RETURN_IF_ERROR(segment->_open(mem_tracker, footer_length_hint, partial_rowset_footer));
+    auto segment = std::make_shared<Segment>(private_type(0), blk_mgr, filename, segment_id, tablet_schema);
+    RETURN_IF_ERROR(segment->_open(footer_length_hint, partial_rowset_footer));
     return std::move(segment);
 }
 
@@ -166,20 +162,22 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
 }
 
 Segment::Segment(const private_type&, std::shared_ptr<FileSystem> blk_mgr, std::string fname, uint32_t segment_id,
-                 const TabletSchema* tablet_schema, MemTracker* mem_tracker)
-        : _fs(std::move(blk_mgr)),
-          _fname(std::move(fname)),
-          _tablet_schema(tablet_schema),
-          _segment_id(segment_id),
-          _mem_tracker(mem_tracker) {}
+                 const TabletSchema* tablet_schema)
+        : _fs(std::move(blk_mgr)), _fname(std::move(fname)), _tablet_schema(tablet_schema), _segment_id(segment_id) {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
+}
 
-Status Segment::_open(MemTracker* mem_tracker, size_t* footer_length_hint,
-                      const FooterPointerPB* partial_rowset_footer) {
+Segment::~Segment() {
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
+}
+
+Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer) {
     SegmentFooterPB footer;
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(_fname));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
 
-    RETURN_IF_ERROR(_create_column_readers(mem_tracker, &footer));
+    RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
     _prepare_adapter_info();
@@ -226,39 +224,51 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const vectorized::Schema& schem
     }
 }
 
-Status Segment::load_index(MemTracker* mem_tracker) {
-    auto res = success_once(_load_index_once, [this, mem_tracker] {
+Status Segment::load_index() {
+    auto res = success_once(_load_index_once, [this] {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
-        // read and parse short key index page
-        ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(_fname));
 
-        PageReadOptions opts;
-        opts.use_page_cache = !config::disable_storage_page_cache;
-        opts.read_file = read_file.get();
-        opts.page_pointer = _short_key_index_page;
-        opts.codec = nullptr; // short key index page uses NO_COMPRESSION for now
-        OlapReaderStatistics tmp_stats;
-        opts.stats = &tmp_stats;
-
-        Slice body;
-        PageFooterPB footer;
-        RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &_sk_index_handle, &body, &footer));
-
-        mem_tracker->consume(_sk_index_handle.mem_usage());
-
-        DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);
-        DCHECK(footer.has_short_key_page_footer());
-
-        _sk_index_decoder = std::make_unique<ShortKeyIndexDecoder>();
-        Status st = _sk_index_decoder->parse(body, footer.short_key_page_footer());
-        mem_tracker->consume(_sk_index_decoder->mem_usage());
-
+        Status st = _load_index();
+        if (st.ok()) {
+            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->short_key_index_mem_tracker(),
+                                     _short_key_index_mem_usage());
+        } else {
+            _reset();
+        }
         return st;
     });
     return res.status();
 }
 
-Status Segment::_create_column_readers(MemTracker* mem_tracker, SegmentFooterPB* footer) {
+Status Segment::_load_index() {
+    // read and parse short key index page
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(_fname));
+
+    PageReadOptions opts;
+    opts.use_page_cache = !config::disable_storage_page_cache;
+    opts.read_file = read_file.get();
+    opts.page_pointer = _short_key_index_page;
+    opts.codec = nullptr; // short key index page uses NO_COMPRESSION for now
+    OlapReaderStatistics tmp_stats;
+    opts.stats = &tmp_stats;
+
+    Slice body;
+    PageFooterPB footer;
+    RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &_sk_index_handle, &body, &footer));
+
+    DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);
+    DCHECK(footer.has_short_key_page_footer());
+
+    _sk_index_decoder = std::make_unique<ShortKeyIndexDecoder>();
+    return _sk_index_decoder->parse(body, footer.short_key_page_footer());
+}
+
+void Segment::_reset() {
+    _sk_index_handle.reset();
+    _sk_index_decoder.reset();
+}
+
+Status Segment::_create_column_readers(SegmentFooterPB* footer) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
     for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
         const auto& column_pb = footer->columns(ordinal);

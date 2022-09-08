@@ -56,7 +56,7 @@ using ValueGenerator = std::function<vectorized::Datum(size_t rid, int cid, int 
 // 10, 11, 12, 13
 // 20, 21, 22, 23
 static vectorized::Datum DefaultIntGenerator(size_t rid, int cid, int block_id) {
-    return vectorized::Datum(static_cast<int32_t>(rid * 10 + cid));
+    return {static_cast<int32_t>(rid * 10 + cid)};
 }
 
 class SegmentReaderWriterTest : public ::testing::Test {
@@ -65,7 +65,6 @@ protected:
         _fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(_fs->create_dir(kSegmentDir).ok());
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
-        _metadata_mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
     }
 
@@ -95,7 +94,7 @@ protected:
         uint64_t file_size, index_size, footer_position;
         ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
-        *res = *Segment::open(_metadata_mem_tracker.get(), _fs, filename, 0, &query_schema);
+        *res = *Segment::open(_fs, filename, 0, &query_schema);
         ASSERT_EQ(nrows, (*res)->num_rows());
     }
 
@@ -103,7 +102,6 @@ protected:
 
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
-    std::unique_ptr<MemTracker> _metadata_mem_tracker = nullptr;
 };
 
 TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
@@ -208,7 +206,7 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     uint64_t footer_position;
     ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
-    auto segment = *Segment::open(_metadata_mem_tracker.get(), _fs, file_name, 0, tablet_schema.get());
+    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
@@ -319,7 +317,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
 
     ASSERT_OK(writer.finalize_footer(&file_size));
 
-    auto segment = *Segment::open(_metadata_mem_tracker.get(), _fs, file_name, 0, tablet_schema.get());
+    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
@@ -424,7 +422,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     }
 
     ASSERT_OK(writer.finalize_footer(&file_size));
-    auto segment = *Segment::open(_metadata_mem_tracker.get(), _fs, file_name, 0, tablet_schema.get());
+    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
