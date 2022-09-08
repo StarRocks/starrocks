@@ -19,6 +19,7 @@ import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
@@ -325,6 +326,12 @@ public class Analyzer {
 
         @Override
         public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt stmt, ConnectContext session) {
+            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }
