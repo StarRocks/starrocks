@@ -108,8 +108,8 @@ public:
     void set_runtime_filter(const JoinRuntimeFilter* rf);
     void set_shared_runtime_filter(const std::shared_ptr<const JoinRuntimeFilter>& rf);
     bool is_bound(const std::vector<TupleId>& tuple_ids) const { return _probe_expr_ctx->root()->is_bound(tuple_ids); }
-    // When partition_by_exprs > 1, disable pushing down runtime filters.
-    bool can_push_down_runtime_filter() { return _partition_by_exprs_contexts.size() <= 1; }
+    // When there are multi partition_by_exprs, disable pushing down runtime filters.
+    bool is_multi_partition_by_exprs() { return _partition_by_exprs_contexts.size() > 1; }
     bool is_probe_slot_ref(SlotId* slot_id) const {
         Expr* probe_expr = _probe_expr_ctx->root();
         if (!probe_expr->is_slotref()) return false;

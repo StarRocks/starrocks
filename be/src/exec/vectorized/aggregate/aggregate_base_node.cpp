@@ -56,7 +56,7 @@ void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state,
     auto iter = descriptors.begin();
     while (iter != descriptors.end()) {
         RuntimeFilterProbeDescriptor* rf_desc = iter->second;
-        if (!rf_desc->can_push_down_runtime_filter()) {
+        if (rf_desc->is_multi_partition_by_exprs()) {
             continue;
         }
         SlotId slot_id;
