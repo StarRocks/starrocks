@@ -982,7 +982,7 @@ public class JoinTest extends PlanTestBase {
     public void testJoinOnPredicateRewrite() throws Exception {
         String sql = "select * from t0 left outer join t1 on v1=v4 and cast(v2 as bigint) = v5 and false";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "equal join conjunct: 1: v1 = 4: v4");
+        assertNotContains(plan, "equal join conjunct");
         assertContains(plan, "1:EMPTYSET");
     }
 
@@ -992,9 +992,7 @@ public class JoinTest extends PlanTestBase {
                 "AND CASE WHEN NULL THEN t0.v1 ELSE '' END = " +
                 "CASE WHEN true THEN 'fGrak3iTt' WHEN false THEN t3.v10 ELSE 'asf' END";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  |  join op: RIGHT SEMI JOIN (PARTITIONED)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 4: v10 = 1: v1");
+        assertNotContains(plan, "equal join conjunct");
     }
 
     @Test
@@ -1659,10 +1657,7 @@ public class JoinTest extends PlanTestBase {
                 " union select join2.id from join1 RIGHT ANTI JOIN join2 on join1.id = join2.id " +
                 " and 1 > 2 WHERE (NOT (true)) group by join2.id ";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "4:HASH JOIN\n" +
-                "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 5: id = 2: id");
+        assertNotContains(plan, "equal join conjunct");
         assertContains(plan, "  2:EMPTYSET\n");
         assertContains(plan, "  8:EMPTYSET\n");
         FeConstants.runningUnitTest = false;
@@ -2070,7 +2065,7 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testJoinCastFloat() throws Exception {
-        String sql = "select * from t1, t3 right semi join test_all_type as a on t3.v10 = a.t1a and 1 > 2;";
+        String sql = "select * from t1, t3 right semi join test_all_type as a on t3.v10 = a.t1a;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "equal join conjunct: 7: t1a = 17: cast");
     }

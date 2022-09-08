@@ -9,7 +9,13 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -18,20 +24,79 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.ReplaceSubqueryRewriteRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
+import com.starrocks.sql.optimizer.transformer.CTETransformerContext;
+import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
+import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 public class SubqueryUtils {
 
-    public static final String EXIST_NON_EQ_PREDICATE = "Not support Non-EQ correlated predicate in correlated subquery";
+    public static final String EXIST_NON_EQ_PREDICATE =
+            "Not support Non-EQ correlated predicate in correlated subquery";
 
-    public static final String NOT_FOUND_CORRELATED_PREDICATE = "Not support without correlated predicate in correlated subquery";
+    public static final String NOT_FOUND_CORRELATED_PREDICATE =
+            "Not support without correlated predicate in correlated subquery";
 
     public static final String CONST_QUANTIFIED_COMPARISON = "Not support const value quantified comparison with " +
             "a correlated subquery";
+
+    public static Pair<ScalarOperator, OptExprBuilder> rewriteScalarOperator(
+            ScalarOperator scalarOperator,
+            OptExprBuilder builder,
+            Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders) {
+        if (scalarOperator == null) {
+            return Pair.create(null, builder);
+        }
+
+        List<ScalarOperatorRewriteRule> rules = Lists.newArrayList();
+        ReplaceSubqueryRewriteRule subqueryRewriteRule = new ReplaceSubqueryRewriteRule(subqueryPlaceholders, builder);
+        rules.add(subqueryRewriteRule);
+        ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+        scalarOperator = rewriter.rewrite(scalarOperator, rules);
+        builder = subqueryRewriteRule.getBuilder();
+
+        // remove semi-quantified or semi-existential subquery
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(scalarOperator);
+        Iterator<ScalarOperator> it = conjuncts.iterator();
+        while (it.hasNext()) {
+            ScalarOperator conjunct = it.next();
+            if (subqueryPlaceholders.containsKey(conjunct)) {
+                SubqueryOperator subqueryOperator = subqueryPlaceholders.get(conjunct);
+                LogicalApplyOperator applyOperator = subqueryOperator.getApplyOperator();
+                if ((applyOperator.isQuantified() || applyOperator.isExistential()) && applyOperator.isUseSemiAnti()) {
+                    it.remove();
+                }
+            }
+        }
+
+        return Pair.create(Utils.compoundAnd(conjuncts), builder);
+    }
+
+    public static LogicalPlan getLogicalPlan(ConnectContext session, CTETransformerContext cteContext,
+                                             ColumnRefFactory columnRefFactory, QueryRelation relation,
+                                             ExpressionMapping outer) {
+        if (!(relation instanceof SelectRelation)) {
+            throw new SemanticException("Currently only subquery of the Select type are supported");
+        }
+
+        // For in subQuery, the order by is meaningless
+        if (!relation.hasLimit()) {
+            relation.getOrderBy().clear();
+        }
+
+        return new RelationTransformer(columnRefFactory, session, outer, cteContext).transform(relation);
+    }
 
     private static Function getAggregateFunction(String functionName, Type[] argTypes) {
         Function func = Expr.getBuiltinFunction(functionName, argTypes,
@@ -128,6 +193,7 @@ public class SubqueryUtils {
 
     /**
      * rewrite the predicate and collect info according to your operatorShuttle
+     *
      * @param correlationPredicate
      * @param scalarOperatorShuttle
      * @return
