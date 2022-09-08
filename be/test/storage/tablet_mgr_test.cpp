@@ -24,7 +24,6 @@
 
 #include "fs/fs_util.h"
 #include "gtest/gtest.h"
-#include "runtime/mem_tracker.h"
 #include "storage/kv_store.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -44,7 +43,6 @@ static StorageEngine* k_engine = nullptr;
 class TabletMgrTest : public testing::Test {
 public:
     virtual void SetUp() {
-        _mem_tracker = std::make_unique<MemTracker>();
         config::tablet_map_shard_size = 1;
         config::txn_map_shard_size = 1;
         config::txn_shard_size = 1;
@@ -74,7 +72,7 @@ public:
         _schema_hash = 368169781;
         _tablet_data_path = tmp_data_path + "/" + std::to_string(0) + "/" + std::to_string(_tablet_id) + "/" +
                             std::to_string(_schema_hash);
-        _tablet_mgr.reset(new TabletManager(_mem_tracker.get(), 1));
+        _tablet_mgr.reset(new TabletManager(1));
     }
 
     virtual void TearDown() {
@@ -108,7 +106,6 @@ public:
     }
 
 protected:
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     DataDir* _data_dir;
     std::string _engine_data_path;
     int64_t _tablet_id;
