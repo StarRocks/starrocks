@@ -202,6 +202,7 @@ public class StreamLoadPlanner {
         queryOptions.setQuery_type(TQueryType.LOAD);
         queryOptions.setQuery_timeout(streamLoadTask.getTimeout());
         queryOptions.setLoad_transmission_compression_type(streamLoadTask.getTransmisionCompressionType());
+        queryOptions.setEnable_replicated_storage(streamLoadTask.getEnableReplicatedStorage());
         // Disable load_dop for LakeTable temporary, because BE's `LakeTabletsChannel` does not support
         // parallel send from a single sender.
         if (streamLoadTask.getLoadParallelRequestNum() != 0 && !destTable.isLakeTable()) {
@@ -222,9 +223,9 @@ public class StreamLoadPlanner {
         queryGlobals.setTime_zone(streamLoadTask.getTimezone());
         params.setQuery_globals(queryGlobals);
 
-        LOG.info("load job id: {} tx id {} parallel {} compress {}", loadId, streamLoadTask.getTxnId(),
+        LOG.info("load job id: {} tx id {} parallel {} compress {} replicated {}", loadId, streamLoadTask.getTxnId(),
                 queryOptions.getLoad_dop(),
-                queryOptions.getLoad_transmission_compression_type());
+                queryOptions.getLoad_transmission_compression_type(), streamLoadTask.getEnableReplicatedStorage());
         return params;
     }
 

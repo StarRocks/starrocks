@@ -46,6 +46,8 @@
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/unique_rowset_id_generator.h"
+#include "storage/segment_flush_executor.h"
+#include "storage/segment_replicate_executor.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/task/engine_task.h"
@@ -179,6 +181,12 @@ Status StorageEngine::_open() {
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
+
+    _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
+    RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
+
+    _segment_replicate_executor = std::make_unique<SegmentReplicateExecutor>();
+    RETURN_IF_ERROR_WITH_WARN(_segment_replicate_executor->init(dirs), "init SegmentReplicateExecutor failed");
 
     return Status::OK();
 }

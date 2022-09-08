@@ -166,7 +166,18 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
     for (ExprContext* ctx : cloned_conjunct_ctxs) {
         const Expr* root_expr = ctx->root();
         std::vector<SlotId> slot_ids;
-        if (root_expr->get_slot_ids(&slot_ids) != 1) {
+        root_expr->get_slot_ids(&slot_ids);
+
+        // For some conjunct like (a < 1) or (a > 7)
+        // slot_ids = (a, a), but actually there is only one slot.
+        bool single_slot = true;
+        for (int i = 1; i < slot_ids.size(); i++) {
+            if (slot_ids[i] != slot_ids[0]) {
+                single_slot = false;
+                break;
+            }
+        }
+        if (!single_slot) {
             _scanner_conjunct_ctxs.emplace_back(ctx);
             continue;
         }

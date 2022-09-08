@@ -100,6 +100,8 @@ Status NodeChannel::init(RuntimeState* state) {
         return _err_st;
     }
 
+    _rpc_timeout_ms = state->query_options().query_timeout * 1000 / 2;
+
     // Initialize _rpc_request
     for (const auto& [index_id, tablets] : _index_tablets_map) {
         auto request = _rpc_request.add_requests();
@@ -108,10 +110,9 @@ Status NodeChannel::init(RuntimeState* state) {
         request->set_txn_id(_parent->_txn_id);
         request->set_sender_id(_parent->_sender_id);
         request->set_eos(false);
+        request->set_timeout_ms(_rpc_timeout_ms);
     }
     _rpc_request.set_allocated_id(&_parent->_load_id);
-
-    _rpc_timeout_ms = state->query_options().query_timeout * 1000 / 2;
 
     if (state->query_options().__isset.load_transmission_compression_type) {
         _compress_type = CompressionUtils::to_compression_pb(state->query_options().load_transmission_compression_type);
@@ -160,10 +161,11 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_txn_trace_parent(_parent->_txn_trace_parent);
     request.set_allocated_schema(_parent->_schema->to_protobuf());
     request.set_is_lake_tablet(_parent->_is_lake_table);
+    request.set_is_replicated_storage(_parent->_enable_replicated_storage);
+    request.set_node_id(_node_id);
     for (auto& tablet : _index_tablets_map[index_id]) {
         auto ptablet = request.add_tablets();
-        ptablet->set_partition_id(tablet.partition_id);
-        ptablet->set_tablet_id(tablet.tablet_id);
+        ptablet->Swap(&tablet);
     }
     request.set_num_senders(_parent->_num_senders);
     request.set_need_gen_rollup(_parent->_need_gen_rollup);
@@ -175,6 +177,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     // when load coordinator BE have upgrade to 2.1 but other BE still in 2.0 or previous
     // we need use is_vectorized to make other BE open vectorized delta writer
     request.set_is_vectorized(true);
+    request.set_timeout_ms(_rpc_timeout_ms);
 
     // set global dict
     const auto& global_dict = _runtime_state->get_load_global_dict_map();
@@ -195,6 +198,9 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     _stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
     request.release_id();
     request.release_schema();
+
+    VLOG(2) << "NodeChannel[" << _load_info << "] send open request to [" << _node_info->host << ":"
+            << _node_info->brpc_port << "]";
 }
 
 bool NodeChannel::is_open_done() {
@@ -522,7 +528,11 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     for (auto& tablet : closure->result.tablet_vec()) {
         TTabletCommitInfo commit_info;
         commit_info.tabletId = tablet.tablet_id();
-        commit_info.backendId = _node_id;
+        if (tablet.has_node_id()) {
+            commit_info.backendId = tablet.node_id();
+        } else {
+            commit_info.backendId = _node_id;
+        }
         std::vector<std::string> invalid_dict_cache_columns;
         for (auto& col_name : tablet.invalid_dict_cache_columns()) {
             invalid_dict_cache_columns.emplace_back(col_name);
@@ -683,11 +693,11 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
 
 IndexChannel::~IndexChannel() = default;
 
-Status IndexChannel::init(RuntimeState* state, const std::vector<TTabletWithPartition>& tablets) {
+Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets) {
     for (const auto& tablet : tablets) {
-        auto* location = _parent->_location->find_tablet(tablet.tablet_id);
+        auto* location = _parent->_location->find_tablet(tablet.tablet_id());
         if (location == nullptr) {
-            auto msg = fmt::format("Not found tablet: {}", tablet.tablet_id);
+            auto msg = fmt::format("Not found tablet: {}", tablet.tablet_id());
             return Status::NotFound(msg);
         }
         std::vector<NodeChannel*> channels;
@@ -706,7 +716,7 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<TTabletWithPart
             channels.push_back(channel);
             bes.emplace_back(node_id);
         }
-        _tablet_to_be.emplace(tablet.tablet_id, std::move(bes));
+        _tablet_to_be.emplace(tablet.tablet_id(), std::move(bes));
     }
     for (auto& it : _node_channels) {
         RETURN_IF_ERROR(it.second->init(state));
@@ -736,6 +746,7 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     _need_gen_rollup = table_sink.need_gen_rollup;
     _tuple_desc_id = table_sink.tuple_id;
     _is_lake_table = table_sink.is_lake_table;
+    _keys_type = table_sink.keys_type;
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
     _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));
@@ -755,11 +766,16 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
 Status OlapTableSink::prepare(RuntimeState* state) {
     _span->AddEvent("prepare");
 
+    if (state->query_options().__isset.enable_replicated_storage && _keys_type != TKeysType::PRIMARY_KEYS) {
+        _enable_replicated_storage = state->query_options().enable_replicated_storage;
+    }
+
     // profile must add to state's object pool
     _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
 
     _profile->add_info_string("TxnID", fmt::format("{}", _txn_id));
     _profile->add_info_string("IndexNum", fmt::format("{}", _schema->indexes().size()));
+    _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
     // add all counter
     _input_rows_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);
     _output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
@@ -849,22 +865,37 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state) {
     const auto& partitions = _vectorized_partition->get_partitions();
     for (int i = 0; i < _schema->indexes().size(); ++i) {
         // collect all tablets belong to this rollup
-        std::vector<TTabletWithPartition> tablets;
+        std::vector<PTabletWithPartition> tablets;
         auto* index = _schema->indexes()[i];
         for (auto* part : partitions) {
             for (auto tablet : part->indexes[i].tablets) {
-                TTabletWithPartition tablet_with_partition;
-                tablet_with_partition.partition_id = part->id;
-                tablet_with_partition.tablet_id = tablet;
-                tablets.emplace_back(std::move(tablet_with_partition));
+                PTabletWithPartition tablet_info;
+                tablet_info.set_tablet_id(tablet);
+                tablet_info.set_partition_id(part->id);
 
-                if (_colocate_mv_index) {
-                    auto* location = _location->find_tablet(tablet);
-                    if (location == nullptr) {
-                        auto msg = fmt::format("Not found tablet: {}", tablet);
-                        return Status::NotFound(msg);
+                // setup replicas
+                auto* location = _location->find_tablet(tablet);
+                if (location == nullptr) {
+                    auto msg = fmt::format("Failed to find tablet {} location info", tablet);
+                    return Status::NotFound(msg);
+                }
+                auto node_ids_size = location->node_ids.size();
+                for (size_t i = 0; i < node_ids_size; ++i) {
+                    auto& node_id = location->node_ids[i];
+                    auto node_info = _nodes_info->find_node(node_id);
+                    if (node_info == nullptr) {
+                        return Status::InvalidArgument(fmt::format("Unknown node_id: {}", node_id));
                     }
-                    for (auto& node_id : location->node_ids) {
+                    auto* replica = tablet_info.add_replicas();
+                    replica->set_host(node_info->host);
+                    replica->set_port(node_info->brpc_port);
+                    replica->set_node_id(node_id);
+                }
+
+                // colocate mv load doesn't has IndexChannel, initialize NodeChannel here
+                if (_colocate_mv_index) {
+                    for (size_t i = 0; i < node_ids_size; ++i) {
+                        auto& node_id = location->node_ids[i];
                         NodeChannel* node_channel = nullptr;
                         auto it = _node_channels.find(node_id);
                         if (it == std::end(_node_channels)) {
@@ -874,9 +905,11 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state) {
                         } else {
                             node_channel = it->second.get();
                         }
-                        node_channel->add_tablet(index->index_id, tablet_with_partition);
+                        node_channel->add_tablet(index->index_id, tablet_info);
                     }
                 }
+
+                tablets.emplace_back(std::move(tablet_info));
             }
         }
         auto channel = std::make_unique<IndexChannel>(this, index->index_id);
@@ -1163,8 +1196,17 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
         _node_select_idx.reserve(selection_idx.size());
         for (unsigned short selection : selection_idx) {
             std::vector<int64_t>& be_ids = channel->_tablet_to_be.find(_tablet_ids[selection])->second;
-            if (std::find(be_ids.begin(), be_ids.end(), be_id) != be_ids.end()) {
-                _node_select_idx.emplace_back(selection);
+            if (_enable_replicated_storage) {
+                // TODO(meegoo): add backlist policy
+                // first replica is primary replica, which determined by FE now
+                // only send to primary replica when enable replicated storage engine
+                if (be_ids[0] == be_id) {
+                    _node_select_idx.emplace_back(selection);
+                }
+            } else {
+                if (std::find(be_ids.begin(), be_ids.end(), be_id) != be_ids.end()) {
+                    _node_select_idx.emplace_back(selection);
+                }
             }
         }
         NodeChannel* node = it.second.get();
@@ -1176,6 +1218,10 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
                          << ", errmsg=" << st.get_error_msg();
             channel->mark_as_failed(node);
             err_st = st;
+            // we only send to primary replica, if it fail whole load fail
+            if (_enable_replicated_storage) {
+                return err_st;
+            }
         }
         if (channel->has_intolerable_failure()) {
             return err_st;
@@ -1189,12 +1235,14 @@ Status OlapTableSink::try_close(RuntimeState* state) {
     bool intolerable_failure = false;
     if (_colocate_mv_index) {
         for_each_node_channel([this, &err_st, &intolerable_failure](NodeChannel* ch) {
-            auto st = ch->try_close();
-            if (!st.ok()) {
-                LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
-                             << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
-                err_st = st;
-                this->mark_as_failed(ch);
+            if (!this->is_failed_channel(ch)) {
+                auto st = ch->try_close();
+                if (!st.ok()) {
+                    LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
+                                 << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
+                    err_st = st;
+                    this->mark_as_failed(ch);
+                }
             }
             if (this->has_intolerable_failure()) {
                 intolerable_failure = true;
@@ -1203,12 +1251,14 @@ Status OlapTableSink::try_close(RuntimeState* state) {
     } else {
         for (auto& index_channel : _channels) {
             index_channel->for_each_node_channel([&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
-                auto st = ch->try_close();
-                if (!st.ok()) {
-                    LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
-                                 << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
-                    err_st = st;
-                    index_channel->mark_as_failed(ch);
+                if (!index_channel->is_failed_channel(ch)) {
+                    auto st = ch->try_close();
+                    if (!st.ok()) {
+                        LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
+                                     << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
+                        err_st = st;
+                        index_channel->mark_as_failed(ch);
+                    }
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;

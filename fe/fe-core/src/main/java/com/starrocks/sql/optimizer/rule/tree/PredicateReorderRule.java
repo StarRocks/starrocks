@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.sql.optimizer.rewrite.physical;
+package com.starrocks.sql.optimizer.rule.tree;
 
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.SessionVariable;
@@ -23,7 +23,7 @@ import java.util.Set;
  * Predicate reorder
  * Evaluate the selectivity of child.
  */
-public class PredicateReorderRule implements PhysicalOperatorTreeRewriteRule {
+public class PredicateReorderRule implements TreeRewriteRule {
     public static final PredicateReorderVisitor HANDLER = new PredicateReorderVisitor();
 
     private final SessionVariable sessionVariable;

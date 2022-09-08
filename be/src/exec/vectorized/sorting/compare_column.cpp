@@ -10,6 +10,9 @@
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exec/vectorized/sorting/sorting.h"
+#include "glog/logging.h"
+#include "runtime/primitive_type.h"
+#include "simd/selector.h"
 
 namespace starrocks::vectorized {
 
@@ -60,15 +63,12 @@ static inline size_t compare_column_helper(CompareVector& cmp_vector, DataCompar
 // bit of memory footprint and could support fast navigate.
 class ColumnCompare final : public ColumnVisitorAdapter<ColumnCompare> {
 public:
-    explicit ColumnCompare(CompareVector& cmp_vector, Datum rhs_value, int sort_order, int null_first)
+    explicit ColumnCompare(CompareVector& cmp_vector, Datum rhs_value, const SortDesc& sort_desc)
             : ColumnVisitorAdapter(this),
               _cmp_vector(cmp_vector),
               _rhs_value(std::move(rhs_value)),
-              _sort_order(sort_order),
-              _null_first(null_first) {
-        DCHECK(sort_order == 1 || sort_order == -1);
-        DCHECK(null_first == 1 || null_first == -1);
-    }
+              _sort_order(sort_desc.sort_order),
+              _null_first(sort_desc.null_first) {}
 
     Status do_visit(const vectorized::NullableColumn& column) {
         // Two step compare:
@@ -88,14 +88,26 @@ public:
         size_t null_equal_count = compare_column_helper(null_vector, null_cmp);
 
         int notnull_equal_count = 0;
+
+        CompareVector cmp_vector(null_data.size());
+        // TODO: use IMD select_if
+        auto merge_cmp_vector = [](CompareVector& a, CompareVector& b) {
+            DCHECK_EQ(a.size(), b.size());
+            for (size_t i = 0; i < a.size(); ++i) {
+                a[i] = a[i] == 0 ? b[i] : a[i];
+            }
+        };
         if (_rhs_value.is_null()) {
             for (size_t i = 0; i < null_data.size(); i++) {
                 if (null_data[i] == 0) {
-                    _cmp_vector[i] = -_null_first;
+                    cmp_vector[i] = -_null_first;
                 } else {
-                    _cmp_vector[i] = null_vector[i];
+                    cmp_vector[i] = null_vector[i];
                 }
             }
+            // merge cmp_vector
+            // _cmp_vector[i] = _cmp_vector[i] == 0 ? cmp_vector[i]: _cmp_vector[i];
+            merge_cmp_vector(_cmp_vector, cmp_vector);
         } else {
             // 0 means not null, so compare it
             // 1 means null, not compare it for not-null values
@@ -104,15 +116,16 @@ public:
                 notnull_vector[i] = null_data[i];
             }
 
-            notnull_equal_count =
-                    compare_column(column.data_column(), notnull_vector, _rhs_value, _sort_order, _null_first);
+            notnull_equal_count = compare_column(column.data_column(), notnull_vector, _rhs_value,
+                                                 SortDesc(_sort_order, _null_first));
             for (size_t i = 0; i < null_data.size(); i++) {
                 if (null_data[i] == 0) {
-                    _cmp_vector[i] = notnull_vector[i];
+                    cmp_vector[i] = notnull_vector[i];
                 } else {
-                    _cmp_vector[i] = null_vector[i];
+                    cmp_vector[i] = null_vector[i];
                 }
             }
+            merge_cmp_vector(_cmp_vector, cmp_vector);
         }
 
         _equal_count = null_equal_count + notnull_equal_count;
@@ -121,7 +134,8 @@ public:
     }
 
     Status do_visit(const vectorized::ConstColumn& column) {
-        _equal_count = compare_column(column.data_column(), _cmp_vector, _rhs_value, _sort_order, _null_first);
+        _equal_count =
+                compare_column(column.data_column(), _cmp_vector, _rhs_value, SortDesc(_sort_order, _null_first));
 
         return Status::OK();
     }
@@ -270,8 +284,8 @@ private:
     const NullColumnPtr _nullable_column;
 };
 
-int compare_column(const ColumnPtr column, CompareVector& cmp_vector, Datum rhs_value, int sort_order, int null_first) {
-    ColumnCompare compare(cmp_vector, rhs_value, sort_order, null_first);
+int compare_column(const ColumnPtr column, CompareVector& cmp_vector, Datum rhs_value, const SortDesc& desc) {
+    ColumnCompare compare(cmp_vector, rhs_value, desc);
 
     [[maybe_unused]] Status st = column->accept(&compare);
     DCHECK(st.ok());
@@ -279,22 +293,19 @@ int compare_column(const ColumnPtr column, CompareVector& cmp_vector, Datum rhs_
 }
 
 void compare_columns(const Columns columns, std::vector<int8_t>& cmp_vector, const std::vector<Datum>& rhs_values,
-                     const std::vector<int>& sort_orders, const std::vector<int>& null_firsts) {
+                     const SortDescs& sort_desc) {
     if (columns.empty()) {
         return;
     }
     DCHECK_EQ(columns.size(), rhs_values.size());
-    DCHECK_EQ(columns.size(), sort_orders.size());
-    DCHECK_EQ(columns.size(), null_firsts.size());
+    DCHECK_EQ(columns.size(), sort_desc.num_columns());
     DCHECK_EQ(columns[0]->size(), cmp_vector.size());
     DCHECK(std::all_of(cmp_vector.begin(), cmp_vector.end(), [](int8_t x) { return x == 1 || x == -1 || x == 0; }));
 
     for (size_t col_idx = 0; col_idx < columns.size(); col_idx++) {
-        int sort_order = sort_orders[col_idx];
-        int null_first = null_firsts[col_idx];
         Datum rhs_value = rhs_values[col_idx];
 
-        int equal_count = compare_column(columns[col_idx], cmp_vector, rhs_value, sort_order, null_first);
+        int equal_count = compare_column(columns[col_idx], cmp_vector, rhs_value, sort_desc.get_column_desc(col_idx));
         if (equal_count == 0) {
             break;
         }

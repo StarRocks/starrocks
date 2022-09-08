@@ -6,6 +6,7 @@
 
 #include "column/chunk.h"
 #include "exec/vectorized/sorting/sort_permute.h"
+#include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/olap_define.h"
@@ -41,7 +42,7 @@ public:
     // return true suggests caller should flush this memory table
     bool insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
-    Status flush();
+    Status flush(SegmentPB* seg_info = nullptr);
 
     Status finalize();
 

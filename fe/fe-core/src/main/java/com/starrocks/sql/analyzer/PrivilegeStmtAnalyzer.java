@@ -1,9 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.CreateRoleStmt;
+import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
+import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
@@ -208,6 +211,29 @@ public class PrivilegeStmtAnalyzer {
         @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
             stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not create role"));
+            return null;
+        }
+
+        @Override
+        public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
+            if (stmt.getUserIdent() != null) {
+                if (stmt.isAll()) {
+                    throw new SemanticException("Can not specified keyword ALL when specified user");
+                }
+                analyseUser(stmt.getUserIdent(), session, true);
+            } else {
+                if (!stmt.isAll()) {
+                    // self
+                    stmt.setUserIdent(session.getCurrentUserIdentity());
+                }
+            }
+            Preconditions.checkState(stmt.isAll() || session.getCurrentUserIdentity() != null);
+            return null;
+        }
+
+        @Override
+        public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
+            stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not drop role"));
             return null;
         }
     }

@@ -79,6 +79,7 @@ public class StreamLoadTask {
     private boolean partialUpdate = false;
     private TCompressionType compressionType = TCompressionType.NO_COMPRESSION;
     private int loadParallelRequestNum = 0;
+    private boolean enableReplicatedStorage;
 
     public StreamLoadTask(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -180,6 +181,10 @@ public class StreamLoadTask {
 
     public TCompressionType getTransmisionCompressionType() {
         return compressionType;
+    }
+
+    public boolean getEnableReplicatedStorage() {
+        return enableReplicatedStorage;
     }
 
     public int getLoadParallelRequestNum() {
@@ -298,6 +303,10 @@ public class StreamLoadTask {
         if (routineLoadJob.getSessionVariables().containsKey(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE)) {
             compressionType = CompressionUtils.findTCompressionByName(
                     routineLoadJob.getSessionVariables().get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
+        }
+        if (routineLoadJob.getSessionVariables().containsKey(SessionVariable.ENABLE_REPLICATED_STORAGE)) {
+            enableReplicatedStorage = Boolean
+                    .parseBoolean(routineLoadJob.getSessionVariables().get(SessionVariable.ENABLE_REPLICATED_STORAGE));
         }
     }
 

@@ -8,6 +8,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.velocity.VelocityContext;
 
 import java.util.ArrayList;
@@ -36,9 +37,16 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @Override
-    public void collect(ConnectContext context) throws Exception {
-        for (String sql : buildCollectSQLList()) {
+    public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+        List<String> collectSQLList = buildCollectSQLList();
+        long finishedSQLNum = 0;
+        long totalCollectSQL = collectSQLList.size();
+
+        for (String sql : collectSQLList) {
             collectStatisticSync(sql, context);
+            finishedSQLNum++;
+            analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         }
     }
 

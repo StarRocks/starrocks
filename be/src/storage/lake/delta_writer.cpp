@@ -32,7 +32,7 @@ public:
 
     DISALLOW_COPY_AND_MOVE(TabletWriterSink);
 
-    Status flush_chunk(const Chunk& chunk) override {
+    Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr) override {
         RETURN_IF_ERROR(_writer->write(chunk));
         return _writer->flush();
     }

@@ -12,6 +12,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
+import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -179,6 +180,20 @@ public class ShowStmtAnalyzer {
             String dbName = node.getDbFullName();
             dbName = getDatabaseName(dbName, context);
             node.setDb(dbName);
+            return null;
+        }
+
+        @Override
+        public Void visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt node, ConnectContext context) {
+            String dbName = node.getDbFullName();
+            dbName = getDatabaseName(dbName, context);
+            node.setDbFullName(dbName);
+            try {
+                node.checkJobNameExpr();
+            } catch (AnalysisException e) {
+                LOGGER.error("analysis show routine load task error:", e);
+                throw new SemanticException("analysis show routine load task error: %s", e.getMessage());
+            }
             return null;
         }
 

@@ -32,6 +32,16 @@ public class NestLoopJoinTest extends PlanTestBase {
         String sql = "SELECT * from t0 join test_all_type where t0.v1 = 2;";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment, planFragment.contains("NESTLOOP JOIN"));
+
+        // Outer join
+        PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("auto");
+        sql = "SELECT * from t0 left join test_all_type t1 on 2 = t1.t1c";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment, planFragment.contains("LEFT OUTER JOIN"));
+
+        sql = "SELECT * from t0 left join test_all_type t1 on 2 = t0.v1";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment, planFragment.contains("LEFT OUTER JOIN"));
     }
 
     private void assertNestloopJoin(String sql, String joinType, String onPredicate) throws Exception {
