@@ -58,8 +58,6 @@ int main(int argc, char** argv) {
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;
-    options.metadata_mem_tracker = metadata_mem_tracker.get();
-    options.schema_change_mem_tracker = schema_change_mem_tracker.get();
     options.compaction_mem_tracker = compaction_mem_tracker.get();
     options.update_mem_tracker = update_mem_tracker.get();
     starrocks::Status s = starrocks::StorageEngine::open(options, &engine);
