@@ -73,7 +73,26 @@ public class AlterRoutineLoadStmtTest {
 
     @Test
     public void testParser() {
-        String sql = "alter ROUTINE LOAD for testdb.routine_name\n" + "WHERE k1 > 1 and k2 like \"%starrocks%\",\n" + "COLUMNS(k1, k2, k4 = k1 + k2),\n" + "COLUMNS TERMINATED BY \"\\t\",\n" + "PARTITION(p1,p2) \n" + "PROPERTIES\n" + "(\n" + "\t\"max_batch_rows\"=\"200000\",\n" + "\t\"max_error_number\"=\"1\",\n" + "    \"desired_concurrent_number\"=\"3\",\n" + "    \"max_batch_interval\" = \"21\",\n" + "    \"strict_mode\" = \"false\",\n" + "    \"timezone\" = \"Africa/Abidjan\"\n" + ")\n" + "FROM KAFKA\n" + "(\n" + "    \"kafka_partitions\" = \"0, 1, 2\",\n" + "    \"kafka_offsets\" = \"100, 200, 100\",\n" + "    \"property.group.id\" = \"group1\"\n" + ");";
+        String sql = "alter ROUTINE LOAD for testdb.routine_name\n"
+                + "WHERE k1 > 1 and k2 like \"%starrocks%\",\n"
+                + "COLUMNS(k1, k2, k4 = k1 + k2),\n"
+                + "COLUMNS TERMINATED BY \"\\t\",\n"
+                + "PARTITION(p1,p2) \n"
+                + "PROPERTIES\n"
+                + "(\n"
+                + "\"max_batch_rows\"=\"200000\",\n"
+                + "\"max_error_number\"=\"1\",\n"
+                + "\"desired_concurrent_number\"=\"3\",\n"
+                + "\"max_batch_interval\" = \"21\",\n"
+                + "\"strict_mode\" = \"false\",\n"
+                + "\"timezone\" = \"Africa/Abidjan\"\n"
+                + ")\n"
+                + "FROM KAFKA\n"
+                + "(\n"
+                + "\"kafka_partitions\" = \"0, 1, 2\",\n"
+                + "\"kafka_offsets\" = \"100, 200, 100\",\n"
+                + "\"property.group.id\" = \"group1\"\n"
+                + ");";
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt)stmts.get(0);
         AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
@@ -91,7 +110,11 @@ public class AlterRoutineLoadStmtTest {
 
     @Test
     public void testLoadPropertiesContexts() {
-        String sql = "ALTER ROUTINE LOAD for testdb.routine_name \n" + "PROPERTIES\n" + "(\n" + "    \"max_error_number\"=\"1000\"\n" + ")\n" + "FROM KAFKA;";
+        String sql = "ALTER ROUTINE LOAD for testdb.routine_name \n"
+                + "PROPERTIES\n"
+                + "(\n"
+                + "\"max_error_number\"=\"1000\"\n"
+                + ")\n";
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         AlterRoutineLoadStmt alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
         AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
