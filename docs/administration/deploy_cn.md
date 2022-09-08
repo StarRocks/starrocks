@@ -1,6 +1,16 @@
 # Deploy a Compute Node
 
+<<<<<<< HEAD
 A Compute Node (CN) is responsible for SQL execution. It helps improve the computing capacity of a StarRocks cluster. This topic describes how to configure and deploy a CN node. You can add multiple CN nodes by repeating the following steps.
+=======
+A Compute Node (CN) a stateless computing service that does not maintain data itself. It only provides extra computing resources during queries. This topic describes how to configure and deploy a CN node. You can add multiple CN nodes by repeating the following steps.
+
+## Principle
+
+The life cycle of SQL statements in StarRocks can be divided into three phases: query parsing, planning, and execution. CN takes some or all of the computation tasks in the execution phase. Its working processing is as follows: first, FE divides the parsed SQL statements into logical execution units, splits the logical execution units into physical execution units according to the data distribution and operator types, and then assigns them to BEs and CNs.
+
+During execution, BEs do the computation tasks before data shuffle, and data read and write. CNs receive the shuffled data from BEs, do part of the computation tasks such as JOIN, and return the results to FEs.
+>>>>>>> d693a4726 ([Add FQDN and other trivial modifications (#11013))
 
 ## Download and decompress the installer
 
@@ -55,7 +65,7 @@ mysql> ALTER SYSTEM DROP COMPUTE NODE "host:port";
 Run the following command to start the CN node.
 
 ```shell
-bin/start_cn.sh --daemon
+sh bin/start_cn.sh --daemon
 ```
 
 ## Verify if CN node starts
@@ -91,6 +101,8 @@ ClusterDecommissioned: false
 When the field `Alive` is `true`, the CN node is properly started and added to the cluster.
 
 If the CN node is not properly added to the cluster, you can check the **log/cn.WARNING** log file to troubleshoot the problem.
+
+After the Compute Nodes are started properly, you need to set the system variables `prefer_compute_node`, and `use_compute_nodes` to allow them to scale the computing resources out during queries. See [System Variables](../reference/System_variable.md) for more information.
 
 ## Stop CN node
 
