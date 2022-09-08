@@ -60,25 +60,20 @@ Status AlterTabletTask::set_alter_state(AlterTabletState alter_state) {
     return Status::OK();
 }
 
-Status TabletMeta::create(MemTracker* mem_tracker, const TCreateTabletReq& request, const TabletUid& tablet_uid,
-                          uint64_t shard_id, uint32_t next_unique_id,
+Status TabletMeta::create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
+                          uint32_t next_unique_id,
                           const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                           TabletMetaSharedPtr* tablet_meta) {
-    *tablet_meta = std::shared_ptr<TabletMeta>(
-            new TabletMeta(request.table_id, request.partition_id, request.tablet_id, request.tablet_schema.schema_hash,
-                           shard_id, request.tablet_schema, next_unique_id,
-                           request.__isset.enable_persistent_index ? request.enable_persistent_index : false,
-                           col_ordinal_to_unique_id, tablet_uid,
-                           request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK),
-            DeleterWithMemTracker<TabletMeta>(mem_tracker));
-    mem_tracker->consume((*tablet_meta)->mem_usage());
+    *tablet_meta = std::make_shared<TabletMeta>(
+            request.table_id, request.partition_id, request.tablet_id, request.tablet_schema.schema_hash, shard_id,
+            request.tablet_schema, next_unique_id,
+            request.__isset.enable_persistent_index ? request.enable_persistent_index : false, col_ordinal_to_unique_id,
+            tablet_uid, request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK);
     return Status::OK();
 }
 
-TabletMetaSharedPtr TabletMeta::create(MemTracker* mem_tracker) {
-    auto tablet_meta = std::shared_ptr<TabletMeta>(new TabletMeta(), DeleterWithMemTracker<TabletMeta>(mem_tracker));
-    mem_tracker->consume(tablet_meta->mem_usage());
-    return tablet_meta;
+TabletMetaSharedPtr TabletMeta::create() {
+    return std::make_shared<TabletMeta>();
 }
 
 TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash,
@@ -106,6 +101,15 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
     convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema);
 
     init_from_pb(&tablet_meta_pb);
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+}
+
+TabletMeta::TabletMeta() : _tablet_uid(0, 0) {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+}
+
+TabletMeta::~TabletMeta() {
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 Status TabletMeta::create_from_file(const string& file_path) {
