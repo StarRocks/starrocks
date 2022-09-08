@@ -37,7 +37,6 @@ import java.io.IOException;
 
 public class GlobalPrivEntry extends PrivEntry {
     private static final Logger LOG = LogManager.getLogger(GlobalPrivEntry.class);
-
     private Password password;
     // set domainUserIdent when this a password entry and is set by domain resolver.
     // so that when user checking password with user@'IP' and match a entry set by the resolver,
@@ -118,7 +117,7 @@ public class GlobalPrivEntry extends PrivEntry {
             return -res;
         }
 
-        return -origUser.compareTo(otherEntry.origUser);
+        return -realOrigUser.compareTo(otherEntry.realOrigUser);
     }
 
     @Override
@@ -128,7 +127,7 @@ public class GlobalPrivEntry extends PrivEntry {
         }
 
         GlobalPrivEntry otherEntry = (GlobalPrivEntry) other;
-        if (origHost.equals(otherEntry.origHost) && origUser.equals(otherEntry.origUser)
+        if (origHost.equals(otherEntry.origHost) && realOrigUser.equals(otherEntry.realOrigUser)
                 && isDomain == otherEntry.isDomain) {
             return true;
         }
@@ -138,7 +137,7 @@ public class GlobalPrivEntry extends PrivEntry {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("global priv. host: ").append(origHost).append(", user: ").append(origUser);
+        sb.append("global priv. host: ").append(origHost).append(", user: ").append(realOrigUser);
         sb.append(", priv: ").append(privSet).append(", set by resolver: ").append(isSetByDomainResolver);
         sb.append(", domain user ident: ").append(domainUserIdent);
         return sb.toString();
