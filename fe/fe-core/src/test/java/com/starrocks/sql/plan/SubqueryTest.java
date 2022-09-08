@@ -471,4 +471,5 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  group by: 5: v4");
         }
     }
+
 }
