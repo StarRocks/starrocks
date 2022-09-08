@@ -32,8 +32,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDateLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -448,7 +446,7 @@ public class DateLiteral extends LiteralExpr {
 
     @Override
     public int hashCode() {
-        return 31 * super.hashCode() + Objects.hashCode(unixTimestamp(TimeZone.getDefault()));
+        return Objects.hash(super.hashCode(), Objects.hashCode(unixTimestamp(TimeZone.getDefault())));
     }
 
     @Override
