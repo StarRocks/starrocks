@@ -325,12 +325,6 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitExecuteAsStatement(ExecuteAsStmt stmt, ConnectContext session) {
-            PrivilegeStmtAnalyzer.analyze(stmt, session);
-            return null;
-        }
-
-        @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
