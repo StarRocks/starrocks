@@ -106,3 +106,25 @@ export_mem_limit_from_conf() {
     export TCMALLOC_HEAP_LIMIT_MB=${mem}
     return 0
 }
+
+export_shared_envvars() {
+    # compatible with DORIS_HOME: DORIS_HOME still be using in config on the user side, so set DORIS_HOME to the meaningful value in case of wrong envs.
+    export DORIS_HOME="$STARROCKS_HOME"
+
+    # ===================================================================================
+    # initialization of environment variables before exporting env variables from be.conf
+    # For most cases, you should put default environment variables in this section.
+    #
+    # UDF_RUNTIME_DIR
+    # LOG_DIR
+    # PID_DIR
+    export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
+    export LOG_DIR=${STARROCKS_HOME}/log
+    export PID_DIR=`cd "$curdir"; pwd`
+
+    # https://github.com/aws/aws-cli/issues/5623
+    # https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
+    export AWS_EC2_METADATA_DISABLED=true
+    # ===================================================================================
+}
+

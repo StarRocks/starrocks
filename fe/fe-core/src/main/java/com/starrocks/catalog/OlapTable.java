@@ -1333,6 +1333,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
         // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.
         rebuildFullSchema();
 
+        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
+
         // Recover nameToPartition from idToPartition
         nameToPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Partition partition : idToPartition.values()) {

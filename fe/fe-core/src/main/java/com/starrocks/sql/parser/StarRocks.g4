@@ -80,6 +80,7 @@ statement
     | deleteStatement
 
     //Routine Statement
+    | createRoutineLoadStatement
     | stopRoutineLoadStatement
     | resumeRoutineLoadStatement
     | pauseRoutineLoadStatement
@@ -171,6 +172,7 @@ statement
     | showAuthenticationStatement
     | createRoleStatement
     | showRolesStatement
+    | showGrantsStatement
 
     // Backup Restore Satement
     | backupStatement
@@ -682,6 +684,43 @@ deleteStatement
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
+createRoutineLoadStatement
+    : CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier ON table=qualifiedName
+        (loadProperties (',' loadProperties)*)?
+        jobProperties?
+        FROM source=identifier
+        dataSourceProperties?
+    ;
+
+loadProperties
+    : (colSeparatorProperty)
+    | (rowDelimiterProperty)
+    | (COLUMNS columnProperties)
+    | (WHERE expression)
+    | (partitionNames)
+    ;
+
+colSeparatorProperty
+    : COLUMNS TERMINATED BY string
+    ;
+
+rowDelimiterProperty
+    : ROWS TERMINATED BY string
+    ;
+
+columnProperties
+    : '('
+        (qualifiedName | assignmentList) (',' (qualifiedName | assignmentList))*
+      ')'
+    ;
+
+jobProperties
+    : properties
+    ;
+
+dataSourceProperties
+    : propertyList
+    ;
 
 stopRoutineLoadStatement
     : STOP ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
@@ -993,6 +1032,10 @@ createRoleStatement
 
 showRolesStatement
     : SHOW ROLES
+    ;
+
+showGrantsStatement
+    : SHOW ALL? GRANTS (FOR user)?
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
