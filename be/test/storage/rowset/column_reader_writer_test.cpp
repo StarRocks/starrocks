@@ -59,54 +59,36 @@ static const std::string TEST_DIR = "/column_reader_writer_test";
 
 class ColumnReaderWriterTest : public testing::Test {
 public:
-    ColumnReaderWriterTest() {}
+    ColumnReaderWriterTest() {
+        TabletSchemaPB schema_pb;
+        auto* c0 = schema_pb.add_column();
+        c0->set_name("pk");
+        c0->set_is_key(true);
+        c0->set_type("BIGINT");
+
+        auto* c1 = schema_pb.add_column();
+        c1->set_name("v1");
+        c1->set_is_key(false);
+        c1->set_type("SMALLINT");
+
+        auto* c2 = schema_pb.add_column();
+        c2->set_name("v2");
+        c2->set_type("INT");
+
+        _dummy_segment_schema = TabletSchema::create(schema_pb);
+    }
 
     ~ColumnReaderWriterTest() override = default;
 
 protected:
-    void SetUp() override { _metadata_mem_tracker = std::make_unique<MemTracker>(); }
+    void SetUp() override {}
 
     void TearDown() override {}
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<fs::FileBlockManager>& block_mgr,
                                                   const std::string& fname) {
-        int tablet_id = 1;
-        TCreateTabletReq request;
-        request.tablet_id = tablet_id;
-        request.__set_version(1);
-        request.__set_version_hash(0);
-        request.tablet_schema.schema_hash = 0;
-        request.tablet_schema.short_key_column_count = 6;
-        request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
-        request.tablet_schema.storage_type = TStorageType::COLUMN;
-
-        TColumn k1;
-        k1.column_name = "pk";
-        k1.__set_is_key(true);
-        k1.column_type.type = TPrimitiveType::BIGINT;
-        request.tablet_schema.columns.push_back(k1);
-
-        TColumn k2;
-        k2.column_name = "v1";
-        k2.__set_is_key(false);
-        k2.column_type.type = TPrimitiveType::SMALLINT;
-        request.tablet_schema.columns.push_back(k2);
-
-        TColumn k3;
-        k3.column_name = "v2";
-        k3.__set_is_key(false);
-        k3.column_type.type = TPrimitiveType::INT;
-        request.tablet_schema.columns.push_back(k3);
-
-        auto st = StorageEngine::instance()->create_tablet(request);
-        auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
-        std::vector<int32_t> column_indexes;
-        std::shared_ptr<TabletSchema> tablet_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
-
-        MemTracker* mem_tracker = _metadata_mem_tracker.get();
-        return std::shared_ptr<Segment>(
-                new Segment(Segment::private_type(0), block_mgr.get(), fname, 1, tablet_schema.get(), mem_tracker),
-                DeleterWithMemTracker<Segment>(mem_tracker));
+        return std::make_shared<Segment>(Segment::private_type(0), block_mgr.get(), fname, 1,
+                                         _dummy_segment_schema.get());
     }
 
     template <FieldType type, EncodingTypePB encoding, uint32_t version, bool adaptive = true>
@@ -588,7 +570,7 @@ protected:
     }
 
     MemPool _pool;
-    std::unique_ptr<MemTracker> _metadata_mem_tracker;
+    std::shared_ptr<TabletSchema> _dummy_segment_schema;
 };
 
 // NOLINTNEXTLINE

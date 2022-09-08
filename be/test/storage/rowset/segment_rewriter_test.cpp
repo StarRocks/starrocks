@@ -11,7 +11,6 @@
 #include "common/logging.h"
 #include "env/env_memory.h"
 #include "gen_cpp/olap_file.pb.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/fs/file_block_manager.h"
@@ -43,7 +42,6 @@ protected:
         ASSERT_TRUE(_env->create_dir(kSegmentDir).ok());
 
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
-        _metadata_mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
     }
 
@@ -56,8 +54,7 @@ protected:
 
     Env* _env = nullptr;
     fs::BlockManager* _block_mgr = nullptr;
-    std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
-    std::unique_ptr<MemTracker> _metadata_mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _page_cache_mem_tracker;
 };
 
 TEST_F(SegmentRewriterTest, rewrite_test) {
@@ -103,8 +100,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     partial_rowset_footer.set_position(footer_position);
     partial_rowset_footer.set_size(file_size - footer_position);
 
-    auto partial_segment =
-            *Segment::open(_metadata_mem_tracker.get(), _block_mgr, file_name, 0, partial_tablet_schema.get());
+    auto partial_segment = *Segment::open(_block_mgr, file_name, 0, partial_tablet_schema.get());
     ASSERT_EQ(partial_segment->num_rows(), num_rows);
 
     std::unique_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
@@ -127,7 +123,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     ASSERT_OK(SegmentRewriter::rewrite(file_name, dst_file_name, *tablet_schema, read_column_ids, write_columns,
                                        partial_segment->id(), partial_rowset_footer));
 
-    auto segment = *Segment::open(_metadata_mem_tracker.get(), _block_mgr, dst_file_name, 0, tablet_schema.get());
+    auto segment = *Segment::open(_block_mgr, dst_file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     vectorized::SegmentReadOptions seg_options;
@@ -181,7 +177,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     }
     ASSERT_OK(SegmentRewriter::rewrite(file_name, *tablet_schema, read_column_ids, new_write_columns,
                                        partial_segment->id(), partial_rowset_footer));
-    auto rewrite_segment = *Segment::open(_metadata_mem_tracker.get(), _block_mgr, file_name, 0, tablet_schema.get());
+    auto rewrite_segment = *Segment::open(_block_mgr, file_name, 0, tablet_schema.get());
 
     ASSERT_EQ(rewrite_segment->num_rows(), num_rows);
     res = rewrite_segment->new_iterator(schema, seg_options);
