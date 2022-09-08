@@ -1,6 +1,6 @@
 ## Description
 
-Creates a materialized view. Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the materialized view in a database via [SHOW ALTER](../sql-reference/sql-statements/data-manipulation/SHOW%20ALTER.md) command. For usage information about materialized views, see [materialized view](../using_starrocks/Materialized_view.md).
+Creates a materialized view. Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the materialized view in a database via [SHOW ALTER](..//data-manipulation/SHOW%20ALTER.md) command. For usage information about materialized views, see [materialized view](../../../using_starrocks/Materialized_view.md).
 
 > **CAUTION**
 >
@@ -82,11 +82,8 @@ The bucketing strategy of the materialized view, in the form of `DISTRIBUTED BY 
 
 The refresh strategy of the materialized view. This parameter supports the following values:
 
-- `SYNC`: Synchronous refresh mode.
 - `ASYNC`: Asynchronous refresh mode. You can specify the refresh start time, refresh interval, or refresh task trigger mechanism for async refresh mode. The refresh interval supports the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`.
 - `MANUAL`: Manual refresh mode.
-
-If this parameter is not specified, the SYNC mode is used by default.
 
 **partition_expression** (optional)
 
@@ -315,36 +312,7 @@ from orders
 group by dt, order_id, user_id;
 ```
 
-Example 3: Create a synchronous refresh materialized view.
-
-```SQL
-CREATE MATERIALIZED VIEW lo_mv_sync_1
-AS
-select
-    lo_orderkey,
-    lo_orderdate,
-    lo_custkey, 
-    sum(lo_quantity) as total_quantity, 
-    sum(lo_revenue) as total_revenue, 
-    count(lo_shipmode) as shipmode_count
-from lineorder 
-group by lo_orderkey, lo_orderdate, lo_custkey;
-
-CREATE MATERIALIZED VIEW lo_mv_sync_2
-REFRESH SYNC
-AS
-select
-    lo_orderkey,
-    lo_orderdate,
-    lo_custkey, 
-    sum(lo_quantity) as total_quantity, 
-    sum(lo_revenue) as total_revenue, 
-    count(lo_shipmode) as shipmode_count
-from lineorder 
-group by lo_orderkey, lo_orderdate, lo_custkey;
-```
-
-Example 4: Create a multi-table materialized view.
+Example 3: Create a multi-table materialized view.
 
 ```SQL
 CREATE MATERIALIZED VIEW flat_lineorder
@@ -395,7 +363,7 @@ INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 ```
 
-Example 5: Create synchronous refresh materialized views for a base table.
+Example 5: Create a single-table sync materialized views.
 
 Base table schema is as follows:
 
