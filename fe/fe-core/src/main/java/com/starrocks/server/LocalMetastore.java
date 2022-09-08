@@ -536,7 +536,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
 
-
             // log
             RecoverInfo recoverInfo = new RecoverInfo(db.getId(), -1L, -1L);
             editLog.logRecoverDb(recoverInfo);
@@ -1935,6 +1934,10 @@ public class LocalMetastore implements ConnectorMetadata {
             olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
         } else if (stmt.isLakeEngine()) {
+            if (keysType == KeysType.PRIMARY_KEYS) {
+                throw new DdlException("Does not support PRIMARY KEY in lake table");
+            }
+
             olapTable = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
 
             // storage cache property
