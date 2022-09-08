@@ -179,7 +179,6 @@ private:
     uint32_t _segment_id = 0;
     uint32_t _num_rows = 0;
     PagePointer _short_key_index_page;
-    MemTracker* _mem_tracker;
 
     // ColumnReader for each column in TabletSchema. If ColumnReader is nullptr,
     // This means that this segment has no data for that column, which may be added

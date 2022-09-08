@@ -63,8 +63,6 @@ void set_up() {
     k_schema_change_mem_tracker = new MemTracker();
     starrocks::EngineOptions options;
     options.store_paths = paths;
-    options.metadata_mem_tracker = k_metadata_mem_tracker;
-    options.schema_change_mem_tracker = k_schema_change_mem_tracker;
     Status s = starrocks::StorageEngine::open(options, &k_engine);
     ASSERT_TRUE(s.ok()) << s.to_string();
 }
