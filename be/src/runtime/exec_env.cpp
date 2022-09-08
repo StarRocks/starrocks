@@ -386,7 +386,13 @@ Status ExecEnv::_init_storage_page_cache() {
                      << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
     }
     if (!config::disable_storage_page_cache) {
-        LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
+        if (storage_cache_limit < kcacheMinSize) {
+            LOG(WARNING) << "Storage cache limit is too small, give up using page cache.";
+            config::disable_storage_page_cache = true;
+            storage_cache_limit = 0;
+        } else {
+            LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
+        }
     }
     StoragePageCache::create_global_cache(_page_cache_mem_tracker, storage_cache_limit);
 
