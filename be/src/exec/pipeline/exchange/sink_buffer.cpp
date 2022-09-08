@@ -294,8 +294,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<vo
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
                 {instance_id, request.params->sequence(), GetCurrentTimeNanos()});
         if (_first_send_time == -1) {
-            int64_t expected = -1;
-            _first_send_time.compare_exchange_weak(expected, MonotonicNanos());
+            _first_send_time = MonotonicNanos();
         }
 
         closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
