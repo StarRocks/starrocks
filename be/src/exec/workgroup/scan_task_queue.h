@@ -82,7 +82,9 @@ private:
 
 class WorkGroupScanTaskQueue final : public ScanTaskQueue {
 public:
-    WorkGroupScanTaskQueue() = default;
+    enum SchedEntityType { OLAP, CONNECTOR };
+
+    WorkGroupScanTaskQueue(SchedEntityType sched_entity_type) : _sched_entity_type(sched_entity_type) {}
     ~WorkGroupScanTaskQueue() override = default;
 
     void close() override;
@@ -112,6 +114,9 @@ private:
     // The ideal runtime of a work group is the weighted average of the schedule period.
     int64_t _ideal_runtime_ns(workgroup::WorkGroupScanSchedEntity* wg_entity) const;
 
+    workgroup::WorkGroupScanSchedEntity* _sched_entity(workgroup::WorkGroup* wg);
+    const workgroup::WorkGroupScanSchedEntity* _sched_entity(const workgroup::WorkGroup* wg) const;
+
 private:
     static constexpr int64_t SCHEDULE_PERIOD_PER_WG_NS = 100'000'000;
     static constexpr int64_t BANDWIDTH_CONTROL_PERIOD_NS = 100'000'000;
@@ -121,6 +126,8 @@ private:
         bool operator()(const WorkGroupScanSchedEntityPtr& lhs, const WorkGroupScanSchedEntityPtr& rhs) const;
     };
     using WorkgroupSet = std::set<workgroup::WorkGroupScanSchedEntity*, WorkGroupScanSchedEntityComparator>;
+
+    const SchedEntityType _sched_entity_type;
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;
