@@ -50,6 +50,14 @@ StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity)
 
 StoragePageCache::~StoragePageCache() {}
 
+void StoragePageCache::set_capacity(size_t capacity) {
+    _cache->set_capacity(capacity);
+}
+
+size_t StoragePageCache::get_capacity() {
+    return _cache->get_capacity();
+}
+
 bool StoragePageCache::lookup(const CacheKey& key, PageCacheHandle* handle) {
     auto* lru_handle = _cache->lookup(key.encode());
     if (lru_handle == nullptr) {

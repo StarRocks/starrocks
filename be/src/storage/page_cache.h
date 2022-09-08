@@ -93,6 +93,10 @@ public:
 
     size_t memory_usage() const { return _cache->get_memory_usage(); }
 
+    void set_capacity(size_t capacity);
+
+    size_t get_capacity();
+
 private:
     static StoragePageCache* _s_instance;
 
