@@ -85,6 +85,7 @@ statement
     | resumeRoutineLoadStatement
     | pauseRoutineLoadStatement
     | showRoutineLoadStatement
+    | showRoutineLoadTaskStatement
 
     // Admin Statement
     | adminSetConfigStatement
@@ -740,6 +741,11 @@ showRoutineLoadStatement
         (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
+showRoutineLoadTaskStatement
+    : SHOW ROUTINE LOAD TASK
+        (FROM db=qualifiedName)?
+        WHERE expression
+    ;
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement

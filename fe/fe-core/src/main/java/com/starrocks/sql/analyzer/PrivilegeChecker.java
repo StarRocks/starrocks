@@ -1101,7 +1101,6 @@ public class PrivilegeChecker {
                     tableRef.getName().getDb(), PrivPredicate.LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "LOAD");
             }
-
             return null;
         }
 
