@@ -76,8 +76,8 @@ public:
     //
     // Return true if the index data was successfully loaded by the caller, false if
     // the data was loaded by another caller.
-    StatusOr<bool> load(fs::BlockManager* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
-                        bool use_page_cache, bool kept_in_memory);
+    StatusOr<bool> load(fs::BlockManager* fs, const std::string& filename, const OrdinalIndexPB& meta,
+                        ordinal_t num_values, bool use_page_cache, bool kept_in_memory);
 
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     OrdinalPageIndexIterator seek_at_or_before(ordinal_t ordinal);

@@ -39,8 +39,8 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
-#include "storage/update_manager.h"
 #include "storage/tablet_schema_helper.h"
+#include "storage/update_manager.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/empty_iterator.h"
 #include "storage/vectorized/tablet_reader.h"
@@ -293,8 +293,7 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
     std::string segment_file =
             BetaRowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
 
-    auto segment = *Segment::open(_metadata_mem_tracker.get(), fs::fs_util::block_manager(), segment_file, 0,
-                                  tablet_schema.get());
+    auto segment = *Segment::open(fs::fs_util::block_manager(), segment_file, 0, tablet_schema.get());
     ASSERT_NE(segment->num_rows(), 0);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
@@ -393,8 +392,7 @@ TEST_F(BetaRowsetTest, FinalMergeVerticalTest) {
 
     std::string segment_file =
             BetaRowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
-    auto segment = *Segment::open(_metadata_mem_tracker.get(), fs::fs_util::block_manager(), segment_file, 0,
-                                  &tablet->tablet_schema());
+    auto segment = *Segment::open(fs::fs_util::block_manager(), segment_file, 0, &tablet->tablet_schema());
     ASSERT_NE(segment->num_rows(), 0);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
