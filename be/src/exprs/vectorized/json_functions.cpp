@@ -149,6 +149,7 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
 
         // Since the simdjson::ondemand::object cannot be converted to simdjson::ondemand::value,
         // we have to do some special treatment for the second elem of json path.
+        // If the key is not found in json object, simdjson::NO_SUCH_FIELD would be returned.
         if (i == 1) {
             HANDLE_SIMDJSON_ERROR(obj.find_field_unordered(col).get(tvalue),
                                   fmt::format("unable to find field: {}", col));
@@ -159,6 +160,7 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
 
         if (index != -1) {
             // try to access tvalue as array.
+            // If the index is beyond the length of array, simdjson::INDEX_OUT_OF_BOUNDS would be returned.
             simdjson::ondemand::array arr;
             HANDLE_SIMDJSON_ERROR(tvalue.get_array().get(arr),
                                   fmt::format("failed to access field as array, field: {}", col));
