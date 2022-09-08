@@ -254,7 +254,6 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
     for (auto& restore_info : request->restore_infos()) {
         // 2.1 Remove the tablet metadata
         _env->lake_tablet_manager()->delete_tablet(restore_info.tablet_id());
-        std::string tablet_root_location = _env->lake_tablet_manager()->tablet_root_location(restore_info.tablet_id());
 
         // 2.2. Get remote files
         std::map<std::string, FileStat> remote_files;
@@ -276,8 +275,9 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
             const std::string& remote_file = iter.first;
             const FileStat& file_stat = iter.second;
             std::string full_remote_file = restore_info.snapshot_path() + "/" + remote_file + "." + file_stat.md5;
+            auto [tablet_id, version] = starrocks::lake::parse_tablet_metadata_filename(iter.first);
             std::string restored_file =
-                    _env->lake_tablet_manager()->tablet_root_location(restore_info.tablet_id()) + "/" + iter.first;
+                    _env->lake_tablet_manager()->tablet_metadata_location(restore_info.tablet_id(), version);
             std::unique_ptr<WritableFile> remote_writable_file;
             WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
             BrokerFileSystem fs_broker(address, broker_prop);

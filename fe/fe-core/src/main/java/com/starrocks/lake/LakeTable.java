@@ -109,21 +109,6 @@ public class LakeTable extends OlapTable {
         tableProperty.setStorageInfo(new StorageInfo(newShardStorageInfo));
     }
 
-    public ShardStorageInfo getPartitionShardStorageInfo(long partitionId) {
-        PartitionInfo partitionInfo = getPartitionInfo();
-        StorageInfo partitionStorageInfo = partitionInfo.getStorageInfo(partitionId);
-        if (partitionStorageInfo == null) {
-            partitionStorageInfo = tableProperty.getStorageInfo();
-        }
-
-        CacheInfo cacheInfo = CacheInfo.newBuilder().setEnableCache(partitionStorageInfo.isEnableStorageCache())
-                .setTtlSeconds(partitionStorageInfo.getStorageCacheTtlS())
-                .setAllowAsyncWriteBack(partitionStorageInfo.isAllowAsyncWriteBack())
-                .build();
-        return ShardStorageInfo.newBuilder(getShardStorageInfo())
-                .setCacheInfo(cacheInfo).build();
-    }
-
     @Override
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState,
                                    MaterializedIndex.IndexExtState extState) {
@@ -188,8 +173,18 @@ public class LakeTable extends OlapTable {
 
     @Override
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
-                                          int replicationNum, long version, int schemaHash, long partitionId) {
-        ShardStorageInfo shardStorageInfo = getPartitionShardStorageInfo(partitionId);
+                                          int replicationNum, long version, int schemaHash, long partitionId,
+                                          boolean restoreTable) {
+        ShardStorageInfo shardStorageInfo;
+        if (restoreTable) {
+            try {
+                shardStorageInfo = globalStateMgr.getStarOSAgent().getServiceShardStorageInfo();
+            } catch (DdlException e) {
+                return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
+            }
+        } else {
+            shardStorageInfo = getPartitionShardStorageInfo(partitionId);
+        }
         List<Long> shardIds = null;
         try {
             shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, shardStorageInfo);

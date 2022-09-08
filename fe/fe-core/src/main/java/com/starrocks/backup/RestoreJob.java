@@ -130,7 +130,7 @@ public class RestoreJob extends AbstractJob {
     private RestoreJobState state;
 
     @SerializedName(value = "backupMeta")
-    private BackupMeta backupMeta;
+    protected BackupMeta backupMeta;
 
     @SerializedName(value = "fileMapping")
     protected RestoreFileMapping fileMapping = new RestoreFileMapping();
@@ -143,12 +143,12 @@ public class RestoreJob extends AbstractJob {
     private long downloadFinishedTime = -1;
 
     @SerializedName(value = "restoreReplicationNum")
-    private int restoreReplicationNum;
+    protected int restoreReplicationNum;
 
     // this 2 members is to save all newly restored objs
     // tbl name -> part
     @SerializedName(value = "restoredPartitions")
-    private List<Pair<String, Partition>> restoredPartitions = Lists.newArrayList();
+    protected List<Pair<String, Partition>> restoredPartitions = Lists.newArrayList();
     @SerializedName(value = "restoredTbls")
     private List<OlapTable> restoredTbls = Lists.newArrayList();
 
@@ -444,6 +444,7 @@ public class RestoreJob extends AbstractJob {
         jobId = globalStateMgr.getNextId();
 
         if (backupMeta == null) {
+            status = new Status(ErrCode.COMMON_ERROR, "Failed to read backup meta from file");
             return;
         }
 
@@ -566,6 +567,8 @@ public class RestoreJob extends AbstractJob {
                                             backupPartInfo.name,
                                             restoreReplicationNum);
                                     if (restorePart == null) {
+                                        status = new Status(ErrCode.COMMON_ERROR, "Restored partition "
+                                                + backupPartInfo.name + "of " + localTbl.getName() + "is null");
                                         return;
                                     }
                                     restoredPartitions.add(Pair.create(localOlapTbl.getName(), restorePart));
@@ -592,6 +595,7 @@ public class RestoreJob extends AbstractJob {
 
                     // reset all ids in this table
                     Status st = remoteOlapTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
+                    // TODO: delete the shards for lake table if it fails.
                     if (!st.ok()) {
                         status = st;
                         return;
@@ -640,7 +644,13 @@ public class RestoreJob extends AbstractJob {
         }
 
         // Send create replica task to BE outside the db lock
-        sendCreateReplicaTasks(db);
+        sendCreateReplicaTasks();
+        if (!status.ok()) {
+            return;
+        }
+
+        // add all restored partition and tbls to globalStateMgr
+        addRestorePartitionsAndTables(db);
         if (!status.ok()) {
             return;
         }
@@ -662,7 +672,7 @@ public class RestoreJob extends AbstractJob {
                 batchTask.getTaskNum(), this);
     }
 
-    protected void sendCreateReplicaTasks(Database db) {
+    protected void sendCreateReplicaTasks() {
         if (batchTask.getTaskNum() > 0) {
             MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<Long, Long>(batchTask.getTaskNum());
             for (AgentTask task : batchTask.getAllTasks()) {
@@ -687,16 +697,15 @@ public class RestoreJob extends AbstractJob {
 
             if (ok) {
                 LOG.debug("finished to create all restored replcias. {}", this);
-                // add all restored partition and tbls to globalStateMgr
-                addRestorePartitionsAndTables(db);
-            } else {
-                List<Entry<Long, Long>> unfinishedMarks = latch.getLeftMarks();
-                // only show at most 10 results
-                List<Entry<Long, Long>> subList = unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 10));
-                String idStr = Joiner.on(", ").join(subList);
-                status = new Status(ErrCode.COMMON_ERROR,
-                        "Failed to create replicas for restore. unfinished marks: " + idStr);
+                return;
             }
+
+            List<Entry<Long, Long>> unfinishedMarks = latch.getLeftMarks();
+            // only show at most 10 results
+            List<Entry<Long, Long>> subList = unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 10));
+            String idStr = Joiner.on(", ").join(subList);
+            status = new Status(ErrCode.COMMON_ERROR,
+                    "Failed to create replicas for restore. unfinished marks: " + idStr);
         }
     }
 
@@ -706,22 +715,7 @@ public class RestoreJob extends AbstractJob {
             // add restored partitions.
             // table should be in State RESTORE, so no other partitions can be
             // added to or removed from this table during the restore process.
-            for (Pair<String, Partition> entry : restoredPartitions) {
-                OlapTable localTbl = (OlapTable) db.getTable(entry.first);
-                Partition restoredPart = entry.second;
-                OlapTable remoteTbl = (OlapTable) backupMeta.getTable(entry.first);
-                RangePartitionInfo localPartitionInfo = (RangePartitionInfo) localTbl.getPartitionInfo();
-                RangePartitionInfo remotePartitionInfo = (RangePartitionInfo) remoteTbl.getPartitionInfo();
-                BackupPartitionInfo backupPartitionInfo
-                        = jobInfo.getTableInfo(entry.first).getPartInfo(restoredPart.getName());
-                long remotePartId = backupPartitionInfo.id;
-                Range<PartitionKey> remoteRange = remotePartitionInfo.getRange(remotePartId);
-                DataProperty remoteDataProperty = remotePartitionInfo.getDataProperty(remotePartId);
-                localPartitionInfo.addPartition(restoredPart.getId(), false, remoteRange,
-                        remoteDataProperty, (short) restoreReplicationNum,
-                        remotePartitionInfo.getIsInMemory(remotePartId));
-                localTbl.addPartition(restoredPart);
-            }
+            addRestoredPartitions(db, false);
 
             // add restored tables
             for (OlapTable tbl : restoredTbls) {
@@ -870,7 +864,7 @@ public class RestoreJob extends AbstractJob {
             remoteIdx.clearTabletsForRestore();
             // generate new table
             status = remoteTbl.createTabletsForRestore(remotetabletSize, remoteIdx, globalStateMgr, restoreReplicationNum,
-                    visibleVersion, schemaHash, remotePart.getId());
+                    visibleVersion, schemaHash, remotePart.getId(), false);
             if (!status.ok()) {
                 return null;
             }
@@ -916,25 +910,7 @@ public class RestoreJob extends AbstractJob {
             }
 
             // restored partitions
-            for (Pair<String, Partition> entry : restoredPartitions) {
-                OlapTable localTbl = (OlapTable) db.getTable(entry.first);
-                Partition restorePart = entry.second;
-                OlapTable remoteTbl = (OlapTable) backupMeta.getTable(entry.first);
-                RangePartitionInfo localPartitionInfo = (RangePartitionInfo) localTbl.getPartitionInfo();
-                RangePartitionInfo remotePartitionInfo = (RangePartitionInfo) remoteTbl.getPartitionInfo();
-                BackupPartitionInfo backupPartitionInfo =
-                        jobInfo.getTableInfo(entry.first).getPartInfo(restorePart.getName());
-                long remotePartId = backupPartitionInfo.id;
-                Range<PartitionKey> remoteRange = remotePartitionInfo.getRange(remotePartId);
-                DataProperty remoteDataProperty = remotePartitionInfo.getDataProperty(remotePartId);
-                localPartitionInfo.addPartition(restorePart.getId(), false, remoteRange,
-                        remoteDataProperty, (short) restoreReplicationNum,
-                        remotePartitionInfo.getIsInMemory(remotePartId));
-                localTbl.addPartition(restorePart);
-
-                // modify tablet inverted index
-                modifyInvertedIndex(localTbl, restorePart);
-            }
+            addRestoredPartitions(db, true);
 
             // restored tables
             for (OlapTable restoreTbl : restoredTbls) {
@@ -949,6 +925,29 @@ public class RestoreJob extends AbstractJob {
         }
 
         LOG.info("replay check and prepare meta. {}", this);
+    }
+
+    protected void addRestoredPartitions(Database db, boolean modify) {
+        for (Pair<String, Partition> entry : restoredPartitions) {
+            OlapTable localTbl = (OlapTable) db.getTable(entry.first);
+            Partition restorePart = entry.second;
+            OlapTable remoteTbl = (OlapTable) backupMeta.getTable(entry.first);
+            RangePartitionInfo localPartitionInfo = (RangePartitionInfo) localTbl.getPartitionInfo();
+            RangePartitionInfo remotePartitionInfo = (RangePartitionInfo) remoteTbl.getPartitionInfo();
+            BackupPartitionInfo backupPartitionInfo =
+                    jobInfo.getTableInfo(entry.first).getPartInfo(restorePart.getName());
+            long remotePartId = backupPartitionInfo.id;
+            Range<PartitionKey> remoteRange = remotePartitionInfo.getRange(remotePartId);
+            DataProperty remoteDataProperty = remotePartitionInfo.getDataProperty(remotePartId);
+            localPartitionInfo.addPartition(restorePart.getId(), false, remoteRange,
+                    remoteDataProperty, (short) restoreReplicationNum,
+                    remotePartitionInfo.getIsInMemory(remotePartId));
+            localTbl.addPartition(restorePart);
+            if (modify) {
+                // modify tablet inverted index
+                modifyInvertedIndex(localTbl, restorePart);
+            }
+        }
     }
 
     protected void modifyInvertedIndex(OlapTable restoreTbl, Partition restorePart) {
@@ -1032,6 +1031,9 @@ public class RestoreJob extends AbstractJob {
                     }
                     // allot tasks
                     prepareDownloadTasks(beSnapshotInfos, db, beId, brokerAddrs, hdfsProperties);
+                    if (!status.ok()) {
+                        return;
+                    }
                 }
             } finally {
                 db.readUnlock();

@@ -5,6 +5,7 @@ package com.starrocks.lake.backup;
 import autovalue.shaded.com.google.common.common.collect.Maps;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Range;
 import com.starrocks.backup.BackupJobInfo;
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
@@ -13,14 +14,18 @@ import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.backup.Status;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.lake.LakeTablet;
@@ -90,8 +95,8 @@ public class LakeRestoreJob extends RestoreJob {
     }
 
     @Override
-    protected void sendCreateReplicaTasks(Database db) {
-        addRestorePartitionsAndTables(db);
+    protected void sendCreateReplicaTasks() {
+        // It is no need to send create replica tasks for lake table.
     }
 
     @Override
@@ -106,7 +111,7 @@ public class LakeRestoreJob extends RestoreJob {
                 Backend backend = globalStateMgr.getCurrentSystemInfo().getBackend(tablet.getPrimaryBackendId());
                 LakeTableSnapshotInfo info = new LakeTableSnapshotInfo(db.getId(), idChain.getTblId(),
                         idChain.getPartId(), idChain.getIdxId(), idChain.getTabletId(),
-                        backend.getId(), tbl.getSchemaHashByIndexId(index.getId()), part.getVisibleVersion());
+                        backend.getId(), tbl.getSchemaHashByIndexId(index.getId()), -1);
                 snapshotInfos.put(idChain.getTabletId(), backend.getId(), info);
             } catch (UserException e) {
                 LOG.error(e.getMessage());
@@ -245,6 +250,31 @@ public class LakeRestoreJob extends RestoreJob {
                     restoredIdx.getId(), indexMeta.getSchemaHash(), medium, true);
             for (Tablet restoreTablet : restoredIdx.getTablets()) {
                 GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
+            }
+        }
+    }
+
+    @Override
+    protected void addRestoredPartitions(Database db, boolean modify) {
+        for (Pair<String, Partition> entry : restoredPartitions) {
+            OlapTable localTbl = (OlapTable) db.getTable(entry.first);
+            Partition restorePart = entry.second;
+            OlapTable remoteTbl = (OlapTable) backupMeta.getTable(entry.first);
+            RangePartitionInfo localPartitionInfo = (RangePartitionInfo) localTbl.getPartitionInfo();
+            RangePartitionInfo remotePartitionInfo = (RangePartitionInfo) remoteTbl.getPartitionInfo();
+            BackupJobInfo.BackupPartitionInfo backupPartitionInfo =
+                    jobInfo.getTableInfo(entry.first).getPartInfo(restorePart.getName());
+            long remotePartId = backupPartitionInfo.id;
+            Range<PartitionKey> remoteRange = remotePartitionInfo.getRange(remotePartId);
+            DataProperty remoteDataProperty = remotePartitionInfo.getDataProperty(remotePartId);
+            localPartitionInfo.addPartition(restorePart.getId(), false, remoteRange,
+                    remoteDataProperty, (short) restoreReplicationNum,
+                    remotePartitionInfo.getIsInMemory(remotePartId),
+                    remotePartitionInfo.getStorageCacheInfo(remotePartId));
+            localTbl.addPartition(restorePart);
+            if (modify) {
+                // modify tablet inverted index
+                modifyInvertedIndex(localTbl, restorePart);
             }
         }
     }
