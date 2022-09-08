@@ -106,7 +106,7 @@ public:
 
     // General implementation
     template <class ColumnType>
-    Status do_visit(const ColumnType&) {
+    Status do_visit_slow(const ColumnType&) {
         auto cmp = [&](size_t lhs_index, size_t rhs_index) {
             int x = _left_col->compare_at(lhs_index, rhs_index, *_right_col, _null_first);
             if (_sort_order == -1) {
@@ -142,6 +142,11 @@ public:
         return do_merge(cmp, cmp_left, cmp_right);
     }
 
+    template <class ColumnType>
+    Status do_visit(const ColumnType& _) {
+        return do_visit_slow(_);
+    }
+
     // Specific version for FixedlengthColumn
     template <class T>
     Status do_visit(const FixedLengthColumn<T>& _) {
@@ -161,10 +166,19 @@ public:
         return merge_ordinary_column<Container, Slice>(left_data, right_data);
     }
 
-    // TODO: Murphy
-    // Status do_visit(const NullableColumn& _) {
-    // return Status::NotSupported("TODO");
-    // }
+    Status do_visit(const NullableColumn& _) {
+        // Fast path
+        if (!_left_col->has_null() && !_right_col->has_null()) {
+            DCHECK(_left_col->is_nullable() && _right_col->is_nullable());
+            const auto* lhs_data = down_cast<const NullableColumn*>(_left_col)->data_column().get();
+            const auto* rhs_data = down_cast<const NullableColumn*>(_right_col)->data_column().get();
+            MergeTwoColumn merge2({_sort_order, _null_first}, lhs_data, rhs_data, _equal_ranges, _perm);
+            return lhs_data->accept(&merge2);
+        }
+
+        // Slow path
+        return do_visit_slow(_);
+    }
 
 private:
     constexpr static uint32_t kLeftIndex = 0;
