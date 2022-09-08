@@ -147,13 +147,18 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
         if (master_info.backend_ip != BackendOptions::get_localhost()) {
             LOG(INFO) << master_info.backend_ip << " not equal to to backend localhost "
                       << BackendOptions::get_localhost();
-            if (is_valid_ip(master_info.backend_ip)) {
-                return Status::InternalError("Invalid backend ip");
+            if (is_valid_ip(master_info.backend_ip) && is_valid_ip(BackendOptions::get_localhost())) {
+                return Status::InternalError("FE saved address not match backend address");
             }
 
-            std::string ip = hostname_to_ip(master_info.backend_ip);
-            if (ip.empty()) {
-                return Status::InternalError("can not get ip from fqdn");
+            std::string ip;
+            if (is_valid_ip(master_info.backend_ip)) {
+                ip = master_info.backend_ip;
+            } else {
+                ip = hostname_to_ip(master_info.backend_ip);
+                if (ip.empty()) {
+                    return Status::InternalError("can not get ip from fqdn");
+                }
             }
 
             std::vector<InetAddress> hosts;
