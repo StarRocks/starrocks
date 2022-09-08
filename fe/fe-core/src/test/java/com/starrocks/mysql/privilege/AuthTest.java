@@ -245,9 +245,8 @@ public class AuthTest {
         resolver.runAfterCatalogReady();
 
         // 6. check if user from resolved ip can access
-        List<UserIdentity> userxx = new ArrayList<>();
         Assert.assertTrue(auth.checkPlainPassword("zhangsan", "10.1.1.1",
-                "12345", userxx));
+                "12345", null));
         Assert.assertFalse(auth.checkPlainPassword("zhangsan", "10.1.1.1",
                 "123456", null));
 
@@ -342,7 +341,7 @@ public class AuthTest {
         // 11. grant auth for user with non exist host
         hasException = false;
         try {
-            String sql = "GRANT CREATE_PRIV,DROP_PRIV on *.* to zhangsan";
+            String sql = "GRANT SELECT,DROP_PRIV on *.* to zhangsan";
             grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         } catch (Exception e) {
             e.printStackTrace();
@@ -469,7 +468,7 @@ public class AuthTest {
         Assert.assertTrue(hasException);
 
         // 17. revoke privs from non exist host
-        sql = "REVOKE SELECT_PRIV ON *.* FROM cmz@'172.%'";
+        sql = "REVOKE SELECT_PRIV ON *.* FROM cmy@'172.%'";
         hasException = false;
         try {
             revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);

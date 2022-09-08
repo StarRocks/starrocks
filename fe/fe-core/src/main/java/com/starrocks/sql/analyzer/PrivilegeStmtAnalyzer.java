@@ -167,7 +167,7 @@ public class PrivilegeStmtAnalyzer {
             try {
                 resourcePattern.analyze();
             } catch (AnalysisException e) {
-                SemanticException exception = new SemanticException("invalid resource pattern " + resourcePattern.toString());
+                SemanticException exception = new SemanticException("invalid resource pattern " + resourcePattern);
                 exception.initCause(e);
                 throw exception;
             }

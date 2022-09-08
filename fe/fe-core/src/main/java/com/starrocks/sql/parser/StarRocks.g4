@@ -166,10 +166,10 @@ statement
     | alterUserStatement
     | createUserStatement
     | dropUserStatement
+    | showAuthenticationStatement
     | createRoleStatement
     | grantPrivilegeStatement
     | revokePrivilegeStatement
-    | showAuthenticationStatement
     | showRolesStatement
 
 

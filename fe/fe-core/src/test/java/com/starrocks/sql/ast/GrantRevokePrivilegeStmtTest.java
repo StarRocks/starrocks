@@ -48,6 +48,14 @@ public class GrantRevokePrivilegeStmtTest {
     }
 
     @Test
+    public void testCommonBadCase() throws Exception {
+        Assert.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser("grant IMPERSONATE on XXX db.table to me", ctx));
+        Assert.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser("grant aaa, bbb on db.table to me", ctx));
+    }
+
+    @Test
     public void testImpersonate() throws Exception {
         // grant IMPERSONATE
         GrantPrivilegeStmt stmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
@@ -78,6 +86,10 @@ public class GrantRevokePrivilegeStmtTest {
         // role not exists
         Assert.assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser("grant IMPERSONATE on test_user to Role rolexx", ctx));
+
+        // invalide privilege
+        Assert.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser("grant IMPERSONATE,SELECT on test_user@'%' to me", ctx));
     }
 
     @Test
@@ -145,6 +157,13 @@ public class GrantRevokePrivilegeStmtTest {
         stmt1 = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "revoke usage on db.tbl from role test_role", ctx);
         Assert.assertEquals("REVOKE USAGE ON db.tbl FROM ROLE 'test_role'", AST2SQL.toString(stmt1));
+
+        // invalide table name
+        Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(
+                "REVOKE select on 'not!valid!' from me", ctx));
+        // invalid privilege
+        Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(
+                "REVOKE admin,node on db.tbl from me", ctx));
     }
 
     @Test
@@ -164,6 +183,11 @@ public class GrantRevokePrivilegeStmtTest {
                 "revoke usage on resource spark0 from role test_role", ctx);
         Assert.assertEquals("REVOKE USAGE ON RESOURCE spark0 FROM ROLE 'test_role'", AST2SQL.toString(stmt1));
 
+        // invalide resource name
+        Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(
+                "REVOKE node_priv on RESOURCE not.valid from me", ctx));
+        Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(
+                "REVOKE node_priv on RESOURCE 'not!valid!' from me", ctx));
     }
 
 }
