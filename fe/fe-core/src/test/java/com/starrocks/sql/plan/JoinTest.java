@@ -105,7 +105,7 @@ public class JoinTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan,
                 plan.contains("  3:NESTLOOP JOIN\n" +
-                        "  |  join op: CROSS JOIN\n" +
+                        "  |  join op: INNER JOIN\n" +
                         "  |  colocate: false, reason: \n" +
                         "  |  \n" +
                         "  |----2:EXCHANGE\n" +
@@ -724,7 +724,7 @@ public class JoinTest extends PlanTestBase {
         String sql = "select * from t0 as x0 join t1 as x1 on (1 = 2) is not null;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "3:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n");
     }
 
