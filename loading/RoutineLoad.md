@@ -1,424 +1,375 @@
-# Routine Load
+# 从 Apache Kafka® 导入数据
 
-例行导入（Routine Load）功能，支持提交一个常驻的导入任务，通过不断的从指定的数据源读取数据，将数据导入到 StarRocks 中。 目前仅支持通过无认证或者 SSL 认证方式，从 Kakfa 导入文本格式（CSV）的数据。 本文主要介绍 Routine Load 的使用方式和常见问题。
+本文介绍 Routine Load 的基本原理、以及如何通过 Routine Load 持续消费 Apache Kafka® 的消息并导入至 StarRocks 中。
 
-## 支持的数据格式
+如果您需要将消息流不间断地导入至 StarRocks，则可以将消息流存储在 Kafka 的 Topic 中，并向 StarRocks 提交一个 Routine Load 导入作业。 StarRocks 会常驻地运行这个导入作业，持续生成一系列导入任务，消费 Kafka 集群中该 Topic 中的全部或部分分区的消息并导入到 StarRocks 中。
 
-* CSV
-* JSON
+Routine load 支持 Exactly-Once 语义，能够保证数据不丢不重。
+
+## 支持的数据文件格式
+
+Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON 格式的数据。
+
+> 说明：对于 CSV 格式的数据，StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
 
 ## 基本原理
 
 ![routine load](../assets/4.5.2-1.png)
 
-导入流程如上图：
+### 概念
 
-1. 用户通过支持MySQL协议的客户端向 FE 提交一个Kafka导入任务。
-2. FE将一个导入任务拆分成若干个Task，每个Task负责导入指定的一部分数据。
-3. 每个Task被分配到指定的 BE 上执行。在 BE 上，一个 Task 被视为一个普通的导入任务，
-  通过 Stream Load 的导入机制进行导入。
-4. BE导入完成后，向 FE 汇报。
-5. FE 根据汇报结果，继续生成后续新的 Task，或者对失败的 Task 进行重试。
-6. FE 会不断的产生新的 Task，来完成数据不间断的导入。
+- **导入作业**
 
----
+  导入作业会常驻运行，当导入作业的状态为 **RUNNING** 时，会持续不断生成一个或多个并行的导入任务，不断消费 Kafka 集群中一个 Topic 的消息，并导入至 StarRocks 中。
 
-## 基本操作
+- **导入任务**
 
-### 创建导入任务
+  导入作业会按照一定规则拆分成若干个导入任务。导入任务是执行导入的基本单位，作为一个独立的事务，通过 [Stream Load](../loading/StreamLoad.md) 导入机制实现。若干个导入任务并行消费一个 Topic 中不同分区的消息，并导入至 StarRocks 中。
 
-以从一个本地 Kafka 集群导入 CSV 数据为例：
+### 作业流程
 
-~~~sql
-CREATE ROUTINE LOAD load_test.routine_wiki_edit_1589191587 ON routine_wiki_edit
+- **创建常驻的导入作业**
+
+  您需要向 StarRocks 提交创建导入作业的 SQL 语句。 FE 会解析 SQL 语句，并创建一个常驻的导入作业。
+
+- **拆分导入作业为多个导入任务**
+
+  FE 将导入作业按照一定规则拆分成若干个导入任务。一个导入任务作为一个独立的事务。
+
+  拆分规则如下：
+  - FE 根据期望任务并行度`desired_concurrent_number`、Kafka Topic 的分区数量、存活 BE 数量等，计算得出实际任务并行度。
+  - FE 根据实际任务并行度将导入作业分为若干导入任务，放入任务执行队列中。
+
+  每个 Topic 会有多个分区，分区与导入任务之间的对应关系为：
+  - 每个分区的消息只能由一个对应的导入任务消费。
+  - 一个导入任务可能会消费一个或多个分区。
+  - 分区会尽可能均匀地分配给导入任务。
+
+- **多个导入任务****并行****进行，消费 Kafka 多个分区的消息，导入至 StarRocks**
+
+  - **调度和提交导入任务**：FE 定时调度任务执行队列中的导入任务，分配给选定的 Coordinator BE。调度导入任务的时间间隔由 `max_batch_interval` 参数，并且 FE 会尽可能均匀地向所有 BE 分配导入任务。有关 `max_batch_interval` 参数的详细介绍，请参见  [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example)。
+
+  - **执行导入任务**：Coordinator BE 执行导入任务，消费分区的消息，解析并过滤数据。导入任务需要消费足够多的消息，或者消费足够长时间。消费时间和消费的数据量由 FE 配置项 `max_routine_load_batch_size`、`routine_load_task_consume_second`决定，有关该配置项的更多说明，请参见 [配置参数](../administration/Configuration.md#导入和导出相关动态参数)。然后，Coordinator BE 将消息分发至相关 Executor BE 节点， Executor BE 节点将消息写入磁盘。
+
+    > StarRocks 可以通过无认证、SSL 认证、SASL 认证机制连接 Kafka。
+
+- **持续生成新的导入任务，不间断地导入数据**
+
+  Executor BE 节点成功写入数据后， Coordonator BE 会向 FE 汇报导入结果。
+  
+  FE 根据汇报结果，继续生成新的导入任务，或者对失败的导入任务进行重试，连续地导入数据，并且能够保证导入数据不丢不重。
+
+## 创建导入作业
+
+这里通过两个简单的示例，介绍如何通过 Routine Load 持续消费 Kafka 中 CSV 和 JSON 格式的数据，并导入至 StarRocks 中。有关创建 Routine Load 的详细语法和参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example)。
+
+### 导入 CSV 数据
+
+本小节介绍如何创建一个 Routine Load 导入作业，持续不断地消费 Kafka 集群的 CSV 格式的数据，然后导入至 StarRocks 中。
+
+#### 数据集
+
+假设 Kafka 集群的 Topic `ordertest1` 存在如下 CSV 格式的数据，其中 CSV 数据中列的含义依次是订单编号、支付日期、顾客姓名、国籍、性别、支付金额。
+
+```Plain text
+2020050802,2020-05-08,Johann Georg Faust,Deutschland,male,895
+2020050802,2020-05-08,Julien Sorel,France,male,893
+2020050803,2020-05-08,Dorian Grey,UK,male,1262
+2020050901,2020-05-09,Anna Karenina",Russia,female,175
+2020051001,2020-05-10,Tess Durbeyfield,US,female,986
+2020051101,2020-05-11,Edogawa Conan,japan,male,8924
+```
+
+#### 目标数据库和表
+
+根据 CSV 数据中需要导入的几列（例如除第五列性别外的其余五列需要导入至 StarRocks）， 在 StarRocks 集群的目标数据库 `example_db` 中创建表 `example_tbl1`。
+
+```SQL
+CREATE TABLE example_db.example_tbl1 ( 
+    `order_id` bigint NOT NULL COMMENT "订单编号",
+    `pay_dt` date NOT NULL COMMENT "支付日期", 
+    `customer_name` varchar(26) NULL COMMENT "顾客姓名", 
+    `nationality` varchar(26) NULL COMMENT "国籍", 
+    `price`double NULL COMMENT "支付金额"
+) 
+ENGINE=OLAP 
+PRIMARY KEY (order_id,pay_dt) 
+DISTRIBUTED BY HASH(`order_id`) BUCKETS 5; 
+```
+
+#### 导入作业
+
+通过如下语句，向StarRocks 提交一个 Routine Load 导入作业 `example_tbl1_ordertest1`，持续消费 Kafka 集群中 Topic `ordertest1` 的消息，并导入至数据库 `example_db` 的表 `example_tbl1` 中。并且导入作业会从该 Topic 所指定分区的最早位点 (Offset) 开始消费。
+
+```SQL
+CREATE ROUTINE LOAD example_db.example_tbl1_ordertest1 ON example_tbl1
 COLUMNS TERMINATED BY ",",
-COLUMNS (event_time, channel, user, is_anonymous, is_minor, is_new, is_robot, is_unpatrolled, delta, added, deleted)
-WHERE event_time > "2022-01-01 00:00:00",
+COLUMNS (order_id, pay_dt, customer_name, nationality, temp_gender, price)
 PROPERTIES
 (
-  "desired_concurrent_number" = "3",
-  "max_batch_interval" = "15000",
-  "max_error_number" = "1000"
+    "desired_concurrent_number" = "5"
 )
 FROM KAFKA
 (
-  "kafka_broker_list" = "localhost:9092",
-  "kafka_topic" = "starrocks-load"
+    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_topic" = "ordertest1",
+    "kafka_partitions" ="0,1,2,3,4",
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
 );
-~~~
+```
 
-**参数说明：**
+提交导入作业后，您可以执行  [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md)，查看导入作业执行情况。
 
-* **job_name**：必填。导入作业的名称，本示例为`routine_wiki_edit_1589191587`。导入作业的常见命名方式为表名+时间戳。在相同数据库内，导入作业的名称不可重复。
-  > 您可以在**job_name**前指定导入数据库名称。例如`load_test.routine_wiki_edit_1589191587`。
-* **table_name**：必填。导入的目标表的名称。本示例为`routine_wiki_edit`。
-* **COLUMN TERMINATED BY 子句**：选填。指定源数据文件中的列分隔符，分隔符默认为：\t。
-* **COLUMN 子句** ：选填。用于指定源数据中列和表中列的映射关系。
-  * 映射列：如目标表有三列 col1, col2, col3 ，源数据有 4 列，其中第 1、2、4 列分别对应 col2, col1, col3，则书写如下：COLUMNS (col2, col1, temp, col3), ，其中 temp 列为不存在的一列，用于跳过源数据中的第三列。
-  * 衍生列：除了直接读取源数据的列内容之外，StarRocks 还提供对数据列的加工操作。假设目标表后加入了第四列 col4 ，其结果由 col1 + col2 产生，则可以书写如下：COLUMNS (col2, col1, temp, col3, col4 = col1 + col2),。
-* **WHERE 子句**：过滤条件，只有满足过滤条件的数据才会导入StarRocks中。过滤条件中所指定的列可以是映射列或衍生列。例如，如果仅需要导入 col1 大于 100 并且 col2 等于 1000 的数据，则需要传入`WHERE col1 > 100 and col2 = 1000`。
-* **PROPERTIES 子句**：选填。用于指定导入作业的通用参数。
-  * **desired_concurrent_number**：导入并发度，指定一个导入作业最多会被分成多少个子任务执行。必须大于 0，默认为 3。子任务最终的个数，由多个参数决定。当前 routine load 并发取决于以下参数：
+- **导入作业的名称**
 
-    ~~~plain text
-    min(min(partitionNum,min(desireTaskConcurrentNum,aliveBeNum)),max_routine_load_task_concurrent_num)
-    ~~~
+  一张表可能有多个导入作业，建议您根据 Kafka Topic 的名称和创建导入作业的大致时间等信息来给导入作业命名，这样有助于区分同一张表上的不同导入作业。
 
-    * partitionNum：Kafka 分区数。
-    * desireTaskConcurrentNum： desired_concurrent_number 任务配置，参考当前参数释义。
-    * aliveBeNum：状态为 Alive 的 BE 节点个数。
-    * max_routine_load_task_concurrent_num：be.conf 配置项，默认为5，具体可参考 [参数配置](../administration/Configuration.md)。
+- **列分隔符**
 
-  * **max_batch_interval**：每个子任务最大执行时间，单位是「秒」。范围为 5 到 60。默认为 10。**1.15 版本后**: 该参数是子任务的调度间隔，即任务多久执行一次，任务的消费数据时间为 fe.conf 中的 routine_load_task_consume_second，默认为 3s，
-  任务的执行超时时间为 fe.conf 中的 routine_load_task_timeout_second，默认为 15s。
-  * **max_error_number**：采样窗口内，允许的最大错误行数。必须大于等于 0。默认是 0，即不允许有错误行。注意：被 where 条件过滤掉的行不算错误行。
-* **FROM 子句**：指定数据源，以及数据源的相关信息。本示例中数据源为 KAFKA，数据源相关的信息包含如下两项。
-  * **kafka_broker_list**：Kafka 的 broker 连接信息，格式为 ip: host。多个 broker 之间以逗号分隔。
-  * **kafka_topic**：指定要订阅的 Kafka 的 topic。
+  `COLUMN TERMINATED BY` 指定 CSV 数据的列分隔符，默认为`\t`。
 
-创建导入任务更详细的语法可以参考 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)。
+- **消费分区和起始消费位点**
 
-### 查看任务状态
+  如果需要指定分区、起始消费位点，则可以配置参数 `kafka_partitions`、`kafka_offsets`。例如待消费分区为`"0,1,2,3,4"`，并且从每个分区的起始位点开始消费，则可以指定如下配置：
 
-显示 [database] 下，所有的例行导入作业（包括已停止或取消的作业）。结果为一行或多行。
+  ```SQL
+    "kafka_partitions" ="0,1,2,3,4",
+    "kafka_offsets" = "OFFSET_BEGINNING,OFFSET_BEGINNING,OFFSET_BEGINNING,OFFSET_END,OFFSET_END"
+  ```
 
-~~~SQL
-USE [database];
-SHOW ALL ROUTINE LOAD;
-~~~
+  您也可以使用 `property.kafka_default_offsets` 来设置全部分区的默认消费位点。
 
-显示 [database] 下，名称为 job_name 的当前正在运行的例行导入作业。
+  ```SQL
+    "kafka_partitions" ="0,1,2,3,4",
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+  ```
 
-~~~SQL
-SHOW ROUTINE LOAD FOR [database.][job_name];
-~~~
+  更多参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example)。
 
-> 注意： StarRocks 只能查看当前正在运行中的任务，已结束和未开始的任务无法查看。
+- **数据转换**
 
-查看任务状态的具体命令和示例可以参考 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md)。
+  如果需要指定源数据和目标表之间列的映射和转换关系，则需要配置 `COLUMNS` 。`COLUMNS`中列的**顺序**与 **CSV 数据**中列的顺序一致，并且**名称**与**目标表**中的列名对应。本示例中，由于无需导入 CSV 数据的第五列至目标表，因此`COLUMNS`中把第五列临时命名为 `tem``p_gender` 用于占位，其他列都直接映射至表`example_tbl1`中。
 
-查看任务运行状态（包括子任务）的具体命令和示例可以参考 [SHOW ROUTINE LOAD TASK](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD%20TASK.md)。
+  更多数据转换的说明，请参见[导入时实现数据转换](./Etl_in_loading.md)。
 
-以上述创建的导入任务为示例，以下命令能查看当前正在运行的所有 Routine Load 任务：
+  > 如果 CSV 数据中列的名称、顺序和数量都能与目标表中列完全对应，则无需配置 `COLUMNS` 。
 
-~~~sql
-MySQL [load_test] > USE load_test;
-MySQL [load_test] > SHOW ROUTINE LOAD\G;
+- **增加实际任务并行度 加快导入速度**
 
-*************************** 1. row ***************************
+  当分区数量较多，并且 BE 节点数量充足时，如果您期望加快导入速度，则可以增加实际任务并行度，将一个导入作业分成尽可能多的导入任务并行执行。
 
-                  Id: 14093
-                Name: routine_wiki_edit_1589191587
-          CreateTime: 2020-05-16 16:00:48
-           PauseTime: N/A
-             EndTime: N/A
-              DbName: default_cluster:load_test
-           TableName: routine_wiki_edit
-               State: RUNNING
-      DataSourceType: KAFKA
-      CurrentTaskNum: 1
-       JobProperties: {"partitions":"*","columnToColumnExpr":"event_time,channel,user,is_anonymous,is_minor,is_new,is_robot,is_unpatrolled,delta,added,deleted","maxBatchIntervalS":"10","whereExpr":"*","maxBatchSizeBytes":"104857600","columnSeparator":"','","maxErrorNum":"1000","currentTaskConcurrentNum":"1","maxBatchRows":"200000"}
-DataSourceProperties: {"topic":"starrocks-load","currentKafkaPartitions":"0","brokerList":"localhost:9092"}
-    CustomProperties: {}
-           Statistic: {"receivedBytes":150821770,"errorRows":122,"committedTaskNum":12,"loadedRows":2399878,"loadRowsRate":199000,"abortedTaskNum":1,"totalRows":2400000,"unselectedRows":0,"receivedBytesRate":12523000,"taskExecuteTimeMs":12043}
-            Progress: {"0":"13634667"}
-ReasonOfStateChanged:
-        ErrorLogUrls: http://172.26.108.172:9122/api/_load_error_log?file=__shard_53/error_log_insert_stmt_47e8a1d107ed4932-8f1ddf7b01ad2fee_47e8a1d107ed4932_8f1ddf7b01ad2fee
-            OtherMsg:
-1 row in set (0.00 sec)
-~~~
+  实际任务并行度由如下多个参数组成的公式决定。如果需要增加实际任务并行度，您可以在创建Routine Load 导入作业时为单个导入作业设置较高的期望任务并行度 `desired_concurrent_number` ，以及设置较高的  Routine Load 导入作业的默认最大任务并行度的`max_routine_load_task_concurrent_num` ，该参数为 FE 动态参数，详细说明，请参见 [配置参数](../administration/Configuration.md#导入和导出相关动态参数)。此时实际任务并行度上限为存活 BE 节点数量或者指定分区数量。
 
-可以看到示例中创建的名为 routine_wiki_edit_1589191587 的导入任务，其中重要的字段释义：
+  本示例中存活 BE 数量为 5， 指定分区数量为 5，`max_routine_load_task_concurrent_num` 为默认值 `5`，如果需要增加实际任务并发度至上限，则需要将 `desired_concurrent_number` 为 `5`（默认值为 3），计算出实际任务并行度为 5。
 
-* State：导入任务状态。RUNNING，表示该导入任务处于持续运行中。
-* Statistic 为进度信息，记录了从创建任务开始后的导入信息。
-* receivedBytes：接收到的数据大小，单位是「Byte」
-* errorRows：导入错误行数
-* committedTaskNum：FE 提交的 Task 数
-* loadedRows：已导入的行数
-* loadRowsRate：导入数据速率，单位是「行每秒(row/s)」
-* abortedTaskNum：BE 失败的 Task 数
-* totalRows：接收的总行数
-* unselectedRows：被 where 条件过滤的行数
-* receivedBytesRate：接收数据速率，单位是「Bytes/s」
-* taskExecuteTimeMs：导入耗时，单位是「ms」
-* Progress：已消费 Kafka 分区的OFFSET
-* ErrorLogUrls：错误信息日志，可以通过 URL 看到导入过程中的错误信息。
+  ```Plain
+    min(aliveBeNum, partitionNum, desired_concurrent_number, max_routine_load_task_concurrent_num)
+  ```
 
-~~~sql
-MySQL [load_test] > USE load_test;
-MySQL [load_test] > SHOW ROUTINE LOAD TASK WHERE Jobname="routine_wiki_edit_1589191587"\G;
-*************************** 1. row ***************************
-              TaskId: 645da10b-0a5c-4e90-84f0-03b33ec58b68
-               TxnId: 2776810
-           TxnStatus: UNKNOWN
-               JobId: 144093
-          CreateTime: 2020-05-16 16:00:48
-   LastScheduledTime: 2020-05-16 16:01:18
-    ExecuteStartTime: NULL
-             Timeout: 15
-                BeId: 10003
-DataSourceProperties: {"0":13634684}
-             Message: 
-1 rows in set (0.00 sec)
-~~~
+  更多参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example)。。 更多调整导入速度的说明，请参见 [Routine Load 常见问题](../faq/loading/Routine_load_faq.md)。
 
-可以看到示例中创建的名为 routine_wiki_edit_1589191587 的导入子任务，其中重要的字段释义：
+### 导入 JSON 数据
 
-* TaskId：子任务 ID
-* TxnId：本次导入任务事物 ID
-* JobId：任务ID，例如例子中 routine_wiki_edit_1589191587 对应的 ID
-* DataSourceProperties：已消费 Kafka 分区的OFFSET
+#### 数据集
 
-### 暂停导入任务
+假设 Kafka 集群的 Topic `ordertest2` 中存在如下 JSON 格式的数据。其中一个JSON 对象中 key 的含义依次是 品类 ID、顾客姓名、顾客国籍、支付日期、支付金额。
 
-使用 PAUSE 语句后，此时导入任务进入 PAUSED 状态，数据暂停导入，但任务未消亡，可以通过 RESUME 语句可以重启任务：
+并且，您希望在导入时进行数据转换，将 JSON 数据中的 `pay_time` 键转换为 DATE 类型，并导入到目标表的列`pay_dt`中。
 
-暂停名称为 job_name 的例行导入任务。
+```JSON
+{"commodity_id": "1", "customer_name": "Mark Twain", "country": "US","pay_time": 1589191487,"price": 875}
+{"commodity_id": "2", "customer_name": "Oscar Wilde", "country": "UK","pay_time": 1589191487,"price": 895}
+{"commodity_id": "3", "customer_name": "Antoine de Saint-Exupéry","country": "France","pay_time": 1589191487,"price": 895}
+```
 
-~~~SQL
-PAUSE ROUTINE LOAD FOR [job_name];
-~~~
+> 注意：这里每行一个 JSON 对象必须在一个 Kafka 消息中，否则会出现“JSON 解析错误”的问题。
 
-可以参考 [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/PAUSE%20ROUTINE%20LOAD.md)
+#### 目标数据库和表
 
-~~~sql
-MySQL [load_test] > PAUSE ROUTINE LOAD FOR routine_wiki_edit_1589191587;
-Query OK, 0 rows affected (0.01 sec)
-MySQL [load_test] > SHOW ROUTINE LOAD\G;
-*************************** 1. row ***************************
-                  Id: 14093
-                Name: routine_wiki_edit_1589191587
-          CreateTime: 2020-05-16 16:00:48
-           PauseTime: 2020-05-16 16:03:39
-             EndTime: N/A
-              DbName: default_cluster:load_test
-           TableName: routine_wiki_edit
-               State: PAUSED
-      DataSourceType: KAFKA
-      CurrentTaskNum: 0
-       JobProperties: {"partitions":"*","columnToColumnExpr":"event_time,channel,user,is_anonymous,is_minor,is_new,is_robot,is_unpatrolled,delta,added,deleted","maxBatchIntervalS":"10","whereExpr":"*","maxBatchSizeBytes":"104857600","columnSeparator":"','","maxErrorNum":"1000","currentTaskConcurrentNum":"1","maxBatchRows":"200000"}
-DataSourceProperties: {"topic":"starrocks-load","currentKafkaPartitions":"0","brokerList":"localhost:9092"}
-    CustomProperties: {}
-           Statistic: {"receivedBytes":162767220,"errorRows":132,"committedTaskNum":13,"loadedRows":2589972,"loadRowsRate":115000,"abortedTaskNum":7,"totalRows":2590104,"unselectedRows":0,"receivedBytesRate":7279000,"taskExecuteTimeMs":22359}
-            Progress: {"0":"13824771"}
-ReasonOfStateChanged: ErrorReason{code=errCode = 100, msg='User root pauses routine load job'}
-        ErrorLogUrls: http://172.26.108.172:9122/api/_load_error_log?file=__shard_54/error_log_insert_stmt_e0c0c6b040c044fd-a162b16f6bad53e6_e0c0c6b040c044fd_a162b16f6bad53e6
-            OtherMsg:
-1 row in set (0.01 sec)
-~~~
+根据 JSON 数据中需要导入的 key，在StarRocks 集群的目标数据库 `example_db` 中创建表 `example_tbl2` 。
 
-暂停导入任务后，任务的 State 变更为 PAUSED，Statistic 和 Progress 中的导入信息停止更新。此时，任务并未消亡，通过 SHOW ROUTINE LOAD 语句可以看到已经暂停的导入任务。
+```SQL
+CREATE TABLE `example_tbl2` ( 
+    `commodity_id` varchar(26) NULL COMMENT "品类ID", 
+    `customer_name` varchar(26) NULL COMMENT "顾客姓名", 
+    `country` varchar(26) NULL COMMENT "顾客国籍", 
+    `pay_time` bigint(20) NULL COMMENT "支付时间", 
+    `pay_dt` date NULL COMMENT "支付日期", 
+    `price`double SUM NULL COMMENT "支付金额"
+) 
+AGGREGATE KEY(`commodity_id`,`customer_name`,`country`,`pay_time`,`pay_dt`) 
+ENGINE=OLAP
+DISTRIBUTED BY HASH(`commodity_id`) BUCKETS 5; 
+```
 
-### 恢复导入任务
+#### 导入作业
 
-使用 RESUME 语句后，任务会短暂的进入 **NEED_SCHEDULE** 状态，表示任务正在重新调度，一段时间后会重新恢复至 RUNNING 状态，继续导入数据。
+通过如下语句，向 StarRocks  提交一个 Routine Load 导入作业 `example_tbl2_ordertest2`，持续消费 Kafka 集群中 Topic `ordertest2` 的消息，并导入至 `example_tbl2` 表中。并且导入作业会从此 Topic 所指定分区的最早位点开始消费。
 
-重启名称为 job_name 的例行导入任务。
-
-~~~SQL
-RESUME ROUTINE LOAD FOR [job_name];
-~~~
-
-可以参考 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md)
-
-~~~sql
-MySQL [load_test] > RESUME ROUTINE LOAD FOR routine_wiki_edit_1589191587;
-Query OK, 0 rows affected (0.01 sec)
-MySQL [load_test] > SHOW ROUTINE LOAD\G;
-*************************** 1. row ***************************
-                  Id: 14093
-                Name: routine_wiki_edit_1589191587
-          CreateTime: 2020-05-16 16:00:48
-           PauseTime: N/A
-             EndTime: N/A
-              DbName: default_cluster: load_test
-           TableName: routine_wiki_edit
-               State: NEED_SCHEDULE
-      DataSourceType: KAFKA
-      CurrentTaskNum: 0
-       JobProperties: {"partitions":"*","columnToColumnExpr":"event_time,channel,user,is_anonymous,is_minor,is_new,is_robot,is_unpatrolled,delta,added,deleted","maxBatchIntervalS":"10","whereExpr":"*","maxBatchSizeBytes":"104857600","columnSeparator":"','","maxErrorNum":"1000","currentTaskConcurrentNum":"1","maxBatchRows":"200000"}
-DataSourceProperties: {"topic":"starrocks-load","currentKafkaPartitions":"0","brokerList":"localhost:9092"}
-    CustomProperties: {}
-           Statistic: {"receivedBytes":162767220,"errorRows":132,"committedTaskNum":13,"loadedRows":2589972,"loadRowsRate":115000,"abortedTaskNum":7,"totalRows":2590104,"unselectedRows":0,"receivedBytesRate":7279000,"taskExecuteTimeMs":22359}
-            Progress: {"0":"13824771"}
-ReasonOfStateChanged:
-        ErrorLogUrls: http://172.26.108.172:9122/api/_load_error_log?file=__shard_54/error_log_insert_stmt_e0c0c6b040c044fd-a162b16f6bad53e6_e0c0c6b040c044fd_a162b16f6bad53e6
-            OtherMsg:
-1 row in set (0.00 sec)
-~~~
-
-~~~sql
-MySQL [load_test] > SHOW ROUTINE LOAD\G;
-*************************** 1. row ***************************
-                  Id: 14093
-                Name: routine_wiki_edit_1589191587
-          CreateTime: 2020-05-16 16:00:48
-           PauseTime: N/A
-             EndTime: N/A
-              DbName: default_cluster:load_test
-           TableName: routine_wiki_edit
-               State: RUNNING
-      DataSourceType: KAFKA
-      CurrentTaskNum: 1
-       JobProperties: {"partitions":"*","columnToColumnExpr":"event_time,channel,user,is_anonymous,is_minor,is_new,is_robot,is_unpatrolled,delta,added,deleted","maxBatchIntervalS":"10","whereExpr":"*","maxBatchSizeBytes":"104857600","columnSeparator":"','","maxErrorNum":"1000","currentTaskConcurrentNum":"1","maxBatchRows":"200000"}
-DataSourceProperties: {"topic":"starrocks-load","currentKafkaPartitions":"0","brokerList":"localhost:9092"}
-    CustomProperties: {}
-           Statistic: {"receivedBytes":175337712,"errorRows":142,"committedTaskNum":14,"loadedRows":2789962,"loadRowsRate":118000,"abortedTaskNum":7,"totalRows":2790104,"unselectedRows":0,"receivedBytesRate":7422000,"taskExecuteTimeMs":23623}
-            Progress: {"0":"14024771"}
-ReasonOfStateChanged:
-        ErrorLogUrls: http://172.26.108.172:9122/api/_load_error_log?file=__shard_55/error_log_insert_stmt_ce4c95f0c72440ef-a442bb300bd743c8_ce4c95f0c72440ef_a442bb300bd743c8
-            OtherMsg:
-1 row in set (0.00 sec)
-~~~
-
-重启导入任务后，可以看到第一次查询任务时，State 变更为 **NEED_SCHEDULE**，表示任务正在重新调度；第二次查询任务时，State 变更为 **RUNNING**，同时 Statistic 和 Progress 中的导入信息开始更新，继续导入数据。
-
-### 修改导入任务
-
-使用 ALTER 语句可以改变已经创建的例行导入作业的参数，只支持状态为 **PAUSED** 的任务。
-
-以上面创建的任务为例，将 `desired_concurrent_number` 修改为 10，修改 partition 的 offset。
-
-~~~sql
-ALTER ROUTINE LOAD FOR routine_wiki_edit
+```SQL
+CREATE ROUTINE LOAD example_db.example_tbl2_ordertest2 ON example_tbl2
+COLUMNS(commodity_id, customer_name, country, pay_time, price, pay_dt=from_unixtime(pay_time, '%Y%m%d'))
 PROPERTIES
 (
-    "desired_concurrent_number" = "10"
+    "desired_concurrent_number"="5",
+    "format" ="json",
+    "jsonpaths" ="[\"$.commodity_id\",\"$.customer_name\",\"$.country\",\"$.pay_time\",\"$.price\"]"
+ )
+FROM KAFKA
+(
+    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_topic" = "ordertest2",
+    "kafka_partitions" ="0,1,2,3,4",
+    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+);
+```
+
+提交导入作业后，您可以执行  [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md)，查看导入作业执行情况。
+
+- **数据格式**
+
+  需要`PROPERTIES`子句的`"format" ="json"`中指定数据格式为 JSON。
+
+- **数据提取和转换**
+
+  如果需要指定源数据和目标表之间列的映射和转换关系，则可以配置 `COLUMNS` 和`jsonpaths`参数。`COLUMNS`中的列名对应**目标表**的列名，列的顺序对应**源数据**中的列顺序。`jsonpaths` 参数用于提取 JSON 数据中需要的字段数据，而后（就像新生成的 CSV 数据一样）被`COLUMNS`参数**按顺序**临时命名。
+
+  由于源数据中`pay_time` 键需要转换为 DATE 类型，导入到目标表的列`pay_dt`，因此`COLUMNS`中需要使用函数`from_unixtime`进行转换。其他字段都能直接映射至表`example_tbl2`中。
+
+  更多数据转换的说明，请参见[导入时实现数据转换](./Etl_in_loading.md)。
+
+  > 如果每行一个 JSON 对象中 key 的名称和数量（顺序不需要对应）都能对应目标表中列，则无需配置 `COLUMNS` 。
+
+## 查看导入作业和任务
+
+### 查看导入作业
+
+执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md)，查看名称为  `example_tbl2_ordertest2` 的导入作业的信息，比如导入作业状态`State`，导入作业的统计信息`Statistic`（消费的总数据行数、已导入的行数等），消费的分区及进度`Progress`等。
+
+如果导入作业状态自动变为 **PAUSED**，则可能为导入任务错误行数超过阈值。错误行数阈值的设置方式，请参考 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)。您可以参考`ReasonOfStateChanged`、`ErrorLogUrls`报错进行排查和修复。修复后您可以使用 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md)，恢复 **PAUSED** 状态的导入作业。
+
+如果导入作业状态为 **CANCELLED**，则可能为导入任务执行遇到异常（如表被删除）。您可以参考`ReasonOfStateChanged`、`ErrorLogUrls`报错进行排查和修复。但是修复后，您无法恢复 **CANCELLED** 状态的导入作业。
+
+```SQL
+MySQL [example_db]> SHOW ROUTINE LOAD FOR example_tbl2_ordertest2 \G
+*************************** 1. row ***************************
+                  Id: 63013
+                Name: example_tbl2_ordertest2
+          CreateTime: 2022-08-10 17:09:00
+           PauseTime: NULL
+             EndTime: NULL
+              DbName: default_cluster:example_db
+           TableName: example_tbl2
+               State: RUNNING
+      DataSourceType: KAFKA
+      CurrentTaskNum: 3
+       JobProperties: {"partitions":"*","partial_update":"false","columnToColumnExpr":"commodity_id,customer_name,country,pay_time,pay_dt=from_unixtime(`pay_time`, '%Y%m%d'),price","maxBatchIntervalS":"20","whereExpr":"*","dataFormat":"json","timezone":"Asia/Shanghai","format":"json","json_root":"","strict_mode":"false","jsonpaths":"[\"$.commodity_id\",\"$.customer_name\",\"$.country\",\"$.pay_time\",\"$.price\"]","desireTaskConcurrentNum":"3","maxErrorNum":"0","strip_outer_array":"false","currentTaskConcurrentNum":"3","maxBatchRows":"200000"}
+DataSourceProperties: {"topic":"ordertest2","currentKafkaPartitions":"0,1,2,3,4","brokerList":"<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>"}
+    CustomProperties: {"kafka_default_offsets":"OFFSET_BEGINNING"}
+           Statistic: {"receivedBytes":230,"errorRows":0,"committedTaskNum":1,"loadedRows":2,"loadRowsRate":0,"abortedTaskNum":0,"totalRows":2,"unselectedRows":0,"receivedBytesRate":0,"taskExecuteTimeMs":522}
+            Progress: {"0":"1","1":"OFFSET_ZERO","2":"OFFSET_ZERO","3":"OFFSET_ZERO","4":"OFFSET_ZERO"}
+ReasonOfStateChanged: 
+        ErrorLogUrls: 
+            OtherMsg: 
+```
+
+> 注意： StarRocks 只支持查看当前正在运行中的导入作业，不支持查看已经停止和未开始的导入作业。
+
+### 查看导入任务
+
+执行 [SHOW ROUTINE LOAD TASK](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD%20TASK.md)，查看导入作业`example_tbl2_ordertest2` 中一个或多个导入任务的信息。比如当前有多少任务正在运行，消费分区及进度`DataSourceProperties`，以及对应的 Coordinator BE 节点 `BeId`。
+
+```SQL
+MySQL [example_db]> SHOW ROUTINE LOAD TASK WHERE JobName = "example_tbl2_ordertest2" \G
+*************************** 1. row ***************************
+              TaskId: 18c3a823-d73e-4a64-b9cb-b9eced026753
+               TxnId: -1
+           TxnStatus: UNKNOWN
+               JobId: 63013
+          CreateTime: 2022-08-10 17:09:05
+   LastScheduledTime: 2022-08-10 17:47:27
+    ExecuteStartTime: NULL
+             Timeout: 60
+                BeId: -1
+DataSourceProperties: {"1":0,"4":0}
+             Message: there is no new data in kafka, wait for 20 seconds to schedule again
+*************************** 2. row ***************************
+              TaskId: f76c97ac-26aa-4b41-8194-a8ba2063eb00
+               TxnId: -1
+           TxnStatus: UNKNOWN
+               JobId: 63013
+          CreateTime: 2022-08-10 17:09:05
+   LastScheduledTime: 2022-08-10 17:47:26
+    ExecuteStartTime: NULL
+             Timeout: 60
+                BeId: -1
+DataSourceProperties: {"2":0}
+             Message: there is no new data in kafka, wait for 20 seconds to schedule again
+*************************** 3. row ***************************
+              TaskId: 1a327a34-99f4-4f8d-8014-3cd38db99ec6
+               TxnId: -1
+           TxnStatus: UNKNOWN
+               JobId: 63013
+          CreateTime: 2022-08-10 17:09:26
+   LastScheduledTime: 2022-08-10 17:47:27
+    ExecuteStartTime: NULL
+             Timeout: 60
+                BeId: -1
+DataSourceProperties: {"0":2,"3":0}
+             Message: there is no new data in kafka, wait for 20 seconds to schedule again
+```
+
+## 暂停导入作业
+
+执行 [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/PAUSE%20ROUTINE%20LOAD.md) 语句后，会暂停导入作业。导入作业会进入 **PAUSED** 状态，但是导入作业未结束，您可以执行 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md) 语句重启该导入作业。您也可以执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md) 语句查看已暂停的导入作业的状态。
+
+例如，可以通过以下语句，暂停导入作业`example_tbl2_ordertest2`：
+
+```SQL
+PAUSE ROUTINE LOAD FOR example_tbl2_ordertest2;
+```
+
+## 恢复导入作业
+
+执行 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md)，恢复导入作业。导入作业会先短暂地进入 **NEED_SCHEDULE** 状态，表示正在重新调度导入作业，一段时间后会恢复至 **RUNNING** 状态，继续消费 Kafka 消息并且导入数据。您可以执行 [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md) 语句查看已恢复的导入作业。
+
+例如，可以通过以下语句，恢复导入作业`example_tbl2_ordertest2`：
+
+```SQL
+RESUME ROUTINE LOAD FOR example_tbl2_ordertest2;
+```
+
+## 修改导入作业
+
+修改前，您需要先执行 PAUSE ROUTINE LOAD 暂停导入作业。然后执行 [ALTER ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/alter-routine-load.md) 语句，修改导入作业的参数配置。修改成功后，您需要执行 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md)，恢复导入作业。然后执行  [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md) 语句查看修改后的导入作业。
+
+例如，当存活 BE 节点数增至 6 个，待消费分区为`"0,1,2,3,4,5,6,7"`时，如果您希望提高实际的导入并行度，则可以通过以下语句，将期望任务并行度`desired_concurrent_number` 增加至 `6`（大于等于存活 BE 节点数），并且调整待消费分区和起始消费位点。
+
+> 说明：由于实际导入并行度由多个参数的最小值决定，此时，您还需要确保 FE 动态参数 `routine_load_task_consume_second`的值大于或等于 `6`。
+
+```SQL
+ALTER ROUTINE LOAD FOR example_tbl2_ordertest2
+PROPERTIES
+(
+    "desired_concurrent_number" = "6"
 )
 FROM kafka
 (
-    "kafka_partitions" = "0",
-    "kafka_offsets" = "16414342",
+    "kafka_partitions" = "0,1,2,3,4,5,6,7",
+    "kafka_offsets" = "OFFSET_BEGINNING,OFFSET_BEGINNING,OFFSET_BEGINNING,OFFSET_BEGINNING,OFFSET_END,OFFSET_END,OFFSET_END,OFFSET_END"
 );
-~~~
+```
 
-其他参数详解请参考 [ALTER ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/alter-routine-load.md)
+## 停止导入作业
 
-### 停止导入任务
+执行  [STOP ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)，可以停止导入作业。导入作业会进入 **STOPPED** 状态，代表此导入作业已经结束，且无法恢复。再次执行 SHOW ROUTINE LOAD 语句，将无法看到已经停止的导入作业。
 
-使用 STOP 语句让导入任务进入 STOP 状态，数据停止导入，任务消亡，无法恢复数据导入。
+例如，可以通过以下语句，停止导入作业`example_tbl2_ordertest2`：
 
-停止名称为 job_name 的例行导入任务。
-
-~~~SQL
-STOP ROUTINE LOAD FOR [job_name];
-~~~
-
-可以参考 [STOP ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)
-
-~~~sql
-MySQL [load_test] > STOP ROUTINE LOAD FOR routine_wiki_edit_1589191587;
-Query OK, 0 rows affected (0.01 sec)
-MySQL [load_test] > SHOW ALL ROUTINE LOAD\G;
-*************************** 1. row ***************************
-                  Id: 14093
-                Name: routine_wiki_edit_1589191587
-          CreateTime: 2020-05-16 16:00:48
-           PauseTime: N/A
-             EndTime: 2020-05-16 16:08:25
-              DbName: default_cluster: load_test
-           TableName: routine_wiki_edit
-               State: STOPPED
-      DataSourceType: KAFKA
-      CurrentTaskNum: 0
-       JobProperties: {"partitions":"*","columnToColumnExpr":"event_time,channel,user,is_anonymous,is_minor,is_new,is_robot,is_unpatrolled,delta,added,deleted","maxBatchIntervalS":"10","whereExpr":"*","maxBatchSizeBytes":"104857600","columnSeparator":"','","maxErrorNum":"1000","currentTaskConcurrentNum":"1","maxBatchRows":"200000"}
-DataSourceProperties: {"topic":"starrocks-load","currentKafkaPartitions":"0","brokerList":"localhost:9092"}
-    CustomProperties: {}
-           Statistic: {"receivedBytes":325534440,"errorRows":264,"committedTaskNum":26,"loadedRows":5179944,"loadRowsRate":109000,"abortedTaskNum":18,"totalRows":5180208,"unselectedRows":0,"receivedBytesRate":6900000,"taskExecuteTimeMs":47173}
-            Progress: {"0":"16414875"}
-ReasonOfStateChanged:
-        ErrorLogUrls: http://172.26.108.172:9122/api/_load_error_log?file=__shard_67/error_log_insert_stmt_79e9504cafee4fbd-b3981a65fb158cde_79e9504cafee4fbd_b3981a65fb158cde
-            OtherMsg:
-~~~
-
-停止导入任务后，任务的 State 变更为 STOP，Statistic 和 Progress 中的导入信息再也不会更新。此时，通过 SHOW ROUTINE LOAD 语句无法看到已经停止的导入任务。
-
-## JSON 文本导入
-
-### json 文本
-
-下面每个`{}`代表一行数据，`[]`中表示有3行数据。
-
-~~~json
-[
-    {"category": "11", "title": "SayingsoftheCentury", "price": 895, "timestamp": 1589191587},
-    {"category": "22", "author": "2avc", "price": 895, "timestamp": 1589191487},
-    {"category": "33", "author": "3avc", "title": "SayingsoftheCentury", "timestamp": 1589191387}
-]
-~~~
-
-### 创建任务
-
-~~~sql
-CREATE ROUTINE LOAD example_db.test1 ON example_tbl
-COLUMNS(category, author, price, timestamp, dt=from_unixtime(timestamp, '%Y%m%d'))
-PROPERTIES
-(
-    "desired_concurrent_number" = "3",
-    "max_batch_interval" = "20",
-    "strict_mode" = "false",
-    "format" = "json",
-    "jsonpaths" = "[\"$.category\",\"$.author\",\"$.price\",\"$.timestamp\"]",
-    "strip_outer_array" = "true"
-)
-FROM KAFKA
-(
-    "kafka_broker_list" = "localhost:9092",
-    "kafka_topic" = "my_topic"
-);
-~~~
-
-**参数说明：**
-
-* format : json，指定导入的数据类型，只有导入 json 数据的时候需要指定。
-* jsonpaths : 选择每一列的 json 路径。
-* json_root : 选择 json 开始解析的对象。
-* strip_outer_array : 裁剪最外面的 array 字段，默认为 false。当数据为格式为下面数组格式的需要配置为 true，`{"key1": "value1"}` 表示一行数据。
-
-~~~json
-[
-    {
-        "key1": "value1"
-    },
-    {
-        "key2": "value2"
-    }
-]
-~~~
-
-JSON文本暂停、恢复和停止导入任务指令与上述CSV格式一致。
-
-更多详细的事例请参考 [ROUTINE LOAD 导入例子](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example)
-
----
+```SQL
+STOP ROUTINE LOAD FOR example_tbl2_ordertest2;
+```
 
 ## 常见问题
 
-* Q：导入任务被 PAUSE，报错 Broker: Offset out of range。<br>
-  A：通过 SHOW ROUTINE LOAD 查看最新的 offset，用 Kafka 客户端查看该 offset 有没有数据。<br>
-  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;可能原因：
-  * 导入时指定了未来的 offset。
-  * 还没来得及导入，Kafka 已经将该 offset 的数据清理。需要根据 StarRocks 的导入速度设置合理的 log 清理参数 log.retention.hours、log.retention.bytes 等。
-
-* Q：如何提高 ROUTINE LOAD 效率。<br>
-
-  A：当前 ROUNTINE LOAD 并发取决于：
-
-     ~~~plain text
-     min(min(partitionNum, min(desireTaskConcurrentNum, aliveBeNum)), Config.max_routine_load_task_concurrent_num)
-     ~~~
-
-  * partitionNum：Kafka topic 分区个数
-  * desireTaskConcurrentNum： desired_concurrent_number 配置，见 [创建导入任务](#创建导入任务) 参数说明
-  * aliveBeNum：集群存活的 BE 节点个数
-  * max_routine_load_task_concurrent_num：be.conf 配置项，默认为5，具体可参考 [参数配置](../administration/Configuration.md)
-
-     可以看出来主要受限于存活的 BE 节点个数，您的 **Kafka topic分区数 > BE节点个数** 的时候，建议拆分成多个 ROUTINE LOAD 任务。比如下面这个场景下：
-
-     ~~~plain text
-     BE 节点：3 台
-     Kafka topic 分区数：6
-     ~~~
-
-     可以将您的任务可以拆分成两个 ROUTINE LOAD 任务，可以指定每个任务消费 3 个分区。
+请参见 [Routine Load 常见问题](../faq/loading/Routine_load_faq.md)。
