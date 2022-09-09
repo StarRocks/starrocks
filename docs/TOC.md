@@ -38,9 +38,6 @@
   + [Materialized view](./using_starrocks/Materialized_view.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [External tables](./using_starrocks/External_table.md)
-<<<<<<< HEAD
-  + [Use catalogs to manage internal and external data](./using_starrocks/Manage_data.md)
-=======
   + Catalog
     + [Overview](./using_starrocks/catalog/catalog_overview.md)
     + [Default catalog](./using_starrocks/catalog/default_catalog.md)
@@ -50,7 +47,6 @@
     + [Query external data](./using_starrocks/catalog/query_external_data.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
->>>>>>> b19438e54 ([Doc] docs for version 2.4 (#10754))
   + [Window functions](./using_starrocks/Window_function.md)
   + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
   + [Java UDFs](./using_starrocks/JAVA_UDF.md)
