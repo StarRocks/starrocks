@@ -955,4 +955,31 @@ TEST_F(JsonScannerTest, test_column_2x_than_columns_with_json_root) {
               chunk->debug_row(4));
 }
 
+TEST_F(JsonScannerTest, test_illegal_input_with_jsonpath) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_DOUBLE);
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = "[\"$.f_float\", \"$.f_bool\", \"$.f_int\", \"$.f_float_in_string\", \"$.f_int_in_string\"]";
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/illegal.json");
+    ranges.emplace_back(range);
+
+    auto scanner =
+            create_json_scanner(types, ranges, {"f_float", "f_bool", "f_int", "f_float_in_string", "f_int_in_string"});
+
+    ASSERT_OK(scanner->open());
+    ASSERT_TRUE(scanner->get_next().status().is_data_quality_error());
+}
+
+
 } // namespace starrocks::vectorized
