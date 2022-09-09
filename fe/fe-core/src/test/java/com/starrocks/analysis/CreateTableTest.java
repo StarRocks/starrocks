@@ -50,8 +50,7 @@ public class CreateTableTest {
         } finally {
             db.readUnlock();
         }
-        int expectBucketNum = (int) (1.2 * cluster.getBackends().size());
-        Assert.assertEquals(expectBucketNum, bucketNum);
+        Assert.assertEquals(bucketNum, 12);
     }
 
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {
@@ -98,6 +97,6 @@ public class CreateTableTest {
         } finally {
             db.readUnlock();
         }
-        Assert.assertEquals(bucketNum, 1);
+        Assert.assertEquals(bucketNum, 12);
     }
 }

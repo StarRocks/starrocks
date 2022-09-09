@@ -651,6 +651,7 @@ rollupRenameClause
 addPartitionClause
     : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties?
     ;
+
 dropPartitionClause
     : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
     ;
@@ -1521,10 +1522,12 @@ partitionValue
 
 distributionClause
     : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+    | DISTRIBUTED BY HASH identifierList
     ;
 
 distributionDesc
     : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+    | DISTRIBUTED BY HASH identifierList
     ;
 
 refreshSchemeDesc

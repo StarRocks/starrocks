@@ -893,7 +893,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 return (int) (h2.getVisibleVersion() - h1.getVisibleVersion());
             }
         });
-        return partitions.subList(0, recentPartitionNum - 1);
+        return partitions.subList(0, recentPartitionNum);
     }
 
     // get all partitions' name except the temp partitions

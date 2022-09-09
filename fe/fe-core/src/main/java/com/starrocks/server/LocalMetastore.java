@@ -938,36 +938,56 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    private int calBucketNumAccordingToBackends() {
+        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+        // When POC, the backends is not greater than three most of the time.
+        // The bucketNum will be given a small multiplier factor for small backends.
+        int bucketNum = 0;
+        if (backendNum <= 3) {
+            bucketNum = 2 * backendNum;
+        } else if (backendNum <= 6) {
+            bucketNum = (int) 1.5 * backendNum;
+        } else if (backendNum <= 12) {
+            bucketNum = 12;
+        }  else {
+            bucketNum = Math.min(backendNum, 48);
+        }
+        return bucketNum;
+    }
+
     private int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum) {
-        int avgBucketNum = 0;
-        if (olapTable.getPartitions().size() < 5) {
-            int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
-            // When POC, the backends is not greater than three most of the time.
-            // The bucketNum will be given a small multiplier factor for small backends.
-            if (backendNum <= recentPartitionNum) {
-                avgBucketNum = 2 * backendNum;
-            } else if (backendNum <= 6) {
-                avgBucketNum = (int) (1.5 * backendNum);
-            } else if (backendNum <= 12) {
-                avgBucketNum = (int) (1.2 * backendNum);
-            } else {
-                avgBucketNum = backendNum;
-            }
-            return avgBucketNum;
+        // 1. If the partition is less than recentPartitionNum, use backendNum to speculate the bucketNum
+        int bucketNum = 0;
+        if (olapTable.getPartitions().size() < recentPartitionNum) {
+            bucketNum = calBucketNumAccordingToBackends();
+            return bucketNum;
         }
 
+        // 2. If the partition is not imported anydata, use backendNum to speculate the bucketNum
         List<Partition> partitions = (List<Partition>) olapTable.getRecentPartitions(recentPartitionNum);
+        boolean dataImported = true;
+        for (Partition partition : partitions) {
+            if (partition.getVisibleVersion() == 1) {
+                dataImported = false;
+            }
+        }
 
-        int totalDataSize = 0;
+        if (!dataImported) {
+            bucketNum = calBucketNumAccordingToBackends();
+            return bucketNum;
+        }
+
+        // 3. Use the totalSize of recentPartitions to speculate the bucketNum
+        long totalDataSize = 0;
         for (Partition partition : partitions) {
             totalDataSize += partition.getDataSize();
         }
-        // A tablet will be regarded using the 10GB size
-        avgBucketNum = totalDataSize / (10 * 1024 * 1024 * 1024);
-        if (avgBucketNum == 0) {
-            avgBucketNum = 1;
+        // A tablet will be regarded using the 1GB size
+        bucketNum = (int) (totalDataSize / (1024 * 1024 * 1024L));
+        if (bucketNum == 0) {
+            bucketNum = 1;
         }
-        return avgBucketNum;
+        return bucketNum;
     }
 
     private DistributionInfo getDistributionInfo(OlapTable olapTable, AddPartitionClause addPartitionClause)
@@ -993,8 +1013,8 @@ public class LocalMetastore implements ConnectorMetadata {
                     throw new DdlException("Cannot assign hash distribution with different distribution cols. "
                             + "default is: " + defaultDistriCols);
                 }
-                if (hashDistributionInfo.getBucketNum() <= 0) {
-                    throw new DdlException("Cannot assign hash distribution buckets less than 1");
+                if (hashDistributionInfo.getBucketNum() < 0) {
+                    throw new DdlException("Cannot assign hash distribution buckets less than 0");
                 }
             }
         } else {
@@ -1282,8 +1302,10 @@ public class LocalMetastore implements ConnectorMetadata {
             // get distributionInfo
             distributionInfo = getDistributionInfo(olapTable, addPartitionClause);
 
-            int numBucket = calAvgBucketNumOfRecentPartitions(olapTable, 5);
-            distributionInfo.setBucketNum(numBucket);
+            if (distributionInfo.getBucketNum() == 0) {
+                int numBucket = calAvgBucketNumOfRecentPartitions(olapTable, 5);
+                distributionInfo.setBucketNum(numBucket);
+            }
 
             // check colocation
             checkColocation(db, olapTable, distributionInfo, partitionDescs);
@@ -1997,27 +2019,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
             if (!enableStorageCache && allowAsyncWriteBack) {
                 throw new DdlException("storage allow_async_write_back can't be enabled when cache is disabled");
-            } else {
-                if (distributionInfo.getBucketNum() == 0) {
-                    int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
-                    int bucketNum = 0;
-                    // When POC, the backends is not greater than three most of the time.
-                    // The bucketNum will be given a multiplier factor for small backends.
-                    if (backendNum <= 3) {
-                        bucketNum = 2 * backendNum;
-                    } else if (backendNum <= 6) {
-                        bucketNum = (int) (1.5 * backendNum);
-                    } else if (backendNum <= 12) {
-                        bucketNum = (int) (1.2 * backendNum);
-                    } else {
-                        bucketNum = backendNum;
-                    }
-                    distributionInfo.setBucketNum(bucketNum);
-                }
-
-                Preconditions.checkState(stmt.isOlapEngine());
-                olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
-                        distributionInfo, indexes);
             }
 
             // get service shard storage info from StarMgr
@@ -2025,6 +2026,11 @@ public class LocalMetastore implements ConnectorMetadata {
 
             ((LakeTable) olapTable).setStorageInfo(shardStorageInfo, enableStorageCache, storageCacheTtlS, allowAsyncWriteBack);
         } else {
+            if (distributionInfo.getBucketNum() == 0) {
+                int bucketNum = calBucketNumAccordingToBackends();
+                distributionInfo.setBucketNum(bucketNum);
+            }
+
             Preconditions.checkState(stmt.isOlapEngine());
             olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
         }
