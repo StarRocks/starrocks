@@ -3,9 +3,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -20,10 +18,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.CorrelatedPredicateRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -106,54 +104,50 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
 
         if (correlationPredicate.isEmpty()) {
             // If the correlation predicate doesn't appear in here,
-            // it's should not be a situation that we currently support.
-            throw new SemanticException("Not support none correlation predicate correlation subquery");
+            // it should not be a situation that we currently support.
+            throw new SemanticException(SubqueryUtils.NONE_CORRELATED_PREDICATE);
         }
 
         // @Todo: Can be support contain one EQ predicate
         // check correlation filter
-        if (!SubqueryUtils.checkAllIsBinaryEQ(correlationPredicate, apply.getCorrelationColumnRefs())) {
-            throw new SemanticException(SubqueryUtils.UNSUPPORTED_CORRELATED_PREDICATE);
+        if (!SubqueryUtils.checkAllIsBinaryEQ(correlationPredicate)) {
+            throw new SemanticException(SubqueryUtils.EXIST_NON_EQ_PREDICATE);
         }
 
         // extract group columns
-        Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> pair =
-                SubqueryUtils.rewritePredicateAndExtractColumnRefs(correlationPredicate,
-                        apply.getCorrelationColumnRefs(), context);
+        CorrelatedPredicateRewriter rewriter = new CorrelatedPredicateRewriter(
+                apply.getCorrelationColumnRefs(), context);
 
+        ScalarOperator newPredicate = SubqueryUtils.rewritePredicateAndExtractColumnRefs(
+                Utils.compoundAnd(correlationPredicate).clone(), rewriter);
+
+        Map<ColumnRefOperator, ScalarOperator> innerRefMap = rewriter.getColumnRefToExprMap();
         // create new trees
 
         // vector aggregate
-        Set<ColumnRefOperator> newGroupingKeys = Sets.newHashSet(pair.second.keySet());
+        Set<ColumnRefOperator> newGroupingKeys = Sets.newHashSet(innerRefMap.keySet());
         newGroupingKeys.addAll(aggregate.getGroupingKeys());
         OptExpression vectorAggregationOptExpression = new OptExpression(
                 new LogicalAggregationOperator(AggType.GLOBAL, new ArrayList<>(newGroupingKeys),
                         aggregate.getAggregations()));
 
-        // correlation filter
+        // correlation filter. correlation filter -> agg
         OptExpression correlationFilterOptExpression =
-                new OptExpression(new LogicalFilterOperator(Utils.compoundAnd(pair.first)));
+                new OptExpression(new LogicalFilterOperator(newPredicate));
         correlationFilterOptExpression.getInputs().add(vectorAggregationOptExpression);
 
         OptExpression childOptExpression = vectorAggregationOptExpression;
 
-        // project
-        Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
-        pair.second.entrySet().stream().filter(d -> !(d.getValue().isColumnRef()))
-                .forEach(d -> projectMap.put(d.getKey(), d.getValue()));
-
-        if (!projectMap.isEmpty()) {
-            // project add all output
-            Arrays.stream(filterOptExpression.getOutputColumns().getColumnIds())
-                    .mapToObj(context.getColumnRefFactory()::getColumnRef).forEach(d -> projectMap.put(d, d));
-
+        // exists expression, add project node. agg -> project
+        if (SubqueryUtils.containsExpr(innerRefMap)) {
+            Map<ColumnRefOperator, ScalarOperator> projectMap = SubqueryUtils.updateOutputColumns(
+                    filterOptExpression, innerRefMap, context);
             OptExpression projectOptExpression = new OptExpression(new LogicalProjectOperator(projectMap));
-
             childOptExpression.getInputs().add(projectOptExpression);
             childOptExpression = projectOptExpression;
         }
 
-        // un-correlation filter
+        // add un-correlation filter, agg -> project -> un-correlation filter
         if (!unCorrelationPredicate.isEmpty()) {
             OptExpression unCorrelationFilterOptExpression =
                     new OptExpression(new LogicalFilterOperator(Utils.compoundAnd(unCorrelationPredicate)));
@@ -162,6 +156,7 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
             childOptExpression = unCorrelationFilterOptExpression;
         }
 
+        // add un-correlation filter, agg -> project -> un-correlation filter -> inputs
         childOptExpression.getInputs().addAll(filterOptExpression.getInputs());
 
         // apply node

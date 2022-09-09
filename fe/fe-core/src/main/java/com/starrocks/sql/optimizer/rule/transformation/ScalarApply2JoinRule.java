@@ -9,7 +9,6 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -34,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.CorrelatedPredicateRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Arrays;
@@ -69,9 +69,8 @@ public class ScalarApply2JoinRule extends TransformationRule {
     private List<OptExpression> transformCorrelate(OptExpression input, LogicalApplyOperator apply,
                                                    OptimizerContext context) {
         // check correlation filter
-        if (!SubqueryUtils.checkAllIsBinaryEQ(Utils.extractConjuncts(apply.getCorrelationConjuncts()),
-                apply.getCorrelationColumnRefs())) {
-            throw new SemanticException(SubqueryUtils.UNSUPPORTED_CORRELATED_PREDICATE);
+        if (!SubqueryUtils.checkAllIsBinaryEQ(Utils.extractConjuncts(apply.getCorrelationConjuncts()))) {
+            throw new SemanticException(SubqueryUtils.EXIST_NON_EQ_PREDICATE);
         }
 
         if (apply.isNeedCheckMaxRows()) {
@@ -104,20 +103,22 @@ public class ScalarApply2JoinRule extends TransformationRule {
                                                                    OptimizerContext context) {
         // t0.v1 = t1.v1
         ScalarOperator correlationPredicate = apply.getCorrelationConjuncts();
-        Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> correlationPredicatePair =
-                SubqueryUtils.rewritePredicateAndExtractColumnRefs(Utils.extractConjuncts(correlationPredicate),
-                        apply.getCorrelationColumnRefs(), context);
+
+        CorrelatedPredicateRewriter rewriter = new CorrelatedPredicateRewriter(
+                apply.getCorrelationColumnRefs(), context);
+
+        ScalarOperator newPredicate = SubqueryUtils.rewritePredicateAndExtractColumnRefs(correlationPredicate.clone(), rewriter);
+
+        Map<ColumnRefOperator, ScalarOperator> innerRefMap = rewriter.getColumnRefToExprMap();
         // t1.v1
-        ColumnRefSet correlationPredicateInnerRefs = new ColumnRefSet(correlationPredicatePair.second.keySet());
+        ColumnRefSet correlationPredicateInnerRefs = new ColumnRefSet(innerRefMap.keySet());
 
         OptExpression rightChild = input.inputAt(1);
-        if (correlationPredicatePair.second.values().stream().anyMatch(v -> !v.isColumnRef())) {
-            // There are expression, need project node
-            Map<ColumnRefOperator, ScalarOperator> rightChildProjectMap = Maps.newHashMap();
-            Arrays.stream(input.inputAt(1).getOutputColumns().getColumnIds()).
-                    mapToObj(context.getColumnRefFactory()::getColumnRef).forEach(i -> rightChildProjectMap.put(i, i));
-            rightChildProjectMap.putAll(correlationPredicatePair.second);
-            rightChild = OptExpression.create(new LogicalProjectOperator(rightChildProjectMap), rightChild);
+
+        if (SubqueryUtils.containsExpr(innerRefMap)) {
+            // exists expression, need put it in project node
+            rightChild = OptExpression.create(new LogicalProjectOperator(
+                    SubqueryUtils.updateOutputColumns(rightChild, innerRefMap, context)), rightChild);
         }
 
         // Non-correlated predicates
@@ -130,13 +131,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
          *      output: count(1) as countRows, any_value(t1.v2) as anyValue
          *      groupBy: t1.v1
          */
-        List<ColumnRefOperator> countAggregateGroupBys = Lists.newArrayList();
-
         ColumnRefFactory factory = context.getColumnRefFactory();
-        for (int columnId : correlationPredicateInnerRefs.getColumnIds()) {
-            ColumnRefOperator ref = factory.getColumnRef(columnId);
-            countAggregateGroupBys.add(ref);
-        }
 
         // count aggregate
         Map<ColumnRefOperator, CallOperator> aggregates = Maps.newHashMap();
@@ -152,7 +147,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
         aggregates.put(anyValue, anyValueCallOp);
 
         OptExpression newAggOpt = OptExpression.create(
-                new LogicalAggregationOperator(AggType.GLOBAL, countAggregateGroupBys, aggregates),
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(innerRefMap.keySet()), aggregates),
                 rightChild);
 
         /*
@@ -162,7 +157,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
          */
         LogicalJoinOperator joinOp = new LogicalJoinOperator.Builder()
                 .setJoinType(JoinOperator.LEFT_OUTER_JOIN)
-                .setOnPredicate(Utils.compoundAnd(correlationPredicatePair.first))
+                .setOnPredicate(newPredicate)
                 .build();
         OptExpression newLeftOuterJoinOpt = OptExpression.create(joinOp, input.inputAt(0), newAggOpt);
 

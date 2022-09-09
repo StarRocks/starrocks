@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
@@ -14,20 +13,22 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 
 import java.util.List;
 import java.util.Map;
 
 public class SubqueryUtils {
 
-    public static String UNSUPPORTED_CORRELATED_PREDICATE = "Only support correlation scalar-subquery with EQ type " +
-            "and outer reference column in one side of correlation predicate conjunction";
+    public static String EXIST_NON_EQ_PREDICATE = "Not support Non-EQ correlation predicate in correlation subquery";
 
+    public static String NONE_CORRELATED_PREDICATE = "Not support none correlation predicate in correlation subquery";
 
     private static Function getAggregateFunction(String functionName, Type[] argTypes) {
         Function func = Expr.getBuiltinFunction(functionName, argTypes,
@@ -69,6 +70,20 @@ public class SubqueryUtils {
             }
         }
 
+        return true;
+    }
+
+    public static boolean checkAllIsBinaryEQ(List<ScalarOperator> correlationPredicate) {
+        for (ScalarOperator predicate : correlationPredicate) {
+            if (!OperatorType.BINARY.equals(predicate.getOpType())) {
+                return false;
+            }
+
+            BinaryPredicateOperator bpo = ((BinaryPredicateOperator) predicate);
+            if (!BinaryPredicateOperator.BinaryType.EQ.equals(bpo.getBinaryType())) {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -178,34 +193,21 @@ public class SubqueryUtils {
     }
 
 
-    static class InnerTableExprExtractor extends ScalarOperatorVisitor<Void, Void> {
+    public static ScalarOperator rewritePredicateAndExtractColumnRefs (
+            ScalarOperator correlationPredicate, BaseScalarOperatorShuttle scalarOperatorShuttle) {
+        return correlationPredicate.accept(scalarOperatorShuttle, null);
+    }
 
-        private final ColumnRefSet correlationColSet;
+    public static boolean containsExpr(Map<ColumnRefOperator, ScalarOperator> innerRefMap) {
+        return innerRefMap.values().stream().anyMatch(e -> !e.isColumnRef());
+    }
 
-        private final Set<ScalarOperator> innerTableExprSet;
-
-        private InnerTableExprExtractor(List<ColumnRefOperator> correlationCols) {
-            correlationColSet = new ColumnRefSet(correlationCols);
-            innerTableExprSet = Sets.newHashSet();
-        }
-
-        @Override
-        public Void visit(ScalarOperator scalarOperator, Void context) {
-            return null;
-        }
-
-        @Override
-        public Void visitCall(CallOperator call, Void context) {
-            ColumnRefSet usedColumns = call.getUsedColumns();
-            if (correlationColSet.containsAll(usedColumns)) {
-                return null;
-            }
-
-            if (!correlationColSet.isIntersect(usedColumns)) {
-                innerTableExprSet.add(call);
-            }
-            call.getChildren().stream().map(e -> e.accept(this, null));
-            return null;
-        }
+    public static Map<ColumnRefOperator, ScalarOperator> updateOutputColumns(
+            OptExpression input, Map<ColumnRefOperator, ScalarOperator> columns, OptimizerContext context) {
+        Map<ColumnRefOperator, ScalarOperator> outPutColumns = Maps.newHashMap();
+        context.getColumnRefFactory().getColumnRefs(input.getOutputColumns()).stream()
+                .forEach(c -> outPutColumns.put(c, c));
+        outPutColumns.putAll(columns);
+        return outPutColumns;
     }
 }

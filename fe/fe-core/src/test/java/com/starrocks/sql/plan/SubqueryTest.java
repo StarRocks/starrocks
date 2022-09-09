@@ -98,7 +98,9 @@ public class SubqueryTest extends PlanTestBase {
     @Test
     public void testSubqueryLimit() throws Exception {
         String sql = "select * from t0 where 2 = (select v4 from t1 limit 1);";
+        sql = "select v1, v2 in (select v4 from t1 where t0.v1 + t1.v6 = t1.v4 + t1.v5) from t0;";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         assertContains(plan, "4:SELECT\n" +
                 "  |  predicates: 4: v4 = 2\n" +
                 "  |  \n" +
@@ -563,13 +565,12 @@ public class SubqueryTest extends PlanTestBase {
                 "      ) >= 1\n" +
                 "  ) subt0;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(1), any_value(4: v7)\n" +
-                "  |  group by: 8: expr\n" +
+                "  |  group by: \n" +
                 "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 4> : 4: v7\n" +
-                "  |  <slot 8> : 284082749");
+                "  1:OlapScanNode\n" +
+                "     TABLE: t2");
         sql = "SELECT \n" +
                 "  subt0.v1 \n" +
                 "FROM \n" +
