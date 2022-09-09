@@ -43,7 +43,7 @@ public class ImpersonateUserPrivEntry extends PrivEntry {
         }
 
         ImpersonateUserPrivEntry otherEntry = (ImpersonateUserPrivEntry) other;
-        return origHost.equals(otherEntry.origHost) && origUser.equals(otherEntry.origUser)
+        return origHost.equals(otherEntry.origHost) && realOrigUser.equals(otherEntry.realOrigUser)
                 && securedUserIdentity.equals(otherEntry.securedUserIdentity) && isDomain == otherEntry.isDomain;
     }
 
@@ -51,7 +51,7 @@ public class ImpersonateUserPrivEntry extends PrivEntry {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("impersonate user priv. host: ").append(origHost).append(", securedUser: ").append(securedUserIdentity);
-        sb.append(", user: ").append(origUser);
+        sb.append(", user: ").append(realOrigUser);
         sb.append(", priv: ").append(privSet).append(", set by resolver: ").append(isSetByDomainResolver);
         return sb.toString();
     }

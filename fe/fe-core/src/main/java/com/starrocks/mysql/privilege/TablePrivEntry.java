@@ -92,7 +92,7 @@ public class TablePrivEntry extends DbPrivEntry {
             return -res;
         }
 
-        res = origUser.compareTo(otherEntry.origUser);
+        res = realOrigUser.compareTo(otherEntry.realOrigUser);
         if (res != 0) {
             return -res;
         }
@@ -107,7 +107,7 @@ public class TablePrivEntry extends DbPrivEntry {
         }
 
         TablePrivEntry otherEntry = (TablePrivEntry) other;
-        if (origHost.equals(otherEntry.origHost) && origUser.equals(otherEntry.origUser)
+        if (origHost.equals(otherEntry.origHost) && realOrigUser.equals(otherEntry.realOrigUser)
                 && origDb.equals(otherEntry.origDb) && origTbl.equals(otherEntry.origTbl)
                 && isDomain == otherEntry.isDomain) {
             return true;
@@ -119,7 +119,7 @@ public class TablePrivEntry extends DbPrivEntry {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("db priv. host: ").append(origHost).append(", db: ").append(origDb);
-        sb.append(", user: ").append(origUser).append(", tbl: ").append(origTbl);
+        sb.append(", user: ").append(realOrigUser).append(", tbl: ").append(origTbl);
         sb.append(", priv: ").append(privSet).append(", set by resolver: ").append(isSetByDomainResolver);
         return sb.toString();
     }

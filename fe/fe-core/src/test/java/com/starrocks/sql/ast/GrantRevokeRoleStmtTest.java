@@ -49,11 +49,11 @@ public class GrantRevokeRoleStmtTest {
         // suppose current role exists and has GRANT privilege
         new Expectations(auth) {
             {
-                auth.doesUserExist((UserIdentity) any);
+                auth.doesRoleExist((String) any);
                 minTimes = 0;
                 result = true;
 
-                auth.doesRoleExist((String) any);
+                auth.doesUserExist((UserIdentity) any);
                 minTimes = 0;
                 result = true;
             }

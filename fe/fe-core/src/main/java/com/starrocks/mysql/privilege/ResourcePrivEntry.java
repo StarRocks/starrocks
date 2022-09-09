@@ -89,7 +89,7 @@ public class ResourcePrivEntry extends PrivEntry {
             return -res;
         }
 
-        return -origUser.compareTo(otherEntry.origUser);
+        return -realOrigUser.compareTo(otherEntry.realOrigUser);
     }
 
     @Override
@@ -99,7 +99,7 @@ public class ResourcePrivEntry extends PrivEntry {
         }
 
         ResourcePrivEntry otherEntry = (ResourcePrivEntry) other;
-        if (origHost.equals(otherEntry.origHost) && origUser.equals(otherEntry.origUser)
+        if (origHost.equals(otherEntry.origHost) && realOrigUser.equals(otherEntry.realOrigUser)
                 && origResource.equals(otherEntry.origResource) && isDomain == otherEntry.isDomain) {
             return true;
         }
@@ -110,7 +110,7 @@ public class ResourcePrivEntry extends PrivEntry {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("resource priv. host: ").append(origHost).append(", resource: ").append(origResource);
-        sb.append(", user: ").append(origUser);
+        sb.append(", user: ").append(realOrigUser);
         sb.append(", priv: ").append(privSet).append(", set by resolver: ").append(isSetByDomainResolver);
         return sb.toString();
     }
