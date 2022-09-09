@@ -19,7 +19,6 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
@@ -357,10 +356,6 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
-    }
-
-    public R visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, C context) {
-        return visitStatement(statement, context);
     }
 
     public R visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, C context) {
