@@ -29,8 +29,11 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_need_compaction) {
     std::vector<RowsetSharedPtr> rowsets;
     auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
 
+    RowsetId id;
+    id.init(2, 3, 0, 0);
     int64_t base_time = UnixSeconds() - 100 * 60;
     auto base_rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+    base_rowset_meta_pb->set_rowset_id(id.to_string());
     base_rowset_meta_pb->set_start_version(0);
     base_rowset_meta_pb->set_end_version(9);
     base_rowset_meta_pb->set_creation_time(base_time);
@@ -44,6 +47,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_need_compaction) {
     rowsets.emplace_back(std::move(base_rowset));
     for (int i = 1; i <= 10; i++) {
         auto rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+        rowset_meta_pb->set_rowset_id(id.to_string());
         rowset_meta_pb->set_start_version(i * 10);
         rowset_meta_pb->set_end_version((i + 1) * 10 - 1);
         rowset_meta_pb->set_creation_time(base_time + i);
@@ -59,6 +63,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_need_compaction) {
 
     for (int i = 110; i < 120; i++) {
         auto rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+        rowset_meta_pb->set_rowset_id(id.to_string());
         rowset_meta_pb->set_start_version(i);
         rowset_meta_pb->set_end_version(i);
         rowset_meta_pb->set_creation_time(base_time + i);
@@ -88,7 +93,10 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_cumulative_compaction_wi
     auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
 
     int64_t base_time = UnixSeconds() - 100 * 60;
+    RowsetId id;
+    id.init(2, 3, 0, 0);
     auto base_rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+    base_rowset_meta_pb->set_rowset_id(id.to_string());
     base_rowset_meta_pb->set_start_version(0);
     base_rowset_meta_pb->set_end_version(9);
     base_rowset_meta_pb->set_creation_time(base_time);
@@ -102,6 +110,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_cumulative_compaction_wi
     rowsets.emplace_back(std::move(base_rowset));
     for (int i = 10; i <= 14; i++) {
         auto rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+        rowset_meta_pb->set_rowset_id(id.to_string());
         rowset_meta_pb->set_start_version(i);
         rowset_meta_pb->set_end_version(i);
         if (i == 14) {
@@ -137,7 +146,10 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_cumulative_compaction_wi
     auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
 
     int64_t base_time = UnixSeconds() - 100 * 60;
+    RowsetId id;
+    id.init(2, 3, 0, 0);
     auto base_rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+    base_rowset_meta_pb->set_rowset_id(id.to_string());
     base_rowset_meta_pb->set_start_version(0);
     base_rowset_meta_pb->set_end_version(9);
     base_rowset_meta_pb->set_creation_time(base_time);
@@ -155,6 +167,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_cumulative_compaction_wi
             continue;
         }
         auto rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+        rowset_meta_pb->set_rowset_id(id.to_string());
         rowset_meta_pb->set_start_version(i);
         rowset_meta_pb->set_end_version(i);
         rowset_meta_pb->set_creation_time(base_time + i);
@@ -186,7 +199,10 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_with_emp
     auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
 
     int64_t base_time = UnixSeconds() - 100 * 60;
+    RowsetId id;
+    id.init(2, 3, 0, 0);
     auto base_rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+    base_rowset_meta_pb->set_rowset_id(id.to_string());
     base_rowset_meta_pb->set_start_version(0);
     base_rowset_meta_pb->set_end_version(9);
     base_rowset_meta_pb->set_creation_time(base_time);
@@ -198,6 +214,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_with_emp
     rowsets.emplace_back(std::move(base_rowset));
     for (int i = 1; i <= 1; i++) {
         auto rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+        rowset_meta_pb->set_rowset_id(id.to_string());
         rowset_meta_pb->set_start_version(i * 10);
         rowset_meta_pb->set_end_version((i + 1) * 10 - 1);
         rowset_meta_pb->set_creation_time(base_time + i);
@@ -229,7 +246,10 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_with_mis
     auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
 
     int64_t base_time = UnixSeconds() - 100 * 60;
+    RowsetId id;
+    id.init(2, 3, 0, 0);
     auto base_rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+    base_rowset_meta_pb->set_rowset_id(id.to_string());
     base_rowset_meta_pb->set_start_version(0);
     base_rowset_meta_pb->set_end_version(9);
     base_rowset_meta_pb->set_creation_time(base_time);
@@ -244,6 +264,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_with_mis
             continue;
         }
         auto rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+        rowset_meta_pb->set_rowset_id(id.to_string());
         rowset_meta_pb->set_start_version(i * 10);
         rowset_meta_pb->set_end_version((i + 1) * 10 - 1);
         rowset_meta_pb->set_creation_time(base_time + i);
@@ -276,8 +297,11 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_without_
     int64_t base_time = UnixSeconds() - 100 * 60;
 
     {
+        RowsetId id;
+        id.init(2, 3, 0, 0);
         auto rowset_meta_pb = std::make_unique<RowsetMetaPB>();
         rowset_meta_pb->set_start_version(10);
+        rowset_meta_pb->set_rowset_id(id.to_string());
         rowset_meta_pb->set_end_version(19);
         rowset_meta_pb->set_creation_time(base_time + 1);
         rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
