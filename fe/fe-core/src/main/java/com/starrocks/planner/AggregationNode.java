@@ -260,7 +260,7 @@ public class AggregationNode extends PlanNode {
             return false;
         }
 
-        return canPushDownRuntimeFilterForChild(description, probeExpr, candidatesOfSlotExpr(probeExpr),
+        return pushdownRuntimeFilterForChildOrAccept(description, probeExpr, candidatesOfSlotExpr(probeExpr),
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
     }
 

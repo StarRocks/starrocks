@@ -267,7 +267,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     public boolean pushDownRuntimeFiltersForChild(RuntimeFilterDescription description,
                                                   Expr probeExpr,
                                                   List<Expr> partitionByExprs, int childIdx) {
-        return canPushDownRuntimeFilterForChild(description, probeExpr, candidatesOfSlotExprForChild(probeExpr, childIdx),
+        return pushdownRuntimeFilterForChildOrAccept(description, probeExpr, candidatesOfSlotExprForChild(probeExpr, childIdx),
                 partitionByExprs, candidatesOfSlotExprsForChild(partitionByExprs, childIdx), childIdx, false);
     }
 

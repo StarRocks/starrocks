@@ -290,8 +290,9 @@ public abstract class SetOperationNode extends PlanNode {
             boolean pushDown = false;
             // try to push all children if any expr of a child can match `probeExpr`
             for (int i = 0; i < materializedResultExprLists_.size(); i++) {
-                pushDown |= canPushDownRuntimeFilterForChild(description, probeExpr, candidatesOfSlotExprForChild(probeExpr, i),
-                        partitionByExprs, candidatesOfSlotExprsForChild(partitionByExprs, i), i, false);
+                pushDown |= pushdownRuntimeFilterForChildOrAccept(description, probeExpr,
+                        candidatesOfSlotExprForChild(probeExpr, i), partitionByExprs,
+                        candidatesOfSlotExprsForChild(partitionByExprs, i), i, false);
             }
             if (pushDown) {
                 return true;

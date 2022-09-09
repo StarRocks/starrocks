@@ -808,10 +808,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return false;
     }
 
-    private boolean canPushDownRuntimeFilterForChildOfProbeExpr(RuntimeFilterDescription description,
-                                                                Optional<List<Expr>> optProbeExprCandidates,
-                                                                Optional<List<List<Expr>>> optPartitionByExprsCandidates,
-                                                                int childIdx) {
+    private boolean tryPushdownRuntimeFilterToChild(RuntimeFilterDescription description,
+                                                    Optional<List<Expr>> optProbeExprCandidates,
+                                                    Optional<List<List<Expr>>> optPartitionByExprsCandidates,
+                                                    int childIdx) {
         if (!optProbeExprCandidates.isPresent() || !optPartitionByExprsCandidates.isPresent()) {
             return false;
         }
@@ -835,14 +835,18 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return false;
     }
 
-    protected boolean canPushDownRuntimeFilterForChild(RuntimeFilterDescription description,
-                                                       Expr probeExpr,
-                                                       Optional<List<Expr>> optProbeExprCandidates,
-                                                       List<Expr> partitionByExprs,
-                                                       Optional<List<List<Expr>>> optPartitionByExprsCandidates,
-                                                       int childIdx,
-                                                       boolean addProbeInfo) {
-        boolean accept = canPushDownRuntimeFilterForChildOfProbeExpr(description, optProbeExprCandidates,
+    /**
+     * Push down a runtime filter for the specific child with childIdx. `addProbeInfo` indicates whether
+     * add runtime filter info into this PlanNode.
+     */
+    protected boolean pushdownRuntimeFilterForChildOrAccept(RuntimeFilterDescription description,
+                                                            Expr probeExpr,
+                                                            Optional<List<Expr>> optProbeExprCandidates,
+                                                            List<Expr> partitionByExprs,
+                                                            Optional<List<List<Expr>>> optPartitionByExprsCandidates,
+                                                            int childIdx,
+                                                            boolean addProbeInfo) {
+        boolean accept = tryPushdownRuntimeFilterToChild(description, optProbeExprCandidates,
                 optPartitionByExprsCandidates, childIdx);
         boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds());
         if (isBound) {
