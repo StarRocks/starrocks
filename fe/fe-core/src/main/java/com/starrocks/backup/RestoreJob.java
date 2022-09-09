@@ -162,16 +162,6 @@ public class RestoreJob extends AbstractJob {
 
     protected Map<Long, Long> unfinishedSignatureToId = Maps.newConcurrentMap();
 
-    // the meta version is used when reading backup meta from file.
-    // we do not persist this field, because this is just a temporary solution.
-    // the true meta version should be getting from backup job info, which is saved when doing backup job.
-    // But the earlier version of StarRocks do not save the meta version in backup job info, so we allow user to
-    // set this 'metaVersion' in restore stmt.
-    // NOTICE: because we do not persist it, this info may be lost if Frontend restart,
-    // and if you don't want to lose it, backup your data again by using latest StarRocks version.
-    private int metaVersion = -1;
-    private int starrocksMetaVersion = -1;
-
     private AgentBatchTask batchTask;
 
     public RestoreJob() {
@@ -179,8 +169,7 @@ public class RestoreJob extends AbstractJob {
     }
 
     public RestoreJob(String label, String backupTs, long dbId, String dbName, BackupJobInfo jobInfo,
-                      boolean allowLoad, int restoreReplicationNum, long timeoutMs, int metaVersion,
-                      int starrocksMetaVersion,
+                      boolean allowLoad, int restoreReplicationNum, long timeoutMs,
                       GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta) {
         super(JobType.RESTORE, label, dbId, dbName, timeoutMs, globalStateMgr, repoId);
         this.backupTimestamp = backupTs;
@@ -188,8 +177,6 @@ public class RestoreJob extends AbstractJob {
         this.allowLoad = allowLoad;
         this.restoreReplicationNum = restoreReplicationNum;
         this.state = RestoreJobState.PENDING;
-        this.metaVersion = metaVersion;
-        this.starrocksMetaVersion = starrocksMetaVersion;
         this.backupMeta = backupMeta;
     }
 
@@ -201,10 +188,6 @@ public class RestoreJob extends AbstractJob {
         return fileMapping;
     }
 
-    public int getMetaVersion() {
-        return metaVersion;
-    }
-
     public synchronized boolean finishTabletSnapshotTask(SnapshotTask task, TFinishTaskRequest request) {
         if (checkTaskStatus(task, task.getJobId(), request)) {
             return false;
@@ -212,7 +195,7 @@ public class RestoreJob extends AbstractJob {
 
         Preconditions.checkState(request.isSetSnapshot_path());
 
-        // snapshot path does not contains last 'tablet_id' and 'schema_hash' dir
+        // snapshot path does not contain last 'tablet_id' and 'schema_hash' dir
         // eg:
         // /path/to/your/be/data/snapshot/20180410102311.0/
         // Full path will look like:
@@ -594,7 +577,7 @@ public class RestoreJob extends AbstractJob {
                     }
 
                     // reset all ids in this table
-                    Status st = remoteOlapTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
+                    Status st = resetTableForRestore(remoteOlapTbl, db);
                     // TODO: delete the shards for lake table if it fails.
                     if (!st.ok()) {
                         status = st;
@@ -670,6 +653,10 @@ public class RestoreJob extends AbstractJob {
         // No log here, PENDING state restore job will redo this method
         LOG.info("finished to prepare meta and send snapshot tasks, num: {}. {}",
                 batchTask.getTaskNum(), this);
+    }
+
+    protected Status resetTableForRestore(OlapTable remoteOlapTbl, Database db) {
+        return remoteOlapTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
     }
 
     protected void sendCreateReplicaTasks() {
@@ -864,7 +851,7 @@ public class RestoreJob extends AbstractJob {
             remoteIdx.clearTabletsForRestore();
             // generate new table
             status = remoteTbl.createTabletsForRestore(remotetabletSize, remoteIdx, globalStateMgr, restoreReplicationNum,
-                    visibleVersion, schemaHash, remotePart.getId(), false);
+                    visibleVersion, schemaHash, remotePart.getId());
             if (!status.ok()) {
                 return null;
             }

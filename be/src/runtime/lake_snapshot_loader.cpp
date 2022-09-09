@@ -10,6 +10,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet.h"
 #include "util/network_util.h"
+#include "util/raw_container.h"
 
 namespace starrocks {
 LakeSnapshotLoader::LakeSnapshotLoader(ExecEnv* env) : _env(env) {}
@@ -275,30 +276,22 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
             const std::string& remote_file = iter.first;
             const FileStat& file_stat = iter.second;
             std::string full_remote_file = restore_info.snapshot_path() + "/" + remote_file + "." + file_stat.md5;
-            auto [tablet_id, version] = starrocks::lake::parse_tablet_metadata_filename(iter.first);
-            std::string restored_file =
-                    _env->lake_tablet_manager()->tablet_metadata_location(restore_info.tablet_id(), version);
-            std::unique_ptr<WritableFile> remote_writable_file;
-            WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+            std::string read_buf;
             BrokerFileSystem fs_broker(address, broker_prop);
-            ASSIGN_OR_RETURN(auto input_file, fs_broker.new_sequential_file(full_remote_file));
-            ASSIGN_OR_RETURN(remote_writable_file, fs::new_writable_file(opts, restored_file));
-            auto res = fs::copy(input_file.get(), remote_writable_file.get(), 1024 * 1024);
-            if (!res.ok()) {
-                return res.status();
+            ASSIGN_OR_RETURN(auto rf, fs_broker.new_random_access_file(full_remote_file));
+            ASSIGN_OR_RETURN(auto size, rf->get_size());
+            if (UNLIKELY(size > std::numeric_limits<int>::max())) {
+                return Status::Corruption("file size exceeded the int range");
             }
-            RETURN_IF_ERROR(remote_writable_file->close());
-            auto remote_tablet_metadata = _env->lake_tablet_manager()->get_tablet_metadata(restored_file);
-            if (!remote_tablet_metadata.ok()) {
-                std::stringstream ss;
-                ss << "Fail to get tablet metadata. tablet_id: " << restore_info.tablet_id() << " "
-                   << remote_tablet_metadata.status();
-                LOG(ERROR) << ss.str();
-                return Status::InternalError(ss.str());
+            raw::stl_string_resize_uninitialized(&read_buf, size);
+            RETURN_IF_ERROR(rf->read_at_fully(0, read_buf.data(), size));
+            std::shared_ptr<starrocks::lake::TabletMetadata> meta = std::make_shared<starrocks::lake::TabletMetadata>();
+            bool parsed = meta->ParseFromArray(read_buf.data(), static_cast<int>(size));
+            if (!parsed) {
+                return Status::Corruption(fmt::format("failed to parse tablet meta {}", full_remote_file));
             }
-            starrocks::lake::TabletMetadataPB tablet_metadata = *(*remote_tablet_metadata);
-            tablet_metadata.set_id(restore_info.tablet_id());
-            _env->lake_tablet_manager()->put_tablet_metadata(tablet_metadata);
+            meta->set_id(restore_info.tablet_id());
+            _env->lake_tablet_manager()->put_tablet_metadata(meta);
         }
 
         // 2.4. upload the segment files.

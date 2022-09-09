@@ -191,20 +191,25 @@ public class LakeBackupJob extends BackupJob {
         try {
             Iterator<Map.Entry<SnapshotInfo, Future<LockTabletMetadataResponse>>> entries = lockResponses.entrySet().iterator();
             while (entries.hasNext()) {
-                try {
-                    Map.Entry<SnapshotInfo, Future<LockTabletMetadataResponse>> entry = entries.next();
-                    entry.getValue().get(1000, TimeUnit.MILLISECONDS);
-                    unfinishedTaskIds.remove(entry.getKey().getTabletId());
-                    taskProgress.remove(entry.getKey().getTabletId());
-                    snapshotInfos.put(entry.getKey().getTabletId(), entry.getKey());
-                    entries.remove();
-                } catch (TimeoutException e) {
-                    // Maybe there are many snapshot tasks, so we ignore timeout exception.
-                }
+                Map.Entry<SnapshotInfo, Future<LockTabletMetadataResponse>> entry = entries.next();
+                getLockTabletMetadataResponse(entry);
+                entries.remove();
             }
             super.waitingAllSnapshotsFinished();
         } catch (InterruptedException | ExecutionException e) {
             status = new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
+        }
+    }
+
+    private void getLockTabletMetadataResponse(Map.Entry<SnapshotInfo, Future<LockTabletMetadataResponse>> entry)
+            throws ExecutionException, InterruptedException {
+        try {
+            entry.getValue().get(1000, TimeUnit.MILLISECONDS);
+            unfinishedTaskIds.remove(entry.getKey().getTabletId());
+            taskProgress.remove(entry.getKey().getTabletId());
+            snapshotInfos.put(entry.getKey().getTabletId(), entry.getKey());
+        } catch (TimeoutException e) {
+            // Maybe there are many snapshot tasks, so we ignore timeout exception.
         }
     }
 
@@ -214,18 +219,23 @@ public class LakeBackupJob extends BackupJob {
         try {
             Iterator<Map.Entry<Long, Future<UploadSnapshotsResponse>>> entries = uploadResponses.entrySet().iterator();
             while (entries.hasNext()) {
-                try {
-                    Map.Entry<Long, Future<UploadSnapshotsResponse>> entry = entries.next();
-                    entry.getValue().get(1000, TimeUnit.MILLISECONDS);
-                    unfinishedTaskIds.remove(entry.getKey());
-                    entries.remove();
-                } catch (TimeoutException e) {
-                    // Maybe there are many upload tasks, so we ignore timeout exception.
-                }
+                Map.Entry<Long, Future<UploadSnapshotsResponse>> entry = entries.next();
+                getUploadSnapshotsResponse(entry);
+                entries.remove();
             }
             super.waitingAllUploadingFinished();
         } catch (InterruptedException | ExecutionException e) {
             status = new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
+        }
+    }
+
+    private void getUploadSnapshotsResponse(Map.Entry<Long, Future<UploadSnapshotsResponse>> entry)
+            throws ExecutionException, InterruptedException {
+        try {
+            entry.getValue().get(1000, TimeUnit.MILLISECONDS);
+            unfinishedTaskIds.remove(entry.getKey());
+        } catch (TimeoutException e) {
+            // Maybe there are many upload tasks, so we ignore timeout exception.
         }
     }
 }

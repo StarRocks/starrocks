@@ -550,7 +550,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 idx.clearTabletsForRestore();
                 Status status = createTabletsForRestore(tabletNum, idx, globalStateMgr,
                         partitionInfo.getReplicationNum(entry.getKey()), partition.getVisibleVersion(),
-                        schemaHash, entry.getValue().getId(), true);
+                        schemaHash, partition.getId());
                 if (!status.ok()) {
                     return status;
                 }
@@ -564,8 +564,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
-                                          int replicationNum, long version, int schemaHash, long partitionId,
-                                          boolean restoreTable) {
+                                          int replicationNum, long version, int schemaHash, long partitionId) {
         for (int i = 0; i < tabletNum; i++) {
             long newTabletId = globalStateMgr.getNextId();
             LocalTablet newTablet = new LocalTablet(newTabletId);

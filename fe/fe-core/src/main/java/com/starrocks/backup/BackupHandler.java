@@ -436,13 +436,11 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         if (t == TableType.OLAP) {
             restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
                     db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
-                    stmt.getTimeoutMs(), stmt.getMetaVersion(), stmt.getStarRocksMetaVersion(), globalStateMgr,
-                    repository.getId(), backupMeta);
+                    stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta);
         } else {
             restoreJob = new LakeRestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
                     db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
-                    stmt.getTimeoutMs(), stmt.getMetaVersion(), stmt.getStarRocksMetaVersion(), globalStateMgr,
-                    repository.getId(), backupMeta);
+                    stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta);
         }
         globalStateMgr.getEditLog().logRestoreJob(restoreJob);
 
@@ -453,6 +451,13 @@ public class BackupHandler extends LeaderDaemon implements Writable {
     }
 
     private BackupMeta downloadAndDeserializeMetaInfo(BackupJobInfo jobInfo, Repository repo, RestoreStmt stmt) {
+        // the meta version is used when reading backup meta from file.
+        // we do not persist this field, because this is just a temporary solution.
+        // the true meta version should be getting from backup job info, which is saved when doing backup job.
+        // But the earlier version of StarRocks do not save the meta version in backup job info, so we allow user to
+        // set this 'metaVersion' in restore stmt.
+        // NOTICE: because we do not persist it, this info may be lost if Frontend restart,
+        // and if you don't want to lose it, backup your data again by using latest StarRocks version.
         List<BackupMeta> backupMetas = Lists.newArrayList();
         Status st = repo.getSnapshotMetaFile(jobInfo.name, backupMetas,
                 stmt.getMetaVersion() == -1 ? jobInfo.metaVersion : stmt.getMetaVersion(),

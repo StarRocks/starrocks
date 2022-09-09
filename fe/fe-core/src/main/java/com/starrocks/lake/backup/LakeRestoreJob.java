@@ -6,6 +6,7 @@ import autovalue.shaded.com.google.common.common.collect.Maps;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Range;
+import com.staros.proto.ShardStorageInfo;
 import com.starrocks.backup.BackupJobInfo;
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
@@ -25,10 +26,13 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.lake.proto.RestoreInfo;
 import com.starrocks.lake.proto.RestoreSnapshotsRequest;
 import com.starrocks.lake.proto.RestoreSnapshotsResponse;
@@ -63,11 +67,10 @@ public class LakeRestoreJob extends RestoreJob {
     public LakeRestoreJob() {}
 
     public LakeRestoreJob(String label, String backupTs, long dbId, String dbName, BackupJobInfo jobInfo,
-                          boolean allowLoad, int restoreReplicationNum, long timeoutMs, int metaVersion,
-                          int starrocksMetaVersion,
+                          boolean allowLoad, int restoreReplicationNum, long timeoutMs,
                           GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta) {
         super(label, backupTs, dbId, dbName, jobInfo, allowLoad, restoreReplicationNum, timeoutMs,
-                metaVersion, starrocksMetaVersion, globalStateMgr, repoId, backupMeta);
+                globalStateMgr, repoId, backupMeta);
         this.type = JobType.LAKE_RESTORE;
     }
 
@@ -108,7 +111,7 @@ public class LakeRestoreJob extends RestoreJob {
                 Partition part = tbl.getPartition(idChain.getPartId());
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
-                Backend backend = globalStateMgr.getCurrentSystemInfo().getBackend(tablet.getPrimaryBackendId());
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tablet.getPrimaryBackendId());
                 LakeTableSnapshotInfo info = new LakeTableSnapshotInfo(db.getId(), idChain.getTblId(),
                         idChain.getPartId(), idChain.getIdxId(), idChain.getTabletId(),
                         backend.getId(), tbl.getSchemaHashByIndexId(index.getId()), -1);
@@ -187,7 +190,7 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected void sendDownloadTasks() {
         for (Map.Entry<Long, RestoreSnapshotsRequest> entry : requests.entrySet()) {
-            Backend backend = globalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey());
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey());
             LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
             Future<RestoreSnapshotsResponse> response = lakeService.restoreSnapshots(entry.getValue());
             responses.put(entry.getKey(), response);
@@ -200,18 +203,23 @@ public class LakeRestoreJob extends RestoreJob {
         try {
             Iterator<Map.Entry<Long, Future<RestoreSnapshotsResponse>>> entries = responses.entrySet().iterator();
             while (entries.hasNext()) {
-                try {
-                    Map.Entry<Long, Future<RestoreSnapshotsResponse>> entry = entries.next();
-                    entry.getValue().get(1000, TimeUnit.MILLISECONDS);
-                    unfinishedSignatureToId.remove(entry.getKey());
-                    entries.remove();
-                } catch (TimeoutException e) {
-                    // Maybe there are many download tasks, so we ignore timeout exception.
-                }
+                Map.Entry<Long, Future<RestoreSnapshotsResponse>> entry = entries.next();
+                getRestoreSnapshotsResponse(entry);
+                entries.remove();
             }
             super.waitingAllDownloadFinished();
         } catch (InterruptedException | ExecutionException e) {
             status = new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
+        }
+    }
+
+    private void getRestoreSnapshotsResponse(Map.Entry<Long, Future<RestoreSnapshotsResponse>> entry)
+            throws ExecutionException, InterruptedException {
+        try {
+            entry.getValue().get(1000, TimeUnit.MILLISECONDS);
+            unfinishedSignatureToId.remove(entry.getKey());
+        } catch (TimeoutException e) {
+            // Maybe there are many download tasks, so we ignore timeout exception.
         }
     }
 
@@ -277,5 +285,20 @@ public class LakeRestoreJob extends RestoreJob {
                 modifyInvertedIndex(localTbl, restorePart);
             }
         }
+    }
+
+    @Override
+    protected Status resetTableForRestore(OlapTable remoteOlapTbl, Database db) {
+        try {
+            ShardStorageInfo shardStorageInfo = globalStateMgr.getStarOSAgent().getServiceShardStorageInfo();
+            LakeTable remoteLakeTbl = (LakeTable) remoteOlapTbl;
+            StorageInfo storageInfo = remoteLakeTbl.getTableProperty().getStorageInfo();
+            remoteLakeTbl.setStorageInfo(shardStorageInfo, storageInfo.isEnableStorageCache(),
+                    storageInfo.getStorageCacheTtlS(), storageInfo.isAllowAsyncWriteBack());
+            remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
+        } catch (DdlException e) {
+            return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
+        }
+        return Status.OK;
     }
 }
