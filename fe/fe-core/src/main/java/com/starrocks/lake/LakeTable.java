@@ -74,9 +74,7 @@ public class LakeTable extends OlapTable {
         } else {
             cacheInfo = storageCacheInfo.getCacheInfo();
         }
-        ShardStorageInfo shardStorageInfo =
-                ShardStorageInfo.newBuilder(getDefaultShardStorageInfo()).setCacheInfo(cacheInfo).build();
-        return shardStorageInfo;
+        return ShardStorageInfo.newBuilder(getDefaultShardStorageInfo()).setCacheInfo(cacheInfo).build();
     }
 
     public void setStorageInfo(ShardStorageInfo shardStorageInfo, boolean enableCache, long cacheTtlS,
