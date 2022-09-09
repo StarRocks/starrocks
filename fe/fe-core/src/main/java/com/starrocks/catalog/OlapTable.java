@@ -51,7 +51,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.Util;
-import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
@@ -762,7 +762,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                         rangePartitionInfo.getDataProperty(partition.getId()),
                         rangePartitionInfo.getReplicationNum(partition.getId()),
                         rangePartitionInfo.getIsInMemory(partition.getId()),
-                        rangePartitionInfo.getStorageInfo(partition.getId()),
+                        rangePartitionInfo.getStorageCacheInfo(partition.getId()),
                         isLakeTable());
             } else if (!reserveTablets) {
                 tabletIds = GlobalStateMgr.getCurrentState().onErasePartition(partition);
@@ -1416,17 +1416,17 @@ public class OlapTable extends Table implements GsonPostProcessable {
         DataProperty dataProperty = partitionInfo.getDataProperty(oldPartition.getId());
         short replicationNum = partitionInfo.getReplicationNum(oldPartition.getId());
         boolean isInMemory = partitionInfo.getIsInMemory(oldPartition.getId());
-        StorageInfo storageInfo = partitionInfo.getStorageInfo(oldPartition.getId());
+        StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(oldPartition.getId());
 
         if (partitionInfo.getType() == PartitionType.RANGE) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             Range<PartitionKey> range = rangePartitionInfo.getRange(oldPartition.getId());
             rangePartitionInfo.dropPartition(oldPartition.getId());
             rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
-                    replicationNum, isInMemory, storageInfo);
+                    replicationNum, isInMemory, storageCacheInfo);
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
-            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageInfo);
+            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageCacheInfo);
         }
 
         return oldPartition;

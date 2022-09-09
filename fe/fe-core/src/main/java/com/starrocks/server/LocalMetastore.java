@@ -31,7 +31,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
-import com.staros.proto.CacheInfo;
 import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
@@ -116,6 +115,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.AddPartitionsInfo;
@@ -1008,7 +1008,7 @@ public class LocalMetastore implements ConnectorMetadata {
             copiedTable.getPartitionInfo().setTabletType(partitionId, partitionDesc.getTabletType());
             copiedTable.getPartitionInfo().setReplicationNum(partitionId, partitionDesc.getReplicationNum());
             copiedTable.getPartitionInfo().setIsInMemory(partitionId, partitionDesc.isInMemory());
-            copiedTable.getPartitionInfo().setStorageInfo(partitionId, partitionDesc.getStorageInfo());
+            copiedTable.getPartitionInfo().setStorageCacheInfo(partitionId, partitionDesc.getStorageCacheInfo());
 
             Partition partition =
                     createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
@@ -1100,7 +1100,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         partitionDescs.get(0).getPartitionDataProperty(), partitionInfo.getReplicationNum(partition.getId()),
                         partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
                         ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
-                        ((SingleRangePartitionDesc) partitionDescs.get(0)).getStorageInfo());
+                        ((SingleRangePartitionDesc) partitionDescs.get(0)).getStorageCacheInfo());
                 partitionInfoV2List.add(info);
                 AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
                 editLog.logAddPartitions(infos);
@@ -1127,7 +1127,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                 partitionInfo.getReplicationNum(partition.getId()),
                                 partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
                                 ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
-                                ((SingleRangePartitionDesc) partitionDescs.get(i)).getStorageInfo());
+                                ((SingleRangePartitionDesc) partitionDescs.get(i)).getStorageCacheInfo());
 
                         partitionInfoV2List.add(info);
                     } else {
@@ -2055,7 +2055,9 @@ public class LocalMetastore implements ConnectorMetadata {
             partitionInfo.setReplicationNum(partitionId, replicationNum);
             partitionInfo.setIsInMemory(partitionId, isInMemory);
             partitionInfo.setTabletType(partitionId, tabletType);
-            partitionInfo.setStorageInfo(partitionId, olapTable.getTableProperty().getStorageInfo());
+            StorageInfo storageInfo = olapTable.getTableProperty().getStorageInfo();
+            StorageCacheInfo storageCacheInfo = storageInfo == null ? null : storageInfo.getStorageCacheInfo();
+            partitionInfo.setStorageCacheInfo(partitionId, storageCacheInfo);
         }
 
         // check colocation properties
@@ -2577,16 +2579,9 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Unknown distribution type: " + distributionInfoType);
         }
 
-        PartitionInfo partitionInfo = table.getPartitionInfo();
-        StorageInfo partitionStorageInfo = partitionInfo.getStorageInfo(partitionId);
-        CacheInfo cacheInfo = CacheInfo.newBuilder().setEnableCache(partitionStorageInfo.isEnableStorageCache())
-                .setTtlSeconds(partitionStorageInfo.getStorageCacheTtlS())
-                .setAllowAsyncWriteBack(partitionStorageInfo.isAllowAsyncWriteBack())
-                .build();
-        ShardStorageInfo shardStorageInfo = ShardStorageInfo.newBuilder(table.getShardStorageInfo())
-                .setCacheInfo(cacheInfo).build();
         int bucketNum = distributionInfo.getBucketNum();
-        List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum, shardStorageInfo);
+        List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
+                table.getPartitionShardStorageInfo(partitionId));
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             index.addTablet(tablet, tabletMeta);
@@ -4165,7 +4160,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
 
                 if (copiedTbl.isLakeTable()) {
-                    partitionInfo.setStorageInfo(newPartitionId, partitionInfo.getStorageInfo(oldPartitionId));
+                    partitionInfo.setStorageCacheInfo(newPartitionId, partitionInfo.getStorageCacheInfo(oldPartitionId));
                 }
 
                 copiedTbl.setDefaultDistributionInfo(entry.getValue().getDistributionInfo());
