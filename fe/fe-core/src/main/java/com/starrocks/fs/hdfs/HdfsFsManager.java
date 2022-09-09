@@ -986,6 +986,7 @@ public class HdfsFsManager {
                     true, writeBufferSize);
             UUID uuid = UUID.randomUUID();
             TBrokerFD fd = parseUUIDToFD(uuid);
+            LOG.info("finish a open writer request. fd: " + fd);
             ioStreamManager.putNewOutputStream(fd, fsDataOutputStream, fileSystem);
             return fd;
         } catch (IOException e) {
@@ -1005,7 +1006,7 @@ public class HdfsFsManager {
             try {
                 fsDataOutputStream.write(data);
             } catch (IOException e) {
-                LOG.error("errors while write data to output stream", e);
+                LOG.error("errors while write file " + fd + " to output stream", e);
                 throw new UserException("errors while write data to output stream");
             }
         }
@@ -1015,10 +1016,10 @@ public class HdfsFsManager {
         FSDataOutputStream fsDataOutputStream = ioStreamManager.getFsDataOutputStream(fd);
         synchronized (fsDataOutputStream) {
             try {
-                fsDataOutputStream.flush();
+                fsDataOutputStream.hsync();
                 fsDataOutputStream.close();
             } catch (IOException e) {
-                LOG.error("errors while close file output stream", e);
+                LOG.error("errors while close file " + fd + " output stream", e);
                 throw new UserException("errors while close file output stream");
             } finally {
                 ioStreamManager.removeOutputStream(fd);
