@@ -128,27 +128,6 @@ public:
     Rowset(const Rowset&) = delete;
     const Rowset& operator=(const Rowset&) = delete;
 
-    // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
-    Status init();
-
-    // The actual implementation of load(). Guaranteed by to called exactly once.
-    Status do_load();
-
-    // release resources in this api
-    void do_close();
-
-    // allow subclass to add custom logic when rowset is being published
-    virtual void make_visible_extra(Version version) {}
-
-    const TabletSchema* _schema;
-    std::string _rowset_path;
-    RowsetMetaSharedPtr _rowset_meta;
-
-    // mutex lock for load/close api because it is costly
-    std::mutex _lock;
-    bool _need_delete_file = false;
-    // variable to indicate how many rowset readers owned this rowset
-
     static std::shared_ptr<Rowset> create(const TabletSchema* schema, std::string rowset_path,
                                           RowsetMetaSharedPtr rowset_meta) {
         return std::make_shared<Rowset>(schema, std::move(rowset_path), std::move(rowset_meta));
@@ -336,6 +315,27 @@ public:
 
 protected:
     friend class RowsetFactory;
+
+    // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
+    Status init();
+
+    // The actual implementation of load(). Guaranteed by to called exactly once.
+    Status do_load();
+
+    // release resources in this api
+    void do_close();
+
+    // allow subclass to add custom logic when rowset is being published
+    virtual void make_visible_extra(Version version) {}
+
+    const TabletSchema* _schema;
+    std::string _rowset_path;
+    RowsetMetaSharedPtr _rowset_meta;
+
+    // mutex lock for load/close api because it is costly
+    std::mutex _lock;
+    bool _need_delete_file = false;
+    // variable to indicate how many rowset readers owned this rowset
 
     std::atomic<uint64_t> _refs_by_reader;
     RowsetStateMachine _rowset_state_machine;
