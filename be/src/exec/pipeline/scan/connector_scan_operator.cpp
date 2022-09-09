@@ -179,7 +179,7 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(siz
         }
 
         if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-            running_wg->scan_sched_entity()->in_queue()->should_yield(running_wg, time_spent)) {
+            running_wg->connector_scan_sched_entity()->in_queue()->should_yield(running_wg, time_spent)) {
             break;
         }
     }
