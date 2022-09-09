@@ -36,7 +36,15 @@ StarRocks 提供 Flink CDC connector、flink-connector-starrocks 和 StarRocks-m
 2. 下载 [Flink](https://flink.apache.org/downloads.html), 推荐使用 1.13，最低支持版本 1.11。
 3. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应 Flink 版本的 Flink-MySQL-CDC。
 4. 下载 [Flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks)，请注意 1.13 版本和 1.11/1.12 版本使用不同的 connector.
-5. 复制 `flink-sql-connector-mysql-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`，请注意如果 Flink 服务已经在运行中，需要重启下 Flink 服务使 jar 包被加载生效
+5. 复制 `flink-sql-connector-mysql-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`。
+
+   > 注意：
+   > 如果 Flink 已经处于运行状态中，则需要重启 Flink ，加载并生效 jar 包。
+   >
+   > ``` bash
+   > $ ./bin/stop-cluster.sh
+   > $ ./bin/start-cluster.sh
+
 6. 下载并解压 [smt.tar.gz](https://www.starrocks.com/zh-CN/download/community)
 7. 解压并修改配置文件
     * `Db` 需要修改成 MySQL 的连接信息。  
