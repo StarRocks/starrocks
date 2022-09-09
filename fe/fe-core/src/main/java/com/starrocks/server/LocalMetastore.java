@@ -2062,6 +2062,9 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
             if (!Strings.isNullOrEmpty(colocateGroup)) {
+                if (olapTable.isLakeTable()) {
+                    throw new DdlException("Does not support collocate group in lake table");
+                }
                 String fullGroupName = db.getId() + "_" + colocateGroup;
                 ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
                 if (groupSchema != null) {
