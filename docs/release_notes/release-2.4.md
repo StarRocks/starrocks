@@ -71,6 +71,10 @@ The following bugs are fixed:
   - Queries on Parquet-format in Hive external tables fail. [#7413](https://github.com/StarRocks/starrocks/pull/7413) [#7482](https://github.com/StarRocks/starrocks/pull/7482) [#7624](https://github.com/StarRocks/starrocks/pull/7624)
   - Incorrect results are returned to queries with `limit` clause on Elasticsearch external table. [#9226](https://github.com/StarRocks/starrocks/pull/9226)
 
+## Behavior Change
+
+Page Cache is enabled by default. The default cache size is 20% of the system memory.
+
 ## Others
 
 - Announcing the general availability of the Resource Group.
