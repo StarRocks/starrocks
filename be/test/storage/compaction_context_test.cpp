@@ -16,11 +16,14 @@ namespace starrocks {
 // NOLINTNEXTLINE
 TEST(CompactionContextTest, test_rowset_comparator) {
     std::set<Rowset*, RowsetComparator> sorted_rowsets_set;
+    RowsetId id;
+    id.init(2, 3, 0, 0);
 
     std::vector<RowsetSharedPtr> rowsets;
     auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
 
     auto base_rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+    base_rowset_meta_pb->set_rowset_id(id.to_string());
     base_rowset_meta_pb->set_start_version(0);
     base_rowset_meta_pb->set_end_version(9);
     RowsetMetaSharedPtr base_rowset_meta = std::make_shared<RowsetMeta>(base_rowset_meta_pb);
@@ -29,6 +32,7 @@ TEST(CompactionContextTest, test_rowset_comparator) {
 
     for (int i = 1; i <= 10; i++) {
         auto rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+        rowset_meta_pb->set_rowset_id(id.to_string());
         rowset_meta_pb->set_start_version(i * 10);
         rowset_meta_pb->set_end_version((i + 1) * 10 - 1);
         RowsetMetaSharedPtr rowset_meta = std::make_shared<RowsetMeta>(rowset_meta_pb);
@@ -39,6 +43,7 @@ TEST(CompactionContextTest, test_rowset_comparator) {
 
     for (int i = 110; i < 120; i++) {
         auto rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+        rowset_meta_pb->set_rowset_id(id.to_string());
         rowset_meta_pb->set_start_version(i);
         rowset_meta_pb->set_end_version(i);
         RowsetMetaSharedPtr rowset_meta = std::make_shared<RowsetMeta>(rowset_meta_pb);
