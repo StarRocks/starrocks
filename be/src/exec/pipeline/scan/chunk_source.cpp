@@ -83,7 +83,7 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
         }
 
         if (running_wg != nullptr && time_spent_ns >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-            running_wg->scan_sched_entity()->in_queue()->should_yield(running_wg, time_spent_ns)) {
+            _scan_sched_entity(running_wg)->in_queue()->should_yield(running_wg, time_spent_ns)) {
             break;
         }
     }
