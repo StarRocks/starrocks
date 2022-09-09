@@ -1,4 +1,4 @@
-# [Preview] Resource group
+# Resource group
 
 This topic describes the resource group feature of StarRocks.
 
