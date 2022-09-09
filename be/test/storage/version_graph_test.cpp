@@ -9,10 +9,13 @@ namespace starrocks::vectorized {
 // NOLINTNEXTLINE
 TEST(VersionGraphTest, capture) {
     VersionGraph graph;
+    RowsetId id;
+    id.init(2, 3, 0, 0);
 
     std::vector<RowsetMetaSharedPtr> rs_meta;
     for (int i = 0; i < 10; i++) {
         auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
         rs_meta_pb->set_start_version(i);
         rs_meta_pb->set_end_version(i);
         rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
@@ -20,6 +23,7 @@ TEST(VersionGraphTest, capture) {
 
     for (int i = 0; i < 10; i = i + 2) {
         auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
         rs_meta_pb->set_start_version(i);
         rs_meta_pb->set_end_version(i + 1);
         rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
@@ -27,6 +31,7 @@ TEST(VersionGraphTest, capture) {
 
     {
         auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
         rs_meta_pb->set_start_version(0);
         rs_meta_pb->set_end_version(5);
         rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
@@ -34,6 +39,7 @@ TEST(VersionGraphTest, capture) {
 
     {
         auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
         rs_meta_pb->set_start_version(11);
         rs_meta_pb->set_end_version(11);
         rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
@@ -214,10 +220,13 @@ TEST(VersionGraphTest, capture) {
 // NOLINTNEXTLINE
 TEST(VersionGraphTest, multi_edge) {
     VersionGraph graph;
+    RowsetId id;
+    id.init(2, 3, 0, 0);
 
     std::vector<RowsetMetaSharedPtr> rs_meta;
     {
         auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
         rs_meta_pb->set_start_version(0);
         rs_meta_pb->set_end_version(5);
         rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
@@ -225,6 +234,7 @@ TEST(VersionGraphTest, multi_edge) {
 
     for (int i = 0; i < 10; i = i + 2) {
         auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
         rs_meta_pb->set_start_version(i);
         rs_meta_pb->set_end_version(i + 1);
         rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
@@ -232,6 +242,7 @@ TEST(VersionGraphTest, multi_edge) {
 
     for (int i = 0; i < 10; i++) {
         auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
         rs_meta_pb->set_start_version(i);
         rs_meta_pb->set_end_version(i);
         rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
@@ -256,10 +267,13 @@ TEST(VersionGraphTest, multi_edge) {
 // NOLINTNEXTLINE
 TEST(VersionGraphTest, remove_version) {
     VersionGraph graph;
+    RowsetId id;
+    id.init(2, 3, 0, 0);
 
     std::vector<RowsetMetaSharedPtr> rs_meta;
     {
         auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
         rs_meta_pb->set_start_version(0);
         rs_meta_pb->set_end_version(5);
         rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
@@ -267,6 +281,7 @@ TEST(VersionGraphTest, remove_version) {
 
     for (int i = 0; i < 10; i = i + 2) {
         auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
         rs_meta_pb->set_start_version(i);
         rs_meta_pb->set_end_version(i + 1);
         rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
@@ -274,6 +289,7 @@ TEST(VersionGraphTest, remove_version) {
 
     for (int i = 0; i < 10; i++) {
         auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
         rs_meta_pb->set_start_version(i);
         rs_meta_pb->set_end_version(i);
         rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
@@ -308,10 +324,13 @@ TEST(VersionGraphTest, remove_version) {
 // NOLINTNEXTLINE
 TEST(VersionGraphTest, max_continuous_version) {
     VersionGraph graph;
+    RowsetId id;
+    id.init(2, 3, 0, 0);
     auto gen_meta = [&](const std::vector<std::pair<int64_t, int64_t>>& versions) {
         std::vector<RowsetMetaSharedPtr> rs_meta;
         for (auto& version : versions) {
             auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+            rs_meta_pb->set_rowset_id(id.to_string());
             rs_meta_pb->set_start_version(version.first);
             rs_meta_pb->set_end_version(version.second);
             rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
