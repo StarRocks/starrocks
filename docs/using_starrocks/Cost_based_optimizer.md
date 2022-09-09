@@ -71,7 +71,7 @@ Conditions that trigger automatic collection:
 
 - Partition data has been modified. Partitions whose data is not modified will not be collected again.
 
-Automatic full collection is enabled by default and run by the system using the default settings. 
+Automatic full collection is enabled by default and run by the system using the default settings.
 
 The following table describes the default settings. If you need to modify them, run the **ADMIN SET CONFIG** command.
 
@@ -87,7 +87,7 @@ You can rely on automatic jobs for a majority of statistics collection, but if y
 
 ### Manual collection
 
-**Manual collection is a synchronous operation**. **It is executed only once after creation. You do not need to delete manual tasks.**
+You can use ANALYZE TABLE to create a manual collection task. **Manual collection is an asynchronous operation. The result for running this command is returned immediately after you run this command. However, the collection task will be running in the background. You can check the status of the task by running SHOW ANALYZE STATUS. Manual collection tasks are run only once after creation. You do not need to delete manual collection tasks.**
 
 #### Manually collect basic statistics
 
