@@ -41,6 +41,8 @@ private:
 
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
+    const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
+
     Status _get_tablet(const TInternalScanRange* scan_range);
     Status _init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges,
                                const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);

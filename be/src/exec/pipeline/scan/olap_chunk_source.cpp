@@ -283,6 +283,11 @@ Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
 }
 
+const workgroup::WorkGroupScanSchedEntity* OlapChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
+    DCHECK(wg != nullptr);
+    return wg->scan_sched_entity();
+}
+
 // mapping a slot-column-id to schema-columnid
 Status OlapChunkSource::_init_global_dicts(vectorized::TabletReaderParams* params) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
