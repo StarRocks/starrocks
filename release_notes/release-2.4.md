@@ -1,0 +1,76 @@
+# 2.4.0 RC01
+
+发布日期： 2022 年 9 月 9 日
+
+## 新增特性
+
+- 支持构建多表物化视图，实现多表 JOIN 查询加速。
+
+- 支持通过 INSERT OVERWRITE 语句批量写入并覆盖数据。
+
+- [公测中] 提供无状态的计算节点（Compute Node，简称 CN 节点）。计算节点支持无状态扩缩容，您可通过 StarRocks Operator 部署，并基于 Kubernetes 管理容器化的计算节点，以此实现自动感知系统负载并水平扩展计算节点。
+
+- Outer Join 支持通过 `<`、`<=`、`>`、`>=`、`<>` 等比较操作符对多表进行非等值关联。
+
+- 支持创建 Iceberg Catalog 和 Hudi Catalog，创建后即可查询 Apache Iceberg 和 Apache Hudi 数据。
+
+- 支持查询 CSV 格式 Apache Hive™ 表中的 ARRAY 列。
+
+- 支持通过 DESC 语句查看外部数据的表结构。
+
+- 支持通过 GRANT 或 REVOKE 语句授予或撤销用户特定角色或 IMPERSONATE 权限，并支持通过 EXECUTE AS 语句使用 IMPERSONATE 权限执行当前会话。
+
+- 支持 FQDN 访问：您可以用域名或结合主机名与端口的方式作为 FE 或 BE 节点的唯一标识，有效避免因 IP 变更导致无法访问的问题。
+
+- 函数相关：
+  - 新增 array_contains_all 函数，用于判断特定数组是否为另一数组的子集。
+  - 新增 percentile_cont 函数，用于通过线性插值法计算百分位数。
+
+## 功能优化
+
+- 主键模型支持持久化 VARCHAR 类型主键索引。
+  
+  自 2.4.0 版本起，主键模型的主键索引磁盘持久化模式和常驻内存模式支持相同的数据类型。
+
+- 优化外表查询性能。
+  - 支持查询 Parquet 格式文件时延迟物化，提升小范围过滤场景下的数据湖查询性能。
+  - 查询数据湖时，支持通过合并小型 I/O 以降低存储系统的访问延迟，进而提升外表查询性能。
+
+- 优化窗口函数性能。
+
+- Cross Join 支持谓词下推，性能提升。
+
+- 统计信息支持直方图，并进一步完善全量统计信息采集。
+
+- 支持 Tablet 自适应多线程 Scan，降低 Scan 性能对同磁盘 Tablet 数量的依赖。
+
+- 函数相关：
+  - count distinct 支持多个字段，可计算多字段组合去重后的结果数目。
+  - 窗口函数 min 和 max 支持滑动窗口。
+  - 优化函数 window_funnel 性能。
+
+## 问题修复
+
+修复了如下 Bug：
+
+- 使用 DESC 查看表结构信息显示的字段类型与创建表指定的字段类型不同。[#7309](https://github.com/StarRocks/starrocks/pull/7309)
+
+- 影响 FE 稳定性的元数据问题。[#6685](https://github.com/StarRocks/starrocks/pull/6685) [#9445](https://github.com/StarRocks/starrocks/pull/9445) [#7974](https://github.com/StarRocks/starrocks/pull/7974) [#7455](https://github.com/StarRocks/starrocks/pull/7455)
+
+- 导入相关问题：
+  - Broker Load 导入时设定 ARRAY 列失败。 [#9158](https://github.com/StarRocks/starrocks/pull/9158)
+  - 通过 Broker Load 向非明细模型表导入数据后，副本数据不一致。[#8714](https://github.com/StarRocks/starrocks/pull/8714)
+  - 执行 ALTER ROUTINE LOAD 过程中出现 NPE 错误。 [#7804](https://github.com/StarRocks/starrocks/pull/7804)
+
+- 数据湖分析相关问题：
+  - 查询 HIVE 外表中 Parquet 格式数据失败。 [#7413](https://github.com/StarRocks/starrocks/pull/7413) [#7482](https://github.com/StarRocks/starrocks/pull/7482) [#7624](https://github.com/StarRocks/starrocks/pull/7624)
+  - Elasticsearch 外表 Limit 查询结果不正确。[#9226](https://github.com/StarRocks/starrocks/pull/9226)
+
+## 行为变更
+
+默认开启 Page Cache，Cache Size 为系统内存大小的 20% 。
+
+## 其他
+
+- 现已正式支持资源隔离功能。
+- 现已正式支持 JSON 数据类型。
