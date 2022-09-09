@@ -14,7 +14,6 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.StorageCacheInfo;
-import com.starrocks.lake.StorageInfo;
 import com.starrocks.thrift.TTabletType;
 
 import java.util.Map;
@@ -33,7 +32,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
     private boolean isInMemory = false;
     private TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
     private Long versionInfo;
-    private StorageInfo storageInfo;
+    private StorageCacheInfo storageCacheInfo;
 
     public SingleRangePartitionDesc(boolean ifNotExists, String partName, PartitionKeyDesc partitionKeyDesc,
                                     Map<String, String> properties) {
@@ -82,8 +81,8 @@ public class SingleRangePartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public StorageInfo getStorageInfo() {
-        return storageInfo;
+    public StorageCacheInfo getStorageCacheInfo() {
+        return storageCacheInfo;
     }
 
     public Map<String, String> getProperties() {
@@ -154,8 +153,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         if (!enableStorageCache && allowAsyncWriteBack) {
             throw new AnalysisException("storage allow_async_write_back can't be enabled when cache is disabled");
         }
-        storageInfo =
-                new StorageInfo(null, new StorageCacheInfo(enableStorageCache, storageCacheTtlS, allowAsyncWriteBack));
+        storageCacheInfo = new StorageCacheInfo(enableStorageCache, storageCacheTtlS, allowAsyncWriteBack);
 
         if (otherProperties == null) {
             // check unknown properties

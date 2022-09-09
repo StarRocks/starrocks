@@ -198,4 +198,10 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
     return Status::OK();
 }
 
+const workgroup::WorkGroupScanSchedEntity* ConnectorChunkSource::_scan_sched_entity(
+        const workgroup::WorkGroup* wg) const {
+    DCHECK(wg != nullptr);
+    return wg->connector_scan_sched_entity();
+}
+
 } // namespace starrocks::pipeline

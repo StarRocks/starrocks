@@ -48,7 +48,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
@@ -1896,9 +1896,9 @@ public class AlterTest {
         boolean isInMemory = partitionInfo.getIsInMemory(partitionId);
         boolean isTempPartition = false;
         Range<PartitionKey> range = partitionInfo.getRange(partitionId);
-        StorageInfo storageInfo = partitionInfo.getStorageInfo(partitionId);
+        StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(partitionId);
         RangePartitionPersistInfo partitionPersistInfoOut = new RangePartitionPersistInfo(dbId, tableId, partition,
-                dataProperty, replicationNum, isInMemory, isTempPartition, range, storageInfo);
+                dataProperty, replicationNum, isInMemory, isTempPartition, range, storageCacheInfo);
 
         // write log
         File file = new File("./test_serial.log");
@@ -1924,7 +1924,7 @@ public class AlterTest {
 
         // replay log
         GlobalStateMgr.getCurrentState().replayAddPartition(partitionPersistInfoIn);
-        Assert.assertNotNull(partitionInfo.getStorageInfo(partitionId));
+        Assert.assertNotNull(partitionInfo.getStorageCacheInfo(partitionId));
 
         String dropSQL = "drop table new_table";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);

@@ -76,6 +76,8 @@ public:
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
+    const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
+
     connector::DataSourcePtr _data_source;
     vectorized::ConnectorScanNode* _scan_node;
     const int64_t _limit; // -1: no limit

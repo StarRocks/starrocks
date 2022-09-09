@@ -1007,7 +1007,9 @@ public class MaterializedViewHandler extends AlterHandler {
     @Override
     public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
             throws DdlException, AnalysisException, MetaNotFoundException {
-
+        if (olapTable.isLakeTable()) {
+            throw new DdlException("Does not support add rollup on lake table");
+        }
         if (olapTable.existTempPartitions()) {
             throw new DdlException("Can not alter table when there are temp partitions in table");
         }

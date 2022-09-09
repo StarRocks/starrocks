@@ -59,8 +59,6 @@ int main(int argc, char** argv) {
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;
-    options.metadata_mem_tracker = metadata_mem_tracker.get();
-    options.schema_change_mem_tracker = schema_change_mem_tracker.get();
     options.compaction_mem_tracker = compaction_mem_tracker.get();
     options.update_mem_tracker = update_mem_tracker.get();
     starrocks::Status s = starrocks::StorageEngine::open(options, &engine);
@@ -71,6 +69,11 @@ int main(int argc, char** argv) {
         return -1;
     }
     auto* exec_env = starrocks::ExecEnv::GetInstance();
+    // Pagecache is turned on by default, and some test cases require cache to be turned on,
+    // and some test cases do not. For easy management, we turn cache off during unit test
+    // initialization. If there are test cases that require Pagecache, it must be responsible
+    // for managing it.
+    starrocks::config::disable_storage_page_cache = true;
     exec_env->init_mem_tracker();
     starrocks::ExecEnv::init(exec_env, paths);
 
