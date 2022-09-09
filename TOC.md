@@ -64,6 +64,8 @@
     + [通过源码编译](/administration/Build_in_docker.md)
     + [部署 FE 高可用集群](/administration/Deployment.md)
     + [部署 Broker](/administration/deploy_broker.md)
+    + [使用 StarRocks Operator 在 Kubernetes 部署和管理 CN](/administration/k8s_operator_cn.md)
+    + [部署CN节点](/administration/deploy_cn.md)
   + 运维集群
     + [扩容缩容](/administration/Scale_up_down.md)
     + [备份恢复](/administration/Backup_and_restore.md)
@@ -161,6 +163,7 @@
       + [RECOVER](/sql-reference/sql-statements/data-definition/RECOVER.md)
       + [REFRESH EXTERNAL TABLE](/sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)
       + [RESTORE](/sql-reference/sql-statements/data-definition/RESTORE.md)
+      + [SHOW COMPUTE NODES](/sql-reference/sql-statements/Administration/SHOW COMPUTE NODES.md)
       + [SHOW RESOURCES](/sql-reference/sql-statements/data-definition/SHOW%20RESOURCES.md)
       + [SHOW FUNCTION](/sql-reference/sql-statements/data-definition/show-functions.md)
       + [TRUNCATE TABLE](/sql-reference/sql-statements/data-definition/TRUNCATE%20TABLE.md)
