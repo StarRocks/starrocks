@@ -24,7 +24,7 @@ SHOW CATALOGS;
 | -------- | ------------------------------------------------------------ |
 | Catalog  | Catalog 名称。                                               |
 | Type     | Catalog 类型。                                               |
-| Comment  | Catalog 的备注。<ul><li>在创建 external catalog 时不支持为 external catalog 添加备注，所以如果是 external catalog，则`Comment`取值为`NULL`。</li><li>如果是`default_catalog`，则`Comment`取值为`Internal Catalog`。`default_catalog`是一个 StarRocks 集群中唯一的 internal catalog。</li><ul> |
+| Comment  | Catalog 的备注。<ul><li>在创建 external catalog 时不支持为 external catalog 添加备注，所以如果是 external catalog，则`Comment`取值为`NULL`。</li><li>如果是`default_catalog`，则`Comment`取值为`Internal Catalog`。`default_catalog`是一个 StarRocks 集群中唯一的 internal catalog。</li></ul> |
 
 ## 示例
 
