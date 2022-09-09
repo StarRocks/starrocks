@@ -232,11 +232,8 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
         const TQueryOptions& query_options = runtime_state()->query_options();
         if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::Broker) {
             size_t before_size = temp_chunk->bytes_usage();
-
-            runtime_state()->update_num_rows_load_total(before_rows);
-            runtime_state()->update_num_bytes_load_total(before_size);
-            StarRocksMetrics::instance()->load_rows_total.increment(before_rows);
-            StarRocksMetrics::instance()->load_bytes_total.increment(before_size);
+            runtime_state()->update_num_rows_load_source_total(before_rows);
+            runtime_state()->update_num_bytes_load_source_total(before_size);
         }
 
         // eval conjuncts

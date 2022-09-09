@@ -34,6 +34,7 @@
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/global_dict/types.h"
@@ -218,29 +219,48 @@ public:
 
     bool has_reached_max_error_msg_num(bool is_summary = false);
 
-    int64_t num_bytes_load_total() const noexcept { return _num_bytes_load_total.load(); }
+    int64_t num_bytes_load_source_total() const noexcept { return _num_bytes_load_source_total.load(); }
 
-    int64_t num_rows_load_total() const noexcept { return _num_rows_load_total.load(); }
+    int64_t num_rows_load_source_total() const noexcept { return _num_rows_load_source_total.load(); }
+
+    int64_t num_bytes_load_sink_total() const noexcept { return _num_bytes_load_sink_total.load(); }
+
+    int64_t num_rows_load_sink_total() const noexcept { return _num_rows_load_sink_total.load(); }
 
     int64_t num_rows_load_filtered() const noexcept { return _num_rows_load_filtered.load(); }
 
     int64_t num_rows_load_unselected() const noexcept { return _num_rows_load_unselected.load(); }
 
-    int64_t num_rows_load_success() const noexcept {
-        return num_rows_load_total() - num_rows_load_filtered() - num_rows_load_unselected();
+    int64_t num_rows_load_sink_success() const noexcept {
+        return num_rows_load_sink_total() - num_rows_load_filtered() - num_rows_load_unselected();
     }
 
-    void update_num_rows_load_total(int64_t num_rows) { _num_rows_load_total.fetch_add(num_rows); }
+    void update_num_bytes_load_source_total(int64_t bytes_load) { _num_bytes_load_source_total.fetch_add(bytes_load); }
 
-    void set_num_rows_load_total(int64_t num_rows) { _num_rows_load_total.store(num_rows); }
+    void set_update_num_bytes_load_source_total(int64_t bytes_load) { _num_bytes_load_source_total.store(bytes_load); }
 
-    void update_num_bytes_load_total(int64_t bytes_load) { _num_bytes_load_total.fetch_add(bytes_load); }
+    void update_num_rows_load_source_total(int64_t num_rows) { _num_rows_load_source_total.fetch_add(num_rows); }
 
-    void set_update_num_bytes_load_total(int64_t bytes_load) { _num_bytes_load_total.store(bytes_load); }
+    void set_num_rows_load_source_total(int64_t num_rows) { _num_rows_load_source_total.store(num_rows); }
+
+    void update_num_bytes_load_sink_total(int64_t bytes_load) { _num_bytes_load_sink_total.fetch_add(bytes_load); }
+
+    void set_update_num_bytes_load_sink_total(int64_t bytes_load) { _num_bytes_load_sink_total.store(bytes_load); }
+
+    void update_num_rows_load_sink_total(int64_t num_rows) { _num_rows_load_sink_total.fetch_add(num_rows); }
+
+    void set_num_rows_load_sink_total(int64_t num_rows) { _num_rows_load_sink_total.store(num_rows); }
 
     void update_num_rows_load_filtered(int64_t num_rows) { _num_rows_load_filtered.fetch_add(num_rows); }
 
     void update_num_rows_load_unselected(int64_t num_rows) { _num_rows_load_unselected.fetch_add(num_rows); }
+
+    void update_report_load_status(TReportExecStatusParams* load_params) {
+        load_params->__set_loaded_rows(num_rows_load_sink_total());
+        load_params->__set_sink_load_bytes(num_bytes_load_sink_total());
+        load_params->__set_source_load_rows(num_rows_load_source_total());
+        load_params->__set_source_load_bytes(num_bytes_load_source_total());
+    }
 
     void set_per_fragment_instance_idx(int idx) { _per_fragment_instance_idx = idx; }
 
@@ -359,12 +379,16 @@ private:
 
     // put here to collect files??
     std::vector<std::string> _output_files;
-    std::atomic<int64_t> _num_rows_load_total{0};      // total rows read from source
+    std::atomic<int64_t> _num_rows_load_source_total{0};  // total rows read from load source
+    std::atomic<int64_t> _num_bytes_load_source_total{0}; // total bytes read from load source
+
+    std::atomic<int64_t> _num_rows_load_sink_total{0};  // total rows read from load sink
+    std::atomic<int64_t> _num_bytes_load_sink_total{0}; // total bytes read from load sink
+
     std::atomic<int64_t> _num_rows_load_filtered{0};   // unqualified rows
     std::atomic<int64_t> _num_rows_load_unselected{0}; // rows filtered by predicates
-    std::atomic<int64_t> _num_print_error_rows{0};
 
-    std::atomic<int64_t> _num_bytes_load_total{0}; // total bytes read from source
+    std::atomic<int64_t> _num_print_error_rows{0};
 
     std::vector<std::string> _export_output_files;
 
