@@ -10,9 +10,11 @@
 
 ```sql
 ALTER SYSTEM ADD BACKEND "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
+ALTER SYSTEM ADD COMPUTE NODE "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
 ```
 
 BE 节点增加成功后可通过 [Show Backends](../Administration/SHOW%20BACKENDS.md) 章节描述命令查看。
+CN 节点增加成功后可通过 [Show Compute Nodes](../Administration/SHOW%20COMPUTE%20NODES.md) 章节描述命令查看。
 
 ### 增加空闲节点(即添加不属于任何 cluster 的 BACKEND)
 
@@ -30,6 +32,7 @@ ALTER SYSTEM ADD BACKEND TO cluster_name "host:heartbeat_service_port"[,"host:he
 
 ```sql
 ALTER SYSTEM DROP BACKEND "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
+ALTER SYSTEM DROP COMPUTE NODES "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
 ```
 
 ### 节点下线

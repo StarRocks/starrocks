@@ -64,6 +64,8 @@
     + [通过源码编译](/administration/Build_in_docker.md)
     + [部署 FE 高可用集群](/administration/Deployment.md)
     + [部署 Broker](/administration/deploy_broker.md)
+    + [使用 StarRocks Operator 在 Kubernetes 部署和管理 CN](/administration/k8s_operator_cn.md)
+    + [部署CN节点](/administration/deploy_cn.md)
   + 运维集群
     + [扩容缩容](/administration/Scale_up_down.md)
     + [备份恢复](/administration/Backup_and_restore.md)
@@ -121,6 +123,7 @@
       + [INSTALL PLUGIN](/sql-reference/sql-statements/Administration/INSTALL%20PLUGIN.md)
       + [SHOW BACKENDS](/sql-reference/sql-statements/Administration/SHOW%20BACKENDS.md)
       + [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md)
+      + [SHOW COMPUTE NODES](/sql-reference/sql-statements/Administration/SHOW%20COMPUTE%20NODES.md)
       + [SHOW FRONTENDS](/sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md)
       + [SHOW FULL COLUMNS](/sql-reference/sql-statements/Administration/SHOW%20FULL%20COLUMNS.md)
       + [SHOW INDEX](/sql-reference/sql-statements/Administration/SHOW%20INDEX.md)
