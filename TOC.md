@@ -123,6 +123,7 @@
       + [INSTALL PLUGIN](/sql-reference/sql-statements/Administration/INSTALL%20PLUGIN.md)
       + [SHOW BACKENDS](/sql-reference/sql-statements/Administration/SHOW%20BACKENDS.md)
       + [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md)
+      + [SHOW COMPUTE NODES](./sql-reference/sql-statements/Administration/SHOW%20COMPUTE%20NODES.md)
       + [SHOW FRONTENDS](/sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md)
       + [SHOW FULL COLUMNS](/sql-reference/sql-statements/Administration/SHOW%20FULL%20COLUMNS.md)
       + [SHOW INDEX](/sql-reference/sql-statements/Administration/SHOW%20INDEX.md)
