@@ -87,4 +87,4 @@ StarRocks 需要利用 Hudi 表的元数据来进行查询规划，因此请求�
 
 - 如要查看有关创建 external catalog 的示例， 请参见 [CREATE EXTERNAL CATALOG](/sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md)。
 - 如要看查看当前集群中的所有 catalog， 请参见 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md)。
-- 如要删除指定 external catalog， 请参见 [DROP EXTERNAL CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md)。
+- 如要删除指定 external catalog， 请参见 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md)。

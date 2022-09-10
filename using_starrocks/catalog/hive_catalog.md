@@ -79,8 +79,8 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 
       | **配置项**                | **说明**                                                     |
       | ------------------------- | ------------------------------------------------------------ |
-      | fs.s3a.access.key         | AWS 根用户或 IAM 用户的 access key ID （即访问密钥 ID）。获取方式，请参见 [AWS 凭证](https://docs.aws.amazon.com/zh_cn/general/latest/gr/aws-sec-cred-types.html)。 |
-      | fs.s3a.secret.key         | AWS 根用户或 IAM 用户的 secret access key（即秘密访问密钥）。获取方式，请参见 [AWS 凭证](https://docs.aws.amazon.com/zh_cn/general/latest/gr/aws-sec-cred-types.html)。 |
+      | fs.s3a.access.key         | AWS 根用户或 IAM 用户的 access key ID （即访问密钥 ID）。获取方式，请参见[了解并获取您的 AWS 凭证](https://docs.aws.amazon.com/zh_cn/general/latest/gr/aws-sec-cred-types.html)。 |
+      | fs.s3a.secret.key         | AWS 根用户或 IAM 用户的 secret access key（即秘密访问密钥）。获取方式，请参见[了解并获取您的 AWS 凭证](https://docs.aws.amazon.com/zh_cn/general/latest/gr/aws-sec-cred-types.html)。 |
       | fs.s3a.endpoint           | Amazon S3 服务所在地域的 endpoint，例如`s3.us-west-2.amazonaws.com`即为美国西部（俄勒冈）的 endpoint。您可以根据 endpoint 与地域的对应关系进行查找，详情参见 [Amazon Simple Storage Service 终端节点和配额](https://docs.aws.amazon.com/zh_cn/general/latest/gr/s3.html)。 |
       | fs.s3a.connection.maximum | Amazon S3 的最大连接数， 默认值为 500。如查询时有报错 `Timeout waiting for connection from poll`，可适当调高该参数。 |
 
@@ -186,8 +186,8 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 
     | **配置项**             | **说明**                                                     |
     | ---------------------- | ------------------------------------------------------------ |
-    | fs.oss.accessKeyId     | 阿里云账号或 RAM 用户的 AccessKey ID。获取方式，请参见[获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。 |
-    | fs.oss.accessKeySecret | 阿里云账号或 RAM 用户的 AccessKey Secret。获取方式，请参见[获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。 |
+    | fs.oss.accessKeyId     | 阿里云账号或 RAM 用户的 AccessKey ID。获取方式，请参见 [AccessKey](https://www.alibabacloud.com/help/zh/object-storage-service/latest/developer-guide-terms#section-u3j-nmt-tdb)。 |
+    | fs.oss.accessKeySecret | 阿里云账号或 RAM 用户的 AccessKey Secret。获取方式，请参见 [AccessKey](https://www.alibabacloud.com/help/zh/object-storage-service/latest/developer-guide-terms#section-u3j-nmt-tdb)。 |
     | fs.oss.endpoint        | OSS bucket 所在地域对应的外网 endpoint。 您可以通过以下方式查询 endpoint：根据 endpoint 与地域的对应关系进行查找，详情参见[访问域名和数据中心](https://help.aliyun.com/document_detail/31837.htm#concept-zt4-cvy-5db)。登录 [OSS 管理控制台](https://oss.console.aliyun.com/index?spm=a2c4g.11186623.0.0.11d24772leoEEg#/)，并进入 bucket 概览页。一个 bucket 域名的后缀部分即为该 bucket 的外网 endpoint。例如，一个 bucket 域名为 examplebucket.oss-cn-hangzhou.aliyuncs.com，那么 oss-cn-hangzhou.aliyuncs.com 即为该 bucket 的外网 endpoint。 |
 
 2. 在每个 BE 的 **$BE_HOME/conf/be.conf** 中添加如下配置。
@@ -328,4 +328,4 @@ Event listener 可以对 Hive metastore 中的 event（例如增减分区、增�
 
 - 如要查看有关创建 external catalog 的示例， 请参见 [CREATE EXTERNAL CATALOG](/sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md)。
 - 如要看查看当前集群中的所有 catalog， 请参见 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md)。
-- 如要删除指定 external catalog， 请参见 [DROP EXTERNAL CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md)。
+- 如要删除指定 external catalog， 请参见 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md)。

@@ -12,7 +12,7 @@ DROP CATALOG catalog_name;
 
 ## 参数说明
 
-`catalog_name`：external catalog 名称。
+`catalog_name`：external catalog 名称，必选参数。
 
 ## 示例
 

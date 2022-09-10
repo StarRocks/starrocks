@@ -57,7 +57,7 @@ PROPERTIES(
 );
 ```
 
-## 更多操作
+## 相关操作
 
 - 如要查看所有 catalog，参见 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md)。
 - 如要删除 external catalog，参见 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md)。
