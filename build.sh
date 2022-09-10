@@ -85,7 +85,6 @@ OPTS=$(getopt \
   -l 'without-gcov' \
   -l 'use-staros' \
   -o 'j:' \
-  -l 'use-jemalloc' \
   -l 'help' \
   -- "$@")
 
@@ -112,7 +111,7 @@ if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
 	ENABLE_QUERY_DEBUG_TRACE=OFF
 fi
 
-USE_JEMALLOC=OFF
+USE_JEMALLOC=ON
 
 HELP=0
 if [ $# == 1 ] ; then
@@ -138,7 +137,6 @@ else
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --use-staros) USE_STAROS=ON; shift ;;
-            --use-jemalloc) USE_JEMALLOC=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -169,7 +167,6 @@ echo "Get params:
     USE_AVX2            -- $USE_AVX2
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
-    USE_JEMALLOC        -- $USE_JEMALLOC
 "
 
 # Clean and build generated code
