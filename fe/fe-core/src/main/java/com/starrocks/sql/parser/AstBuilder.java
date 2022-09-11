@@ -1740,10 +1740,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
                 for (StarRocksParser.AssignmentListContext assignmentListContext :
                         loadPropertiesContext.columnProperties().assignmentList()) {
-                    ColumnAssignment columnAssignment = (ColumnAssignment) (visit(assignmentListContext));
-                    Expr expr = columnAssignment.getExpr();
-                    ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
-                    columns.add(columnDesc);
+                    for (StarRocksParser.AssignmentContext assignmentContext : assignmentListContext.assignment()) {
+                        ColumnAssignment columnAssignment = (ColumnAssignment) (visit(assignmentContext));
+                        Expr expr = columnAssignment.getExpr();
+                        ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
+                        columns.add(columnDesc);
+                    }
                 }
                 loadPropertyList.add(new ImportColumnsStmt(columns));
             }
