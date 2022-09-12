@@ -119,10 +119,10 @@ public class ShowTransactionStmt extends ShowStmt {
         StringBuilder sb = new StringBuilder();
         sb.append("SHOW TRANSACTION ");
         if (!Strings.isNullOrEmpty(dbName)) {
-            sb.append("FROM `").append(dbName).append("`");
+            sb.append("FROM `").append(dbName).append("` ");
         }
 
-        sb.append(" WHERE ").append(whereClause.toSql());
+        sb.append("WHERE ").append(whereClause.toSql());
         return sb.toString();
     }
 
