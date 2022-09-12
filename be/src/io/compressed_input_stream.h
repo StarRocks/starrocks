@@ -4,6 +4,7 @@
 
 #include "common/status.h"
 #include "io/input_stream.h"
+#include "io/seekable_input_stream.h"
 #include "util/bit_util.h"
 #include "util/raw_container.h"
 
@@ -79,6 +80,28 @@ private:
     std::shared_ptr<StreamCompression> _decompressor;
     CompressedBuffer _compressed_buff;
     bool _stream_end = false;
+};
+
+class CompressedSeekableInputStream final : public SeekableInputStream {
+public:
+    CompressedSeekableInputStream(std::shared_ptr<CompressedInputStream> source) : _source(source) {}
+
+    StatusOr<int64_t> read(void* data, int64_t size) override { return _source->read(data, size); }
+
+    Status skip(int64_t n) override { return _source->skip(n); }
+
+    bool allows_peek() const override { return _source->allows_peek(); }
+
+    StatusOr<std::unique_ptr<NumericStatistics>> get_numeric_statistics() override {
+        return _source->get_numeric_statistics();
+    }
+
+    Status seek(int64_t position) override { return Status::NotSupported(""); }
+    StatusOr<int64_t> position() override { return Status::NotSupported(""); }
+    StatusOr<int64_t> get_size() override { return Status::NotSupported(""); }
+
+private:
+    std::shared_ptr<CompressedInputStream> _source;
 };
 
 } // namespace starrocks::io
