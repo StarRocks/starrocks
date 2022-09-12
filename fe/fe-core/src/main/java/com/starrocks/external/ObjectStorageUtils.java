@@ -11,10 +11,6 @@ public class ObjectStorageUtils {
     private static final String SCHEME_S3_PREFIX = "s3";
     private static final String SCHEME_OSS_PREFIX = "oss";
 
-    public static boolean isObjectStorage(String path) {
-        return path.startsWith(SCHEME_S3_PREFIX) || path.startsWith(SCHEME_OSS_PREFIX);
-    }
-
     public static String formatObjectStoragePath(String path) {
         if (path.startsWith(SCHEME_S3)) {
             return SCHEME_S3A + path.substring(SCHEME_S3.length());

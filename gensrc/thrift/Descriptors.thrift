@@ -48,10 +48,10 @@ struct TTupleDescriptor {
 
 enum THdfsFileFormat {
   TEXT,
-  LZO_TEXT,
-  RC_FILE,
-  SEQUENCE_FILE,
-  AVRO,
+  DEPRECATED_TEXT_LZO, // unused
+  RC_FILE, // unused
+  SEQUENCE_FILE, // unused
+  AVRO, // unused
   PARQUET,
   ORC,
 }

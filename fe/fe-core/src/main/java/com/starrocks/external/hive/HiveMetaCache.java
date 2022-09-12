@@ -47,7 +47,6 @@ public class HiveMetaCache {
     private final HiveMetaClient client;
     private final String resourceName;
 
-
     // HivePartitionKeysKey => ImmutableMap<PartitionKey -> PartitionId>
     // for unPartitioned table, partition map is: ImmutableMap<>.of(new PartitionKey(), PartitionId)
     LoadingCache<HivePartitionKeysKey, ImmutableMap<PartitionKey, Long>> partitionKeysCache;
@@ -69,7 +68,6 @@ public class HiveMetaCache {
 
     LoadingCache<String, List<String>> databaseNamesCache;
     LoadingCache<String, List<String>> tableNamesCache;
-
 
     public HiveMetaCache(HiveMetaClient hiveMetaClient, Executor executor) {
         this(hiveMetaClient, executor, null);
@@ -125,7 +123,7 @@ public class HiveMetaCache {
         databaseNamesCache = newCacheBuilder(MAX_NAMES_CACHE_SIZE)
                 .build(asyncReloading(new CacheLoader<String, List<String>>() {
                     @Override
-                        public List<String> load(String key) throws Exception {
+                    public List<String> load(String key) throws Exception {
                         return loadAllDatabaseNames();
                     }
                 }, executor));
@@ -374,10 +372,9 @@ public class HiveMetaCache {
 
     private HivePartition getPartitionByEvent(StorageDescriptor sd) throws Exception {
         HdfsFileFormat format = HdfsFileFormat.fromHdfsInputFormatClass(sd.getInputFormat());
+        HiveTextFileDesc hiveTextFileDesc = client.getTextFileFormatDesc(sd);
         String path = ObjectStorageUtils.formatObjectStoragePath(sd.getLocation());
-        boolean isSplittable = ObjectStorageUtils.isObjectStorage(path) ||
-                HdfsFileFormat.isSplittable(sd.getInputFormat());
-        List<HdfsFileDesc> fileDescs = client.getHdfsFileDescs(path, isSplittable, sd);
+        List<HdfsFileDesc> fileDescs = client.getHdfsFileDescs(path, format, hiveTextFileDesc, sd);
         return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
     }
 

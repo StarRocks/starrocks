@@ -1,10 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.external.hive.text;
+package com.starrocks.external.hive;
 
 import com.starrocks.thrift.TTextFileDesc;
 
-public class TextFileFormatDesc {
+public class HiveTextFileDesc {
 
     private final String fieldDelim;
 
@@ -17,7 +17,7 @@ public class TextFileFormatDesc {
     // For example, {"smith": age} mapkey_delimiter is ':'.
     private final String mapkeyDelim;
 
-    public TextFileFormatDesc(String fieldDelim, String lineDelim, String collectionDelim, String mapkeyDelim) {
+    public HiveTextFileDesc(String fieldDelim, String lineDelim, String collectionDelim, String mapkeyDelim) {
         this.fieldDelim = fieldDelim;
         this.lineDelim = lineDelim;
         this.collectionDelim = collectionDelim;

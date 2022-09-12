@@ -15,7 +15,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.ObjectStorageUtils;
-import com.starrocks.external.hive.text.TextFileFormatDesc;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
@@ -255,14 +254,9 @@ public class HiveMetaClient {
                 sd = table.getSd();
             }
             HdfsFileFormat format = HdfsFileFormat.fromHdfsInputFormatClass(sd.getInputFormat());
-            if (format == null) {
-                throw new DdlException("unsupported file format [" + sd.getInputFormat() + "]");
-            }
-
+            HiveTextFileDesc hiveTextFileDesc = getTextFileFormatDesc(sd);
             String path = ObjectStorageUtils.formatObjectStoragePath(sd.getLocation());
-            List<HdfsFileDesc> fileDescs = getHdfsFileDescs(path,
-                    ObjectStorageUtils.isObjectStorage(path) || HdfsFileFormat.isSplittable(sd.getInputFormat()),
-                    sd);
+            List<HdfsFileDesc> fileDescs = getHdfsFileDescs(path, format, hiveTextFileDesc, sd);
             return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
         } catch (NoSuchObjectException e) {
             throw new DdlException("get hive partition meta data failed: "
@@ -326,15 +320,17 @@ public class HiveMetaClient {
         String queryInstant = timeline.lastInstant().get().getTimestamp();
         Iterator<FileSlice> hoodieFileSliceIterator = fileSystemView
                 .getLatestMergedFileSlicesBeforeOrOn(partName, queryInstant).iterator();
+        HdfsFileFormat fileFormat = HdfsFileFormat.fromHdfsInputFormatClass(sd.getInputFormat());
         while (hoodieFileSliceIterator.hasNext()) {
             FileSlice fileSlice = hoodieFileSliceIterator.next();
             Optional<HoodieBaseFile> baseFile = fileSlice.getBaseFile().toJavaOptional();
-            String fileName = baseFile.map(BaseFile::getFileName).orElse("");
-            long fileLength = baseFile.map(BaseFile::getFileLen).orElse(-1L);
+            String fileName = baseFile.map(BaseFile::getFileName).orElse(HdfsFileDesc.INVALID_FILE_NAME);
+            long fileLength = baseFile.map(BaseFile::getFileLen).orElse(HdfsFileDesc.INVALID_FILE_LENGTH);
             List<String> logs = fileSlice.getLogFiles().map(HoodieLogFile::getFileName).collect(Collectors.toList());
-            fileDescs.add(new HdfsFileDesc(fileName, "", fileLength,
-                    ImmutableList.of(), ImmutableList.copyOf(logs), HdfsFileFormat.isSplittable(sd.getInputFormat()),
-                    getTextFileFormatDesc(sd)));
+            fileDescs.add(new HdfsFileDesc(fileName, fileLength,
+                    fileFormat,
+                    getTextFileFormatDesc(sd),
+                    ImmutableList.of(), ImmutableList.copyOf(logs)));
         }
         return fileDescs;
     }
@@ -565,9 +561,10 @@ public class HiveMetaClient {
      * hive metastore is false. The hive metastore will throw StackOverFlow exception.
      * We solve this problem by get partitions information multiple times.
      * Each retry reduces the number of partitions fetched by half until only one partition is fetched at a time.
+     *
      * @return Hive table partitions
      * @throws DdlException If there is an exception with only one partition at a time when get partition,
-     * then we determine that there is a bug with the user's hive metastore.
+     *                      then we determine that there is a bug with the user's hive metastore.
      */
     private List<Partition> getPartitionsWithRetry(String dbName, String tableName,
                                                    List<String> partNames, int retryNum) throws DdlException {
@@ -583,7 +580,8 @@ public class HiveMetaClient {
             for (List<String> parts : partNamesList) {
                 partitions.addAll(client.hiveClient.getPartitionsByNames(dbName, tableName, parts));
             }
-            LOG.info("Succeed to getPartitionByName on [{}.{}] with {} times retry, slice size is {}, partName size is {}",
+            LOG.info(
+                    "Succeed to getPartitionByName on [{}.{}] with {} times retry, slice size is {}, partName size is {}",
                     dbName, tableName, retryNum, subListSize, partNames.size());
             return partitions;
         } catch (TTransportException te) {
@@ -591,7 +589,8 @@ public class HiveMetaClient {
                 return getPartitionsWithRetry(dbName, tableName, partNames, retryNum + 1);
             } else {
                 throw new DdlException(String.format("" +
-                        "Failed to getPartitionsByNames on [%s.%s] with slice size is %d", dbName, tableName, subListNum));
+                                "Failed to getPartitionsByNames on [%s.%s] with slice size is %d", dbName, tableName,
+                        subListNum));
             }
         } catch (Exception e) {
             throw new DdlException(String.format("Failed to getPartitionsNames on [%s.%s], msg: %s",
@@ -639,7 +638,7 @@ public class HiveMetaClient {
         }
     }
 
-    public TextFileFormatDesc getTextFileFormatDesc(StorageDescriptor sd) {
+    public HiveTextFileDesc getTextFileFormatDesc(StorageDescriptor sd) {
         // Get properties 'field.delim', 'line.delim', 'collection.delim' and 'mapkey.delim' from StorageDescriptor
         // Detail refer to:
         // https://github.com/apache/hive/blob/90428cc5f594bd0abb457e4e5c391007b2ad1cb8/serde/src/gen/thrift/gen-javabean/org/apache/hadoop/hive/serde/serdeConstants.java#L34-L40
@@ -656,19 +655,19 @@ public class HiveMetaClient {
             collectionDelim = parameters.getOrDefault("collection.delim", "\002");
         }
 
-        return new TextFileFormatDesc(
+        return new HiveTextFileDesc(
                 parameters.getOrDefault("field.delim", "\001"),
                 parameters.getOrDefault("line.delim", "\n"),
                 collectionDelim,
                 parameters.getOrDefault("mapkey.delim", "\003"));
     }
 
-    public List<HdfsFileDesc> getHdfsFileDescs(String dirPath, boolean isSplittable,
-                                               StorageDescriptor sd) throws Exception {
+    public List<HdfsFileDesc> getHdfsFileDescs(String dirPath, HdfsFileFormat fileFormat,
+                                               HiveTextFileDesc hiveTextFileDesc, StorageDescriptor sd)
+            throws Exception {
         URI uri = new Path(dirPath).toUri();
         FileSystem fileSystem = getFileSystem(uri);
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
-
         // fileSystem.listLocatedStatus is an api to list all statuses and
         // block locations of the files in the given path in one operation.
         // The performance is better than getting status and block location one by one.
@@ -685,14 +684,17 @@ public class HiveMetaClient {
                 if (!isValidDataFile(locatedFileStatus)) {
                     continue;
                 } else if (locatedFileStatus.isDirectory() && Config.recursive_dir_search_enabled) {
-                    fileDescs.addAll(getHdfsFileDescs(locatedFileStatus.getPath().toString(), isSplittable, sd));
+                    fileDescs.addAll(
+                            getHdfsFileDescs(locatedFileStatus.getPath().toString(), fileFormat,
+                                    hiveTextFileDesc,
+                                    sd));
                 }
                 String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                 List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
-                fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
-                        ImmutableList.copyOf(fileBlockDescs), ImmutableList.of(),
-                        isSplittable, getTextFileFormatDesc(sd)));
+                fileDescs.add(new HdfsFileDesc(fileName, locatedFileStatus.getLen(),
+                        fileFormat, hiveTextFileDesc,
+                        ImmutableList.copyOf(fileBlockDescs), ImmutableList.of()));
             }
         } catch (FileNotFoundException ignored) {
             // hive empty partition may not create directory

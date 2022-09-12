@@ -11,26 +11,34 @@ public enum HdfsFileFormat {
     ORC,
     TEXT;
 
-    private static final ImmutableMap<String, HdfsFileFormat> VALID_INPUT_FORMATS =
+    private static final ImmutableMap<String, HdfsFileFormat> SUPPORTED_FILE_FORMATS =
             new ImmutableMap.Builder<String, HdfsFileFormat>()
                     .put("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat", PARQUET)
                     .put("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat", ORC)
                     .put("org.apache.hadoop.mapred.TextInputFormat", TEXT)
                     .build();
-    private static final ImmutableMap<String, Boolean> FILE_FORMAT_SPLITTABLE_INFOS =
-            new ImmutableMap.Builder<String, Boolean>()
-                    .put("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat", true)
-                    .put("org.apache.hudi.hadoop.HoodieParquetInputFormat", true)
-                    .put("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat", true)
-                    .put("org.apache.hadoop.mapred.TextInputFormat", true)
-                    .build();
 
     public static HdfsFileFormat fromHdfsInputFormatClass(String className) {
-        return VALID_INPUT_FORMATS.get(className);
+        HdfsFileFormat format = SUPPORTED_FILE_FORMATS.getOrDefault(className, null);
+        if (format == null) {
+            throw new RuntimeException(String.format("Unsupported file format: %s", className));
+        }
+        return format;
     }
 
-    public static boolean isSplittable(String className) {
-        return FILE_FORMAT_SPLITTABLE_INFOS.containsKey(className) && FILE_FORMAT_SPLITTABLE_INFOS.get(className);
+    public boolean isSplittable(String fileName) {
+        if (this != TEXT) {
+            return true;
+        }
+
+        // if text file name is with any extension
+        // probably it's compressed file format.
+        String extension = null;
+        int i = fileName.lastIndexOf('.');
+        if (i > 0) {
+            extension = fileName.substring(i + 1);
+        }
+        return (extension == null);
     }
 
     public THdfsFileFormat toThrift() {

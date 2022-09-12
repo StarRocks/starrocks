@@ -145,9 +145,8 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
                     for (HdfsFileDesc fileDesc : partition.getFiles()) {
                         JsonObject fileObject = new JsonObject();
                         fileObject.addProperty("fileName", fileDesc.getFileName());
-                        fileObject.addProperty("compression", fileDesc.getCompression());
                         fileObject.addProperty("length", fileDesc.getLength());
-                        fileObject.addProperty("splittable", fileDesc.isSplittable());
+                        fileObject.addProperty("fileFormat", fileDesc.getFileFormat().toString());
                         fileArray.add(fileObject);
                     }
                     partitionJson.add("files", fileArray);
@@ -163,7 +162,8 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
             if (!hivePartitionStats.isEmpty()) {
                 JsonObject partitionStatsObject = new JsonObject();
                 for (Map.Entry<PartitionKey, HivePartitionStats> entry : hivePartitionStats.entrySet()) {
-                    partitionStatsObject.addProperty(entry.getKey().toString(), GsonUtils.GSON.toJson(entry.getValue()));
+                    partitionStatsObject.addProperty(entry.getKey().toString(),
+                            GsonUtils.GSON.toJson(entry.getValue()));
                 }
                 result.add("HivePartitionStats", partitionStatsObject);
             }
@@ -226,9 +226,10 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
                 for (JsonElement file : partition.get("files").getAsJsonArray()) {
                     JsonObject fileObject = file.getAsJsonObject();
                     fileDescs.add(new HdfsFileDesc(fileObject.get("fileName").getAsString(),
-                            fileObject.get("compression").getAsString(), fileObject.get("length").getAsLong(),
-                            ImmutableList.of(), ImmutableList.of(), fileObject.get("splittable").getAsBoolean(),
-                            null));
+                            fileObject.get("length").getAsLong(),
+                            HdfsFileFormat.valueOf(fileObject.get("fileFormat").getAsString()),
+                            null,
+                            ImmutableList.of(), ImmutableList.of()));
                 }
 
                 hivePartitions.put(PartitionKey.fromString(entry.getKey()),
@@ -238,7 +239,8 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
 
             // deserialize hive table stats
             JsonPrimitive hiveTableStatsPrimitive = dumpJsonObject.getAsJsonPrimitive("HiveTableStats");
-            HiveTableStats hiveTableStats = GsonUtils.GSON.fromJson(hiveTableStatsPrimitive.getAsString(), HiveTableStats.class);
+            HiveTableStats hiveTableStats =
+                    GsonUtils.GSON.fromJson(hiveTableStatsPrimitive.getAsString(), HiveTableStats.class);
             hiveTableDumpInfo.setHiveTableStats(hiveTableStats);
 
             // deserialize hive partition stats

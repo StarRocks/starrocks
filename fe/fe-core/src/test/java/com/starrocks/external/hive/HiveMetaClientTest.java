@@ -8,7 +8,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.external.hive.text.TextFileFormatDesc;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -248,7 +247,7 @@ public class HiveMetaClientTest {
         // Check is using default delimiter
         StorageDescriptor emptySd = new StorageDescriptor();
         emptySd.setSerdeInfo(new SerDeInfo("test", "test", new HashMap<>()));
-        TextFileFormatDesc emptyDesc = client.getTextFileFormatDesc(emptySd);
+        HiveTextFileDesc emptyDesc = client.getTextFileFormatDesc(emptySd);
         Assert.assertEquals("\001", emptyDesc.getFieldDelim());
         Assert.assertEquals("\n", emptyDesc.getLineDelim());
         Assert.assertEquals("\002", emptyDesc.getCollectionDelim());
@@ -262,7 +261,7 @@ public class HiveMetaClientTest {
         parameters.put("collection.delim", "\006");
         parameters.put("mapkey.delim", ":");
         customSd.setSerdeInfo(new SerDeInfo("test", "test", parameters));
-        TextFileFormatDesc customDesc = client.getTextFileFormatDesc(customSd);
+        HiveTextFileDesc customDesc = client.getTextFileFormatDesc(customSd);
         Assert.assertEquals(",", customDesc.getFieldDelim());
         Assert.assertEquals("\004", customDesc.getLineDelim());
         Assert.assertEquals("\006", customDesc.getCollectionDelim());

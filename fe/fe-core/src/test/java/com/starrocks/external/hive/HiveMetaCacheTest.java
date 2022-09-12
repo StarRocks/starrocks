@@ -289,12 +289,11 @@ public class HiveMetaCacheTest {
             clientMethodGetPartitionCalledTimes++;
             return new HivePartition(HdfsFileFormat.PARQUET,
                     ImmutableList.of(new HdfsFileDesc("file1",
-                            "",
                             10000L,
+                            HdfsFileFormat.PARQUET,
+                            null,
                             ImmutableList.of(),
-                            ImmutableList.of(),
-                            false,
-                            null)),
+                            ImmutableList.of())),
                     partitionPath);
         }
 
