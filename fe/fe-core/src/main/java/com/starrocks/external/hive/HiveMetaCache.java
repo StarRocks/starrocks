@@ -372,7 +372,7 @@ public class HiveMetaCache {
 
     private HivePartition getPartitionByEvent(StorageDescriptor sd) throws Exception {
         HdfsFileFormat format = HdfsFileFormat.fromHdfsInputFormatClass(sd.getInputFormat());
-        HiveTextFileDesc hiveTextFileDesc = client.getTextFileFormatDesc(sd);
+        TextFileFormatDesc hiveTextFileDesc = client.getTextFileFormatDesc(sd);
         String path = ObjectStorageUtils.formatObjectStoragePath(sd.getLocation());
         List<HdfsFileDesc> fileDescs = client.getHdfsFileDescs(path, format, hiveTextFileDesc, sd);
         return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);

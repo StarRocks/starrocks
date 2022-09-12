@@ -254,7 +254,7 @@ public class HiveMetaClient {
                 sd = table.getSd();
             }
             HdfsFileFormat format = HdfsFileFormat.fromHdfsInputFormatClass(sd.getInputFormat());
-            HiveTextFileDesc hiveTextFileDesc = getTextFileFormatDesc(sd);
+            TextFileFormatDesc hiveTextFileDesc = getTextFileFormatDesc(sd);
             String path = ObjectStorageUtils.formatObjectStoragePath(sd.getLocation());
             List<HdfsFileDesc> fileDescs = getHdfsFileDescs(path, format, hiveTextFileDesc, sd);
             return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
@@ -638,7 +638,7 @@ public class HiveMetaClient {
         }
     }
 
-    public HiveTextFileDesc getTextFileFormatDesc(StorageDescriptor sd) {
+    public TextFileFormatDesc getTextFileFormatDesc(StorageDescriptor sd) {
         // Get properties 'field.delim', 'line.delim', 'collection.delim' and 'mapkey.delim' from StorageDescriptor
         // Detail refer to:
         // https://github.com/apache/hive/blob/90428cc5f594bd0abb457e4e5c391007b2ad1cb8/serde/src/gen/thrift/gen-javabean/org/apache/hadoop/hive/serde/serdeConstants.java#L34-L40
@@ -655,7 +655,7 @@ public class HiveMetaClient {
             collectionDelim = parameters.getOrDefault("collection.delim", "\002");
         }
 
-        return new HiveTextFileDesc(
+        return new TextFileFormatDesc(
                 parameters.getOrDefault("field.delim", "\001"),
                 parameters.getOrDefault("line.delim", "\n"),
                 collectionDelim,
@@ -663,7 +663,7 @@ public class HiveMetaClient {
     }
 
     public List<HdfsFileDesc> getHdfsFileDescs(String dirPath, HdfsFileFormat fileFormat,
-                                               HiveTextFileDesc hiveTextFileDesc, StorageDescriptor sd)
+                                               TextFileFormatDesc hiveTextFileDesc, StorageDescriptor sd)
             throws Exception {
         URI uri = new Path(dirPath).toUri();
         FileSystem fileSystem = getFileSystem(uri);

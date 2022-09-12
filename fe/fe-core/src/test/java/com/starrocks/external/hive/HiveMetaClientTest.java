@@ -247,7 +247,7 @@ public class HiveMetaClientTest {
         // Check is using default delimiter
         StorageDescriptor emptySd = new StorageDescriptor();
         emptySd.setSerdeInfo(new SerDeInfo("test", "test", new HashMap<>()));
-        HiveTextFileDesc emptyDesc = client.getTextFileFormatDesc(emptySd);
+        TextFileFormatDesc emptyDesc = client.getTextFileFormatDesc(emptySd);
         Assert.assertEquals("\001", emptyDesc.getFieldDelim());
         Assert.assertEquals("\n", emptyDesc.getLineDelim());
         Assert.assertEquals("\002", emptyDesc.getCollectionDelim());
@@ -261,7 +261,7 @@ public class HiveMetaClientTest {
         parameters.put("collection.delim", "\006");
         parameters.put("mapkey.delim", ":");
         customSd.setSerdeInfo(new SerDeInfo("test", "test", parameters));
-        HiveTextFileDesc customDesc = client.getTextFileFormatDesc(customSd);
+        TextFileFormatDesc customDesc = client.getTextFileFormatDesc(customSd);
         Assert.assertEquals(",", customDesc.getFieldDelim());
         Assert.assertEquals("\004", customDesc.getLineDelim());
         Assert.assertEquals("\006", customDesc.getCollectionDelim());

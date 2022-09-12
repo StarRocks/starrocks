@@ -8,7 +8,7 @@ import com.starrocks.external.hive.HdfsFileBlockDesc;
 import com.starrocks.external.hive.HdfsFileDesc;
 import com.starrocks.external.hive.HdfsFileFormat;
 import com.starrocks.external.hive.HivePartition;
-import com.starrocks.external.hive.HiveTextFileDesc;
+import com.starrocks.external.hive.TextFileFormatDesc;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Test;
@@ -22,7 +22,7 @@ public class RemoteScanLocationsTest {
     public void testSplittableFiles() {
         RemoteScanRangeLocations instance = new RemoteScanRangeLocations();
         HivePartition partition = new HivePartition(HdfsFileFormat.PARQUET, ImmutableList.of(), "hdfs://nn/xxx/");
-        HiveTextFileDesc hiveTextFileDesc = new HiveTextFileDesc("a", "b", "c", "d");
+        TextFileFormatDesc hiveTextFileDesc = new TextFileFormatDesc("a", "b", "c", "d");
         long size = 3 * Config.hive_max_split_size;
         new Expectations() {
             {
@@ -48,7 +48,7 @@ public class RemoteScanLocationsTest {
     public void testUnsplittableFiles() {
         RemoteScanRangeLocations instance = new RemoteScanRangeLocations();
         HivePartition partition = new HivePartition(HdfsFileFormat.TEXT, ImmutableList.of(), "hdfs://nn/xxx/");
-        HiveTextFileDesc hiveTextFileDesc = new HiveTextFileDesc("a", "b", "c", "d");
+        TextFileFormatDesc hiveTextFileDesc = new TextFileFormatDesc("a", "b", "c", "d");
         long size = 3 * Config.hive_max_split_size;
         HdfsFileDesc fileDesc =
                 new HdfsFileDesc("0000.gz", size, HdfsFileFormat.TEXT, hiveTextFileDesc,

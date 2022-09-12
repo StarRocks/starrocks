@@ -13,7 +13,7 @@ public class HdfsFileDesc {
     @SerializedName(value = "fileFormat")
     private HdfsFileFormat fileFormat;
     @SerializedName(value = "hiveTextFileDesc")
-    private HiveTextFileDesc hiveTextFileDesc;
+    private TextFileFormatDesc hiveTextFileDesc;
 
     private ImmutableList<HdfsFileBlockDesc> blockDescs;
     private ImmutableList<String> hudiDeltaLogs;
@@ -22,7 +22,7 @@ public class HdfsFileDesc {
 
     public HdfsFileDesc(String fileName, long length,
                         HdfsFileFormat fileFormat,
-                        HiveTextFileDesc hiveTextFileDesc,
+                        TextFileFormatDesc hiveTextFileDesc,
                         ImmutableList<HdfsFileBlockDesc> blockDescs,
                         ImmutableList<String> hudiDeltaLogs) {
         this.fileName = fileName;
@@ -49,7 +49,7 @@ public class HdfsFileDesc {
         return blockDescs;
     }
 
-    public HiveTextFileDesc getTextFileFormatDesc() {
+    public TextFileFormatDesc getTextFileFormatDesc() {
         return hiveTextFileDesc;
     }
 
