@@ -36,21 +36,19 @@ public class ShowWhiteListStmt extends ShowStmt {
     }
 
     @Override
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
-    @Override
     public String toSql() {
         return "SHOW WHITELIST;";
     }
-
     @Override
-    public String toString() {
-        return toSql();
+    public boolean isSupportNewPlanner() {
+        return true;
     }
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+    @Override
+    public String toString() {
+        return toSql();
     }
 }
