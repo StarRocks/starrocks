@@ -179,6 +179,12 @@ statement
     | backupStatement
     | showBackupStatement
 
+    // Sql BlackList And WhiteList Statement
+    | addSqlBlackListStatement
+    | delSqlBlackListStatement
+    | showSqlBlackListStatement
+    | showWhiteListStatement
+
     // Other statement
     | killStatement
     | setUserPropertyStatement
@@ -1011,6 +1017,19 @@ dropRoleStatement
     : DROP ROLE identifierOrString                                                          #dropRole
     ;
 
+// ------------------------------------ Sql BlackList And WhiteList Statement ------------------------------------------
+addSqlBlackListStatement
+    : ADD SQLBLACKLIST string
+    ;
+delSqlBlackListStatement
+    : DELETE SQLBLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+showSqlBlackListStatement
+    : SHOW SQLBLACKLIST
+    ;
+showWhiteListStatement
+    : SHOW WHITELIST
+    ;
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showDatabasesStatement

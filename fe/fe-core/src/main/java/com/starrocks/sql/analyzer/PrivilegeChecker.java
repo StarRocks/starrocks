@@ -1,11 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.AddSqlBlackListStmt;
 import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateRoleStmt;
+import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -20,6 +22,7 @@ import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
+import com.starrocks.analysis.ShowSqlBlackListStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.TableName;
@@ -362,6 +365,30 @@ public class PrivilegeChecker {
         public Void visitDropTableStmt(DropTableStmt statement, ConnectContext session) {
             if (!checkTblPriv(session, statement.getTbl(), PrivPredicate.DROP)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt stmt, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDelSqlBlackListStatement(DelSqlBlackListStmt stmt, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowSqlBlackListStatement(ShowSqlBlackListStmt stmt, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
         }
