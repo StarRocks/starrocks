@@ -132,4 +132,11 @@ public class SelectConstTest extends PlanTestBase {
                 "WHEN false THEN 1 ELSE 2 / 3 END AS STRING ) AS BOOLEAN );";
         assertPlanContains(sql, "PREDICATES: CAST('-1229625855' AS BOOLEAN)");
     }
+
+    @Test
+    public void test() throws Exception {
+        String sql = "select * from test.t0 inner join (select * from test.t1 where v4 = 1) t on t.v4 = t0.v1";
+        String explainString = getFragmentPlan(sql);
+        System.out.println(explainString);
+    }
 }

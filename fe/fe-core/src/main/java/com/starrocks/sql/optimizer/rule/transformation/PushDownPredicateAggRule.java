@@ -12,6 +12,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Iterator;
@@ -49,8 +50,15 @@ public class PushDownPredicateAggRule extends TransformationRule {
 
         // merge filter
         filters.add(logicalAggOperator.getPredicate());
+        ScalarOperator scalarOperator = Utils.compoundAnd(filters);
+        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+        // The calculation of the null value is in the constant fold
+        if (scalarOperator != null) {
+            scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+        }
+
         input.setChild(0, OptExpression.create(new LogicalAggregationOperator.Builder().withOperator(logicalAggOperator)
-                        .setPredicate(Utils.compoundAnd(filters))
+                        .setPredicate(scalarOperator)
                         .build(),
                 input.inputAt(0).getInputs()));
 

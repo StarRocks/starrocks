@@ -433,6 +433,7 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select t2.tb from tall t1 join tall t2 " +
                 "on t1.tc = t2.tb and t2.tt = 123 and (t2.tt != 'ax') = t2.td;";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("PREDICATES: 20: tt = '123', " +
                 "CAST(20: tt != 'ax' AS BIGINT) = 14: td, 14: td = 1"));
     }

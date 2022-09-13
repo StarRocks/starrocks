@@ -35,7 +35,9 @@ import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
+import com.starrocks.sql.optimizer.rule.tree.EquivalentConstantExpressionRewrite;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
+import com.starrocks.sql.optimizer.rule.tree.JoinEquivalentPredicatePushDown;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
@@ -166,7 +168,9 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
 
+        tree = new JoinEquivalentPredicatePushDown().rewrite(tree, context.getTaskContext());
         deriveLogicalProperty(tree);
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
@@ -226,6 +230,9 @@ public class Optimizer {
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INLINE_CTE);
             CTEUtils.collectCteOperators(tree, context);
         }
+
+        tree = new EquivalentConstantExpressionRewrite().rewrite(tree, context.getTaskContext());
+        deriveLogicalProperty(tree);
 
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
