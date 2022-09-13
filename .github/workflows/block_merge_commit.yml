@@ -1,0 +1,22 @@
+on: 
+  pull_request:
+    branches:
+      - main
+
+name: Pull Request
+
+permissions:
+  pull-requests: read
+
+jobs:
+  message-check:
+    name: Block Merge Commits
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - run: echo "Squash and commit will be ok"
+      - name: Block Merge Commits
+        uses: Morishiri/block-merge-commits-action@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
