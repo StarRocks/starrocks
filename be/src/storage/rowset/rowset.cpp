@@ -35,6 +35,8 @@ Rowset::Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSh
           _rowset_meta(std::move(rowset_meta)),
           _refs_by_reader(0) {}
 
+Rowset::~Rowset() = default;
+
 Status Rowset::load() {
     // if the state is ROWSET_UNLOADING it means close() is called
     // and the rowset is already loaded, and the resource is not closed yet.
