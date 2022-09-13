@@ -123,7 +123,7 @@ java -jar lib/je-7.3.7.jar DbPrintLog -h meta/bdb/ -vd
 7. DROP 当前 OBSERVER 节点以外的所有 FE 节点。
 
     ```sql
-    ALTER SYSTEM DROP FRONTEND "host:heartbeat_service_port"[, "host:heartbeat_service_port", ...];
+    ALTER SYSTEM DROP FOLLOWER/OBSERVER "host:heartbeat_service_port"[, "host:heartbeat_service_port", ...];
     ```
 
 8. 添加一个新的 FOLLOWER FE，假设在 hostA 上。
