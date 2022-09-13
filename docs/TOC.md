@@ -346,13 +346,13 @@
       + [reverse](./sql-reference/sql-functions/array-functions/reverse.md)
     + [cast function](./sql-reference/sql-functions/cast.md)
     + [hash function](./sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
-    + Cryptographic Functions
+    + Cryptographic functions
       + [md5](./sql-reference/sql-functions/crytographic-functions/md5.md)
       + [sha2](./sql-reference/sql-functions/crytographic-functions/sha2.md)
-    + Math Functions
+    + Math functions
       + [RAND](./sql-reference/sql-functions/math-functions/rand.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
-    + Utility Functions
+    + Utility functions
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)
       + [uuid_numeric](./sql-reference/sql-functions/utility-functions/uuid_numeric.md)
   + [System variables](./reference/System_variable.md)
@@ -381,10 +381,10 @@
   + Data Recovery
     + [Data recovery](./administration/Data_recovery.md)
     + [Restore FEs](./administration/Metadata_recovery.md)
-  + User privilege and authentication
+  + User Privilege and Authentication
     + [User privilege](./administration/User_privilege.md)
     + [Authentication](./administration/Authentication.md)
-  + Performance
+  + Performance Tuning
     + [Query planning](./administration/Query_planning.md)
     + [Profiling](./administration/Profiling.md)
 + FAQ
