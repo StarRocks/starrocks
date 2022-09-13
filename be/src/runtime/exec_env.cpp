@@ -387,6 +387,7 @@ Status ExecEnv::_init_storage_page_cache() {
         mem_limit = _mem_tracker->limit();
     }
     int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
+
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
                      << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
