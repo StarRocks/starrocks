@@ -6,7 +6,7 @@
 + Introduction to StarRocks
   + [What is StarRocks?](./introduction/what_is_starrocks.md)
   + [Architecture](./introduction/Architecture.md)
-  + [Features]()
+  + [Features](./introduction/Features.md)
 + Quick Start
   + [Deploy](./quick_start/Deploy.md)
   + [Create a table](./quick_start/Create_table.md)
