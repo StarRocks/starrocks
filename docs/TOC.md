@@ -37,15 +37,14 @@
   + [Materialized view](./using_starrocks/Materialized_view.md)
   + [External tables](./using_starrocks/External_table.md)
   + [Use catalogs to manage internal and external data](./using_starrocks/Manage_data.md)
-  + [Array](./using_starrocks/Array.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Window functions](./using_starrocks/Window_function.md)
-  + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
   + [Java UDFs](./using_starrocks/JAVA_UDF.md)
   + [Bitmap indexing](./table_design/Bitmap_index.md)
   + [Bloomfilter indexing](./table_design/Bloomfilter_index.md)
   + [Precise de-duplication with bitmap](./using_starrocks/Using_bitmap.md)
+  + [Approximate de-duplication with HLL](./using_starrocks/Using_HLL.md)
   + [Configure a time zone](./using_starrocks/timezone.md)
   + [File manager](./using_starrocks/filemanager.md)
 + Reference
@@ -61,6 +60,7 @@
       + [SET PASSWORD](./sql-reference/sql-statements/account-management/SET%20PASSWORD.md)
       + [SET PROPERTY](./sql-reference/sql-statements/account-management/SET%20PROPERTY.md)
       + [SHOW GRANTS](./sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
+      + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
     + Cluster Management
       + [ADMIN CANCEL REPAIR](./sql-reference/sql-statements/Administration/ADMIN%20CANCEL%20REPAIR.md)
       + [ADMIN CHECK TABLET](./sql-reference/sql-statements/Administration/ADMIN%20CHECK%20TABLET.md)
@@ -171,6 +171,7 @@
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
+        + [Array](./using_starrocks/Array.md)
     + Auxiliary Commands
       + [DESCRIBE](./sql-reference/sql-statements/Utility/DESCRIBE.md)
   + Function Reference
@@ -324,51 +325,47 @@
       + [arrays_overlap](./sql-reference/sql-functions/array-functions/arrays_overlap.md)
       + [array_to_bitmap](./sql-reference/sql-functions/array-functions/array_to_bitmap.md)
       + [reverse](./sql-reference/sql-functions/array-functions/reverse.md)
-    + [cast function](./sql-reference/sql-functions/cast.md)
-    + [hash function](./sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
-    + Cryptographic functions
+    + [Cast Functions](./sql-reference/sql-functions/cast.md)
+    + [Hash Functions](./sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
+    + Cryptographic Functions
       + [md5](./sql-reference/sql-functions/crytographic-functions/md5.md)
       + [sha2](./sql-reference/sql-functions/crytographic-functions/sha2.md)
-    + Math functions
+    + Math Functions
       + [RAND](./sql-reference/sql-functions/math-functions/rand.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
-    + Utility functions
+    + Utility Functions
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)
       + [uuid_numeric](./sql-reference/sql-functions/utility-functions/uuid_numeric.md)
   + [System variables](./reference/System_variable.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
 + Administration
-  + [Build in Docker](./administration/Build_in_docker.md)
-  + [Manage a cluster](./administration/Cluster_administration.md)
-  + [Configuration](./administration/Configuration.md)
-  + [Scale in and out](./administration/Scale_up_down.md)
-  + [Backup and restore](./administration/Backup_and_restore.md)
-  + [Deploy StarRocks with StarGo](./administration/stargo.md)
+  + Deployment
+    + [Deploy StarRocks with StarGo](./administration/stargo.md)
+    + [Build in Docker](./administration/Build_in_docker.md)
+    + [AWS CloudFormation](./administration/AWS_Cloudformation.md)
+  + Management
+    + [Manage a cluster](./administration/Cluster_administration.md)
+    + [Configuration](./administration/Configuration.md)
+    + [Scale in and out](./administration/Scale_up_down.md)
+    + [Backup and restore](./administration/Backup_and_restore.md)
+    + [Monitor and alert](./administration/Monitor_and_Alert.md)
+    + Resource Management
+      + [Resource group](./administration/resource_group.md)
+      + [Query management](./administration/Query_management.md)
+      + [Memory management](./administration/Memory_management.md)
+      + [Load balancing](./administration/Load_balance.md)
+      + [Replica](./administration/Replica.md)
+      + [Blacklist](./administration/Blacklist.md)
   + Data Recovery
     + [Data recovery](./administration/Data_recovery.md)
     + [Restore FEs](./administration/Metadata_recovery.md)
-<<<<<<< HEAD
-  + [Replica](./administration/Replica.md)
-  + [Query planning](./administration/Query_planning.md)
-  + [Profiling](./administration/Profiling.md)
-  + [Monitor and alert](./administration/Monitor_and_Alert.md)
-  + [User privilege](./administration/User_privilege.md)
-  + [Authentication](./administration/Authentication.md)
-  + Resource Management
-    + [Resource group](./administration/resource_group.md)
-    + [Query management](./administration/Query_management.md)
-    + [Blacklist](./administration/Blacklist.md)
-    + [Memory management](./administration/Memory_management.md)
-    + [Load balance](./administration/Load_balance.md)
-=======
   + User Privilege and Authentication
     + [User privilege](./administration/User_privilege.md)
     + [Authentication](./administration/Authentication.md)
   + Performance Tuning
     + [Query planning](./administration/Query_planning.md)
     + [Profiling](./administration/Profiling.md)
->>>>>>> 21b4dfffd ([Doc] add architecture (#11098))
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
