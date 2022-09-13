@@ -191,7 +191,7 @@ curl -v --location-trusted -u root: -H "strict_mode: true" \
 
 > 说明：上述示例中，在导入过程中先将 `example2.json` 文件中 `code` 键对应的值乘以 100，然后再落入到 `table2` 表的 `id` 中。
 
-有关导入 JSON 数据时 `jsonpaths`、`columns` 和 StarRocks 表中的字段之间的对应关系，请参见 STREAM LOAD 文档中“[使用说明](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md#使用说明)”章节。
+有关导入 JSON 数据时 `jsonpaths`、`columns` 和 StarRocks 表中的字段之间的对应关系，请参见 STREAM LOAD 文档中“[列映射](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md#列映射)”章节。
 
 ##### 查询数据
 
