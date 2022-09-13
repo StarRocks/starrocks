@@ -36,8 +36,8 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
-#include "util/priority_thread_pool.hpp"
 #include "storage/page_cache.h"
+#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 

@@ -100,7 +100,7 @@ TEST_F(ConfigTest, UpdateConfigs) {
     // string
     ASSERT_EQ(cfg_std_string_mutable, "starrocks_config_test_string_mutable");
     ASSERT_TRUE(config::set_config("cfg_std_string_mutable", "hello SR").ok());
-    ASSERT_EQ(cfg_std_string_mutable, "hello SR");  
+    ASSERT_EQ(cfg_std_string_mutable, "hello SR");
 
     // not exist
     Status s = config::set_config("cfg_not_exist", "123");

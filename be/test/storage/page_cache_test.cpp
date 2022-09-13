@@ -96,8 +96,8 @@ TEST_F(StoragePageCacheTest, normal) {
     // set capacity
     {
         size_t ori = cache.get_capacity();
-        cache.set_capacity(ori/2);
-        ASSERT_EQ(ori/2, cache.get_capacity());
+        cache.set_capacity(ori / 2);
+        ASSERT_EQ(ori / 2, cache.get_capacity());
     }
 }
 
