@@ -2,7 +2,11 @@
 
 ## Index
 
-+ [StarRocks](/introduction/StarRocks_intro.md)
++ [StarRocks](./introduction/StarRocks_intro.md)
++ Introduction to StarRocks
+  + [What is StarRocks?](./introduction/what_is_starrocks.md)
+  + [Architecture](./introduction/Architecture.md)
+  + [Features](./introduction/Features.md)
 + Quick Start
   + [Introduction](./introduction/what_is_starrocks.md)
   + [Concepts](./quick_start/Concepts.md)
@@ -28,12 +32,12 @@
   + [Synchronize data from MySQL](./loading/Flink_cdc_load.md)
   + [Load data by using flink-connector-starrocks](./loading/Flink-connector-starrocks.md)
   + [DataX writer](./loading/DataX-starrocks-writer.md)
-+ Data Export
-  + [Export](./unloading/Export.md)
++ Data Unloading
+  + [Overview of data unloading](./unloading/Export.md)
   + [Spark connector](./unloading/Spark_connector.md)
   + [Flink connector](./unloading/Flink_connector.md)
 + Using StarRocks
-  + [Cost-based optimizer](./using_starrocks/Cost_based_optimizer.md)
+  + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Materialized view](./using_starrocks/Materialized_view.md)
   + [External tables](./using_starrocks/External_table.md)
   + [Use catalogs to manage internal and external data](./using_starrocks/Manage_data.md)
@@ -326,13 +330,13 @@
       + [reverse](./sql-reference/sql-functions/array-functions/reverse.md)
     + [cast function](./sql-reference/sql-functions/cast.md)
     + [hash function](./sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
-    + Cryptographic Functions
+    + Cryptographic functions
       + [md5](./sql-reference/sql-functions/crytographic-functions/md5.md)
       + [sha2](./sql-reference/sql-functions/crytographic-functions/sha2.md)
-    + Math Functions
+    + Math functions
       + [RAND](./sql-reference/sql-functions/math-functions/rand.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
-    + Utility Functions
+    + Utility functions
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)
       + [uuid_numeric](./sql-reference/sql-functions/utility-functions/uuid_numeric.md)
   + [System variables](./reference/System_variable.md)
@@ -348,6 +352,7 @@
   + Data Recovery
     + [Data recovery](./administration/Data_recovery.md)
     + [Restore FEs](./administration/Metadata_recovery.md)
+<<<<<<< HEAD
   + [Replica](./administration/Replica.md)
   + [Query planning](./administration/Query_planning.md)
   + [Profiling](./administration/Profiling.md)
@@ -360,18 +365,26 @@
     + [Blacklist](./administration/Blacklist.md)
     + [Memory management](./administration/Memory_management.md)
     + [Load balance](./administration/Load_balance.md)
+=======
+  + User Privilege and Authentication
+    + [User privilege](./administration/User_privilege.md)
+    + [Authentication](./administration/Authentication.md)
+  + Performance Tuning
+    + [Query planning](./administration/Query_planning.md)
+    + [Profiling](./administration/Profiling.md)
+>>>>>>> 21b4dfffd ([Doc] add architecture (#11098))
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
-    + Data Ingestion
-      + [Data ingestion](./faq/loading/Loading_faq.md)
+    + Data Loading
+      + [Data loading](./faq/loading/Loading_faq.md)
       + [Stream Load](./faq/loading/Stream_load_faq.md)
       + [Routine Load](./faq/loading/Routine_load_faq.md)
       + [Broker Load](./faq/loading/Broker_load_faq.md)
       + [Insert Into](./faq/loading/Insert_into_faq.md)
       + [Flink connector](./faq/loading/Flink_connector_faq.md)
       + [DataX](./faq/loading/DataX_faq.md)
-    + [Data Export](./faq/Exporting_faq.md)
+    + [Data Unloading](./faq/Exporting_faq.md)
   + [SQL](./faq/Sql_faq.md)
   + [Other FAQs](./faq/Others.md)
 + Benchmark
