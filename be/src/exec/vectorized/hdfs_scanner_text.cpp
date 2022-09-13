@@ -149,7 +149,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     const std::string& path = _scanner_params.path;
     _compression_type = return_compression_type_from_filename(path);
     if (_compression_type == CompressionTypePB::UNKNOWN_COMPRESSION) {
-        return Status::InternalError(strings::Substitute("Unknown compress type from filename $0", path));
+        _compression_type = CompressionTypePB::NO_COMPRESSION;
     }
     RETURN_IF_ERROR(open_random_access_file());
     RETURN_IF_ERROR(_create_or_reinit_reader());
