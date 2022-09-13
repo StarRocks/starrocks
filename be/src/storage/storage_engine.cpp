@@ -24,7 +24,6 @@
 #include <fmt/format.h>
 
 #include <algorithm>
-#include <csignal>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -86,8 +85,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _options(options),
           _available_storage_medium_type_count(0),
           _is_all_cluster_id_exist(true),
-
-          _tablet_manager(new TabletManager(options.metadata_mem_tracker, config::tablet_map_shard_size)),
+          _tablet_manager(new TabletManager(config::tablet_map_shard_size)),
           _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size, options.store_paths.size())),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
@@ -830,8 +828,8 @@ void StorageEngine::_clean_unused_rowset_metas() {
     std::vector<RowsetMetaSharedPtr> invalid_rowset_metas;
     auto clean_rowset_func = [this, &invalid_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
                                                            std::string_view meta_str) -> bool {
-        auto rowset_meta = std::make_shared<RowsetMeta>();
-        bool parsed = rowset_meta->init(meta_str);
+        bool parsed = false;
+        auto rowset_meta = std::make_shared<RowsetMeta>(meta_str, &parsed);
         if (!parsed) {
             LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
             // return false will break meta iterator, return true to skip this error

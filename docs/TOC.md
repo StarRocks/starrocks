@@ -2,16 +2,15 @@
 
 ## Index
 
-+ [StarRocks](/introduction/StarRocks_intro.md)
++ [StarRocks](./introduction/StarRocks_intro.md)
++ Introduction to StarRocks
+  + [What is StarRocks?](./introduction/what_is_starrocks.md)
+  + [Architecture](./introduction/Architecture.md)
+  + [Features](./introduction/Features.md)
 + Quick Start
-  + [Introduction](./introduction/what_is_starrocks.md)
-  + [Concepts](./quick_start/Concepts.md)
-  + [Architecture](./quick_start/Architecture.md)
-  + [Data flow and control flow](./quick_start/Data_flow_and_control_flow.md)
   + [Deploy](./quick_start/Deploy.md)
   + [Create a table](./quick_start/Create_table.md)
   + [Import and query](./quick_start/Import_and_query.md)
-  + [Test FAQs](./quick_start/Test_faq.md)
 + Table Design
   + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
   + [Data models](./table_design/Data_model.md)
@@ -29,12 +28,12 @@
   + [Synchronize data from MySQL](./loading/Flink_cdc_load.md)
   + [Load data by using flink-connector-starrocks](./loading/Flink-connector-starrocks.md)
   + [DataX writer](./loading/DataX-starrocks-writer.md)
-+ Data Export
-  + [Export](./unloading/Export.md)
++ Data Unloading
+  + [Overview of data unloading](./unloading/Export.md)
   + [Spark connector](./unloading/Spark_connector.md)
   + [Flink connector](./unloading/Flink_connector.md)
 + Using StarRocks
-  + [Cost-based optimizer](./using_starrocks/Cost_based_optimizer.md)
+  + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Materialized view](./using_starrocks/Materialized_view.md)
   + [External tables](./using_starrocks/External_table.md)
   + Catalog
@@ -346,58 +345,66 @@
       + [reverse](./sql-reference/sql-functions/array-functions/reverse.md)
     + [cast function](./sql-reference/sql-functions/cast.md)
     + [hash function](./sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
-    + Cryptographic Functions
+    + Cryptographic functions
       + [md5](./sql-reference/sql-functions/crytographic-functions/md5.md)
       + [sha2](./sql-reference/sql-functions/crytographic-functions/sha2.md)
-    + Math Functions
+    + Math functions
       + [RAND](./sql-reference/sql-functions/math-functions/rand.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
-    + Utility Functions
+    + Utility functions
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)
       + [uuid_numeric](./sql-reference/sql-functions/utility-functions/uuid_numeric.md)
   + [System variables](./reference/System_variable.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
 + Administration
-  + [Build in Docker](./administration/Build_in_docker.md)
-  + [Manage a cluster](./administration/Cluster_administration.md)
-  + [Configuration](./administration/Configuration.md)
-  + [Scale in and out](./administration/Scale_up_down.md)
-  + [Backup and restore](./administration/Backup_and_restore.md)
-  + [Deploy StarRocks with StarGo](./administration/stargo.md)
+  + Deployment
+    + [Deploy StarRocks with StarGo](./administration/stargo.md)
+    + [Build in Docker](./administration/Build_in_docker.md)
+    + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/k8s_operator_cn.md)
+    + [Deploy CN](./administration/deploy_cn.md)
+  + Management
+    + [Scale in and out](./administration/Scale_up_down.md)
+    + [Backup and restore](./administration/Backup_and_restore.md)
+    + [Configuration](./administration/Configuration.md)
+    + [Monitor and alert](./administration/Monitor_and_Alert.md)
+    + [Manage a cluster](./administration/Cluster_administration.md)
+    + [Enable FQDN access](./administration/enable_fqdn.md)
+    + Resource Management
+      + [Resource group](./administration/resource_group.md)
+      + [Query management](./administration/Query_management.md)
+      + [Memory management](./administration/Memory_management.md)
+      + [Load balance](./administration/Load_balance.md)
+      + [Replica](./administration/Replica.md)
+      + [Blacklist](./administration/Blacklist.md)
   + Data Recovery
     + [Data recovery](./administration/Data_recovery.md)
     + [Restore FEs](./administration/Metadata_recovery.md)
-  + [Replica](./administration/Replica.md)
-  + [Query planning](./administration/Query_planning.md)
-  + [Profiling](./administration/Profiling.md)
-  + [Monitor and alert](./administration/Monitor_and_Alert.md)
-  + [User privilege](./administration/User_privilege.md)
-  + [Authentication](./administration/Authentication.md)
-  + Resource Management
-    + [Resource group](./administration/resource_group.md)
-    + [Query management](./administration/Query_management.md)
-    + [Blacklist](./administration/Blacklist.md)
-    + [Memory management](./administration/Memory_management.md)
-    + [Load balance](./administration/Load_balance.md)
+  + User Privilege and Authentication
+    + [User privilege](./administration/User_privilege.md)
+    + [Authentication](./administration/Authentication.md)
+  + Performance Tuning
+    + [Query planning](./administration/Query_planning.md)
+    + [Profiling](./administration/Profiling.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
-    + Data Ingestion
-      + [Data ingestion](./faq/loading/Loading_faq.md)
+    + Data Loading
+      + [Data loading](./faq/loading/Loading_faq.md)
       + [Stream Load](./faq/loading/Stream_load_faq.md)
       + [Routine Load](./faq/loading/Routine_load_faq.md)
       + [Broker Load](./faq/loading/Broker_load_faq.md)
       + [Insert Into](./faq/loading/Insert_into_faq.md)
       + [Flink connector](./faq/loading/Flink_connector_faq.md)
       + [DataX](./faq/loading/DataX_faq.md)
-    + [Data Export](./faq/Exporting_faq.md)
+    + [Data Unloading](./faq/Exporting_faq.md)
   + [SQL](./faq/Sql_faq.md)
   + [Other FAQs](./faq/Others.md)
 + Benchmark
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)
   + [TPC-H Benchmark](./benchmarking/TPC-H_Benchmarking.md)
 + Release Notes
+  + [v2.4](./release_notes/release-2.4.md)
   + [v2.3](./release_notes/release-2.3.md)
   + [v2.2](./release_notes/release-2.2.md)
   + [v2.1](./release_notes/release-2.1.md)

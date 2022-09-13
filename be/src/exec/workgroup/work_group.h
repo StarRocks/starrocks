@@ -103,6 +103,8 @@ public:
     const WorkGroupDriverSchedEntity* driver_sched_entity() const { return &_driver_sched_entity; }
     WorkGroupScanSchedEntity* scan_sched_entity() { return &_scan_sched_entity; }
     const WorkGroupScanSchedEntity* scan_sched_entity() const { return &_scan_sched_entity; }
+    WorkGroupScanSchedEntity* connector_scan_sched_entity() { return &_connector_scan_sched_entity; }
+    const WorkGroupScanSchedEntity* connector_scan_sched_entity() const { return &_connector_scan_sched_entity; }
 
     void incr_num_running_drivers();
     void decr_num_running_drivers();
@@ -177,6 +179,7 @@ private:
 
     WorkGroupDriverSchedEntity _driver_sched_entity;
     WorkGroupScanSchedEntity _scan_sched_entity;
+    WorkGroupScanSchedEntity _connector_scan_sched_entity;
 
     std::atomic<bool> _is_marked_del = false;
 
@@ -244,6 +247,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_limit_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_scan_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_connector_scan_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_limit_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_running_queries;

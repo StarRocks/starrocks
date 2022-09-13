@@ -34,7 +34,7 @@ public class AlterUserStmtTest {
 
         new Expectations() {
             {
-                auth.getUserPrivTable().doesUserExist((UserIdentity) any);
+                auth.doesUserExist((UserIdentity) any);
                 result = true;
             }
         };
@@ -118,7 +118,7 @@ public class AlterUserStmtTest {
     public void testBadPass(@Mocked Auth auth) throws Exception {
         new Expectations() {
             {
-                auth.getUserPrivTable().doesUserExist((UserIdentity) any);
+                auth.doesUserExist((UserIdentity) any);
                 result = true;
             }
         };
@@ -131,7 +131,7 @@ public class AlterUserStmtTest {
     public void testInvalidAuthPlugin(@Mocked Auth auth) throws Exception {
         new Expectations() {
             {
-                auth.getUserPrivTable().doesUserExist((UserIdentity) any);
+                auth.doesUserExist((UserIdentity) any);
                 result = true;
             }
         };

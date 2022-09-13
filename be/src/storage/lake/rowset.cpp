@@ -92,7 +92,7 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema, const 
         }
     }
     if (segment_iterators.empty()) {
-        return vectorized::new_empty_iterator(*segment_schema, options.chunk_size);
+        return vectorized::new_empty_iterator(schema, options.chunk_size);
     } else if (segment_iterators.size() == 1) {
         return segment_iterators[0];
     } else if (options.sorted) {

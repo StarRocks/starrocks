@@ -164,6 +164,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PIPELINE_DOP = "pipeline_dop";
 
     public static final String PROFILE_TIMEOUT = "profile_timeout";
+    public static final String PROFILE_LIMIT_FOLD = "profile_limit_fold";
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
 
     public static final String RESOURCE_GROUP_ID = "workgroup_id";
@@ -218,6 +219,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
+    public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL = "enable_rewrite_groupingsets_to_union_all";
 
     // --------  New planner session variables end --------
 
@@ -247,6 +249,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
+    public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER = "enable_multicolumn_global_runtime_filter";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
     public static final String JOIN_IMPLEMENTATION_MODE_V2 = "join_implementation_mode_v2";
@@ -300,6 +303,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_ON_EXCHANGE_NODE)
     private boolean runtimeFilterOnExchangeNode = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER)
+    private boolean enableMultiColumnsOnGlobalRuntimeFilter = false;
 
     @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
     private boolean enableResourceGroup = false;
@@ -470,6 +476,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PROFILE_TIMEOUT, flag = VariableMgr.INVISIBLE)
     private int profileTimeout = 2;
 
+    @VariableMgr.VarAttr(name = PROFILE_LIMIT_FOLD, flag = VariableMgr.INVISIBLE)
+    private boolean profileLimitFold = true;
+
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
 
@@ -546,6 +555,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE)
     private boolean enableLowCardinalityOptimize = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
+    private boolean enableRewriteGroupingSetsToUnionAll = false;
 
     // value should be 0~4
     // 0 represents automatic selection, and 1, 2, 3, and 4 represent forced selection of AGG of
@@ -942,12 +954,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         enableGlobalRuntimeFilter = value;
     }
 
+    public void setGlobalRuntimeFilterBuildMaxSize(long globalRuntimeFilterBuildMaxSize) {
+        this.globalRuntimeFilterBuildMaxSize = globalRuntimeFilterBuildMaxSize;
+    }
+
     public long getGlobalRuntimeFilterBuildMaxSize() {
         return globalRuntimeFilterBuildMaxSize;
     }
 
     public long getGlobalRuntimeFilterProbeMinSize() {
         return globalRuntimeFilterProbeMinSize;
+    }
+
+    public void setGlobalRuntimeFilterProbeMinSize(long globalRuntimeFilterProbeMinSize) {
+        this.globalRuntimeFilterProbeMinSize = globalRuntimeFilterProbeMinSize;
     }
 
     public float getGlobalRuntimeFilterProbeMinSelectivity() {
@@ -998,6 +1018,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return profileTimeout;
     }
 
+    public boolean isProfileLimitFold() {
+        return profileLimitFold;
+    }
+
     public int getPipelineProfileLevel() {
         return pipelineProfileLevel;
     }
@@ -1032,6 +1056,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableLowCardinalityOptimize() {
         return enableLowCardinalityOptimize;
+    }
+
+    public boolean isEnableRewriteGroupingsetsToUnionAll() {
+        return enableRewriteGroupingSetsToUnionAll;
+    }
+
+    public void setEnableRewriteGroupingSetsToUnionAll(boolean enableRewriteGroupingSetsToUnionAll) {
+        this.enableRewriteGroupingSetsToUnionAll = enableRewriteGroupingSetsToUnionAll;
     }
 
     public void setEnableLowCardinalityOptimize(boolean enableLowCardinalityOptimize) {
@@ -1099,6 +1131,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isRuntimeFilterOnExchangeNode() {
         return runtimeFilterOnExchangeNode;
+    }
+
+    public void setEnableRuntimeFilterOnExchangeNode(boolean value) {
+        this.runtimeFilterOnExchangeNode = value;
+    }
+
+    public boolean isEnableMultiColumnsOnGlobbalRuntimeFilter() {
+        return enableMultiColumnsOnGlobalRuntimeFilter;
+    }
+
+    public void setEnableMultiColumnsOnGlobbalRuntimeFilter(boolean value) {
+        this.enableMultiColumnsOnGlobalRuntimeFilter = value;
     }
 
     public boolean isEnableQueryDebugTrace() {

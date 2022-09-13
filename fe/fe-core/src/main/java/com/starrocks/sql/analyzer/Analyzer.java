@@ -7,18 +7,20 @@ import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
@@ -318,6 +320,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
+            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
@@ -325,6 +333,12 @@ public class Analyzer {
 
         @Override
         public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt stmt, ConnectContext session) {
+            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }
@@ -475,12 +489,6 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, ConnectContext session) {
-            CreateRoutineLoadAnalyzer.analyze(statement, session);
-            return null;
-        }
-
-        @Override
         public Void visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, ConnectContext session) {
             StopRoutineLoadAnalyzer.analyze(statement, session);
             return null;
@@ -561,13 +569,19 @@ public class Analyzer {
 
         @Override
         public Void visitBackupStmt(BackupStmt statement, ConnectContext context) {
-            BackupStmtAnalyzer.analyze(statement, context);
+            BackupRestoreAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitRestoreStmt(RestoreStmt statement, ConnectContext context) {
+            BackupRestoreAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
         public Void visitShowBackupStmt(ShowBackupStmt statement, ConnectContext context) {
-            BackupStmtAnalyzer.analyze(statement, context);
+            BackupRestoreAnalyzer.analyze(statement, context);
             return null;
         }
     }

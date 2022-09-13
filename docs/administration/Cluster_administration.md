@@ -73,15 +73,15 @@ sh bin/start_cn.sh --daemon
 
 ### Check the health status of a cluster
 
-After you set up the BEs and FEs of a cluster, you need to check the statuses of FEs and BEs to ensure the FEs and BEs are started normally:
+After you set up the FEs, BEs, and CNs of a cluster, you need to check their statuses to ensure they are started normally:
 
 - Run `http://be_host:be_http_port/api/health` to check the statuses of BEs. If `{"status": "OK", "msg": "To Be Added"}` is returned, the BEs are properly started.
 
 - Run `http://fe_host:fe_http_port/api/bootstrap` to check the statuses of FEs. If `{"status": "OK", "msg": "Success"}` is returned, the FEs are properly started.
 
-#### Check the health status of a Compute Node
+- Run `http://cn_host:cn_http_port/api/health` to check the statuses of Compute Nodes. If `{"status": "OK", "msg": "To Be Added"}` is returned, the Compute Nodes are properly started.
 
-Run `http://cn_host:cn_http_port/api/health` to check the statuses of Compute Nodes. If `{"status": "OK", "msg": "To Be Added"}` is returned, the Compute Nodes are properly started.
+After the Compute Nodes are started properly, you need to set the system variables `prefer_compute_node`, and `use_compute_nodes` to allow them to scale the computing resources out during queries. See [System Variables](../reference/System_variable.md) for more information.
 
 ### Stop a cluster
 
@@ -161,8 +161,7 @@ ps aux | grep StarRocksFE
 
 ##### Upgrade a Compute Node
 
-Since the Compute Node node is stateless, you only need to replace the binary file and restart the process. It is recommended to stop it gracefully.
-
+Since the Compute Node node is stateless, you only need to replace the binary file and restart the process. We recommend to stop it gracefully.
 
 ```shell
 sh bin/stop_cn.sh --graceful

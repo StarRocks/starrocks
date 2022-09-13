@@ -80,11 +80,11 @@ statement
     | deleteStatement
 
     //Routine Statement
-    | createRoutineLoadStatement
     | stopRoutineLoadStatement
     | resumeRoutineLoadStatement
     | pauseRoutineLoadStatement
     | showRoutineLoadStatement
+    | showRoutineLoadTaskStatement
 
     // Admin Statement
     | adminSetConfigStatement
@@ -172,10 +172,13 @@ statement
     | showAuthenticationStatement
     | createRoleStatement
     | showRolesStatement
+    | showGrantsStatement
+    | dropRoleStatement
 
     // Backup Restore Satement
     | backupStatement
     | showBackupStatement
+    | restoreStatement
 
     // Other statement
     | killStatement
@@ -683,43 +686,6 @@ deleteStatement
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
-createRoutineLoadStatement
-    : CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier ON table=qualifiedName
-        (loadProperties (',' loadProperties)*)?
-        jobProperties?
-        FROM source=identifier
-        dataSourceProperties?
-    ;
-
-loadProperties
-    : (colSeparatorProperty)
-    | (rowDelimiterProperty)
-    | (COLUMNS columnProperties)
-    | (WHERE expression)
-    | (partitionNames)
-    ;
-
-colSeparatorProperty
-    : COLUMNS TERMINATED BY string
-    ;
-
-rowDelimiterProperty
-    : ROWS TERMINATED BY string
-    ;
-
-columnProperties
-    : '('
-        (qualifiedName | assignmentList) (',' (qualifiedName | assignmentList))*
-      ')'
-    ;
-
-jobProperties
-    : properties
-    ;
-
-dataSourceProperties
-    : propertyList
-    ;
 
 stopRoutineLoadStatement
     : STOP ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
@@ -739,6 +705,11 @@ showRoutineLoadStatement
         (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
+showRoutineLoadTaskStatement
+    : SHOW ROUTINE LOAD TASK
+        (FROM db=qualifiedName)?
+        WHERE expression
+    ;
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
@@ -1033,6 +1004,14 @@ showRolesStatement
     : SHOW ROLES
     ;
 
+showGrantsStatement
+    : SHOW ALL? GRANTS (FOR user)?
+    ;
+
+dropRoleStatement
+    : DROP ROLE identifierOrString                                                          #dropRole
+    ;
+
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showDatabasesStatement
@@ -1258,6 +1237,13 @@ showBackupStatement
     : SHOW BACKUP ((FROM | IN) identifier)?
     ;
 
+restoreStatement
+    : RESTORE SNAPSHOT qualifiedName
+    FROM identifier
+    ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
+    (PROPERTIES propertyList)?
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -1467,6 +1453,10 @@ frameBound
 
 tableDesc
     : qualifiedName partitionNames?
+    ;
+
+restoreTableDesc
+    : qualifiedName partitionNames? (AS identifier)?
     ;
 
 explainDesc

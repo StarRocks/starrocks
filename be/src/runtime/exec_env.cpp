@@ -208,7 +208,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .build(&connector_scan_worker_thread_pool_with_workgroup));
     _connector_scan_executor_with_workgroup =
             new workgroup::ScanExecutor(std::move(connector_scan_worker_thread_pool_with_workgroup),
-                                        std::make_unique<workgroup::WorkGroupScanTaskQueue>());
+                                        std::make_unique<workgroup::WorkGroupScanTaskQueue>(
+                                                workgroup::WorkGroupScanTaskQueue::SchedEntityType::CONNECTOR));
     _connector_scan_executor_with_workgroup->initialize(connector_num_io_threads);
 
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
@@ -260,7 +261,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                 .build(&scan_worker_thread_pool_with_workgroup));
         _scan_executor_with_workgroup =
                 new workgroup::ScanExecutor(std::move(scan_worker_thread_pool_with_workgroup),
-                                            std::make_unique<workgroup::WorkGroupScanTaskQueue>());
+                                            std::make_unique<workgroup::WorkGroupScanTaskQueue>(
+                                                    workgroup::WorkGroupScanTaskQueue::SchedEntityType::OLAP));
         _scan_executor_with_workgroup->initialize(num_io_threads);
 
         Status status = _load_path_mgr->init();
@@ -384,6 +386,15 @@ Status ExecEnv::_init_storage_page_cache() {
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
                      << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
+    }
+    if (!config::disable_storage_page_cache) {
+        if (storage_cache_limit < kcacheMinSize) {
+            LOG(WARNING) << "Storage cache limit is too small, give up using page cache.";
+            config::disable_storage_page_cache = true;
+            storage_cache_limit = 0;
+        } else {
+            LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
+        }
     }
     StoragePageCache::create_global_cache(_page_cache_mem_tracker, storage_cache_limit);
 

@@ -20,7 +20,6 @@ message MutableIndexMetaPB {
     uint32 format_version = 1;
     IndexSnapshotMetaPB snapshot = 2;
     repeated IndexWalMetaPB wals = 3;
-    repeated ShardInfoPB shard_infos = 4;
 }
 
 // Do not modify the parameters order because of compatibility

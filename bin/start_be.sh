@@ -39,26 +39,10 @@ while true; do
 done
 
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
-# compatible with DORIS_HOME: DORIS_HOME still be using in config on the user side, so set DORIS_HOME to the meaningful value in case of wrong envs.
-export DORIS_HOME="$STARROCKS_HOME"
 source $STARROCKS_HOME/bin/common.sh
 
-# ===================================================================================
-# initialization of environment variables before exporting env variables from be.conf
-# For most cases, you should put default environment variables in this section.
-#
-# UDF_RUNTIME_DIR
-# LOG_DIR
-# PID_DIR
-export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
-export LOG_DIR=${STARROCKS_HOME}/log
-export PID_DIR=`cd "$curdir"; pwd`
-
-# https://github.com/aws/aws-cli/issues/5623
-# https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
-export AWS_EC2_METADATA_DISABLED=true
-# ===================================================================================
-
+# actions shared between start_be.sh & start_cn.sh
+export_shared_envvars
 export_env_from_conf $STARROCKS_HOME/conf/be.conf
 export_mem_limit_from_conf $STARROCKS_HOME/conf/be.conf
 
@@ -136,7 +120,7 @@ if [[ $(ulimit -n) -lt 60000 ]]; then
   ulimit -n 65535
 fi
 
-export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:30000,dirty_decay_ms:30000,lg_tcache_max:23,metadata_thp:auto,background_thread:true"
+export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:30000,dirty_decay_ms:30000,lg_tcache_max:23,metadata_thp:auto,background_thread:true,prof:true"
 
 # Prevent JVM from handling any internally or externally generated signals.
 # Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.

@@ -36,7 +36,6 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
-#include "storage/data_dir.h"
 #include "storage/empty_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -50,9 +49,7 @@
 #include "storage/tablet_schema_helper.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
-#include "util/defer_op.h"
 
 using std::string;
 
@@ -65,8 +62,6 @@ protected:
     OlapReaderStatistics _stats;
 
     void SetUp() override {
-        _metadata_mem_tracker = std::make_unique<MemTracker>();
-        _schema_change_mem_tracker = std::make_unique<MemTracker>();
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
         config::tablet_map_shard_size = 1;
         config::txn_map_shard_size = 1;
@@ -83,8 +78,6 @@ protected:
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
-        options.metadata_mem_tracker = _metadata_mem_tracker.get();
-        options.schema_change_mem_tracker = _schema_change_mem_tracker.get();
         Status s = starrocks::StorageEngine::open(options, &k_engine);
         ASSERT_TRUE(s.ok()) << s.to_string();
 
@@ -227,8 +220,6 @@ protected:
     }
 
 private:
-    std::unique_ptr<MemTracker> _metadata_mem_tracker = nullptr;
-    std::unique_ptr<MemTracker> _schema_change_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
 };
 
@@ -294,7 +285,7 @@ TEST_F(RowsetTest, FinalMergeTest) {
     std::string segment_file =
             Rowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
 
-    auto segment = *Segment::open(_metadata_mem_tracker.get(), seg_options.fs, segment_file, 0, tablet_schema.get());
+    auto segment = *Segment::open(seg_options.fs, segment_file, 0, tablet_schema.get());
     ASSERT_NE(segment->num_rows(), 0);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
@@ -393,8 +384,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
 
     std::string segment_file =
             Rowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
-    auto segment =
-            *Segment::open(_metadata_mem_tracker.get(), seg_options.fs, segment_file, 0, &tablet->tablet_schema());
+    auto segment = *Segment::open(seg_options.fs, segment_file, 0, &tablet->tablet_schema());
     ASSERT_NE(segment->num_rows(), 0);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
@@ -493,7 +483,7 @@ static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, int64_
 
 static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, std::shared_ptr<TabletSchema> partial_schema,
                                        int64_t version, int64_t nkeys) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema);
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -516,7 +506,7 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-    auto schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
+    auto schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema);
 
     {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
@@ -714,10 +704,6 @@ TEST_F(RowsetTest, SegmentWriteTest) {
     }
     EXPECT_EQ(count, num_rows);
 
-    for (int i = 0; i < seg_infos.size(); i++) {
-        LOG(INFO) << seg_infos[i]->DebugString();
-    }
-
     std::unique_ptr<RowsetWriter> segment_rowset_writer;
     writer_context.rowset_path_prefix = config::storage_root_path + "/data/rowset_test_seg";
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &segment_rowset_writer).ok());
@@ -731,7 +717,7 @@ TEST_F(RowsetTest, SegmentWriteTest) {
 
         butil::IOBuf data;
         auto buf = new uint8[seg_info->data_size()];
-        data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[] (uint8*)buf; });
+        data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[](uint8*) buf; });
 
         ASSERT_TRUE(rfile->read_fully(buf, seg_info->data_size()).ok());
         auto st = segment_rowset_writer->flush_segment(*seg_info, data);
@@ -774,6 +760,5 @@ TEST_F(RowsetTest, SegmentWriteTest) {
         EXPECT_EQ(count, num_rows);
     }
 }
-
 
 } // namespace starrocks
