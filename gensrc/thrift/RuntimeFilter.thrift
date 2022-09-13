@@ -74,6 +74,10 @@ struct TRuntimeFilterDescription {
   // for COLOCATE and LOCAL_HASH_BUCKET HashJoin, we need a mapping to save
   // bucketSeq to fragment instance ordinal mapping.
   14: optional list<i32> bucketseq_to_instance;
+
+  // partition_by_exprs are used for computing partition ids in probe side
+  // when join's equal conjuncts size > 1.
+  15: optional map<Types.TPlanNodeId, list<Exprs.TExpr>> plan_node_id_to_partition_by_exprs;
 }
 
 struct TRuntimeFilterProberParams {

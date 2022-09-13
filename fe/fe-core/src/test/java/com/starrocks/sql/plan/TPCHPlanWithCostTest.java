@@ -13,6 +13,7 @@ public class TPCHPlanWithCostTest extends DistributedEnvPlanTestBase {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(true);
+        connectContext.getSessionVariable().setEnableMultiColumnsOnGlobbalRuntimeFilter(true);
     }
 
     @Test

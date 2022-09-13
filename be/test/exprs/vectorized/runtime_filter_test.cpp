@@ -141,6 +141,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilter) {
     ctx.use_merged_selection = false;
     auto& selection = ctx.selection;
     selection.assign(column->size(), 1);
+    rf->compute_hash({column.get()}, &ctx);
     rf->evaluate(column.get(), &ctx);
     chunk.filter(selection);
     // 0 17 34 ... 187
@@ -415,6 +416,7 @@ void test_grf_helper_template(size_t num_rows, size_t num_partitions, PartitionB
         running_ctx.selection.assign(num_rows, 1);
         running_ctx.use_merged_selection = false;
         running_ctx.compatibility = compatibility;
+        grf.compute_hash({column.get()}, &running_ctx);
         grf.evaluate(column.get(), &running_ctx);
         auto true_count = SIMD::count_nonzero(running_ctx.selection.data(), num_rows);
         ASSERT_EQ(true_count, num_rows);
@@ -424,6 +426,7 @@ void test_grf_helper_template(size_t num_rows, size_t num_partitions, PartitionB
         auto negative_column = gen_random_binary_column(alphabet1, 100, negative_num_rows);
         running_ctx.selection.assign(negative_num_rows, 1);
         running_ctx.use_merged_selection = false;
+        grf.compute_hash({negative_column.get()}, &running_ctx);
         grf.evaluate(negative_column.get(), &running_ctx);
         auto true_count = SIMD::count_nonzero(running_ctx.selection.data(), negative_num_rows);
         ASSERT_LE((double)true_count / negative_num_rows, 0.5);
@@ -591,6 +594,139 @@ TEST_F(RuntimeFilterTest, TestGlobalRuntimeFilterMinMax) {
     }
     EXPECT_EQ(global->min_value(), 10);
     EXPECT_EQ(global->max_value(), 33);
+}
+
+void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode, std::vector<ColumnPtr> columns,
+                                     int64_t num_rows, int64_t num_partitions,
+                                     std::vector<int32_t> bucketseq_to_partition) {
+    std::vector<uint32_t> expected_hash_values;
+    std::vector<size_t> num_rows_per_partitions(num_partitions, 0);
+
+    switch (join_mode) {
+    case TRuntimeFilterBuildJoinMode::BORADCAST: {
+        break;
+    }
+    case TRuntimeFilterBuildJoinMode::PARTITIONED:
+    case TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET: {
+        expected_hash_values.assign(num_rows, HashUtil::FNV_SEED);
+        for (auto& column : columns) {
+            column->fnv_hash(expected_hash_values.data(), 0, num_rows);
+        }
+        for (auto i = 0; i < num_rows; ++i) {
+            expected_hash_values[i] %= num_partitions;
+            ++num_rows_per_partitions[expected_hash_values[i]];
+        }
+        break;
+    }
+    case TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET:
+    case TRuntimeFilterBuildJoinMode::COLOCATE: {
+        expected_hash_values.assign(num_rows, 0);
+        DCHECK_LT(0, bucketseq_to_partition.size());
+        auto num_buckets = bucketseq_to_partition.size();
+        for (auto& column : columns) {
+            column->crc32_hash(expected_hash_values.data(), 0, num_rows);
+        }
+        std::vector<size_t> num_rows_per_bucket(num_buckets, 0);
+        for (auto i = 0; i < num_rows; ++i) {
+            expected_hash_values[i] %= num_buckets;
+            ++num_rows_per_bucket[expected_hash_values[i]];
+            expected_hash_values[i] = bucketseq_to_partition[expected_hash_values[i]];
+            ++num_rows_per_partitions[expected_hash_values[i]];
+        }
+        static constexpr uint32_t BUCKET_ABSENT = 2147483647;
+        for (auto b = 0; b < num_buckets; ++b) {
+            if (num_rows_per_bucket[b] == 0) {
+                bucketseq_to_partition[b] = BUCKET_ABSENT;
+            }
+        }
+    }
+    default:
+        break;
+    }
+
+    JoinRuntimeFilter::RunningContext running_ctx;
+    running_ctx.selection.assign(num_rows, 2);
+    running_ctx.use_merged_selection = false;
+    running_ctx.compatibility = true;
+    running_ctx.bucketseq_to_partition = &bucketseq_to_partition;
+    std::vector<Column*> column_ptrs;
+    for (auto& column : columns) {
+        column_ptrs.push_back(column.get());
+    }
+
+    int32_t num_column = columns.size();
+    std::vector<RuntimeBloomFilter<TYPE_INT>> bfs(num_column * num_partitions);
+    std::vector<RuntimeBloomFilter<TYPE_INT>> gfs(num_column);
+    for (int i = 0; i < num_column; i++) {
+        auto& column = columns[i];
+        for (auto p = 0; p < num_partitions; ++p) {
+            auto pp = p + (i * num_partitions);
+            bfs[pp].init(num_rows_per_partitions[p]);
+        }
+        for (auto j = 0; j < num_rows; ++j) {
+            auto ele = column->get(j).get_int32();
+            auto pp = expected_hash_values[j] + (i * num_partitions);
+            bfs[pp].insert(&ele);
+        }
+        for (auto p = 0; p < num_partitions; ++p) {
+            auto pp = p + (i * num_partitions);
+            gfs[i].concat(&bfs[pp]);
+        }
+        ASSERT_EQ(gfs[i].size(), num_rows);
+        ASSERT_EQ(gfs[i].num_hash_partitions(), num_partitions);
+    }
+    // compute hash
+    {
+        auto& grf = gfs[0];
+        grf.set_join_mode(join_mode);
+        grf.compute_hash(column_ptrs, &running_ctx);
+        auto& ctx_hash_values = running_ctx.hash_values;
+        for (auto i = 0; i < num_rows; i++) {
+            DCHECK_EQ(ctx_hash_values[i], expected_hash_values[i]);
+        }
+    }
+
+    for (int i = 0; i < num_column; i++) {
+        auto& grf = gfs[i];
+        grf.set_join_mode(join_mode);
+        grf.evaluate(column_ptrs[i], &running_ctx);
+        auto true_count = SIMD::count_nonzero(running_ctx.selection.data(), num_rows);
+        ASSERT_EQ(true_count, num_rows);
+    }
+}
+
+ColumnPtr CreateSeriesColumnInt32(int32_t num_rows, bool nullable) {
+    auto type_desc = TypeDescriptor(TYPE_INT);
+    ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
+    std::vector<int32_t> elements(num_rows);
+    std::iota(elements.begin(), elements.end(), 0);
+    for (auto& x : elements) {
+        column->append_datum(Datum((int32_t)x));
+    }
+    return column;
+}
+
+TEST_F(RuntimeFilterTest, TestMultiColumnsOnRuntimeFilter_BucketJoin) {
+    std::vector<ColumnPtr> columns;
+    int32_t num_rows = 100;
+    int32_t num_partition = 10;
+    for (int i = 0; i < 10; i++) {
+        columns.push_back(CreateSeriesColumnInt32(100, true));
+    }
+
+    return TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET, columns, num_rows,
+                                           num_partition, {0, 0, 1, 2, 2, 1});
+}
+
+TEST_F(RuntimeFilterTest, TestMultiColumnsOnRuntimeFilter_ShuffleJoin) {
+    std::vector<ColumnPtr> columns;
+    int32_t num_rows = 100;
+    int32_t num_partition = 10;
+    for (int i = 0; i < 10; i++) {
+        columns.push_back(CreateSeriesColumnInt32(100, true));
+    }
+    return TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::PARTITIONED, columns, num_rows, num_partition,
+                                           {});
 }
 
 } // namespace vectorized
