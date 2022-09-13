@@ -254,7 +254,7 @@ charsetName
     ;
 
 defaultDesc
-    : DEFAULT (string | NULL | CURRENT_TIMESTAMP | '(' qualifiedName '()' ')')
+    : DEFAULT (string | NULL | CURRENT_TIMESTAMP | '(' qualifiedName '())')
     ;
 
 indexDesc
