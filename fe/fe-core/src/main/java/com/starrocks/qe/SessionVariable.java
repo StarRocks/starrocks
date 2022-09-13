@@ -219,7 +219,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
-    public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL = "enable_rewrite_groupingsets_to_union_all";
+    public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
+            "enable_rewrite_groupingsets_to_union_all";
 
     // --------  New planner session variables end --------
 
@@ -260,6 +261,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
 
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
+
+    public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -628,6 +631,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
+
+    @VarAttr(name = ENABLE_SORT_AGGREGATE)
+    private boolean enableSortAggregate = false;
+
+    public boolean isEnableSortAggregate() {
+        return enableSortAggregate;
+    }
+
+    public void setEnableSortAggregate(boolean enableSortAggregate) {
+        this.enableSortAggregate = enableSortAggregate;
+    }
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
