@@ -3,7 +3,9 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -18,7 +20,11 @@ import java.util.stream.Collectors;
 public class UseSortAggregateRule extends OptExpressionVisitor<Void, Void> implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        return null;
+        if (!ConnectContext.get().getSessionVariable().isEnableSortAggregate()) {
+            return root;
+        }
+        root.getOp().accept(this, root, null);
+        return root;
     }
 
     @Override
@@ -39,6 +45,15 @@ public class UseSortAggregateRule extends OptExpressionVisitor<Void, Void> imple
         PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getInputs().get(0).getOp();
 
         PhysicalHashAggregateOperator agg = (PhysicalHashAggregateOperator) optExpression.getOp();
+
+        if (!agg.getType().isGlobal()) {
+            return null;
+        }
+        
+        OlapTable table = (OlapTable) scan.getTable();
+        if (table.getKeysType() != KeysType.AGG_KEYS && table.getKeysType() != KeysType.UNIQUE_KEYS) {
+            return null;
+        }
 
         for (ColumnRefOperator groupBy : agg.getGroupBys()) {
             if (!scan.getColRefToColumnMetaMap().containsKey(groupBy)) {
@@ -62,6 +77,7 @@ public class UseSortAggregateRule extends OptExpressionVisitor<Void, Void> imple
 
         if (groupBys.isEmpty()) {
             agg.setUseSortAgg(true);
+            scan.setSortedResult(true);
         }
 
         return null;

@@ -582,6 +582,7 @@ public class PlanFragmentBuilder {
 
             // set unused output columns 
             setUnUsedOutputColumns(node, scanNode, predicates, referenceTable);
+            scanNode.setUseSortedResult(node.isSortedResult());
 
             // set isPreAggregation
             scanNode.setIsPreAggregation(node.isPreAggregation(), node.getTurnOffReason());
@@ -1244,6 +1245,7 @@ public class PlanFragmentBuilder {
                 throw unsupportedException("Not support aggregate type : " + node.getType());
             }
 
+            aggregationNode.setUseSortAgg(node.isUseSortAgg());
             aggregationNode.setStreamingPreaggregationMode(context.getConnectContext().
                     getSessionVariable().getStreamingPreaggregationMode());
             aggregationNode.setHasNullableGenerateChild();

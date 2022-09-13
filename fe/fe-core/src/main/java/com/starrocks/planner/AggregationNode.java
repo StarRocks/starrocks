@@ -51,6 +51,8 @@ public class AggregationNode extends PlanNode {
 
     private String streamingPreaggregationMode = "auto";
 
+    private boolean useSortAgg = false;
+
     /**
      * Create an agg node that is not an intermediate node.
      * isIntermediate is true if it is a slave node in a 2-part agg plan.
@@ -97,6 +99,10 @@ public class AggregationNode extends PlanNode {
 
     public void setStreamingPreaggregationMode(String mode) {
         this.streamingPreaggregationMode = mode;
+    }
+
+    public void setUseSortAgg(boolean useSortAgg) {
+        this.useSortAgg = useSortAgg;
     }
 
     @Override
@@ -151,6 +157,7 @@ public class AggregationNode extends PlanNode {
         if (sqlAggFuncBuilder.length() > 0) {
             msg.agg_node.setSql_aggregate_functions(sqlAggFuncBuilder.toString());
         }
+        msg.agg_node.setUse_sort_agg(useSortAgg);
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {

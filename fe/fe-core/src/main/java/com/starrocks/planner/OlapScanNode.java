@@ -117,6 +117,8 @@ public class OlapScanNode extends ScanNode {
     private ArrayList<Long> scanTabletIds = Lists.newArrayList();
     private boolean isFinalized = false;
 
+    private boolean useSortedResult = false;
+
     private final HashSet<Long> scanBackendIds = new HashSet<>();
 
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
@@ -143,6 +145,10 @@ public class OlapScanNode extends ScanNode {
     }
 
     public void setCanTurnOnPreAggr(boolean canChangePreAggr) {
+    }
+
+    public void setUseSortedResult(boolean useSortedResult) {
+        this.useSortedResult = useSortedResult;
     }
 
     public Collection<Long> getSelectedPartitionIds() {
@@ -647,6 +653,7 @@ public class OlapScanNode extends ScanNode {
             if (!olapTable.hasDelete()) {
                 msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
+            msg.olap_scan_node.setUse_sorted_agg(useSortedResult);
         }
     }
 
