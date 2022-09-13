@@ -1201,17 +1201,6 @@ delete_stmt ::=
     :}
     ;
 
-// Restore statement
-restore_stmt ::=
-    KW_RESTORE KW_SNAPSHOT job_label:label
-    KW_FROM ident:repoName
-	KW_ON LPAREN base_table_ref_list:tbls RPAREN
-    opt_properties:properties
-    {:
-        RESULT = new RestoreStmt(label, repoName, tbls, properties);
-    :}
-    ;
-
 // TODO(zhaochun): stolen from MySQL. Why not use value list, maybe avoid shift/reduce conflict
 // Set statement
 set_stmt ::=
