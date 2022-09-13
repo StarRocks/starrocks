@@ -2,7 +2,7 @@
 
 ## 功能
 
-该语句用于修改一个view的定义。
+该语句用于修改一个逻辑视图的定义。
 
 ## 语法
 
@@ -17,12 +17,12 @@ AS query_stmt;
 
 说明：
 
-1. 视图都是逻辑上的，其中的数据不会存储在物理介质上，在查询时视图将作为语句中的子查询，因此，修改视图的定义等价于修改query_stmt。
+1. 逻辑视图中的数据不会存储在物理介质上，在查询时，逻辑视图将作为语句中的子查询，因此，修改逻辑视图的定义等价于修改 query_stmt。
 2. query_stmt 为任意支持的 SQL。
 
-## example
+## 示例
 
-1. 修改example_db上的视图example_view。
+1. 修改example_db上的逻辑视图example_view。
 
     ```sql
     ALTER VIEW example_db.example_view

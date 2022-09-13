@@ -498,3 +498,7 @@ mysql> desc duplicate_table;
     |                | k7    | VARCHAR(20)  | Yes  | false | N/A     | NONE  |
     +----------------+-------+--------------+------+-------+---------+-------+
     ```
+
+## 更多操作
+
+如要创建逻辑视图，请参见 [CREATE VIEW](./CREATE%20VIEW.md)。
