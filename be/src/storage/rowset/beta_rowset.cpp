@@ -63,7 +63,13 @@ std::string BetaRowset::segment_srcrssid_file_path(const std::string& dir, const
 }
 
 BetaRowset::BetaRowset(const TabletSchema* schema, string rowset_path, RowsetMetaSharedPtr rowset_meta)
-        : Rowset(schema, std::move(rowset_path), std::move(rowset_meta)) {}
+        : Rowset(schema, std::move(rowset_path), std::move(rowset_meta)) {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+}
+
+BetaRowset::~BetaRowset() {
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+}
 
 Status BetaRowset::init() {
     return Status::OK();

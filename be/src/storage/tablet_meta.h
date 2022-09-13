@@ -228,14 +228,6 @@ private:
 
     Status _save_meta(DataDir* data_dir);
 
-    static int64_t calc_mem_usage_of_rs_metas(const std::vector<RowsetMetaSharedPtr>& rs_metas) {
-        int64_t mem_usage = 0;
-        for (const auto& rs_meta : rs_metas) {
-            mem_usage += rs_meta->mem_usage();
-        }
-        return mem_usage;
-    }
-
     // _del_pred_array is ignored to compare.
     friend bool operator==(const TabletMeta& a, const TabletMeta& b);
     friend bool operator!=(const TabletMeta& a, const TabletMeta& b);
