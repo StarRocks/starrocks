@@ -68,7 +68,7 @@ enum RowsetState {
 
 class RowsetStateMachine {
 public:
-    RowsetStateMachine() {}
+    RowsetStateMachine() = default;
 
     Status on_load() {
         switch (_rowset_state) {
@@ -116,7 +116,11 @@ private:
 
 class Rowset : public std::enable_shared_from_this<Rowset> {
 public:
-    virtual ~Rowset() = default;
+    Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
+    Rowset(const Rowset&) = delete;
+    const Rowset& operator=(const Rowset&) = delete;
+
+    virtual ~Rowset();
 
     // Open all segment files in this rowset and load necessary metadata.
     //
@@ -150,20 +154,16 @@ public:
     // helper class to access RowsetMeta
     int64_t start_version() const { return rowset_meta()->version().first; }
     int64_t end_version() const { return rowset_meta()->version().second; }
-    size_t index_disk_size() const { return rowset_meta()->index_disk_size(); }
     size_t data_disk_size() const { return rowset_meta()->total_disk_size(); }
     bool empty() const { return rowset_meta()->empty(); }
-    bool zero_num_rows() const { return rowset_meta()->num_rows() == 0; }
     size_t num_rows() const { return rowset_meta()->num_rows(); }
     size_t total_row_size() const { return rowset_meta()->total_row_size(); }
     Version version() const { return rowset_meta()->version(); }
     RowsetId rowset_id() const { return rowset_meta()->rowset_id(); }
-    int64_t creation_time() { return rowset_meta()->creation_time(); }
+    int64_t creation_time() const { return rowset_meta()->creation_time(); }
     PUniqueId load_id() const { return rowset_meta()->load_id(); }
     int64_t txn_id() const { return rowset_meta()->txn_id(); }
     int64_t partition_id() const { return rowset_meta()->partition_id(); }
-    // flag for push delete rowset
-    bool delete_flag() const { return rowset_meta()->delete_flag(); }
     int64_t num_segments() const { return rowset_meta()->num_segments(); }
     uint32_t num_delete_files() const { return rowset_meta()->get_num_delete_files(); }
     bool has_data_files() const { return num_segments() > 0 || num_delete_files() > 0; }
@@ -220,7 +220,7 @@ public:
 
     void set_need_delete_file() { _need_delete_file = true; }
 
-    bool contains_version(Version version) { return rowset_meta()->version().contains(version); }
+    bool contains_version(Version version) const { return rowset_meta()->version().contains(version); }
 
     static bool comparator(const RowsetSharedPtr& left, const RowsetSharedPtr& right) {
         return left->end_version() < right->end_version();
@@ -277,11 +277,6 @@ public:
 protected:
     friend class RowsetFactory;
 
-    Rowset(const Rowset&) = delete;
-    const Rowset& operator=(const Rowset&) = delete;
-    // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
-    Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
-
     // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
     virtual Status init() = 0;
 
@@ -305,6 +300,9 @@ protected:
     std::atomic<uint64_t> _refs_by_reader;
     // rowset state machine
     RowsetStateMachine _rowset_state_machine;
+
+private:
+    int64_t _mem_usage() const { return sizeof(Rowset) + _rowset_path.length(); }
 };
 
 class RowsetReleaseGuard {

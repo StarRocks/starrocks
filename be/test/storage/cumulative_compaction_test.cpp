@@ -157,8 +157,8 @@ public:
             tablet_meta->add_rs_meta(src_rowset->rowset_meta());
         }
 
-        TabletSharedPtr tablet =
-                Tablet::create_tablet_from_meta(tablet_meta, starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0]);
+        TabletSharedPtr tablet = Tablet::create_tablet_from_meta(
+                tablet_meta, starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0]);
         tablet->init();
 
         config::cumulative_compaction_skip_window_seconds = -2;

@@ -103,9 +103,8 @@ TEST(TabletMetaTest, test_create) {
     col_ordinal_to_unique_id[3] = 10003;
 
     TabletMetaSharedPtr tablet_meta;
-    Status st = TabletMeta::create(request, TabletUid(321, 456), 987 /*shared_id*/,
-                                   20000 /*next_unique_id*/, col_ordinal_to_unique_id, RowsetTypePB::BETA_ROWSET,
-                                   &tablet_meta);
+    Status st = TabletMeta::create(request, TabletUid(321, 456), 987 /*shared_id*/, 20000 /*next_unique_id*/,
+                                   col_ordinal_to_unique_id, RowsetTypePB::BETA_ROWSET, &tablet_meta);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(tablet_meta != nullptr);
 

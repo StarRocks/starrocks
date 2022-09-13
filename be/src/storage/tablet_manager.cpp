@@ -1241,8 +1241,8 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
         return Status::InternalError("fail to get root path shard");
     }
     // We generate a new tablet_uid for this new tablet.
-    return TabletMeta::create(normal_request, TabletUid::gen_uid(), shard_id, next_unique_id,
-                              col_idx_to_unique_id, RowsetTypePB::BETA_ROWSET, tablet_meta);
+    return TabletMeta::create(normal_request, TabletUid::gen_uid(), shard_id, next_unique_id, col_idx_to_unique_id,
+                              RowsetTypePB::BETA_ROWSET, tablet_meta);
 }
 
 Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, TabletDropFlag flag) {

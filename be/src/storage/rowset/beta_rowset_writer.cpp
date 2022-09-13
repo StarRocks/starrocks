@@ -48,12 +48,7 @@
 namespace starrocks {
 
 BetaRowsetWriter::BetaRowsetWriter(const RowsetWriterContext& context)
-        : _context(context),
-          _rowset_meta(nullptr),
-          _num_rows_written(0),
-          _total_row_size(0),
-          _total_data_size(0),
-          _total_index_size(0) {}
+        : _context(context), _num_rows_written(0), _total_row_size(0), _total_data_size(0), _total_index_size(0) {}
 
 Status BetaRowsetWriter::init() {
     DCHECK(!(_context.tablet_schema->contains_format_v1_column() &&
@@ -75,22 +70,27 @@ Status BetaRowsetWriter::init() {
         _rowset_schema = _context.tablet_schema->convert_to_format(real_data_format);
     }
 
-    _rowset_meta = std::make_shared<RowsetMeta>();
-    _rowset_meta->set_rowset_id(_context.rowset_id);
-    _rowset_meta->set_partition_id(_context.partition_id);
-    _rowset_meta->set_tablet_id(_context.tablet_id);
-    _rowset_meta->set_tablet_schema_hash(_context.tablet_schema_hash);
-    _rowset_meta->set_rowset_type(_context.rowset_type);
-    _rowset_meta->set_rowset_state(_context.rowset_state);
-    _rowset_meta->set_segments_overlap(_context.segments_overlap);
+    _rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+    _rowset_meta_pb->set_deprecated_rowset_id(0);
+    _rowset_meta_pb->set_rowset_id(_context.rowset_id.to_string());
+    _rowset_meta_pb->set_partition_id(_context.partition_id);
+    _rowset_meta_pb->set_tablet_id(_context.tablet_id);
+    _rowset_meta_pb->set_tablet_schema_hash(_context.tablet_schema_hash);
+    _rowset_meta_pb->set_rowset_type(_context.rowset_type);
+    _rowset_meta_pb->set_rowset_state(_context.rowset_state);
+    _rowset_meta_pb->set_segments_overlap_pb(_context.segments_overlap);
+
     if (_context.rowset_state == PREPARED || _context.rowset_state == COMMITTED) {
         _is_pending = true;
-        _rowset_meta->set_txn_id(_context.txn_id);
-        _rowset_meta->set_load_id(_context.load_id);
+        _rowset_meta_pb->set_txn_id(_context.txn_id);
+        PUniqueId* new_load_id = _rowset_meta_pb->mutable_load_id();
+        new_load_id->set_hi(_context.load_id.hi());
+        new_load_id->set_lo(_context.load_id.lo());
     } else {
-        _rowset_meta->set_version(_context.version);
+        _rowset_meta_pb->set_start_version(_context.version.first);
+        _rowset_meta_pb->set_end_version(_context.version.second);
     }
-    _rowset_meta->set_tablet_uid(_context.tablet_uid);
+    *(_rowset_meta_pb->mutable_tablet_uid()) = _context.tablet_uid.to_proto();
 
     _writer_options.storage_format_version = _context.storage_format_version;
     _writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
@@ -108,21 +108,21 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     if (_num_rows_written > 0) {
         RETURN_IF_ERROR(_fs->sync_dir(_context.rowset_path_prefix));
     }
-    _rowset_meta->set_num_rows(_num_rows_written);
-    _rowset_meta->set_total_row_size(_total_row_size);
-    _rowset_meta->set_total_disk_size(_total_data_size);
-    _rowset_meta->set_data_disk_size(_total_data_size);
-    _rowset_meta->set_index_disk_size(_total_index_size);
+    _rowset_meta_pb->set_num_rows(_num_rows_written);
+    _rowset_meta_pb->set_total_row_size(_total_row_size);
+    _rowset_meta_pb->set_total_disk_size(_total_data_size);
+    _rowset_meta_pb->set_data_disk_size(_total_data_size);
+    _rowset_meta_pb->set_index_disk_size(_total_index_size);
     // TODO write zonemap to meta
-    _rowset_meta->set_empty(_num_rows_written == 0);
-    _rowset_meta->set_creation_time(time(nullptr));
-    _rowset_meta->set_num_segments(_num_segment);
+    _rowset_meta_pb->set_empty(_num_rows_written == 0);
+    _rowset_meta_pb->set_creation_time(time(nullptr));
+    _rowset_meta_pb->set_num_segments(_num_segment);
     // newly created rowset do not have rowset_id yet, use 0 instead
-    _rowset_meta->set_rowset_seg_id(0);
+    _rowset_meta_pb->set_rowset_seg_id(0);
     // updatable tablet require extra processing
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        _rowset_meta->set_num_delete_files(_num_delfile);
-        _rowset_meta->set_segments_overlap(NONOVERLAPPING);
+        _rowset_meta_pb->set_num_delete_files(_num_delfile);
+        _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
         // if load only has delete, we can skip the partial update logic
         if (_context.partial_update_tablet_schema && _flush_chunk_state != FlushChunkState::DELETE) {
             DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
@@ -133,21 +133,22 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
                 _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
                 _rowset_txn_meta_pb->add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
-            _rowset_meta->set_txn_meta(*_rowset_txn_meta_pb);
+            *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
         }
     } else {
         if (_num_segment <= 1) {
-            _rowset_meta->set_segments_overlap(NONOVERLAPPING);
+            _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
         }
     }
     if (_is_pending) {
-        _rowset_meta->set_rowset_state(COMMITTED);
+        _rowset_meta_pb->set_rowset_state(COMMITTED);
     } else {
-        _rowset_meta->set_rowset_state(VISIBLE);
+        _rowset_meta_pb->set_rowset_state(VISIBLE);
     }
+    auto rowset_meta = std::make_shared<RowsetMeta>(_rowset_meta_pb);
     RowsetSharedPtr rowset;
     RETURN_IF_ERROR(
-            RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, _rowset_meta, &rowset));
+            RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, rowset_meta, &rowset));
     _already_built = true;
     return rowset;
 }
@@ -382,7 +383,7 @@ Status HorizontalBetaRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
     _num_segment += static_cast<int>(rowset->num_segments());
     // TODO update zonemap
     if (rowset->rowset_meta()->has_delete_predicate()) {
-        _rowset_meta->set_delete_predicate(rowset->rowset_meta()->delete_predicate());
+        *_rowset_meta_pb->mutable_delete_predicate() = rowset->rowset_meta()->delete_predicate();
     }
     return Status::OK();
 }

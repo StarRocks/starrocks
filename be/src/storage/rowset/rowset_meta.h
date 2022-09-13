@@ -40,180 +40,95 @@ using RowsetMetaSharedPtr = std::shared_ptr<RowsetMeta>;
 
 class RowsetMeta {
 public:
-    // for ut
-    RowsetMeta() = default;
+    RowsetMeta() = delete;
 
-    ~RowsetMeta() = default;
+    explicit RowsetMeta(const RowsetMetaPB& rowset_meta_pb);
+    explicit RowsetMeta(std::unique_ptr<RowsetMetaPB>& rowset_meta_pb);
+    RowsetMeta(std::string_view pb_rowset_meta, bool* parse_ok);
 
-    bool init(std::string_view pb_rowset_meta) {
-        bool ret = _deserialize_from_pb(pb_rowset_meta);
-        if (!ret) {
-            return false;
-        }
-        _init();
-        return true;
-    }
-
-    bool init_from_pb(const RowsetMetaPB& rowset_meta_pb) {
-        _rowset_meta_pb = rowset_meta_pb;
-        _init();
-        return true;
-    }
-
-    bool init_from_json(const std::string& json_rowset_meta) {
-        bool ret = json2pb::JsonToProtoMessage(json_rowset_meta, &_rowset_meta_pb);
-        if (!ret) {
-            return false;
-        }
-        _init();
-        return true;
-    }
-
-    bool serialize(std::string* value) { return _serialize_to_pb(value); }
-
-    bool json_rowset_meta(std::string* json_rowset_meta) {
-        json2pb::Pb2JsonOptions json_options;
-        json_options.pretty_json = true;
-        bool ret = json2pb::ProtoMessageToJson(_rowset_meta_pb, json_rowset_meta, json_options);
-        return ret;
-    }
+    ~RowsetMeta();
 
     RowsetId rowset_id() const { return _rowset_id; }
 
-    void set_rowset_id(const RowsetId& rowset_id) {
-        // rowset id is a required field, just set it to 0
-        _rowset_meta_pb.set_deprecated_rowset_id(0);
-        _rowset_id = rowset_id;
-        _rowset_meta_pb.set_rowset_id(rowset_id.to_string());
-    }
+    int64_t tablet_id() const { return _rowset_meta_pb->tablet_id(); }
 
-    int64_t tablet_id() const { return _rowset_meta_pb.tablet_id(); }
+    TabletUid tablet_uid() const { return _rowset_meta_pb->tablet_uid(); }
 
-    void set_tablet_id(int64_t tablet_id) { _rowset_meta_pb.set_tablet_id(tablet_id); }
+    int64_t txn_id() const { return _rowset_meta_pb->txn_id(); }
 
-    TabletUid tablet_uid() const { return _rowset_meta_pb.tablet_uid(); }
+    int32_t tablet_schema_hash() const { return _rowset_meta_pb->tablet_schema_hash(); }
 
-    void set_tablet_uid(const TabletUid& tablet_uid) {
-        *(_rowset_meta_pb.mutable_tablet_uid()) = tablet_uid.to_proto();
-    }
+    RowsetStatePB rowset_state() const { return _rowset_meta_pb->rowset_state(); }
 
-    int64_t txn_id() const { return _rowset_meta_pb.txn_id(); }
+    RowsetTypePB rowset_type() const { return _rowset_meta_pb->rowset_type(); }
 
-    void set_txn_id(int64_t txn_id) { _rowset_meta_pb.set_txn_id(txn_id); }
+    void set_rowset_state(RowsetStatePB rowset_state) { _rowset_meta_pb->set_rowset_state(rowset_state); }
 
-    int32_t tablet_schema_hash() const { return _rowset_meta_pb.tablet_schema_hash(); }
-
-    void set_tablet_schema_hash(int64_t tablet_schema_hash) {
-        _rowset_meta_pb.set_tablet_schema_hash(tablet_schema_hash);
-    }
-
-    RowsetTypePB rowset_type() const { return _rowset_meta_pb.rowset_type(); }
-
-    void set_rowset_type(RowsetTypePB rowset_type) { _rowset_meta_pb.set_rowset_type(rowset_type); }
-
-    RowsetStatePB rowset_state() const { return _rowset_meta_pb.rowset_state(); }
-
-    void set_rowset_state(RowsetStatePB rowset_state) { _rowset_meta_pb.set_rowset_state(rowset_state); }
-
-    Version version() const { return {_rowset_meta_pb.start_version(), _rowset_meta_pb.end_version()}; }
+    Version version() const { return {_rowset_meta_pb->start_version(), _rowset_meta_pb->end_version()}; }
 
     void set_version(Version version) {
-        _rowset_meta_pb.set_start_version(version.first);
-        _rowset_meta_pb.set_end_version(version.second);
+        _rowset_meta_pb->set_start_version(version.first);
+        _rowset_meta_pb->set_end_version(version.second);
     }
 
-    bool has_version() const { return _rowset_meta_pb.has_start_version() && _rowset_meta_pb.has_end_version(); }
+    bool has_version() const { return _rowset_meta_pb->has_start_version() && _rowset_meta_pb->has_end_version(); }
 
-    int64_t start_version() const { return _rowset_meta_pb.start_version(); }
+    int64_t start_version() const { return _rowset_meta_pb->start_version(); }
 
-    void set_start_version(int64_t start_version) { _rowset_meta_pb.set_start_version(start_version); }
+    int64_t end_version() const { return _rowset_meta_pb->end_version(); }
 
-    int64_t end_version() const { return _rowset_meta_pb.end_version(); }
+    int64_t num_rows() const { return _rowset_meta_pb->num_rows(); }
 
-    void set_end_version(int64_t end_version) { _rowset_meta_pb.set_end_version(end_version); }
+    int64_t total_row_size() { return _rowset_meta_pb->total_row_size(); }
 
-    int64_t num_rows() const { return _rowset_meta_pb.num_rows(); }
+    size_t total_disk_size() const { return _rowset_meta_pb->total_disk_size(); }
 
-    void set_num_rows(int64_t num_rows) { _rowset_meta_pb.set_num_rows(num_rows); }
+    size_t data_disk_size() const { return _rowset_meta_pb->data_disk_size(); }
 
-    int64_t total_row_size() { return _rowset_meta_pb.total_row_size(); }
+    size_t index_disk_size() const { return _rowset_meta_pb->index_disk_size(); }
 
-    void set_total_row_size(int64_t total_row_size) { _rowset_meta_pb.set_total_row_size(total_row_size); }
+    bool has_delete_predicate() const { return _rowset_meta_pb->has_delete_predicate(); }
 
-    size_t total_disk_size() const { return _rowset_meta_pb.total_disk_size(); }
+    const DeletePredicatePB& delete_predicate() const { return _rowset_meta_pb->delete_predicate(); }
 
-    void set_total_disk_size(size_t total_disk_size) { _rowset_meta_pb.set_total_disk_size(total_disk_size); }
-
-    size_t data_disk_size() const { return _rowset_meta_pb.data_disk_size(); }
-
-    void set_data_disk_size(size_t data_disk_size) { _rowset_meta_pb.set_data_disk_size(data_disk_size); }
-
-    size_t index_disk_size() const { return _rowset_meta_pb.index_disk_size(); }
-
-    void set_index_disk_size(size_t index_disk_size) { _rowset_meta_pb.set_index_disk_size(index_disk_size); }
-
-    bool has_delete_predicate() const { return _rowset_meta_pb.has_delete_predicate(); }
-
-    const DeletePredicatePB& delete_predicate() const { return _rowset_meta_pb.delete_predicate(); }
-
-    DeletePredicatePB* mutable_delete_predicate() { return _rowset_meta_pb.mutable_delete_predicate(); }
+    DeletePredicatePB* mutable_delete_predicate() { return _rowset_meta_pb->mutable_delete_predicate(); }
 
     void set_delete_predicate(const DeletePredicatePB& delete_predicate) {
-        *_rowset_meta_pb.mutable_delete_predicate() = delete_predicate;
+        *_rowset_meta_pb->mutable_delete_predicate() = delete_predicate;
     }
-
-    const RowsetTxnMetaPB& txn_meta() const { return _rowset_meta_pb.txn_meta(); }
-
-    RowsetTxnMetaPB* mutable_txn_meta() { return _rowset_meta_pb.mutable_txn_meta(); }
 
     // return semgent_footer position and size if rowset is partial_rowset
     const FooterPointerPB* partial_rowset_footer(size_t segment_id) const {
-        if (!_rowset_meta_pb.has_txn_meta()) {
+        if (!_rowset_meta_pb->has_txn_meta()) {
             return nullptr;
         }
-        return &_rowset_meta_pb.txn_meta().partial_rowset_footers(segment_id);
+        return &_rowset_meta_pb->txn_meta().partial_rowset_footers(segment_id);
     }
 
-    void set_txn_meta(const RowsetTxnMetaPB& txn_meta) { *_rowset_meta_pb.mutable_txn_meta() = txn_meta; }
+    void clear_txn_meta() { _rowset_meta_pb->clear_txn_meta(); }
 
-    void clear_txn_meta() { _rowset_meta_pb.clear_txn_meta(); }
+    bool empty() const { return _rowset_meta_pb->empty(); }
 
-    bool empty() const { return _rowset_meta_pb.empty(); }
+    PUniqueId load_id() const { return _rowset_meta_pb->load_id(); }
 
-    void set_empty(bool empty) { _rowset_meta_pb.set_empty(empty); }
+    int64_t creation_time() const { return _rowset_meta_pb->creation_time(); }
 
-    PUniqueId load_id() const { return _rowset_meta_pb.load_id(); }
+    void set_creation_time(int64_t creation_time) { return _rowset_meta_pb->set_creation_time(creation_time); }
 
-    void set_load_id(const PUniqueId& load_id) {
-        PUniqueId* new_load_id = _rowset_meta_pb.mutable_load_id();
-        new_load_id->set_hi(load_id.hi());
-        new_load_id->set_lo(load_id.lo());
-    }
+    int64_t partition_id() const { return _rowset_meta_pb->partition_id(); }
 
-    bool delete_flag() const { return _rowset_meta_pb.delete_flag(); }
+    int64_t num_segments() const { return _rowset_meta_pb->num_segments(); }
 
-    int64_t creation_time() const { return _rowset_meta_pb.creation_time(); }
+    void to_rowset_pb(RowsetMetaPB* rs_meta_pb) const { *rs_meta_pb = *_rowset_meta_pb; }
 
-    void set_creation_time(int64_t creation_time) { return _rowset_meta_pb.set_creation_time(creation_time); }
-
-    int64_t partition_id() const { return _rowset_meta_pb.partition_id(); }
-
-    void set_partition_id(int64_t partition_id) { return _rowset_meta_pb.set_partition_id(partition_id); }
-
-    int64_t num_segments() const { return _rowset_meta_pb.num_segments(); }
-
-    void set_num_segments(int64_t num_segments) { _rowset_meta_pb.set_num_segments(num_segments); }
-
-    void to_rowset_pb(RowsetMetaPB* rs_meta_pb) const { *rs_meta_pb = _rowset_meta_pb; }
-
-    RowsetMetaPB to_rowset_pb() {
+    RowsetMetaPB to_rowset_pb() const {
         RowsetMetaPB meta_pb;
         to_rowset_pb(&meta_pb);
         return meta_pb;
     }
 
     bool is_singleton_delta() const {
-        return has_version() && _rowset_meta_pb.start_version() == _rowset_meta_pb.end_version();
+        return has_version() && _rowset_meta_pb->start_version() == _rowset_meta_pb->end_version();
     }
 
     // Some time, we may check if this rowset is in rowset meta manager's meta by using RowsetMetaManager::check_rowset_meta.
@@ -225,11 +140,7 @@ public:
 
     bool is_remove_from_rowset_meta() const { return _is_removed_from_rowset_meta; }
 
-    SegmentsOverlapPB segments_overlap() const { return _rowset_meta_pb.segments_overlap_pb(); }
-
-    void set_segments_overlap(SegmentsOverlapPB segments_overlap) {
-        _rowset_meta_pb.set_segments_overlap_pb(segments_overlap);
-    }
+    SegmentsOverlapPB segments_overlap() const { return _rowset_meta_pb->segments_overlap_pb(); }
 
     // return true if segments in this rowset has overlapping data.
     // this is not same as `segments_overlap()` method.
@@ -259,47 +170,52 @@ public:
         return score;
     }
 
-    int64_t mem_usage() const { return sizeof(RowsetMeta) + _rowset_meta_pb.SpaceUsedLong() - sizeof(_rowset_meta_pb); }
+    int64_t mem_usage() const { return _mem_usage; }
 
-    uint32_t get_rowset_seg_id() const { return _rowset_meta_pb.rowset_seg_id(); }
+    uint32_t get_rowset_seg_id() const { return _rowset_meta_pb->rowset_seg_id(); }
 
-    void set_rowset_seg_id(uint32_t id) { _rowset_meta_pb.set_rowset_seg_id(id); }
+    void set_rowset_seg_id(uint32_t id) { _rowset_meta_pb->set_rowset_seg_id(id); }
 
-    uint32_t get_num_delete_files() const { return _rowset_meta_pb.num_delete_files(); }
+    uint32_t get_num_delete_files() const { return _rowset_meta_pb->num_delete_files(); }
 
-    void set_num_delete_files(uint32_t num_delete_files) { _rowset_meta_pb.set_num_delete_files(num_delete_files); }
-
-    const RowsetMetaPB& get_meta_pb() const { return _rowset_meta_pb; }
+    const RowsetMetaPB& get_meta_pb() const { return *_rowset_meta_pb; }
 
 private:
     bool _deserialize_from_pb(std::string_view value) {
-        return _rowset_meta_pb.ParseFromArray(value.data(), value.size());
-    }
-
-    bool _serialize_to_pb(std::string* value) {
-        if (value == nullptr) {
-            return false;
-        }
-        return _rowset_meta_pb.SerializeToString(value);
+        return _rowset_meta_pb->ParseFromArray(value.data(), value.size());
     }
 
     void _init() {
-        if (_rowset_meta_pb.deprecated_rowset_id() > 0) {
-            _rowset_id.init(_rowset_meta_pb.deprecated_rowset_id());
+        if (_rowset_meta_pb->deprecated_rowset_id() > 0) {
+            _rowset_id.init(_rowset_meta_pb->deprecated_rowset_id());
         } else {
-            _rowset_id.init(_rowset_meta_pb.rowset_id());
+            _rowset_id.init(_rowset_meta_pb->rowset_id());
         }
+    }
+
+    int64_t _calc_mem_usage() const {
+        int64_t size = sizeof(RowsetMeta);
+        if (_rowset_meta_pb != nullptr) {
+            size += static_cast<int64_t>(_rowset_meta_pb->SpaceUsedLong());
+        }
+        return size;
     }
 
     friend bool operator==(const RowsetMeta& a, const RowsetMeta& b) {
         if (a._rowset_id != b._rowset_id) return false;
         if (a._is_removed_from_rowset_meta != b._is_removed_from_rowset_meta) return false;
-        return google::protobuf::util::MessageDifferencer::Equals(a._rowset_meta_pb, b._rowset_meta_pb);
+        return google::protobuf::util::MessageDifferencer::Equals(*a._rowset_meta_pb, *b._rowset_meta_pb);
     }
 
     friend bool operator!=(const RowsetMeta& a, const RowsetMeta& b) { return !(a == b); }
 
-    RowsetMetaPB _rowset_meta_pb;
+    // RowsetMeta may be modifyed after create,
+    // so it may be not inconsistent at construct and destruct using `_rowset_meta_pb->SpaceUsedLong`,
+    // So we add one item to record the mem usage. This method will have a certain deviation,
+    // but it can ensure that the statistical error will not accumulate.
+    int64_t _mem_usage = 0;
+
+    std::unique_ptr<RowsetMetaPB> _rowset_meta_pb;
     RowsetId _rowset_id;
     bool _is_removed_from_rowset_meta = false;
 };
