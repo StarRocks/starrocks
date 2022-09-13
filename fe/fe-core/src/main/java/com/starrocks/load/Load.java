@@ -684,8 +684,12 @@ public class Load {
                         if (defaultValueType == Column.DefaultValueType.CONST) {
                             exprs.add(new StringLiteral(column.calculatedDefaultValue()));
                         } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                            throw new UserException("Column(" + columnName + ") has unsupported default value:"
-                                    + column.getDefaultExpr().getExpr());
+                            if ("uuid()".equalsIgnoreCase(column.getDefaultExpr().getExpr())) {
+                                exprs.add(column.getDefaultExpr().obtainExpr());
+                            } else {
+                                throw new UserException("Column(" + columnName + ") has unsupported default value:"
+                                        + column.getDefaultExpr().getExpr());
+                            }
                         } else if (defaultValueType == Column.DefaultValueType.NULL) {
                             if (column.isAllowNull()) {
                                 exprs.add(NullLiteral.create(Type.VARCHAR));
@@ -707,8 +711,12 @@ public class Load {
                         if (defaultValueType == Column.DefaultValueType.CONST) {
                             innerIfExprs.add(new StringLiteral(column.calculatedDefaultValue()));
                         } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                            throw new UserException("Column(" + columnName + ") has unsupported default value:"
-                                    + column.getDefaultExpr().getExpr());
+                            if ("uuid()".equalsIgnoreCase(column.getDefaultExpr().getExpr())) {
+                                innerIfExprs.add(column.getDefaultExpr().obtainExpr());
+                            } else {
+                                throw new UserException("Column(" + columnName + ") has unsupported default value:"
+                                        + column.getDefaultExpr().getExpr());
+                            }
                         } else if (defaultValueType == Column.DefaultValueType.NULL) {
                             if (column.isAllowNull()) {
                                 innerIfExprs.add(NullLiteral.create(Type.VARCHAR));

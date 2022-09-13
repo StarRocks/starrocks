@@ -206,10 +206,14 @@ public class InsertPlanner {
                     } else if (defaultValueType == Column.DefaultValueType.CONST) {
                         scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        throw new SemanticException(
-                                "Column:" + targetColumn.getName() + " has unsupported default value:"
-                                        + targetColumn.getDefaultExpr().getExpr());
-
+                        if ("uuid()".equalsIgnoreCase(targetColumn.getDefaultExpr().getExpr())) {
+                            scalarOperator = SqlToScalarOperatorTranslator.
+                                    translate(targetColumn.getDefaultExpr().obtainExpr());
+                        } else {
+                            throw new SemanticException(
+                                    "Column:" + targetColumn.getName() + " has unsupported default value:"
+                                            + targetColumn.getDefaultExpr().getExpr());
+                        }
                     } else {
                         throw new SemanticException("Unknown default value type:%s", defaultValueType.toString());
                     }

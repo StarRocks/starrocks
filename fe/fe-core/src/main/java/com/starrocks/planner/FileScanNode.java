@@ -326,8 +326,12 @@ public class FileScanNode extends LoadScanNode {
                     if (defaultValueType == Column.DefaultValueType.CONST) {
                         expr = new StringLiteral(column.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        throw new UserException("Column(" + column + ") has unsupported default value:"
-                                + column.getDefaultExpr().getExpr());
+                        if ("uuid()".equalsIgnoreCase(column.getDefaultExpr().getExpr())) {
+                            expr = column.getDefaultExpr().obtainExpr();
+                        } else {
+                            throw new UserException("Column(" + column + ") has unsupported default value:"
+                                    + column.getDefaultExpr().getExpr());
+                        }
                     } else if (defaultValueType == Column.DefaultValueType.NULL) {
                         if (column.isAllowNull()) {
                             expr = NullLiteral.create(column.getType());

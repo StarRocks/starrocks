@@ -353,7 +353,14 @@ public class ColumnDef {
         } else if (defaultExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) defaultExpr;
             String functionName = functionCallExpr.getFnName().getFunction();
-            if (!FunctionSet.NOW.equalsIgnoreCase(functionName)) {
+            boolean supported = false;
+            if (FunctionSet.NOW.equalsIgnoreCase(functionName)) {
+                supported = true;
+            } else if (FunctionSet.UUID.equalsIgnoreCase(functionName)) {
+                supported = true;
+            }
+
+            if (!supported) {
                 throw new AnalysisException(
                         String.format("Default expr for function %s is not supported", functionName));
             }
@@ -361,6 +368,13 @@ public class ColumnDef {
             // default function current_timestamp currently only support DATETIME type.
             if (FunctionSet.NOW.equalsIgnoreCase(functionName) && type.getPrimitiveType() != PrimitiveType.DATETIME) {
                 throw new AnalysisException(String.format("Default function now() for type %s is not supported", type));
+            }
+            // default function uuid currently only support VARCHAR type.
+            if (FunctionSet.UUID.equalsIgnoreCase(functionName) && type.getPrimitiveType() != PrimitiveType.VARCHAR) {
+                throw new AnalysisException(String.format("Default function uuid() for type %s is not supported", type));
+            }
+            if (FunctionSet.UUID.equalsIgnoreCase(functionName) && type.getColumnSize() < 36) {
+                throw new AnalysisException("Varchar type length must be greater than 36 for uuid function");
             }
         } else if (defaultExpr instanceof NullLiteral) {
             // nothing to check
