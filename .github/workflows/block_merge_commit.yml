@@ -1,19 +1,18 @@
+
+name: Blocker
+
 on: 
   pull_request:
     branches:
       - main
 
-name: Pull Request
-
 permissions:
   pull-requests: read
 
 jobs:
-  message-check:
+  block-merge-and-commit:
     name: Block Merge Commits
-
     runs-on: ubuntu-latest
-
     steps:
       - run: echo "Squash and commit will be ok"
       - name: Block Merge Commits
