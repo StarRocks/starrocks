@@ -27,7 +27,7 @@ public class DefaultExpr {
         if ("uuid()".equals(expr)) {
             FunctionCallExpr functionCallExpr = new FunctionCallExpr(new FunctionName("uuid"), Lists.newArrayList());
             functionCallExpr.setType(Type.VARCHAR);
-            functionCallExpr.setFn(Expr.getBuiltinFunction("uuid", new Type[]{}, Function.CompareMode.IS_IDENTICAL));
+            functionCallExpr.setFn(Expr.getBuiltinFunction("uuid", new Type[] {}, Function.CompareMode.IS_IDENTICAL));
             return functionCallExpr;
         }
         return null;
