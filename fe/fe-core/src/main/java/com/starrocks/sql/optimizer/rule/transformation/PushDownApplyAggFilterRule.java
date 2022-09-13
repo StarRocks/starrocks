@@ -119,7 +119,7 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
                 apply.getCorrelationColumnRefs(), context);
 
         ScalarOperator newPredicate = SubqueryUtils.rewritePredicateAndExtractColumnRefs(
-                Utils.compoundAnd(correlationPredicate).clone(), rewriter);
+                Utils.compoundAnd(correlationPredicate), rewriter);
 
         Map<ColumnRefOperator, ScalarOperator> innerRefMap = rewriter.getColumnRefToExprMap();
         // create new trees

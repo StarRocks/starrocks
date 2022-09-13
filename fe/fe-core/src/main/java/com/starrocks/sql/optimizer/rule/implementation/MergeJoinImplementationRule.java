@@ -3,12 +3,11 @@
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -26,10 +25,7 @@ public class MergeJoinImplementationRule extends JoinImplementationRule {
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
-        LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
-        ScalarOperator predicate = joinOperator.getOnPredicate();
-        // TODO: support non-equal predicate
-        return Utils.containsEqualBinaryPredicate(predicate);
+        return JoinHelper.isJoinConditionContainsEq(input);
     }
 
     @Override

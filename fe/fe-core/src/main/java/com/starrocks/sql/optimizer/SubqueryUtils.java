@@ -9,7 +9,6 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -87,49 +86,6 @@ public class SubqueryUtils {
         return true;
     }
 
-    //
-    // extract expression as a columnRef when the parameter of correlation predicate is expression
-    // e.g.
-    // correlation predicate: a = abs(b)
-    // return: <a = c, c: abs(b)>
-    public static Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> rewritePredicateAndExtractColumnRefs(
-            List<ScalarOperator> correlationPredicate, List<ColumnRefOperator> correlationColumnRefs,
-            OptimizerContext context) {
-        List<ScalarOperator> newPredicates = Lists.newArrayList();
-        Map<ColumnRefOperator, ScalarOperator> newColumnRefs = Maps.newHashMap();
-
-        for (ScalarOperator predicate : correlationPredicate) {
-            BinaryPredicateOperator bpo = ((BinaryPredicateOperator) predicate);
-
-            ScalarOperator left = bpo.getChild(0);
-            ScalarOperator right = bpo.getChild(1);
-
-            if (Utils.containAnyColumnRefs(correlationColumnRefs, left)) {
-                if (right.isColumnRef()) {
-                    newPredicates.add(bpo);
-                    newColumnRefs.put((ColumnRefOperator) right, right);
-                } else {
-                    ColumnRefOperator ref =
-                            context.getColumnRefFactory().create(right, right.getType(), right.isNullable());
-                    newPredicates.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, left, ref));
-                    newColumnRefs.put(ref, right);
-                }
-            } else {
-                if (left.isColumnRef()) {
-                    newPredicates.add(bpo);
-                    newColumnRefs.put((ColumnRefOperator) left, left);
-                } else {
-                    ColumnRefOperator ref =
-                            context.getColumnRefFactory().create(left, left.getType(), left.isNullable());
-                    newPredicates.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, ref, right));
-                    newColumnRefs.put(ref, left);
-                }
-            }
-        }
-
-        return new Pair<>(newPredicates, newColumnRefs);
-    }
-
     public static CallOperator createCountRowsOperator() {
         Function count = getAggregateFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT});
         return new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)),
@@ -192,10 +148,18 @@ public class SubqueryUtils {
         return false;
     }
 
-
+    /**
+     * rewrite the predicate and collect info according to your operatorShuttle
+     * @param correlationPredicate
+     * @param scalarOperatorShuttle
+     * @return
+     */
     public static ScalarOperator rewritePredicateAndExtractColumnRefs(
             ScalarOperator correlationPredicate, BaseScalarOperatorShuttle scalarOperatorShuttle) {
-        return correlationPredicate.accept(scalarOperatorShuttle, null);
+        if (correlationPredicate == null) {
+            return null;
+        }
+        return correlationPredicate.clone().accept(scalarOperatorShuttle, null);
     }
 
     public static boolean containsExpr(Map<ColumnRefOperator, ScalarOperator> innerRefMap) {

@@ -8,7 +8,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -36,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.CorrelatedPredicateRewriter;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
@@ -232,22 +232,23 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             // CTE Produce
             OptExpression cteProduceChild = input.getInputs().get(1);
 
-            Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> correlationPredicatePair =
-                    SubqueryUtils.rewritePredicateAndExtractColumnRefs(Utils.extractConjuncts(correlationPredicate),
-                            apply.getCorrelationColumnRefs(), context);
+            CorrelatedPredicateRewriter corPredRewriter = new CorrelatedPredicateRewriter(
+                    apply.getCorrelationColumnRefs(), context);
 
-            Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> inPredicatePair =
-                    SubqueryUtils.rewritePredicateAndExtractColumnRefs(Lists.newArrayList(inPredicate),
-                            Utils.extractColumnRef(inPredicate.getChild(0)), context);
+            CorrelatedPredicateRewriter inPredRewriter = new CorrelatedPredicateRewriter(
+                    Utils.extractColumnRef(inPredicate.getChild(0)), context);
 
-            // update predicates
-            correlationPredicate = Utils.compoundAnd(correlationPredicatePair.first);
-            inPredicate = (BinaryPredicateOperator) inPredicatePair.first.get(0);
+            correlationPredicate = SubqueryUtils.rewritePredicateAndExtractColumnRefs(
+                    correlationPredicate, corPredRewriter);
+
+            inPredicate = (BinaryPredicateOperator) SubqueryUtils.rewritePredicateAndExtractColumnRefs(
+                    inPredicate, inPredRewriter);
 
             // update used columns
-            Preconditions.checkState(inPredicatePair.second.keySet().size() == 1);
-            inPredicateUsedRefs = new ColumnRefSet(inPredicatePair.second.keySet());
-            correlationPredicateInnerRefs = new ColumnRefSet(correlationPredicatePair.second.keySet());
+            Preconditions.checkState(inPredRewriter.getColumnRefToExprMap().keySet().size() == 1);
+            inPredicateUsedRefs = new ColumnRefSet(inPredRewriter.getColumnRefToExprMap().keySet());
+            correlationPredicateInnerRefs = new ColumnRefSet(corPredRewriter
+                    .getColumnRefToExprMap().keySet());
 
             // CTE produce filter
             if (null != apply.getPredicate()) {
@@ -256,15 +257,13 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             }
 
             // CTE produce project
-            if (correlationPredicatePair.second.values().stream().anyMatch(v -> !v.isColumnRef()) ||
-                    inPredicatePair.second.values().stream().anyMatch(v -> !v.isColumnRef())) {
+            if (SubqueryUtils.containsExpr(corPredRewriter.getColumnRefToExprMap()) ||
+                    SubqueryUtils.containsExpr(inPredRewriter.getColumnRefToExprMap())) {
                 // has function, need project node
                 Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
-
-                Arrays.stream(cteProduceChild.getOutputColumns().getColumnIds()).mapToObj(factory::getColumnRef)
-                        .forEach(i -> projectMap.put(i, i));
-                projectMap.putAll(correlationPredicatePair.second);
-                projectMap.putAll(inPredicatePair.second);
+                projectMap.putAll(corPredRewriter.getColumnRefToExprMap());
+                projectMap.putAll(inPredRewriter.getColumnRefToExprMap());
+                projectMap = SubqueryUtils.updateOutputColumns(cteProduceChild, projectMap, context);
 
                 cteProduceChild = OptExpression.create(new LogicalProjectOperator(projectMap), cteProduceChild);
             }

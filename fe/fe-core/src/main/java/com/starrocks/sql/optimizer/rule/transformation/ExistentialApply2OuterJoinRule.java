@@ -245,7 +245,7 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
         CorrelatedPredicateRewriter rewriter = new CorrelatedPredicateRewriter(
                 correlationColumnRefs, context);
         ScalarOperator newPredicate = SubqueryUtils.rewritePredicateAndExtractColumnRefs(
-                Utils.compoundAnd(correlationPredicates).clone(), rewriter);
+                Utils.compoundAnd(correlationPredicates), rewriter);
 
         Map<ColumnRefOperator, ScalarOperator> innerRefMap = rewriter.getColumnRefToExprMap();
 

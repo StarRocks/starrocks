@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 
@@ -118,6 +119,15 @@ public class JoinHelper {
         return eqConjuncts;
     }
 
+    /**
+     * Conditions should contain:
+     * 1. binary predicate operator is EQ or EQ_FOR_NULL type
+     * 2. operands in each side of operator should totally belong to each side of join's input
+     * @param leftColumns
+     * @param rightColumns
+     * @param predicate
+     * @return
+     */
     private static boolean isEqualBinaryPredicate(ColumnRefSet leftColumns, ColumnRefSet rightColumns,
                                                  ScalarOperator predicate) {
         if (predicate instanceof BinaryPredicateOperator) {
@@ -146,5 +156,16 @@ public class JoinHelper {
         return type.isCrossJoin() || JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN.equals(type) ||
                 (type.isInnerJoin() && equalOnPredicate.isEmpty()) || "BROADCAST".equalsIgnoreCase(hint);
     }
+
+    public static boolean isJoinConditionContainsEq(OptExpression joinOpt) {
+        LogicalJoinOperator joinOperator = (LogicalJoinOperator) joinOpt.getOp();
+        ScalarOperator predicate = joinOperator.getOnPredicate();
+        ColumnRefSet leftColumnSet = joinOpt.getInputs().get(0).getOutputColumns();
+        ColumnRefSet rightColumnSet = joinOpt.getInputs().get(1).getOutputColumns();
+        List<BinaryPredicateOperator> equalConjuncts = JoinHelper.
+                getEqualsPredicate(leftColumnSet, rightColumnSet, Utils.extractConjuncts(predicate));
+        return CollectionUtils.isNotEmpty(equalConjuncts);
+    }
+
 
 }
