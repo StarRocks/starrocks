@@ -36,6 +36,7 @@ protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
     HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, const TupleDescriptor* tuple_desc);
+    void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc);
 
     THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length);
     TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
@@ -88,7 +89,6 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     std::vector<SlotDescriptor*> mat_slots;
     std::vector<SlotDescriptor*> part_slots;
 
-    std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
     for (int i = 0; i < tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = tuple_desc->slots()[i];
         if (slot->col_name().find("PART_") != std::string::npos) {
@@ -98,15 +98,22 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
             materialize_index_in_chunk.push_back(i);
             mat_slots.push_back(slot);
         }
-        hive_column_names->emplace_back(slot->col_name());
     }
 
     param->partition_index_in_chunk = partition_index_in_chunk;
     param->materialize_index_in_chunk = materialize_index_in_chunk;
     param->materialize_slots = mat_slots;
     param->partition_slots = part_slots;
-    param->hive_column_names = hive_column_names;
     return param;
+}
+
+void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc) {
+    std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
+    for (int i = 0; i < tuple_desc->slots().size(); i++) {
+        SlotDescriptor* slot = tuple_desc->slots()[i];
+        hive_column_names->emplace_back(slot->col_name());
+    }
+    params->hive_column_names = hive_column_names;
 }
 
 TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
@@ -1188,7 +1195,7 @@ UID9,ACTION9
 UID99,ACTION99
 */
 
-TEST_F(HdfsScannerTest, TestCompressedCSV) {
+TEST_F(HdfsScannerTest, TestCSVCompressed) {
     SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
                             {"action", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
                             {""}};
@@ -1201,6 +1208,7 @@ TEST_F(HdfsScannerTest, TestCompressedCSV) {
         auto* range = _create_scan_range(uncompressed_file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
         auto* param = _create_param(uncompressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
@@ -1216,6 +1224,7 @@ TEST_F(HdfsScannerTest, TestCompressedCSV) {
         auto* range = _create_scan_range(compressed_file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
         auto* param = _create_param(compressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
