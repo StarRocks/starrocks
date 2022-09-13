@@ -14,7 +14,7 @@ jobs:
     name: Block Merge Commits
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Squash and commit will be ok"
+      - run: echo "Squash and merge will be ok, please re-arrange commit message."
       - name: Block Merge Commits
         uses: Morishiri/block-merge-commits-action@v2
         with:
