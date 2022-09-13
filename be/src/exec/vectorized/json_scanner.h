@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <string_view>
+
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "exec/vectorized/file_scanner.h"
@@ -11,7 +13,6 @@
 #include "simdjson.h"
 #include "util/raw_container.h"
 #include "util/slice.h"
-#include <string_view>
 
 namespace starrocks::vectorized {
 
@@ -101,7 +102,7 @@ private:
     std::shared_ptr<SequentialFile> _file;
     bool _closed = false;
     std::vector<SlotDescriptor*> _slot_descs;
-    //Attention: _slot_desc_dict's key is the string_view of the column of _slot_descs, 
+    //Attention: _slot_desc_dict's key is the string_view of the column of _slot_descs,
     // so the lifecycle of _slot_descs should be longer than _slot_desc_dict;
     std::unordered_map<std::string_view, SlotDescriptor*> _slot_desc_dict;
 

@@ -512,8 +512,8 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
 
     // append null to the column without data.
     for (auto& pair : slot_desc_dict) {
-        auto &col_name = pair.first;
-        auto &slot_desc = pair.second;
+        auto& col_name = pair.first;
+        auto& slot_desc = pair.second;
 
         auto column = chunk->get_column_by_slot_id(slot_desc->id());
 
