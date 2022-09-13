@@ -94,13 +94,19 @@ public class CorrelatedPredicateRewriter extends BaseScalarOperatorShuttle {
         return super.visitCastOperator(operator, context);
     }
 
+    /**
+     * if exprToColumnRefMap doesn't contain operator means should create a new columnRef to replace this operator,
+     * otherwise replace this operator with exist columnRef.
+     * @param operator
+     * @return
+     */
     private ScalarOperator addExprToColumnRefMap(ScalarOperator operator) {
         if (!exprToColumnRefMap.containsKey(operator)) {
             ColumnRefOperator columnRefOperator = createColumnRefOperator(operator);
             exprToColumnRefMap.put(operator, columnRefOperator);
             return columnRefOperator;
         } else {
-            return operator;
+            return exprToColumnRefMap.get(operator);
         }
     }
     private ColumnRefOperator createColumnRefOperator(ScalarOperator operator) {
