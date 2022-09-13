@@ -35,6 +35,8 @@ import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
+import com.starrocks.sql.optimizer.rule.tree.BottomUp;
+import com.starrocks.sql.optimizer.rule.tree.EquivalentConstantExpressionRewrite;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
@@ -155,6 +157,8 @@ public class Optimizer {
         ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
         rootTaskContext.getRequiredColumns().union(cteContext.getAllRequiredColumns());
 
+        tree = new BottomUp().rewrite(tree, context.getTaskContext());
+
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node
         // cannot merge
@@ -226,6 +230,9 @@ public class Optimizer {
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INLINE_CTE);
             CTEUtils.collectCteOperators(tree, context);
         }
+
+        tree = new EquivalentConstantExpressionRewrite().rewrite(tree, context.getTaskContext());
+        deriveLogicalProperty(tree);
 
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
