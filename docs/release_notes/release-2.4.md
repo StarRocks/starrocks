@@ -46,7 +46,7 @@ Release date: September 9th, 2022
 
 - Histograms are added to CBO statistics. Full statistics collection is further optimized. For more information, see [Gather CBO statistics](../using_starrocks/Cost_based_optimizer.md).
 
-- Adaptive multi-threading is enabled for tablet scanning to reduce the dependency of scanning performance on the tablet number. As a result, you can set the number of buckets more easily. For more information, see [Data Distribution](../table_design/Data_distribution.md).
+- Adaptive multi-threading is enabled for tablet scanning to reduce the dependency of scanning performance on the tablet number. As a result, you can set the number of buckets more easily. For more information, see [Data Distribution](../table_design/Data_distribution.md#how-to-determine-the-number-of-buckets).
 
 - Functions:
 
