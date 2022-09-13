@@ -78,7 +78,7 @@ SHOW LOAD FROM example_db ORDER BY LoadStartTime DESC limit 5,10;
 SHOW LOAD FROM example_db ORDER BY LoadStartTime DESC limit 10 offset 5;
 ```
 
-### 小批量导入是查看导入状态的命令
+### 小批量导入时查看导入状态的命令
 
 ```bash
 curl --location-trusted -u {user}:{passwd} \
