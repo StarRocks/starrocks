@@ -1,7 +1,5 @@
 # StarRocks version 2.1
 
-<<<<<<< HEAD
-=======
 ## 2.1.13
 
 Release date: September 6, 2022
@@ -38,7 +36,6 @@ The following bugs are fixed:
 - When multiple Broker Load jobs are created to load the same HDFS data file, if one job encounters exceptions, the other jobs may not be able to properly read data and consequently fail. [#9506](https://github.com/StarRocks/starrocks/issues/9506)
 - The related variables are not reset when the schema of a table changes, resulting in an error (`no delete vector found tablet`) when querying the table. [#9192](https://github.com/StarRocks/starrocks/issues/9192)
 
->>>>>>> ca619432a ([Docs]Update release-2.1.md (#10916))
 ## 2.1.11
 
 Release date: July 9, 2022
