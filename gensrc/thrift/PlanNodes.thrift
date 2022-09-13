@@ -363,6 +363,7 @@ struct TOlapScanNode {
   23: optional map<i32, i32> dict_string_id_to_int_ids
   // which columns only be used to filter data in the stage of scan data
   24: optional list<string> unused_output_column_name
+  25: optional bool use_sorted_agg
 }
 
 struct TJDBCScanNode {
@@ -568,6 +569,8 @@ struct TAggregationNode {
   23: optional string sql_aggregate_functions
 
   24: optional i32 agg_func_set_version = 1
+
+  25: optional bool use_sort_agg
 }
 
 struct TRepeatNode {

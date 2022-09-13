@@ -282,6 +282,9 @@ public:
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
+    bool use_sorted_agg() const { return _use_sorted_agg; };
+    void set_use_sorted_agg(bool use_sorted_agg) { _use_sorted_agg = use_sorted_agg; }
+
 private:
     Status create_error_log_file();
 
@@ -385,6 +388,8 @@ private:
     pipeline::QueryContext* _query_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;
+
+    bool _use_sorted_agg = false;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \

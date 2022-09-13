@@ -47,6 +47,10 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _unused_output_columns.emplace_back(col_name);
     }
 
+    if (tnode.olap_scan_node.__isset.use_sorted_agg) {
+        _sorted_result = tnode.olap_scan_node.use_sorted_agg;
+    }
+
     _estimate_scan_and_output_row_bytes();
 
     return Status::OK();

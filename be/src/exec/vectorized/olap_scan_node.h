@@ -80,6 +80,13 @@ public:
     static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
     static int compute_priority(int32_t num_submitted_tasks);
 
+    int io_tasks_per_scan_operator() const override {
+        if (_sorted_result) {
+            return 1;
+        }
+        return starrocks::ScanNode::io_tasks_per_scan_operator();
+    }
+
 private:
     friend class TabletScanner;
 
@@ -182,6 +189,8 @@ private:
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 
     bool _enable_shared_scan = false;
+
+    bool _sorted_result = false;
 
     // profile
     RuntimeProfile* _scan_profile = nullptr;

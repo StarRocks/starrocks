@@ -20,5 +20,11 @@ public:
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
+
+private:
+    template <class AggFactory, class SourceFactory, class SinkFactory>
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> _decompose_to_pipeline(
+            std::vector<std::shared_ptr<pipeline::OperatorFactory>>& ops_with_sink,
+            pipeline::PipelineBuilderContext* context);
 };
 } // namespace starrocks::vectorized
