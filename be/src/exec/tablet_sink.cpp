@@ -1027,8 +1027,8 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
     size_t serialize_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
     // update incrementally so that FE can get the progress.
     // the real 'num_rows_load_total' will be set when sink being closed.
-    state->update_num_rows_load_sink_total(num_rows);
-    state->update_num_bytes_load_sink_total(serialize_size);
+    state->update_num_rows_load_from_sink(num_rows);
+    state->update_num_bytes_load_from_sink(serialize_size);
     StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
     StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
 
@@ -1365,7 +1365,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
         // _number_input_rows don't contain num_rows_load_filtered and num_rows_load_unselected in scan node
         int64_t num_rows_load_total =
                 _number_input_rows + state->num_rows_load_filtered() + state->num_rows_load_unselected();
-        state->set_num_rows_load_sink_total(num_rows_load_total);
+        state->set_num_rows_load_from_sink(num_rows_load_total);
         state->update_num_rows_load_filtered(_number_filtered_rows);
 
         // print log of add batch time of all node, for tracing load performance easily

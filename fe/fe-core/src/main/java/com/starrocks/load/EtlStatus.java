@@ -473,10 +473,10 @@ public class EtlStatus implements Writable {
             }
 
             TreeMap<String, Object> details = Maps.newTreeMap();
-            details.put("LoadSourceRows", totalSourceRows);
-            details.put("LoadSourceBytes", totalSourceBytes);
-            details.put("LoadSinkRows", totalSinkRows);
-            details.put("LoadSinkBytes", totalSinkBytes);
+            details.put("ScanRows", totalSourceRows);
+            details.put("ScanBytes", totalSourceBytes);
+            details.put("InternalTableLoadRows", totalSinkRows);
+            details.put("InternalTableLoadBytes", totalSinkBytes);
             details.put("FileNumber", fileNum);
             details.put("FileSize", totalFileSizeB);
             details.put("TaskNumber", counterTbl.rowMap().size());
