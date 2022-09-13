@@ -150,7 +150,7 @@ public class RestoreJob extends AbstractJob {
     @SerializedName(value = "restoredPartitions")
     protected List<Pair<String, Partition>> restoredPartitions = Lists.newArrayList();
     @SerializedName(value = "restoredTbls")
-    private List<OlapTable> restoredTbls = Lists.newArrayList();
+    private List<Table> restoredTbls = Lists.newArrayList();
 
     // save all restored partitions' version info which are already exist in globalStateMgr
     // table id -> partition id -> version
@@ -610,15 +610,15 @@ public class RestoreJob extends AbstractJob {
             }
 
             // generate create replica task for all restored tables
-            for (OlapTable restoreTbl : restoredTbls) {
+            for (Table restoreTbl : restoredTbls) {
                 for (Partition restorePart : restoreTbl.getPartitions()) {
-                    createReplicas(restoreTbl, restorePart);
+                    createReplicas((OlapTable) restoreTbl, restorePart);
                     BackupTableInfo backupTableInfo = jobInfo.getTableInfo(restoreTbl.getName());
-                    genFileMapping(restoreTbl, restorePart, backupTableInfo.id,
+                    genFileMapping((OlapTable) restoreTbl, restorePart, backupTableInfo.id,
                             backupTableInfo.getPartInfo(restorePart.getName()), true);
                 }
                 // set restored table's new name after all 'genFileMapping'
-                restoreTbl.setName(jobInfo.getAliasByOriginNameIfSet(restoreTbl.getName()));
+                ((OlapTable) restoreTbl).setName(jobInfo.getAliasByOriginNameIfSet(restoreTbl.getName()));
             }
 
             LOG.debug("finished to generate create replica tasks. {}", this);
@@ -705,7 +705,7 @@ public class RestoreJob extends AbstractJob {
             addRestoredPartitions(db, false);
 
             // add restored tables
-            for (OlapTable tbl : restoredTbls) {
+            for (Table tbl : restoredTbls) {
                 if (!db.createTable(tbl)) {
                     status = new Status(ErrCode.COMMON_ERROR, "Table " + tbl.getName()
                             + " already exist in db: " + db.getOriginName());
@@ -900,11 +900,11 @@ public class RestoreJob extends AbstractJob {
             addRestoredPartitions(db, true);
 
             // restored tables
-            for (OlapTable restoreTbl : restoredTbls) {
+            for (Table restoreTbl : restoredTbls) {
                 db.createTable(restoreTbl);
                 // modify tablet inverted index
                 for (Partition restorePart : restoreTbl.getPartitions()) {
-                    modifyInvertedIndex(restoreTbl, restorePart);
+                    modifyInvertedIndex((OlapTable) restoreTbl, restorePart);
                 }
             }
         } finally {
@@ -1162,8 +1162,6 @@ public class RestoreJob extends AbstractJob {
         prepareAndSendDirMoveTasks();
 
         state = RestoreJobState.COMMITTING;
-
-        return;
     }
 
     protected void prepareAndSendDirMoveTasks() {
@@ -1399,7 +1397,7 @@ public class RestoreJob extends AbstractJob {
                 setTableStateToNormal(db);
 
                 // remove restored tbls
-                for (OlapTable restoreTbl : restoredTbls) {
+                for (Table restoreTbl : restoredTbls) {
                     LOG.info("remove restored table when cancelled: {}", restoreTbl.getName());
                     for (Partition part : restoreTbl.getPartitions()) {
                         for (MaterializedIndex idx : part.getMaterializedIndices(IndexExtState.VISIBLE)) {
@@ -1505,7 +1503,7 @@ public class RestoreJob extends AbstractJob {
         }
 
         out.writeInt(restoredTbls.size());
-        for (OlapTable tbl : restoredTbls) {
+        for (Table tbl : restoredTbls) {
             tbl.write(out);
         }
 
@@ -1563,7 +1561,7 @@ public class RestoreJob extends AbstractJob {
 
         size = in.readInt();
         for (int i = 0; i < size; i++) {
-            restoredTbls.add((OlapTable) Table.read(in));
+            restoredTbls.add(Table.read(in));
         }
 
         size = in.readInt();
