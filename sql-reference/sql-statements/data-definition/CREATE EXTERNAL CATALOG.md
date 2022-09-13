@@ -22,7 +22,7 @@ PROPERTIES ("key"="value", ...);
 | 参数         | 必选 | 说明                                                         |
 | ------------ | ---- | ------------------------------------------------------------ |
 | catalog_name | 是   | External catalog 的名称，命名要求如下：必须由字母(a-z或A-Z)、数字(0-9)或下划线(_)组成，且只能以字母开头。总长度不能超过 64 个字符。 |
-| PROPERTIES   | 是   | External catalog 的属性，不同的 external catalog 需要设置不同属性。详细配置信息，请参见 [Hive catalog](/using_starrocks/catalog/hive_catalog.md#创建-hive-catalog)、[Iceberg catalog](/using_starrocks/catalog/iceberg_catalog.md#创建-iceberg-catalog) 和 [Hudi catalog](/using_starrocks/catalog/hudi_catalog.md#创建-hudi-catalog)。 |
+| PROPERTIES   | 是   | External catalog 的属性，不同的 external catalog 需要设置不同属性。详细配置信息，请参见 Hive catalog、Iceberg catalog 和 Hudi catalog |
 
 ## 示例
 
