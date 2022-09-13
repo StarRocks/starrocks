@@ -22,7 +22,7 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 同步导入是指您创建导入作业以后，StarRocks 同步执行作业，并在作业执行完成以后返回导入结果。您可以通过返回的导入结果判断导入作业是否成功。
 
-支持同步模式的导入方式有 Stream Load 和 INSERT INTO。
+支持同步模式的导入方式有 Stream Load 和 INSERT。
 
 导入过程如下：
 
@@ -77,7 +77,7 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 ## 导入方式
 
-StarRocks 提供 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/BrokerLoad.md)、 [Routine Load](/loading/RoutineLoad.md)、[Spark Load](/loading/SparkLoad.md) 和 [INSERT INTO](/loading/InsertInto.md) 多种导入方式，满足您在不同业务场景下的数据导入需求。
+StarRocks 提供 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/BrokerLoad.md)、 [Routine Load](/loading/RoutineLoad.md)、[Spark Load](/loading/SparkLoad.md) 和 [INSERT](/loading/InsertInto.md) 多种导入方式，满足您在不同业务场景下的数据导入需求。
 
 | 导入方式           | 协议  | 业务场景                                                     | 数据量（单作业）     | 数据源                                       | 数据格式              | 同步模式 |
 | ------------------ | ----- | ------------------------------------------------------------ | -------------------- | -------------------------------------------- | --------------------- | -------- |
@@ -106,7 +106,7 @@ StarRocks 提供 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/
 
 您可以通过设置参数来限制单个导入作业的内存使用，以防止导入作业占用过多内存，特别是在导入并发较高的情况下。同时，您也需要注意避免设置过小的内存使用上限，因为内存使用上限过小，导入过程中可能会因为内存使用量达到上限而频繁地将内存中的数据刷出到磁盘，进而可能影响导入效率。建议您根据具体的业务场景要求，合理地设置内存使用上限。
 
-不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/BrokerLoad.md)、[Routine Load](/loading/RoutineLoad.md)、[Spark Load](/loading/SparkLoad.md) 和 [INSERT INTO](/loading/InsertInto.md)。需要注意的是，一个导入作业通常都会分布在多个 BE 上执行，这些内存参数限制的是一个导入作业在单个 BE 上的内存使用，而不是在整个集群上的内存使用总和。
+不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/BrokerLoad.md)、[Routine Load](/loading/RoutineLoad.md)、[Spark Load](/loading/SparkLoad.md) 和 [INSERT](/loading/InsertInto.md)。需要注意的是，一个导入作业通常都会分布在多个 BE 上执行，这些内存参数限制的是一个导入作业在单个 BE 上的内存使用，而不是在整个集群上的内存使用总和。
 
 您还可以通过设置一些参数来限制在单个 BE 上运行的所有导入作业的总的内存使用上限。可参考本文“[系统配置](/loading/Loading_intro.md#系统配置)”章节。
 

@@ -8,7 +8,7 @@ StarRocks 提供的数据导出功能。您可以使用该功能将指定表或�
 
 Broker Load 需要借助 Broker 程序程访问外部云存储系统。因此，使用 Broker Load 前，需要提前部署好 Broker 程序。
 
-有关如何部署 Broker 程序的信息，请参见[部署 Broker 节点](/quick_start/Deploy.md)。
+有关如何部署 Broker 程序的信息，请参见[部署 Broker 节点](/administration/deploy_broker.md)。
 
 ## 注意事项
 
