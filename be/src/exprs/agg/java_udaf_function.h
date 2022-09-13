@@ -34,17 +34,63 @@ public:
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
                size_t row_num) const override final {
-        CHECK(false) << "unreadable path";
+        // TODO merge
+        const BinaryColumn* input_column = nullptr;
+        if (column->is_nullable()) {
+            auto* null_column = down_cast<const NullableColumn*>(column);
+            input_column = down_cast<const BinaryColumn*>(null_column->data_column().get());
+        } else {
+            input_column = down_cast<const BinaryColumn*>(column);
+        }
+        Slice slice = input_column->get_slice(row_num);
+        auto* udaf_ctx = ctx->impl()->udaf_ctxs();
+
+        if (udaf_ctx->buffer->capacity() < slice.get_size()) {
+            udaf_ctx->buffer_data.resize(slice.get_size());
+            udaf_ctx->buffer =
+                    std::make_unique<DirectByteBuffer>(udaf_ctx->buffer_data.data(), udaf_ctx->buffer_data.size());
+        }
+        JVMFunctionHelper::getInstance().clear(udaf_ctx->buffer.get(), ctx);
+        memcpy(udaf_ctx->buffer_data.data(), slice.get_data(), slice.get_size());
+        udaf_ctx->_func->merge(this->data(state).handle, udaf_ctx->buffer->handle());
     }
 
     void serialize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
                              Column* to) const override final {
-        CHECK(false) << "unreadable path";
+        BinaryColumn* column = nullptr;
+        // TODO serialize
+        if (to->is_nullable()) {
+            auto* null_column = down_cast<NullableColumn*>(to);
+            null_column->null_column()->append(DATUM_NOT_NULL);
+            column = down_cast<BinaryColumn*>(null_column->data_column().get());
+        } else {
+            DCHECK(to->is_binary());
+            column = down_cast<BinaryColumn*>(to);
+        }
+
+        size_t old_size = column->get_bytes().size();
+        auto* udaf_ctx = ctx->impl()->udaf_ctxs();
+        int serialize_size = udaf_ctx->_func->serialize_size(this->data(state).handle);
+        if (udaf_ctx->buffer->capacity() < serialize_size) {
+            udaf_ctx->buffer_data.resize(serialize_size);
+            udaf_ctx->buffer =
+                    std::make_unique<DirectByteBuffer>(udaf_ctx->buffer_data.data(), udaf_ctx->buffer_data.size());
+        }
+        JVMFunctionHelper::getInstance().clear(udaf_ctx->buffer.get(), ctx);
+
+        udaf_ctx->_func->serialize(this->data(state).handle, udaf_ctx->buffer->handle());
+        size_t new_size = old_size + serialize_size;
+        column->get_bytes().resize(new_size);
+        column->get_offset().emplace_back(new_size);
+        memcpy(column->get_bytes().data() + old_size, udaf_ctx->buffer_data.data(), serialize_size);
     }
 
     void finalize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
                             Column* to) const override final {
-        CHECK(false) << "unreadable path";
+        auto* udaf_ctx = ctx->impl()->udaf_ctxs();
+        jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
+        append_jvalue(udaf_ctx->finalize->method_desc[0], to, val);
+        release_jvalue(udaf_ctx->finalize->method_desc[0].is_box, val);
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t batch_size,
