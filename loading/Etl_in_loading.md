@@ -83,7 +83,7 @@ StarRocks 支持在导入数据的过程中实现数据转换。
    2020-05-23
    ```
 
-3. 把 `file1.csv` 和 `file2.csv` 文件上传到 HDFS 集群的 `/user/starRocks/data/input/` 路径下，并把 `file1.csv` 和 `file2.csv` 文件的数据分别传入 Apache Kafka® 集群的 `topic1` 和 `topic2` 中。
+3. 把 `file1.csv` 和 `file2.csv` 文件上传到 HDFS 集群的 `/user/starrocks/data/input/` 路径下，并把 `file1.csv` 和 `file2.csv` 文件的数据分别传入 Apache Kafka® 集群的 `topic1` 和 `topic2` 中。
 
 ## 跳过不需要导入的列
 
@@ -133,7 +133,7 @@ curl --location-trusted -u root: \
 ```SQL
 LOAD LABEL test_db.label1
 (
-    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starRocks/data/input/file1.csv")
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/file1.csv")
     INTO TABLE `table1`
     FORMAT AS "csv"
     COLUMNS TERMINATED BY ","
@@ -222,7 +222,7 @@ curl --location-trusted -u root: \
 ```SQL
 LOAD LABEL test_db.label2
 (
-    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starRocks/data/input/file1.csv")
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/file1.csv")
     INTO TABLE `table1`
     FORMAT AS "csv"
     COLUMNS TERMINATED BY ","
@@ -312,7 +312,7 @@ curl --location-trusted -u root: \
 ```SQL
 LOAD LABEL test_db.label3
 (
-    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starRocks/data/input/file2.csv")
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/file2.csv")
     INTO TABLE `table2`
     FORMAT AS "csv"
     COLUMNS TERMINATED BY ","
@@ -367,27 +367,27 @@ MySQL [test_db]> SELECT * FROM table2;
 
 当指定的文件路径中存在分区字段时，StarRocks 支持您使用 `COLUMNS FROM PATH AS` 参数指定要提取文件路径中哪些分区字段的信息，相当于待导入数据文件中的列。该参数只有在从 HDFS 导入数据时可用。
 
-例如，要导入 Hive 生成的四个数据文件，这些文件存储在 HDFS 上的 `/user/starRocks/data/input/` 路径下，每个数据文件都按照 `date` 分区字段进行分区，并且每个数据文件都只包含两列，分别代表事件类型和用户 ID，如下所示：
+例如，要导入 Hive 生成的四个数据文件，这些文件存储在 HDFS 上的 `/user/starrocks/data/input/` 路径下，每个数据文件都按照 `date` 分区字段进行分区，并且每个数据文件都只包含两列，分别代表事件类型和用户 ID，如下所示：
 
 ```Plain
-/user/starRocks/data/input/date=2020-05-20/data
+/user/starrocks/data/input/date=2020-05-20/data
 1,354
-/user/starRocks/data/input/date=2020-05-21/data
+/user/starrocks/data/input/date=2020-05-21/data
 2,465
-/user/starRocks/data/input/date=2020-05-22/data
+/user/starrocks/data/input/date=2020-05-22/data
 1,576
-/user/starRocks/data/input/date=2020-05-23/data
+/user/starrocks/data/input/date=2020-05-23/data
 2,687
 ```
 
 ### 导入数据
 
-可以通过如下语句，创建 [Broker Load](/loading/BrokerLoad.md) 导入作业，获取文件路径 `/user/starRocks/data/input/` 中分区字段 `date` 的信息，并通过使用通配符 (*) 指定将该文件路径下所有数据文件都导入到 `table1` 表中：
+可以通过如下语句，创建 [Broker Load](/loading/BrokerLoad.md) 导入作业，获取文件路径 `/user/starrocks/data/input/` 中分区字段 `date` 的信息，并通过使用通配符 (*) 指定将该文件路径下所有数据文件都导入到 `table1` 表中：
 
 ```SQL
 LOAD LABEL test_db.label4
 (
-    DATA INFILE("hdfs://<fe_host>:<fe_http_port>/user/starRocks/data/input/date=*/*")
+    DATA INFILE("hdfs://<fe_host>:<fe_http_port>/user/starrocks/data/input/date=*/*")
     INTO TABLE `table1`
     FORMAT AS "csv"
     COLUMNS TERMINATED BY ","
