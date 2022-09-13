@@ -12,23 +12,19 @@
   + [Create a table](./quick_start/Create_table.md)
   + [Import and query](./quick_start/Import_and_query.md)
 + Table Design
-  + [StarRocks table design](./table_design/StarRocks_table_design.md)
+  + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
   + [Data models](./table_design/Data_model.md)
   + [Data distribution](./table_design/Data_distribution.md)
-  + [Sort key and shortkey index](./table_design/Sort_key.md)
-  + [Materialized view](./table_design/Materialized_view.md)
-  + [Bitmap indexing](./table_design/Bitmap_index.md)
-  + [Bloomfilter indexing](./table_design/Bloomfilter_index.md)
+  + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
-  + [Overview](./loading/Loading_intro.md)
-  + [Stream Load](./loading/StreamLoad.md)
-  + [Broker Load](./loading/BrokerLoad.md)
+  + [Overview of data loading](./loading/Loading_intro.md)
+  + [Load data from a local file system or a streaming data source using HTTP push](./loading/StreamLoad.md)
+  + [Load data from HDFS or cloud storage](./loading/BrokerLoad.md)
   + [Routine Load](./loading/RoutineLoad.md)
   + [Spark Load](./loading/SparkLoad.md)
-  + [Load Data using INSERT](./loading/InsertInto.md)
-  + [Load data into tables of Primary Key model](./loading/Load_to_Primary_Key_tables.md)
-  + [ETL in loading](./loading/Etl_in_loading.md)
-  + [JSON loading](./loading/Json_loading.md)
+  + [Load data using INSERT](./loading/InsertInto.md)
+  + [Change data through loading](./loading/Load_to_Primary_Key_tables.md)
+  + [Transform data at loading](./loading/Etl_in_loading.md)
   + [Synchronize data from MySQL](./loading/Flink_cdc_load.md)
   + [Load data by using flink-connector-starrocks](./loading/Flink-connector-starrocks.md)
   + [DataX writer](./loading/DataX-starrocks-writer.md)
@@ -37,14 +33,8 @@
   + [Spark connector](./unloading/Spark_connector.md)
   + [Flink connector](./unloading/Flink_connector.md)
 + Using StarRocks
-<<<<<<< HEAD
-  + [Precise de-duplication with bitmap](./using_starrocks/Using_bitmap.md)
-  + [Approximate de-duplication with HLL](./using_starrocks/Using_HLL.md)
-=======
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
->>>>>>> 21b4dfffd ([Doc] add architecture (#11098))
   + [Materialized view](./using_starrocks/Materialized_view.md)
-  + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [External tables](./using_starrocks/External_table.md)
   + Catalog
     + [Overview](./using_starrocks/catalog/catalog_overview.md)
@@ -56,10 +46,11 @@
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Window functions](./using_starrocks/Window_function.md)
-  + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
   + [Java UDFs](./using_starrocks/JAVA_UDF.md)
-  + [Cost-based optimizer](./using_starrocks/Cost_based_optimizer.md)
-  + [Lateral Join](./using_starrocks/Lateral_join.md)
+  + [Bitmap indexing](./table_design/Bitmap_index.md)
+  + [Bloomfilter indexing](./table_design/Bloomfilter_index.md)
+  + [Precise de-duplication with bitmap](./using_starrocks/Using_bitmap.md)
+  + [Approximate de-duplication with HLL](./using_starrocks/Using_HLL.md)
   + [Configure a time zone](./using_starrocks/timezone.md)
   + [File manager](./using_starrocks/filemanager.md)
 + Reference
@@ -76,6 +67,7 @@
       + [SET PASSWORD](./sql-reference/sql-statements/account-management/SET%20PASSWORD.md)
       + [SET PROPERTY](./sql-reference/sql-statements/account-management/SET%20PROPERTY.md)
       + [SHOW GRANTS](./sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
+      + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
     + Cluster Management
       + [ADMIN CANCEL REPAIR](./sql-reference/sql-statements/Administration/ADMIN%20CANCEL%20REPAIR.md)
       + [ADMIN CHECK TABLET](./sql-reference/sql-statements/Administration/ADMIN%20CHECK%20TABLET.md)
@@ -370,7 +362,7 @@
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
     + [Build in Docker](./administration/Build_in_docker.md)
-    + [Deploy and Manage CN on Kubernetes with StarRocks Operator](./administration/k8s_operator_cn.md)
+    + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/k8s_operator_cn.md)
     + [Deploy CN](./administration/deploy_cn.md)
   + Management
     + [Scale in and out](./administration/Scale_up_down.md)
