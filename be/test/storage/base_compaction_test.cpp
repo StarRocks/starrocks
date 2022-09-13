@@ -180,13 +180,13 @@ public:
             tablet_meta->add_rs_meta(src_rowset->rowset_meta());
         }
 
-        TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta,
-                                                                 starrocks::StorageEngine::instance()->get_stores()[0]);
+        TabletSharedPtr tablet =
+                Tablet::create_tablet_from_meta(_metadata_mem_tracker.get(), tablet_meta,
+                                                starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0]);
         tablet->init();
         tablet->calculate_cumulative_point();
 
         BaseCompaction base_compaction(_compaction_mem_tracker.get(), tablet);
-
         ASSERT_TRUE(base_compaction.compact().ok());
     }
 
