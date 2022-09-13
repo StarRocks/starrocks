@@ -164,6 +164,7 @@
       + [RECOVER](/sql-reference/sql-statements/data-definition/RECOVER.md)
       + [REFRESH EXTERNAL TABLE](/sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)
       + [RESTORE](/sql-reference/sql-statements/data-definition/RESTORE.md)
+      + [SHOW COMPUTE NODES](/sql-reference/sql-statements/Administration/SHOW COMPUTE NODES.md)
       + [SHOW RESOURCES](/sql-reference/sql-statements/data-definition/SHOW%20RESOURCES.md)
       + [SHOW FUNCTION](/sql-reference/sql-statements/data-definition/show-functions.md)
       + [TRUNCATE TABLE](/sql-reference/sql-statements/data-definition/TRUNCATE%20TABLE.md)
