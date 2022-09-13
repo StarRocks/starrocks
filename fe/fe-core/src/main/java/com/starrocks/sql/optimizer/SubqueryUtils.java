@@ -44,34 +44,7 @@ public class SubqueryUtils {
     // ApplyNode doesn't need to check the number of subquery's return rows
     // when the correlation predicate meets these requirements:
     // 1. All predicate is Binary.EQ
-    // 2. Only a child contains outer table's column
     // @todo: only check contains, not all
-    public static boolean checkAllIsBinaryEQ(List<ScalarOperator> correlationPredicate,
-                                             List<ColumnRefOperator> correlationColumnRefs) {
-        for (ScalarOperator predicate : correlationPredicate) {
-            if (!OperatorType.BINARY.equals(predicate.getOpType())) {
-                return false;
-            }
-
-            BinaryPredicateOperator bpo = ((BinaryPredicateOperator) predicate);
-            if (!BinaryPredicateOperator.BinaryType.EQ.equals(bpo.getBinaryType())) {
-                return false;
-            }
-
-            ScalarOperator left = bpo.getChild(0);
-            ScalarOperator right = bpo.getChild(1);
-
-            boolean correlationLeft = Utils.containAnyColumnRefs(correlationColumnRefs, left);
-            boolean correlationRight = Utils.containAnyColumnRefs(correlationColumnRefs, right);
-
-            if (correlationLeft == correlationRight) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     public static boolean checkAllIsBinaryEQ(List<ScalarOperator> correlationPredicate) {
         for (ScalarOperator predicate : correlationPredicate) {
             if (!OperatorType.BINARY.equals(predicate.getOpType())) {

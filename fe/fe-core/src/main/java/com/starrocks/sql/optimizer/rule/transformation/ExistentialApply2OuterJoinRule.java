@@ -232,7 +232,7 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
                                                    List<ColumnRefOperator> correlationColumnRefs,
                                                    boolean isNot) {
         // check correlation filter
-        if (!SubqueryUtils.checkAllIsBinaryEQ(correlationPredicates, correlationColumnRefs)) {
+        if (!SubqueryUtils.checkAllIsBinaryEQ(correlationPredicates)) {
             // @Todo:
             // 1. require least a EQ predicate
             // 2. for other binary predicate rewrite rule

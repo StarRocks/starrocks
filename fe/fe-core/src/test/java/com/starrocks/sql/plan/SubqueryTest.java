@@ -18,18 +18,17 @@ public class SubqueryTest extends PlanTestBase {
     public void testCorrelatedSubqueryWithEqualsExpressions() throws Exception {
         String sql = "select t0.v1 from t0 where (t0.v2 in (select t1.v4 from t1 where t0.v3 + t1.v5 = 1)) is NULL";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan, plan.contains("17:NESTLOOP JOIN\n" +
+        Assert.assertTrue(plan, plan.contains("15:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: 3: v3 + 14: v5 = 13: expr, CASE WHEN (15: countRows IS NULL) " +
-                "OR (15: countRows = 0) THEN FALSE WHEN 2: v2 IS NULL THEN NULL " +
-                "WHEN 9: v4 IS NOT NULL THEN TRUE WHEN 16: countNotNulls < 15: countRows " +
-                "THEN NULL ELSE FALSE END IS NULL"));
-        assertContains(plan, "10:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  other join predicates: 3: v3 + 11: v5 = 1, CASE WHEN (12: countRows IS NULL) " +
+                "OR (12: countRows = 0) THEN FALSE WHEN 2: v2 IS NULL THEN NULL WHEN 8: v4 IS NOT NULL " +
+                "THEN TRUE WHEN 13: countNotNulls < 12: countRows THEN NULL ELSE FALSE END IS NULL"));
+        assertContains(plan, "8:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 9: v4 = 2: v2\n" +
-                "  |  other join predicates: 3: v3 + 11: v5 = 10: expr");
+                "  |  equal join conjunct: 2: v2 = 8: v4\n" +
+                "  |  other join predicates: 3: v3 + 9: v5 = 1");
     }
 
     @Test
@@ -310,11 +309,19 @@ public class SubqueryTest extends PlanTestBase {
                 "    ) IS NULL\n" +
                 "  );";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "13:HASH JOIN\n" +
+        assertContains(plan, "19:NESTLOOP JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)\n" +
+                "  |  \n" +
+                "  |----18:EXCHANGE\n" +
+                "  |    \n" +
+                "  12:HASH JOIN");
+        assertContains(plan, "12:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 6: v9 = 15: v4\n" +
-                "  |  equal join conjunct: 22: cast = 16: cast");
+                "  |  equal join conjunct: 6: v9 = 14: v4\n" +
+                "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)");
     }
 
     @Test

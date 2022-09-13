@@ -91,7 +91,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
         correlationColumnRefs.addAll(apply.getCorrelationColumnRefs());
 
         // check correlation filter
-        if (!SubqueryUtils.checkAllIsBinaryEQ(joinOnPredicate, correlationColumnRefs)) {
+        if (!SubqueryUtils.checkAllIsBinaryEQ(joinOnPredicate)) {
             // @Todo:
             // 1. require least a EQ predicate
             // 2. for other binary predicate rewrite rule
