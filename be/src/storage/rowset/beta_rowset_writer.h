@@ -55,7 +55,7 @@ protected:
     Status flush_src_rssids(uint32_t segment_id);
 
     RowsetWriterContext _context;
-    std::shared_ptr<RowsetMeta> _rowset_meta;
+    std::unique_ptr<RowsetMetaPB> _rowset_meta_pb;
     std::unique_ptr<TabletSchema> _rowset_schema;
     std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta_pb;
     SegmentWriterOptions _writer_options;
