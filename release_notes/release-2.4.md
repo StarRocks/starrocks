@@ -1,8 +1,10 @@
-# 2.4.0 RC01
+# StarRocks version 2.4
+
+## 2.4.0 RC01
 
 发布日期： 2022 年 9 月 9 日
 
-## 新增特性
+### 新增特性
 
 - 支持构建多表物化视图，实现多表 JOIN 查询加速。相关文档，请参见 [物化视图](../using_starrocks/Materialized_view.md)。
 
@@ -28,7 +30,7 @@
   - 新增 array_contains_all 函数，用于判断特定数组是否为另一数组的子集。相关文档，请参见[array_contains_all](../sql-reference/sql-functions/array-functions/array_contains_all.md)。
   - 新增 percentile_cont 函数，用于通过线性插值法计算百分位数。相关文档，请参见[percentile_cont](../sql-reference/sql-functions/aggregate-functions/percentile_cont.md)。
 
-## 功能优化
+### 功能优化
 
 - 主键模型支持持久化 VARCHAR 类型主键索引。
   
@@ -44,15 +46,14 @@
 
 - 统计信息支持直方图，并进一步完善全量统计信息采集。相关文档，请参见[CBO统计信息](../using_starrocks/Cost_based_optimizer.md)。
 
-- 支持 Tablet 自适应多线程 Scan，降低 Scan 性能对同磁盘 Tablet 数量的依赖，从而可以简化分桶数量的设定。相关文档，请参见 [确定分桶数量
-](../table_design/Data_distribution.md/#确定分桶数量)。
+- 支持 Tablet 自适应多线程 Scan，降低 Scan 性能对同磁盘 Tablet 数量的依赖，从而可以简化分桶数量的设定。相关文档，请参见 [确定分桶数量](../table_design/Data_distribution.md/#确定分桶数量)。
 
 - 函数相关：
   - count distinct 支持多个字段，可计算多字段组合去重后的结果数目。相关文档，请参见[count](../sql-reference/sql-functions/aggregate-functions/count.md)。
   - 窗口函数 min 和 max 支持滑动窗口。相关文档，请参见[窗口函数](../using_starrocks/Window_function.md#使用-MAX()-窗口函数)。
   - 优化函数 window_funnel 性能。相关文档，请参见[window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md)。
 
-## 问题修复
+### 问题修复
 
 修复了如下 Bug：
 
@@ -69,11 +70,11 @@
   - 查询 HIVE 外表中 Parquet 格式数据失败。 [#7413](https://github.com/StarRocks/starrocks/pull/7413) [#7482](https://github.com/StarRocks/starrocks/pull/7482) [#7624](https://github.com/StarRocks/starrocks/pull/7624)
   - Elasticsearch 外表 Limit 查询结果不正确。[#9226](https://github.com/StarRocks/starrocks/pull/9226)
 
-## 行为变更
+### 行为变更
 
 默认开启 Page Cache，Cache Size 为系统内存大小的 20% 。
 
-## 其他
+### 其他
 
 - 现已正式支持资源隔离功能。
 - 现已正式支持 JSON 数据类型及相关函数。
