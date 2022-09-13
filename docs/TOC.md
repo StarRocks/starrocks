@@ -348,27 +348,20 @@
   + Data Recovery
     + [Data recovery](./administration/Data_recovery.md)
     + [Restore FEs](./administration/Metadata_recovery.md)
-<<<<<<< HEAD
   + [Replica](./administration/Replica.md)
-  + [Query planning](./administration/Query_planning.md)
-  + [Profiling](./administration/Profiling.md)
   + [Monitor and alert](./administration/Monitor_and_Alert.md)
-  + [User privilege](./administration/User_privilege.md)
-  + [Authentication](./administration/Authentication.md)
   + Resource Management
     + [Resource group](./administration/resource_group.md)
     + [Query management](./administration/Query_management.md)
     + [Blacklist](./administration/Blacklist.md)
     + [Memory management](./administration/Memory_management.md)
     + [Load balance](./administration/Load_balance.md)
-=======
   + User Privilege and Authentication
     + [User privilege](./administration/User_privilege.md)
     + [Authentication](./administration/Authentication.md)
   + Performance Tuning
     + [Query planning](./administration/Query_planning.md)
     + [Profiling](./administration/Profiling.md)
->>>>>>> 21b4dfffd ([Doc] add architecture (#11098))
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
