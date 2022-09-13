@@ -54,7 +54,7 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 在异步的导入方式 Broker Load、Routine Load 和 Spark Load 中，一个导入作业的执行流程主要分为 5 个阶段，如下图所示。
 
-![异步导入流程图](/assets/4.1.1.png)
+![异步导入流程图](/assets/4.1-1.png)
 
 每个阶段的描述如下：
 
