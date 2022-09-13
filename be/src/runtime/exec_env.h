@@ -203,6 +203,8 @@ public:
     lake::LocationProvider* lake_location_provider() const { return _lake_location_provider; }
 
     AgentServer* agent_server() const { return _agent_server; }
+    
+    int64_t get_storage_page_cache_size();
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
