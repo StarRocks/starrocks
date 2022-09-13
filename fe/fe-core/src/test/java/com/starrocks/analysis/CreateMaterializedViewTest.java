@@ -423,6 +423,26 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testCreateAsyncWithSingleTable() throws Exception {
+        String sql = "create materialized view mv1\n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2)\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
+                UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
+        Assert.assertEquals(MaterializedView.RefreshType.MANUAL,refreshSchemeDesc.getType());
+    }
+
+    @Test
+    public void testCreateSyncWithSingleTable() throws Exception {
+        String sql = "create materialized view mv1\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assert.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
+    }
+
+    @Test
     public void testFullCreateMultiTables() throws Exception {
         new MockUp<StmtExecutor>() {
             @Mock
