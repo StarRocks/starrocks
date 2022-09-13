@@ -130,7 +130,7 @@ ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES ("key" = "value"[, ...]);
     ALTER SYSTEM DECOMMISSION BACKEND "host1:port", "host2:port";
     ```
 
-5. 增加两个 Hdfs Broker。
+5. 增加两个 HDFS Broker。
 
     ```sql
     ALTER SYSTEM ADD BROKER hdfs "host1:port", "host2:port";

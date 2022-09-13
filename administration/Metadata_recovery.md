@@ -59,7 +59,7 @@ java -jar lib/je-7.3.7.jar DbPrintLog -h meta/bdb/ -vd
 
 > 注意：确认恢复节点角色后，您需要基于当前 FE 节点进行恢复。我们建议您优先选择 FOLLOWER 节点进行恢复。
 
-如果恢复的节点的 role 为 FOLLOWER，请参考[基于 FOLLOWER 节点恢复](#基于-follower-节点恢复)，如果恢复的节点的role为 OBSERVER，请参考[基于 OBSERVER 节点恢复](/#基于-observer-节点恢复)。
+如果恢复的节点的 role 为 FOLLOWER，请参考[基于 FOLLOWER 节点恢复](#基于-follower-节点恢复)，如果恢复的节点的role为 OBSERVER，请参考[基于 OBSERVER 节点恢复](#基于-observer-节点恢复)。
 
 ## 基于 FOLLOWER 节点恢复
 
@@ -78,7 +78,7 @@ java -jar lib/je-7.3.7.jar DbPrintLog -h meta/bdb/ -vd
     ```
 
     正常情况下，当前 FE 节点会以 MASTER 的角色启动。您可以在当前节点的 **fe.log** 中查询到 `transfer from XXXX to MASTER` 的日志条目。
-3. 启动完成后，通过 MySQL 连接至当前 FE节点，执行查询导入操作，检查集群是否能够正常访问。如果无法正常防伪，您需要查看 FE 节点的启动日志，排查问题后重新启动 FE 节点。
+3. 启动完成后，通过 MySQL 连接至当前 FE节点，执行查询导入操作，检查集群是否能够正常访问。如果无法正常访问，您需要查看 FE 节点的启动日志，排查问题后重新启动 FE 节点。
 4. 确认启动成功后，检查当前 FE 节点角色。
 
     ```sql
@@ -123,7 +123,7 @@ java -jar lib/je-7.3.7.jar DbPrintLog -h meta/bdb/ -vd
 7. DROP 当前 OBSERVER 节点以外的所有 FE 节点。
 
     ```sql
-    ALTER SYSTEM DROP BACKEND "host:heartbeat_service_port"[, "host:heartbeat_service_port", ...];
+    ALTER SYSTEM DROP FRONTEND "host:heartbeat_service_port"[, "host:heartbeat_service_port", ...];
     ```
 
 8. 添加一个新的 FOLLOWER FE，假设在 hostA 上。
