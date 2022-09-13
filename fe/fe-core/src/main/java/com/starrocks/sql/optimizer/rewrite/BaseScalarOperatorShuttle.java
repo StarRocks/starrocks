@@ -52,7 +52,7 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
     }
 
     @Override
-    public ScalarOperator visitArrayElement(ArrayElementOperator array, Void Context) {
+    public ScalarOperator visitArrayElement(ArrayElementOperator array, Void context) {
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(array.getChildren(), update);
         if (update[0]) {
@@ -62,7 +62,7 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
     }
 
     @Override
-    public ScalarOperator visitArraySlice(ArraySliceOperator array, Void Context) {
+    public ScalarOperator visitArraySlice(ArraySliceOperator array, Void context) {
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(array.getChildren(), update);
         if (update[0]) {
@@ -198,7 +198,7 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
             return new CaseWhenOperator(operator.getType(), clonedCaseClause, clonedElseClause, clonedWhenThenClauses);
         } else {
-             return operator;
+            return operator;
         }
     }
 

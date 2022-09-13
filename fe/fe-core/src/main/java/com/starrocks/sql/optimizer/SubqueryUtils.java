@@ -193,7 +193,7 @@ public class SubqueryUtils {
     }
 
 
-    public static ScalarOperator rewritePredicateAndExtractColumnRefs (
+    public static ScalarOperator rewritePredicateAndExtractColumnRefs(
             ScalarOperator correlationPredicate, BaseScalarOperatorShuttle scalarOperatorShuttle) {
         return correlationPredicate.accept(scalarOperatorShuttle, null);
     }
