@@ -22,7 +22,7 @@
   + [从 HDFS 或外部云存储系统导入](/loading/BrokerLoad.md)
   + [从 Apache Kafka® 导入](/loading/RoutineLoad.md)
   + [Spark Load](/loading/SparkLoad.md)
-  + [INSERT 导入](/loading/InsertInto.md)
+  + [使用 INSERT 导入](/loading/InsertInto.md)
   + [通过导入实现数据变更](/loading/PrimaryKeyLoad.md)
   + [导入过程中实现数据转换](/loading/Etl_in_loading.md)
   + [MySQL 实时同步](/loading/Flink_cdc_load.md)
