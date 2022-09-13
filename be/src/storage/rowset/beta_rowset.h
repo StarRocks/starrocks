@@ -41,18 +41,15 @@ class KVStore;
 
 class BetaRowset : public Rowset {
 public:
-    static std::shared_ptr<BetaRowset> create(MemTracker* mem_tracker, const TabletSchema* schema,
-                                              std::string rowset_path, RowsetMetaSharedPtr rowset_meta) {
-        auto rowset =
-                std::shared_ptr<BetaRowset>(new BetaRowset(schema, std::move(rowset_path), std::move(rowset_meta)),
-                                            DeleterWithMemTracker<BetaRowset>(mem_tracker));
-        mem_tracker->consume(rowset->mem_usage());
-        return rowset;
+    BetaRowset() = delete;
+    static std::shared_ptr<BetaRowset> create(const TabletSchema* schema, std::string rowset_path,
+                                              RowsetMetaSharedPtr rowset_meta) {
+        return std::make_shared<BetaRowset>(schema, std::move(rowset_path), std::move(rowset_meta));
     }
 
     BetaRowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
 
-    ~BetaRowset() override {}
+    ~BetaRowset() override;
 
     // reload this rowset after the underlying segment file is changed
     Status reload();
@@ -117,6 +114,7 @@ protected:
 private:
     friend class RowsetFactory;
     friend class BetaRowsetReader;
+    int64_t _mem_usage() const { return sizeof(BetaRowset) + _rowset_path.length(); }
     std::vector<SegmentSharedPtr> _segments;
 };
 
