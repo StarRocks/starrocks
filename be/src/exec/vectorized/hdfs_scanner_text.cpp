@@ -6,9 +6,19 @@
 #include "exec/exec_node.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gutil/strings/substitute.h"
+#include "util/compression/compression_utils.h"
+#include "util/compression/stream_compression.h"
 #include "util/utf8_check.h"
 
 namespace starrocks::vectorized {
+
+static CompressionTypePB return_compression_type_from_filename(const std::string& filename) {
+    ssize_t end = filename.size() - 1;
+    while (end >= 0 && filename[end] != '.' && filename[end] != '/') end--;
+    if (end == -1 || filename[end] == '/') return NO_COMPRESSION;
+    const std::string& ext = filename.substr(end + 1);
+    return CompressionUtils::to_compression_pb(ext);
+}
 
 class HdfsScannerCSVReader : public CSVReader {
 public:
@@ -34,12 +44,13 @@ protected:
 private:
     RandomAccessFile* _file;
     size_t _offset = 0;
-    int32_t _remain_length = 0;
+    size_t _remain_length = 0;
     size_t _file_length = 0;
     bool _should_stop_scan = false;
 };
 
 void HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
+    _file->seek(offset);
     _offset = offset;
     _remain_length = remain_length;
     _should_stop_scan = false;
@@ -66,9 +77,14 @@ Status HdfsScannerCSVReader::_fill_buffer() {
         size_t slice_len = _remain_length;
         s = Slice(_buff.limit(), std::min(_buff.free_space(), slice_len));
     }
-    ASSIGN_OR_RETURN(s.size, _file->read_at(_offset, s.data, s.size));
+    // It's very critical to call `read` here, because underneath of RandomAccessFile
+    // maybe its a SequenceFile because we support to read compressed text file.
+    // For uncompressed text file, we can split csv file into chunks and process chunks parallelly.
+    // For compressed text file, we only can parse csv file in sequential way.
+    ASSIGN_OR_RETURN(s.size, _file->read(s.data, s.size));
     _offset += s.size;
     _remain_length -= s.size;
+
     _buff.add_limit(s.size);
     auto n = _buff.available();
     if (s.size == 0) {
@@ -126,10 +142,29 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
         _mapkey_delimiter = text_file_desc.mapkey_delim.front();
     }
 
+    // by default it's unknown compression. we will synthesise informaiton from FE and BE(file extension)
+    // parse compression type from FE first.
+    _compression_type = CompressionTypePB::UNKNOWN_COMPRESSION;
+    if (text_file_desc.__isset.compression_type) {
+        _compression_type = CompressionUtils::to_compression_pb(text_file_desc.compression_type);
+    }
+
     return Status::OK();
 }
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
+<<<<<<< HEAD
+=======
+    const std::string& path = _scanner_params.path;
+    // if FE does not specify compress type, we choose it by looking at filename.
+    if (_compression_type == CompressionTypePB::UNKNOWN_COMPRESSION) {
+        _compression_type = return_compression_type_from_filename(path);
+        if (_compression_type == CompressionTypePB::UNKNOWN_COMPRESSION) {
+            _compression_type = CompressionTypePB::NO_COMPRESSION;
+        }
+    }
+    RETURN_IF_ERROR(open_random_access_file());
+>>>>>>> b98bb0337 ([Enhancement] support to read compressed text file in backend (#11097))
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     for (const auto slot : _scanner_params.materialize_slots) {
@@ -150,6 +185,9 @@ void HdfsTextScanner::do_close(RuntimeState* runtime_state) noexcept {
 }
 
 Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
+    if (_no_data) {
+        return Status::EndOfFile("");
+    }
     CHECK(chunk != nullptr);
     RETURN_IF_ERROR(parse_csv(runtime_state->chunk_size(), chunk));
 
@@ -271,6 +309,29 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
 }
 
 Status HdfsTextScanner::_create_or_reinit_reader() {
+    if (_compression_type != NO_COMPRESSION) {
+        // Since we can not parse compressed file in pieces, we only handle scan range whose offset == 0.
+        size_t index = 0;
+        for (; index < _scanner_params.scan_ranges.size(); index++) {
+            const THdfsScanRange* scan_range = _scanner_params.scan_ranges[index];
+            if (scan_range->offset == 0) {
+                break;
+            }
+        }
+        if (index == _scanner_params.scan_ranges.size()) {
+            _no_data = true;
+            return Status::OK();
+        }
+        // set current range index to the last one, so next time we reach EOF.
+        _current_range_index = _scanner_params.scan_ranges.size() - 1;
+        // we don't know real stream size in adavance, so we set a very large stream size
+        size_t file_size = static_cast<size_t>(-1);
+        _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter, 0, file_size,
+                                                         file_size);
+        return Status::OK();
+    }
+
+    // no compressed file, splittable.
     const THdfsScanRange* scan_range = _scanner_params.scan_ranges[_current_range_index];
     if (_current_range_index == 0) {
         _reader =
