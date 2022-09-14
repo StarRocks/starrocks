@@ -75,6 +75,7 @@ public class LoadStmt extends DdlStmt {
     public static final String TIMEZONE = "timezone";
     public static final String PARTIAL_UPDATE = "partial_update";
     public static final String PRIORITY = "priority";
+    public static final String USE_LOCAL_CACHE = "use_local_cache";
 
     // for load data from Baidu Object Store(BOS)
     public static final String BOS_ENDPOINT = "bos_endpoint";
@@ -112,6 +113,7 @@ public class LoadStmt extends DdlStmt {
             .add(TIMEZONE)
             .add(PARTIAL_UPDATE)
             .add(PRIORITY)
+            .add(USE_LOCAL_CACHE)
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions,
@@ -254,6 +256,15 @@ public class LoadStmt extends DdlStmt {
         if (priorityProperty != null) {
             if (LoadPriority.priorityByName(priorityProperty) == null) {
                 throw new DdlException(PRIORITY + " should in HIGHEST/HIGH/NORMAL/LOW/LOWEST");
+            }
+        }
+
+        // local cache
+        final String useLocalCache = properties.get(USE_LOCAL_CACHE);
+        if (useLocalCache != null) {
+            if (!useLocalCache.equalsIgnoreCase("true")
+                    && !useLocalCache.equalsIgnoreCase("false")) {
+                throw new DdlException(USE_LOCAL_CACHE + " is not a boolean");
             }
         }
     }

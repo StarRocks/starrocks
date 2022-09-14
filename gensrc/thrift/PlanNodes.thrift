@@ -218,6 +218,8 @@ struct TBrokerScanRangeParams {
     15: optional i32 hdfs_read_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
     16: THdfsProperties hdfs_properties
+    // If use_local_cache is set, we will use local file for broker random access
+    17: optional bool use_local_cache = false
 }
 
 // Broker scan range

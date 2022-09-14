@@ -142,6 +142,8 @@ public class FileScanNode extends LoadScanNode {
     // 3. use vectorized engine
     private boolean useVectorizedLoad;
 
+    private boolean useLocalCache;
+
     private static class ParamCreateContext {
         public BrokerFileGroup fileGroup;
         public TBrokerScanRangeParams params;
@@ -160,6 +162,7 @@ public class FileScanNode extends LoadScanNode {
         this.filesAdded = filesAdded;
         this.parallelInstanceNum = 1;
         this.useVectorizedLoad = false;
+        this.useLocalCache = false;
     }
 
     @Override
@@ -229,6 +232,10 @@ public class FileScanNode extends LoadScanNode {
         this.useVectorizedLoad = useVectorizedLoad;
     }
 
+    public void setUseLocalCache(boolean useLocalCache) {
+        this.useLocalCache = useLocalCache;
+    }
+
     // Called from init, construct source tuple information
     private void initParams(ParamCreateContext context)
             throws UserException {
@@ -266,6 +273,7 @@ public class FileScanNode extends LoadScanNode {
         params.setStrict_mode(strictMode);
         params.setProperties(brokerDesc.getProperties());
         params.setUse_broker(brokerDesc.hasBroker());
+        params.setUse_local_cache(useLocalCache);
         initColumns(context);
         initWhereExpr(fileGroup.getWhereExpr(), analyzer);
     }

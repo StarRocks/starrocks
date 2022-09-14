@@ -10,12 +10,15 @@
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_hdfs.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"
+#include "storage/olap_define.h"
+#include "storage/storage_engine.h"
 #include "util/compression/stream_compression.h"
 
 namespace starrocks::vectorized {
@@ -270,6 +273,34 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
     return Status::OK();
 }
 
+std::string FileScanner::create_tmp_file_path() {
+    timeval tv;
+    gettimeofday(&tv, nullptr);
+    struct tm tm;
+    time_t cur_sec = tv.tv_sec;
+    localtime_r(&cur_sec, &tm);
+    char buf[64];
+    strftime(buf, 64, "%Y%m%d%H%M%S", &tm);
+
+    auto stores = StorageEngine::instance()->get_stores();
+    std::stringstream ss;
+    gettimeofday(&tv, nullptr); // for ensuring file path random
+    ss << stores[cur_sec % stores.size()]->path() << TMP_PREFIX << "/" << buf << "." << tv.tv_usec << ".tmp";
+    return ss.str();
+}
+
+StatusOr<std::shared_ptr<TempRandomAccessFile>> FileScanner::create_tmp_file(std::unique_ptr<SequentialFile> broker_file) {
+    std::string tmp_file_path = create_tmp_file_path();
+    LOG(INFO) << "broker load cache file: " << tmp_file_path;
+
+    ASSIGN_OR_RETURN(auto tmp_sequential_file, FileSystem::Default()->new_writable_file(tmp_file_path));
+    auto res = fs::copy(broker_file.get(), tmp_sequential_file.get(), 10 * 1024 * 1024);
+
+    std::shared_ptr<RandomAccessFile> tmp_file;
+    ASSIGN_OR_RETURN(tmp_file, FileSystem::Default()->new_random_access_file(tmp_file_path));
+    return std::make_shared<TempRandomAccessFile>(tmp_file_path, tmp_file);
+}
+
 Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                               const TBrokerScanRangeParams& params, CompressionTypePB compression,
                                               std::shared_ptr<RandomAccessFile>* file) {
@@ -282,15 +313,24 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
     case TFileType::FILE_BROKER: {
         if (params.__isset.use_broker && !params.use_broker) {
             ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
-            ASSIGN_OR_RETURN(auto file, fs->new_random_access_file(RandomAccessFileOptions(), range_desc.path));
-            src_file = std::shared_ptr<RandomAccessFile>(std::move(file));
-            break;
+            if (params.__isset.use_local_cache && params.use_local_cache) {
+                ASSIGN_OR_RETURN(auto file, fs->new_sequential_file(range_desc.path));
+                ASSIGN_OR_RETURN(src_file, create_tmp_file(std::move(file)));
+            } else {
+                ASSIGN_OR_RETURN(auto file, fs->new_random_access_file(RandomAccessFileOptions(), range_desc.path));
+                src_file = std::shared_ptr<RandomAccessFile>(std::move(file));
+            }
         } else {
             BrokerFileSystem fs_broker(address, params.properties);
-            ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_random_access_file(range_desc.path));
-            src_file = std::shared_ptr<RandomAccessFile>(std::move(broker_file));
-            break;
+            if (params.__isset.use_local_cache && params.use_local_cache) {
+                ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_sequential_file(range_desc.path));
+                ASSIGN_OR_RETURN(src_file, create_tmp_file(std::move(broker_file)));
+            } else {
+                ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_random_access_file(range_desc.path));
+                src_file = std::shared_ptr<RandomAccessFile>(std::move(broker_file));
+            }
         }
+        break;
     }
     case TFileType::FILE_STREAM:
         return Status::NotSupported("Does not support create random-access file from file stream");

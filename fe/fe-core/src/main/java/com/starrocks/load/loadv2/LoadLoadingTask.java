@@ -70,6 +70,7 @@ public class LoadLoadingTask extends LoadTask {
     private final long timeoutS;
     private final Map<String, String> sessionVariables;
     private final TLoadJobType loadJobType;
+    private boolean useLocalCache;
 
     private LoadingTaskPlanner planner;
     private ConnectContext context;
@@ -78,7 +79,7 @@ public class LoadLoadingTask extends LoadTask {
             long jobDeadlineMs, long execMemLimit, boolean strictMode,
             long txnId, LoadTaskCallback callback, String timezone,
             long timeoutS, long createTimestamp, boolean partialUpdate, Map<String, String> sessionVariables, 
-            ConnectContext context, TLoadJobType loadJobType, int priority) {
+            ConnectContext context, TLoadJobType loadJobType, int priority, boolean useLocalCache) {
         super(callback, TaskType.LOADING, priority);
         this.db = db;
         this.table = table;
@@ -97,12 +98,13 @@ public class LoadLoadingTask extends LoadTask {
         this.sessionVariables = sessionVariables;
         this.context = context;
         this.loadJobType = loadJobType;
+        this.useLocalCache = useLocalCache;
     }
 
     public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
         this.loadId = loadId;
         planner = new LoadingTaskPlanner(callback.getCallbackId(), txnId, db.getId(), table, brokerDesc, fileGroups,
-                strictMode, timezone, timeoutS, createTimestamp, partialUpdate);
+                strictMode, timezone, timeoutS, createTimestamp, partialUpdate, useLocalCache);
         planner.plan(loadId, fileStatusList, fileNum);
     }
 

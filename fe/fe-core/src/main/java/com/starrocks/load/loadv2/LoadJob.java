@@ -114,6 +114,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // reuse deleteFlag as partialUpdate
     // @Deprecated
     // protected boolean deleteFlag = false;
+    protected boolean useLocalCache = false; // default is false
 
     protected long createTimestamp = -1;
     protected long loadStartTimestamp = -1;
@@ -230,7 +231,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId, 
             long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
-        loadingStatus.getLoadStatistic().updateLoadProgress(beId, loadId, fragmentId, sinkRows, 
+        loadingStatus.getLoadStatistic().updateLoadProgress(beId, loadId, fragmentId, sinkRows,
                 sinkBytes, sourceRows, sourceBytes, isDone);
     }
 
@@ -322,6 +323,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
             if (properties.containsKey(LoadStmt.PRIORITY)) {
                 priority = LoadPriority.priorityByName(properties.get(LoadStmt.PRIORITY));
+            }
+
+            if (properties.containsKey(LoadStmt.USE_LOCAL_CACHE)) {
+                useLocalCache = Boolean.parseBoolean(properties.get(LoadStmt.USE_LOCAL_CACHE));
             }
         }
     }
