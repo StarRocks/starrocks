@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRul
 import com.starrocks.sql.optimizer.rule.implementation.ProjectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.RepeatImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.SchemaScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.StreamAggregateImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.StreamJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.TableFunctionImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.TopNImplementationRule;
@@ -356,6 +357,7 @@ public class RuleSet {
 
     public void addStreamImplementationRules() {
         this.implementRules.add(StreamJoinImplementationRule.getInstance());
+        this.implementRules.add(StreamAggregateImplementationRule.getInstance());
     }
 
     public void addAutoJoinImplementationRule() {
