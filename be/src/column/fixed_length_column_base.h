@@ -35,6 +35,8 @@ template <typename T>
 class FixedLengthColumnBase : public ColumnFactory<Column, FixedLengthColumnBase<T>> {
     friend class ColumnFactory<Column, FixedLengthColumnBase>;
 
+    using Column::append;
+
 public:
     using ValueType = T;
     using Container = Buffer<ValueType>;

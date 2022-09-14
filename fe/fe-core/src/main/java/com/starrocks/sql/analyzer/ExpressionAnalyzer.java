@@ -66,7 +66,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
-import com.starrocks.sql.parser.ParsingException;
 
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -498,17 +497,6 @@ public class ExpressionAnalyzer {
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "add");
                 } else if (subDateFunctions.contains(node.getFuncName())) {
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "sub");
-                } else if (node.getFuncName().equals(FunctionSet.TIME_SLICE)) {
-                    funcOpName = FunctionSet.TIME_SLICE;
-                    if (!(node.getChild(1) instanceof IntLiteral)) {
-                        throw new ParsingException(
-                                funcOpName + " requires second parameter must be a constant interval");
-                    }
-                    if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
-                        throw new ParsingException(
-                                funcOpName + " requires second parameter must be greater than 0");
-                    }
-                    node.addChild(new StringLiteral(node.getTimeUnitIdent().toLowerCase()));
                 } else {
                     node.setChild(1, TypeManager.addCastExpr(node.getChild(1), Type.DATETIME));
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "diff");
@@ -703,6 +691,16 @@ public class ExpressionAnalyzer {
                 // force the second array be of Type.ARRAY_BOOLEAN
                 node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
                 argumentTypes[1] = Type.ARRAY_BOOLEAN;
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            } else if (fnName.equals(FunctionSet.TIME_SLICE)) {
+                if (!(node.getChild(1) instanceof IntLiteral)) {
+                    throw new SemanticException(
+                            FunctionSet.TIME_SLICE + " requires second parameter must be a constant interval");
+                }
+                if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
+                    throw new SemanticException(
+                            FunctionSet.TIME_SLICE + " requires second parameter must be greater than 0");
+                }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

@@ -1537,6 +1537,7 @@ literalExpression
     | (DATE | DATETIME) string                                                            #dateLiteral
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
+    | unitBoundary                                                                        #unitBoundaryLiteral
     ;
 
 functionCall
@@ -1602,6 +1603,8 @@ specialFunctionExpression
     //| WEEK '(' expression ')' TODO: Support week(expr) function
     | YEAR '(' expression ')'
     | PASSWORD '(' string ')'
+    | FLOOR '(' expression ')'
+    | CEIL '(' expression ')'
     ;
 
 windowFunction
@@ -1781,6 +1784,10 @@ interval
 
 unitIdentifier
     : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER
+    ;
+
+unitBoundary
+    : FLOOR | CEIL
     ;
 
 type
