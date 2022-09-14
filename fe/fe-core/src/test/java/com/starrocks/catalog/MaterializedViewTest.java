@@ -575,4 +575,35 @@ public class MaterializedViewTest {
         Assert.assertEquals("500", taskProperties.get("query_timeout"));
         Assert.assertEquals(Constants.TaskType.EVENT_TRIGGERED, task.getType());
     }
+
+    @Test
+    public void testRollupMaterializedViewWithScalarFunction() throws Exception {
+        FeConstants.runningUnitTest = true;
+        UtFrameUtils.createMinStarRocksCluster();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE `part_with_mv` (\n" +
+                        "  `p_partkey` int(11) NOT NULL COMMENT \"\",\n" +
+                        "  `p_name` varchar(55) NOT NULL COMMENT \"\",\n" +
+                        "  `p_mfgr` varchar(25) NOT NULL COMMENT \"\",\n" +
+                        "  `p_brand` varchar(10) NOT NULL COMMENT \"\",\n" +
+                        "  `p_type` varchar(25) NOT NULL COMMENT \"\",\n" +
+                        "  `p_size` int(11) NOT NULL COMMENT \"\",\n" +
+                        "  `p_container` varchar(10) NOT NULL COMMENT \"\",\n" +
+                        "  `p_retailprice` decimal64(15, 2) NOT NULL COMMENT \"\",\n" +
+                        "  `p_comment` varchar(23) NOT NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`p_partkey`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 24\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\");");
+        String createMvSql = "create materialized view mv1 as select p_partkey, p_name, length(p_brand) from part_with_mv;";
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, createMvSql);
+        stmtExecutor.execute();
+        Assert.assertEquals("Materialized view does not support this function:length(`test`.`part_with_mv`.`p_brand`)," +
+                " supported functions are: [min, max, hll_union, percentile_union, count, sum, bitmap_union]",
+                connectContext.getState().getErrorMessage());
+    }
 }
