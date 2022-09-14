@@ -144,7 +144,13 @@ public class FileSystemManager {
     
     private ConcurrentHashMap<FileSystemIdentity, BrokerFileSystem> cachedFileSystem;
     private ClientContextManager clientContextManager;
+<<<<<<< HEAD
     
+=======
+
+    private boolean hasSetGlobalUGI = false;
+
+>>>>>>> c009a7d8e ([BugFix] Fix load encrypted kms failed with error: KMS provider at xxx threw an IOException ... Failed to find any Kerberos tgt (#11063))
     public FileSystemManager() {
         cachedFileSystem = new ConcurrentHashMap<>();
         clientContextManager = new ClientContextManager(handleManagementPool);
@@ -329,6 +335,11 @@ public class FileSystemManager {
                     UserGroupInformation.setConfiguration(conf);
  
                     ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab);
+                    if (!hasSetGlobalUGI) {
+                        // set a global ugi so that other components(kms for example) can get the kerberos token.
+                        UserGroupInformation.setLoginUser(ugi);
+                        hasSetGlobalUGI = true;
+                    }
                     if (properties.containsKey(KERBEROS_KEYTAB_CONTENT)) {
                         try {
                             File file = new File(tmpFilePath);
