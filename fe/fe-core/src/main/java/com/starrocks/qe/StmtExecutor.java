@@ -1244,12 +1244,15 @@ public class StmtExecutor {
                     containOlapScanNode = true;
                 }
             }
-
+            
+            TLoadJobType type = null;
             if (containOlapScanNode) {
                 coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
+                type = TLoadJobType.INSERT_QUERY;
             } else {
                 estimateScanRows = execPlan.getFragments().get(0).getPlanRoot().getCardinality();
                 coord.setLoadJobType(TLoadJobType.INSERT_VALUES);
+                type = TLoadJobType.INSERT_VALUES;
             }
 
             jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
@@ -1258,7 +1261,8 @@ public class StmtExecutor {
                     targetTable.getId(),
                     EtlJobType.INSERT,
                     createTime,
-                    estimateScanRows);
+                    estimateScanRows,
+                    type);
             coord.setJobId(jobId);
 
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);

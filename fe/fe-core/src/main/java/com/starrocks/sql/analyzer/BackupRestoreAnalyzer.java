@@ -3,7 +3,9 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.BackupStmt;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
@@ -16,6 +18,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -27,18 +30,24 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
-public class BackupStmtAnalyzer {
+public class BackupRestoreAnalyzer {
 
     public static void analyze(StatementBase statement, ConnectContext session) {
-        new BackupStmtAnalyzerVisitor().analyze(statement, session);
+        new BackupRestoreStmtAnalyzerVisitor().analyze(statement, session);
     }
 
-    public static class BackupStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    public static class BackupRestoreStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
         private static final String PROP_TIMEOUT = "timeout";
         private static final long MIN_TIMEOUT_MS = 600_000L; // 10 min
         private static final String PROP_TYPE = "type";
+        private static final String PROP_ALLOW_LOAD = "allow_load";
+        private static final String PROP_REPLICATION_NUM = "replication_num";
+        private static final String PROP_BACKUP_TIMESTAMP = "backup_timestamp";
+        private static final String PROP_META_VERSION = "meta_version";
+        private static final String PROP_STARROCKS_META_VERSION = "starrocks_meta_version";
 
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
@@ -106,6 +115,103 @@ public class BackupStmtAnalyzer {
             getDatabase(dbName, context);
             return null;
         }
+
+        @Override
+        public Void visitRestoreStmt(RestoreStmt restoreStmt, ConnectContext context) {
+            String dbName = getDbName(restoreStmt.getDbName(), context);
+            Database db = getDatabase(dbName, context);
+            List<TableRef> tableRefs = restoreStmt.getTableRefs();
+            Set<String> aliasSet = Sets.newHashSet();
+            Map<String, TableRef> tblPartsMap = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            for (TableRef tableRef : tableRefs) {
+                TableName tableName = tableRef.getName();
+
+                if (!tblPartsMap.containsKey(tableName.getTbl())) {
+                    tblPartsMap.put(tableName.getTbl(), tableRef);
+                } else {
+                    throw new SemanticException("Duplicated table: " + tableName.getTbl());
+                }
+
+                aliasSet.add(tableRef.getName().getTbl());
+            }
+
+            for (TableRef tblRef : tableRefs) {
+                if (tblRef.hasExplicitAlias() && !aliasSet.add(tblRef.getExplicitAlias())) {
+                    throw new SemanticException("Duplicated alias name: " + tblRef.getExplicitAlias());
+                }
+            }
+
+            tableRefs.clear();
+            tableRefs.addAll(tblPartsMap.values());
+            Map<String, String> properties = restoreStmt.getProperties();
+            Map<String, String> copiedProperties = Maps.newHashMap(properties);
+            long timeoutMs = Config.backup_job_default_timeout_ms;
+            boolean allowLoad = false;
+            int replicationNum = FeConstants.default_replication_num;
+            String backupTimestamp = null;
+            int metaVersion = -1;
+            int starrocksMetaVersion = -1;
+            Iterator<Map.Entry<String, String>> iterator = copiedProperties.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<String, String> next = iterator.next();
+                String key = next.getKey();
+                String value = next.getValue();
+                switch (key) {
+                    case PROP_TIMEOUT:
+                        timeoutMs = setPropTimeout(value, MIN_TIMEOUT_MS);
+                        iterator.remove();
+                        break;
+                    case PROP_ALLOW_LOAD:
+                        if ("true".equalsIgnoreCase(value)) {
+                            allowLoad = true;
+                        } else if ("false".equalsIgnoreCase(value)) {
+                            allowLoad = false;
+                        } else {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                    "Invalid allow load value: "
+                                            + copiedProperties.get(PROP_ALLOW_LOAD));
+                        }
+                        iterator.remove();
+                        break;
+                    case PROP_REPLICATION_NUM:
+                        replicationNum = parseInt(value);
+                        iterator.remove();
+                        break;
+                    case PROP_BACKUP_TIMESTAMP:
+                        backupTimestamp = value;
+                        iterator.remove();
+                        break;
+                    case PROP_META_VERSION:
+                        metaVersion = parseInt(value);
+                        iterator.remove();
+                        break;
+                    case PROP_STARROCKS_META_VERSION:
+                        starrocksMetaVersion = parseInt(value);
+                        iterator.remove();
+                        break;
+                    default:
+                        copiedProperties.put(key, value);
+                        break;
+                }
+            }
+            restoreStmt.setTimeoutMs(timeoutMs);
+            restoreStmt.setAllowLoad(allowLoad);
+            restoreStmt.setReplicationNum(replicationNum);
+            restoreStmt.setMetaVersion(metaVersion);
+            restoreStmt.setStarrocksMetaVersion(starrocksMetaVersion);
+            if (null == backupTimestamp) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Missing " + PROP_BACKUP_TIMESTAMP + " property");
+            }
+
+            restoreStmt.setBackupTimestamp(backupTimestamp);
+            if (!copiedProperties.isEmpty()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Unknown restore job properties: " + copiedProperties.keySet());
+            }
+
+            return null;
+        }
     }
 
     public static String getDbName(String dbName, ConnectContext context) {
@@ -160,7 +266,7 @@ public class BackupStmtAnalyzer {
         String alias = tableRef.getAlias();
         if (!tableName.getTbl().equalsIgnoreCase(alias)) {
             Table tblAlias = db.getTable(alias);
-            if (tblAlias != null) {
+            if (tblAlias != null && tbl != tblAlias) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "table [" + alias + "] existed");
             }
@@ -203,6 +309,18 @@ public class BackupStmtAnalyzer {
                     "timeout must be at least 10 min");
         }
         return timeoutMs * 1000;
+    }
+
+    public static int parseInt(String value) {
+        int res = 0;
+        try {
+            res = Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "Invalid meta version format: "
+                            + value);
+        }
+        return res;
     }
 
 }

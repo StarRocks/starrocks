@@ -2,7 +2,6 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -27,7 +26,6 @@ import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
@@ -42,9 +40,6 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.ImportColumnDesc;
-import com.starrocks.analysis.ImportColumnsStmt;
-import com.starrocks.analysis.ImportWhereStmt;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.InformationFunction;
@@ -65,8 +60,8 @@ import com.starrocks.analysis.OutFileClause;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.Predicate;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
-import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.analysis.SetNamesVar;
 import com.starrocks.analysis.SetPassVar;
 import com.starrocks.analysis.SetStmt;
@@ -1706,84 +1701,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Routine Statement ---------------------------------------------------
 
     @Override
-    public ParseNode visitCreateRoutineLoadStatement(StarRocksParser.CreateRoutineLoadStatementContext context) {
-        QualifiedName dbName = null;
-        if (context.db != null) {
-            dbName = getQualifiedName(context.db);
-        }
-
-        QualifiedName tableName = null;
-        if (context.table != null) {
-            tableName = getQualifiedName(context.table);
-        }
-
-        String name = ((Identifier) visit(context.name)).getValue();
-
-        List<ParseNode> loadPropertyList = new ArrayList<>();
-        List<StarRocksParser.LoadPropertiesContext> loadPropertiesContexts = context.loadProperties();
-        Preconditions.checkNotNull(loadPropertiesContexts, "load properties is null");
-        for (StarRocksParser.LoadPropertiesContext loadPropertiesContext : loadPropertiesContexts) {
-            if (loadPropertiesContext.colSeparatorProperty() != null) {
-                String literal = ((StringLiteral) visit(loadPropertiesContext.colSeparatorProperty().string())).getValue();
-                loadPropertyList.add(new ColumnSeparator(literal));
-            }
-
-            if (loadPropertiesContext.rowDelimiterProperty() != null) {
-                String literal = ((StringLiteral) visit(loadPropertiesContext.rowDelimiterProperty().string())).getValue();
-                loadPropertyList.add(new RowDelimiter(literal));
-            }
-
-            if (loadPropertiesContext.columnProperties() != null) {
-                List<ImportColumnDesc> columns = new ArrayList<>();
-                for (StarRocksParser.QualifiedNameContext qualifiedNameContext :
-                        loadPropertiesContext.columnProperties().qualifiedName()) {
-                    String column = ((Identifier) (visit(qualifiedNameContext))).getValue();
-                    ImportColumnDesc columnDesc = new ImportColumnDesc(column);
-                    columns.add(columnDesc);
-                }
-
-                for (StarRocksParser.AssignmentListContext assignmentListContext :
-                        loadPropertiesContext.columnProperties().assignmentList()) {
-                    ColumnAssignment columnAssignment = (ColumnAssignment) (visit(assignmentListContext));
-                    Expr expr = columnAssignment.getExpr();
-                    ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
-                    columns.add(columnDesc);
-                }
-                loadPropertyList.add(new ImportColumnsStmt(columns));
-            }
-
-            if (loadPropertiesContext.expression() != null) {
-                Expr where = (Expr) visit(loadPropertiesContext.expression());
-                loadPropertyList.add(new ImportWhereStmt(where));
-            }
-
-            if (loadPropertiesContext.partitionNames() != null) {
-                loadPropertyList.add(visit(loadPropertiesContext.partitionNames()));
-            }
-        }
-
-        String typeName = context.source.getText();
-
-        Map<String, String> jobProperties = new HashMap<>();
-        if (context.jobProperties() != null) {
-            List<Property> propertyList = visit(context.jobProperties().properties().property(), Property.class);
-            for (Property property : propertyList) {
-                jobProperties.put(property.getKey(), property.getValue());
-            }
-        }
-
-        Map<String, String> dataSourceProperties = new HashMap<>();
-        if (context.dataSourceProperties() != null) {
-            List<Property> propertyList = visit(context.dataSourceProperties().propertyList().property(), Property.class);
-            for (Property property : propertyList) {
-                dataSourceProperties.put(property.getKey(), property.getValue());
-            }
-        }
-        return new CreateRoutineLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
-                tableName == null ? null : tableName.toString(), loadPropertyList, jobProperties, typeName, dataSourceProperties);
-    }
-
-    @Override
     public ParseNode visitStopRoutineLoadStatement(StarRocksParser.StopRoutineLoadStatementContext context) {
         String database = null;
         if (context.db != null) {
@@ -3364,6 +3281,42 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new ShowBackupStmt(null);
         }
         return new ShowBackupStmt(((Identifier) visit(context.identifier())).getValue());
+    }
+
+    @Override
+    public ParseNode visitRestoreStatement(StarRocksParser.RestoreStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        LabelName labelName = qualifiedNameToLabelName(qualifiedName);
+
+        List<TableRef> tblRefs = new ArrayList<>();
+        for (StarRocksParser.RestoreTableDescContext tableDescContext : context.restoreTableDesc()) {
+            StarRocksParser.QualifiedNameContext qualifiedNameContext = tableDescContext.qualifiedName();
+            qualifiedName = getQualifiedName(qualifiedNameContext);
+            TableName tableName = qualifiedNameToTableName(qualifiedName);
+            PartitionNames partitionNames = null;
+            if (tableDescContext.partitionNames() != null) {
+                partitionNames = (PartitionNames) visit(tableDescContext.partitionNames());
+            }
+
+            String alias = null;
+            if (tableDescContext.identifier() != null) {
+                alias = ((Identifier) visit(tableDescContext.identifier())).getValue();
+            }
+
+            TableRef tableRef = new TableRef(tableName, alias, partitionNames);
+            tblRefs.add(tableRef);
+        }
+        Map<String, String> properties = null;
+        if (context.propertyList() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        String repoName = ((Identifier) visit(context.identifier())).getValue();
+        return new RestoreStmt(labelName, repoName, tblRefs, properties);
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------

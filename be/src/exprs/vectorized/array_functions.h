@@ -79,13 +79,6 @@ public:
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_OVERLAP_FN)
 #undef DEFINE_ARRAY_OVERLAP_FN
 
-#define DEFINE_ARRAY_FILTER_FN(NAME, PT)                                                     \
-    static ColumnPtr array_filter_##NAME(FunctionContext* context, const Columns& columns) { \
-        return ArrayFilter<PT>::process(context, columns);                                   \
-    }
-    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_FILTER_FN)
-#undef DEFINE_ARRAY_FILTER_FN
-
 #define DEFINE_ARRAY_INTERSECT_FN(NAME, PT)                                                     \
     static ColumnPtr array_intersect_##NAME(FunctionContext* context, const Columns& columns) { \
         return ArrayIntersect<PT>::process(context, columns);                                   \
@@ -170,6 +163,7 @@ public:
     DEFINE_VECTORIZED_FN(array_contains_any);
     DEFINE_VECTORIZED_FN(array_contains_all);
     DEFINE_VECTORIZED_FN(array_map);
+    DEFINE_VECTORIZED_FN(array_filter);
 
     enum ArithmeticType { SUM, AVG, MIN, MAX };
 

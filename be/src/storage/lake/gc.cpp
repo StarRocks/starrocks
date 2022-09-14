@@ -123,8 +123,6 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, in
 Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
 
-    auto now = std::time(nullptr);
-
     const auto metadata_root_location = join_path(root_location, kMetadataDirectoryName);
     const auto txn_log_root_location = join_path(root_location, kTxnLogDirectoryName);
     const auto segment_root_location = join_path(root_location, kSegmentDirectoryName);
@@ -211,13 +209,17 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
         }
     }
 
+    auto now = std::time(nullptr);
+
     for (auto& seg : segments) {
         auto location = join_path(segment_root_location, seg);
         auto res = fs->get_file_modified_time(location);
-        if (!res.ok() && !res.status().is_not_found()) {
-            LOG(WARNING) << "Fail to get modified time of " << location << ": " << res.status();
+        if (!res.ok()) {
+            LOG_IF(WARNING, !res.status().is_not_found())
+                    << "Fail to get modified time of " << location << ": " << res.status();
             continue;
-        } else if (res.status().is_not_found() || now - *res < config::lake_gc_segment_expire_seconds) {
+        } else if ((now < *res) || (now - *res < config::lake_gc_segment_expire_seconds)) {
+            //     ^^^^^^^^^^^^ This is necessary because (now - *res) is an unsigned value.
             continue;
         }
 

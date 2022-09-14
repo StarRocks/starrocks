@@ -2,7 +2,9 @@
 
 package com.starrocks.planner;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
@@ -16,11 +18,8 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TProjectNode;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class ProjectNode extends PlanNode {
     private final Map<SlotId, Expr> slotMap;
@@ -122,34 +121,53 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
-    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr) {
+        if (!(expr instanceof SlotRef)) {
+            return Optional.empty();
+        }
+        if (!expr.isBoundByTupleIds(getTupleIds())) {
+            return Optional.empty();
+        }
+        List<Expr> newExprs = Lists.newArrayList();
+        for (Map.Entry<SlotId, Expr> kv : slotMap.entrySet()) {
+            // Replace the probeExpr only when:
+            // 1. when probeExpr is slot ref
+            // 2. and probe expr slot id == kv.getKey()
+            // then replace probeExpr with kv.getValue()
+            // and push down kv.getValue()
+            if (expr.isBound(kv.getKey())) {
+                newExprs.add(kv.getValue());
+            }
+        }
+        return newExprs.size() > 0 ? Optional.of(newExprs) : Optional.empty();
+    }
+
+    @Override
+    public Optional<List<List<Expr>>> candidatesOfSlotExprs(List<Expr> exprs) {
+        if (!exprs.stream().allMatch(expr -> candidatesOfSlotExpr(expr).isPresent())) {
+            // NOTE: This is necessary, when expr is partition_by_epxr because
+            // partition_by_exprs may exist in JoinNode below the ProjectNode.
+            return Optional.of(ImmutableList.of(exprs));
+        }
+        List<List<Expr>> candidatesOfSlotExprs =
+                exprs.stream().map(expr -> candidatesOfSlotExpr(expr).get()).collect(Collectors.toList());
+        return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
+    }
+
+
+    @Override
+    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description,
+                                          Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
-        if (probeExpr.isBoundByTupleIds(getTupleIds())) {
-            if (probeExpr instanceof SlotRef) {
-                for (Map.Entry<SlotId, Expr> kv : slotMap.entrySet()) {
-                    // Replace the probeExpr only when:
-                    // 1. when probeExpr is slot ref
-                    // 2. and probe expr slot id == kv.getKey()
-                    // then replace probeExpr with kv.getValue()
-                    // and push down kv.getValue()
-                    if (probeExpr.isBound(kv.getKey())) {
-                        if (children.get(0).pushDownRuntimeFilters(description, kv.getValue())) {
-                            return true;
-                        }
-                    }
-                }
-            }
 
-            // can not push down to children.
-            // use runtime filter at this level.
-            if (description.canProbeUse(this)) {
-                description.addProbeExpr(id.asInt(), probeExpr);
-                probeRuntimeFilters.add(description);
-                return true;
-            }
+        if (!probeExpr.isBoundByTupleIds(getTupleIds())) {
+            return false;
         }
-        return false;
+
+        return pushdownRuntimeFilterForChildOrAccept(description, probeExpr, candidatesOfSlotExpr(probeExpr),
+                partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
     }
 }

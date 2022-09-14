@@ -46,6 +46,7 @@ import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CancelLoadStmt;
+import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -174,7 +175,7 @@ public class LoadManager implements Writable {
 
 
     public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
-                                long createTimestamp, long estimateScanRows)
+                                      long createTimestamp, long estimateScanRows, TLoadJobType type)
             throws UserException {
 
         // get db id
@@ -186,7 +187,7 @@ public class LoadManager implements Writable {
         LoadJob loadJob;
         switch (jobType) {
             case INSERT:
-                loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows);
+                loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type);
                 break;
             default:
                 throw new LoadException("Unknown job type [" + jobType.name() + "]");
@@ -237,7 +238,7 @@ public class LoadManager implements Writable {
             LOG.warn("job does not exist when replaying end load job edit log: {}", operation);
             return;
         }
-        job.unprotectReadEndOperation(operation);
+        job.unprotectReadEndOperation(operation, true);
         LOG.info(new LogBuilder(LogKey.LOAD_JOB, operation.getId())
                 .add("operation", operation)
                 .add("msg", "replay end load job")
@@ -600,12 +601,11 @@ public class LoadManager implements Writable {
     }
 
     public void updateJobPrgress(Long jobId, Long beId, TUniqueId loadId, TUniqueId fragmentId,
-                                 long scannedRows, boolean isDone, long scannedBytes) {
+                                 long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
         // LOG.warn("jobId: {} beId: {}, scannedRows: {}, scannedBytes: {}", jobId, beId, scannedRows, scannedBytes);
         LoadJob job = idToLoadJob.get(jobId);
         if (job != null) {
-            LOG.warn("find");
-            job.updateProgess(beId, loadId, fragmentId, scannedRows, isDone, scannedBytes);
+            job.updateProgess(beId, loadId, fragmentId, sinkRows, sinkBytes, sourceRows, sourceBytes, isDone);
         }
     }
 

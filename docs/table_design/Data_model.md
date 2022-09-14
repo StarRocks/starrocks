@@ -134,8 +134,6 @@ The aggregate operations help reduce the amount of data that needs to be process
 
 Suppose that you have a table that uses the Aggregate Key model and want to load the following four raw records into the table.
 
-无法复制加载中的内容
-
 | Date       | Country | PV   |
 | ---------- | ------- | ---- |
 | 2020.05.01 | CHN     | 1    |

@@ -34,6 +34,7 @@
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/global_dict/types.h"
@@ -218,29 +219,48 @@ public:
 
     bool has_reached_max_error_msg_num(bool is_summary = false);
 
-    int64_t num_bytes_load_total() const noexcept { return _num_bytes_load_total.load(); }
+    int64_t num_bytes_load_from_source() const noexcept { return _num_bytes_load_from_source.load(); }
 
-    int64_t num_rows_load_total() const noexcept { return _num_rows_load_total.load(); }
+    int64_t num_rows_load_from_source() const noexcept { return _num_rows_load_total_from_source.load(); }
+
+    int64_t num_bytes_load_from_sink() const noexcept { return _num_bytes_load_from_sink.load(); }
+
+    int64_t num_rows_load_from_sink() const noexcept { return _num_rows_load_from_sink.load(); }
 
     int64_t num_rows_load_filtered() const noexcept { return _num_rows_load_filtered.load(); }
 
     int64_t num_rows_load_unselected() const noexcept { return _num_rows_load_unselected.load(); }
 
-    int64_t num_rows_load_success() const noexcept {
-        return num_rows_load_total() - num_rows_load_filtered() - num_rows_load_unselected();
+    int64_t num_rows_load_sink_success() const noexcept {
+        return num_rows_load_from_sink() - num_rows_load_filtered() - num_rows_load_unselected();
     }
 
-    void update_num_rows_load_total(int64_t num_rows) { _num_rows_load_total.fetch_add(num_rows); }
+    void update_num_bytes_load_from_source(int64_t bytes_load) { _num_bytes_load_from_source.fetch_add(bytes_load); }
 
-    void set_num_rows_load_total(int64_t num_rows) { _num_rows_load_total.store(num_rows); }
+    void set_update_num_bytes_load_from_source(int64_t bytes_load) { _num_bytes_load_from_source.store(bytes_load); }
 
-    void update_num_bytes_load_total(int64_t bytes_load) { _num_bytes_load_total.fetch_add(bytes_load); }
+    void update_num_rows_load_from_source(int64_t num_rows) { _num_rows_load_total_from_source.fetch_add(num_rows); }
 
-    void set_update_num_bytes_load_total(int64_t bytes_load) { _num_bytes_load_total.store(bytes_load); }
+    void set_num_rows_load_from_source(int64_t num_rows) { _num_rows_load_total_from_source.store(num_rows); }
+
+    void update_num_bytes_load_from_sink(int64_t bytes_load) { _num_bytes_load_from_sink.fetch_add(bytes_load); }
+
+    void set_update_num_bytes_load_from_sink(int64_t bytes_load) { _num_bytes_load_from_sink.store(bytes_load); }
+
+    void update_num_rows_load_from_sink(int64_t num_rows) { _num_rows_load_from_sink.fetch_add(num_rows); }
+
+    void set_num_rows_load_from_sink(int64_t num_rows) { _num_rows_load_from_sink.store(num_rows); }
 
     void update_num_rows_load_filtered(int64_t num_rows) { _num_rows_load_filtered.fetch_add(num_rows); }
 
     void update_num_rows_load_unselected(int64_t num_rows) { _num_rows_load_unselected.fetch_add(num_rows); }
+
+    void update_report_load_status(TReportExecStatusParams* load_params) {
+        load_params->__set_loaded_rows(num_rows_load_from_sink());
+        load_params->__set_sink_load_bytes(num_bytes_load_from_sink());
+        load_params->__set_source_load_rows(num_rows_load_from_source());
+        load_params->__set_source_load_bytes(num_bytes_load_from_source());
+    }
 
     void set_per_fragment_instance_idx(int idx) { _per_fragment_instance_idx = idx; }
 
@@ -359,12 +379,23 @@ private:
 
     // put here to collect files??
     std::vector<std::string> _output_files;
-    std::atomic<int64_t> _num_rows_load_total{0};      // total rows read from source
+
+    // here we separate number counter of rows/bytes load from source node and sink node,
+    // num_rows/bytes_load_from_source is mainly used for reporting the progress of broker load and insert into
+    // num_rows/bytes_load_from_sink is mainly used for recording how many rows are loaded into tablet sink
+    std::atomic<int64_t> _num_rows_load_total_from_source{
+            0};                                          // total rows load from source node (file scan node, olap scan
+                                                         // node)
+    std::atomic<int64_t> _num_bytes_load_from_source{0}; // total bytes load from source node (file scan node, olap scan
+                                                         // node)
+
+    std::atomic<int64_t> _num_rows_load_from_sink{0};  // total rows load from sink node (tablet sink node)
+    std::atomic<int64_t> _num_bytes_load_from_sink{0}; // total bytes load from sink node (tablet sink node)
+
     std::atomic<int64_t> _num_rows_load_filtered{0};   // unqualified rows
     std::atomic<int64_t> _num_rows_load_unselected{0}; // rows filtered by predicates
-    std::atomic<int64_t> _num_print_error_rows{0};
 
-    std::atomic<int64_t> _num_bytes_load_total{0}; // total bytes read from source
+    std::atomic<int64_t> _num_print_error_rows{0};
 
     std::vector<std::string> _export_output_files;
 

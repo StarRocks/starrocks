@@ -15,7 +15,6 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropRoleStmt;
@@ -35,6 +34,7 @@ import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
@@ -348,10 +348,6 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     public R visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -426,6 +422,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitBackupStmt(BackupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitRestoreStmt(RestoreStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 

@@ -1149,7 +1149,7 @@ public class FunctionSet {
                     LOGGER.warn("could not determine polymorphic type because input has non-match types");
                     return null;
                 }
-            } else if (declType == Type.FUNCTION) {
+            } else if (declType.matchesType(realType) || Type.canCastTo(realType, declType)) { // non-pseudo types
                 continue;
             } else {
                 LOGGER.warn("has unhandled pseudo type '{}'", declType);
