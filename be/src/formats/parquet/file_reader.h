@@ -65,7 +65,7 @@ private:
     Status _exec_only_partition_scan(vectorized::ChunkPtr* chunk);
 
     // get partition column idx in param.partition_columns
-    int _get_partition_column_idx(const std::string& col_name) const;
+    int32_t _get_partition_column_idx(const std::string& col_name) const;
 
     // check magic number of parquet file
     // current olny support "PAR1"
