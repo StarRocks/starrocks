@@ -109,6 +109,19 @@ public:
         column->get_data().assign(chunk_size, 1);
     }
 
+    void batch_finalize_with_selection(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                                       size_t state_offset, Column* to,
+                                       const std::vector<uint8_t>& selection) const override {
+        DCHECK(to->is_numeric());
+        int64_t values[chunk_size];
+        size_t cnt = 0;
+        for (size_t i = 0; i < chunk_size; i++) {
+            values[cnt] = this->data(agg_states[i] + state_offset).count;
+            cnt += !selection[i];
+        }
+        CHECK(to->append_numbers(values, cnt * sizeof(int64_t)));
+    }
+
     std::string get_name() const override { return "count"; }
 };
 

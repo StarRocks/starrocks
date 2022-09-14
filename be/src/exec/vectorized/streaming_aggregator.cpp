@@ -309,7 +309,7 @@ Status StreamingAggregator::streaming_compute_agg_state(size_t chunk_size) {
             selector[i - 1] = !(_cmp_vector[i] != 0);
             selected_size += !selector[i - 1];
         }
-        DCHECK_EQ(selector[chunk_size - 1], 0);
+        selector[chunk_size - 1] = 1;
     }
 
     // finalize state
