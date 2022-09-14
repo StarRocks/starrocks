@@ -9,6 +9,7 @@
 #include "column/column_helper.h"
 #include "exec/vectorized/hdfs_scanner_orc.h"
 #include "exec/vectorized/hdfs_scanner_parquet.h"
+#include "exec/vectorized/hdfs_scanner_text.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -34,7 +35,8 @@ public:
 protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
-    HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, TupleDescriptor* tuple_desc);
+    HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, const TupleDescriptor* tuple_desc);
+    void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc);
 
     THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length);
     TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
@@ -68,7 +70,10 @@ THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uin
     scan_range->offset = offset;
     scan_range->length = length == 0 ? file_size : length;
     scan_range->file_length = file_size;
-
+    scan_range->text_file_desc.field_delim = ",";
+    scan_range->text_file_desc.line_delim = "\n";
+    scan_range->text_file_desc.collection_delim = "\003";
+    scan_range->text_file_desc.mapkey_delim = "\004";
     return scan_range;
 }
 
@@ -83,6 +88,7 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     std::vector<int> partition_index_in_chunk;
     std::vector<SlotDescriptor*> mat_slots;
     std::vector<SlotDescriptor*> part_slots;
+
     for (int i = 0; i < tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = tuple_desc->slots()[i];
         if (slot->col_name().find("PART_") != std::string::npos) {
@@ -99,6 +105,15 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     param->materialize_slots = mat_slots;
     param->partition_slots = part_slots;
     return param;
+}
+
+void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc) {
+    std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
+    for (int i = 0; i < tuple_desc->slots().size(); i++) {
+        SlotDescriptor* slot = tuple_desc->slots()[i];
+        hive_column_names->emplace_back(slot->col_name());
+    }
+    params->hive_column_names = hive_column_names;
 }
 
 TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
@@ -282,10 +297,9 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
     params->partition_values = part_values;
 }
 
-#define READ_SCANNER_ROWS(scanner, exp)                                                \
+#define READ_SCANNER_RETURN_ROWS(scanner, records)                                     \
     do {                                                                               \
-        auto chunk = vectorized::ChunkHelper::new_chunk(*tuple_desc, 0);               \
-        uint64_t records = 0;                                                          \
+        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                           \
         for (;;) {                                                                     \
             chunk->reset();                                                            \
             status = scanner->get_next(_runtime_state, &chunk);                        \
@@ -302,8 +316,14 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
             }                                                                          \
             records += chunk->num_rows();                                              \
         }                                                                              \
-        EXPECT_EQ(records, exp);                                                       \
     } while (0)
+
+#define READ_SCANNER_ROWS(scanner, exp)             \
+    {                                               \
+        uint64_t records = 0;                       \
+        READ_SCANNER_RETURN_ROWS(scanner, records); \
+        EXPECT_EQ(records, exp);                    \
+    }
 
 // ====================================================================================================
 
@@ -1115,4 +1135,84 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
     EXPECT_TRUE(!status.ok());
     scanner->close(_runtime_state);
 }
+
+// =============================================================================
+/*
+UID0,ACTION0
+UID1,ACTION1
+UID2,ACTION2
+UID3,ACTION3
+UID4,ACTION4
+UID5,ACTION5
+UID6,ACTION6
+UID7,ACTION7
+UID8,ACTION8
+UID9,ACTION9
+...
+UID99,ACTION99
+*/
+
+TEST_F(HdfsScannerTest, TestCSVCompressed) {
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+                            {"action", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+                            {""}};
+
+    const std::string uncompressed_file = "./be/test/exec/test_data/csv_scanner/compressed-csv";
+    const std::string compressed_file = "./be/test/exec/test_data/csv_scanner/compressed-csv.gz";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(uncompressed_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(uncompressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        READ_SCANNER_ROWS(scanner, 100);
+        scanner->close(_runtime_state);
+    }
+    {
+        auto* range = _create_scan_range(compressed_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(compressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        READ_SCANNER_ROWS(scanner, 100);
+        scanner->close(_runtime_state);
+    }
+    {
+        auto* range = _create_scan_range(compressed_file, 0, 0);
+        // Forcr to parse csv as uncompressed data.
+        range->text_file_desc.__set_compression_type(TCompressionType::NO_COMPRESSION);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(compressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        uint64_t records = 0;
+        READ_SCANNER_RETURN_ROWS(scanner, records);
+        EXPECT_NE(records, 100);
+        scanner->close(_runtime_state);
+    }
+}
+
 } // namespace starrocks::vectorized
