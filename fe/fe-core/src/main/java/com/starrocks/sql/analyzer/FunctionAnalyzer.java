@@ -62,7 +62,11 @@ public class FunctionAnalyzer {
 
         if (fnName.getFunction().equals(FunctionSet.ARRAY_MAP)) {
             Preconditions.checkState(functionCallExpr.getChildren().size() > 1);
-            functionCallExpr.setType(new ArrayType(functionCallExpr.getChild(0).getChild(1).getType()));
+            // the normalized high_order functions:
+            // high-order function(lambda_func(lambda_expr, lambda_arguments), input_arrays),
+            // which puts various arguments/inputs at the tail e.g.,
+            // array_map(x+y <- (x,y), arr1, arr2)
+            functionCallExpr.setType(new ArrayType(functionCallExpr.getChild(0).getChild(0).getType()));
         }
     }
 

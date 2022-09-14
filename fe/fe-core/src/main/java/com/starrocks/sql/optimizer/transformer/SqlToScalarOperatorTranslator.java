@@ -261,9 +261,9 @@ public final class SqlToScalarOperatorTranslator {
             Scope scope = new Scope(args, expressionMapping.getScope());
             ExpressionMapping old = expressionMapping;
             expressionMapping = new ExpressionMapping(scope, refs, expressionMapping);
-            ScalarOperator arg = visit(node.getChild(0));
-            expressionMapping = old; // recovery it
-            node.setTransformed(new LambdaFunctionOperator(refs, arg, Type.FUNCTION));
+            ScalarOperator lambda = visit(node.getChild(0));
+            expressionMapping = old; // recover it
+            node.setTransformed(new LambdaFunctionOperator(refs, lambda, Type.FUNCTION));
             return node.getTransformed();
         }
 
