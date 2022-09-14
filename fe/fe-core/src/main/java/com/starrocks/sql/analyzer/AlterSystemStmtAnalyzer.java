@@ -88,14 +88,18 @@ public class AlterSystemStmtAnalyzer {
 
         private void checkModifyHostClause(String srcHost, String destHost) {
             try {
-                if (!InetAddressValidator.getInstance().isValidInet4Address(srcHost)) {
+                boolean srcHostIsIP = InetAddressValidator.getInstance().isValidInet4Address(srcHost);
+                boolean destHostIsIP = InetAddressValidator.getInstance().isValidInet4Address(destHost);
+                if (srcHostIsIP && destHostIsIP) {
+                    throw new SemanticException("Can't change ip to ip");
+                }
+                // If can't get an ip through the srcHost/destHost, will throw UnknownHostException
+                if (!srcHostIsIP) {
                     InetAddress.getByName(srcHost);
                 }
-                // if destHost is a domain name need to determine whether it is a legitimate domain name
-                if (InetAddressValidator.getInstance().isValidInet4Address(destHost)) {
-                    throw new SemanticException("the host you want to set could't be an ip");
+                if (!destHostIsIP) {
+                    InetAddress.getByName(destHost);                    
                 }
-                InetAddress.getByName(destHost);
             } catch (UnknownHostException e) {
                 throw new SemanticException("unknown host " + e.getMessage());
             }
