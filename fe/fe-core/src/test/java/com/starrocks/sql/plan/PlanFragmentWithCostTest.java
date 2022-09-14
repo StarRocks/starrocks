@@ -527,7 +527,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testReapNodeExchange() throws Exception {
+    public void testRepeatNodeExchange() throws Exception {
         String sql = "select v1, v2, SUM(v3) from t0 group by rollup(v1, v2)";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  STREAM DATA SINK\n" +
@@ -704,6 +704,70 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     - filter_id = 0, probe_expr = (1: v4)"));
 
         setTableStatistics(t0, 10000);
+    }
+
+    @Test
+    public void testPushMultiColumnRuntimeFiltersCrossDataExchange() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        connectContext.getSessionVariable().setEnableMultiColumnsOnGlobbalRuntimeFilter(true);
+        connectContext.getSessionVariable().setGlobalRuntimeFilterBuildMaxSize(0);
+        connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSize(0);
+
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        setTableStatistics(t0, 10000000L);
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        setTableStatistics(t1, 1000000000L);
+
+        String sql = "select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6";
+        String plan = getVerboseExplain(sql);
+        System.out.println(plan);
+
+        assertContains(plan, "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (5: v5), remote = true\n" +
+                "  |  - filter_id = 1, build_expr = (6: v6), remote = true");
+
+        assertContains(plan, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (2: v2), partition_exprs = (2: v2,3: v3)\n" +
+                "     - filter_id = 1, probe_expr = (3: v3), partition_exprs = (2: v2,3: v3)");
+    }
+
+    @Test
+    public void testPushMultiColumnRuntimeFiltersCrossDataExchangeOnMultiJoins() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        connectContext.getSessionVariable().setEnableMultiColumnsOnGlobbalRuntimeFilter(true);
+        connectContext.getSessionVariable().setGlobalRuntimeFilterBuildMaxSize(0);
+        connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSize(0);
+
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        setTableStatistics(t0, 10000000L);
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        setTableStatistics(t1, 10000000L);
+
+        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+        setTableStatistics(t2, 10000000L);
+
+        String sql = "select * from (select t1.v5 as v5, t0.v3 as v3 from t0 join[shuffle] t1 on t0.v2 = " +
+                "t1.v5 and t0.v3 = t1.v6) tt join[shuffle] t2 on tt.v5 = t2.v8 and tt.v3 = t2.v7";
+        String plan = getVerboseExplain(sql);
+        System.out.println(plan);
+
+        assertContains(plan, "  |  - filter_id = 0, build_expr = (5: v5), remote = true\n" +
+                "  |  - filter_id = 1, build_expr = (6: v6), remote = true");
+
+        assertContains(plan, "  |  - filter_id = 2, build_expr = (8: v8), remote = true\n" +
+                "  |  - filter_id = 3, build_expr = (7: v7), remote = true");
+
+        assertContains(plan, "     probe runtime filters:\n" +
+                "     - filter_id = 2, probe_expr = (5: v5), partition_exprs = (5: v5,6: v6)\n" +
+                "     - filter_id = 3, probe_expr = (6: v6), partition_exprs = (5: v5,6: v6)");
+
+        assertContains(plan, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (2: v2), partition_exprs = (2: v2,3: v3)\n" +
+                "     - filter_id = 1, probe_expr = (3: v3), partition_exprs = (2: v2,3: v3)\n" +
+                "     - filter_id = 2, probe_expr = (2: v2), partition_exprs = (2: v2,3: v3)\n" +
+                "     - filter_id = 3, probe_expr = (3: v3), partition_exprs = (2: v2,3: v3)");
     }
 
     @Test
@@ -1305,6 +1369,48 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
+    public void testRepeatNodeWithUnionAllRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(true);
+        String sql = "select v1, v2, SUM(v3) from t0 group by rollup(v1, v2)";
+        String plan = getFragmentPlan(sql).replaceAll(" ", "");
+        Assert.assertTrue(plan.contains("1:UNION\n" +
+                "|\n" +
+                "|----15:EXCHANGE\n" +
+                "|\n" +
+                "|----21:EXCHANGE\n" +
+                "|\n" +
+                "8:EXCHANGE\n"));
+
+        sql = "select v1, SUM(v3) from t0 group by rollup(v1)";
+        plan = getFragmentPlan(sql).replaceAll(" ", "");
+        Assert.assertTrue(plan.contains("1:UNION\n" +
+                "|\n" +
+                "|----14:EXCHANGE\n" +
+                "|\n" +
+                "8:EXCHANGE\n"));
+
+        sql = "select SUM(v3) from t0 group by grouping sets(())";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  3:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 2\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    HASH_PARTITIONED: 5: GROUPING_ID\n" +
+                "\n" +
+                "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: sum(3: v3)\n" +
+                "  |  group by: 5: GROUPING_ID\n" +
+                "  |  \n" +
+                "  1:REPEAT_NODE"));
+        connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(false);
+    }
+
+    @Test
     public void testLimitSemiJoin() throws Exception {
         String sql = "select * from t0 " +
                 "        left semi join t2 on t0.v1 = t2.v7 " +
@@ -1323,5 +1429,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  equal join conjunct: 1: v1 = 4: v7\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE");
+    
     }
 }

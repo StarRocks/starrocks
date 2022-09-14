@@ -247,6 +247,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_limit_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_scan_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_connector_scan_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_limit_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_metrics;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_running_queries;

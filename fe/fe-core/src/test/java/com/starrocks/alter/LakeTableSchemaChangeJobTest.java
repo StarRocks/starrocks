@@ -29,7 +29,6 @@ import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageCacheInfo;
-import com.starrocks.lake.StorageInfo;
 import com.starrocks.lake.Utils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
@@ -116,12 +115,9 @@ public class LakeTableSchemaChangeJobTest {
         ObjectStorageInfo.Builder osib = builder.getObjectStorageInfoBuilder();
         ObjectStorageInfo osi = osib.setObjectUri("s3://test").setAccessKey("zzz").setAccessKeySecret("yyy").build();
         ShardStorageInfo shardStorageInfo = ShardStorageInfo.newBuilder().setObjectStorageInfo(osi).build();
-
-        StorageCacheInfo storageCacheInfo = new StorageCacheInfo(false, 0, false);
-
-        StorageInfo storageInfo = new StorageInfo(shardStorageInfo, storageCacheInfo);
         table.setStorageInfo(shardStorageInfo, false, 0, false);
-        partitionInfo.setStorageInfo(partitionId, storageInfo);
+        StorageCacheInfo storageCacheInfo = new StorageCacheInfo(false, 0, false);
+        partitionInfo.setStorageCacheInfo(partitionId, storageCacheInfo);
 
         db.createTable(table);
 

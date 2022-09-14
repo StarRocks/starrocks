@@ -39,7 +39,6 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.ast.AstVisitor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -139,7 +138,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(KAFKA_OFFSETS_PROPERTY)
             .build();
 
-    private LabelName labelName;
+    private final LabelName labelName;
     private final String tableName;
     private final List<ParseNode> loadPropertyList;
     private final Map<String, String> jobProperties;
@@ -194,28 +193,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         this.dataSourceProperties = dataSourceProperties;
     }
 
-    public LabelName getLabelName() {
-        return this.labelName;
-    }
-
-    public void setLabelName(LabelName labelName) {
-        this.labelName = labelName;
-    }
-
     public String getName() {
         return name;
     }
 
-    public void setName(String name) {
-        this.name = name;
-    }
-
     public String getDBName() {
         return dbName;
-    }
-
-    public void setDBName(String dbName) {
-        this.dbName = dbName;
     }
 
     public String getTableName() {
@@ -228,10 +211,6 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public RoutineLoadDesc getRoutineLoadDesc() {
         return routineLoadDesc;
-    }
-
-    public void setRoutineLoadDesc(RoutineLoadDesc routineLoadDesc) {
-        this.routineLoadDesc = routineLoadDesc;
     }
 
     public int getDesiredConcurrentNum() {
@@ -298,10 +277,6 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return loadPropertyList;
     }
 
-    /**
-     * @deprecated Use CreateRoutineLoadAnalyzer.analyze instead.
-     */
-    @Deprecated
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
@@ -339,10 +314,6 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
     }
 
-    /**
-     * @deprecated Use CreateRoutineLoadAnalyzer.analyze has check db and table
-     */
-    @Deprecated
     public void checkDBTable(Analyzer analyzer) throws AnalysisException {
         labelName.analyze(analyzer);
         dbName = labelName.getDbName();
@@ -401,7 +372,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 partitionNames);
     }
 
-    public void checkJobProperties() throws UserException {
+    private void checkJobProperties() throws UserException {
         Optional<String> optional = jobProperties.keySet().stream().filter(
                 entity -> !PROPERTIES_SET.contains(entity)).findFirst();
         if (optional.isPresent()) {
@@ -456,7 +427,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
     }
 
-    public void checkDataSourceProperties() throws AnalysisException {
+    private void checkDataSourceProperties() throws AnalysisException {
         LoadDataSourceType type;
         try {
             type = LoadDataSourceType.valueOf(typeName);
@@ -645,15 +616,5 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                     sessionVariables.get(SessionVariable.PARSE_TOKENS_LIMIT)));
         }
         return sessionVariable;
-    }
-  
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws RuntimeException {
-        return visitor.visitCreateRoutineLoadStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

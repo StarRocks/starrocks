@@ -12,7 +12,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.thrift.TTabletType;
 
 import java.util.HashMap;
@@ -89,7 +89,7 @@ public class MultiItemListPartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public StorageInfo getStorageInfo() {
+    public StorageCacheInfo getStorageCacheInfo() {
         return null;
     }
 

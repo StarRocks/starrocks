@@ -249,10 +249,10 @@ CONF_Int32(min_file_descriptor_number, "60000");
 CONF_Int64(index_stream_cache_capacity, "10737418240");
 // CONF_Int64(max_packed_row_block_size, "20971520");
 
-// Cache for stoage page size
-CONF_String(storage_page_cache_limit, "0");
+// Cache for storage page size
+CONF_String(storage_page_cache_limit, "20%");
 // whether to disable page cache feature in storage
-CONF_Bool(disable_storage_page_cache, "true");
+CONF_Bool(disable_storage_page_cache, "false");
 // whether to disable column pool
 CONF_Bool(disable_column_pool, "false");
 
@@ -784,10 +784,10 @@ CONF_String(starlet_cache_dir, "");
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_Int64(lake_gc_metadata_max_versions, "10");
-CONF_Int64(lake_gc_metadata_check_interval, /*10 minutes=*/"600");
+CONF_Int64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
 CONF_Int64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
 // This value should be much larger than the maximum timeout of loading/compaction/schema change jobs.
-CONF_Int64(lake_gc_segment_expire_seconds, /*1 day=*/"86400");
+CONF_Int64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 

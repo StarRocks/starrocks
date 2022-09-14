@@ -28,7 +28,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.PartitionKeyDesc.PartitionRangeType;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.lake.StorageCacheInfo;
-import com.starrocks.lake.StorageInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -53,7 +52,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
     private boolean isInMemory = false;
     private TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
     private Long versionInfo;
-    private StorageInfo storageInfo;
+    private StorageCacheInfo storageCacheInfo;
 
     public SingleRangePartitionDesc(boolean ifNotExists, String partName, PartitionKeyDesc partitionKeyDesc,
                                     Map<String, String> properties) {
@@ -102,8 +101,8 @@ public class SingleRangePartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public StorageInfo getStorageInfo() {
-        return storageInfo;
+    public StorageCacheInfo getStorageCacheInfo() {
+        return storageCacheInfo;
     }
 
     public Map<String, String> getProperties() {
@@ -174,8 +173,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         if (!enableStorageCache && allowAsyncWriteBack) {
             throw new AnalysisException("storage allow_async_write_back can't be enabled when cache is disabled");
         }
-        storageInfo =
-                new StorageInfo(null, new StorageCacheInfo(enableStorageCache, storageCacheTtlS, allowAsyncWriteBack));
+        storageCacheInfo = new StorageCacheInfo(enableStorageCache, storageCacheTtlS, allowAsyncWriteBack);
 
         if (otherProperties == null) {
             // check unknown properties

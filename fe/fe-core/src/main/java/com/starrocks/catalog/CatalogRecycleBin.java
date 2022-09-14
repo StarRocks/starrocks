@@ -39,7 +39,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.RangeUtils;
-import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
@@ -174,7 +174,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
                                                  DataProperty dataProperty,
                                                  short replicationNum,
                                                  boolean isInMemory,
-                                                 StorageInfo storageInfo,
+                                                 StorageCacheInfo storageCacheInfo,
                                                  boolean isLakeTable) {
         if (idToPartition.containsKey(partition.getId())) {
             LOG.error("partition[{}-{}] already in recycle bin.", partition.getId(), partition.getName());
@@ -189,7 +189,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         if (isLakeTable) {
             // lake table
             partitionInfo = new RecycleRangePartitionInfo(dbId, tableId, partition,
-                    range, dataProperty, replicationNum, isInMemory, storageInfo);
+                    range, dataProperty, replicationNum, isInMemory, storageCacheInfo);
         } else {
             partitionInfo = new RecyclePartitionInfoV1(dbId, tableId, partition,
                     range, dataProperty, replicationNum, isInMemory);
@@ -620,7 +620,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         partitionInfo.setReplicationNum(partitionId, recoverPartitionInfo.getReplicationNum());
         partitionInfo.setIsInMemory(partitionId, recoverPartitionInfo.isInMemory());
         if (table.isLakeTable()) {
-            partitionInfo.setStorageInfo(partitionId, ((RecyclePartitionInfoV2) recoverPartitionInfo).getStorageInfo());
+            partitionInfo.setStorageCacheInfo(partitionId,
+                    ((RecyclePartitionInfoV2) recoverPartitionInfo).getStorageCacheInfo());
         }
 
         // remove from recycle bin
@@ -657,7 +658,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             rangePartitionInfo.setIsInMemory(partitionId, partitionInfo.isInMemory());
 
             if (table.isLakeTable()) {
-                rangePartitionInfo.setStorageInfo(partitionId, ((RecyclePartitionInfoV2) partitionInfo).getStorageInfo());
+                rangePartitionInfo.setStorageCacheInfo(partitionId,
+                        ((RecyclePartitionInfoV2) partitionInfo).getStorageCacheInfo());
             }
 
             iterator.remove();
@@ -1046,24 +1048,24 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         }
     }
 
-    public static class RecyclePartitionInfoV2 extends RecyclePartitionInfo  {
-        @SerializedName(value = "storageInfo")
-        private StorageInfo storageInfo;
+    public static class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
+        @SerializedName(value = "storageCacheInfo")
+        private StorageCacheInfo storageCacheInfo;
 
         public RecyclePartitionInfoV2(long dbId, long tableId, Partition partition,
                                       DataProperty dataProperty, short replicationNum, boolean isInMemory,
-                                      StorageInfo storageInfo) {
+                                      StorageCacheInfo storageCacheInfo) {
             super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory);
-            this.storageInfo = storageInfo;
+            this.storageCacheInfo = storageCacheInfo;
+        }
+
+        public StorageCacheInfo getStorageCacheInfo() {
+            return storageCacheInfo;
         }
 
         public static RecyclePartitionInfoV2 read(DataInput in) throws IOException {
             String json = Text.readString(in);
             return GsonUtils.GSON.fromJson(json, RecyclePartitionInfoV2.class);
-        }
-
-        public StorageInfo getStorageInfo() {
-            return storageInfo;
         }
 
         @Override
@@ -1085,9 +1087,9 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
         public RecycleRangePartitionInfo(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
                                       DataProperty dataProperty, short replicationNum, boolean isInMemory,
-                                      StorageInfo storageInfo) {
+                                      StorageCacheInfo storageCacheInfo) {
             super(dbId, tableId, partition, dataProperty, replicationNum,
-                    isInMemory, storageInfo);
+                    isInMemory, storageCacheInfo);
             this.range = range;
         }
 

@@ -27,7 +27,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.thrift.TTabletType;
 import org.apache.commons.lang.NotImplementedException;
 
@@ -87,7 +87,7 @@ public class PartitionDesc implements ParseNode {
         throw new NotImplementedException();
     }
 
-    public StorageInfo getStorageInfo() throws NotImplementedException {
+    public StorageCacheInfo getStorageCacheInfo() throws NotImplementedException {
         throw new NotImplementedException();
     }
 }
