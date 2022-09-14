@@ -51,6 +51,10 @@ void UpdateConfigAction::handle(HttpRequest* req) {
             LOG(INFO) << "set scanner_thread_pool_thread_num:" << config::scanner_thread_pool_thread_num;
             _exec_env->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
         });
+        _config_callback.emplace("storage_page_cache_limit", [&]() {
+            int64_t cache_limit = _exec_env->get_storage_page_cache_size();
+            StoragePageCache::instance()->set_capacity(cache_limit);
+        });
     });
 
     Status s;
@@ -67,10 +71,6 @@ void UpdateConfigAction::handle(HttpRequest* req) {
             LOG(INFO) << "set_config " << config << "=" << new_value << " success";
             if (_config_callback.count(config)) {
                 _config_callback[config]();
-            }
-            if (config == "storage_page_cache_limit") {
-                int64_t cache_limit = _exec_env->get_storage_page_cache_size();
-                StoragePageCache::instance()->set_capacity(cache_limit);
             }
         } else {
             LOG(WARNING) << "set_config " << config << "=" << new_value << " failed";

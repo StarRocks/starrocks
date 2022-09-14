@@ -382,6 +382,7 @@ Status ExecEnv::init_mem_tracker() {
 }
 
 int64_t ExecEnv::get_storage_page_cache_size() {
+    std::lock_guard<std::mutex>(*config::get_mstring_conf_lock());
     int64_t mem_limit = MemInfo::physical_mem();
     if (_mem_tracker->has_limit()) {
         mem_limit = _mem_tracker->limit();

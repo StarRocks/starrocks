@@ -18,6 +18,7 @@
 #pragma once
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -116,6 +117,8 @@ extern std::map<std::string, std::string>* full_conf_map;
 bool init(const char* filename, bool fillconfmap = false);
 
 Status set_config(const std::string& field, const std::string& value);
+
+std::mutex* get_mstring_conf_lock();
 
 } // namespace config
 } // namespace starrocks
