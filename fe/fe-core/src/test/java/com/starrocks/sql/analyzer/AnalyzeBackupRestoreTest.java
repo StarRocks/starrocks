@@ -106,4 +106,14 @@ public class AnalyzeBackupRestoreTest {
         analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `repo` ON (`t0`PARTITION (p1,p1))");
     }
 
+    @Test
+    public void testShowRestore() {
+        analyzeSuccess("SHOW RESTORE FROM `test`;").toSql();
+        analyzeSuccess("SHOW RESTORE FROM test where true;").toSql();
+        analyzeSuccess("SHOW RESTORE;").toSql();
+        analyzeSuccess("SHOW RESTORE WHERE a=1;");
+        analyzeFail("SHOW RESTORE FROM test1;");
+        analyzeFail("SHOW RESTORE FROM `a:test1`;");
+    }
+
 }
