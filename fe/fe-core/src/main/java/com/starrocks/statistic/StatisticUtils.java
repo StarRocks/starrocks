@@ -52,8 +52,8 @@ public class StatisticUtils {
             // from current session, may execute analyze stmt
             parallel = ConnectContext.get().getSessionVariable().getStatisticCollectParallelism();
         }
-        context.getSessionVariable().setParallelExecInstanceNum(parallel);
-        context.getSessionVariable().setPipelineDop(1);
+        context.getSessionVariable().setParallelExecInstanceNum(1);
+        context.getSessionVariable().setPipelineDop(parallel);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
