@@ -17,7 +17,11 @@ import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+<<<<<<< HEAD
 import com.starrocks.scheduler.persist.TaskSchedule;
+=======
+import com.starrocks.scheduler.persist.TaskRunStatusChange;
+>>>>>>> f6f9d3914 ([BugFix] Fix bug inconsistent metadata when out-of-order (#11067))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.SubmitTaskStmt;
@@ -508,5 +512,33 @@ public class TaskManagerTest {
 
     }
 
+    @Test
+    public void testReplayUpdateTaskRunOutOfOrder() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("test");
+        taskManager.replayCreateTask(task);
+        long taskId = 1;
+
+        TaskRun taskRun1 = TaskRunBuilder.newBuilder(task).build();
+        long now = System.currentTimeMillis();
+        taskRun1.setTaskId(taskId);
+        taskRun1.initStatus("1", now);
+        taskRun1.getStatus().setDefinition("select 1");
+
+        TaskRun taskRun2 = TaskRunBuilder.newBuilder(task).build();
+        taskRun2.setTaskId(taskId);
+        taskRun2.initStatus("2", now);
+        taskRun2.getStatus().setDefinition("select 1");
+        taskManager.replayCreateTaskRun(taskRun2.getStatus());
+        taskManager.replayCreateTaskRun(taskRun1.getStatus());
+
+        TaskRunStatusChange change1 = new TaskRunStatusChange(task.getId(), taskRun2.getStatus(),
+                Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
+        taskManager.replayUpdateTaskRun(change1);
+
+        Map<Long, TaskRun> runningTaskRunMap = taskManager.getTaskRunManager().getRunningTaskRunMap();
+        Assert.assertEquals(1, runningTaskRunMap.values().size());
+
+    }
 
 }
