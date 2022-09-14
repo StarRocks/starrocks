@@ -66,6 +66,7 @@ enum TPlanNodeType {
   NESTLOOP_JOIN_NODE,
   STREAM_SCAN_NODE,
   STREAM_JOIN_NODE,
+  STREAM_AGG_NODE,
 }
 
 // phases of an execution node
