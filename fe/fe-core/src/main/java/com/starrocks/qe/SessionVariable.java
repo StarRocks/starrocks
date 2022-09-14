@@ -262,6 +262,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
+    public static final String SECOND_AGG_PHASE_DOP = "second_agg_phase_dop";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -632,6 +634,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
+
+    @VarAttr(name = SECOND_AGG_PHASE_DOP, flag = VariableMgr.INVISIBLE)
+    private int secondAggPhaseDop = -1;
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
@@ -1163,6 +1168,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableReplicatedStorage() {
         return enableReplicatedStorage;
+    }
+
+    public int getSecondAggPhaseDop() {
+        return secondAggPhaseDop;
     }
 
     // Serialize to thrift object

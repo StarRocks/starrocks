@@ -1194,6 +1194,10 @@ public class PlanFragmentBuilder {
                     aggregationNode =
                             new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
+                    int secondAggPhaseDop = context.getConnectContext().getSessionVariable().getSecondAggPhaseDop();
+                    if (secondAggPhaseDop > 0) {
+                        inputFragment.setPipelineDop(secondAggPhaseDop);
+                    }
                 }
                 // set aggregate node can use local aggregate
                 if (hasColocateOlapScanChildInFragment(aggregationNode)) {
