@@ -15,6 +15,10 @@ namespace starrocks {
 
 using NullMasks = vectorized::NullColumn::Container;
 
+// compare the value by column
+//
+// cmp_vector[0] = first_column.data[0].compare(data[i])
+// cmp_vector[i] = data[i - 1].compare(data[i])
 template <bool has_null>
 class ColumnWiseComparator : public ColumnVisitorAdapter<ColumnWiseComparator<has_null>> {
 public:
@@ -107,6 +111,9 @@ private:
     const vectorized::NullColumn::Container& _null_masks;
 };
 
+// append the result by selector
+// selector[i] == 0 means selected
+//
 class AppendWithMask : public ColumnVisitorMutableAdapter<AppendWithMask> {
 public:
     using SelMask = std::vector<uint8_t>;
@@ -180,6 +187,7 @@ private:
     size_t _selected_size;
 };
 
+// batch allocate states
 struct StateAllocator {
     static size_t constexpr aligned = 16;
     StateAllocator(MemPool* pool_, size_t batch_size, size_t aggregate_state_size) : pool(pool_) {
@@ -237,7 +245,7 @@ Status StreamingAggregator::streaming_compute_agg_state(size_t chunk_size) {
     }
 
     // compare stage
-    // _cmp_vector[i] = group[i].equals(group[i - 1])
+    // _cmp_vector[i] = group[i - 1].equals(group[i])
     _cmp_vector.assign(chunk_size, 0);
     {
         SCOPED_TIMER(_agg_compute_timer);
@@ -253,6 +261,7 @@ Status StreamingAggregator::streaming_compute_agg_state(size_t chunk_size) {
         }
     }
 
+    // TODO: split the states
     // allocate state stage
     {
         SCOPED_TIMER(_allocate_state_timer);
@@ -301,6 +310,7 @@ Status StreamingAggregator::streaming_compute_agg_state(size_t chunk_size) {
         }
     }
 
+    // selector[i] == 0 means selected
     std::vector<uint8_t> selector(chunk_size);
     size_t selected_size = 0;
     {
@@ -309,6 +319,7 @@ Status StreamingAggregator::streaming_compute_agg_state(size_t chunk_size) {
             selector[i - 1] = !(_cmp_vector[i] != 0);
             selected_size += !selector[i - 1];
         }
+        // we will never select the last rows
         selector[chunk_size - 1] = 1;
     }
 
