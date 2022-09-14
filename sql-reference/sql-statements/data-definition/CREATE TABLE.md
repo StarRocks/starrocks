@@ -387,18 +387,6 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 [PROPERTIES ("key" = "value", ...)],...)
 ```
 
-#### 创建表时增加内存表特性
-
-如果希望使用 内存表 特性，需要在 properties 中指定
-
-``` sql
-PROPERTIES (
-    "in_memory" = "true"
-)
-```
-
-当 in_memory 属性为 true 时，StarRocks 会尽可能将该表的数据和索引 Cache 到 BE 内存中
-
 ## 示例
 
 ### 创建 Hash 分桶表并根据 key 列对数据进行聚合
