@@ -6,6 +6,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -14,6 +17,7 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -299,9 +303,36 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             physicalPropertyInfo.isReplicate = true;
         }
 
-        return createPropertySetByDistribution(new HashDistributionSpec(
+        DistributionProperty distributionProperty = new DistributionProperty(new HashDistributionSpec(
                 new HashDistributionDesc(olapDistributionSpec.getShuffleColumns(),
                         HashDistributionDesc.SourceType.LOCAL), physicalPropertyInfo));
+        SortProperty sortProperty = getOlapScanSortProperty(node);
+        return new PhysicalPropertySet(distributionProperty, sortProperty);
+    }
+
+    private SortProperty getOlapScanSortProperty(PhysicalOlapScanOperator node) {
+        if (!ConnectContext.get().getSessionVariable().isSingleTabletMode() ||
+                ConnectContext.get().getSessionVariable().isEnableTabletInternalParallel()) {
+            return SortProperty.EMPTY;
+        }
+
+        if (requirements.getSortProperty() == SortProperty.EMPTY) {
+            return SortProperty.EMPTY;
+        }
+
+        for (int i = 0; i < requirements.getSortProperty().getSpec().getOrderDescs().size(); i++) {
+            Ordering ordering = requirements.getSortProperty().getSpec().getOrderDescs().get(i);
+            Column meta = ((OlapTable) node.getTable()).getSchemaByIndexId(node.getSelectedIndexId()).get(i);
+
+            if (!meta.isKey() || !meta.equals(node.getColRefToColumnMetaMap().get(ordering.getColumnRef()))) {
+                return SortProperty.EMPTY;
+            }
+
+            if (!ordering.isAscending() || ordering.isNullsFirst()) {
+                return SortProperty.EMPTY;
+            }
+        }
+        return requirements.getSortProperty();
     }
 
     @Override

@@ -219,7 +219,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
-    public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL = "enable_rewrite_groupingsets_to_union_all";
+    public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
+            "enable_rewrite_groupingsets_to_union_all";
 
     // --------  New planner session variables end --------
 
@@ -249,7 +250,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
-    public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER = "enable_multicolumn_global_runtime_filter";
+    public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER =
+            "enable_multicolumn_global_runtime_filter";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
     public static final String JOIN_IMPLEMENTATION_MODE_V2 = "join_implementation_mode_v2";
@@ -261,6 +263,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
 
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
+
+    public static final String SINGLE_TABLET_MODE = "single_tablet_mode";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -633,12 +637,27 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
 
+    @VarAttr(name = SINGLE_TABLET_MODE)
+    private boolean singleTabletMode = false;
+
+    public boolean isSingleTabletMode() {
+        return singleTabletMode;
+    }
+
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
     }
 
     public int getCboCTEMaxLimit() {
         return cboCTEMaxLimit;
+    }
+
+    public boolean isEnableTabletInternalParallel() {
+        return enableTabletInternalParallel;
+    }
+
+    public void setEnableTabletInternalParallel(boolean enableTabletInternalParallel) {
+        this.enableTabletInternalParallel = enableTabletInternalParallel;
     }
 
     public double getCboPruneShuffleColumnRate() {

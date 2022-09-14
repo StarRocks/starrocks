@@ -270,7 +270,7 @@ public class WindowTransformer {
             // Each LogicalWindowOperator will belong to a SortGroup,
             // so we need to record sortProperty to ensure that only one SortNode is enforced
             List<Ordering> sortEnforceProperty = new ArrayList<>();
-            partitions.forEach(p -> sortEnforceProperty.add(new Ordering((ColumnRefOperator) p, true, true)));
+            partitions.forEach(p -> sortEnforceProperty.add(new Ordering((ColumnRefOperator) p, true, false)));
             for (Ordering ordering : orderings) {
                 if (sortEnforceProperty.stream().noneMatch(sp -> sp.getColumnRef().equals(ordering.getColumnRef()))) {
                     sortEnforceProperty.add(ordering);
