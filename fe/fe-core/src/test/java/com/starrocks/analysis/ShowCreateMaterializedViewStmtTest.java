@@ -67,7 +67,7 @@ public class ShowCreateMaterializedViewStmtTest {
     @Test
     public void testShowSimpleCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv1 " +
-                "distributed by hash(k1) " +
+                "distributed by hash(k1) buckets 10 " +
                 "refresh manual " +
                 "as select k1, k2 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
@@ -94,7 +94,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowPartitionWithAliasCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv2 " +
                 "partition by k3 " +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh manual " +
                 "as select k1 as k3, k2 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
@@ -122,7 +122,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowPartitionWithFunctionCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv3 " +
                 "partition by date_trunc('month',k1)" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh manual " +
                 "as select k1, k2+v1 as k3 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
@@ -150,7 +150,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowPartitionWithFunctionAliasCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv4 " +
                 "partition by (date_trunc('month',k3))" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh manual " +
                 "as select k1 as k3, k2 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
@@ -178,7 +178,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowPartitionWithAllPropertiesCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv5 " +
                 "partition by (date_trunc('month',k3))" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
@@ -212,7 +212,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowRefreshWithNoStartTimeCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv6 " +
                 "partition by (date_trunc('month',k3))" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh async " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
@@ -246,7 +246,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowRefreshWithIntervalCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv7 " +
                 "partition by (date_trunc('month',k3))" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh async EVERY(INTERVAL 1 HOUR)" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
