@@ -254,9 +254,15 @@ public class ConnectProcessorTest {
                 minTimes = 0;
                 result = "testCluster:user";
 
+<<<<<<< HEAD
                 context.getClusterName();
                 minTimes = 0;
                 result = "testCluster";
+=======
+                context.getCurrentUserIdentity();
+                minTimes = 0;
+                result = UserIdentity.ROOT;
+>>>>>>> 952907454 ([Feature] add separated authorized user in audit log. (#11099))
 
                 context.getStartTime();
                 minTimes = 0;
