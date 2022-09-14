@@ -1,3 +1,5 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
 #include "exec/vectorized/streaming_aggregator.h"
 
 #include <cstdint>
@@ -17,20 +19,19 @@ using NullMasks = vectorized::NullColumn::Container;
 
 // compare the value by column
 //
-// cmp_vector[0] = first_column.data[0].compare(data[i])
+// cmp_vector[0] = first_column.data[0].compare(data[0])
 // cmp_vector[i] = data[i - 1].compare(data[i])
-template <bool has_null>
-class ColumnWiseComparator : public ColumnVisitorAdapter<ColumnWiseComparator<has_null>> {
+class ColumnWiseComparator : public ColumnVisitorAdapter<ColumnWiseComparator> {
 public:
     ColumnWiseComparator(const ColumnPtr& first_column, std::vector<uint8_t>& cmp_vector, const NullMasks& null_masks)
-            : ColumnVisitorAdapter<ColumnWiseComparator<has_null>>(this),
+            : ColumnVisitorAdapter(this),
               _first_column(first_column),
               _cmp_vector(cmp_vector),
               _null_masks(null_masks) {}
 
     Status do_visit(const vectorized::NullableColumn& column) {
         ColumnPtr ptr = down_cast<vectorized::NullableColumn*>(_first_column.get())->data_column();
-        ColumnWiseComparator<true> comparator(ptr, _cmp_vector, column.immutable_null_column_data());
+        ColumnWiseComparator comparator(ptr, _cmp_vector, column.immutable_null_column_data());
         RETURN_IF_ERROR(column.data_column()->accept(&comparator));
 
         auto data_column = column.data_column();
@@ -59,7 +60,8 @@ public:
         } else {
             _cmp_vector[0] = 1;
         }
-        if constexpr (has_null) {
+        if (!_null_masks.empty()) {
+            DCHECK_EQ(_null_masks.size(), num_rows);
             for (size_t i = 1; i < num_rows; ++i) {
                 if (_null_masks[i - 1] == 0 && _null_masks[i] == 0) {
                     _cmp_vector[i] = column.get_slice(i - 1).compare(column.get_slice(i));
@@ -84,7 +86,8 @@ public:
             _cmp_vector[0] = 1;
         }
         const auto& data_container = column.get_data();
-        if constexpr (has_null) {
+        if (!_null_masks.empty()) {
+            DCHECK_EQ(_null_masks.size(), num_rows);
             for (size_t i = 1; i < num_rows; ++i) {
                 if (_null_masks[i - 1] == 0 && _null_masks[i] == 0) {
                     _cmp_vector[i] = !(data_container[i - 1] == data_container[i]);
@@ -252,7 +255,7 @@ Status StreamingAggregator::streaming_compute_agg_state(size_t chunk_size) {
         std::vector<uint8_t> cmp_vector(chunk_size);
         for (size_t i = 0; i < _group_by_columns.size(); ++i) {
             cmp_vector.assign(chunk_size, 0);
-            ColumnWiseComparator<false> cmp(_last_columns[i], cmp_vector, std::vector<uint8_t>());
+            ColumnWiseComparator cmp(_last_columns[i], cmp_vector, std::vector<uint8_t>());
             RETURN_IF_ERROR(_group_by_columns[i]->accept(&cmp));
             for (size_t i = 0; i < chunk_size; ++i) {
                 _cmp_vector[i] |= cmp_vector[i];
