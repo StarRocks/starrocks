@@ -55,7 +55,11 @@
 #include "exec/vectorized/table_function_node.h"
 #include "exec/vectorized/topn_node.h"
 #include "exec/vectorized/union_node.h"
+#include "exec/stream/stream_agg.h"
+#include "exec/stream/stream_join.h"
+#include "exec/stream/stream_scan.h"
 #include "exprs/expr_context.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -523,6 +527,18 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         connector_scan_node.connector_name = connector::Connector::LAKE;
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
+        return Status::OK();
+    }
+    case TPlanNodeType::STREAM_JOIN_NODE: {
+        *node = pool->add(new StreamJoinNode(pool, tnode, descs));
+        return Status::OK();
+    }
+    case TPlanNodeType::STREAM_AGG_NODE: {
+        *node = pool->add(new StreamAggNode(pool, tnode, descs));
+        return Status::OK();
+    }
+    case TPlanNodeType::STREAM_SCAN_NODE: {
+        *node = pool->add(new StreamScanNode(pool, tnode, descs));
         return Status::OK();
     }
     default:
