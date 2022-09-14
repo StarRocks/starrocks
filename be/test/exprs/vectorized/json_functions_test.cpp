@@ -768,6 +768,50 @@ TEST_F(JsonFunctionsTest, extract_from_object_test) {
 
     EXPECT_STATUS(Status::NotFound(""),
                   test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[2].key", &output));
+<<<<<<< HEAD
+=======
+
+    EXPECT_STATUS(Status::NotFound(""),
+                  test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[3].key", &output));
+
+    EXPECT_STATUS(Status::DataQualityError(""),
+                  test_extract_from_object(R"({"data1 " : 1, "data2":})", "$.data", &output));
+}
+
+class JsonLengthTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, int>> {};
+
+TEST_P(JsonLengthTestFixture, json_length_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_column = JsonColumn::create();
+
+    std::string param_json = std::get<0>(GetParam());
+    std::string param_path = std::get<1>(GetParam());
+    int expect_length = std::get<2>(GetParam());
+
+    auto json = JsonValue::parse(param_json);
+    ASSERT_TRUE(json.ok());
+    json_column->append(&*json);
+
+    Columns columns;
+    columns.push_back(json_column);
+    if (!param_path.empty()) {
+        auto path_column = BinaryColumn::create();
+        path_column->append(param_path);
+        columns.push_back(path_column);
+    }
+
+    // ctx.get()->impl()->set_constant_columns(columns);
+    Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    ASSERT_OK(st);
+
+    ColumnPtr result = JsonFunctions::json_length(ctx.get(), columns);
+    ASSERT_TRUE(!!result);
+    EXPECT_EQ(expect_length, result->get(0).get_int32());
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+>>>>>>> 2f20bd57f ([BugFix] Fix crash when bitmap is larger than 2GB (#11159))
 }
 
 } // namespace vectorized
