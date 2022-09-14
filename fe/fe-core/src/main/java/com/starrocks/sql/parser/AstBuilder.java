@@ -96,6 +96,7 @@ import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
@@ -3316,6 +3317,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         String repoName = ((Identifier) visit(context.identifier())).getValue();
         return new RestoreStmt(labelName, repoName, tblRefs, properties);
+    }
+
+    @Override
+    public ParseNode visitShowRestoreStatement(StarRocksParser.ShowRestoreStatementContext context) {
+        if (context.identifier() == null) {
+            return new ShowRestoreStmt(null, null);
+        }
+        if (context.expression() != null) {
+            return new ShowRestoreStmt(((Identifier) visit(context.identifier())).getValue(),
+                    (Expr) visit(context.expression()));
+        } else {
+            return new ShowRestoreStmt(((Identifier) visit(context.identifier())).getValue(), null);
+        }
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------

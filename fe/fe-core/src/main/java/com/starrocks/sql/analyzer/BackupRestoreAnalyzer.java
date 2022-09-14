@@ -7,6 +7,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.RestoreStmt;
+import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
@@ -210,6 +211,14 @@ public class BackupRestoreAnalyzer {
                         "Unknown restore job properties: " + copiedProperties.keySet());
             }
 
+            return null;
+        }
+
+        @Override
+        public Void visitShowRestoreStmt(ShowRestoreStmt showRestoreStmt, ConnectContext context) {
+            String dbName = getDbName(showRestoreStmt.getDbName(), context);
+            showRestoreStmt.setDbName(dbName);
+            getDatabase(dbName, context);
             return null;
         }
     }

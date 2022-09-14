@@ -179,6 +179,7 @@ statement
     | backupStatement
     | showBackupStatement
     | restoreStatement
+    | showRestoreStatement
 
     // Other statement
     | killStatement
@@ -1242,6 +1243,10 @@ restoreStatement
     FROM identifier
     ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
     (PROPERTIES propertyList)?
+    ;
+
+showRestoreStatement
+    : SHOW RESTORE ((FROM | IN) identifier)? (WHERE where=expression)?
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------
