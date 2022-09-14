@@ -6,6 +6,8 @@
 
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
+#include "io/compressed_input_stream.h"
+#include "util/compression/stream_compression.h"
 
 namespace starrocks::vectorized {
 
@@ -149,10 +151,6 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     if (_is_open) {
         return Status::OK();
     }
-    CHECK(_file == nullptr) << "File has already been opened";
-    ASSIGN_OR_RETURN(_raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path));
-    _file = std::make_unique<RandomAccessFile>(
-            std::make_shared<CountedSeekableInputStream>(_raw_file->stream(), &_stats), _raw_file->filename());
     _build_scanner_context();
     auto status = do_open(runtime_state);
     if (status.ok()) {
@@ -195,6 +193,25 @@ void HdfsScanner::enter_pending_queue() {
 
 uint64_t HdfsScanner::exit_pending_queue() {
     return _pending_queue_sw.reset();
+}
+
+Status HdfsScanner::open_random_access_file() {
+    CHECK(_file == nullptr) << "File has already been opened";
+    ASSIGN_OR_RETURN(_raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path))
+    auto stream = std::make_shared<CountedSeekableInputStream>(_raw_file->stream(), &_stats);
+    if (_compression_type == CompressionTypePB::NO_COMPRESSION) {
+        _file = std::make_unique<RandomAccessFile>(stream, _raw_file->filename());
+    } else {
+        using DecompressorPtr = std::shared_ptr<StreamCompression>;
+        std::unique_ptr<StreamCompression> dec;
+        RETURN_IF_ERROR(StreamCompression::create_decompressor(_compression_type, &dec));
+        auto compressed_input_stream =
+                std::make_shared<io::CompressedInputStream>(stream, DecompressorPtr(dec.release()));
+        auto compressed_seekable_input_stream =
+                std::make_shared<io::CompressedSeekableInputStream>(compressed_input_stream);
+        _file = std::make_unique<RandomAccessFile>(compressed_seekable_input_stream, _raw_file->filename());
+    }
+    return Status::OK();
 }
 
 void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
