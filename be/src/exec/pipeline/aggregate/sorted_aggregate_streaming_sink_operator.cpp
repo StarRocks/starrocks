@@ -8,7 +8,7 @@ namespace starrocks::pipeline {
 SortedAggregateStreamingSinkOperator::SortedAggregateStreamingSinkOperator(
         OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
         std::shared_ptr<StreamingAggregator> aggregator)
-        : Operator(factory, id, "xaggregate_streaming_sink", plan_node_id, driver_sequence),
+        : Operator(factory, id, "sorted_aggregate_streaming_sink", plan_node_id, driver_sequence),
           _aggregator(std::move(aggregator)) {
     _aggregator->ref();
 }
