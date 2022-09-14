@@ -50,15 +50,27 @@ public class AlterSystemStmtAnalyzerTest {
 
     @Test(expected = SemanticException.class)
     public void testVisitModifyBackendHostClauseException() {
+<<<<<<< HEAD
         AlterSystemStmtAnalyzerVisitor visitor = new AlterSystemStmtAnalyzerVisitor();
         ModifyBackendAddressClause clause = new ModifyBackendAddressClause("test","127.0.0.1");
+=======
+        AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
+                new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
+        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.2", "127.0.0.1");
+>>>>>>> f4a3fff8e ([Enhancement] Enables SR cluster can support IP and FQDN conversion (#11018))
         visitor.visitModifyBackendHostClause(clause, null);
     }
 
     @Test(expected = SemanticException.class)
     public void testVisitModifyFrontendHostClauseException() {
+<<<<<<< HEAD
         AlterSystemStmtAnalyzerVisitor visitor = new AlterSystemStmtAnalyzerVisitor();
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test","127.0.0.1");
+=======
+        AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
+                new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.2", "127.0.0.1");
+>>>>>>> f4a3fff8e ([Enhancement] Enables SR cluster can support IP and FQDN conversion (#11018))
         visitor.visitModifyFrontendHostClause(clause, null);
     }
 }
