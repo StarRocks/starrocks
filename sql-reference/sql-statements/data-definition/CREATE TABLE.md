@@ -130,60 +130,55 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     当前仅支持BITMAP索引， BITMAP索引仅支持应用于单列
 
 3. ENGINE 类型
+  默认为 olap。可选 mysql, elasticsearch, hive
 
-    默认为 olap。可选 mysql, elasticsearch, hive
+    1. 如果是 mysql，则需要在 properties 提供以下信息：
 
-## 示例
+        ```sql
+        PROPERTIES (
+            "host" = "mysql_server_host",
+            "port" = "mysql_server_port",
+            "user" = "your_user_name",
+            "password" = "your_password",
+            "database" = "database_name",
+            "table" = "table_name"
+        )
+        ```
 
-1. 如果是 mysql，则需要在 properties 提供以下信息：
+        注意：
+        "table" 条目中的 "table_name" 是 mysql 中的真实表名。
+        而 CREATE TABLE 语句中的 table_name 是该 mysql 表在 StarRocks 中的名字，可以不同。
 
-    ```sql
-    PROPERTIES (
-        "host" = "mysql_server_host",
-        "port" = "mysql_server_port",
-        "user" = "your_user_name",
-        "password" = "your_password",
-        "database" = "database_name",
-        "table" = "table_name"
-    )
-    ```
+        在 StarRocks 创建 mysql 表的目的是可以通过 StarRocks 访问 mysql 数据库。
+        而 StarRocks 本身并不维护、存储任何 mysql 数据。
 
-    注意：
-    "table" 条目中的 "table_name" 是 mysql 中的真实表名。
-    而 CREATE TABLE 语句中的 table_name 是该 mysql 表在 StarRocks 中的名字，可以不同。
+    2. 如果是 elasticsearch，则需要在 properties 提供以下信息：
 
-    在 StarRocks 创建 mysql 表的目的是可以通过 StarRocks 访问 mysql 数据库。
-    而 StarRocks 本身并不维护、存储任何 mysql 数据。
+        ```sql
+        PROPERTIES (
+            "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
+            "user" = "root",
+            "password" = "root",
+            "index" = "tindex",
+            "type" = "doc"
+        )
+        ```
 
-2. 如果是 elasticsearch，则需要在 properties 提供以下信息：
+        其中host为ES集群连接地址，可指定一个或者多个,user/password为开启basic认证的ES集群的用户名/密码，index是StarRocks中的表对应的ES的index名字，可以是alias，type指定index的type，默认是doc。
 
-    ```sql
-    PROPERTIES (
-        "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
-        "user" = "root",
-        "password" = "root",
-        "index" = "tindex",
-        "type" = "doc"
-    )
-    ```
+    3. 如果是 hive，则需要在 properties 提供以下信息：
 
-    其中host为ES集群连接地址，可指定一个或者多个,user/password为开启basic认证的ES集群的用户名/密码，index是StarRocks中的表对应的ES的index名字，可以是alias，type指定index的type，默认是doc。
+        ```sql
+        PROPERTIES (
+            "database" = "hive_db_name",
+            "table" = "hive_table_name",
+            "hive.metastore.uris" = "thrift://127.0.0.1:9083"
+        )
+        ```
 
-3. 如果是 hive，则需要在 properties 提供以下信息：
+        其中 database 是 hive 表对应的库名字，table 是 hive 表的名字，hive.metastore.uris 是 hive metastore 服务地址。
 
-    ```sql
-    PROPERTIES (
-        "database" = "hive_db_name",
-        "table" = "hive_table_name",
-        "hive.metastore.uris" = "thrift://127.0.0.1:9083"
-    )
-    ```
-
-    其中 database 是 hive 表对应的库名字，table 是 hive 表的名字，hive.metastore.uris 是 hive metastore 服务地址。
-
-### 语法
-
-1. key_desc
+4. key_desc
 
     语法：
 
@@ -208,7 +203,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     除AGGREGATE KEY外，其他key_type在建表时，value列不需要指定聚合类型。
     ```
 
-2. partition_desc
+5. partition_desc
 
     partition描述有三种使用方式：
 
@@ -274,109 +269,95 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     更详细的语法规则，请参见[批量创建分区](/table_design/Data_distribution#批量创建分区)。
 
-    语法：
+6. distribution_desc
 
     ```sql
     DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
     ```
 
-3. PROPERTIES
-
-    说明：
     使用指定的 key 列进行哈希分桶。默认分桶数为 10。`DISTRIBUTED BY` 为必填字段。有关如何确定分桶数量，请参见[确定分桶数量](/table_design/Data_distribution#确定分桶数量)。建议使用 Hash 分桶方式。
 
-    ```sql
-    PROPERTIES (
-        "storage_medium" = "[SSD|HDD]",
-        [ "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss", ]
-        [ "replication_num" = "3" ]
-    )
-    ```
+7. PROPERTIES
 
-    storage_medium：用于指定该分区的初始存储介质，可选择 SSD 或 HDD。
-    * 默认初始存储介质可通过fe的配置文件 `fe.conf` 中指定 `default_storage_medium=xxx`，如果没有指定，则默认为 HDD。
+    1. 设置该表数据的初始存储介质、存储降冷时间和副本数。
 
-    > 注意：当FE配置项 `enable_strict_storage_medium_check` 为 `True` 时，若集群中没有设置对应的存储介质时，建表语句会报错 `Failed to find enough host in all backends with storage medium is SSD|HDD`.
+        ```sql
+        PROPERTIES (
+            "storage_medium" = "[SSD|HDD]",
+            [ "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss", ]
+            [ "replication_num" = "3" ]
+        )
+        ```
 
-    storage_cooldown_time：当设置存储介质为 SSD 时，指定该分区在 SSD 上的存储到期时间。
-    * 默认存放 30 天。
-    * 格式为："yyyy-MM-dd HH:mm:ss"
+        storage_medium：用于指定该分区的初始存储介质，可选择 SSD 或 HDD。
+        * 默认初始存储介质可通过fe的配置文件 `fe.conf` 中指定 `default_storage_medium=xxx`，如果没有指定，则默认为 HDD。
 
-    replication_num：指定分区的副本数。
-    * 默认为 3。
+        > 注意：当FE配置项 `enable_strict_storage_medium_check` 为 `True` 时，若集群中没有设置对应的存储介质时，建表语句会报错 `Failed to find enough host in all backends with storage medium is SSD|HDD`.
 
-    <br/>
+        storage_cooldown_time：当设置存储介质为 SSD 时，指定该分区在 SSD 上的存储到期时间。
+        * 默认存放 30 天。
+        * 格式为："yyyy-MM-dd HH:mm:ss"
 
-    当表为单分区表时，这些属性为表的属性。
+        replication_num：指定分区的副本数。
+        * 默认为 3。
 
-    当表为两级分区时，这些属性附属于每一个分区。
+        <br/>
 
-    如果希望不同分区有不同属性。可以通过 ADD PARTITION 或 MODIFY PARTITION 进行操作。
+        当表为单分区表时，这些属性为表的属性。
 
-    <br/>
+        当表为两级分区时，这些属性附属于每一个分区。
 
-    2.如果 Engine 类型为 olap, 可以指定某列使用 bloom filter 索引
-    bloom filter 索引仅适用于查询条件为 in 和 equal 的情况，该列的值越分散效果越好
-    目前只支持以下情况的列:除了 TINYINT FLOAT DOUBLE 类型以外的 key 列及聚合方法为 REPLACE 的 value 列
+        如果希望不同分区有不同属性。可以通过 ADD PARTITION 或 MODIFY PARTITION 进行操作。
 
-    ```sql
-    PROPERTIES (
-        "bloom_filter_columns"="k1,k2,k3"
-    )
-    ```
+        <br/>
 
-    3.如果希望使用 Colocate Join 特性，需要在 properties 中指定。
+    2. 如果 Engine 类型为 olap, 可以指定某列使用 bloom filter 索引
+        bloom filter 索引仅适用于查询条件为 in 和 equal 的情况，该列的值越分散效果越好
+        目前只支持以下情况的列:除了 TINYINT FLOAT DOUBLE 类型以外的 key 列及聚合方法为 REPLACE 的 value 列
 
-    ```sql
-    PROPERTIES (
-        "colocate_with"="table1"
-    )
-    ```
+        ```sql
+        PROPERTIES (
+            "bloom_filter_columns"="k1,k2,k3"
+        )
+        ```
 
-    4.如果希望使用动态分区特性，需要在properties 中指定。
+    3. 如果希望使用 Colocate Join 特性，需要在 properties 中指定。
 
-    ```sql
-    PROPERTIES (
-        "dynamic_partition.enable" = "true|false",
-        "dynamic_partition.time_unit" = "DAY|WEEK|MONTH",
-        "dynamic_partition.start" = "${integer_value}",
-        "dynamic_partitoin.end" = "${integer_value}",
-        "dynamic_partition.prefix" = "${string_value}",
-        "dynamic_partition.buckets" = "${integer_value}"
-    )
-    ```
+        ```sql
+        PROPERTIES (
+            "colocate_with"="table1"
+        )
+        ```
 
-    dynamic_partition.enable: 用于指定表级别的动态分区功能是否开启。默认为 true。
+    4. 如果希望使用动态分区特性，需要在properties 中指定。
 
-    dynamic_partition.time_unit: 用于指定动态添加分区的时间单位，可选择为DAY（天），WEEK(周)，MONTH（月）。
+        ```sql
+        PROPERTIES (
+            "dynamic_partition.enable" = "true|false",
+            "dynamic_partition.time_unit" = "DAY|WEEK|MONTH",
+            "dynamic_partition.start" = "${integer_value}",
+            "dynamic_partitoin.end" = "${integer_value}",
+            "dynamic_partition.prefix" = "${string_value}",
+            "dynamic_partition.buckets" = "${integer_value}"
+        )
+        ```
 
-    dynamic_partition.start: 用于指定向前删除多少个分区。值必须小于0。默认为 Integer.MIN_VALUE。
+        dynamic_partition.enable: 用于指定表级别的动态分区功能是否开启。默认为 true。
+        dynamic_partition.time_unit: 用于指定动态添加分区的时间单位，可选择为DAY（天），WEEK(周)，MONTH（月）。
+        dynamic_partition.start: 用于指定向前删除多少个分区。值必须小于0。默认为 Integer.MIN_VALUE。
+        dynamic_partition.end: 用于指定提前创建的分区数量。值必须大于0。
+        dynamic_partition.prefix: 用于指定创建的分区名前缀，例如分区名前缀为p，则自动创建分区名为p20200108。
+        dynamic_partition.buckets: 用于指定自动创建的分区分桶数量。
 
-    dynamic_partition.end: 用于指定提前创建的分区数量。值必须大于0。
+    5. 建表时可以批量创建多个 Rollup。
 
-    dynamic_partition.prefix: 用于指定创建的分区名前缀，例如分区名前缀为p，则自动创建分区名为p20200108。
+        语法：
 
-    dynamic_partition.buckets: 用于指定自动创建的分区分桶数量。
-
-    5.建表时可以批量创建多个 Rollup。
-
-    语法：
-
-    ```sql
-    ROLLUP (rollup_name (column_name1, column_name2, ...)
-    [FROM from_index_name]
-    [PROPERTIES ("key"="value", ...)],...)
-    ```
-
-    6.如果希望使用 内存表 特性，需要在 properties 中指定
-
-    ```sql
-    PROPERTIES (
-        "in_memory"="true"
-    )
-    ```
-
-    当 in_memory 属性为 true 时，StarRocks会尽可能将该表的数据和索引Cache到BE 内存中
+        ```sql
+        ROLLUP (rollup_name (column_name1, column_name2, ...)
+        [FROM from_index_name]
+        [PROPERTIES ("key"="value", ...)],...)
+        ```
 
 ## 示例
 
