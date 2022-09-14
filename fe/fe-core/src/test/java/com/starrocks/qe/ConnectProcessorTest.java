@@ -22,6 +22,7 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.AccessTestUtil;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCapability;
@@ -257,6 +258,10 @@ public class ConnectProcessorTest {
                 context.getClusterName();
                 minTimes = 0;
                 result = "testCluster";
+
+                context.getCurrentUserIdentity();
+                minTimes = 0;
+                result = UserIdentity.ROOT;
 
                 context.getStartTime();
                 minTimes = 0;
