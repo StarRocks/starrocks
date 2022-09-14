@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer.rule.implementation;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamAggOperator;
@@ -12,10 +13,17 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
-public class StreamAggregateImplementationRule extends ImplementationRule {
+public class StreamAggregateImplementationRule extends StreamImplementationRule {
 
-    protected StreamAggregateImplementationRule(Pattern pattern) {
-        super(RuleType.IMP_STREAM_AGG, pattern);
+    private static final StreamAggregateImplementationRule INSTANCE =
+            new StreamAggregateImplementationRule(RuleType.IMP_STREAM_AGG);
+
+    public static StreamAggregateImplementationRule getInstance() {
+        return INSTANCE;
+    }
+
+    private StreamAggregateImplementationRule(RuleType type) {
+        super(type, Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 
     @Override
