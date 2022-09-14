@@ -99,12 +99,15 @@ public class FileSystemManager {
     // which is not thread-safe and may cause 'Filesystem closed' exception when it is closed by other thread.
     private static final String FS_HDFS_IMPL_DISABLE_CACHE = "fs.hdfs.impl.disable.cache";
 
+    // https://hadoop.apache.org/docs/stable/hadoop-aws/tools/hadoop-aws/index.html
     // arguments for s3a
     private static final String FS_S3A_ACCESS_KEY = "fs.s3a.access.key";
     private static final String FS_S3A_SECRET_KEY = "fs.s3a.secret.key";
     private static final String FS_S3A_ENDPOINT = "fs.s3a.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     private static final String FS_S3A_IMPL_DISABLE_CACHE = "fs.s3a.impl.disable.cache";
+    private static final String FS_S3A_CONNECTION_SSL_ENABLED = "fs.s3a.connection.ssl.enabled";
+    private static final String FS_S3A_AWS_CRED_PROVIDER = "fs.s3a.aws.credentials.provider";
 
     // arguments for ks3
     private static final String FS_KS3_ACCESS_KEY = "fs.ks3.AccessKey";
@@ -437,6 +440,8 @@ public class FileSystemManager {
         String secretKey = properties.getOrDefault(FS_S3A_SECRET_KEY, "");
         String endpoint = properties.getOrDefault(FS_S3A_ENDPOINT, "");
         String disableCache = properties.getOrDefault(FS_S3A_IMPL_DISABLE_CACHE, "true");
+        String connectionSSLEnabled = properties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "true");
+        String awsCredProvider = properties.getOrDefault(FS_S3A_AWS_CRED_PROVIDER, null);
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will cache both.
         String host = S3A_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
@@ -464,6 +469,10 @@ public class FileSystemManager {
                 conf.set(FS_S3A_SECRET_KEY, secretKey);
                 conf.set(FS_S3A_ENDPOINT, endpoint);
                 conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCache);
+                conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
+                if (awsCredProvider != null) {
+                    conf.set(FS_S3A_AWS_CRED_PROVIDER, awsCredProvider);
+                }
                 FileSystem s3AFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(s3AFileSystem);
             }
@@ -846,7 +855,8 @@ public class FileSystemManager {
                             "end of file reached");
                 }
                 if (logger.isDebugEnabled()) {
-                    logger.debug("read buffer from input stream, buffer size:" + buf.length + ", read length:" + readLength);
+                    logger.debug(
+                            "read buffer from input stream, buffer size:" + buf.length + ", read length:" + readLength);
                 }
                 return ByteBuffer.wrap(buf, 0, readLength);
             } catch (IOException e) {
