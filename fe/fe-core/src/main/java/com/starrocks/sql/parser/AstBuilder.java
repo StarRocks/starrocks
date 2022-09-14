@@ -3288,7 +3288,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             boolean isGrant) {
 
         List<String> privilegeList = privListContext.privilegeAction().stream().map(
-                c -> ((StringLiteral) visit(c)).getStringValue().toUpperCase()).collect(toList());
+                c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
         BaseGrantRevokePrivilegeStmt stmt;
         if (userContext != null) {
             UserIdentity user = ((UserIdentifier) visit(userContext)).getUserIdentity();
@@ -3322,9 +3322,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitPrivilegeAction(StarRocksParser.PrivilegeActionContext context) {
         if (context.privilegeActionReserved() != null) {
-            return new StringLiteral(context.privilegeActionReserved().getText());
+            return new Identifier(context.privilegeActionReserved().getText());
         } else {
-            return new StringLiteral(context.identifier().getText());
+            return visit(context.identifier());
         }
     }
 
@@ -4390,7 +4390,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitIdentifierOrStringOrStar(StarRocksParser.IdentifierOrStringOrStarContext context) {
         String s = null;
         if (context.identifier() != null) {
-            s = ((Identifier) visit(context.identifier())).getValue();
+            return visit(context.identifier());
         } else if (context.string() != null) {
             s = ((StringLiteral) visit(context.string())).getStringValue();
         } else if (context.ASTERISK_SYMBOL() != null) {
@@ -4403,7 +4403,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitIdentifierOrString(StarRocksParser.IdentifierOrStringContext context) {
         String s = null;
         if (context.identifier() != null) {
-            s = ((Identifier) visit(context.identifier())).getValue();
+            return visit(context.identifier());
         } else if (context.string() != null) {
             s = ((StringLiteral) visit(context.string())).getStringValue();
         }
