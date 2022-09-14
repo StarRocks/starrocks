@@ -15,6 +15,7 @@ import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -84,6 +85,10 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
 
         // IN/NOT IN
         InPredicateOperator inPredicate = (InPredicateOperator) apply.getSubqueryOperator();
+        if (inPredicate.getChild(0).getUsedColumns().isEmpty()) {
+            throw new SemanticException(SubqueryUtils.CONST_QUANTIFIED_COMPARISON);
+        }
+
         joinOnPredicate.add(
                 new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, inPredicate.getChildren()));
 
@@ -252,8 +257,11 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
 
             // CTE produce filter
             if (null != apply.getPredicate()) {
-                cteProduceChild =
-                        OptExpression.create(new LogicalFilterOperator(apply.getPredicate()), cteProduceChild);
+                LogicalProperty oldProperty = cteProduceChild.getLogicalProperty();
+                cteProduceChild = OptExpression.create(
+                        new LogicalFilterOperator(apply.getPredicate()), cteProduceChild);
+                // todo: need check the OptExpression.create() method to avoid logicalProperty hasn't been set
+                cteProduceChild.setLogicalProperty(oldProperty);
             }
 
             // CTE produce project

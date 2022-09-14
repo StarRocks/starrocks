@@ -25,9 +25,11 @@ import java.util.Map;
 
 public class SubqueryUtils {
 
-    public static String EXIST_NON_EQ_PREDICATE = "Not support Non-EQ correlation predicate in correlation subquery";
+    public static String EXIST_NON_EQ_PREDICATE = "Not support Non-EQ correlated predicate in correlated subquery";
 
-    public static String NONE_CORRELATED_PREDICATE = "Not support none correlation predicate in correlation subquery";
+    public static String NONE_CORRELATED_PREDICATE = "Not support without correlated predicate in correlated subquery";
+
+    public static String CONST_QUANTIFIED_COMPARISON = "Not support const value quantified comparison with a correlated subquery";
 
     private static Function getAggregateFunction(String functionName, Type[] argTypes) {
         Function func = Expr.getBuiltinFunction(functionName, argTypes,
@@ -41,10 +43,11 @@ public class SubqueryUtils {
         return func;
     }
 
-    // ApplyNode doesn't need to check the number of subquery's return rows
-    // when the correlation predicate meets these requirements:
-    // 1. All predicate is Binary.EQ
-    // @todo: only check contains, not all
+    /**
+     * ApplyNode doesn't need to check the number of subquery's return rows
+     * when the correlation predicate meets these requirements:
+     * 1. All predicate is Binary.EQ
+     */
     public static boolean checkAllIsBinaryEQ(List<ScalarOperator> correlationPredicate) {
         for (ScalarOperator predicate : correlationPredicate) {
             if (!OperatorType.BINARY.equals(predicate.getOpType())) {
