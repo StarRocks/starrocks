@@ -55,6 +55,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
                 "from inventory a join inventory b on a.inv_item_sk = b.inv_item_sk ) t1 " +
                 "join [shuffle] item t0  on t0.i_item_sk = t1.x;";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        System.out.println("plan:" + plan);
         String[] ss = plan.split("\\n");
         List<String> fragments = new ArrayList<>();
         String currentFragment = null;
@@ -70,7 +71,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         }
         // 1 fragment to generate filter(1)
         // 2 fragements to consumer filter(1)
-        Assert.assertEquals(fragments.size(), 3);
+        Assert.assertEquals(3, fragments.size());
 
         System.out.println(plan);
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;

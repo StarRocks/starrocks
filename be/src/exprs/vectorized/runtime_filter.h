@@ -207,9 +207,11 @@ public:
         bool compatibility = true;
     };
 
+    virtual void compute_hash(const std::vector<Column*>& columns, RunningContext* ctx) const = 0;
     virtual void evaluate(Column* input_column, RunningContext* ctx) const = 0;
 
     size_t size() const { return _size; }
+    size_t num_hash_partitions() const { return _num_hash_partitions; }
 
     bool has_null() const { return _has_null; }
 
@@ -342,21 +344,16 @@ public:
         return _hash_partition_bf[bucket_idx].test_hash(hash);
     }
 
-    void evaluate(Column* input_column, RunningContext* ctx) const override {
-        if (_num_hash_partitions != 0) {
-            return t_evaluate<true>(input_column, ctx);
-        } else {
-            return t_evaluate<false>(input_column, ctx);
-        }
-    }
-
-    void compute_hash_values_for_multi_part(RunningContext* running_ctx, int8_t join_mode, const Column* input_column,
-                                            std::vector<uint32_t>& hash_values, size_t num_rows) const {
+    void compute_hash_values_for_multi_part(RunningContext* running_ctx, int8_t join_mode,
+                                            const std::vector<Column*>& columns, size_t num_rows,
+                                            std::vector<uint32_t>& hash_values) const {
         typedef void (Column::*HashFuncType)(uint32_t*, uint32_t, uint32_t) const;
 
-        auto compute_hash = [&input_column, &num_rows, &hash_values, this](
-                                    HashFuncType hash_func, size_t num_hash_partitions, bool fast_reduce) {
-            (input_column->*hash_func)(hash_values.data(), 0, num_rows);
+        auto compute_hash = [&columns, &num_rows, &hash_values, this](HashFuncType hash_func,
+                                                                      size_t num_hash_partitions, bool fast_reduce) {
+            for (Column* input_column : columns) {
+                (input_column->*hash_func)(hash_values.data(), 0, num_rows);
+            }
             if (fast_reduce) {
                 for (size_t i = 0; i < num_rows; i++) {
                     hash_values[i] = ReduceOp()(hash_values[i], num_hash_partitions);
@@ -370,18 +367,15 @@ public:
 
         switch (join_mode) {
         case TRuntimeFilterBuildJoinMode::BORADCAST: {
-            hash_values.assign(num_rows, 0);
             break;
         }
         case TRuntimeFilterBuildJoinMode::PARTITIONED:
         case TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET: {
-            hash_values.assign(num_rows, HashUtil::FNV_SEED);
             compute_hash(&Column::fnv_hash, _num_hash_partitions, !running_ctx->compatibility);
             break;
         }
         case TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET:
         case TRuntimeFilterBuildJoinMode::COLOCATE: {
-            hash_values.assign(num_rows, 0);
             // shuffle-aware grf is partitioned into multiple parts the number of whom equals to the number of
             // instances. we can use crc32_hash to compute out bucket_seq that the row belongs to, then use
             // the bucketseq_to_partition array to translate bucket_seq into partition index of the grf.
@@ -396,20 +390,57 @@ public:
             DCHECK(false) << "unexpected join mode: " << join_mode;
         }
     }
+
+    void compute_hash(const std::vector<Column*>& columns, RunningContext* ctx) const override {
+        if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
+        size_t num_rows = columns[0]->size();
+
+        // initialize hash_values.
+        // reuse ctx's hash_values object.
+        std::vector<uint32_t>& _hash_values = ctx->hash_values;
+        switch (_join_mode) {
+        case TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET:
+        case TRuntimeFilterBuildJoinMode::COLOCATE:
+        case TRuntimeFilterBuildJoinMode::BORADCAST: {
+            _hash_values.assign(num_rows, 0);
+            break;
+        }
+        case TRuntimeFilterBuildJoinMode::PARTITIONED:
+        case TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET: {
+            _hash_values.assign(num_rows, HashUtil::FNV_SEED);
+            break;
+        }
+        default:
+            DCHECK(false) << "unexpected join mode: " << _join_mode;
+        }
+
+        // compute hash_values
+        compute_hash_values_for_multi_part(ctx, _join_mode, columns, num_rows, _hash_values);
+    }
+
+    void evaluate(Column* input_column, RunningContext* ctx) const override {
+        if (_num_hash_partitions != 0) {
+            return t_evaluate<true>(input_column, ctx);
+        } else {
+            return t_evaluate<false>(input_column, ctx);
+        }
+    }
+
     // `hash_parittion` parameters means if this runtime filter has multiple `simd-block-filter` underneath.
-    // for local runtime filter, it only has once `sime-block-filter`, and `hash_partition` is false.
+    // for local runtime filter, it only has once `simd-block-filter`, and `hash_partition` is false.
     // and for global runtime filter, since it concates multiple runtime filters from partitions
-    // so it has multiple `sime-block-filter` and `hash_partition` is true.
+    // so it has multiple `simd-block-filter` and `hash_partition` is true.
     // For more information, you can refers to doc `shuffle-aware runtime filter`.
     template <bool hash_partition = false>
     void t_evaluate(Column* input_column, RunningContext* ctx) const {
         size_t size = input_column->size();
         Column::Filter& _selection = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
         _selection.resize(size);
-        std::vector<uint32_t>& _hash_values = ctx->hash_values;
 
+        // reuse ctx's hash_values object.
+        std::vector<uint32_t>& _hash_values = ctx->hash_values;
         if constexpr (hash_partition) {
-            compute_hash_values_for_multi_part(ctx, _join_mode, input_column, _hash_values, size);
+            DCHECK_LE(size, _hash_values.size());
         }
 
         if (input_column->is_constant()) {
