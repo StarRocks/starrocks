@@ -65,11 +65,11 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                 ctx->commit_infos = std::move(executor->runtime_state()->tablet_commit_infos());
                 Status status = executor->status();
                 if (status.ok()) {
-                    ctx->number_total_rows = executor->runtime_state()->num_rows_load_total();
-                    ctx->number_loaded_rows = executor->runtime_state()->num_rows_load_success();
+                    ctx->number_total_rows = executor->runtime_state()->num_rows_load_from_sink();
+                    ctx->number_loaded_rows = executor->runtime_state()->num_rows_load_sink_success();
                     ctx->number_filtered_rows = executor->runtime_state()->num_rows_load_filtered();
                     ctx->number_unselected_rows = executor->runtime_state()->num_rows_load_unselected();
-                    ctx->loaded_bytes = executor->runtime_state()->num_bytes_load_total();
+                    ctx->loaded_bytes = executor->runtime_state()->num_bytes_load_from_sink();
 
                     int64_t num_selected_rows = ctx->number_total_rows - ctx->number_unselected_rows;
                     if ((double)ctx->number_filtered_rows / num_selected_rows > ctx->max_filter_ratio) {
