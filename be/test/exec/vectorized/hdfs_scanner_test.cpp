@@ -297,10 +297,9 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
     params->partition_values = part_values;
 }
 
-#define READ_SCANNER_ROWS(scanner, exp)                                                \
+#define READ_SCANNER_RETURN_ROWS(scanner, records)                                     \
     do {                                                                               \
         auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                           \
-        uint64_t records = 0;                                                          \
         for (;;) {                                                                     \
             chunk->reset();                                                            \
             status = scanner->get_next(_runtime_state, &chunk);                        \
@@ -317,8 +316,14 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
             }                                                                          \
             records += chunk->num_rows();                                              \
         }                                                                              \
-        EXPECT_EQ(records, exp);                                                       \
     } while (0)
+
+#define READ_SCANNER_ROWS(scanner, exp)             \
+    {                                               \
+        uint64_t records = 0;                       \
+        READ_SCANNER_RETURN_ROWS(scanner, records); \
+        EXPECT_EQ(records, exp);                    \
+    }
 
 // ====================================================================================================
 
@@ -1234,6 +1239,26 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         READ_SCANNER_ROWS(scanner, 100);
+        scanner->close(_runtime_state);
+    }
+    {
+        auto* range = _create_scan_range(compressed_file, 0, 0);
+        // Forcr to parse csv as uncompressed data.
+        range->text_file_desc.__set_compression_type(TCompressionType::NO_COMPRESSION);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(compressed_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        uint64_t records = 0;
+        READ_SCANNER_RETURN_ROWS(scanner, records);
+        EXPECT_NE(records, 100);
         scanner->close(_runtime_state);
     }
 }

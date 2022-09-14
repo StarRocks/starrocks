@@ -142,14 +142,24 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
         _mapkey_delimiter = text_file_desc.mapkey_delim.front();
     }
 
+    // by default it's unknown compression. we will synthesise informaiton from FE and BE(file extension)
+    // parse compression type from FE first.
+    _compression_type = CompressionTypePB::UNKNOWN_COMPRESSION;
+    if (text_file_desc.__isset.compression_type) {
+        _compression_type = CompressionUtils::to_compression_pb(text_file_desc.compression_type);
+    }
+
     return Status::OK();
 }
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     const std::string& path = _scanner_params.path;
-    _compression_type = return_compression_type_from_filename(path);
+    // if FE does not specify compress type, we choose it by looking at filename.
     if (_compression_type == CompressionTypePB::UNKNOWN_COMPRESSION) {
-        _compression_type = CompressionTypePB::NO_COMPRESSION;
+        _compression_type = return_compression_type_from_filename(path);
+        if (_compression_type == CompressionTypePB::UNKNOWN_COMPRESSION) {
+            _compression_type = CompressionTypePB::NO_COMPRESSION;
+        }
     }
     RETURN_IF_ERROR(open_random_access_file());
     RETURN_IF_ERROR(_create_or_reinit_reader());
