@@ -36,11 +36,7 @@ under the License.
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-<<<<<<< HEAD
         <hadoop.version>3.2.3</hadoop.version>
-=======
-        <hadoop.version>3.3.4</hadoop.version>
->>>>>>> 0b5bfc343 ([BugFix] Fix class not found exception when loading kms encrypted data #11136)
         <guava.version>30.1.1-jre</guava.version>
         <zookeeper.version>3.4.14</zookeeper.version>
         <protobuf.version>3.16.1</protobuf.version>
