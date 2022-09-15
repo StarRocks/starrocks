@@ -157,7 +157,7 @@ MySQL [test_db]> SELECT * FROM table1;
     DISTRIBUTED BY HASH(`id`) BUCKETS 10;
     ```
 
-2. 在本地文件系统中创建一个 JSON 格式的数据文件 `example2``.``json`。文件一共包含三列，分别代表用户 ID、用户姓名和用户得分，如下所示：
+2. 在本地文件系统中创建一个 JSON 格式的数据文件 `example2.json`。文件一共包含两个字段，分别代表城市名称和城市 ID，如下所示：
 
     ```JSON
     {"name": "北京", "code": 2}
@@ -174,7 +174,7 @@ curl -v --location-trusted -u root: -H "strict_mode: true" \
 
     -H "columns: city,tmp_id, id = tmp_id * 100" \
 
-    -T example1.json -XPUT \
+    -T example2.json -XPUT \
 
     http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
 ```
@@ -185,11 +185,11 @@ curl -v --location-trusted -u root: -H "strict_mode: true" \
 
 上图所示的对应关系描述如下：
 
-- 提取 `example2.json` 文件中包含的 `name` 和 `code` 两个键，映射到 `jsonpaths` 参数中声明的 `name` 和 `code` 两个字段。
-- 提取 `jsonpaths` 参数中声明的 `name` 和 `code` 两个字段，**按顺序映射**到 `columns` 参数中声明的 `city` 和 `tmp_id` 两个字段。
-- 提取 `columns` 参数声明中的 `city` 和 `id` 两个字段，**按名称映射**到 `table2` 表中的 `city` 和 `id` 两列。
+- 提取 `example2.json` 文件中包含的 `name` 和 `code` 两个字段，按顺序依次映射到 `jsonpaths` 参数中声明的 `name` 和 `code` 两个字段。
+- 提取 `jsonpaths` 参数中声明的 `name` 和 `code` 两个字段，**按顺序映射**到 `columns` 参数中声明的 `city` 和 `tmp_id` 两列。
+- 提取 `columns` 参数声明中的 `city` 和 `id` 两列，**按名称映射**到 `table2` 表中的 `city` 和 `id` 两列。
 
-> 说明：上述示例中，在导入过程中先将 `example2.json` 文件中 `code` 键对应的值乘以 100，然后再落入到 `table2` 表的 `id` 中。
+> 说明：上述示例中，在导入过程中先将 `example2.json` 文件中 `code` 字段对应的值乘以 100，然后再落入到 `table2` 表的 `id` 中。
 
 有关导入 JSON 数据时 `jsonpaths`、`columns` 和 StarRocks 表中的字段之间的对应关系，请参见 STREAM LOAD 文档中“[列映射](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md#列映射)”章节。
 
@@ -241,11 +241,12 @@ Stream Load 支持通过程序导入数据流，具体操作方法，请参见�
 
   需要注意的是，如果您调大该参数的取值，需要重启 BE 才能生效，并且系统性能有可能会受影响，并且也会增加失败重试时的代价。
 
-> 说明：导入 JSON 格式的数据时，需要注意以下两点：
-
-- > 单个 JSON 对象的大小不能超过 4 GB。如果 JSON 文件中单个 JSON 对象的大小超过 4 GB，会提示 "This parser can't support a document that big." 错误。
-
-- > HTTP 请求中 JSON Body 的大小默认不能超过 100 MB。如果 JSON Body 的大小超过 100 MB，会提示 "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." 错误。为避免该报错，可以在 HTTP 请求头中添加 `"ignore_json_size:true"` 设置，忽略对 JSON Body 大小的检查。
+> 说明：
+>
+> 导入 JSON 格式的数据时，需要注意以下两点：
+>
+> - 单个 JSON 对象的大小不能超过 4 GB。如果 JSON 文件中单个 JSON 对象的大小超过 4 GB，会提示 "This parser can't support a document that big." 错误。
+> - HTTP 请求中 JSON Body 的大小默认不能超过 100 MB。如果 JSON Body 的大小超过 100 MB，会提示 "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." 错误。为避免该报错，可以在 HTTP 请求头中添加 `"ignore_json_size:true"` 设置，忽略对 JSON Body 大小的检查。
 
 - `stream_load_default_timeout_second`：导入作业的超时时间。默认超时时间为 600 秒。具体请参见 [FE 动态参数](/administration/Configuration.md#配置-fe-动态参数)。
 
