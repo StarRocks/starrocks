@@ -128,8 +128,11 @@ std::string FileResultWriter::_file_format_to_name() {
 
 Status FileResultWriter::append_chunk(vectorized::Chunk* chunk) {
     assert(_file_builder != nullptr);
-    RETURN_IF_ERROR(_file_builder->add_chunk(chunk));
-
+    {
+        SCOPED_TIMER(_append_chunk_timer);
+        RETURN_IF_ERROR(_file_builder->add_chunk(chunk));
+    }
+    _written_rows += chunk->num_rows();
     // split file if exceed limit
     RETURN_IF_ERROR(_create_new_file_if_exceed_size());
 
@@ -152,6 +155,7 @@ Status FileResultWriter::_create_new_file_if_exceed_size() {
 Status FileResultWriter::_close_file_writer(bool done) {
     if (_file_builder != nullptr) {
         RETURN_IF_ERROR(_file_builder->finish());
+        COUNTER_UPDATE(_written_data_bytes, _file_builder->file_size());
         _file_builder.reset();
     }
 

@@ -62,11 +62,13 @@ public:
 
     const std::vector<TExpr>& get_output_exprs() const { return _t_output_expr; }
 
+    std::shared_ptr<ResultFileOptions> get_file_opts() const { return _file_opts; }
+
 private:
     Status prepare_exprs(RuntimeState* state);
     TResultSinkType::type _sink_type;
     // set file options when sink type is FILE
-    std::unique_ptr<ResultFileOptions> _file_opts;
+    std::shared_ptr<ResultFileOptions> _file_opts;
 
     // Owned by the RuntimeState.
     const RowDescriptor& _row_desc;
