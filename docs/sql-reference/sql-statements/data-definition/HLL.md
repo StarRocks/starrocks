@@ -34,7 +34,7 @@ EMPTY_HLL(): This generates empty HLL column and is used to fill in default valu
     distributed by hash(id) buckets 32;
     ```
 
-2. Import data. Please refer to "help curl" for the import method.
+2. Import data. Please refer to [Stream Load](../../../loading/StreamLoad.md) for the import method.
 
     ```plain text
     a. Use a table column to generate hll column 
