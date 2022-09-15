@@ -29,7 +29,8 @@ public class SubqueryUtils {
 
     public static final String NONE_CORRELATED_PREDICATE = "Not support without correlated predicate in correlated subquery";
 
-    public static final String CONST_QUANTIFIED_COMPARISON = "Not support const value quantified comparison with a correlated subquery";
+    public static final String CONST_QUANTIFIED_COMPARISON = "Not support const value quantified comparison with " +
+            "a correlated subquery";
 
     private static Function getAggregateFunction(String functionName, Type[] argTypes) {
         Function func = Expr.getBuiltinFunction(functionName, argTypes,
