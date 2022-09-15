@@ -33,6 +33,7 @@
 
 #include "runtime/decimal_value.h"
 #include "util/hash_util.hpp"
+#include "util/integer_util.h"
 
 namespace starrocks {
 
@@ -55,12 +56,7 @@ public:
         return d;
     }
 
-    static std::string to_string(__int128 value) {
-        char buf[64] = {0};
-        auto end = fmt::format_to(buf, "{}", value);
-        int len = end - buf;
-        return std::string(buf, len);
-    }
+    static std::string to_string(__int128 value) { return integer_to_string<__int128>(value); }
 };
 
 std::ostream& operator<<(std::ostream& os, __int128 const& value);
