@@ -11,7 +11,7 @@ A Hive catalog is an external catalog, which enables you to query data from Hive
 
 - StarRocks supports querying data files of Hive in the following formats: Parquet, ORC, and CSV.
 - StarRocks support querying Hive data in the following types: TINYINT, SMALLINT, DATE, BOOLEAN, INT, INTEGER, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY. Note that an error occurs if you query Hive data in unsupported data types. The following data types are not supported: INTERVAL, BINARY, MAP, STRUCT, and UNION.
-- You can use the [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hive table in StarRocks 2.4 and later versions.
+- You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hive table in StarRocks 2.4 and later versions.
 
 ## Before you begin
 
@@ -222,6 +222,6 @@ After you complete the preceding configurations, you can use the Hive catalog to
 
 ## References
 
-- To view examples of creating an external catalog, see [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md).
-- To view all catalogs in the current StarRocks cluster, see [SHOW CATALOGS](../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md).
-- To delete an external catalog, see [DROP CATALOG](../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md).
+- To view examples of creating an external catalog, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md).
+- To view all catalogs in the current StarRocks cluster, see [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md).
+- To delete an external catalog, see [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md).
