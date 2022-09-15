@@ -81,6 +81,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -876,6 +877,17 @@ public class OlapTable extends Table implements GsonPostProcessable {
         List<Partition> partitions = Lists.newArrayList(idToPartition.values());
         partitions.addAll(tempPartitions.getAllPartitions());
         return partitions;
+    }
+
+    public Collection<Partition> getRecentPartitions(int recentPartitionNum) {
+        List<Partition> partitions = Lists.newArrayList(idToPartition.values());
+        Collections.sort(partitions, new Comparator<Partition>() {
+            @Override
+            public int compare(Partition h1, Partition h2) {
+                return (int) (h2.getVisibleVersion() - h1.getVisibleVersion());
+            }
+        });
+        return partitions.subList(0, recentPartitionNum);
     }
 
     // get all partitions' name except the temp partitions

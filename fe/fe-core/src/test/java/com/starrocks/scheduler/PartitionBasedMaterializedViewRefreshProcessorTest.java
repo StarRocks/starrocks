@@ -90,18 +90,18 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                         "PROPERTIES('replication_num' = '1');")
                 .withNewMaterializedView("create materialized view test.mv1\n" +
                         "partition by date_trunc('month',k1) \n" +
-                        "distributed by hash(k2)\n" +
+                        "distributed by hash(k2) buckets 10\n" +
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;")
                 .withNewMaterializedView("create materialized view test.mv_inactive\n" +
                         "partition by date_trunc('month',k1) \n" +
-                        "distributed by hash(k2)\n" +
+                        "distributed by hash(k2) buckets 10\n" +
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;")
                 .withNewMaterializedView("create materialized view test.mv_without_partition\n" +
-                        "distributed by hash(k2)\n" +
+                        "distributed by hash(k2) buckets 10\n" +
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select k2, sum(v1) as total_sum from tbl3 group by k2;");

@@ -4195,7 +4195,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDistributionDesc(StarRocksParser.DistributionDescContext context) {
         //default buckets number
-        int buckets = 10;
+        int buckets = 0;
 
         if (context.INTEGER_VALUE() != null) {
             buckets = Integer.parseInt(context.INTEGER_VALUE().getText());
