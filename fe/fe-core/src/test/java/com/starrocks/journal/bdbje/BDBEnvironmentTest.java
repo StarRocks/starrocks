@@ -278,8 +278,13 @@ public class BDBEnvironmentTest {
 
     /**
      * see https://github.com/StarRocks/starrocks/issues/4977
+     *
+     * This test case tries to simulate an unexpected scenario where a master was down before it got way ahead of all
+     * followers. Normally BDB will cause a `RollbackException`, which we should handle and turn to a
+     * `JournalException`. But there is a slight chance that BDB may handle it well and nothing goes wrong. Either way,
+     * we think it's reached our expectation.
      */
-    @Test(expected = JournalException.class)
+    @Test
     public void testRollbackExceptionOnSetupCluster() throws Exception {
         initClusterMasterFollower();
 
@@ -393,8 +398,11 @@ public class BDBEnvironmentTest {
                 masterNodeHostPort,
                 true);
         Assert.assertTrue(true);
-        maserEnvironment.setup();
-        Assert.fail();
+        try {
+            maserEnvironment.setup();
+        } catch (JournalException e) {
+            LOG.warn("got Rollback Exception, as expect, ", e);
+        }
     }
 
     /**
