@@ -243,7 +243,7 @@ Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, const RowDescr
     if (_probe_expr_ctx != nullptr) {
         RETURN_IF_ERROR(_probe_expr_ctx->prepare(state));
     }
-    for (auto* partition_by_expr: _partition_by_exprs_contexts) {
+    for (auto* partition_by_expr : _partition_by_exprs_contexts) {
         RETURN_IF_ERROR(partition_by_expr->prepare(state));
     }
     _open_timestamp = UnixMillis();

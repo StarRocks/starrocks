@@ -111,7 +111,7 @@ public:
     // Disable pushing down runtime filters when:
     //  - partition_by_exprs have multi columns;
     //  - partition_by_exprs only one column but differ with probe_expr;
-    // When pushing down runtime filters(probe_exprs) but partition_by_exprs are not changed 
+    // When pushing down runtime filters(probe_exprs) but partition_by_exprs are not changed
     // which may cause wrong results.
     bool can_push_down_runtime_filter() { return _partition_by_exprs_contexts.empty(); }
     bool is_probe_slot_ref(SlotId* slot_id) const {
