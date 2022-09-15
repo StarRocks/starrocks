@@ -36,7 +36,8 @@ public:
     //  - tuple_id_map()
     //  - is_nulls()
     //  - is_consts()
-    static StatusOr<vectorized::Chunk> deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb, const int encode_level = 0);
+    static StatusOr<vectorized::Chunk> deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb,
+                                                   const int encode_level = 0);
 };
 
 struct ProtobufChunkMeta {
@@ -49,7 +50,8 @@ struct ProtobufChunkMeta {
 
 class ProtobufChunkDeserializer {
 public:
-    explicit ProtobufChunkDeserializer(const ProtobufChunkMeta& meta, int encode_level = 0) : _meta(meta), _encode_level(encode_level) {}
+    explicit ProtobufChunkDeserializer(const ProtobufChunkMeta& meta, int encode_level = 0)
+            : _meta(meta), _encode_level(encode_level) {}
 
     StatusOr<vectorized::Chunk> deserialize(std::string_view buff, int64_t* deserialized_bytes = nullptr);
 
