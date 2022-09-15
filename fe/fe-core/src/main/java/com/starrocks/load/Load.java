@@ -75,6 +75,8 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FN;
+
 public class Load {
     private static final Logger LOG = LogManager.getLogger(Load.class);
     public static final String VERSION = "v1";
@@ -684,7 +686,7 @@ public class Load {
                         if (defaultValueType == Column.DefaultValueType.CONST) {
                             exprs.add(new StringLiteral(column.calculatedDefaultValue()));
                         } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                            if ("uuid()".equalsIgnoreCase(column.getDefaultExpr().getExpr())) {
+                            if (SUPPORTED_DEFAULT_FN.contains(column.getDefaultExpr().getExpr())) {
                                 exprs.add(column.getDefaultExpr().obtainExpr());
                             } else {
                                 throw new UserException("Column(" + columnName + ") has unsupported default value:"
@@ -711,7 +713,7 @@ public class Load {
                         if (defaultValueType == Column.DefaultValueType.CONST) {
                             innerIfExprs.add(new StringLiteral(column.calculatedDefaultValue()));
                         } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                            if ("uuid()".equalsIgnoreCase(column.getDefaultExpr().getExpr())) {
+                            if (SUPPORTED_DEFAULT_FN.contains(column.getDefaultExpr().getExpr())) {
                                 innerIfExprs.add(column.getDefaultExpr().obtainExpr());
                             } else {
                                 throw new UserException("Column(" + columnName + ") has unsupported default value:"

@@ -69,6 +69,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FN;
+
 public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
@@ -206,7 +208,7 @@ public class InsertPlanner {
                     } else if (defaultValueType == Column.DefaultValueType.CONST) {
                         scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        if ("uuid()".equalsIgnoreCase(targetColumn.getDefaultExpr().getExpr())) {
+                        if (SUPPORTED_DEFAULT_FN.contains(targetColumn.getDefaultExpr().getExpr())) {
                             scalarOperator = SqlToScalarOperatorTranslator.
                                     translate(targetColumn.getDefaultExpr().obtainExpr());
                         } else {

@@ -2,12 +2,18 @@
 package com.starrocks.catalog;
 
 import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.ImmutableSet;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 
+import java.util.Set;
+
 public class DefaultExpr {
+
+    public static final Set<String> SUPPORTED_DEFAULT_FN = ImmutableSet.of("uuid()", "uuid_numeric()");
+
     @SerializedName("expr")
     private String expr;
 
@@ -24,10 +30,12 @@ public class DefaultExpr {
     }
 
     public Expr obtainExpr() {
-        if ("uuid()".equals(expr)) {
-            FunctionCallExpr functionCallExpr = new FunctionCallExpr(new FunctionName("uuid"), Lists.newArrayList());
-            functionCallExpr.setType(Type.VARCHAR);
-            functionCallExpr.setFn(Expr.getBuiltinFunction("uuid", new Type[] {}, Function.CompareMode.IS_IDENTICAL));
+        if (SUPPORTED_DEFAULT_FN.contains(expr)) {
+            String functionName = expr.replace("()", "");
+            FunctionCallExpr functionCallExpr = new FunctionCallExpr(new FunctionName(functionName), Lists.newArrayList());
+            Function fn = Expr.getBuiltinFunction(functionName, new Type[]{}, Function.CompareMode.IS_IDENTICAL);
+            functionCallExpr.setFn(fn);
+            functionCallExpr.setType(fn.getReturnType());
             return functionCallExpr;
         }
         return null;
