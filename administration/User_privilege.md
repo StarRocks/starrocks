@@ -276,8 +276,6 @@ StarRocks 可以创建自定义命名的角色。角色可以被看做是一组�
 * 查看已创建的角色：`SHOW ROLES`
 * 查看用户属性：`SHOW PROPERTY`
 
-关于以上命令的详细帮助，可以通过 MySQL 客户端连接 StarRocks 后，使用 `HELP + command` 获取帮助。如 `HELP CREATE USER`。
-
 ### 权限类型
 
 StarRocks 目前支持以下几种权限：
