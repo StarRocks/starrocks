@@ -57,7 +57,7 @@ public:
         _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
 
         auto metadata = new_tablet_metadata(10086);
-        _tablet_schema = TabletSchema::create(_mem_tracker.get(), metadata->schema());
+        _tablet_schema = TabletSchema::create(metadata->schema());
         _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
 
         // init _open_request
@@ -210,7 +210,7 @@ protected:
         auto path = fmt::format("{}/{}", kTestGroupPath, filename);
         std::cerr << path << '\n';
 
-        ASSIGN_OR_ABORT(auto seg, Segment::open(_mem_tracker.get(), fs, path, 0, _tablet_schema.get()));
+        ASSIGN_OR_ABORT(auto seg, Segment::open(fs, path, 0, _tablet_schema.get()));
 
         OlapReaderStatistics statistics;
         vectorized::SegmentReadOptions opts;

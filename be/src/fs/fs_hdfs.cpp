@@ -49,7 +49,7 @@ HdfsInputStream::~HdfsInputStream() {
         if (r == 0) {
             return Status::OK();
         } else {
-            return Status::IOError("");
+            return Status::IOError("close error, file: {}"_format(_file_name));
         }
     });
     Status st = ret->get_future().get();
@@ -183,9 +183,7 @@ Status HDFSWritableFile::close() {
     });
     Status st = ret->get_future().get();
     PLOG_IF(ERROR, !st.ok()) << "close " << _path << " failed";
-    if (st.ok()) {
-        _closed = true;
-    }
+    _closed = true;
     return st;
 }
 

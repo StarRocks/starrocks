@@ -2,7 +2,7 @@
 
 ## Description
 
-And HLL columns can only be queried or used through the matching hll_union_agg, hll_raw_agg, hll_cardinality, and hll_hash functions.
+HLL columns can only be queried or used through the matching hll_union_agg, hll_raw_agg, hll_cardinality, and hll_hash functions.
 
 ## Example
 

@@ -71,7 +71,7 @@ Conditions that trigger automatic collection:
 
 - Partition data has been modified. Partitions whose data is not modified will not be collected again.
 
-Automatic full collection is enabled by default and run by the system using the default settings. 
+Automatic full collection is enabled by default and run by the system using the default settings.
 
 The following table describes the default settings. If you need to modify them, run the **ADMIN SET CONFIG** command.
 
@@ -87,7 +87,7 @@ You can rely on automatic jobs for a majority of statistics collection, but if y
 
 ### Manual collection
 
-**Manual collection is a synchronous operation**. **It is executed only once after creation. You do not need to delete manual tasks.**
+You can use ANALYZE TABLE to create a manual collection task. **Manual collection is an asynchronous operation. The result for running this command is returned immediately after you run this command. However, the collection task will be running in the background. You can check the status of the task by running SHOW ANALYZE STATUS. Manual collection tasks are run only once after creation. You do not need to delete manual collection tasks.**
 
 #### Manually collect basic statistics
 
@@ -390,7 +390,8 @@ KILL ANALYZE <ID>;
 | statistic_auto_collect_ratio         | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
 | statistic_max_full_collect_data_size | LONG     | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_collect_interval_sec       | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
-| statistic_sample_collect_rows        | LONG     | 200000            | The minimum number of rows to collect for sampled collection.If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
+| statistic_sample_collect_rows        | LONG     | 200000            | The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
+| statistic_collect_concurrency        | INT      | 3                 | The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. |
 | histogram_buckets_size               | LONG     | 64                | The default bucket number for a histogram.                   |
 | histogram_mcv_size                   | LONG     | 100               | The number of most common values (MVC) for a histogram.      |
 | histogram_sample_ratio               | FLOAT    | 0.1               | The sampling ratio for a histogram.                          |

@@ -23,7 +23,6 @@ TEST(TabletSchemaMapTest, test_all) {
     c0->set_is_nullable(true);
 
     TabletSchemaMap schema_map;
-    schema_map.set_mem_tracker(mem_tracker.get());
 
     auto stats0 = schema_map.stats();
     ASSERT_EQ(0, stats0.num_items);

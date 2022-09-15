@@ -42,7 +42,6 @@ set(EXEC_FILES
         ./exec/vectorized/analytor_test.cpp
         ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/sorting_test.cpp
-        ./exec/vectorized/chunks_sorter_test.cpp
         ./exec/vectorized/parquet_scanner_test.cpp
         ./exec/vectorized/repeat_node_test.cpp
         ./exec/vectorized/analytor_test.cpp
@@ -154,6 +153,7 @@ set(EXEC_FILES
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
         ./storage/tablet_mgr_test.cpp
+        ./storage/tablet_schema_helper.cpp
         ./storage/version_graph_test.cpp
         ./storage/lake/async_delta_writer_test.cpp
         ./storage/lake/compaction_policy_test.cpp

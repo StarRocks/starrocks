@@ -232,6 +232,9 @@ public:
     // how long it stays inside pending queue.
     uint64_t exit_pending_queue();
 
+protected:
+    Status open_random_access_file();
+
 private:
     bool _opened = false;
     std::atomic<bool> _closed = false;
@@ -257,6 +260,8 @@ protected:
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
     std::unique_ptr<RandomAccessFile> _raw_file;
     std::unique_ptr<RandomAccessFile> _file;
+    // by default it's no compression.
+    CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
 };
 
 } // namespace starrocks::vectorized

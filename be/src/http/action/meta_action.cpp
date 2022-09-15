@@ -57,7 +57,7 @@ Status MetaAction::_handle_header(HttpRequest* req, std::string* json_meta) {
         LOG(WARNING) << "no tablet for tablet_id:" << tablet_id;
         return Status::InternalError("no tablet exist");
     }
-    auto tablet_meta = TabletMeta::create(StorageEngine::instance()->tablet_meta_mem_tracker());
+    auto tablet_meta = TabletMeta::create();
     tablet->generate_tablet_meta_copy(tablet_meta);
     json2pb::Pb2JsonOptions json_options;
     json_options.pretty_json = true;
