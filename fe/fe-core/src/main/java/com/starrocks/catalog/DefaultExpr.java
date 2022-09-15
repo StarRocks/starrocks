@@ -33,7 +33,7 @@ public class DefaultExpr {
         if (SUPPORTED_DEFAULT_FN.contains(expr)) {
             String functionName = expr.replace("()", "");
             FunctionCallExpr functionCallExpr = new FunctionCallExpr(new FunctionName(functionName), Lists.newArrayList());
-            Function fn = Expr.getBuiltinFunction(functionName, new Type[]{}, Function.CompareMode.IS_IDENTICAL);
+            Function fn = Expr.getBuiltinFunction(functionName, new Type[] {}, Function.CompareMode.IS_IDENTICAL);
             functionCallExpr.setFn(fn);
             functionCallExpr.setType(fn.getReturnType());
             return functionCallExpr;
