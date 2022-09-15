@@ -52,12 +52,6 @@
 CREATE MATERIALIZED VIEW
 ~~~
 
-具体的语法可以通过下面命令查看：
-
-~~~SQL
-HELP CREATE MATERIALIZED VIEW
-~~~
-
 假设用户有一张销售记录明细表，存储了每个交易的交易id、销售员、售卖门店、销售时间、以及金额。建表语句为：
 
 ~~~SQL
@@ -96,7 +90,7 @@ FROM sales_records
 GROUP BY store_id;
 ~~~
 
-更详细物化视图创建语法请参看SQL参考手册 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md) ，或者在 MySQL 客户端使用命令 `help create materialized view` 获得帮助。
+更详细物化视图创建语法请参看SQL参考手册 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)。
 
 <br/>
 
