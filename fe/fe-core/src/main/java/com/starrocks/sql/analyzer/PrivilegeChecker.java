@@ -19,6 +19,7 @@ import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.StatementBase;
@@ -1144,6 +1145,17 @@ public class PrivilegeChecker {
         }
 
         @Override
+        public Void visitShowRestoreStmt(ShowRestoreStmt showRestoreStmt, ConnectContext context) {
+            String dbName = showRestoreStmt.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.LOAD)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                        ConnectContext.get().getQualifiedUser(), dbName);
+            }
+            return null;
+        }
+
+        @Override
         public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
             if (statement.isAll() || !context.getCurrentUserIdentity().equals(statement.getUserIdent())) {
                 if (!GlobalStateMgr.getCurrentState().getAuth()
@@ -1239,6 +1251,7 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
     }
 
 }

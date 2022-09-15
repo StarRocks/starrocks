@@ -274,6 +274,7 @@ public class ConnectProcessor {
                 .setTimestamp(System.currentTimeMillis())
                 .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
                 .setUser(ctx.getQualifiedUser())
+                .setAuthorizedUser(ctx.getCurrentUserIdentity().toString())
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog());
         ctx.getPlannerProfile().reset();

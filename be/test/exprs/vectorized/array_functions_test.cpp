@@ -4349,7 +4349,7 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint_with_nullable) {
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{(bool)1, Datum()});
 
-    ArrayFilter<PrimitiveType::TYPE_TINYINT> filter;
+    ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(dest_column->is_nullable());
@@ -4376,7 +4376,7 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint) {
     src_column2->append_datum(DatumArray{Datum()});
     src_column2->append_datum(DatumArray{(bool)0, Datum()});
 
-    ArrayFilter<PrimitiveType::TYPE_TINYINT> filter;
+    ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(!dest_column->is_nullable());
@@ -4404,7 +4404,7 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint_with_nullable_notnull) {
     src_column2->append_datum(DatumArray{Datum()});
     src_column2->append_datum(DatumArray{(bool)0, Datum()});
 
-    ArrayFilter<PrimitiveType::TYPE_TINYINT> filter;
+    ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(dest_column->is_nullable());
@@ -4431,7 +4431,7 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint_notnull_nullable) {
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{(bool)1, Datum()});
 
-    ArrayFilter<PrimitiveType::TYPE_TINYINT> filter;
+    ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(!dest_column->is_nullable());
@@ -4459,7 +4459,7 @@ TEST_F(ArrayFunctionsTest, array_filter_bigint_with_nullable) {
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{(bool)1, Datum()});
 
-    ArrayFilter<PrimitiveType::TYPE_BIGINT> filter;
+    ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(dest_column->is_nullable());
@@ -4486,7 +4486,7 @@ TEST_F(ArrayFunctionsTest, array_filter_bigint) {
     src_column2->append_datum(DatumArray{Datum()});
     src_column2->append_datum(DatumArray{(bool)0, Datum()});
 
-    ArrayFilter<PrimitiveType::TYPE_BIGINT> filter;
+    ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(!dest_column->is_nullable());
@@ -4514,7 +4514,7 @@ TEST_F(ArrayFunctionsTest, array_filter_double_with_nullable) {
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{(bool)1, Datum()});
 
-    ArrayFilter<PrimitiveType::TYPE_DOUBLE> filter;
+    ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(dest_column->is_nullable());
@@ -4541,7 +4541,7 @@ TEST_F(ArrayFunctionsTest, array_filter_double) {
     src_column2->append_datum(DatumArray{Datum()});
     src_column2->append_datum(DatumArray{(bool)0, Datum()});
 
-    ArrayFilter<PrimitiveType::TYPE_DOUBLE> filter;
+    ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(!dest_column->is_nullable());
@@ -4569,7 +4569,7 @@ TEST_F(ArrayFunctionsTest, array_filter_varchar_with_nullable) {
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{(bool)1, Datum()});
 
-    ArrayFilter<PrimitiveType::TYPE_VARCHAR> filter;
+    ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(dest_column->is_nullable());
@@ -4596,7 +4596,7 @@ TEST_F(ArrayFunctionsTest, array_filter_varchar) {
     src_column2->append_datum(DatumArray{Datum()});
     src_column2->append_datum(DatumArray{(bool)0, Datum()});
 
-    ArrayFilter<PrimitiveType::TYPE_VARCHAR> filter;
+    ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(!dest_column->is_nullable());
@@ -4615,7 +4615,7 @@ TEST_F(ArrayFunctionsTest, array_filter_with_onlynull) {
 
     auto src_column2 = ColumnHelper::create_const_null_column(1);
 
-    ArrayFilter<PrimitiveType::TYPE_TINYINT> filter;
+    ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(dest_column->only_null());

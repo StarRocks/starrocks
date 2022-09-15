@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.FeMetaVersion;
@@ -121,10 +122,15 @@ public class Table extends MetaObject implements Writable {
     @SerializedName(value = "comment")
     protected String comment = "";
 
+    // not serialized field
+    // record all materialized views based on this Table
+    private Set<Long> relatedMaterializedViews;
+
     public Table(TableType type) {
         this.type = type;
         this.fullSchema = Lists.newArrayList();
         this.nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public Table(long id, String tableName, TableType type, List<Column> fullSchema) {
@@ -145,6 +151,7 @@ public class Table extends MetaObject implements Writable {
             Preconditions.checkArgument(type == TableType.VIEW, "Table has no columns");
         }
         this.createTime = Instant.now().getEpochSecond();
+        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public boolean isTypeRead() {
@@ -160,6 +167,10 @@ public class Table extends MetaObject implements Writable {
     }
 
     public String getName() {
+        return name;
+    }
+
+    public String getTableIdentifier() {
         return name;
     }
 
@@ -485,4 +496,19 @@ public class Table extends MetaObject implements Writable {
     public Map<String, String> getProperties() {
         throw new NotImplementedException();
     }
+
+    // should call this when create materialized view
+    public void addRelatedMaterializedView(long mvId) {
+        relatedMaterializedViews.add(mvId);
+    }
+
+    // should call this when drop materialized view
+    public void removeRelatedMaterializedView(long mvId) {
+        relatedMaterializedViews.remove(mvId);
+    }
+
+    public Set<Long> getRelatedMaterializedViews() {
+        return relatedMaterializedViews;
+    }
+
 }

@@ -179,6 +179,7 @@ statement
     | backupStatement
     | showBackupStatement
     | restoreStatement
+    | showRestoreStatement
 
     // Other statement
     | killStatement
@@ -1244,6 +1245,10 @@ restoreStatement
     (PROPERTIES propertyList)?
     ;
 
+showRestoreStatement
+    : SHOW RESTORE ((FROM | IN) identifier)? (WHERE where=expression)?
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -1517,8 +1522,7 @@ distributionDesc
     ;
 
 refreshSchemeDesc
-    : REFRESH (SYNC
-    | ASYNC
+    : REFRESH (ASYNC
     | ASYNC (START '(' string ')')? EVERY '(' interval ')'
     | MANUAL)
     ;

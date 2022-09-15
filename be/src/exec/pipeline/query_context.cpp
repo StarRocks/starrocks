@@ -324,9 +324,7 @@ void QueryContextManager::report_fragments_with_same_host(
                 params.__set_done(false);
 
                 if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                    // this is a load plan, and load is not finished, just make a brief report
-                    params.__set_loaded_rows(runtime_state->num_rows_load_total());
-                    params.__set_loaded_bytes(runtime_state->num_bytes_load_total());
+                    runtime_state->update_report_load_status(&params);
                 }
 
                 auto backend_id = get_backend_id();
@@ -410,9 +408,7 @@ void QueryContextManager::report_fragments(
             params.__set_done(false);
 
             if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-                // this is a load plan, and load is not finished, just make a brief report
-                params.__set_loaded_rows(runtime_state->num_rows_load_total());
-                params.__set_loaded_bytes(runtime_state->num_bytes_load_total());
+                runtime_state->update_report_load_status(&params);
             }
 
             auto backend_id = get_backend_id();

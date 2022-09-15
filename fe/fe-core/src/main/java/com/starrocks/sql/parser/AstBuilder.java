@@ -96,6 +96,7 @@ import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
@@ -1017,7 +1018,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         // process refresh
         RefreshSchemeDesc refreshSchemeDesc;
         if (context.refreshSchemeDesc() == null) {
-            refreshSchemeDesc = new SyncRefreshSchemeDesc();
+            if (context.distributionDesc() == null) {
+                // use old materialized index
+                refreshSchemeDesc = new SyncRefreshSchemeDesc();
+            } else {
+                // use new manual refresh
+                refreshSchemeDesc = new ManualRefreshSchemeDesc();
+            }
         } else {
             refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
         }
@@ -3318,6 +3325,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new RestoreStmt(labelName, repoName, tblRefs, properties);
     }
 
+    @Override
+    public ParseNode visitShowRestoreStatement(StarRocksParser.ShowRestoreStatementContext context) {
+        if (context.identifier() == null) {
+            return new ShowRestoreStmt(null, null);
+        }
+        if (context.expression() != null) {
+            return new ShowRestoreStmt(((Identifier) visit(context.identifier())).getValue(),
+                    (Expr) visit(context.expression()));
+        } else {
+            return new ShowRestoreStmt(((Identifier) visit(context.identifier())).getValue(), null);
+        }
+    }
+
     // ------------------------------------------- Expression ----------------------------------------------------------
 
     @Override
@@ -4221,8 +4241,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
             }
             return new AsyncRefreshSchemeDesc(defineStartTime, startTime, intervalLiteral);
-        } else if (context.SYNC() != null) {
-            return new SyncRefreshSchemeDesc();
         } else if (context.MANUAL() != null) {
             return new ManualRefreshSchemeDesc();
         }
