@@ -22,21 +22,21 @@ public:
     static int64_t max_serialized_size(const vectorized::Chunk& chunk);
 
     // Write the contents of |chunk| to ChunkPB
-    static StatusOr<ChunkPB> serialize(const vectorized::Chunk& chunk);
+    static StatusOr<ChunkPB> serialize(const vectorized::Chunk& chunk, const int encode_level = 0);
 
     // Like `serialize()` but leave the following fields of ChunkPB unfilled:
     //  - slot_id_map()
     //  - tuple_id_map()
     //  - is_nulls()
     //  - is_consts()
-    static StatusOr<ChunkPB> serialize_without_meta(const vectorized::Chunk& chunk);
+    static StatusOr<ChunkPB> serialize_without_meta(const vectorized::Chunk& chunk, const int encode_level = 0);
 
     // REQUIRE: the following fields of |chunk_pb| must be non-empty:
     //  - slot_id_map()
     //  - tuple_id_map()
     //  - is_nulls()
     //  - is_consts()
-    static StatusOr<vectorized::Chunk> deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb);
+    static StatusOr<vectorized::Chunk> deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb, const int encode_level = 0);
 };
 
 struct ProtobufChunkMeta {
@@ -49,12 +49,13 @@ struct ProtobufChunkMeta {
 
 class ProtobufChunkDeserializer {
 public:
-    explicit ProtobufChunkDeserializer(const ProtobufChunkMeta& meta) : _meta(meta) {}
+    explicit ProtobufChunkDeserializer(const ProtobufChunkMeta& meta, int encode_level = 0) : _meta(meta), _encode_level(encode_level) {}
 
     StatusOr<vectorized::Chunk> deserialize(std::string_view buff, int64_t* deserialized_bytes = nullptr);
 
 private:
     const ProtobufChunkMeta& _meta;
+    int _encode_level;
 };
 
 StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RowDescriptor& row_desc, const ChunkPB& chunk_pb);

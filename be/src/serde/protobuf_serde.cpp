@@ -19,8 +19,8 @@ int64_t ProtobufChunkSerde::max_serialized_size(const vectorized::Chunk& chunk) 
     return serialized_size;
 }
 
-StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk) {
-    StatusOr<ChunkPB> res = serialize_without_meta(chunk);
+StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk, const int encode_level) {
+    StatusOr<ChunkPB> res = serialize_without_meta(chunk, encode_level);
     if (!res.ok()) return res.status();
 
     const auto& slot_id_to_index = chunk.get_slot_id_to_index_map();
@@ -53,7 +53,7 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk) 
     return res;
 }
 
-StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::Chunk& chunk) {
+StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::Chunk& chunk, const int encode_level) {
     ChunkPB chunk_pb;
     chunk_pb.set_compress_type(CompressionTypePB::NO_COMPRESSION);
 
@@ -73,7 +73,7 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
     return std::move(chunk_pb);
 }
 
-StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb) {
+StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb, const int encode_level) {
     auto res = build_protobuf_chunk_meta(row_desc, chunk_pb);
     if (!res.ok()) {
         return res.status();
@@ -82,7 +82,7 @@ StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor&
         return Status::InvalidArgument("not data in ChunkPB");
     }
     int64_t deserialized_size = 0;
-    ProtobufChunkDeserializer deserializer(*res);
+    ProtobufChunkDeserializer deserializer(*res, encode_level);
     StatusOr<vectorized::Chunk> chunk = deserializer.deserialize(chunk_pb.data(), &deserialized_size);
     if (!chunk.ok()) return chunk;
 
@@ -130,7 +130,7 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
     }
 
     for (auto& column : columns) {
-        cur = ColumnArraySerde::deserialize(cur, column.get());
+        cur = ColumnArraySerde::deserialize(cur, column.get(), _encode_level);
     }
 
     for (auto& col : columns) {

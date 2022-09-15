@@ -2,6 +2,7 @@
 
 #include "serde/column_array_serde.h"
 
+#include <encode/streamvbyte.h>
 #include <fmt/format.h>
 
 #include "column/array_column.h"
@@ -48,8 +49,25 @@ uint8_t* write_raw(const void* data, size_t size, uint8_t* buff) {
     return buff + size;
 }
 
+uint8_t* encode_integers(const void* data, size_t size, uint8_t* buff) {
+    size_t encode_size =
+            streamvbyte_encode(reinterpret_cast<const uint32_t*>(data), (31 + size) * 1.0 / 4.0, buff + sizeof(size_t));
+    buff = write_little_endian_32(encode_size, buff);
+    return buff + encode_size;
+}
+
 const uint8_t* read_raw(const uint8_t* buff, void* target, size_t size) {
     strings::memcpy_inlined(target, buff, size);
+    return buff + size;
+}
+
+const uint8_t* decode_integers(const uint8_t* buff, void* target, size_t size) {
+    uint32_t encode_size = 0;
+    buff = read_little_endian_32(buff, &encode_size);
+    uint32_t encode_size1 = streamvbyte_decode(buff + sizeof(uint32_t), (uint32_t*)target, (31 + size) * 1.0 / 4.0);
+    if (encode_size != encode_size1) {
+        throw std::runtime_error("encode size does not equal when decoding.");
+    }
     return buff + size;
 }
 
@@ -60,19 +78,27 @@ public:
         return sizeof(uint32_t) + sizeof(T) * column.size();
     }
 
-    static uint8_t* serialize(const vectorized::FixedLengthColumnBase<T>& column, uint8_t* buff) {
+    static uint8_t* serialize(const vectorized::FixedLengthColumnBase<T>& column, uint8_t* buff, const int encode_level = 0) {
         uint32_t size = sizeof(T) * column.size();
         buff = write_little_endian_32(size, buff);
-        buff = write_raw(column.raw_data(), size, buff);
+        if(encode_level == 0) {
+            buff = write_raw(column.raw_data(), size, buff);
+        } else {
+            buff = encode_integers(column.raw_data(),size, buff);
+        }
         return buff;
     }
 
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::FixedLengthColumnBase<T>* column) {
+    static const uint8_t* deserialize(const uint8_t* buff, vectorized::FixedLengthColumnBase<T>* column, const int encode_level = 0) {
         uint32_t size = 0;
         buff = read_little_endian_32(buff, &size);
         std::vector<T>& data = column->get_data();
         raw::make_room(&data, size / sizeof(T));
-        buff = read_raw(buff, data.data(), size);
+        if (encode_level == 0) {
+            buff = read_raw(buff, data.data(), size);
+        } else {
+            buff = decode_integers(buff, data.data(), size);
+        }
         return buff;
     }
 };
@@ -232,15 +258,15 @@ public:
                serde::ColumnArraySerde::max_serialized_size(*column.data_column());
     }
 
-    static uint8_t* serialize(const vectorized::NullableColumn& column, uint8_t* buff) {
-        buff = serde::ColumnArraySerde::serialize(*column.null_column(), buff);
-        buff = serde::ColumnArraySerde::serialize(*column.data_column(), buff);
+    static uint8_t* serialize(const vectorized::NullableColumn& column, uint8_t* buff, const int encode_level = 0) {
+        buff = serde::ColumnArraySerde::serialize(*column.null_column(), buff, encode_level);
+        buff = serde::ColumnArraySerde::serialize(*column.data_column(), buff, encode_level);
         return buff;
     }
 
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::NullableColumn* column) {
-        buff = serde::ColumnArraySerde::deserialize(buff, column->null_column().get());
-        buff = serde::ColumnArraySerde::deserialize(buff, column->data_column().get());
+    static const uint8_t* deserialize(const uint8_t* buff, vectorized::NullableColumn* column, const int encode_level = 0) {
+        buff = serde::ColumnArraySerde::deserialize(buff, column->null_column().get(), encode_level);
+        buff = serde::ColumnArraySerde::deserialize(buff, column->data_column().get(), encode_level);
         column->update_has_null();
         return buff;
     }
@@ -253,15 +279,15 @@ public:
                serde::ColumnArraySerde::max_serialized_size(column.elements());
     }
 
-    static uint8_t* serialize(const vectorized::ArrayColumn& column, uint8_t* buff) {
-        buff = serde::ColumnArraySerde::serialize(column.offsets(), buff);
-        buff = serde::ColumnArraySerde::serialize(column.elements(), buff);
+    static uint8_t* serialize(const vectorized::ArrayColumn& column, uint8_t* buff, const int encode_level = 0) {
+        buff = serde::ColumnArraySerde::serialize(column.offsets(), buff, encode_level);
+        buff = serde::ColumnArraySerde::serialize(column.elements(), buff, encode_level);
         return buff;
     }
 
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::ArrayColumn* column) {
-        buff = serde::ColumnArraySerde::deserialize(buff, column->offsets_column().get());
-        buff = serde::ColumnArraySerde::deserialize(buff, column->elements_column().get());
+    static const uint8_t* deserialize(const uint8_t* buff, vectorized::ArrayColumn* column, const int encode_level = 0) {
+        buff = serde::ColumnArraySerde::deserialize(buff, column->offsets_column().get(), encode_level);
+        buff = serde::ColumnArraySerde::deserialize(buff, column->elements_column().get(), encode_level);
         return buff;
     }
 };
@@ -295,16 +321,16 @@ public:
         return /*sizeof(uint64_t)=*/8 + serde::ColumnArraySerde::max_serialized_size(*column.data_column());
     }
 
-    static uint8_t* serialize(const vectorized::ConstColumn& column, uint8_t* buff) {
+    static uint8_t* serialize(const vectorized::ConstColumn& column, uint8_t* buff, const int encode_level = 0) {
         buff = write_little_endian_64(column.size(), buff);
-        buff = serde::ColumnArraySerde::serialize(*column.data_column(), buff);
+        buff = serde::ColumnArraySerde::serialize(*column.data_column(), buff, encode_level);
         return buff;
     }
 
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::ConstColumn* column) {
+    static const uint8_t* deserialize(const uint8_t* buff, vectorized::ConstColumn* column, const int encode_level = 0) {
         uint64_t size = 0;
         buff = read_little_endian_64(buff, &size);
-        buff = serde::ColumnArraySerde::deserialize(buff, column->data_column().get());
+        buff = serde::ColumnArraySerde::deserialize(buff, column->data_column().get(), encode_level);
         column->resize(size);
         return buff;
     }
@@ -365,20 +391,21 @@ private:
 
 class ColumnSerializingVisitor final : public ColumnVisitorAdapter<ColumnSerializingVisitor> {
 public:
-    explicit ColumnSerializingVisitor(uint8_t* buff) : ColumnVisitorAdapter(this), _buff(buff), _cur(buff) {}
+    explicit ColumnSerializingVisitor(uint8_t* buff, const int encode_level)
+            : ColumnVisitorAdapter(this), _buff(buff), _cur(buff), _encode_level(encode_level) {}
 
     Status do_visit(const vectorized::NullableColumn& column) {
-        _cur = NullableColumnSerde::serialize(column, _cur);
+        _cur = NullableColumnSerde::serialize(column, _cur, _encode_level);
         return Status::OK();
     }
 
     Status do_visit(const vectorized::ConstColumn& column) {
-        _cur = ConstColumnSerde::serialize(column, _cur);
+        _cur = ConstColumnSerde::serialize(column, _cur, _encode_level);
         return Status::OK();
     }
 
     Status do_visit(const vectorized::ArrayColumn& column) {
-        _cur = ArrayColumnSerde::serialize(column, _cur);
+        _cur = ArrayColumnSerde::serialize(column, _cur, _encode_level);
         return Status::OK();
     }
 
@@ -395,7 +422,7 @@ public:
 
     template <typename T>
     Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
-        _cur = FixedLengthColumnSerde<T>::serialize(column, _cur);
+        _cur = FixedLengthColumnSerde<T>::serialize(column, _cur, _encode_level);
         return Status::OK();
     }
 
@@ -417,25 +444,26 @@ public:
 private:
     uint8_t* _buff;
     uint8_t* _cur;
+    int _encode_level;
 };
 
 class ColumnDeserializingVisitor final : public ColumnVisitorMutableAdapter<ColumnDeserializingVisitor> {
 public:
-    explicit ColumnDeserializingVisitor(const uint8_t* buff)
-            : ColumnVisitorMutableAdapter(this), _buff(buff), _cur(buff) {}
+    explicit ColumnDeserializingVisitor(const uint8_t* buff, const int encode_level)
+            : ColumnVisitorMutableAdapter(this), _buff(buff), _cur(buff), _encode_level(encode_level) {}
 
     Status do_visit(vectorized::NullableColumn* column) {
-        _cur = NullableColumnSerde::deserialize(_cur, column);
+        _cur = NullableColumnSerde::deserialize(_cur, column, _encode_level);
         return Status::OK();
     }
 
     Status do_visit(vectorized::ConstColumn* column) {
-        _cur = ConstColumnSerde::deserialize(_cur, column);
+        _cur = ConstColumnSerde::deserialize(_cur, column, _encode_level);
         return Status::OK();
     }
 
     Status do_visit(vectorized::ArrayColumn* column) {
-        _cur = ArrayColumnSerde::deserialize(_cur, column);
+        _cur = ArrayColumnSerde::deserialize(_cur, column, _encode_level);
         return Status::OK();
     }
 
@@ -452,7 +480,7 @@ public:
 
     template <typename T>
     Status do_visit(vectorized::FixedLengthColumnBase<T>* column) {
-        _cur = FixedLengthColumnSerde<T>::deserialize(_cur, column);
+        _cur = FixedLengthColumnSerde<T>::deserialize(_cur, column, _encode_level);
         return Status::OK();
     }
 
@@ -474,6 +502,7 @@ public:
 private:
     const uint8_t* _buff;
     const uint8_t* _cur;
+    int _encode_level;
 };
 
 } // namespace
@@ -485,15 +514,15 @@ int64_t ColumnArraySerde::max_serialized_size(const vectorized::Column& column) 
     return st.ok() ? visitor.size() : 0;
 }
 
-uint8_t* ColumnArraySerde::serialize(const vectorized::Column& column, uint8_t* buff) {
-    ColumnSerializingVisitor visitor(buff);
+uint8_t* ColumnArraySerde::serialize(const vectorized::Column& column, uint8_t* buff, const int encode_level) {
+    ColumnSerializingVisitor visitor(buff, encode_level);
     auto st = column.accept(&visitor);
     LOG_IF(WARNING, !st.ok()) << st;
     return st.ok() ? visitor.cur() : nullptr;
 }
 
-const uint8_t* ColumnArraySerde::deserialize(const uint8_t* data, vectorized::Column* column) {
-    ColumnDeserializingVisitor visitor(data);
+const uint8_t* ColumnArraySerde::deserialize(const uint8_t* data, vectorized::Column* column, const int encode_level) {
+    ColumnDeserializingVisitor visitor(data, encode_level);
     auto st = column->accept_mutable(&visitor);
     LOG_IF(WARNING, !st.ok()) << st;
     return st.ok() ? visitor.cur() : nullptr;
