@@ -3,6 +3,8 @@
 #include "exec/stream/stream_join.h"
 
 #include "exec/exec_node.h"
+#include "runtime/primitive_type.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
@@ -56,13 +58,13 @@ void StreamJoinOperator::close(RuntimeState* state) {
 
 // ==========================  StreamJoinOperator ControlFlow ==========================
 bool StreamJoinOperator::is_finished() const {
-    return true;
+    return _output;
 }
 bool StreamJoinOperator::has_output() const {
-    return false;
+    return !_output;
 }
 bool StreamJoinOperator::need_input() const {
-    return false;
+    return !_output;
 }
 Status StreamJoinOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
@@ -73,24 +75,58 @@ Status StreamJoinOperator::set_finished(RuntimeState* state) {
 
 // ==========================  StreamJoinOperator DataFlow ==========================
 StatusOr<vectorized::ChunkPtr> StreamJoinOperator::pull_chunk(RuntimeState* state) {
-    return Status::NotSupported("TODO");
+    if (_output) {
+        return Status::RuntimeError("no output");
+    }
+    _output = true;
+
+    // TODO: implement the join algorithm
+    // mock a default value as output
+    ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    for (size_t i = 0; i < _col_types.size(); i++) {
+        SlotDescriptor* slot = _col_types[i];
+        bool nullable = _col_types[i]->is_nullable();
+        ColumnPtr new_col = vectorized::ColumnHelper::create_column(slot->type(), nullable);
+        switch (slot->type().type) {
+        case TYPE_INT: {
+            new_col->append_datum(9527);
+            break;
+        }
+        case TYPE_VARCHAR: {
+            new_col->append_datum("starrocks");
+            break;
+        }
+        default: {
+            new_col->append_default();
+            break;
+        }
+        }
+        chunk->append_column(new_col, slot->id());
+    }
+    
+    for (size_t i = 0; i < chunk->num_rows(); i++) {
+        VLOG(2) << "StreamJoin: mock output: " << chunk->debug_row(i);
+    }
+
+    return chunk;
 }
 
 Status StreamJoinOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    return Status::NotSupported("TODO");
+    return Status::OK();
 }
 
 pipeline::OperatorPtr StreamJoinOperatorFactory::create(int32_t dop, int32_t driver_seq) {
-    return std::make_shared<StreamJoinOperator>(this, _id, _plan_node_id, driver_seq);
+    return std::make_shared<StreamJoinOperator>(this, _id, _plan_node_id, driver_seq, _join_op, _col_types,
+                                                _probe_column_count, _build_column_count);
 }
 
 // ==========================  StreamJoinOperator Factory ==========================
 Status StreamJoinOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-
     RETURN_IF_ERROR(Expr::prepare(_probe_eq_exprs, state));
     RETURN_IF_ERROR(Expr::prepare(_build_eq_exprs, state));
     RETURN_IF_ERROR(Expr::prepare(_other_join_conjunct_exprs, state));
+    _init_row_desc();
 
     return Status::OK();
 }
@@ -101,6 +137,21 @@ void StreamJoinOperatorFactory::close(RuntimeState* state) {
     Expr::close(_other_join_conjunct_exprs, state);
 
     OperatorFactory::close(state);
+}
+
+void StreamJoinOperatorFactory::_init_row_desc() {
+    for (auto& tuple_desc : _left_row_desc.tuple_descriptors()) {
+        for (auto& slot : tuple_desc->slots()) {
+            _col_types.emplace_back(slot);
+            _probe_column_count++;
+        }
+    }
+    for (auto& tuple_desc : _right_row_desc.tuple_descriptors()) {
+        for (auto& slot : tuple_desc->slots()) {
+            _col_types.emplace_back(slot);
+            _build_column_count++;
+        }
+    }
 }
 
 } // namespace starrocks

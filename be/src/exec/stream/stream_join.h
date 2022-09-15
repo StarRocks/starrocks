@@ -29,8 +29,14 @@ private:
 
 class StreamJoinOperator final : public pipeline::Operator {
 public:
-    StreamJoinOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_seq)
-            : Operator(factory, id, "stream_join", plan_node_id, driver_seq) {}
+    StreamJoinOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_seq,
+                       TJoinOp::type join_op, const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
+                       size_t build_column_count)
+            : Operator(factory, id, "stream_join", plan_node_id, driver_seq),
+              _join_op(join_op),
+              _col_types(col_types),
+              _probe_column_count(probe_column_count),
+              _build_column_count(build_column_count) {}
 
     ~StreamJoinOperator() override = default;
 
@@ -48,6 +54,16 @@ public:
     // Data flow
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+
+private:
+    const TJoinOp::type _join_op;
+    const std::vector<SlotDescriptor*>& _col_types;
+    const size_t _probe_column_count;
+    const size_t _build_column_count;
+
+
+    // TODO: mocked output
+    bool _output = false;
 };
 
 class StreamJoinOperatorFactory final : public pipeline::OperatorFactory {
@@ -75,10 +91,18 @@ public:
     void close(RuntimeState* state) override;
 
 private:
+    void _init_row_desc();
+
+private:
     const TJoinOp::type _join_op;
     const RowDescriptor& _row_descriptor;
     const RowDescriptor& _left_row_desc;
     const RowDescriptor& _right_row_desc;
+
+    // Output columns
+    vectorized::Buffer<SlotDescriptor*> _col_types;
+    size_t _probe_column_count = 0;
+    size_t _build_column_count = 0;
 
     std::string _sql_join_conjuncts;
     std::vector<ExprContext*> _probe_eq_exprs;
