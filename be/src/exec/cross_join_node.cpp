@@ -64,39 +64,32 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.__isset.need_create_tuple_columns) {
         _need_create_tuple_columns = tnode.need_create_tuple_columns;
     }
-    if (tnode.__isset.nestloop_join_node) {
-        _join_op = tnode.nestloop_join_node.join_op;
-        if (!state->enable_pipeline_engine() && _join_op != TJoinOp::CROSS_JOIN && _join_op != TJoinOp::INNER_JOIN) {
-            return Status::NotSupported("non-pipeline engine only support CROSS JOIN");
-        }
-        if (!_support_join_type(_join_op)) {
-            std::string type_string = starrocks::to_string(_join_op);
-            return Status::NotSupported("nestloop join not supoort: " + type_string);
-        }
-
-        if (tnode.nestloop_join_node.__isset.join_conjuncts) {
-            RETURN_IF_ERROR(
-                    Expr::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts, &_join_conjuncts, state));
-        }
-        if (tnode.nestloop_join_node.__isset.sql_join_conjuncts) {
-            _sql_join_conjuncts = tnode.nestloop_join_node.sql_join_conjuncts;
-        }
-        if (tnode.nestloop_join_node.__isset.build_runtime_filters) {
-            for (const auto& desc : tnode.nestloop_join_node.build_runtime_filters) {
-                auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
-                RETURN_IF_ERROR(rf_desc->init(_pool, desc, state));
-                _build_runtime_filters.emplace_back(rf_desc);
-            }
-        }
-        return Status::OK();
+    if (!tnode.__isset.nestloop_join_node) {
+        return Status::RuntimeError("must be NestLoopJoinNode");
+    }
+    _join_op = tnode.nestloop_join_node.join_op;
+    if (!state->enable_pipeline_engine() && _join_op != TJoinOp::CROSS_JOIN && _join_op != TJoinOp::INNER_JOIN) {
+        return Status::NotSupported("non-pipeline engine only support CROSS JOIN");
+    }
+    if (!_support_join_type(_join_op)) {
+        std::string type_string = starrocks::to_string(_join_op);
+        return Status::NotSupported("nestloop join not supoort: " + type_string);
     }
 
-    for (const auto& desc : tnode.cross_join_node.build_runtime_filters) {
-        auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
-        RETURN_IF_ERROR(rf_desc->init(_pool, desc, state));
-        _build_runtime_filters.emplace_back(rf_desc);
+    if (tnode.nestloop_join_node.__isset.join_conjuncts) {
+        RETURN_IF_ERROR(
+                Expr::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts, &_join_conjuncts, state));
     }
-    DCHECK_LE(_build_runtime_filters.size(), _conjunct_ctxs.size());
+    if (tnode.nestloop_join_node.__isset.sql_join_conjuncts) {
+        _sql_join_conjuncts = tnode.nestloop_join_node.sql_join_conjuncts;
+    }
+    if (tnode.nestloop_join_node.__isset.build_runtime_filters) {
+        for (const auto& desc : tnode.nestloop_join_node.build_runtime_filters) {
+            auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
+            RETURN_IF_ERROR(rf_desc->init(_pool, desc, state));
+            _build_runtime_filters.emplace_back(rf_desc);
+        }
+    }
     return Status::OK();
 }
 

@@ -56,7 +56,7 @@ enum TPlanNodeType {
   EXCHANGE_NODE,
   MERGE_NODE,
   SELECT_NODE,
-  CROSS_JOIN_NODE,
+  CROSS_JOIN_NODE, // Deprecated
   META_SCAN_NODE,
   ANALYTIC_EVAL_NODE,
   OLAP_REWRITE_NODE,
@@ -1014,10 +1014,6 @@ struct TDecodeNode {
     2: optional map<Types.TSlotId, Exprs.TExpr> string_functions
 }
 
-struct TCrossJoinNode {
-    1: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
-}
-
 struct TTableFunctionNode {
     1: optional Exprs.TExpr table_function
     2: optional list<Types.TSlotId> param_columns
@@ -1153,7 +1149,7 @@ struct TPlanNode {
   // generic scan node with connector.
   61: optional TConnectorScanNode connector_scan_node;
 
-  62: optional TCrossJoinNode cross_join_node;
+  // 62 for discarded TCrossJoinNode, do not use it
 
   63: optional TLakeScanNode lake_scan_node;
   
