@@ -63,7 +63,9 @@ private:
 
 
     // TODO: mocked output
+    ChunkPtr _probe_chunk = nullptr;
     bool _output = false;
+    bool _input_finished = false;
 };
 
 class StreamJoinOperatorFactory final : public pipeline::OperatorFactory {

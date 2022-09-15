@@ -64,9 +64,10 @@ bool StreamJoinOperator::has_output() const {
     return !_output;
 }
 bool StreamJoinOperator::need_input() const {
-    return !_output;
+    return !_input_finished;
 }
 Status StreamJoinOperator::set_finishing(RuntimeState* state) {
+    _input_finished = true;
     return Status::OK();
 }
 Status StreamJoinOperator::set_finished(RuntimeState* state) {
@@ -86,24 +87,31 @@ StatusOr<vectorized::ChunkPtr> StreamJoinOperator::pull_chunk(RuntimeState* stat
     for (size_t i = 0; i < _col_types.size(); i++) {
         SlotDescriptor* slot = _col_types[i];
         bool nullable = _col_types[i]->is_nullable();
-        ColumnPtr new_col = vectorized::ColumnHelper::create_column(slot->type(), nullable);
-        switch (slot->type().type) {
-        case TYPE_INT: {
-            new_col->append_datum(9527);
-            break;
-        }
-        case TYPE_VARCHAR: {
-            new_col->append_datum("starrocks");
-            break;
-        }
-        default: {
-            new_col->append_default();
-            break;
-        }
+        ColumnPtr new_col;
+
+        if (i < _probe_column_count && _probe_chunk) {
+            new_col = _probe_chunk->get_column_by_index(i)->clone();
+        } else {
+            new_col = vectorized::ColumnHelper::create_column(slot->type(), nullable);
+
+            switch (slot->type().type) {
+            case TYPE_INT: {
+                new_col->append_datum(9527);
+                break;
+            }
+            case TYPE_VARCHAR: {
+                new_col->append_datum("starrocks");
+                break;
+            }
+            default: {
+                new_col->append_default();
+                break;
+            }
+            }
         }
         chunk->append_column(new_col, slot->id());
     }
-    
+
     for (size_t i = 0; i < chunk->num_rows(); i++) {
         VLOG(2) << "StreamJoin: mock output: " << chunk->debug_row(i);
     }
@@ -112,6 +120,7 @@ StatusOr<vectorized::ChunkPtr> StreamJoinOperator::pull_chunk(RuntimeState* stat
 }
 
 Status StreamJoinOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+    _probe_chunk = chunk;
     return Status::OK();
 }
 
