@@ -24,6 +24,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.List;
 
+/**
+ * When you want to replace some types of nodes in a scalarOperator tree, you can extend this class and
+ * override specific visit methods. It will return a new scalarOperator tree with specific nodes replaced.
+ * shuttle means a scalarOperator bus, it takes you traverse the scalarOperator tree.
+ */
 public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOperator, Void> {
 
     public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
