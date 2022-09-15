@@ -108,6 +108,10 @@ public:
         return Status::NotSupported("Unsupported object column in column wise comparator");
     }
 
+    Status do_visit(const vectorized::MapColumn& column) {
+        return Status::NotSupported("Unsupported map column in column wise comparator");
+    }
+
 private:
     const ColumnPtr& _first_column;
     std::vector<uint8_t>& _cmp_vector;
@@ -182,6 +186,10 @@ public:
     template <typename T>
     Status do_visit(vectorized::ObjectColumn<T>* column) {
         return Status::NotSupported("Unsupported object column in column wise comparator");
+    }
+
+    Status do_visit(vectorized::MapColumn* column) {
+        return Status::NotSupported("Unsupported map column in column wise comparator");
     }
 
 private:
