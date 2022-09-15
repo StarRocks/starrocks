@@ -2335,10 +2335,29 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalStreamJoin(OptExpression optExpr, ExecPlan context) {
+            PhysicalJoinOperator node = (PhysicalJoinOperator) optExpr.getOp();
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+            ColumnRefSet leftChildColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
+            ColumnRefSet rightChildColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
+
+            List<ScalarOperator> onPredicates = Utils.extractConjuncts(node.getOnPredicate());
+            List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
+                    leftChildColumns, rightChildColumns, onPredicates);
+            List<Expr> eqJoinConjuncts =
+                    eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                            .collect(Collectors.toList());
+            List<ScalarOperator> otherJoin = Utils.extractConjuncts(node.getOnPredicate());
+            otherJoin.removeAll(eqOnPredicates);
+            List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                    .collect(Collectors.toList());
+
             JoinNode joinNode =
-                    new StreamJoinNode(context.getNextNodeId(), leftFragment.getPlanRoot(), rightFragment.getPlanRoot(), null);
+                    new StreamJoinNode(context.getNextNodeId(), leftFragment.getPlanRoot(), rightFragment.getPlanRoot(), null,
+                            eqJoinConjuncts, otherJoinConjuncts);
+
             // Connect parent and child fragment
             rightFragment.getPlanRoot().setFragment(leftFragment);
 
