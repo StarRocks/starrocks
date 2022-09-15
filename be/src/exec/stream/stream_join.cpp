@@ -2,8 +2,11 @@
 
 #include "exec/stream/stream_join.h"
 
+#include "exec/exec_node.h"
+
 namespace starrocks {
 
+// ==========================  StreamJoinNode ==========================
 Status StreamJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
     DCHECK(tnode.__isset.stream_join_node);
@@ -12,7 +15,7 @@ Status StreamJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.stream_join_node.__isset.sql_join_predicates) {
         _sql_join_conjuncts = tnode.stream_join_node.sql_join_predicates;
     }
-    const std::vector<TEqJoinCondition>& eq_join_conjuncts = tnode.hash_join_node.eq_join_conjuncts;
+    auto& eq_join_conjuncts = tnode.stream_join_node.eq_join_conjuncts;
     for (const auto& eq_join_conjunct : eq_join_conjuncts) {
         ExprContext* left = nullptr;
         ExprContext* right = nullptr;
@@ -41,15 +44,17 @@ pipeline::OpFactories StreamJoinNode::decompose_to_pipeline(pipeline::PipelineBu
     return left_ops;
 }
 
-// Setup
-
+// ==========================  StreamJoinOperator Setup ==========================
 Status StreamJoinOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare(state));
     return Status::OK();
 }
 
-void StreamJoinOperator::close(RuntimeState* state) {}
+void StreamJoinOperator::close(RuntimeState* state) {
+    Operator::close(state);
+}
 
-// Control flow
+// ==========================  StreamJoinOperator ControlFlow ==========================
 bool StreamJoinOperator::is_finished() const {
     return true;
 }
@@ -66,7 +71,7 @@ Status StreamJoinOperator::set_finished(RuntimeState* state) {
     return Status::OK();
 }
 
-// Data flow
+// ==========================  StreamJoinOperator DataFlow ==========================
 StatusOr<vectorized::ChunkPtr> StreamJoinOperator::pull_chunk(RuntimeState* state) {
     return Status::NotSupported("TODO");
 }
@@ -76,12 +81,26 @@ Status StreamJoinOperator::push_chunk(RuntimeState* state, const vectorized::Chu
 }
 
 pipeline::OperatorPtr StreamJoinOperatorFactory::create(int32_t dop, int32_t driver_seq) {
-    return {};
-}
-Status StreamJoinOperatorFactory::prepare(RuntimeState* state) {
-    return Status::NotSupported("TODO");
+    return std::make_shared<StreamJoinOperator>(this, _id, _plan_node_id, driver_seq);
 }
 
-void StreamJoinOperatorFactory::close(RuntimeState* state) {}
+// ==========================  StreamJoinOperator Factory ==========================
+Status StreamJoinOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+
+    RETURN_IF_ERROR(Expr::prepare(_probe_eq_exprs, state));
+    RETURN_IF_ERROR(Expr::prepare(_build_eq_exprs, state));
+    RETURN_IF_ERROR(Expr::prepare(_other_join_conjunct_exprs, state));
+
+    return Status::OK();
+}
+
+void StreamJoinOperatorFactory::close(RuntimeState* state) {
+    Expr::close(_probe_eq_exprs, state);
+    Expr::close(_build_eq_exprs, state);
+    Expr::close(_other_join_conjunct_exprs, state);
+
+    OperatorFactory::close(state);
+}
 
 } // namespace starrocks
