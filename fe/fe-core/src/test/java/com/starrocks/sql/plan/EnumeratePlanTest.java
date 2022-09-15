@@ -166,7 +166,11 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    o_year ;";
         int planCount = getPlanCount(sql);
+<<<<<<< HEAD
         Assert.assertEquals(136, planCount);
+=======
+        Assert.assertEquals(51, planCount);
+>>>>>>> fef24ebf7 ([Refactor] refactor join implementation rule (#11231))
     }
 
     @Test
@@ -209,7 +213,11 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    o_year ;";
         int planCount = getPlanCount(sql);
+<<<<<<< HEAD
         Assert.assertEquals(136, planCount);
+=======
+        Assert.assertEquals(51, planCount);
+>>>>>>> fef24ebf7 ([Refactor] refactor join implementation rule (#11231))
     }
 
     @Test
