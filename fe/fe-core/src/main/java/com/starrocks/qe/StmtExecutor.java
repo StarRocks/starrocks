@@ -364,7 +364,9 @@ public class StmtExecutor {
                                     MaterializedView viewTable =
                                             (MaterializedView) GlobalStateMgr.getCurrentState().getDb(context.getDatabase())
                                                     .getTable(viewId);
-                                    if (viewTable.getRefreshScheme().getType().equals(MaterializedView.RefreshType.REALTIME)) {
+                                    if (viewTable != null &&
+                                            viewTable.getRefreshScheme().getType()
+                                                    .equals(MaterializedView.RefreshType.REALTIME)) {
                                         if (relatedView == null) {
                                             relatedView = viewTable;
                                         } else {

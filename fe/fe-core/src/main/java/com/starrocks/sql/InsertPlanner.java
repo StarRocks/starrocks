@@ -121,7 +121,7 @@ public class InsertPlanner {
 
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
         long tableId = view.getId();
-        for (Column column : insertStmt.getTargetTable().getFullSchema()) {
+        for (Column column : view.getFullSchema()) {
             SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
             slotDescriptor.setIsMaterialized(true);
             slotDescriptor.setType(column.getType());
