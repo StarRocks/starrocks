@@ -65,7 +65,7 @@ import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,14 +86,20 @@ public class InsertPlanner {
             castLiteralToTargetColumnsType(insertStmt);
         }
 
+
         // Build logical plan for view query
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan =
                 new RelationTransformer(columnRefFactory, session).transform(viewStmt.getQueryRelation());
-        OptExprBuilder optExprBuilder = fillDefaultValue(logicalPlan, columnRefFactory, insertStmt, outputColumns);
-        optExprBuilder = fillShadowColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
-        optExprBuilder =
-                castOutputColumnsTypeToTargetColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+        for (int colIdx = 0; colIdx < view.getBaseSchema().size(); colIdx++) {
+            ColumnRefOperator ref = logicalPlan.getOutputColumn().get(colIdx);
+            outputColumns.add(ref);
+            columnRefMap.put(ref, ref);
+        }
+        // Add ProjectOperator
+        OptExprBuilder optExprBuilder =
+                logicalPlan.getRootBuilder().withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
 
         // Attach insert relation to view query
         // TODO
@@ -398,7 +404,7 @@ public class InsertPlanner {
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
-        List<ScalarOperatorRewriteRule> rewriteRules = Arrays.asList(new FoldConstantsRule());
+        List<ScalarOperatorRewriteRule> rewriteRules = Collections.singletonList(new FoldConstantsRule());
         for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
             if (!fullSchema.get(columnIdx).getType().matchesType(outputColumns.get(columnIdx).getType())) {
                 Column c = fullSchema.get(columnIdx);
