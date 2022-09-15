@@ -23,12 +23,16 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "common/statusor.h"
+#include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 
 namespace starrocks {
 
 class Status;
 class RuntimeState;
+using TFetchDataResultPtr = std::unique_ptr<TFetchDataResult>;
+using TFetchDataResultPtrs = std::vector<TFetchDataResultPtr>;
 
 // abstract class of the result writer
 class ResultWriter {
@@ -43,6 +47,18 @@ public:
     // convert one chunk to mysql result and
     // append this chunk to the result sink
     virtual Status append_chunk(vectorized::Chunk* chunk) = 0;
+
+    // decompose append_chunk into two functions: process_chunk and try_add_batch,
+    // this two function will be used in pipeline engine,
+    // the former transform input chunk into multiple TFetchDataResult, the latter add TFetchDataResult
+    // to queue whose consumers are rpc threads that invoke fetch_data rpc.
+    virtual StatusOr<TFetchDataResultPtrs> process_chunk(vectorized::Chunk* chunk) {
+        return Status::NotSupported("Not Implemented");
+    }
+
+    virtual StatusOr<bool> try_add_batch(TFetchDataResultPtrs& results) {
+        return Status::NotSupported("Not Implemented");
+    }
 
     virtual Status close() = 0;
 
