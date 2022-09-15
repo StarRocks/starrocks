@@ -33,6 +33,7 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -104,8 +105,14 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
         idToDataProperty.put(partitionId, newDataProperty);
     }
 
-    public int getQuorumNum(long partitionId) {
-        return getReplicationNum(partitionId) / 2 + 1;
+    public int getQuorumNum(long partitionId, TWriteQuorumType writeQuorum) {
+        if (writeQuorum == TWriteQuorumType.ALL) {
+            return getReplicationNum(partitionId);
+        } else if (writeQuorum == TWriteQuorumType.ONE) {
+            return 1;
+        } else {
+            return getReplicationNum(partitionId) / 2 + 1;
+        }
     }
 
     public short getReplicationNum(long partitionId) {

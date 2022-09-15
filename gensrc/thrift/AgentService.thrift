@@ -274,7 +274,8 @@ struct TRecoverTabletReq {
 enum TTabletMetaType {
     PARTITIONID,
     INMEMORY,
-    ENABLE_PERSISTENT_INDEX
+    ENABLE_PERSISTENT_INDEX,
+    WRITE_QUORUM
 }
 
 struct TTabletMetaInfo {

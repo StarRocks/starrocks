@@ -64,6 +64,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -86,6 +87,7 @@ import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1099,6 +1101,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                     GlobalStateMgr.getCurrentState().modifyTableReplicationNum(db, olapTable, properties);
                     return null;
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
+                    return null;
                 }
             }
 
@@ -1213,13 +1217,22 @@ public class SchemaChangeHandler extends AlterHandler {
             if (metaValue == olapTable.enablePersistentIndex()) {
                 return;
             }
+        } else if (metaType == TTabletMetaType.WRITE_QUORUM) {
+            TWriteQuorumType writeQuorum = WriteQuorum
+                    .findTWriteQuorumByName(properties.get(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM));
+            if (writeQuorum == olapTable.writeQuorum()) {
+                return;
+            }
         } else {
             LOG.warn("meta type: {} does not support", metaType);
             return;
         }
 
-        for (Partition partition : partitions) {
-            updatePartitionTabletMeta(db, olapTable.getName(), partition.getName(), metaValue, metaType);
+        if (metaType == TTabletMetaType.INMEMORY ||
+                metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
+            for (Partition partition : partitions) {
+                updatePartitionTabletMeta(db, olapTable.getName(), partition.getName(), metaValue, metaType);
+            }
         }
 
         db.writeLock();
