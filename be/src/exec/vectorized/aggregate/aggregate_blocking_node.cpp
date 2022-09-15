@@ -14,7 +14,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/aggregator.h"
-#include "exec/vectorized/streaming_aggregator.h"
+#include "exec/vectorized/sorted_streaming_aggregator.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
 
