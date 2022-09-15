@@ -384,7 +384,7 @@ KILL ANALYZE <ID>;
 | statistic_max_full_collect_data_size | LONG     | 100        | 自动统计信息采集的最大分区大小。单位：GB。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。 |
 | statistic_collect_interval_sec       | LONG     | 300        | 自动定期任务中，检测数据更新的间隔时间，默认为 5 分钟。单位：秒。 |
 | statistic_sample_collect_rows        | LONG     | 200000     | 最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。如果参数取值超过了实际的表行数，默认进行全量采集。 |
-| statistic_collect_concurrency        | INT      | 3          |手动采集任务的最大并发数，默认为3，即最多可以有3个手动采集任务同时运行。超出的任务处于PENDING状态，等待调度。|
+| statistic_collect_concurrency        | INT      | 3          |手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。超出的任务处于 PENDING 状态，等待调度。注意如果修改了该配置项，需要重启 FE 后配置才能生效。|
 | histogram_buckets_size               | LONG     | 64         | 直方图默认分桶数。                                           |
 | histogram_mcv_size                   | LONG     | 100        | 直方图默认most common value的数量。                          |
 | histogram_sample_ratio               | FLOAT    | 0.1        | 直方图默认采样比例。                                         |
