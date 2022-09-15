@@ -390,8 +390,7 @@ LEFT OUTER JOIN (join-predicate [2: v2 = 6: v8] post-join-predicate [null])
                 SCAN (columns[6: v8] predicate[null])
 [end]
 
-
-/*test ExistentialApply2OuterJoinRule*/
+/* test ExistentialApply2OuterJoinRule */
 
 [sql]
 select v1, exists (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 = v6) from t0;
@@ -435,7 +434,7 @@ select t0.v1, exists (select t1a from test_all_type where t1c = t0.v1 + t1.v5 an
 from t0 left join t1 on true;
 [result]
 LEFT OUTER JOIN (join-predicate [21: add = 19: cast AND add(20: add, 1: v1) = 5: v5] post-join-predicate [null])
-    CROSS JOIN (join-predicate [null] post-join-predicate [null])
+    LEFT OUTER JOIN (join-predicate [null] post-join-predicate [null])
         SCAN (columns[1: v1] predicate[null])
         EXCHANGE BROADCAST
             SCAN (columns[5: v5] predicate[null])
@@ -503,7 +502,7 @@ LEFT OUTER JOIN (join-predicate [add(19: cast, cast(1: v1 as double)) = cast(add
 select t0.v1, not exists (select t1a from test_all_type where t1c = t0.v1 + t1.v5 and t1a = 'a' and t1c + t1d + t0.v1 = t1.v5) from t0 left join t1 on true;
 [result]
 LEFT OUTER JOIN (join-predicate [21: add = 19: cast AND add(20: add, 1: v1) = 5: v5] post-join-predicate [null])
-    CROSS JOIN (join-predicate [null] post-join-predicate [null])
+    LEFT OUTER JOIN (join-predicate [null] post-join-predicate [null])
         SCAN (columns[1: v1] predicate[null])
         EXCHANGE BROADCAST
             SCAN (columns[5: v5] predicate[null])
@@ -542,7 +541,7 @@ RIGHT SEMI JOIN (join-predicate [4: v4 = 1: v1 AND add(2: v2, 5: v5) = 6: v6] po
 select t0.v1 from t0 left join t1 on true where exists (select t1a from test_all_type where t1c = t0.v1 + t1.v5 and t1a = 'a' and t1c + t1d + t0.v1 = t1.v5);
 [result]
 LEFT SEMI JOIN (join-predicate [19: add = 18: cast AND add(add(18: cast, 10: t1d), 1: v1) = 5: v5] post-join-predicate [null])
-    CROSS JOIN (join-predicate [null] post-join-predicate [null])
+    LEFT OUTER JOIN (join-predicate [null] post-join-predicate [null])
         SCAN (columns[1: v1] predicate[null])
         EXCHANGE BROADCAST
             SCAN (columns[5: v5] predicate[null])
@@ -563,7 +562,7 @@ RIGHT ANTI JOIN (join-predicate [4: v4 = 1: v1 AND 1: v1 = 1 AND add(2: v2, 5: v
 select t0.v1 from t0 left join t1 on true where not exists (select t1a from test_all_type where t1c = t0.v1 + t1.v5 and t1a = 'a' and t1c + t1d + t0.v1 = t1.v5);
 [result]
 LEFT ANTI JOIN (join-predicate [19: add = 18: cast AND add(add(18: cast, 10: t1d), 1: v1) = 5: v5] post-join-predicate [null])
-    CROSS JOIN (join-predicate [null] post-join-predicate [null])
+    LEFT OUTER JOIN (join-predicate [null] post-join-predicate [null])
         SCAN (columns[1: v1] predicate[null])
         EXCHANGE BROADCAST
             SCAN (columns[5: v5] predicate[null])
@@ -571,7 +570,7 @@ LEFT ANTI JOIN (join-predicate [19: add = 18: cast AND add(add(18: cast, 10: t1d
         SCAN (columns[7: t1a, 9: t1c, 10: t1d] predicate[7: t1a = a])
 [end]
 
-/*test ExistentialApply2JoinRule*/
+/* test ExistentialApply2JoinRule */
 
 [sql]
 select v1 from t0 where exists (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 = v6);
@@ -586,7 +585,7 @@ RIGHT SEMI JOIN (join-predicate [4: v4 = 1: v1 AND add(2: v2, 5: v5) = 6: v6] po
 select t0.v1 from t0 left join t1 on true where exists (select t1a from test_all_type where t1c = t0.v1 + t1.v5 and t1a = 'a' and t1c + t1d + t0.v1 = t1.v5);
 [result]
 LEFT SEMI JOIN (join-predicate [19: add = 18: cast AND add(add(18: cast, 10: t1d), 1: v1) = 5: v5] post-join-predicate [null])
-    CROSS JOIN (join-predicate [null] post-join-predicate [null])
+    LEFT OUTER JOIN (join-predicate [null] post-join-predicate [null])
         SCAN (columns[1: v1] predicate[null])
         EXCHANGE BROADCAST
             SCAN (columns[5: v5] predicate[null])
@@ -607,7 +606,7 @@ RIGHT ANTI JOIN (join-predicate [4: v4 = 1: v1 AND 1: v1 = 1 AND add(2: v2, 5: v
 select t0.v1 from t0 left join t1 on true where not exists (select t1a from test_all_type where t1c = t0.v1 + t1.v5 and t1a = 'a' and t1c + t1d + t0.v1 = t1.v5);
 [result]
 LEFT ANTI JOIN (join-predicate [19: add = 18: cast AND add(add(18: cast, 10: t1d), 1: v1) = 5: v5] post-join-predicate [null])
-    CROSS JOIN (join-predicate [null] post-join-predicate [null])
+    LEFT OUTER JOIN (join-predicate [null] post-join-predicate [null])
         SCAN (columns[1: v1] predicate[null])
         EXCHANGE BROADCAST
             SCAN (columns[5: v5] predicate[null])

@@ -518,8 +518,7 @@ INNER JOIN (join-predicate [2: v2 = 7: v4] post-join-predicate [null])
                                 SCAN (columns[7: v4, 8: v5] predicate[null])
 [end]
 
-/*test PushDownApplyAggFilterRule*/
-
+/* test PushDownApplyAggFilterRule */
 [sql]
 select * from t0 where v1 = (select max(v5 + 1) from t1 where t0.v2 = t1.v4);
 [result]
@@ -730,8 +729,7 @@ LEFT OUTER JOIN (join-predicate [add(add(1: v1, 4: v4), 9: v9) = if(12: t1c = 1,
 [end]
 
 
-/*test ScalarApply2JoinRule*/
-
+/* test ScalarApply2JoinRule */
 [sql]
 select * from t0 where 1 = (select v5 + 1 from t1 where t0.v2 = t1.v4);
 [result]
