@@ -220,8 +220,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId, 
-            long scannedRows, boolean isDone, long scannedBytes) {
-        loadingStatus.getLoadStatistic().updateLoadProgress(beId, loadId, fragmentId, scannedRows, isDone, scannedBytes);
+            long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
+        loadingStatus.getLoadStatistic().updateLoadProgress(beId, loadId, fragmentId, sinkRows, 
+                sinkBytes, sourceRows, sourceBytes, isDone);
     }
 
     public void setLoadFileInfo(int fileNum, long fileSize) {
@@ -635,13 +636,25 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                         state, failMsg));
     }
 
-    public void unprotectReadEndOperation(LoadJobFinalOperation loadJobFinalOperation) {
+    public void unprotectReadEndOperation(LoadJobFinalOperation loadJobFinalOperation, boolean isReplay) {
         loadingStatus = loadJobFinalOperation.getLoadingStatus();
         progress = loadJobFinalOperation.getProgress();
         loadStartTimestamp = loadJobFinalOperation.getLoadStartTimestamp();
         finishTimestamp = loadJobFinalOperation.getFinishTimestamp();
-        state = loadJobFinalOperation.getJobState();
+        if (isReplay) {
+            state = loadJobFinalOperation.getJobState();
+        }
         failMsg = loadJobFinalOperation.getFailMsg();
+    }
+
+    public void unprotectUpdateLoadingStatus(TransactionState txnState) {
+        if (txnState.getTxnCommitAttachment() == null) {
+            // The txn attachment maybe null when broker load has been cancelled without attachment.
+            // The end log of broker load has been record but the callback id of txnState hasn't been removed
+            // So the callback of txn is executed when log of txn aborted is replayed.
+            return;
+        }
+        unprotectReadEndOperation((LoadJobFinalOperation) txnState.getTxnCommitAttachment(), false);
     }
 
     public List<Comparable> getShowInfo() throws DdlException {
@@ -655,8 +668,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             // label
             jobInfo.add(label);
             // state
-            jobInfo.add(state.name());
-
+            if (state == JobState.COMMITTED) {
+                jobInfo.add("PREPARED");
+            } else {
+                jobInfo.add(state.name());
+            }
             // progress
             switch (state) {
                 case PENDING:
@@ -771,11 +787,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     @Override
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
-        if (txnOperated) {
+        if (!txnOperated) {
             return;
         }
         writeLock();
         try {
+            unprotectUpdateLoadingStatus(txnState);
             isCommitting = false;
             state = JobState.COMMITTED;
         } finally {
@@ -788,6 +805,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         writeLock();
         try {
             replayTxnAttachment(txnState);
+            progress = 99;
             transactionId = txnState.getTransactionId();
             state = JobState.COMMITTED;
         } finally {
@@ -816,7 +834,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 return;
             }
             // record attachment in load job
-            replayTxnAttachment(txnState);
+            unprotectUpdateLoadingStatus(txnState);
             // cancel load job
             unprotectedExecuteCancel(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnStatusChangeReason), false);
         } finally {
@@ -855,7 +873,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         if (!txnOperated) {
             return;
         }
-        replayTxnAttachment(txnState);
+        unprotectUpdateLoadingStatus(txnState);
         updateState(JobState.FINISHED);
     }
 

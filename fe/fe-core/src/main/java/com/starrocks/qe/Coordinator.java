@@ -2207,11 +2207,11 @@ public class Coordinator {
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }
 
-        if (params.isSetLoaded_rows() && params.isSetLoaded_bytes()) {
-
+        if (params.isSetLoaded_rows() && params.isSetSink_load_bytes() && params.isSetSource_load_rows() 
+                && params.isSetSource_load_bytes()) {
             GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
                     jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
-                    params.done, params.loaded_bytes);
+                    params.sink_load_bytes, params.source_load_rows, params.source_load_bytes, params.done);
         }
     }
 

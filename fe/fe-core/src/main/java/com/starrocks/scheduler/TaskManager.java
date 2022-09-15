@@ -497,7 +497,25 @@ public class TaskManager {
                 return;
             }
 
-            TaskRun pendingTaskRun = taskRunQueue.poll();
+            // It is possible to update out of order for priority queue.
+            TaskRun pendingTaskRun = null;
+            List<TaskRun> tempQueue = Lists.newArrayList();
+            while (!taskRunQueue.isEmpty()) {
+                TaskRun taskRun = taskRunQueue.poll();
+                if (taskRun.getStatus().getQueryId().equals(statusChange.getQueryId())) {
+                    pendingTaskRun = taskRun;
+                    break;
+                } else {
+                    tempQueue.add(taskRun);
+                }
+            }
+            taskRunQueue.addAll(tempQueue);
+
+            if (pendingTaskRun == null) {
+                LOG.warn("could not find query_id:{}, taskId:{}, when replay update pendingTaskRun",
+                        statusChange.getQueryId(), taskId);
+                return;
+            }
             TaskRunStatus status = pendingTaskRun.getStatus();
 
             if (toStatus == Constants.TaskRunState.RUNNING) {

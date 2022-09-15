@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.lake;
+package com.starrocks.lake.backup;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.backup.SnapshotInfo;

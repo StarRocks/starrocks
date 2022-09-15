@@ -248,7 +248,7 @@ terminal String KW_ADD, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ARR
     KW_PLUGIN, KW_PLUGINS,
     KW_PROC, KW_PROPERTIES, KW_PROPERTY, KW_PERCENTILE, KW_PERCENTILE_UNION,
     KW_QUERY, KW_QUOTA,
-    KW_RANDOM, KW_RANGE, KW_READ, KW_RECOVER, KW_REGEXP, KW_RELEASE,
+    KW_RANGE, KW_READ, KW_RECOVER, KW_REGEXP, KW_RELEASE, KW_RENAME,
     KW_REPEATABLE, KW_REPOSITORY, KW_REPOSITORIES, KW_REPLACE, KW_REPLACE_IF_NOT_NULL, KW_RESOURCE, KW_RESOURCES, KW_RESTORE, KW_RETURNS, KW_RESUME, KW_REVOKE,
     KW_RIGHT, KW_ROLE, KW_ROLES, KW_ROLLBACK, KW_ROLLUP, KW_ROUTINE, KW_ROW, KW_ROWS,
     KW_SCHEMA, KW_SCHEMAS, KW_SECOND, KW_SERIALIZABLE, KW_SESSION, KW_SET, KW_SHOW,
@@ -1023,10 +1023,6 @@ show_param ::=
     | KW_EXPORT opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
     {:
         RESULT = new ShowExportStmt(db, parser.where, orderByClause, limitClause);
-    :}
-    | KW_RESTORE opt_db:db opt_wild_where
-    {:
-        RESULT = new ShowRestoreStmt(db, parser.where);
     :}
     | KW_SNAPSHOT KW_ON ident:repo opt_wild_where
     {:
@@ -2642,8 +2638,6 @@ keyword ::=
     | KW_QUERY:id
     {: RESULT = id; :}
     | KW_QUOTA:id
-    {: RESULT = id; :}
-    | KW_RANDOM:id
     {: RESULT = id; :}
     | KW_RECOVER:id
     {: RESULT = id; :}

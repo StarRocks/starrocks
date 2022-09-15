@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
@@ -168,6 +169,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     public String getHdfsPath() {
         return this.hdfsPath;
+    }
+
+    @Override
+    public String getTableIdentifier() {
+        return Joiner.on(":").join(name, createTime);
     }
 
     public Map<String, String> getHiveProperties() {
@@ -370,6 +376,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         if (hiveTable == null) {
             hiveTable = hiveRepository.getTable(resourceName, this.hiveDbName, this.hiveTableName);
         }
+        this.createTime = hiveTable.getCreateTime();
+
         String hiveTableType = hiveTable.getTableType();
         if (hiveTableType == null) {
             throw new DdlException("Unknown hive table type.");

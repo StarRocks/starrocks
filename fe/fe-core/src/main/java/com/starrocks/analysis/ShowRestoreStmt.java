@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.AstVisitor;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
@@ -59,6 +60,10 @@ public class ShowRestoreStmt extends ShowStmt {
         return label;
     }
 
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
@@ -93,7 +98,9 @@ public class ShowRestoreStmt extends ShowStmt {
             builder.append(" FROM `").append(dbName).append("` ");
         }
 
-        builder.append(where.toSql());
+        if (where != null) {
+            builder.append(where.toSql());
+        }
         return builder.toString();
     }
 
@@ -105,6 +112,16 @@ public class ShowRestoreStmt extends ShowStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowRestoreStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }
 
