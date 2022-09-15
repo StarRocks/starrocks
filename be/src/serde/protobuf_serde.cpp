@@ -11,10 +11,10 @@
 
 namespace starrocks::serde {
 
-int64_t ProtobufChunkSerde::max_serialized_size(const vectorized::Chunk& chunk) {
+int64_t ProtobufChunkSerde::max_serialized_size(const vectorized::Chunk& chunk, const int encode_level) {
     int64_t serialized_size = 8; // 4 bytes version plus 4 bytes row number
     for (const auto& column : chunk.columns()) {
-        serialized_size += ColumnArraySerde::max_serialized_size(*column);
+        serialized_size += ColumnArraySerde::max_serialized_size(*column, encode_level);
     }
     return serialized_size;
 }
@@ -58,14 +58,14 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
     chunk_pb.set_compress_type(CompressionTypePB::NO_COMPRESSION);
 
     std::string* serialized_data = chunk_pb.mutable_data();
-    raw::stl_string_resize_uninitialized(serialized_data, ProtobufChunkSerde::max_serialized_size(chunk));
+    raw::stl_string_resize_uninitialized(serialized_data, ProtobufChunkSerde::max_serialized_size(chunk, encode_level));
     auto* buff = reinterpret_cast<uint8_t*>(serialized_data->data());
     encode_fixed32_le(buff + 0, 1);
     encode_fixed32_le(buff + 4, chunk.num_rows());
     buff = buff + 8;
 
     for (const auto& column : chunk.columns()) {
-        buff = ColumnArraySerde::serialize(*column, buff);
+        buff = ColumnArraySerde::serialize(*column, buff, encode_level);
         if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
     }
     chunk_pb.set_serialized_size(buff - reinterpret_cast<const uint8_t*>(serialized_data->data()));
@@ -73,7 +73,8 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
     return std::move(chunk_pb);
 }
 
-StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb, const int encode_level) {
+StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb,
+                                                            const int encode_level) {
     auto res = build_protobuf_chunk_meta(row_desc, chunk_pb);
     if (!res.ok()) {
         return res.status();
@@ -98,7 +99,7 @@ StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor&
     // serialized size. And for new version of BE, the "real" serialized size always matches, and we can save the cost
     // of calling `ProtobufChunkSerde::max_serialized_size()`.
     if (UNLIKELY(deserialized_size != chunk_pb.serialized_size())) {
-        size_t expected = ProtobufChunkSerde::max_serialized_size(*chunk);
+        size_t expected = ProtobufChunkSerde::max_serialized_size(*chunk, encode_level);
         if (UNLIKELY(chunk_pb.data().size() != expected)) {
             return Status::InternalError(strings::Substitute(
                     "deserialize chunk data failed. len: $0, expected: $1, ser_size: $2, deser_size: $3",

@@ -18,7 +18,7 @@ namespace starrocks::serde {
 class ColumnArraySerde {
 public:
     // 0 means does not support the type of column
-    static int64_t max_serialized_size(const vectorized::Column& column);
+    static int64_t max_serialized_size(const vectorized::Column& column, const int encode_level = 0);
 
     // Return nullptr on error.
     static uint8_t* serialize(const vectorized::Column& column, uint8_t* buff, const int encode_level = 0);

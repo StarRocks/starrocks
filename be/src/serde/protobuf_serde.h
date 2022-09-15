@@ -19,7 +19,7 @@ class ProtobufChunkDeserializer;
 
 class ProtobufChunkSerde {
 public:
-    static int64_t max_serialized_size(const vectorized::Chunk& chunk);
+    static int64_t max_serialized_size(const vectorized::Chunk& chunk, const int encode_level = 0);
 
     // Write the contents of |chunk| to ChunkPB
     static StatusOr<ChunkPB> serialize(const vectorized::Chunk& chunk, const int encode_level = 0);
