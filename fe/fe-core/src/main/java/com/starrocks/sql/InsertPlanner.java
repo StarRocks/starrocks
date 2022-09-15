@@ -16,6 +16,8 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.MysqlTableSink;
@@ -37,7 +39,9 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
@@ -45,7 +49,10 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -78,6 +85,84 @@ public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
 
+    // Rewrite OlapScan to Values for MV
+    static class OlapScanRewritter extends OptExpressionVisitor<OptExpression, OptimizerContext> {
+        private final Table targetTable;
+        private final InsertStmt insert;
+
+        public OlapScanRewritter(InsertStmt insertStmt) {
+            this.targetTable = insertStmt.getTargetTable();
+            this.insert = insertStmt;
+        }
+
+        public OptExpression rewrite(OptExpression optExpr, OptimizerContext context) {
+            return optExpr.getOp().accept(this, optExpr, context);
+        }
+
+        @Override
+        public OptExpression visit(OptExpression optExpr, OptimizerContext context) {
+            for (int childIdx = 0; childIdx < optExpr.arity(); ++childIdx) {
+                optExpr.setChild(childIdx, rewrite(optExpr.inputAt(childIdx), context));
+            }
+
+            return OptExpression.create(optExpr.getOp(), optExpr.getInputs());
+        }
+
+        @Override
+        public OptExpression visitPhysicalOlapScan(OptExpression optExpr, OptimizerContext context) {
+            if (!optExpr.getOp().getOpType().equals(OperatorType.PHYSICAL_OLAP_SCAN)) {
+                return optExpr;
+            }
+            PhysicalOlapScanOperator node = (PhysicalOlapScanOperator) optExpr.getOp();
+            if (node.getTable().equals(this.targetTable)) {
+                QueryRelation queryRelation = this.insert.getQueryStatement().getQueryRelation();
+                ValuesRelation valueRelation = (ValuesRelation) queryRelation;
+                List<ColumnRefOperator> valuesOutputColumns = node.getOutputColumns();
+
+                List<List<ScalarOperator>> values = new ArrayList<>();
+                for (List<Expr> row : valueRelation.getRows()) {
+                    List<ScalarOperator> valuesRow = new ArrayList<>();
+                    for (int fieldIdx = 0; fieldIdx < row.size(); ++fieldIdx) {
+                        Expr rowField = row.get(fieldIdx);
+                        Type outputType = valueRelation.getRelationFields().getFieldByIndex(fieldIdx).getType();
+                        Type fieldType = rowField.getType();
+                        if (!outputType.equals(fieldType)) {
+                            if (fieldType.isNull()) {
+                                rowField.setType(outputType);
+                            } else {
+                                row.set(fieldIdx, TypeManager.addCastExpr(rowField, outputType));
+                            }
+                        }
+
+                        ScalarOperator constant = SqlToScalarOperatorTranslator.translate(row.get(fieldIdx),
+                                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                                context.getColumnRefFactory());
+                        valuesRow.add(constant);
+
+                        if (constant.isNullable()) {
+                            valuesOutputColumns.get(fieldIdx).setNullable(true);
+                        }
+                    }
+                    values.add(valuesRow);
+                }
+                OptExpression res = OptExpression.create(new PhysicalValuesOperator(valuesOutputColumns, values, 0, null, null));
+                // Avoid set statistic and cost here
+                res.setStatistics(optExpr.getStatistics());
+                res.setCost(optExpr.getCost());
+                res.setPlanCount(optExpr.getPlanCount());
+                res.setLogicalProperty(optExpr.getLogicalProperty());
+                return res;
+            }
+            return optExpr;
+        }
+    }
+
+    // Rewrite the OlapScanOperator to insert values
+    private OptExpression rewriteScanToValues(InsertStmt insertStmt, OptExpression optExpr, OptimizerContext context) {
+        OlapScanRewritter rewriter = new OlapScanRewritter(insertStmt);
+        return rewriter.rewrite(optExpr, context);
+    }
+
     public ExecPlan planViewUpdate(InsertStmt insertStmt, QueryStatement viewStmt, MaterializedView view,
                                    ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
@@ -85,7 +170,6 @@ public class InsertPlanner {
         if (queryRelation instanceof ValuesRelation) {
             castLiteralToTargetColumnsType(insertStmt);
         }
-
 
         // Build logical plan for view query
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
@@ -101,9 +185,6 @@ public class InsertPlanner {
         OptExprBuilder optExprBuilder =
                 logicalPlan.getRootBuilder().withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
 
-        // Attach insert relation to view query
-        // TODO
-
         // Optimize view query with stream plan
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
         Optimizer optimizer = new Optimizer();
@@ -116,6 +197,9 @@ public class InsertPlanner {
                 new ColumnRefSet(logicalPlan.getOutputColumn()),
                 columnRefFactory);
         session.getSessionVariable().enableStreamPlanner(false);
+
+        // Rewrite OlapScan to Values
+        optimizedPlan = rewriteScanToValues(insertStmt, optimizedPlan, optimizer.getContext());
 
         // Build plan fragment
         boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
