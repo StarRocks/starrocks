@@ -200,6 +200,7 @@ set(EXEC_FILES
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
+    stream/stream_join.cpp
 )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection

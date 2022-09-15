@@ -1,0 +1,87 @@
+// This file is made available under Elastic License 2.0.
+
+#include "exec/stream/stream_join.h"
+
+namespace starrocks {
+
+Status StreamJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
+    RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    DCHECK(tnode.__isset.stream_join_node);
+
+    _join_op = tnode.stream_join_node.join_op;
+    if (tnode.stream_join_node.__isset.sql_join_predicates) {
+        _sql_join_conjuncts = tnode.stream_join_node.sql_join_predicates;
+    }
+    const std::vector<TEqJoinCondition>& eq_join_conjuncts = tnode.hash_join_node.eq_join_conjuncts;
+    for (const auto& eq_join_conjunct : eq_join_conjuncts) {
+        ExprContext* left = nullptr;
+        ExprContext* right = nullptr;
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.left, &left));
+        _probe_expr_ctxs.push_back(left);
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.right, &right));
+        _build_expr_ctxs.push_back(right);
+    }
+
+    RETURN_IF_ERROR(
+            Expr::create_expr_trees(_pool, tnode.stream_join_node.other_join_conjuncts, &_other_join_conjunct_ctxs));
+
+    return Status::OK();
+}
+
+pipeline::OpFactories StreamJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
+    // OpFactories right_ops = _children[1]->decompose_to_pipeline(context);
+
+    // Left side
+    auto left_factory = std::make_shared<StreamJoinOperatorFactory>(
+            context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
+            _sql_join_conjuncts, _join_op, _probe_expr_ctxs, _build_expr_ctxs, _other_join_conjunct_ctxs);
+    left_ops.emplace_back(std::move(left_factory));
+
+    return left_ops;
+}
+
+// Setup
+
+Status StreamJoinOperator::prepare(RuntimeState* state) {
+    return Status::OK();
+}
+
+void StreamJoinOperator::close(RuntimeState* state) {}
+
+// Control flow
+bool StreamJoinOperator::is_finished() const {
+    return true;
+}
+bool StreamJoinOperator::has_output() const {
+    return false;
+}
+bool StreamJoinOperator::need_input() const {
+    return false;
+}
+Status StreamJoinOperator::set_finishing(RuntimeState* state) {
+    return Status::OK();
+}
+Status StreamJoinOperator::set_finished(RuntimeState* state) {
+    return Status::OK();
+}
+
+// Data flow
+StatusOr<vectorized::ChunkPtr> StreamJoinOperator::pull_chunk(RuntimeState* state) {
+    return Status::NotSupported("TODO");
+}
+
+Status StreamJoinOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+    return Status::NotSupported("TODO");
+}
+
+pipeline::OperatorPtr StreamJoinOperatorFactory::create(int32_t dop, int32_t driver_seq) {
+    return {};
+}
+Status StreamJoinOperatorFactory::prepare(RuntimeState* state) {
+    return Status::NotSupported("TODO");
+}
+
+void StreamJoinOperatorFactory::close(RuntimeState* state) {}
+
+} // namespace starrocks
