@@ -548,26 +548,11 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 // generate new tablets in origin tablet order
                 int tabletNum = idx.getTablets().size();
                 idx.clearTabletsForRestore();
-                for (int i = 0; i < tabletNum; i++) {
-                    long newTabletId = globalStateMgr.getNextId();
-                    LocalTablet newTablet = new LocalTablet(newTabletId);
-                    idx.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
-
-                    // replicas
-                    List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
-                            .seqChooseBackendIds(partitionInfo.getReplicationNum(entry.getKey()),
-                                    true, true);
-                    if (CollectionUtils.isEmpty(beIds)) {
-                        return new Status(ErrCode.COMMON_ERROR, "failed to find "
-                                + partitionInfo.getReplicationNum(entry.getKey())
-                                + " different hosts to create table: " + name);
-                    }
-                    for (Long beId : beIds) {
-                        long newReplicaId = globalStateMgr.getNextId();
-                        Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
-                                partition.getVisibleVersion(), schemaHash);
-                        newTablet.addReplica(replica, true /* is restore */);
-                    }
+                Status status = createTabletsForRestore(tabletNum, idx, globalStateMgr,
+                        partitionInfo.getReplicationNum(entry.getKey()), partition.getVisibleVersion(),
+                        schemaHash, partition.getId());
+                if (!status.ok()) {
+                    return status;
                 }
             }
 
@@ -575,6 +560,31 @@ public class OlapTable extends Table implements GsonPostProcessable {
             partition.setIdForRestore(entry.getKey());
         }
 
+        return Status.OK;
+    }
+
+    public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
+                                          int replicationNum, long version, int schemaHash, long partitionId) {
+        for (int i = 0; i < tabletNum; i++) {
+            long newTabletId = globalStateMgr.getNextId();
+            LocalTablet newTablet = new LocalTablet(newTabletId);
+            index.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
+
+            // replicas
+            List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
+                    .seqChooseBackendIds(replicationNum, true, true);
+            if (CollectionUtils.isEmpty(beIds)) {
+                return new Status(ErrCode.COMMON_ERROR, "failed to find "
+                        + replicationNum
+                        + " different hosts to create table: " + name);
+            }
+            for (Long beId : beIds) {
+                long newReplicaId = globalStateMgr.getNextId();
+                Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
+                        version, schemaHash);
+                newTablet.addReplica(replica, true /* is restore */);
+            }
+        }
         return Status.OK;
     }
 
@@ -1340,6 +1350,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
         for (Partition partition : idToPartition.values()) {
             nameToPartition.put(partition.getName(), partition);
         }
+
+        // The table may be restored from another cluster, it should be set to current cluster id.
+        clusterId = GlobalStateMgr.getCurrentState().getClusterId();
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
