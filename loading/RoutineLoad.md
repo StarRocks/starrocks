@@ -45,7 +45,7 @@ Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON 格式的数据。
   - 一个导入任务可能会消费一个或多个分区。
   - 分区会尽可能均匀地分配给导入任务。
 
-- **多个导入任务****并行****进行，消费 Kafka 多个分区的消息，导入至 StarRocks**
+- **多个导入任务并行进行，消费 Kafka 多个分区的消息，导入至 StarRocks**
 
   - **调度和提交导入任务**：FE 定时调度任务执行队列中的导入任务，分配给选定的 Coordinator BE。调度导入任务的时间间隔由 `max_batch_interval` 参数，并且 FE 会尽可能均匀地向所有 BE 分配导入任务。有关 `max_batch_interval` 参数的详细介绍，请参见  [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example)。
 
@@ -148,7 +148,7 @@ FROM KAFKA
 
 - **数据转换**
 
-  如果需要指定源数据和目标表之间列的映射和转换关系，则需要配置 `COLUMNS` 。`COLUMNS`中列的**顺序**与 **CSV 数据**中列的顺序一致，并且**名称**与**目标表**中的列名对应。本示例中，由于无需导入 CSV 数据的第五列至目标表，因此`COLUMNS`中把第五列临时命名为 `tem``p_gender` 用于占位，其他列都直接映射至表`example_tbl1`中。
+  如果需要指定源数据和目标表之间列的映射和转换关系，则需要配置 `COLUMNS` 。`COLUMNS`中列的**顺序**与 **CSV 数据**中列的顺序一致，并且**名称**与**目标表**中的列名对应。本示例中，由于无需导入 CSV 数据的第五列至目标表，因此`COLUMNS`中把第五列临时命名为 `temp_gender` 用于占位，其他列都直接映射至表`example_tbl1`中。
 
   更多数据转换的说明，请参见[导入时实现数据转换](./Etl_in_loading.md)。
 
@@ -166,7 +166,7 @@ FROM KAFKA
     min(aliveBeNum, partitionNum, desired_concurrent_number, max_routine_load_task_concurrent_num)
   ```
 
-  更多参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example)。。 更多调整导入速度的说明，请参见 [Routine Load 常见问题](../faq/loading/Routine_load_faq.md)。
+  更多参数说明，请参见 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md#example)。更多调整导入速度的说明，请参见 [Routine Load 常见问题](../faq/loading/Routine_load_faq.md)。
 
 ### 导入 JSON 数据
 
