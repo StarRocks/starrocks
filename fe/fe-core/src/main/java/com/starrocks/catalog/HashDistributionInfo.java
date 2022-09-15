@@ -26,6 +26,9 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.HashDistributionDesc;
+import com.starrocks.planner.OlapScanNode;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -41,6 +44,8 @@ public class HashDistributionInfo extends DistributionInfo {
     private List<Column> distributionColumns;
     @SerializedName(value = "bucketNum")
     private int bucketNum;
+
+    private static final Logger LOG = LogManager.getLogger(OlapScanNode.class);
 
     public HashDistributionInfo() {
         super();
@@ -70,6 +75,11 @@ public class HashDistributionInfo extends DistributionInfo {
         }
         String colList = Joiner.on(", ").join(colNames);
         return colList;
+    }
+
+    @Override
+    public void setBucketNum(int bucketNum) {
+        this.bucketNum = bucketNum;
     }
 
     public void write(DataOutput out) throws IOException {

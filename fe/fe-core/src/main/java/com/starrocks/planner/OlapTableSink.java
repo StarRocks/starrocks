@@ -212,14 +212,6 @@ public class OlapTableSink extends DataSink {
                 }
                 break;
             }
-            case RANDOM: {
-                for (Column column : table.getBaseSchema()) {
-                    if (column.isKey()) {
-                        distColumns.add(column.getName());
-                    }
-                }
-                break;
-            }
             default:
                 throw new UserException("unsupported distributed type, type=" + distInfo.getType());
         }
