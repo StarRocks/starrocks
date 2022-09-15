@@ -53,7 +53,7 @@ public class IcebergTableStatisticCalculatorTest {
     }
 
     @Test
-    public void testMakeTableStatisticsWithStructFiled() {
+    public void testMakeTableStatisticsWithStructField() {
         List<Types.NestedField> fields = new ArrayList<>();
         fields.add(Types.NestedField.of(1, false, "col1", new Types.LongType()));
         fields.add(Types.NestedField.of(2, false, "col2", new Types.DateType()));
@@ -62,7 +62,6 @@ public class IcebergTableStatisticCalculatorTest {
         structFields.add(Types.NestedField.of(4, false, "col4", new Types.LongType()));
         structFields.add(Types.NestedField.of(5, false, "col5", new Types.DoubleType()));
         fields.add(Types.NestedField.of(3, false, "col3", Types.StructType.of(structFields)));
-        Schema schema = new Schema(fields);
 
         Map<Integer, org.apache.iceberg.types.Type.PrimitiveType> idToTypeMapping = fields.stream()
                 .filter(column -> column.type().isPrimitiveType())
