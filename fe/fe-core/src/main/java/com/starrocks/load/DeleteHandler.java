@@ -834,8 +834,13 @@ public class DeleteHandler implements Writable {
                 predicate.setChild(childNo, LiteralExpr.create("0", Type.TINYINT));
             }
         }
+<<<<<<< HEAD
         LiteralExpr result =
                 LiteralExpr.create(value, Objects.requireNonNull(Type.fromPrimitiveType(column.getPrimitiveType())));
+=======
+
+        LiteralExpr result = LiteralExpr.create(value, Objects.requireNonNull(column.getType()));
+>>>>>>> fa6c0f636 ([BugFix] fix delete predicate of array type (#10939))
         if (result instanceof DecimalLiteral) {
             ((DecimalLiteral) result).checkPrecisionAndScale(column.getPrecision(), column.getScale());
         } else if (result instanceof DateLiteral) {
