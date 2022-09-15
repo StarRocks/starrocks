@@ -231,7 +231,7 @@ terminal String KW_ADD, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ARR
     KW_CONFIG, KW_CONNECTION, KW_CONNECTION_ID, KW_CONSISTENT, KW_COUNT, KW_CREATE, KW_CURRENT, KW_CURRENT_TIMESTAMP, KW_CURRENT_USER,
     KW_DATA, KW_DATABASE, KW_DATABASES, KW_DATE, KW_DATETIME, KW_DAY, KW_DECIMAL, KW_DECIMALV2, KW_DECIMAL32, KW_DECIMAL64, KW_DECIMAL128, KW_DECOMMISSION, KW_DEFAULT, KW_DESC,
     KW_DELETE, KW_DISTINCT, KW_DISTINCTPC, KW_DISTINCTPCSA, KW_DYNAMIC, KW_BUCKETS, KW_DIV, KW_DOUBLE, KW_DROP,
-    KW_ELSE, KW_END, KW_ENGINE, KW_ENGINES, KW_ERRORS, KW_EVENTS, KW_EXISTS, KW_EXPORT,
+    KW_ELSE, KW_END, KW_ENGINE, KW_ENGINES, KW_ERRORS, KW_EVENTS, KW_EXISTS,
     KW_EXTERNAL, KW_EXTRACT,
     KW_FALSE, KW_FOLLOWING, KW_FREE, KW_FROM, KW_FILE, KW_FIRST, KW_FLOAT, KW_FOR, KW_FORMAT, KW_FRONTENDS, KW_FULL, KW_FN, KW_FUNCTION,
     KW_GLOBAL, KW_GRANT, KW_GRANTS, KW_GROUPING,
@@ -280,7 +280,7 @@ nonterminal List<StatementBase> stmts;
 nonterminal StatementBase stmt, show_stmt, show_param, help_stmt, create_routine_load_stmt, pause_routine_load_stmt, resume_routine_load_stmt, stop_routine_load_stmt,
     show_routine_load_stmt, show_routine_load_task_stmt, alter_stmt,
     drop_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt,
-    unsupported_stmt, export_stmt,
+    unsupported_stmt,
     import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt;
 
 nonterminal ImportColumnDesc import_column_desc;
@@ -524,8 +524,6 @@ stmt ::=
     {: RESULT = stmt; :}
     | unsupported_stmt : stmt
     {: RESULT = stmt; :}
-    | export_stmt : stmt
-    {: RESULT = stmt; :}
     | install_plugin_stmt : stmt
     {: RESULT = stmt; :}
     | uninstall_plugin_stmt : stmt
@@ -688,17 +686,6 @@ help_stmt ::=
     KW_HELP ident_or_text:mark
     {:
         RESULT = new HelpStmt(mark);
-    :}
-    ;
-
-// Export statement
-export_stmt ::=
-    KW_EXPORT KW_TABLE base_table_ref:tblRef opt_col_list:cols
-    KW_TO STRING_LITERAL:path
-    opt_properties:properties
-    opt_broker:broker
-    {:
-        RESULT = new ExportStmt(tblRef, cols, path, properties, broker);
     :}
     ;
 
@@ -1019,11 +1006,6 @@ show_param ::=
     {:
         RESULT = new ShowMaterializedViewStmt(db);
     :}
-    /* Show export statement */
-    | KW_EXPORT opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
-    {:
-        RESULT = new ShowExportStmt(db, parser.where, orderByClause, limitClause);
-    :}
     | KW_SNAPSHOT KW_ON ident:repo opt_wild_where
     {:
         RESULT = new ShowSnapshotStmt(repo, parser.where);
@@ -1178,10 +1160,6 @@ cancel_param ::=
     | KW_RESTORE opt_db:db
     {:
         RESULT = new CancelBackupStmt(db, true);
-    :}
-    | KW_EXPORT opt_db:db opt_wild_where
-    {:
-        RESULT = new CancelExportStmt(db, parser.where);
     :}
     ;
 

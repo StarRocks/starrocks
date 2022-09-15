@@ -181,6 +181,11 @@ statement
     | restoreStatement
     | showRestoreStatement
 
+    //Export Statement
+    | exportStatement
+    | cancelExportStatement
+    | showExportStatement
+
     // Other statement
     | killStatement
     | setUserPropertyStatement
@@ -1011,6 +1016,24 @@ showGrantsStatement
 
 dropRoleStatement
     : DROP ROLE identifierOrString                                                          #dropRole
+    ;
+
+// ------------------------------------------- Export Statement --------------------------------------------------------
+
+exportStatement
+    : EXPORT TABLE qualifiedName partitionNames? columnAliases?
+        TO string properties? brokerDesc?
+    ;
+
+cancelExportStatement
+    : CANCEL EXPORT ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showExportStatement
+    : SHOW EXPORT ((FROM | IN) catalog=qualifiedName)?
+        ((LIKE pattern=string) | (WHERE expression))?
+        (ORDER BY sortItem (',' sortItem)*)?
+        (limitElement)?
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
