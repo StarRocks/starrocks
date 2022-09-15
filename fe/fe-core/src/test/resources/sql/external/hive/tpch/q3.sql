@@ -21,7 +21,6 @@ group by
 order by
     revenue desc,
     o_orderdate limit 10;
-
 [fragment statistics]
 PLAN FRAGMENT 0(F07)
 Output Exprs:18: l_orderkey | 35: sum | 13: o_orderdate | 16: o_shippriority
@@ -200,7 +199,7 @@ avgRowSize=28.0
 numNodes=0
 cardinality: 323426370
 probe runtime filters:
-- filter_id = 1, probe_expr = (18: l_orderkey)
+- filter_id = 1, probe_expr = (18: l_orderkey), partition_exprs = (18: l_orderkey)
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE

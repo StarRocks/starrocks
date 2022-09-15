@@ -21,7 +21,7 @@
 
 #include "storage/rowset/rowset.h"
 
-#include <unistd.h> // for link()
+#include <unistd.h>
 
 #include <memory>
 #include <set>
@@ -51,7 +51,13 @@ Rowset::Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSh
         : _schema(schema),
           _rowset_path(std::move(rowset_path)),
           _rowset_meta(std::move(rowset_meta)),
-          _refs_by_reader(0) {}
+          _refs_by_reader(0) {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+}
+
+Rowset::~Rowset() {
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+}
 
 Status Rowset::load() {
     // if the state is ROWSET_UNLOADING it means close() is called
@@ -157,14 +163,6 @@ Status Rowset::reload() {
         _segments.push_back(std::move(res).value());
     }
     return Status::OK();
-}
-
-bool Rowset::check_path(const std::string& path) {
-    std::set<std::string> valid_paths;
-    for (int i = 0; i < num_segments(); ++i) {
-        valid_paths.insert(segment_file_path(_rowset_path, rowset_id(), i));
-    }
-    return valid_paths.find(path) != valid_paths.end();
 }
 
 StatusOr<int64_t> Rowset::estimate_compaction_segment_iterator_num() {

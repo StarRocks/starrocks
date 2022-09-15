@@ -10,6 +10,7 @@
 #include "column/decimalv3_column.h"
 #include "column/fixed_length_column_base.h"
 #include "column/json_column.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
@@ -135,6 +136,18 @@ public:
     }
 
     Status do_visit(ArrayColumn* dst) {
+        if (_columns.empty() || _perm.empty()) {
+            return Status::OK();
+        }
+
+        for (auto& p : _perm) {
+            dst->append(*_columns[p.chunk_index], p.index_in_chunk, 1);
+        }
+
+        return Status::OK();
+    }
+
+    Status do_visit(MapColumn* dst) {
         if (_columns.empty() || _perm.empty()) {
             return Status::OK();
         }

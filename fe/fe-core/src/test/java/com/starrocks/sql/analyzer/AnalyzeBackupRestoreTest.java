@@ -20,7 +20,7 @@ import java.util.Collection;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
-public class AnalyzeBackupTest {
+public class AnalyzeBackupRestoreTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -76,6 +76,44 @@ public class AnalyzeBackupTest {
         analyzeSuccess("SHOW BACKUP;");
         analyzeFail("SHOW BACKUP FROM test1;");
         analyzeFail("SHOW BACKUP FROM 1a;");
+    }
+
+    @Test
+    public void testRestore() {
+        analyzeSuccess("RESTORE SNAPSHOT test.`snapshot_2` FROM `repo` ON ( `t0` , `t1` AS `new_tbl` ) " +
+                "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\",\"allow_load\"=\"true\"," +
+                "\"replication_num\"=\"1\",\"meta_version\"=\"10\"," +
+                "\"starrocks_meta_version\"=\"10\",\"timeout\"=\"3600\" );");
+        analyzeFail("RESTORE SNAPSHOT test.`snapshot_2` FROM `repo` ON ( `t0` , `t1` AS `new_tbl` ) " +
+                "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\",\"allow_load\"=\"a\" );");
+        analyzeFail("RESTORE SNAPSHOT test.`snapshot_2` FROM `repo` ON ( `t0` , `t1` AS `new_tbl` ) " +
+                "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\",\"replication_num\"=\"a\" );");
+        analyzeFail("RESTORE SNAPSHOT test.`snapshot_2` FROM `repo` ON ( `t0` , `t1` AS `new_tbl` ) " +
+                "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\",\"meta_version\"=\"a\" );");
+        analyzeFail("RESTORE SNAPSHOT test.`snapshot_2` FROM `repo` ON ( `t0` , `t1` AS `new_tbl` ) " +
+                "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\"," +
+                "\"starrocks_meta_version\"=\"a\",\"timeout\"=\"3600\" );");
+        analyzeFail("RESTORE SNAPSHOT test.`snapshot_2` FROM `repo` ON ( `t0` , `t1` AS `new_tbl` ) " +
+                "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\",\"timeout\"=\"a\" );");
+        analyzeFail("RESTORE SNAPSHOT test.`snapshot_2` FROM `repo1` ON ( `t0`)");
+        analyzeFail("RESTORE SNAPSHOT test.`snapshot_2` FROM `repo` ON ( `test`.`t0`)");
+        analyzeFail("RESTORE SNAPSHOT test1.`snapshot_2` FROM `repo1` ON ( `t0`)");
+        analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `repo` ON ( `t0` )");
+        analyzeFail("RESTORE SNAPSHOT `test:2`.`snapshot_2` FROM `repo` ON ( `t0`)");
+        analyzeFail("RESTORE SNAPSHOT `` FROM `repo` ON (`t0`)");
+        analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `repo` ON (t99)");
+        analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `repo` ON (`t0` AS `t1`)");
+        analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `repo` ON (`t0`PARTITION (p1,p1))");
+    }
+
+    @Test
+    public void testShowRestore() {
+        analyzeSuccess("SHOW RESTORE FROM `test`;").toSql();
+        analyzeSuccess("SHOW RESTORE FROM test where true;").toSql();
+        analyzeSuccess("SHOW RESTORE;").toSql();
+        analyzeSuccess("SHOW RESTORE WHERE a=1;");
+        analyzeFail("SHOW RESTORE FROM test1;");
+        analyzeFail("SHOW RESTORE FROM `a:test1`;");
     }
 
 }

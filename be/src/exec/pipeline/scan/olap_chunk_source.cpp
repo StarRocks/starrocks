@@ -360,10 +360,8 @@ void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
     const TQueryOptions& query_options = _runtime_state->query_options();
     if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::INSERT_QUERY) {
         size_t bytes_usage = chunk->bytes_usage();
-        _runtime_state->update_num_rows_load_total(num_rows);
-        _runtime_state->update_num_bytes_load_total(bytes_usage);
-        StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
-        StarRocksMetrics::instance()->load_bytes_total.increment(bytes_usage);
+        _runtime_state->update_num_rows_load_from_source(num_rows);
+        _runtime_state->update_num_bytes_load_from_source(bytes_usage);
     }
 
     // Update local counters.

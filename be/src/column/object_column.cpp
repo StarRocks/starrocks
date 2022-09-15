@@ -16,7 +16,7 @@ template <typename T>
 size_t ObjectColumn<T>::byte_size(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     size_t byte_size = 0;
-    for (int i = 0; i < size; ++i) {
+    for (size_t i = 0; i < size; ++i) {
         byte_size += _pool[from + i].serialize_size();
     }
     return byte_size;
@@ -36,7 +36,7 @@ void ObjectColumn<T>::assign(size_t n, size_t idx) {
     _pool.resize(1);
     _pool.reserve(n);
 
-    for (int i = 1; i < n; ++i) {
+    for (size_t i = 1; i < n; ++i) {
         append(&_pool[0]);
     }
 
@@ -58,7 +58,7 @@ void ObjectColumn<T>::append(T&& object) {
 template <typename T>
 void ObjectColumn<T>::remove_first_n_values(size_t count) {
     size_t remain_size = _pool.size() - count;
-    for (int i = 0; i < remain_size; ++i) {
+    for (size_t i = 0; i < remain_size; ++i) {
         _pool[i] = std::move(_pool[count + i]);
     }
 
@@ -69,7 +69,7 @@ void ObjectColumn<T>::remove_first_n_values(size_t count) {
 template <typename T>
 void ObjectColumn<T>::append(const Column& src, size_t offset, size_t count) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
-    for (int i = offset; i < count + offset; ++i) {
+    for (size_t i = offset; i < count + offset; ++i) {
         append(obj_col.get_object(i));
     }
 }
@@ -78,7 +78,7 @@ template <typename T>
 void ObjectColumn<T>::append_selective(const starrocks::vectorized::Column& src, const uint32_t* indexes, uint32_t from,
                                        uint32_t size) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
-    for (int j = 0; j < size; ++j) {
+    for (uint32_t j = 0; j < size; ++j) {
         append(obj_col.get_object(indexes[from + j]));
     }
 };
@@ -87,7 +87,7 @@ template <typename T>
 void ObjectColumn<T>::append_value_multiple_times(const starrocks::vectorized::Column& src, uint32_t index,
                                                   uint32_t size) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
-    for (int j = 0; j < size; ++j) {
+    for (uint32_t j = 0; j < size; ++j) {
         append(obj_col.get_object(index));
     }
 };
@@ -108,7 +108,7 @@ void ObjectColumn<T>::append_value_multiple_times(const void* value, size_t coun
     const Slice* slice = reinterpret_cast<const Slice*>(value);
     _pool.reserve(_pool.size() + count);
 
-    for (int i = 0; i < count; ++i) {
+    for (size_t i = 0; i < count; ++i) {
         _pool.emplace_back(*reinterpret_cast<T*>(slice->data));
     }
 
@@ -123,7 +123,7 @@ void ObjectColumn<T>::append_default() {
 
 template <typename T>
 void ObjectColumn<T>::append_default(size_t count) {
-    for (int i = 0; i < count; ++i) {
+    for (size_t i = 0; i < count; ++i) {
         append_default();
     }
 }
@@ -197,7 +197,7 @@ size_t ObjectColumn<T>::filter_range(const Column::Filter& filter, size_t from, 
     }
     DCHECK_LE(new_sz, to);
     if (new_sz < to) {
-        for (int i = to; i < old_sz; i++) {
+        for (size_t i = to; i < old_sz; i++) {
             std::swap(_pool[new_sz], _pool[i]);
             new_sz++;
         }
@@ -216,7 +216,7 @@ int ObjectColumn<T>::compare_at(size_t left, size_t right, const starrocks::vect
 template <typename T>
 void ObjectColumn<T>::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     std::string s;
-    for (int i = from; i < to; ++i) {
+    for (uint32_t i = from; i < to; ++i) {
         s.resize(_pool[i].serialize_size());
         int32_t size = _pool[i].serialize(reinterpret_cast<uint8_t*>(s.data()));
         hash[i] = HashUtil::fnv_hash(s.data(), size, hash[i]);
@@ -248,7 +248,7 @@ void ObjectColumn<T>::_build_slices() const {
     // FIXME(kks): bitmap itself compress is more effective than LZ4 compress?
     // Do we really need compress bitmap here?
     if constexpr (std::is_same_v<T, BitmapValue>) {
-        for (int i = 0; i < _pool.size(); ++i) {
+        for (size_t i = 0; i < _pool.size(); ++i) {
             _pool[i].compress();
         }
     }
@@ -257,8 +257,8 @@ void ObjectColumn<T>::_build_slices() const {
     _buffer.resize(size);
     _slices.reserve(_pool.size());
     size_t old_size = 0;
-    for (int i = 0; i < _pool.size(); ++i) {
-        int32_t slice_size = _pool[i].serialize(_buffer.data() + old_size);
+    for (size_t i = 0; i < _pool.size(); ++i) {
+        size_t slice_size = _pool[i].serialize(_buffer.data() + old_size);
         _slices.emplace_back(Slice(_buffer.data() + old_size, slice_size));
         old_size += slice_size;
     }

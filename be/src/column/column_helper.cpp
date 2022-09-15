@@ -6,6 +6,7 @@
 
 #include "column/array_column.h"
 #include "column/json_column.h"
+#include "column/map_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
@@ -227,6 +228,11 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         auto offsets = UInt32Column::create(size);
         auto data = create_column(type_desc.children[0], true, is_const, size);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
+    } else if (type_desc.type == TYPE_MAP) {
+        auto offsets = UInt32Column ::create(size);
+        auto keys = create_column(type_desc.children[0], true, is_const, size);
+        auto values = create_column(type_desc.children[1], true, is_const, size);
+        p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
     } else {
         p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc, size);
     }
