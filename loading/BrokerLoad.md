@@ -4,7 +4,7 @@ StarRocks 提供基于 MySQL 协议的 Broker Load 导入方式，帮助您从 H
 
 Broker Load 是一种异步的导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句或者 curl 命令来查看导入作业的结果。
 
-Broker Load 支持一次导入多个数据文件。另外，Broker Load 支持在导入过程中做数据的转换，具体请参见[导入过程中实现数据转换](https://docs.starrocks.com/zh-cn/main/loading/Etl_in_loading)。
+Broker Load 支持一次导入多个数据文件。另外，Broker Load 支持在导入过程中做数据的转换，具体请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)。
 
 ## 背景信息
 
@@ -59,6 +59,7 @@ Broker Load 支持从如下外部存储系统导入数据：
 #### 数据样例
 
 1. 在 StarRocks 数据库 `test_db` 中创建 StarRocks 表。
+
    a. 创建一张名为 `table1` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
 
    ```SQL
@@ -97,7 +98,7 @@ Broker Load 支持从如下外部存储系统导入数据：
    4,Julia,25
    ```
 
-   b. 创建一个名为 `file2.csv` 的数据文件。文件一共包含两列，分别代表城市名称和城市 ID，如下所示：
+   b. 创建一个名为 `file2.csv` 的数据文件。文件一共包含两列，分别代表城市 ID 和城市名称，如下所示：
 
    ```Plain
    200,'北京'
@@ -294,8 +295,8 @@ curl --location-trusted -u root: \
 
 | **参数**    | **说明**                                                     |
 | ----------- | ------------------------------------------------------------ |
-| dbName      | 数据导入的目的端数据库的名称。                               |
-| tblNames    | 数据导入的目的端 StarRocks 表的名称。                        |
+| dbName      | 目标 StarRocks 表所在的数据库的名称。                               |
+| tblNames    | 目标 StarRocks 表的名称。                        |
 | label       | 导入作业的标签。                                             |
 | state       | 导入作业的状态，包括：<ul><li>`PENDING`：导入作业正在等待执行中。</li><li>`LOADING`：导入作业正在执行中。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul>请参见[异步导入](/loading/Loading_intro.md#异步导入)。 |
 | failMsg     | 导入作业的失败原因。当导入作业的状态为`PENDING`，`LOADING`或`FINISHED`时，该参数值为`NULL`。当导入作业的状态为`CANCELLED`时，该参数值包括 `type` 和 `msg` 两部分：<ul><li>`type` 包括如下取值：</li><ul><li>`USER_CANCEL`：导入作业被手动取消。</li><li>`ETL_SUBMIT_FAIL`：导入任务提交失败。</li><li>`ETL-QUALITY-UNSATISFIED`：数据质量不合格，即导入作业的错误数据率超过了 `max-filter-ratio`。</li><li>`LOAD-RUN-FAIL`：导入作业在 `LOADING` 状态失败。</li><li>`TIMEOUT`：导入作业未在允许的超时时间内完成。</li><li>`UNKNOWN`：未知的导入错误。</li></ul><li>`msg` 显示有关失败原因的详细信息。</li></ul> |
@@ -333,7 +334,7 @@ WHERE LABEL = "label";
 
     可以使用如下公式计算单个子任务的实例总数：
 
-    `单个子任务``的实例总数 = min（``单个子任务``待导入数据量的总大小/min_bytes_per_broker_scanner，max_broker_concurrency，load_parallel_instance_num x BE 总数）`
+    单个子任务的实例总数 = min（单个子任务待导入数据量的总大小/`min_bytes_per_broker_scanner`，`max_broker_concurrency`，`load_parallel_instance_num` x BE 总数）
 
 一般情况下，一个导入作业只有一个 `data_desc`，只会拆分成一个子任务，子任务会拆分成与 BE 总数相等的实例。
 
