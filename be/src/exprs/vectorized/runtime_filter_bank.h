@@ -127,7 +127,6 @@ public:
     void set_probe_plan_node_id(TPlanNodeId id) { _probe_plan_node_id = id; }
     const TRuntimeFilterBuildJoinMode::type join_mode() const { return _join_mode; };
     const std::vector<int32_t>* bucketseq_to_partition() const { return &_bucketseq_to_partition; }
-    const std::vector<SlotId>* partition_by_expr_ids() const { return &_partition_by_expr_ids; }
     const std::vector<ExprContext*>* partition_by_expr_contexts() const { return &_partition_by_exprs_contexts; }
 
 private:
@@ -149,7 +148,6 @@ private:
     TRuntimeFilterBuildJoinMode::type _join_mode;
     std::vector<int32_t> _bucketseq_to_partition;
     std::vector<ExprContext*> _partition_by_exprs_contexts;
-    std::vector<SlotId> _partition_by_expr_ids;
 };
 
 // RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.

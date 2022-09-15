@@ -238,8 +238,7 @@ public class RuntimeFilterDescription {
 
     // Only use partition_by_exprs when the grf is remote and joinMode is partitioned.
     private boolean isCanUsePartitionByExprs() {
-        return hasRemoteTargets && joinMode != JoinNode.DistributionMode.BROADCAST
-                && joinMode != JoinNode.DistributionMode.COLOCATE;
+        return hasRemoteTargets && joinMode != JoinNode.DistributionMode.BROADCAST;
     }
 
     public String toExplainString(int probeNodeId) {
