@@ -27,7 +27,6 @@ import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
-import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
@@ -286,7 +285,7 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_RESTORE_JOB: {
-                data = RestoreJob.read(in);
+                data = AbstractJob.read(in);
                 isRead = true;
                 break;
             }
