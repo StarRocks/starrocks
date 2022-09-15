@@ -11,6 +11,6 @@
   "MESSAGES": {
     "success": "All OK",
     "failure": "Add type in the title of the pull request. [BugFix], [Enhancement], [Feature], [Refactor], [UT], [Doc], [Tool]",
-    "notice": ""
+    "notice": "Example: [BugFix] Fix some implicit conversion."
   }
 }
