@@ -2,7 +2,6 @@
 
 #include "storage/lake/tablet_writer.h"
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include "column/chunk.h"
@@ -12,7 +11,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
-#include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/location_provider.h"
@@ -35,7 +33,6 @@ using VChunk = starrocks::vectorized::Chunk;
 class DuplicateTabletWriterTest : public testing::Test {
 public:
     DuplicateTabletWriterTest() {
-        _mem_tracker = std::make_unique<MemTracker>(-1);
         _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
         _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
@@ -84,7 +81,6 @@ public:
 protected:
     constexpr static const char* const kTestGroupPath = "test_lake_tablet_writer";
 
-    std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
@@ -136,10 +132,10 @@ TEST_F(DuplicateTabletWriterTest, test_write_success) {
     writer->close();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(_mem_tracker.get(), fs, fmt::format("{}/{}", kTestGroupPath, files[0]), 0,
-                                             _tablet_schema.get()));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(_mem_tracker.get(), fs, fmt::format("{}/{}", kTestGroupPath, files[1]), 1,
-                                             _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg0,
+                    Segment::open(fs, fmt::format("{}/{}", kTestGroupPath, files[0]), 0, _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg1,
+                    Segment::open(fs, fmt::format("{}/{}", kTestGroupPath, files[1]), 1, _tablet_schema.get()));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;

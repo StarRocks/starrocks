@@ -2,10 +2,8 @@
 
 #include "storage/lake/delta_writer.h"
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <random>
 
 #include "column/chunk.h"
@@ -185,8 +183,8 @@ TEST_F(DeltaWriterTest, test_write) {
     auto path0 = fmt::format("{}/{}", kTestGroupPath, txnlog->op_write().rowset().segments(0));
     auto path1 = fmt::format("{}/{}", kTestGroupPath, txnlog->op_write().rowset().segments(1));
 
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(_mem_tracker.get(), fs, path0, 0, _tablet_schema.get()));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(_mem_tracker.get(), fs, path1, 1, _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, path0, 0, _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, path1, 1, _tablet_schema.get()));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;

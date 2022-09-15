@@ -50,15 +50,17 @@ public class AlterSystemStmtAnalyzerTest {
 
     @Test(expected = SemanticException.class)
     public void testVisitModifyBackendHostClauseException() {
-        AlterSystemStmtAnalyzerVisitor visitor = new AlterSystemStmtAnalyzerVisitor();
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("test","127.0.0.1");
+        AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
+                new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
+        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.2", "127.0.0.1");
         visitor.visitModifyBackendHostClause(clause, null);
     }
 
     @Test(expected = SemanticException.class)
     public void testVisitModifyFrontendHostClauseException() {
-        AlterSystemStmtAnalyzerVisitor visitor = new AlterSystemStmtAnalyzerVisitor();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test","127.0.0.1");
+        AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
+                new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.2", "127.0.0.1");
         visitor.visitModifyFrontendHostClause(clause, null);
     }
 }
