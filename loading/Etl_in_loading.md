@@ -38,7 +38,7 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
 1. 在 `test_db` 的数据库中创建 StarRocks 表。
 
-   a. 创建一张名为 `table1` 的表，包含 `event_date`、`event_type` 和 `user_id` 三列，如下所示：
+   a. 创建一张名为 `table1` 的表，包含 `user_id`、`event_date` 和 `event_type` 三列，如下所示：
 
    ```SQL
    MySQL [test_db]> CREATE TABLE table1
@@ -65,7 +65,7 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
 2. 在本地文件系统中创建数据文件。
 
-   a. 创建一个名为 `file1.csv` 的数据文件，文件一共包含四列，分别代表事件日期、用户性别、事件日期和事件类型，如下所示：
+   a. 创建一个名为 `file1.csv` 的数据文件，文件一共包含四列，分别代表用户 ID、用户性别、事件日期和事件类型，如下所示：
 
    ```Plain
    354,female,2020-05-20,1
@@ -83,7 +83,7 @@ StarRocks 支持在导入数据的过程中实现数据转换。
    2020-05-23
    ```
 
-3. 把 `file1.csv` 和 `file2.csv` 文件上传到 HDFS 集群的 `/user/starrocks/data/input/` 路径下，并把 `file1.csv` 和 `file2.csv` 文件的数据分别传入 Apache Kafka® 集群的 `topic1` 和 `topic2` 中。
+3. 把 `file1.csv` 和 `file2.csv` 文件上传到 HDFS 集群的 `/user/starrocks/data/input/` 路径下，并把 `file1.csv` 和 `file2.csv` 文件中的数据分别上传到 Apache Kafka® 集群的 `topic1` 和 `topic2` 中。
 
 ## 跳过不需要导入的列
 
