@@ -195,8 +195,10 @@ public class IcebergFileStats {
         }
         ImmutableMap.Builder<Integer, Object> map = ImmutableMap.builder();
         idToMetricMap.forEach((id, value) -> {
-            Type.PrimitiveType type = idToTypeMapping.get(id);
-            map.put(id, Conversions.fromByteBuffer(type, value));
+            if (idToTypeMapping.containsKey(id)) {
+                Type.PrimitiveType type = idToTypeMapping.get(id);
+                map.put(id, Conversions.fromByteBuffer(type, value));
+            }
         });
         return map.build();
     }
