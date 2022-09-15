@@ -92,7 +92,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
     102,Rose,100
     ```
 
-   b. 把 `example1.csv` 文件上传到 Kafka 集群的 `topic1` 中。
+   b. 把 `example1.csv` 文件中的数据上传到 Kafka 集群的 `topic1` 中。
 
 #### 导入数据
 
@@ -248,7 +248,7 @@ MySQL [test_db]> SELECT * FROM table1;
    101,Jack,100
    ```
 
-   b. 把 `example2.csv` 文件上传到 Kafka 集群的 `topic2` 中。
+   b. 把 `example2.csv` 文件中的数据上传到 Kafka 集群的 `topic2` 中。
 
 #### 导入数据
 
@@ -355,7 +355,7 @@ MySQL [test_db]> SELECT * FROM table2;
    103,Stan,80,0
    ```
 
-   b. 把 `example3.csv` 文件上传到 Kafka 集群的 `topic3` 中。
+   b. 把 `example3.csv` 文件中的数据上传到 Kafka 集群的 `topic3` 中。
 
 #### 导入数据
 
@@ -393,7 +393,7 @@ MySQL [test_db]> SELECT * FROM table2;
 
   ```SQL
   CREATE ROUTINE LOAD test_db.table3 ON table3
-  COLUMNS(id, name, score, __op)
+  COLUMNS(id, name, score, temp, __op = 'temp')
   PROPERTIES
   (
       "desired_concurrent_number" = "3",
@@ -465,7 +465,7 @@ MySQL [test_db]> SELECT * FROM table3;
    103,Alice
    ```
 
-   b. 把 `example4.csv` 文件上传到 Kafka 集群的 `topic4` 中。
+   b. 把 `example4.csv` 文件中的数据上传到 Kafka 集群的 `topic4` 中。
 
 ### 导入数据
 
