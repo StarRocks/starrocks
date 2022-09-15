@@ -341,14 +341,14 @@ public class StmtExecutor {
             // execPlan is the output of new planner
             ExecPlan execPlan = null;
             boolean execPlanBuildByNewPlanner = false;
+            // NOTE: only handle single view update
+            MaterializedView relatedView = null;
 
             // Entrance to the new planner
             if (StatementPlanner.supportedByNewPlanner(parsedStmt)) {
                 try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
                     redirectStatus = parsedStmt.getRedirectStatus();
 
-                    // NOTE: only handle single view update
-                    MaterializedView relatedView = null;
 
                     // Check if contains realtime views
                     if (parsedStmt instanceof InsertStmt) {
@@ -494,7 +494,7 @@ public class StmtExecutor {
                 }
             } else if (parsedStmt instanceof DmlStmt) {
                 try {
-                    handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
+                    handleDMLStmt(execPlan, (DmlStmt) parsedStmt, relatedView);
                     if (context.getSessionVariable().isReportSucc()) {
                         writeProfile(beginTimeInNanoSecond);
                     }
@@ -1199,6 +1199,10 @@ public class StmtExecutor {
     }
 
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+        handleDMLStmt(execPlan, stmt, null);
+    }
+
+    public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt, MaterializedView view) throws Exception {
         if (stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan));
             return;
@@ -1229,7 +1233,7 @@ public class StmtExecutor {
 
         MetaUtils.normalizationTableName(context, stmt.getTableName());
         Database database = MetaUtils.getDatabase(context, stmt.getTableName());
-        Table targetTable = MetaUtils.getTable(context, stmt.getTableName());
+        Table targetTable = view == null ? MetaUtils.getTable(context, stmt.getTableName()) : view;
 
         String label = DebugUtil.printId(context.getExecutionId());
         if (stmt instanceof InsertStmt) {

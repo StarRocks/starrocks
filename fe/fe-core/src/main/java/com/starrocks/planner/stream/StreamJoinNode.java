@@ -22,7 +22,7 @@ public class StreamJoinNode extends JoinNode {
 
     public StreamJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
                           List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
-        super("STREAM JOIN", id, outer, inner, JoinOperator.INNER_JOIN, eqJoinConjuncts, otherJoinConjuncts);
+        super("StreamJoin", id, outer, inner, JoinOperator.INNER_JOIN, eqJoinConjuncts, otherJoinConjuncts);
     }
 
     @Override
