@@ -166,7 +166,7 @@ avgRowSize=95.0
 numNodes=0
 cardinality: 112500000
 probe runtime filters:
-- filter_id = 0, probe_expr = (10: o_custkey), partition_exprs = (10: o_custkey)
+- filter_id = 0, probe_expr = (10: o_custkey)
 column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.125E8] ESTIMATE
 * o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
