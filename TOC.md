@@ -326,9 +326,9 @@
       + JSON 查询和处理函数
         + [箭头函数](/sql-reference/sql-functions/json-functions/json-processing-functions/arrow-function.md)
         + [JSON 类型转换](/sql-reference/sql-functions/json-functions/json-processing-functions/cast-from-or-to-json.md)
-        + [get_json_double](/sql-reference/sql-functions/json-functions/get_json_double.md)
-        + [get_json_int](/sql-reference/sql-functions/json-functions/get_json_int.md)
-        + [get_json_string](/sql-reference/sql-functions/json-functions/get_json_string.md)
+        + [get_json_double](/sql-reference/sql-functions/json-functions/json-processing-functions/get_json_double.md)
+        + [get_json_int](/sql-reference/sql-functions/json-functions/json-processing-functions/get_json_int.md)
+        + [get_json_string](/sql-reference/sql-functions/json-functions/json-processing-functions/get_json_string.md)
         + [json_each](/sql-reference/sql-functions/json-functions/json-processing-functions/json_each.md)
         + [json_exist](/sql-reference/sql-functions/json-functions/json-processing-functions/json_exist.md)
         + [json_query](/sql-reference/sql-functions/json-functions/json-processing-functions/json_query.md)
