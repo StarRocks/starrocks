@@ -89,8 +89,8 @@ struct HdfsScannerParams {
     FileSystem* fs = nullptr;
     // The file to scan
     std::string path;
-    // The file size
-    int64_t file_size;
+    // The file size. -1 means unknown.
+    int64_t file_size = -1;
 
     const TupleDescriptor* tuple_desc = nullptr;
 
