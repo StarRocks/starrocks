@@ -2,12 +2,12 @@
 
 #include "exec/pipeline/aggregate/sorted_aggregate_streaming_sink_operator.h"
 
-#include "exec/vectorized/streaming_aggregator.h"
+#include "exec/vectorized/sorted_streaming_aggregator.h"
 
 namespace starrocks::pipeline {
 SortedAggregateStreamingSinkOperator::SortedAggregateStreamingSinkOperator(
         OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-        std::shared_ptr<StreamingAggregator> aggregator)
+        std::shared_ptr<SortedStreamingAggregator> aggregator)
         : Operator(factory, id, "sorted_aggregate_streaming_sink", plan_node_id, driver_sequence),
           _aggregator(std::move(aggregator)) {
     _aggregator->ref();

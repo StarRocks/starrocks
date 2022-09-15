@@ -49,7 +49,7 @@ set(EXEC_FILES
     parquet_builder.cpp
     plain_text_builder.cpp
     vectorized/aggregator.cpp
-    vectorized/streaming_aggregator.cpp
+    vectorized/sorted_streaming_aggregator.cpp
     vectorized/aggregate/aggregate_base_node.cpp
     vectorized/aggregate/aggregate_blocking_node.cpp
     vectorized/aggregate/distinct_blocking_node.cpp

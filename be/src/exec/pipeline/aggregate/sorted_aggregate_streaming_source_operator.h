@@ -9,7 +9,8 @@ namespace starrocks::pipeline {
 class SortedAggregateStreamingSourceOperator : public SourceOperator {
 public:
     SortedAggregateStreamingSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                                           int32_t driver_sequence, std::shared_ptr<StreamingAggregator> aggregator);
+                                           int32_t driver_sequence,
+                                           std::shared_ptr<SortedStreamingAggregator> aggregator);
     ~SortedAggregateStreamingSourceOperator() override = default;
 
     bool has_output() const override;
@@ -23,7 +24,7 @@ public:
 
 private:
     mutable bool _is_finished = false;
-    std::shared_ptr<StreamingAggregator> _aggregator;
+    std::shared_ptr<SortedStreamingAggregator> _aggregator;
 };
 
 class SortedAggregateStreamingSourceOperatorFactory final : public SourceOperatorFactory {

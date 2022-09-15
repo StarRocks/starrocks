@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "exec/vectorized/streaming_aggregator.h"
+#include "exec/vectorized/sorted_streaming_aggregator.h"
 
 #include <cstdint>
 #include <memory>
@@ -219,15 +219,15 @@ private:
     uint8_t* buffer2_ed;
 };
 
-StreamingAggregator::StreamingAggregator(const TPlanNode& tnode) : Aggregator(tnode) {}
+SortedStreamingAggregator::SortedStreamingAggregator(const TPlanNode& tnode) : Aggregator(tnode) {}
 
-StreamingAggregator::~StreamingAggregator() {
+SortedStreamingAggregator::~SortedStreamingAggregator() {
     if (_state) {
         close(_state);
     }
 }
 
-Status StreamingAggregator::streaming_compute_agg_state(size_t chunk_size) {
+Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size) {
     if (chunk_size == 0) {
         return Status::OK();
     }
@@ -386,7 +386,7 @@ Status StreamingAggregator::streaming_compute_agg_state(size_t chunk_size) {
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> StreamingAggregator::pull_eos_chunk() {
+StatusOr<vectorized::ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     auto agg_result_columns = _create_agg_result_columns();
     auto group_by_columns = _last_columns;
 

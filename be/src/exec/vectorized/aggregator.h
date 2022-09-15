@@ -80,7 +80,7 @@ inline uint8_t* RawHashTableIterator::value() {
 }
 
 class Aggregator;
-class StreamingAggregator;
+class SortedStreamingAggregator;
 
 template <class HashMapWithKey>
 struct AllocateState {
@@ -594,7 +594,7 @@ private:
 using AggregatorFactory = AggregatorFactoryBase<Aggregator>;
 using AggregatorFactoryPtr = std::shared_ptr<AggregatorFactory>;
 
-using StreamingAggregatorFactory = AggregatorFactoryBase<StreamingAggregator>;
+using StreamingAggregatorFactory = AggregatorFactoryBase<SortedStreamingAggregator>;
 using StreamingAggregatorFactoryPtr = std::shared_ptr<StreamingAggregatorFactory>;
 
 } // namespace starrocks

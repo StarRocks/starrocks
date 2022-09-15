@@ -255,6 +255,9 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode:
     size_t degree_of_parallelism =
             down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
 
+    // operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators_with_sink,
+    //                                                                             degree_of_parallelism, true);
+
     // shared by sink operator factory and source operator factory
     AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
 

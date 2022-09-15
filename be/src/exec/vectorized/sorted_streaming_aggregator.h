@@ -10,10 +10,10 @@
 
 namespace starrocks {
 struct StateAllocator;
-class StreamingAggregator final : public Aggregator {
+class SortedStreamingAggregator final : public Aggregator {
 public:
-    StreamingAggregator(const TPlanNode& tnode);
-    ~StreamingAggregator();
+    SortedStreamingAggregator(const TPlanNode& tnode);
+    ~SortedStreamingAggregator();
 
     Status streaming_compute_agg_state(size_t chunk_size);
 
