@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.base;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -77,7 +76,6 @@ public class ColumnRefFactory {
     }
 
     public Set<ColumnRefOperator> getColumnRefs(ColumnRefSet columnRefSet) {
-        Preconditions.checkState(!columnRefSet.isEmpty());
         Set<ColumnRefOperator> columnRefOperators = Sets.newHashSet();
         for (int idx : columnRefSet.getColumnIds()) {
             columnRefOperators.add(getColumnRef(idx));

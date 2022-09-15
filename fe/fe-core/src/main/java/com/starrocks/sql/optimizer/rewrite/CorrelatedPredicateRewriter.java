@@ -17,13 +17,14 @@ import java.util.Map;
 /**
  * used to extract distinct expr which only contains inner table column and replace it with a new columnRef.
  * e.g. t1 is inner table, t2 is outer table. correlated predicate is:
- * t1.col1 + t2.col1 = abs(t1.col2) + t2.col1 + concat(t1.col1, t2.col1)
- * The rewriter will extract abs(t1.col2), t2.col1 and build scalarOperator to new columnRef map like:
+ * t1.col1 + t2.col1 = abs(t1.col2) + t2.col1 + concat(t1.col3, t2.col1) + abs(t1.col2)
+ * The rewriter will extract abs(t1.col2), t1.col1, t1.col3 and build scalarOperator to new columnRef map like:
  * t1.col1 : t1.col1
+ * t1.col3 : t1.col3
  * abs(t1.col2) : columnRef1
  *
  * then and rewrite the predicate like:
- * t1.col1 + t2.col1 = columnRef1 + t2.col1 + concat(t1.col1, t2.col1)
+ * t1.col1 + t2.col1 = columnRef1 + t2.col1 + concat(t1.col3, t2.col1) + columnRef1
  */
 public class CorrelatedPredicateRewriter extends BaseScalarOperatorShuttle {
 
