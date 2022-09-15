@@ -139,8 +139,8 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
         OptExpression childOptExpression = vectorAggregationOptExpression;
 
         // exists expression, add project node. agg -> project
-        if (SubqueryUtils.containsExpr(innerRefMap)) {
-            Map<ColumnRefOperator, ScalarOperator> projectMap = SubqueryUtils.updateOutputColumns(
+        if (SubqueryUtils.existNonColumnRef(innerRefMap.values())) {
+            Map<ColumnRefOperator, ScalarOperator> projectMap = SubqueryUtils.generateChildOutColumns(
                     filterOptExpression, innerRefMap, context);
             OptExpression projectOptExpression = new OptExpression(new LogicalProjectOperator(projectMap));
             childOptExpression.getInputs().add(projectOptExpression);

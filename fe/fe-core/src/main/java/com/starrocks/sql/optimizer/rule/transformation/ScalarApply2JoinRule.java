@@ -112,10 +112,10 @@ public class ScalarApply2JoinRule extends TransformationRule {
 
         OptExpression rightChild = input.inputAt(1);
 
-        if (SubqueryUtils.containsExpr(innerRefMap)) {
+        if (SubqueryUtils.existNonColumnRef(innerRefMap.values())) {
             // exists expression, need put it in project node
             rightChild = OptExpression.create(new LogicalProjectOperator(
-                    SubqueryUtils.updateOutputColumns(rightChild, innerRefMap, context)), rightChild);
+                    SubqueryUtils.generateChildOutColumns(rightChild, innerRefMap, context)), rightChild);
         }
 
         // Non-correlated predicates

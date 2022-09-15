@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -139,11 +140,11 @@ public class SubqueryUtils {
         return correlationPredicate.clone().accept(scalarOperatorShuttle, null);
     }
 
-    public static boolean containsExpr(Map<ColumnRefOperator, ScalarOperator> innerRefMap) {
-        return innerRefMap.values().stream().anyMatch(e -> !e.isColumnRef());
+    public static boolean existNonColumnRef(Collection<ScalarOperator> scalarOperators) {
+        return scalarOperators.stream().anyMatch(e -> !e.isColumnRef());
     }
 
-    public static Map<ColumnRefOperator, ScalarOperator> updateOutputColumns(
+    public static Map<ColumnRefOperator, ScalarOperator> generateChildOutColumns(
             OptExpression input, Map<ColumnRefOperator, ScalarOperator> columns, OptimizerContext context) {
         Map<ColumnRefOperator, ScalarOperator> outPutColumns = Maps.newHashMap();
         context.getColumnRefFactory().getColumnRefs(input.getOutputColumns()).stream()

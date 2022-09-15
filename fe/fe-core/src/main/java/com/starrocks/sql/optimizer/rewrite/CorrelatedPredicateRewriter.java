@@ -14,6 +14,17 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * used to extract distinct expr which only contains inner table column and replace it with a new columnRef.
+ * e.g. t1 is inner table, t2 is outer table. correlated predicate is:
+ * t1.col1 + t2.col1 = abs(t1.col2) + t2.col1 + concat(t1.col1, t2.col1)
+ * The rewriter will extract abs(t1.col2), t2.col1 and build scalarOperator to new columnRef map like:
+ * t1.col1 : t1.col1
+ * abs(t1.col2) : columnRef1
+ *
+ * then and rewrite the predicate like:
+ * t1.col1 + t2.col1 = columnRef1 + t2.col1 + concat(t1.col1, t2.col1)
+ */
 public class CorrelatedPredicateRewriter extends BaseScalarOperatorShuttle {
 
     private final ColumnRefSet correlationColSet;

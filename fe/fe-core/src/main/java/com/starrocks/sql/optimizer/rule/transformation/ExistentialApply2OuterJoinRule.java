@@ -261,10 +261,10 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
         rootOptExpression = aggregateOptExpression;
 
         // aggregate project, agg -> project
-        if (SubqueryUtils.containsExpr(innerRefMap)) {
+        if (SubqueryUtils.existNonColumnRef(innerRefMap.values())) {
             // exists expression, need put it in project node
             OptExpression rightChild = input.getInputs().get(1);
-            Map<ColumnRefOperator, ScalarOperator> projectMap = SubqueryUtils.updateOutputColumns(
+            Map<ColumnRefOperator, ScalarOperator> projectMap = SubqueryUtils.generateChildOutColumns(
                     rightChild, innerRefMap, context);
             OptExpression projectOptExpression = OptExpression.create(new LogicalProjectOperator(projectMap));
             rootOptExpression.getInputs().add(projectOptExpression);

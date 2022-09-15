@@ -265,13 +265,13 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             }
 
             // CTE produce project
-            if (SubqueryUtils.containsExpr(corPredRewriter.getColumnRefToExprMap()) ||
-                    SubqueryUtils.containsExpr(inPredRewriter.getColumnRefToExprMap())) {
+            if (SubqueryUtils.existNonColumnRef(corPredRewriter.getColumnRefToExprMap().values()) ||
+                    SubqueryUtils.existNonColumnRef(inPredRewriter.getColumnRefToExprMap().values())) {
                 // has function, need project node
                 Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
                 projectMap.putAll(corPredRewriter.getColumnRefToExprMap());
                 projectMap.putAll(inPredRewriter.getColumnRefToExprMap());
-                projectMap = SubqueryUtils.updateOutputColumns(cteProduceChild, projectMap, context);
+                projectMap = SubqueryUtils.generateChildOutColumns(cteProduceChild, projectMap, context);
 
                 cteProduceChild = OptExpression.create(new LogicalProjectOperator(projectMap), cteProduceChild);
             }
