@@ -3177,7 +3177,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // set comment
         materializedView.setComment(stmt.getComment());
         // set baseTableIds
-        materializedView.setBaseTableIds(stmt.getBaseTableIds());
+        materializedView.setBaseTableInfos(stmt.getBaseTableInfos());
         // set viewDefineSql
         materializedView.setViewDefineSql(stmt.getInlineViewDef());
         // set partitionRefTableExprs
@@ -3329,10 +3329,10 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         if (table instanceof MaterializedView) {
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
-            Set<Long> baseTableIds = ((MaterializedView) table).getBaseTableIds();
-            if (baseTableIds != null) {
-                for (Long baseTableId : baseTableIds) {
-                    OlapTable baseTable = ((OlapTable) db.getTable(baseTableId));
+            List<MaterializedView.BaseTableInfo> baseTableInfos = ((MaterializedView) table).getBaseTableInfos();
+            if (baseTableInfos != null) {
+                for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+                    Table baseTable = baseTableInfo.getTable();
                     if (baseTable != null) {
                         baseTable.removeRelatedMaterializedView(table.getId());
                     }
