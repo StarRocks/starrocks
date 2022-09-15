@@ -2,14 +2,14 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.GrantImpersonateStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.utframe.UtFrameUtils;
@@ -27,6 +27,7 @@ import java.io.FileOutputStream;
 
 public class ImpersonatePrivInfoTest {
     private static final Logger LOG = LogManager.getLogger(ImpersonatePrivInfoTest.class);
+
     @Test
     public void testSerialized() throws Exception {
         UserIdentity harry = new UserIdentity("Harry", "%");
@@ -92,7 +93,7 @@ public class ImpersonatePrivInfoTest {
         auth.grantRole((GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT " + auror + " TO Harry", connectContext));
         // 2.2 grant impersonate to role auror
-        auth.grantImpersonate((GrantImpersonateStmt) UtFrameUtils.parseStmtWithNewParser(
+        auth.grant((GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT Impersonate on Gregory To role " + auror, connectContext));
         // 2.3 verify can impersonate
         Assert.assertTrue(auth.canImpersonate(harry, gregory));

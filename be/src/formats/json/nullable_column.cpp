@@ -130,7 +130,7 @@ static Status add_nullable_column(Column* column, const TypeDescriptor& type_des
 
                 simdjson::ondemand::array arr = value->get_array();
 
-                size_t n = 0;
+                uint32_t n = 0;
                 for (auto a : arr) {
                     simdjson::ondemand::value value = a.value();
                     RETURN_IF_ERROR(add_nullable_column(elems_column.get(), type_desc.children[0], name, &value));

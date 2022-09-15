@@ -58,6 +58,11 @@ public class RandomDistributionInfo extends DistributionInfo {
     }
 
     @Override
+    public void setBucketNum(int bucketNum) {
+        this.bucketNum = bucketNum;
+    }
+
+    @Override
     public String toSql() {
         StringBuilder builder = new StringBuilder();
         builder.append("DISTRIBUTED BY RANDOM BUCKETS ").append(bucketNum);

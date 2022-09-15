@@ -6,12 +6,9 @@ import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
@@ -20,7 +17,6 @@ import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
-import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
@@ -47,7 +43,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
-import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
+import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.BaseViewStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
@@ -58,6 +54,7 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -65,8 +62,10 @@ import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
@@ -82,6 +81,7 @@ import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowResourcesStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
@@ -333,7 +333,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt stmt, ConnectContext session) {
+        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }

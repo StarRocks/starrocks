@@ -21,6 +21,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
 import org.junit.Assert;

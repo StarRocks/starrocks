@@ -248,7 +248,7 @@ terminal String KW_ADD, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ARR
     KW_PLUGIN, KW_PLUGINS,
     KW_PROC, KW_PROPERTIES, KW_PROPERTY, KW_PERCENTILE, KW_PERCENTILE_UNION,
     KW_QUERY, KW_QUOTA,
-    KW_RANDOM, KW_RANGE, KW_READ, KW_RECOVER, KW_REGEXP, KW_RELEASE,
+    KW_RANGE, KW_READ, KW_RECOVER, KW_REGEXP, KW_RELEASE, KW_RENAME,
     KW_REPEATABLE, KW_REPOSITORY, KW_REPOSITORIES, KW_REPLACE, KW_REPLACE_IF_NOT_NULL, KW_RESOURCE, KW_RESOURCES, KW_RESTORE, KW_RETURNS, KW_RESUME, KW_REVOKE,
     KW_RIGHT, KW_ROLE, KW_ROLES, KW_ROLLBACK, KW_ROLLUP, KW_ROUTINE, KW_ROW, KW_ROWS,
     KW_SCHEMA, KW_SCHEMAS, KW_SECOND, KW_SERIALIZABLE, KW_SESSION, KW_SET, KW_SHOW,
@@ -279,7 +279,7 @@ terminal String UNMATCHED_STRING_LITERAL;
 nonterminal List<StatementBase> stmts;
 nonterminal StatementBase stmt, show_stmt, show_param, help_stmt, create_routine_load_stmt, pause_routine_load_stmt, resume_routine_load_stmt, stop_routine_load_stmt,
     show_routine_load_stmt, show_routine_load_task_stmt, alter_stmt,
-    drop_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt,
+    drop_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt,
     unsupported_stmt,
     import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt;
 
@@ -290,15 +290,9 @@ nonterminal List<ImportColumnDesc> import_column_descs;
 nonterminal opt_with_consistent_snapshot, opt_work, opt_chain, opt_release;
 
 // No return.
-nonterminal opt_full, from_or_in, opt_storage, opt_wild_where,
+nonterminal from_or_in, opt_wild_where,
             charset, equal, transaction_characteristics, isolation_level,
             transaction_access_mode, isolation_types;
-
-// String
-nonterminal UserIdentity user_identity;
-
-// Description of user
-nonterminal UserDesc grant_user;
 
 nonterminal BackupStmt backup_stmt;
 nonterminal RestoreStmt restore_stmt;
@@ -310,10 +304,8 @@ nonterminal Expr arrow_expr;
 nonterminal ArrayList<Expr> expr_list;
 nonterminal ArrayList<Expr> func_arg_list;
 nonterminal ArrayList<Expr> expr_pipe_list;
-nonterminal String opt_table_alias;
 nonterminal ArrayList<String> ident_list;
 nonterminal PartitionNames opt_partition_names, partition_names;
-nonterminal ArrayList<Long> opt_tablet_list, tablet_list;
 nonterminal TableName table_name, opt_table_name;
 nonterminal FunctionName function_name;
 nonterminal Expr where_clause;
@@ -337,11 +329,8 @@ nonterminal AnalyticWindow opt_window_clause;
 nonterminal AnalyticWindow.Type window_type;
 nonterminal AnalyticWindow.Boundary window_boundary;
 nonterminal SlotRef column_ref;
-nonterminal ArrayList<TableRef> base_table_ref_list;
-nonterminal TableRef base_table_ref;
 nonterminal Subquery subquery;
 nonterminal Expr sign_chain_expr;
-nonterminal ArrayList<String> opt_common_hints;
 
 // Set type
 nonterminal SetType option_type, opt_var_type, var_ident_type;
@@ -356,20 +345,12 @@ nonterminal List<SetVar> option_value_list, option_value_list_continued, start_o
 nonterminal Map<String, String> key_value_map, opt_properties;
 nonterminal Long opt_field_length;
 
-nonterminal List<AccessPrivilege> privilege_list;
 nonterminal List<String> string_list;
 nonterminal List<Long> integer_list;
-nonterminal AccessPrivilege privilege_type;
 
 nonterminal LabelName job_label;
-nonterminal BrokerDesc opt_broker;
-nonterminal List<String> opt_col_list;
 nonterminal ColumnSeparator column_separator;
 nonterminal RowDelimiter row_delimiter;
-nonterminal String opt_user_role;
-nonterminal TablePattern tbl_pattern;
-nonterminal ResourcePattern resource_pattern;
-nonterminal String ident_or_star;
 
 // Routine load
 nonterminal ParseNode load_property;
@@ -378,12 +359,12 @@ nonterminal List<ParseNode> opt_load_property_list;
 // Boolean
 nonterminal Boolean opt_read_only;
 
-nonterminal String keyword, ident, ident_or_text, variable_name, text_or_password,
+nonterminal String keyword, ident, ident_or_text, variable_name,
         charset_name_or_default, old_or_new_charset_name_or_default, opt_collate,
         collation_name_or_default, type_func_name_keyword, type_function_name, time_unit;
 
 nonterminal String opt_db;
-nonterminal Boolean opt_if_exists, opt_if_not_exists;
+nonterminal Boolean opt_if_exists;
 
 nonterminal RoutineLoadDataSourceProperties opt_datasource_properties;
 
@@ -494,10 +475,6 @@ stmt ::=
     {: RESULT = new AddSqlBlackListStmt(sql); :}
     | show_stmt:show
     {: RESULT = show; :}
-    | grant_stmt:grant
-    {: RESULT = grant; :}
-    | revoke_stmt:revoke
-    {: RESULT = revoke; :}
     | help_stmt : stmt
     {: RESULT = stmt; :}
     | create_routine_load_stmt : stmt
@@ -581,12 +558,7 @@ sync_stmt ::=
 
 // Create Statement
 create_stmt ::=
-    /* User */
-    KW_CREATE KW_USER opt_if_not_exists:ifNotExists grant_user:user opt_user_role:userRole
-    {:
-        RESULT = new CreateUserStmt(ifNotExists, user, userRole);
-    :}
-    | KW_CREATE opt_read_only:isReadOnly KW_REPOSITORY ident:repoName KW_WITH KW_BROKER ident:brokerName
+    KW_CREATE opt_read_only:isReadOnly KW_REPOSITORY ident:repoName KW_WITH KW_BROKER ident:brokerName
       KW_ON KW_LOCATION STRING_LITERAL:location
       opt_properties:properties
     {:
@@ -597,10 +569,6 @@ create_stmt ::=
       opt_properties:properties
     {:
         RESULT = new CreateRepositoryStmt(isReadOnly, repoName, null, location, properties);
-    :}
-    | KW_CREATE KW_ROLE ident_or_text:role
-    {:
-        RESULT = new CreateRoleStmt(role);
     :}
     | KW_CREATE KW_FILE STRING_LITERAL:fileName opt_db:db KW_PROPERTIES LPAREN key_value_map:properties RPAREN
     {:
@@ -615,69 +583,6 @@ opt_read_only ::=
     | KW_READ KW_ONLY
     {:
         RESULT = true;
-    :}
-    ;
-
-grant_user ::=
-    user_identity:user_id
-    {:
-        /* No password */
-        RESULT = new UserDesc(user_id);
-    :}
-    | user_identity:user_id KW_IDENTIFIED KW_BY STRING_LITERAL:password
-    {:
-        /* plain text password */
-        RESULT = new UserDesc(user_id, password, true);
-    :}
-    | user_identity:user_id KW_IDENTIFIED KW_BY KW_PASSWORD STRING_LITERAL:password
-    {:
-        /* hashed password */
-        RESULT = new UserDesc(user_id, password, false);
-    :}
-    | user_identity:user_id KW_IDENTIFIED KW_WITH IDENT:auth_plugin
-    {:
-        /* with auth plugin */
-        RESULT = new UserDesc(user_id, auth_plugin);
-    :}
-    | user_identity:user_id KW_IDENTIFIED KW_WITH IDENT:auth_plugin KW_AS STRING_LITERAL:auth_string
-    {:
-        /* with auth plugin and auth string, encrypted if auth string is password */
-        RESULT = new UserDesc(user_id, auth_plugin, auth_string, false);
-    :}
-    | user_identity:user_id KW_IDENTIFIED KW_WITH IDENT:auth_plugin KW_BY STRING_LITERAL:auth_string
-    {:
-        /* with auth plugin and auth string, plain text if auth string is password */
-        RESULT = new UserDesc(user_id, auth_plugin, auth_string, true);
-    :}
-    ;
-
-opt_user_role ::=
-    /* Empty */
-    {:
-        RESULT = null;
-    :}
-    | KW_SUPERUSER /* for forward compatibility*/
-    {:
-        RESULT = "superuser";
-    :}
-    | KW_DEFAULT KW_ROLE STRING_LITERAL:role
-    {:
-        RESULT = role;
-    :}
-    ;
-
-user_identity ::=
-    ident_or_text:user
-    {:
-        RESULT = new UserIdentity(user, "%", false);
-    :}
-    | ident_or_text:user AT ident_or_text:host
-    {:
-        RESULT = new UserIdentity(user, host, false);
-    :}
-    | ident_or_text:user AT LBRACKET ident_or_text:host RBRACKET
-    {:
-        RESULT = new UserIdentity(user, host, true);
     :}
     ;
 
@@ -711,38 +616,6 @@ row_delimiter::=
     KW_ROWS KW_TERMINATED KW_BY STRING_LITERAL:delimiter
     {:
         RESULT = new RowDelimiter(delimiter);
-    :}
-    ;
-
-opt_col_list ::=
-    {:
-        RESULT = null;
-    :}
-    | LPAREN ident_list:colList RPAREN
-    {:
-        RESULT = colList;
-    :}
-    ;
-
-opt_broker ::=
-    {:
-        RESULT = null;
-    :}
-    | KW_WITH KW_BROKER
-    {:
-        RESULT = new BrokerDesc(null);
-    :}
-    | KW_WITH KW_BROKER LPAREN key_value_map:properties RPAREN
-    {:
-        RESULT = new BrokerDesc(properties);
-    :}
-    | KW_WITH KW_BROKER ident_or_text:name
-    {:
-        RESULT = new BrokerDesc(name, null);
-    :}
-    | KW_WITH KW_BROKER ident_or_text:name LPAREN key_value_map:properties RPAREN
-    {:
-        RESULT = new BrokerDesc(name, properties);
     :}
     ;
 
@@ -842,93 +715,11 @@ show_routine_load_task_stmt ::=
     :}
     ;
 
-// Grant statement
-grant_stmt ::=
-    KW_GRANT privilege_list:privs KW_ON tbl_pattern:tblPattern KW_TO user_identity:userId
-    {:
-        RESULT = new GrantStmt(userId, null, tblPattern, privs);
-    :}
-    | KW_GRANT privilege_list:privs KW_ON tbl_pattern:tblPattern KW_TO KW_ROLE STRING_LITERAL:role
-    {:
-        RESULT = new GrantStmt(null, role, tblPattern, privs);
-    :}
-    | KW_GRANT privilege_list:privs KW_ON KW_RESOURCE resource_pattern:resourcePattern KW_TO user_identity:userId
-    {:
-        RESULT = new GrantStmt(userId, null, resourcePattern, privs);
-    :}
-    | KW_GRANT privilege_list:privs KW_ON KW_RESOURCE resource_pattern:resourcePattern KW_TO KW_ROLE STRING_LITERAL:role
-    {:
-        RESULT = new GrantStmt(null, role, resourcePattern, privs);
-    :}
-    ;
-
-tbl_pattern ::=
-    ident_or_star:db
-    {:
-        RESULT = new TablePattern(db, "*");
-    :}
-    | ident_or_star:db DOT ident_or_star:tbl
-    {:
-        RESULT = new TablePattern(db, tbl);
-    :}
-    ;
-
-resource_pattern ::=
-    ident_or_star:resourceName
-    {:
-        RESULT = new ResourcePattern(resourceName);
-    :}
-    | STRING_LITERAL:resourceName
-    {:
-        RESULT = new ResourcePattern(resourceName);
-    :}
-    ;
-
-ident_or_star ::=
-    STAR
-    {:
-        RESULT = "*";
-    :}
-    | ident:ident
-    {:
-        RESULT = ident;
-    :}
-    ;
-
-// Revoke statement
-revoke_stmt ::=
-    KW_REVOKE privilege_list:privs KW_ON tbl_pattern:tblPattern KW_FROM user_identity:userId
-    {:
-        RESULT = new RevokeStmt(userId, null, tblPattern, privs);
-    :}
-    | KW_REVOKE privilege_list:privs KW_ON tbl_pattern:tblPattern KW_FROM KW_ROLE STRING_LITERAL:role
-    {:
-        RESULT = new RevokeStmt(null, role, tblPattern, privs);
-    :}
-    | KW_REVOKE privilege_list:privs KW_ON KW_RESOURCE resource_pattern:resourcePattern KW_FROM user_identity:userId
-    {:
-        RESULT = new RevokeStmt(userId, null, resourcePattern, privs);
-    :}
-    | KW_REVOKE privilege_list:privs KW_ON KW_RESOURCE resource_pattern:resourcePattern KW_FROM KW_ROLE STRING_LITERAL:role
-    {:
-        RESULT = new RevokeStmt(null, role, resourcePattern, privs);
-    :}
-    ;
-
 // Drop statement
 drop_stmt ::=
-    /* User */
-    KW_DROP KW_USER user_identity:userId
-    {:
-        RESULT = new DropUserStmt(userId);
-    :}
-    | KW_DROP KW_REPOSITORY ident:repoName
+    KW_DROP KW_REPOSITORY ident:repoName
     {:
         RESULT = new DropRepositoryStmt(repoName);
-    :}
-    | KW_DROP KW_ROLE ident_or_text:role
-    {:
-        RESULT = new DropRoleStmt(role);
     :}
     | KW_DROP KW_FILE STRING_LITERAL:fileName opt_db:dbName KW_PROPERTIES LPAREN key_value_map:properties RPAREN
     {:
@@ -973,16 +764,6 @@ opt_if_exists ::=
     :}
     ;
 
-opt_if_not_exists ::=
-    {:
-        RESULT = false;
-    :}
-    | KW_IF KW_NOT KW_EXISTS
-    {:
-        RESULT = true;
-    :}
-    ;
-
 // Show statement
 show_stmt ::=
     KW_SHOW show_param:stmt
@@ -1009,22 +790,6 @@ show_param ::=
     | KW_SNAPSHOT KW_ON ident:repo opt_wild_where
     {:
         RESULT = new ShowSnapshotStmt(repo, parser.where);
-    :}
-    | KW_ALL KW_GRANTS
-    {:
-        RESULT = new ShowGrantsStmt(null, true);
-    :}
-    | KW_GRANTS
-    {:
-        RESULT = new ShowGrantsStmt(null, false);
-    :}
-    | KW_GRANTS KW_FOR user_identity:userIdent
-    {:
-        RESULT = new ShowGrantsStmt(userIdent, false);
-    :}
-    | KW_ROLES
-    {:
-        RESULT = new ShowRolesStmt();
     :}
     | KW_FILE opt_db:dbName
     {:
@@ -1107,25 +872,9 @@ collation_name_or_default ::=
     :}
     ;
 
-opt_storage ::=
-    /* Empty */
-    | KW_STORAGE
-    ;
-
 from_or_in ::=
     KW_FROM
     | KW_IN
-    ;
-
-opt_full ::=
-    /* empty */
-    {:
-        parser.isVerbose = false;
-    :}
-    | KW_FULL
-    {:
-        parser.isVerbose = true;
-    :}
     ;
 
 opt_wild_where ::=
@@ -1299,34 +1048,12 @@ option_value_no_option_type ::=
     {:
         RESULT = new SetNamesVar(charset, collate);
     :}
-    /* Password */
-    | KW_PASSWORD equal text_or_password:passwd
-    {:
-        RESULT = new SetPassVar(null, passwd);
-    :}
-    | KW_PASSWORD KW_FOR user_identity:userId equal text_or_password:passwd
-    {:
-        RESULT = new SetPassVar(userId, passwd);
-    :}
     ;
 
 variable_name ::=
     ident:name
     {:
         RESULT = name;
-    :}
-    ;
-
-text_or_password ::=
-    STRING_LITERAL:text
-    {:
-        // This is hashed text
-        RESULT = text;
-    :}
-    | KW_PASSWORD LPAREN STRING_LITERAL:passwd RPAREN
-    {:
-        // This is plain text
-        RESULT = new String(MysqlPassword.makeScrambledPassword(passwd));
     :}
     ;
 
@@ -1439,61 +1166,6 @@ type_function_name ::=
     {: RESULT = id; :}
     ;
 
-base_table_ref_list ::=
-  base_table_ref:tbl
-  {:
-    ArrayList<TableRef> list = new ArrayList<TableRef>();
-    list.add(tbl);
-    RESULT = list;
-  :}
-  | base_table_ref_list:list COMMA base_table_ref:tbl
-  {:
-    list.add(tbl);
-    RESULT = list;
-  :}
-  ;
-
-base_table_ref ::=
-    table_name:name opt_partition_names:partitionNames opt_tablet_list:tabletIds opt_table_alias:alias opt_common_hints:commonHints
-    {:
-        RESULT = new TableRef(name, alias, partitionNames, tabletIds, commonHints);
-    :}
-    ;
-
-opt_common_hints ::=
-    COMMENTED_PLAN_HINT_START ident_list:l COMMENTED_PLAN_HINT_END
-    {:
-        RESULT = l;
-    :}
-    | LBRACKET ident_list:l RBRACKET
-    {:
-        RESULT = l;
-    :}
-    |
-    {:
-        RESULT = null;
-    :}
-    ;
-
-opt_table_alias ::=
-    /* empty */
-    {:
-        RESULT = null;
-    :}
-    | ident:alias
-    {:
-        RESULT = alias;
-    :}
-    | KW_AS ident:alias
-    {:
-        RESULT = alias;
-    :}
-    | EQUAL ident:alias
-    {:
-        RESULT = alias;
-    :}
-    ;
-
 opt_partition_names ::=
     /* empty */
     {:
@@ -1553,17 +1225,6 @@ partition_names ::=
     | KW_TEMPORARY KW_PARTITION STRING_LITERAL:partName
     {:
         RESULT = new PartitionNames(true, Lists.newArrayList(partName));
-    :}
-    ;
-
-opt_tablet_list ::=
-    /* empty */
-    {:
-        RESULT = null;
-    :}
-    | tablet_list:tabletList
-    {:
-        RESULT = tabletList;
     :}
     ;
 
@@ -2331,32 +1992,6 @@ column_ref ::=
   {: RESULT = new SlotRef(new TableName(db, tbl), col); :}
   ;
 
-privilege_type ::=
-    ident:name
-    {:
-        RESULT = AccessPrivilege.fromName(name);
-        if (RESULT == null) {
-            throw new AnalysisException("Unknown privilege type " + name);
-        }
-    :}
-    | KW_ALL:id
-    {:
-        RESULT = AccessPrivilege.ALL;
-    :}
-    ;
-
-privilege_list ::=
-    privilege_list:l COMMA privilege_type:priv
-    {:
-        l.add(priv);
-        RESULT = l;
-    :}
-    | privilege_type:priv
-    {:
-        RESULT = Lists.newArrayList(priv);
-    :}
-    ;
-
 string_list ::=
     string_list:l COMMA STRING_LITERAL:item
     {:
@@ -2616,8 +2251,6 @@ keyword ::=
     | KW_QUERY:id
     {: RESULT = id; :}
     | KW_QUOTA:id
-    {: RESULT = id; :}
-    | KW_RANDOM:id
     {: RESULT = id; :}
     | KW_RECOVER:id
     {: RESULT = id; :}

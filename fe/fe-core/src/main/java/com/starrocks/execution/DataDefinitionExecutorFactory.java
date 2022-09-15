@@ -14,23 +14,17 @@ import com.starrocks.analysis.CreateFileStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateRepositoryStmt;
-import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
-import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DropFileStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropRepositoryStmt;
-import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropUserStmt;
-import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
-import com.starrocks.analysis.RevokeStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
@@ -60,22 +54,26 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.ast.GrantImpersonateStmt;
+import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
-import com.starrocks.sql.ast.RevokeImpersonateStmt;
+import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
@@ -111,10 +109,8 @@ public class DataDefinitionExecutorFactory {
                     .put(DropUserStmt.class, new DropUserExecutor())
                     .put(RevokeRoleStmt.class, new RevokeRoleExecutor())
                     .put(GrantRoleStmt.class, new GrantRoleExecutor())
-                    .put(GrantStmt.class, new GrantExecutor())
-                    .put(GrantImpersonateStmt.class, new GrantImpersonateExecutor())
-                    .put(RevokeStmt.class, new RevokeExecutor())
-                    .put(RevokeImpersonateStmt.class, new RevokeImpersonateExecutor())
+                    .put(GrantPrivilegeStmt.class, new GrantExecutor())
+                    .put(RevokePrivilegeStmt.class, new RevokeExecutor())
                     .put(CreateRoleStmt.class, new CreateRoleExecutor())
                     .put(DropRoleStmt.class, new DropRoleExecutor())
                     .put(SetUserPropertyStmt.class, new SetUserPropertyExecutor())

@@ -18,14 +18,11 @@ import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -47,10 +44,8 @@ import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
-import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowRestoreStmt;
-import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.ShowStmt;
@@ -164,6 +159,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitCreateTableLikeStatement(CreateTableLikeStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -240,10 +239,6 @@ public abstract class AstVisitor<R, C> {
 
 
     public R visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

@@ -22,7 +22,6 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.SetPassVar;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
@@ -34,6 +33,7 @@ import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateUserStmt;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;

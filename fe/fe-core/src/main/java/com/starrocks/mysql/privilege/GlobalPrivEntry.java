@@ -21,13 +21,14 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -175,6 +176,8 @@ public class GlobalPrivEntry extends PrivEntry {
         if (privSet.isEmpty()) {
             return null;
         }
-        return new GrantStmt(getUserIdent(), new TablePattern("*", "*"), privSet).toSql();
+        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "TABLE", getUserIdent());
+        stmt.setAnalysedTable(privSet, new TablePattern("*", "*"));
+        return AST2SQL.toString(stmt);
     }
 }

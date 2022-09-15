@@ -29,6 +29,7 @@ import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.io.DataInput;
@@ -63,9 +64,10 @@ public class HashDistributionDesc extends DistributionDesc {
 
     @Override
     public void analyze(Set<String> cols) {
-        if (numBucket <= 0) {
+        if (numBucket < 0) {
             throw new SemanticException("Number of hash distribution is zero.");
         }
+
         if (distributionColumnNames == null || distributionColumnNames.size() == 0) {
             throw new SemanticException("Number of hash column is zero.");
         }
