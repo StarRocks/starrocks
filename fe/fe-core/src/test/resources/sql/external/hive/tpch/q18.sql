@@ -169,7 +169,7 @@ OutPut Exchange Id: 19
 1:EXCHANGE
 cardinality: 600037902
 probe runtime filters:
-- filter_id = 2, probe_expr = (18: l_orderkey), partition_exprs = (18: l_orderkey)
+- filter_id = 2, probe_expr = (18: l_orderkey)
 
 PLAN FRAGMENT 2(F06)
 
@@ -282,7 +282,7 @@ avgRowSize=16.0
 numNodes=0
 cardinality: 600037902
 probe runtime filters:
-- filter_id = 2, probe_expr = (18: l_orderkey), partition_exprs = (18: l_orderkey)
+- filter_id = 2, probe_expr = (18: l_orderkey)
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
