@@ -22,18 +22,8 @@ NULL
 
 
 # UDF JSON_AGG
-#### 功能：
-用于返回选中字段一作为key，字段二作为value的聚合后的json。
-#### 语法：
-```
-json_agg(columnA, columnB)
-```
-#### 参数说明：
- * columnA: 作为key的列
- * columnB: 作为value的列
-#### 返回值说明
-   返回columnA列的值作为key，columnB的列作为value，且只保留key不为null，相同key的value值会被覆盖的json字符串。
-#### 函数创建：
+
+add two parameter
 ```
 CREATE AGGREGATE FUNCTION json_agg(String, String)
 RETURNS string
@@ -43,7 +33,7 @@ properties (
 	"file" = "http://$HTTP_HOST:$PORT/xxx.jar"
 );
 ```
-#### 示例：
+#### usage:
 ```
 mysql>select db_udf.json_agg(columnA, columnB)
 >     from (
