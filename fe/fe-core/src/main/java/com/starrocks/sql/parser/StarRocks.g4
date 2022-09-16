@@ -182,6 +182,9 @@ statement
     | restoreStatement
     | showRestoreStatement
 
+    // Snapshot Satement
+    | showSnapshotStatement
+
     // Other statement
     | killStatement
     | setUserPropertyStatement
@@ -1292,6 +1295,12 @@ restoreStatement
 
 showRestoreStatement
     : SHOW RESTORE ((FROM | IN) identifier)? (WHERE where=expression)?
+    ;
+
+// ------------------------------------------- Snapshot Statement ------------------------------------------------------
+showSnapshotStatement
+    : SHOW SNAPSHOT ON identifier
+    (WHERE expression)?
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------
