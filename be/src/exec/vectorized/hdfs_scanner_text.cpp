@@ -59,55 +59,40 @@ Status HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
 }
 
 Status HdfsScannerCSVReader::next_record(Record* record) {
-    if (_should_stop_scan) {
-        return Status::EndOfFile("Should stop for this reader!");
+    if (_remain_length == 0) {
+        return Status::EndOfFile("");
     }
-    return CSVReader::next_record(record);
+    Status st = CSVReader::next_record(record);
+    _remain_length -= std::min(_remain_length, record->size + _row_delimiter_length);
+    return st;
 }
 
 Status HdfsScannerCSVReader::_fill_buffer() {
     if (_should_stop_scan || _offset >= _file_length) {
-        return Status::EndOfFile("HdfsScannerCSVReader");
+        return Status::EndOfFile("");
     }
 
     DCHECK(_buff.free_space() > 0);
-    Slice s;
-    if (_remain_length == 0) {
-        s = Slice(_buff.limit(), _buff.free_space());
-    } else {
-        size_t slice_len = _remain_length;
-        s = Slice(_buff.limit(), std::min(_buff.free_space(), slice_len));
-    }
+    Slice s = Slice(_buff.limit(), _buff.free_space());
+
     // It's very critical to call `read` here, because underneath of RandomAccessFile
     // maybe its a SequenceFile because we support to read compressed text file.
     // For uncompressed text file, we can split csv file into chunks and process chunks parallelly.
     // For compressed text file, we only can parse csv file in sequential way.
     ASSIGN_OR_RETURN(s.size, _file->read(s.data, s.size));
     _offset += s.size;
-    _remain_length -= std::min(_remain_length, s.size);
-
     _buff.add_limit(s.size);
-    auto n = _buff.available();
+
     if (s.size == 0) {
-        if (n == 0) {
-            // Has reached the end of file and the buffer is empty.
-            _should_stop_scan = true;
-            LOG(INFO) << "Reach end of file!";
-            return Status::EndOfFile(_file->filename());
-        } else if (n < _row_delimiter_length || _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
+        size_t n = _buff.available();
+        _should_stop_scan = true;
+        if (n >= _row_delimiter_length && _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
             // Has reached the end of file but still no record delimiter found, which
-            // is valid, according the RFC, add the record delimiter ourself.
+            // is valid, according the RFC, add the record delimiter ourself. ONLY IF we have space.
             for (char ch : _row_delimiter) {
                 _buff.append(ch);
             }
         }
-    }
-
-    // For each scan range we always read the first record of next scan range,so _remain_length
-    // may be negative here. Once we have read the first record of next scan range we
-    // should stop scan in the next round.
-    if ((_remain_length == 0 && _buff.find(_row_delimiter, 0) != nullptr)) {
-        _should_stop_scan = true;
     }
 
     return Status::OK();
