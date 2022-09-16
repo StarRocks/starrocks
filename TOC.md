@@ -339,7 +339,8 @@
       + [space](/sql-reference/sql-functions/string-functions/space.md)
       + [parse_url](/sql-reference/sql-functions/string-functions/parse_url.md)
     + JSON 函数
-      + [JSON 函数和运算符](/sql-reference/sql-functions/json-functions/json-functions-and-operators.md)
+      + [JSON 函数概述](/sql-reference/sql-functions/json-functions/json-functions-and-operators.md)
+      + [JSON 运算符](/sql-reference/sql-functions/json-functions/json-operators.md)
       + JSON 构造函数
         + [json_array](/sql-reference/sql-functions/json-functions/json-creation-functions/json_array.md)
         + [json_object](/sql-reference/sql-functions/json-functions/json-creation-functions/json_object.md)
@@ -351,9 +352,8 @@
         + [get_json_int](/sql-reference/sql-functions/json-functions/json-processing-functions/get_json_int.md)
         + [get_json_string](/sql-reference/sql-functions/json-functions/json-processing-functions/get_json_string.md)
         + [json_each](/sql-reference/sql-functions/json-functions/json-processing-functions/json_each.md)
-        + [json_exist](/sql-reference/sql-functions/json-functions/json-processing-functions/json_exist.md)
+        + [json_exists](/sql-reference/sql-functions/json-functions/json-processing-functions/json_exist.md)
         + [json_query](/sql-reference/sql-functions/json-functions/json-processing-functions/json_query.md)
-      + [JSON 运算符](/sql-reference/sql-functions/json-functions/json-operators.md)
     + 模糊/正则匹配函数
       + [like](/sql-reference/sql-functions/like_predicate-functions/like.md)
       + [regexp](/sql-reference/sql-functions/like_predicate-functions/regexp.md)
