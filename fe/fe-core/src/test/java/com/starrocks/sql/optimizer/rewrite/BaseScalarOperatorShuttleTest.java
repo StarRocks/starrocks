@@ -1,3 +1,5 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.ImmutableList;
@@ -51,7 +53,7 @@ class BaseScalarOperatorShuttleTest {
     @Test
     void visitBetweenPredicate() {
         BetweenPredicateOperator operator = new BetweenPredicateOperator(true,
-                new ColumnRefOperator(1, INT, "id", true ),
+                new ColumnRefOperator(1, INT, "id", true),
                 ConstantOperator.TRUE, ConstantOperator.TRUE);
         ScalarOperator newOperator = shuttle.visitBetweenPredicate(operator, null);
         assertEquals(operator, newOperator);
@@ -82,7 +84,7 @@ class BaseScalarOperatorShuttleTest {
     @Test
     void visitLikePredicateOperator() {
         LikePredicateOperator operator = new LikePredicateOperator(
-                new ColumnRefOperator(1, INT, "id", true ),
+                new ColumnRefOperator(1, INT, "id", true),
                 ConstantOperator.TRUE);
         ScalarOperator newOperator = shuttle.visitLikePredicateOperator(operator, null);
         assertEquals(operator, newOperator);
@@ -90,7 +92,7 @@ class BaseScalarOperatorShuttleTest {
 
     @Test
     void visitCastOperator() {
-        CastOperator operator = new CastOperator(INT, new ColumnRefOperator(1, INT, "id", true ));
+        CastOperator operator = new CastOperator(INT, new ColumnRefOperator(1, INT, "id", true));
         ScalarOperator newOperator = shuttle.visitCastOperator(operator, null);
         assertEquals(operator, newOperator);
 
