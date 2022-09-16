@@ -15,6 +15,7 @@ import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowRestoreStmt;
+import com.starrocks.analysis.ShowSnapshotStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
@@ -589,6 +590,12 @@ public class Analyzer {
         @Override
         public Void visitShowRestoreStmt(ShowRestoreStmt statement, ConnectContext context) {
             BackupRestoreAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowSnapshotStmt(ShowSnapshotStmt statement, ConnectContext context) {
+            ShowSnapshotAnalyzer.analyze(statement, context);
             return null;
         }
     }

@@ -996,10 +996,6 @@ show_param ::=
     {:
         RESULT = new ShowExportStmt(db, parser.where, orderByClause, limitClause);
     :}
-    | KW_SNAPSHOT KW_ON ident:repo opt_wild_where
-    {:
-        RESULT = new ShowSnapshotStmt(repo, parser.where);
-    :}
     | KW_ALL KW_GRANTS
     {:
         RESULT = new ShowGrantsStmt(null, true);

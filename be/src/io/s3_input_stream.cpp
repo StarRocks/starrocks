@@ -64,4 +64,8 @@ StatusOr<int64_t> S3InputStream::get_size() {
     return _size;
 }
 
+void S3InputStream::set_size(int64_t value) {
+    _size = value;
+}
+
 } // namespace starrocks::io

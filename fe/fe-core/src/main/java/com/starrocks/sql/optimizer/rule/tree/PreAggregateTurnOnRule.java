@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.sql.optimizer.rule.implementation;
+package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.List;
 import java.util.Map;
@@ -43,11 +44,13 @@ import java.util.stream.Collectors;
  * A cross join cannot turn on PreAggregation, and other types of joins can only be turn on on one side.
  * If both sides are opened, many-to-many join results will appear, leading to errors in the upper aggregation results
  */
-public class PreAggregateTurnOnRule {
+public class PreAggregateTurnOnRule implements TreeRewriteRule {
     private static final PreAggregateVisitor VISITOR = new PreAggregateVisitor();
 
-    public static void tryOpenPreAggregate(OptExpression root) {
+    @Override
+    public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         root.getOp().accept(VISITOR, root, new PreAggregationContext());
+        return root;
     }
 
     private static class PreAggregateVisitor extends OptExpressionVisitor<Void, PreAggregationContext> {
