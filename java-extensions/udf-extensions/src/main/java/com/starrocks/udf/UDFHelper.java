@@ -578,7 +578,7 @@ public class UDFHelper {
     public static Object[] batchCall(Object o, Method method, int batchSize)
             throws Throwable {
         try {
-            Object[] res = new Object[batchSize];
+            Object[] res = (Object[]) Array.newInstance(method.getReturnType(), batchSize);
             for (int i = 0; i < batchSize; ++i) {
                 res[i] = method.invoke(o);
             }
