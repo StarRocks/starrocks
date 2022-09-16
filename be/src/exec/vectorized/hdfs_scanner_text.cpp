@@ -78,7 +78,7 @@ Status HdfsScannerCSVReader::next_record(Record* record) {
 }
 
 Status HdfsScannerCSVReader::_fill_buffer() {
-    if (_should_stop_scan || _offset >= _file_length) {
+    if (_should_stop_scan) {
         return Status::EndOfFile("");
     }
 
