@@ -308,9 +308,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER)
     private boolean enableMultiColumnsOnGlobalRuntimeFilter = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
-    private boolean enableResourceGroup = false;
-
     @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP_V2, alias = ENABLE_RESOURCE_GROUP, show = ENABLE_RESOURCE_GROUP)
     private boolean enableResourceGroup = true;
 
