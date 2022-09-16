@@ -82,6 +82,7 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     auto* param = _pool.add(new HdfsScannerParams());
     param->fs = FileSystem::Default();
     param->path = file;
+    param->file_size = range->file_length;
     param->scan_ranges.emplace_back(range);
     param->tuple_desc = tuple_desc;
     std::vector<int> materialize_index_in_chunk;
