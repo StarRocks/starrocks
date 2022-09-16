@@ -153,6 +153,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitCreateTableLikeStatement(CreateTableLikeStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -229,10 +233,6 @@ public abstract class AstVisitor<R, C> {
 
 
     public R visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

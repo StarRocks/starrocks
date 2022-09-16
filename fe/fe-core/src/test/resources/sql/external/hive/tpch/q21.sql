@@ -147,7 +147,7 @@ OutPut Exchange Id: 28
 1:EXCHANGE
 cardinality: 600037902
 probe runtime filters:
-- filter_id = 4, probe_expr = (37: l_orderkey), partition_exprs = (37: l_orderkey)
+- filter_id = 4, probe_expr = (37: l_orderkey)
 
 PLAN FRAGMENT 3(F12)
 
@@ -337,7 +337,7 @@ avgRowSize=20.0
 numNodes=0
 cardinality: 300018951
 probe runtime filters:
-- filter_id = 2, probe_expr = (54: l_orderkey), partition_exprs = (54: l_orderkey)
+- filter_id = 2, probe_expr = (54: l_orderkey)
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
@@ -366,7 +366,7 @@ avgRowSize=9.0
 numNodes=0
 cardinality: 50000000
 probe runtime filters:
-- filter_id = 3, probe_expr = (24: o_orderkey), partition_exprs = (24: o_orderkey)
+- filter_id = 3, probe_expr = (24: o_orderkey)
 column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 5.0E7] ESTIMATE
 * o_orderstatus-->[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE
@@ -385,7 +385,7 @@ avgRowSize=12.0
 numNodes=0
 cardinality: 600037902
 probe runtime filters:
-- filter_id = 4, probe_expr = (37: l_orderkey), partition_exprs = (37: l_orderkey)
+- filter_id = 4, probe_expr = (37: l_orderkey)
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * l_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE

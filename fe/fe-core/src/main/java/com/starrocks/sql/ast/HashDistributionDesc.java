@@ -44,9 +44,10 @@ public class HashDistributionDesc extends DistributionDesc {
 
     @Override
     public void analyze(Set<String> cols) {
-        if (numBucket <= 0) {
+        if (numBucket < 0) {
             throw new SemanticException("Number of hash distribution is zero.");
         }
+
         if (distributionColumnNames == null || distributionColumnNames.size() == 0) {
             throw new SemanticException("Number of hash column is zero.");
         }

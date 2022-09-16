@@ -67,6 +67,10 @@ public abstract class DistributionInfo implements Writable {
         return "";
     }
 
+    public void setBucketNum(int bucketNum) {
+        throw new NotImplementedException("not implemented");
+    }
+
     public DistributionDesc toDistributionDesc() {
         throw new NotImplementedException();
     }

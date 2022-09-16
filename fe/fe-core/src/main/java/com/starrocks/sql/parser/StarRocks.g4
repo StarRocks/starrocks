@@ -162,18 +162,19 @@ statement
 
     // privilege
     | grantRoleStatement
-    | grantImpersonateStatement
     | revokeRoleStatement
-    | revokeImpersonateStatement
     | executeAsStatement
     | alterUserStatement
     | createUserStatement
     | dropUserStatement
     | showAuthenticationStatement
     | createRoleStatement
+    | grantPrivilegeStatement
+    | revokePrivilegeStatement
     | showRolesStatement
     | showGrantsStatement
     | dropRoleStatement
+
 
     // Backup Restore Satement
     | backupStatement
@@ -547,6 +548,7 @@ alterClause
     //Alter partition clause
     | addPartitionClause
     | dropPartitionClause
+    | distributionClause
     | truncatePartitionClause
     | modifyPartitionClause
     | replacePartitionClause
@@ -656,6 +658,7 @@ rollupRenameClause
 addPartitionClause
     : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties?
     ;
+
 dropPartitionClause
     : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
     ;
@@ -666,6 +669,7 @@ truncatePartitionClause
 
 modifyPartitionClause
     : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
+    | MODIFY PARTITION distributionDesc
     ;
 
 replacePartitionClause
@@ -966,20 +970,61 @@ showWarningStatement
 
 // ------------------------------------------- Privilege Statement -----------------------------------------------------
 
+
+privilegeObjectName
+    : identifierOrString
+    | tablePrivilegeObjectName
+    | user
+    ;
+
+tablePrivilegeObjectName
+    : identifierOrStringOrStar
+    | identifierOrStringOrStar '.' identifierOrStringOrStar
+    ;
+
+identifierOrStringOrStar
+    : ASTERISK_SYMBOL
+    | identifier
+    | string
+    ;
+
+privilegeActionReserved
+    : ADMIN
+    | ALTER
+    | CREATE
+    | DROP
+    | GRANT
+    | LOAD
+    | SELECT
+    ;
+
+privilegeActionList
+    :  privilegeAction (',' privilegeAction)*
+    ;
+
+privilegeAction
+    : privilegeActionReserved
+    | identifier
+    ;
+
+grantPrivilegeStatement
+    : GRANT IMPERSONATE ON user TO ( user | ROLE identifierOrString )                                       #grantImpersonateBrief
+    | GRANT privilegeActionList ON tablePrivilegeObjectName TO (user | ROLE identifierOrString)        #grantTablePrivBrief
+    | GRANT privilegeActionList ON identifier privilegeObjectName TO (user | ROLE identifierOrString)  #grantPrivWithType
+    ;
+
+revokePrivilegeStatement
+    : REVOKE IMPERSONATE ON user FROM ( user | ROLE identifierOrString )                                  #revokeImpersonateBrief
+    | REVOKE privilegeActionList ON tablePrivilegeObjectName FROM (user | ROLE identifierOrString)   #revokeTablePrivBrief
+    | REVOKE privilegeActionList ON identifier privilegeObjectName FROM (user | ROLE identifierOrString) #revokePrivWithType
+    ;
+
 grantRoleStatement
     : GRANT identifierOrString TO user
     ;
 
-grantImpersonateStatement
-    : GRANT IMPERSONATE ON user TO (user | ROLE identifierOrString)
-    ;
-
 revokeRoleStatement
     : REVOKE identifierOrString FROM user
-    ;
-
-revokeImpersonateStatement
-    : REVOKE IMPERSONATE ON user FROM  (user | ROLE identifierOrString)
     ;
 
 executeAsStatement
@@ -1522,8 +1567,14 @@ partitionValue
     : MAXVALUE | string
     ;
 
+distributionClause
+    : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+    | DISTRIBUTED BY HASH identifierList
+    ;
+
 distributionDesc
     : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+    | DISTRIBUTED BY HASH identifierList
     ;
 
 refreshSchemeDesc

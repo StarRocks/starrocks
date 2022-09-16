@@ -163,12 +163,12 @@ OutPut Exchange Id: 25
 |----17:EXCHANGE
 |       cardinality: 1000000
 |       probe runtime filters:
-|       - filter_id = 3, probe_expr = (10: s_suppkey), partition_exprs = (10: s_suppkey)
+|       - filter_id = 3, probe_expr = (10: s_suppkey)
 |
 11:EXCHANGE
 cardinality: 150009476
 probe runtime filters:
-- filter_id = 3, probe_expr = (19: l_suppkey), partition_exprs = (19: l_suppkey)
+- filter_id = 3, probe_expr = (19: l_suppkey)
 - filter_id = 4, probe_expr = (18: l_partkey)
 
 PLAN FRAGMENT 3(F13)
@@ -361,8 +361,8 @@ numNodes=0
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 0, probe_expr = (18: l_partkey)
-- filter_id = 2, probe_expr = (19: l_suppkey), partition_exprs = (19: l_suppkey)
-- filter_id = 3, probe_expr = (19: l_suppkey), partition_exprs = (19: l_suppkey)
+- filter_id = 2, probe_expr = (19: l_suppkey)
+- filter_id = 3, probe_expr = (19: l_suppkey)
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE

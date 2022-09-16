@@ -27,7 +27,6 @@ import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.DataProperty;
@@ -73,6 +72,7 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -1576,9 +1576,8 @@ public class AlterTest {
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
         auth.createUser(createUserStmt);
 
-        String grantUser = "grant ALTER_PRIV on test to testuser";
-        GrantStmt grantUserStmt = (GrantStmt) UtFrameUtils.parseAndAnalyzeStmt(grantUser, starRocksAssert.getCtx());
-        auth.grant(grantUserStmt);
+        String sql = "grant ALTER_PRIV on test to testuser";
+        auth.grant((GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx()));
 
         UserIdentity testUser = new UserIdentity("testuser", "%");
         testUser.analyze();
