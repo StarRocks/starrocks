@@ -182,7 +182,7 @@ public class PlanFragmentBuilder {
 
         // Single tablet direct output
         // Note: If the fragment has right or full join and the join is local bucket shuffle join,
-        // We shouldn't set result sink directly to top fragment, because we will hash multi reslt sink.
+        // We shouldn't set result sink directly to top fragment, because we will hash multi result sink.
         if (!inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
                 && execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
                 && execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
