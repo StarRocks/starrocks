@@ -343,7 +343,13 @@
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
     + [Build in Docker](./administration/Build_in_docker.md)
+<<<<<<< HEAD
     + [AWS CloudFormation](./administration/AWS_Cloudformation.md)
+=======
+    + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/k8s_operator_cn.md)
+    + [Deploy CN](./administration/deploy_cn.md)
+    + [Deploy Broker](./administration/deploy_broker.md)
+>>>>>>> b01b74b7f ([Doc] Revise Broker Doc (#11278))
   + Management
     + [Manage a cluster](./administration/Cluster_administration.md)
     + [Configuration](./administration/Configuration.md)
