@@ -208,9 +208,13 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
     }
 
     protected List<ScalarOperator> visitList(List<ScalarOperator> operators, boolean[] update) {
+        if (operators == null) {
+            return null;
+        }
+
         List<ScalarOperator> clonedOperators = Lists.newArrayList();
         for (ScalarOperator operator : operators) {
-            ScalarOperator clonedOperator = operator.accept(this, null);
+            ScalarOperator clonedOperator = operator == null ? null :operator.accept(this, null);
             if ((clonedOperator != operator) && (update != null)) {
                 update[0] = true;
             }
