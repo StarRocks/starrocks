@@ -94,10 +94,8 @@ public class InformationSchemaDataSource {
         TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
         List<TTableConfigInfo> tList = new ArrayList<>();
 
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
-
-        dbNames.forEach(dbName -> {
+        List<String> authorizedDbs = getAuthorizedDbs(request.getAuth_info());
+        authorizedDbs.forEach(dbName -> {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
                 db.readLock();

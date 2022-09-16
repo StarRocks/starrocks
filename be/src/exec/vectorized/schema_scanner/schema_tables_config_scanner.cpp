@@ -32,7 +32,23 @@ Status SchemaTablesConfigScanner::start(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("used before initialized.");
     }
+    TAuthInfo auth_info;
+    if (nullptr != _param->db) {
+        auth_info.__set_pattern(*(_param->db));
+    }
+    if (nullptr != _param->current_user_ident) {
+        auth_info.__set_current_user_ident(*(_param->current_user_ident));
+    } else {
+        if (nullptr != _param->user) {
+            auth_info.__set_user(*(_param->user));
+        }
+        if (nullptr != _param->user_ip) {
+            auth_info.__set_user_ip(*(_param->user_ip));
+        }
+    }
     TGetTablesConfigRequest tables_config_req;
+    tables_config_req.__set_auth_info(auth_info);
+
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(SchemaHelper::get_tables_config(*(_param->ip), _param->port, tables_config_req,
                                                         &_tables_config_response));
