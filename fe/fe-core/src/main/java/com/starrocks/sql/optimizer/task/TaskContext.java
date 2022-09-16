@@ -29,17 +29,6 @@ public class TaskContext {
         this.allScanOperators = Collections.emptyList();
     }
 
-    public TaskContext(OptimizerContext optimizerContext,
-                       PhysicalPropertySet requiredProperty,
-                       ColumnRefSet requiredColumns, double upperBoundCost,
-                       List<LogicalOlapScanOperator> allScanOperators) {
-        this.optimizerContext = optimizerContext;
-        this.requiredProperty = requiredProperty;
-        this.requiredColumns = requiredColumns;
-        this.upperBoundCost = upperBoundCost;
-        this.allScanOperators = allScanOperators;
-    }
-
     public OptimizerContext getOptimizerContext() {
         return optimizerContext;
     }
