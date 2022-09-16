@@ -105,7 +105,7 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
         if (correlationPredicate.isEmpty()) {
             // If the correlation predicate doesn't appear in here,
             // it should not be a situation that we currently support.
-            throw new SemanticException(SubqueryUtils.NONE_CORRELATED_PREDICATE);
+            throw new SemanticException(SubqueryUtils.NOT_FOUND_CORRELATED_PREDICATE);
         }
 
         // @Todo: Can be support contain one EQ predicate
