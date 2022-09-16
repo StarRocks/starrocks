@@ -14,7 +14,7 @@ VARCHAR get_json_string(VARCHAR json_str, VARCHAR json_path)
 
 - `json_str`: JSON 字符串，支持的数据类型为 VARCHAR。
 
-- `json_path`: 指定的解析路径，支持的数据类型为 VARCHAR。`json_path` 必须以 `$` 符号作为开头；使用 `.` 作为路径分割符；使用 `[]` 表示数组下标, 从 0 开始。
+- `json_path`: 指定的解析路径，支持的数据类型为 VARCHAR。`json_path`使用 `.` 作为路径分割符；使用 `[]` 表示数组下标, 从 0 开始。
 
    举例：`$."my.key"[1]`表示的是获取`my.key`对应的数据中第 2 个值。
 
