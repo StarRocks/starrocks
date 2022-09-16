@@ -7,6 +7,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MapType;
@@ -15,7 +16,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.parser.SqlParser;
 import org.apache.hadoop.hive.common.StatsSetupConst;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -33,6 +38,8 @@ public class Utils {
     public static final String CHAR_PATTERN = "^char\\(([0-9]+)\\)";
     public static final String VARCHAR_PATTERN = "^varchar\\(([0-9,-1]+)\\)";
     protected static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("STRUCT", "BINARY", "MAP", "UNIONTYPE");
+
+    private static final Logger LOG = LogManager.getLogger(Utils.class);
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
         return createPartitionKey(values, columns, false);
@@ -220,6 +227,23 @@ public class Utils {
         String[] kv = getKeyValueStr(typeStr);
         return new MapType(HiveMetaStoreTableUtils.convertHiveTableColumnType(kv[0]),
                 HiveMetaStoreTableUtils.convertHiveTableColumnType(kv[1]));
+    }
+
+    // Hive's struct string like struct<cc0:int,cc1:struct<cc0:int,cc1:string>>, it's grammar is the same
+    // as StarRocks's grammar, so wo can use StarRocks's parser to parse it.
+    public static Type convertToStructType(String typeStr) {
+        //TODO(SmithCruise) Trick method.
+        final String STMT = String.format("CREATE TABLE tmp (tmp %s)", typeStr);
+        CreateTableStmt createTableStmt;
+        try {
+            List<StatementBase> statementBases = SqlParser.parse(STMT, 0);
+            StatementBase statementBase = statementBases.get(0);
+            createTableStmt = (CreateTableStmt) statementBase;
+        } catch (Exception e) {
+            LOG.warn(String.format("Invalid struct type format: %s", typeStr));
+            return Type.UNKNOWN_TYPE;
+        }
+        return createTableStmt.getColumnDefs().get(0).getType();
     }
 
     // Char string like char(100)

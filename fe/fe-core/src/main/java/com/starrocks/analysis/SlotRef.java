@@ -31,6 +31,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TSlotRef;
@@ -46,12 +47,26 @@ public class SlotRef extends Expr {
     // Used in toSql
     private String label;
 
+    private QualifiedName qualifiedName;
+
     // results of analysis
     protected SlotDescriptor desc;
+
+    // Only Struct Type need this field
+    // Record used struct field position
+    // Example: struct type: col->STRUCT<c1: INT, c2: STRUCT<c1: INT, c2: DOUBLE>>,
+    // We execute sql: `SELECT col.c2.c1 FROM table`, the usedStructFieldPos value is [1, 0].
+    // We execute sql: `SELECT col.c2 FROM table`, the usedStructFieldPos value is [1].
+    // We execute sql: `SELECT col FROM table`, the usedStructField value is [];
+    private List<Integer> usedStructFieldPos;
 
     // Only used write
     private SlotRef() {
         super();
+    }
+
+    public SlotRef(QualifiedName qualifiedName) {
+        this.qualifiedName = qualifiedName;
     }
 
     public SlotRef(TableName tblName, String col) {
@@ -81,6 +96,7 @@ public class SlotRef extends Expr {
         if (this.type.isChar()) {
             this.type = Type.VARCHAR;
         }
+        this.usedStructFieldPos = desc.getUsedStructFieldPos();
         analysisDone();
     }
 
@@ -90,11 +106,33 @@ public class SlotRef extends Expr {
         col = other.col;
         label = other.label;
         desc = other.desc;
+        qualifiedName = other.qualifiedName;
+        usedStructFieldPos = other.usedStructFieldPos;
     }
 
     public SlotRef(String label, SlotDescriptor desc) {
         this(desc);
         this.label = label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    public QualifiedName getQualifiedName() {
+        return qualifiedName;
+    }
+
+    public void setQualifiedName(QualifiedName qualifiedName) {
+        this.qualifiedName = qualifiedName;
+    }
+
+    public void setUsedStructFieldPos(List<Integer> usedStructFieldPos) {
+        this.usedStructFieldPos = usedStructFieldPos;
+    }
+
+    public List<Integer> getUsedStructFieldPos() {
+        return usedStructFieldPos;
     }
 
     @Override
@@ -145,6 +183,7 @@ public class SlotRef extends Expr {
 
     @Override
     public String toSqlImpl() {
+        // TODO(SmithCruise) StructType if not been parsed, this function will throw NullPointer.
         StringBuilder sb = new StringBuilder();
         if (tblName != null) {
             return tblName.toSql() + "." + "`" + col + "`";
@@ -234,6 +273,10 @@ public class SlotRef extends Expr {
 
     @Override
     public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+
         if (!super.equals(obj)) {
             return false;
         }

@@ -174,6 +174,17 @@ public class AnalyzeTestUtil {
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                 "PROPERTIES('replication_num' = '1');");
         starRocksAssert.withView("create view test.view_to_drop as select * from test.table_to_drop;");
+
+        starRocksAssert.withTable("CREATE TABLE struct_a(\n" +
+                "a INT, \n" +
+                "b STRUCT<a: INT, c: INT COMMENT 'sub field comment'> COMMENT 'smith',\n" +
+                "c STRUCT<a: INT, b: DOUBLE>,\n" +
+                "d STRUCT<a: INT, b: ARRAY<ARRAY<INT>>, c: STRUCT<a: INT> COMMENT 'aa'>,\n" +
+                "struct_a STRUCT<struct_a: STRUCT<struct_a: INT>, other: INT> COMMENT 'alias test'\n" +
+                ") DISTRIBUTED BY HASH(`a`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
     }
 
     public static String getDbName() {

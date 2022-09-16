@@ -15,6 +15,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "column/struct_column.h"
 
 namespace starrocks::vectorized {
 
@@ -1064,6 +1065,107 @@ TEST_F(OrcChunkReaderTest, TestReadArrayBasic) {
             ColumnPtr col = result->get_column_by_slot_id(i);
             std::cout << "column" << i << ": " << col->debug_string() << std::endl;
         }
+    }
+}
+
+/**
+ * ORC format: struct<c0:int,c1:struct<cc0:int,cc1:string>>
+ * Data:
+ * {c0: 1, c1: {cc0: 11, cc1: "Smith"}}
+ * {c0: 2, c1: {cc0: 22, cc2: "Cruise"}}
+ */
+TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_struct_basic.orc";
+
+    SlotDesc c0{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)};
+    SlotDesc c1{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT)};
+    c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    c1.type.field_names.push_back("cc0");
+    c1.type.field_names.push_back("cc1");
+
+    {
+        /**
+         * Expect result:
+         * {c0: 1, c1: {cc0: 11, cc1: "Smith"}}
+         * {c0: 2, c1: {cc0: 22, cc2: "Cruise"}}
+         */
+        SlotDesc slot_descs[] = {c0, c1, {""}};
+
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs);
+
+        // Read all fields
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 2);
+        EXPECT_EQ(result->num_columns(), 2);
+
+        ColumnPtr c0_col = result->get_column_by_index(0);
+        EXPECT_EQ(1, c0_col->get(0).get_int32());
+        EXPECT_EQ(2, c0_col->get(1).get_int32());
+
+        NullableColumn* null_c1_col = down_cast<NullableColumn*>(result->get_column_by_index(1).get());
+        StructColumn* c1_col = down_cast<StructColumn*>(null_c1_col->data_column().get());
+        ColumnPtr cc0_col = c1_col->fields_column()[0];
+        ColumnPtr cc1_col = c1_col->fields_column()[1];
+
+        EXPECT_EQ(11, cc0_col->get(0).get_int32());
+        EXPECT_EQ(22, cc0_col->get(1).get_int32());
+        EXPECT_EQ("Smith", cc1_col->get(0).get_slice().to_string());
+        EXPECT_EQ("Cruise", cc1_col->get(1).get_slice().to_string());
+    }
+
+    {
+        /**
+         * Expect result, ignore c1.cc0:
+         * {c0: 1, c1: {cc1: "Smith"}}
+         * {c0: 2, c1: {cc2: "Cruise"}}
+         */
+        c1.type.used_struct_field_pos = 1;
+
+        SlotDesc slot_descs[] = {c0, c1, {""}};
+
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs);
+
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 2);
+        EXPECT_EQ(result->num_columns(), 2);
+
+        NullableColumn* null_c1_col = down_cast<NullableColumn*>(result->get_column_by_index(1).get());
+        StructColumn* c1_col = down_cast<StructColumn*>(null_c1_col->data_column().get());
+        ColumnPtr cc1_col = c1_col->fields_column()[0];
+
+        EXPECT_EQ("Smith", cc1_col->get(0).get_slice().to_string());
+        EXPECT_EQ("Cruise", cc1_col->get(1).get_slice().to_string());
     }
 }
 

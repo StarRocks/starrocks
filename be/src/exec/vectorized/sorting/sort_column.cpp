@@ -75,6 +75,11 @@ public:
                                    _build_tie);
     }
 
+    Status do_visit(const vectorized::StructColumn& column) {
+        // TODO(SmithCruise)
+        return Status::NotSupported("Not support");
+    }
+
     template <typename T>
     Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
         DCHECK_GE(column.size(), _permutation.size());
@@ -287,6 +292,11 @@ public:
                                             _build_tie, _limit, &_pruned_limit));
         _prune_limit();
         return Status::OK();
+    }
+
+    Status do_visit(const vectorized::StructColumn& column) {
+        // TODO(SmithCruise)
+        return Status::NotSupported("Not support");
     }
 
     template <typename T>

@@ -10,6 +10,8 @@ import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
@@ -255,6 +257,21 @@ public class UtilsTest {
         typeStr = "map<char(10),map<int,array<timestamp>>>";
         resType = Utils.convertToMapType(typeStr);
         Assert.assertEquals(mapType, resType);
+    }
+
+    @Test
+    public void testStructString() throws DdlException {
+        String typeStr = "Struct<a: struct<aa: date>>";
+
+        StructField aa = new StructField("aa", ScalarType.createType(PrimitiveType.DATE));
+
+        StructType innerStruct = new StructType(Lists.newArrayList(aa));
+        StructField a = new StructField("a", innerStruct);
+
+        StructType outerStruct = new StructType(Lists.newArrayList(a));
+
+        Type resType = Utils.convertToStructType(typeStr);
+        Assert.assertEquals(outerStruct, resType);
     }
 
     @Test

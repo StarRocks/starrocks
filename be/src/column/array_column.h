@@ -16,7 +16,7 @@ class ArrayColumn final : public ColumnFactory<Column, ArrayColumn> {
 public:
     using ValueType = void;
 
-    ArrayColumn(ColumnPtr elements, UInt32Column::Ptr offests);
+    ArrayColumn(ColumnPtr elements, UInt32Column::Ptr offsets);
 
     ArrayColumn(const ArrayColumn& rhs)
             : _elements(rhs._elements->clone_shared()),

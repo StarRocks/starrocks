@@ -6,6 +6,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.Iterables.isEmpty;
@@ -30,6 +31,11 @@ public class QualifiedName {
 
     public List<String> getParts() {
         return parts;
+    }
+
+    public String toSqlImpl() {
+        List<String> backtick = parts.stream().map(s -> "`" + s + "`").collect(Collectors.toList());
+        return Joiner.on('.').join(backtick);
     }
 
     @Override

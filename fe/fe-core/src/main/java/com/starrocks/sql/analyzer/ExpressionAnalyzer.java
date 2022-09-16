@@ -70,6 +70,7 @@ import com.starrocks.sql.parser.ParsingException;
 
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -205,6 +206,14 @@ public class ExpressionAnalyzer {
             ResolvedField resolvedField = scope.resolveField(node);
             node.setType(resolvedField.getField().getType());
             node.setTblName(resolvedField.getField().getRelationAlias());
+
+            if (node.getType().isStructType()) {
+                // If SlotRef is a struct type, it needs special treatment.
+                node.setCol(resolvedField.getField().getName());
+                node.setLabel(resolvedField.getField().getName());
+                node.setUsedStructFieldPos(Collections.unmodifiableList(resolvedField.getField()
+                        .getTmpUsedStructFieldPos()));
+            }
             handleResolvedField(node, resolvedField);
             return null;
         }

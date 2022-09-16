@@ -14,6 +14,7 @@
 #include "cctz/time_zone.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
+#include "column/struct_column.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/literal.h"
 #include "gen_cpp/Exprs_types.h"
@@ -1000,6 +1001,70 @@ static void fill_map_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& co
     }
 }
 
+static void fill_struct_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
+                               const TypeDescriptor& type_desc, void* ctx) {
+    // TODO(Dingchao): Maybe something wrong?
+    auto* orc_list = down_cast<orc::StructVectorBatch*>(cvb);
+    auto* col_struct = down_cast<StructColumn*>(col.get());
+
+    Columns& field_columns = col_struct->fields_column();
+
+    int32_t pos = type_desc.used_struct_field_pos;
+    if (pos == -1) {
+        for (size_t i = 0; i < type_desc.children.size(); i++) {
+            const TypeDescriptor& field_type = type_desc.children[i];
+            orc::ColumnVectorBatch* field_cvb = orc_list->fields[i];
+            const FillColumnFunction& fn_fill_elements = find_fill_func(field_type.type, true);
+            fn_fill_elements(field_cvb, field_columns[i], from, size, field_type, ctx);
+        }
+    } else {
+        const TypeDescriptor& field_type = type_desc.children[pos];
+        orc::ColumnVectorBatch* field_cvb = orc_list->fields[pos];
+        const FillColumnFunction& fn_fill_elements = find_fill_func(field_type.type, true);
+        fn_fill_elements(field_cvb, field_columns[0], from, size, field_type, ctx);
+    }
+}
+
+static void fill_struct_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
+                                         const TypeDescriptor& type_desc, void* ctx) {
+    // TODO(SmithCruise): Maybe something wrong?
+    auto* orc_list = down_cast<orc::StructVectorBatch*>(cvb);
+    auto* col_nullable = down_cast<NullableColumn*>(col.get());
+    auto* col_struct = down_cast<StructColumn*>(col_nullable->data_column().get());
+
+    if (!orc_list->hasNulls) {
+        fill_struct_column(cvb, col_nullable->data_column(), from, size, type_desc, ctx);
+        col_nullable->null_column()->resize(col_struct->size());
+    } else {
+        const int end = from + size;
+
+        int i = from;
+        while (i < end) {
+            int j = i;
+            // Loop until NULL or end of batch.
+            while (j < end && orc_list->notNull[j]) {
+                j++;
+            }
+            if (j > i) {
+                fill_array_column(orc_list, col_nullable->data_column(), i, j - i, type_desc, ctx);
+                col_nullable->null_column()->resize(col_struct->size());
+            }
+
+            if (j == end) {
+                break;
+            }
+            DCHECK(!orc_list->notNull[j]);
+            i = j++;
+            // Loop until not NULL or end of batch.
+            while (j < end && !orc_list->notNull[j]) {
+                j++;
+            }
+            col_nullable->append_nulls(j - i);
+            i = j;
+        }
+    }
+}
+
 class FunctionsMap {
 public:
     static FunctionsMap* instance() {
@@ -1032,6 +1097,7 @@ private:
         _funcs[TYPE_DATETIME] = &fill_timestamp_column;
         _funcs[TYPE_ARRAY] = &fill_array_column;
         _funcs[TYPE_MAP] = &fill_map_column;
+        _funcs[TYPE_STRUCT] = &fill_struct_column;
 
         _nullable_funcs[TYPE_BOOLEAN] = &fill_boolean_column_with_null;
         _nullable_funcs[TYPE_TINYINT] = &fill_int_column_with_null<TYPE_TINYINT>;
@@ -1052,6 +1118,7 @@ private:
         _nullable_funcs[TYPE_DATETIME] = &fill_timestamp_column_with_null;
         _nullable_funcs[TYPE_ARRAY] = &fill_array_column_with_null;
         _nullable_funcs[TYPE_MAP] = &fill_map_column_with_null;
+        _nullable_funcs[TYPE_STRUCT] = &fill_struct_column_with_null;
     }
 
     std::array<FillColumnFunction, 64> _funcs;
@@ -1282,8 +1349,7 @@ static Status _orc_type_to_type_descriptor(const orc::Type* orc_type, TypeDescri
     if (kind == orc::LIST) {
         result->type = TYPE_ARRAY;
         DCHECK_EQ(0, result->children.size());
-        result->children.emplace_back();
-        TypeDescriptor& element_type = result->children.back();
+        TypeDescriptor& element_type = result->children.emplace_back();
         RETURN_IF_ERROR(_orc_type_to_type_descriptor(orc_type->getSubtype(0), &element_type));
     } else if (kind == orc::MAP) {
         result->type = TYPE_MAP;
@@ -1294,6 +1360,16 @@ static Status _orc_type_to_type_descriptor(const orc::Type* orc_type, TypeDescri
         result->children.emplace_back();
         TypeDescriptor& value_type = result->children.back();
         RETURN_IF_ERROR(_orc_type_to_type_descriptor(orc_type->getSubtype(1), &value_type));
+    } else if (kind == orc::STRUCT) {
+        result->type = TYPE_STRUCT;
+        DCHECK_EQ(0, result->children.size());
+        size_t field_size = orc_type->getSubtypeCount();
+        // Struct type must have at least one field.
+        DCHECK(field_size > 0);
+        for (size_t i = 0; i < field_size; i++) {
+            TypeDescriptor& field_type = result->children.emplace_back();
+            RETURN_IF_ERROR(_orc_type_to_type_descriptor(orc_type->getSubtype(i), &field_type));
+        }
     } else {
         auto precision = (int)orc_type->getPrecision();
         auto scale = (int)orc_type->getScale();
@@ -1310,6 +1386,19 @@ static Status _orc_type_to_type_descriptor(const orc::Type* orc_type, TypeDescri
     return Status::OK();
 }
 
+static Status _try_set_struct_type_info(TypeDescriptor& src_type, const TypeDescriptor& origin_slot_type) {
+    if (src_type.type != TYPE_STRUCT) {
+        return Status::OK();
+    }
+    DCHECK_EQ(src_type.children.size(), origin_slot_type.children.size());
+    src_type.field_names = origin_slot_type.field_names;
+    src_type.used_struct_field_pos = origin_slot_type.used_struct_field_pos;
+    for (size_t i = 0; i < src_type.children.size(); i++) {
+        RETURN_IF_ERROR(_try_set_struct_type_info(src_type.children[i], origin_slot_type.children[i]));
+    }
+    return Status::OK();
+}
+
 static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
     auto is_integer_type = [](PrimitiveType t) { return g_starrocks_int_type.count(t) > 0; };
     auto is_decimal_type = [](PrimitiveType t) { return g_starrocks_decimal_type.count(t) > 0; };
@@ -1318,6 +1407,17 @@ static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
     PrimitiveType t2 = to.type;
     if (t1 == TYPE_ARRAY && t2 == TYPE_ARRAY) {
         _try_implicit_cast(&from->children[0], to.children[0]);
+    } else if (t1 == TYPE_STRUCT && t2 == TYPE_STRUCT) {
+        size_t field_size = from->children.size();
+        int32_t pos = from->used_struct_field_pos;
+        if (pos == -1) {
+            for (size_t i = 0; i < field_size; i++) {
+                _try_implicit_cast(&from->children[i], to.children[i]);
+            }
+        } else {
+            DCHECK(pos < field_size);
+            _try_implicit_cast(&from->children[pos], to.children[pos]);
+        }
     } else if (is_integer_type(t1) && is_integer_type(t2)) {
         from->type = t2;
     } else if (is_decimal_type(t1) && is_decimal_type(t2)) {
@@ -1345,7 +1445,7 @@ Status OrcChunkReader::_init_src_types() {
     _src_types.clear();
     _src_types.resize(column_size);
     for (int i = 0; i < column_size; i++) {
-        auto slot_desc = _src_slot_descriptors[i];
+        SlotDescriptor* slot_desc = _src_slot_descriptors[i];
         if (slot_desc == nullptr) {
             continue;
         }
@@ -1353,6 +1453,9 @@ Status OrcChunkReader::_init_src_types() {
         const orc::Type* orc_type = _row_reader->getSelectedType().getSubtype(pos_of_orc);
         RETURN_IF_ERROR(_orc_type_to_type_descriptor(orc_type, &_src_types[i]));
         _try_implicit_cast(&_src_types[i], slot_desc->type());
+
+        // We need copy struct field pos & struct field name into _src_types.
+        RETURN_IF_ERROR(_try_set_struct_type_info(_src_types[i], slot_desc->type()));
     }
     return Status::OK();
 }

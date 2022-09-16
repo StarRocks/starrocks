@@ -194,6 +194,8 @@ public final class SqlToScalarOperatorTranslator {
                     resolvedField.getScope().getRelationId().equals(expressionMapping.getOuterScopeRelationId())) {
                 correlation.add(columnRefOperator);
             }
+
+            columnRefOperator.setUsedStructFieldPos(node.getUsedStructFieldPos());
             return columnRefOperator;
         }
 

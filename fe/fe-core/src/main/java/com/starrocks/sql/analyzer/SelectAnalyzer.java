@@ -225,17 +225,17 @@ public class SelectAnalyzer {
                 outputFields.addAll(fields);
 
             } else {
-                // The name here only refer to column name.
-                String name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
-
                 analyzeExpression(item.getExpr(), analyzeState, scope);
                 outputExpressionBuilder.add(item.getExpr());
 
+                // The name here only refer to column name.
+                String columnName = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
+
                 if (item.getExpr() instanceof SlotRef) {
-                    outputFields.add(new Field(name, item.getExpr().getType(),
+                    outputFields.add(new Field(columnName, item.getExpr().getType(),
                             ((SlotRef) item.getExpr()).getTblNameWithoutAnalyzed(), item.getExpr()));
                 } else {
-                    outputFields.add(new Field(name, item.getExpr().getType(), null, item.getExpr()));
+                    outputFields.add(new Field(columnName, item.getExpr().getType(), null, item.getExpr()));
                 }
             }
 

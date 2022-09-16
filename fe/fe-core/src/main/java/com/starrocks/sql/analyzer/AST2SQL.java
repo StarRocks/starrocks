@@ -47,6 +47,7 @@ import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -527,6 +528,21 @@ public class AST2SQL {
             List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
             sb.append(Joiner.on(", ").join(p)).append(")");
             return sb.toString();
+        }
+
+        @Override
+        public String visitLambdaFunctionExpr(LambdaFunctionExpr node, Void context) {
+            List<Expr> children = node.getChildren();
+            String names = visit(children.get(1));
+
+            if (children.size() > 2) {
+                names = "(" + visit(children.get(1));
+                for (int i = 2; i < children.size(); ++i) {
+                    names = names + ", " + visit(children.get(i));
+                }
+                names = names + ")";
+            }
+            return String.format("%s -> %s", names, visit(children.get(0)));
         }
 
         public String visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {

@@ -120,6 +120,9 @@ struct TTypeNode {
 
     // only used for structs; has struct_fields.size() corresponding child types
     3: optional list<TStructField> struct_fields
+
+    // only used to mapping TypeDescription's field, this field will not get value from FE
+    4: optional i32 used_struct_field_pos
 }
 
 // A flattened representation of a tree of column types obtained by depth-first

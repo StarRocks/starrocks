@@ -103,6 +103,8 @@ public:
 
     std::string debug_string() const;
 
+    const std::vector<int32_t>& used_struct_field_pos() const;
+
 private:
     friend class DescriptorTbl;
     friend class TupleDescriptor;
@@ -130,6 +132,8 @@ private:
     int _field_idx;
 
     const bool _is_materialized;
+
+    std::vector<int32_t> _used_struct_field_pos;
 
     SlotDescriptor(const TSlotDescriptor& tdesc);
     SlotDescriptor(const PSlotDescriptor& pdesc);

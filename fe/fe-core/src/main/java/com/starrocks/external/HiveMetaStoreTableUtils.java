@@ -177,6 +177,11 @@ public class HiveMetaStoreTableUtils {
                     return false;
                 }
 
+            case "STRUCT":
+                // TODO(SmithCruise)
+                // Only hive external table will use this function, but
+                // we only implement struct type in Hive catalog now.
+                return primitiveType == PrimitiveType.UNKNOWN_TYPE;
             default:
                 // for BINARY and other types, we transfer it to UNKNOWN_TYPE
                 return primitiveType == PrimitiveType.UNKNOWN_TYPE;
@@ -239,6 +244,11 @@ public class HiveMetaStoreTableUtils {
                     return mapType;
                 } else {
                     return Type.UNKNOWN_TYPE;
+                }
+            case "STRUCT":
+                type = Utils.convertToStructType(hiveType);
+                if (type.isStructType()) {
+                    return type;
                 }
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;

@@ -21,6 +21,8 @@ public final class ColumnRefOperator extends ScalarOperator {
 
     private boolean isLambdaArgument;
 
+    private List<Integer> usedStructFieldPos;
+
     public ColumnRefOperator(int id, Type type, String name, boolean nullable) {
         super(OperatorType.VARIABLE, type);
         this.id = id;
@@ -35,6 +37,14 @@ public final class ColumnRefOperator extends ScalarOperator {
         this.name = requireNonNull(name, "name is null");
         this.nullable = nullable;
         this.isLambdaArgument = isLambdaArgument;
+    }
+
+    public void setUsedStructFieldPos(List<Integer> usedStructFieldPos) {
+        this.usedStructFieldPos = usedStructFieldPos;
+    }
+
+    public List<Integer> getUsedStructFieldPos() {
+        return usedStructFieldPos;
     }
 
     public int getId() {

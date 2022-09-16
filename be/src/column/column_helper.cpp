@@ -7,6 +7,7 @@
 #include "column/array_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
+#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
@@ -233,6 +234,34 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         auto keys = create_column(type_desc.children[0], true, is_const, size);
         auto values = create_column(type_desc.children[1], true, is_const, size);
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
+    } else if (type_desc.type == TYPE_STRUCT) {
+        size_t field_size = type_desc.children.size();
+        Columns columns;
+        BinaryColumn::Ptr field_names = BinaryColumn::create();
+        if (type_desc.used_struct_field_pos == -1) {
+            // Create all Struct subfield columns.
+            columns.reserve(field_size);
+            field_names->reserve(field_size);
+
+            for (size_t i = 0; i < field_size; i++) {
+                ColumnPtr field_column = create_column(type_desc.children[i], true, is_const, size);
+                columns.emplace_back(field_column);
+                field_names->append_string(type_desc.field_names[i]);
+            }
+        } else {
+            // Create specific Struct subfield column.
+            int32_t pos = type_desc.used_struct_field_pos;
+            DCHECK(pos < field_size);
+
+            // If used_struct_field_pos is set, means StructColumn will use only one struct field.
+            columns.reserve(1);
+            field_names->reserve(1);
+
+            ColumnPtr field_column = create_column(type_desc.children[pos], true, is_const, size);
+            columns.emplace_back(field_column);
+            field_names->append_string(type_desc.field_names[pos]);
+        }
+        p = StructColumn::create(columns, field_names);
     } else {
         p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc, size);
     }

@@ -31,6 +31,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TSlotDescriptor;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -66,6 +67,9 @@ public class SlotDescriptor {
     // used for load to get more information of varchar and decimal
     // and for query result set metadata
     private Type originType;
+
+    // Explain this field in SlotRef.java
+    private List<Integer> usedStructFieldPos;
 
     public SlotDescriptor(SlotId id, TupleDescriptor parent) {
         this.id = id;
@@ -126,6 +130,14 @@ public class SlotDescriptor {
             throw new SemanticException("slot type shouldn't be invalid");
         }
         this.type = type;
+    }
+
+    public void setUsedStructFieldPos(List<Integer> usedStructFieldPos) {
+        this.usedStructFieldPos = usedStructFieldPos;
+    }
+
+    public List<Integer> getUsedStructFieldPos() {
+        return usedStructFieldPos;
     }
 
     public Type getOriginType() {
@@ -241,8 +253,10 @@ public class SlotDescriptor {
 
     // TODO
     public TSlotDescriptor toThrift() {
+        TSlotDescriptor tSlotDescriptor = null;
+
         if (originType != null) {
-            return new TSlotDescriptor(id.asInt(), parent.getId().asInt(), originType.toThrift(), -1,
+            tSlotDescriptor = new TSlotDescriptor(id.asInt(), parent.getId().asInt(), originType.toThrift(), -1,
                     byteOffset, nullIndicatorByte,
                     nullIndicatorBit, ((column != null) ? column.getName() : ""),
                     slotIdx, isMaterialized);
@@ -253,11 +267,16 @@ public class SlotDescriptor {
             if (type.isNull()) {
                 type = ScalarType.BOOLEAN;
             }
-            return new TSlotDescriptor(id.asInt(), parent.getId().asInt(), type.toThrift(), -1,
+            tSlotDescriptor = new TSlotDescriptor(id.asInt(), parent.getId().asInt(), type.toThrift(), -1,
                     byteOffset, nullIndicatorByte,
                     nullIndicatorBit, ((column != null) ? column.getName() : ""),
                     slotIdx, isMaterialized);
         }
+
+        if (usedStructFieldPos != null && usedStructFieldPos.size() > 0) {
+            tSlotDescriptor.setUsed_struct_field_pos(usedStructFieldPos);
+        }
+        return tSlotDescriptor;
     }
 
     public String debugString() {

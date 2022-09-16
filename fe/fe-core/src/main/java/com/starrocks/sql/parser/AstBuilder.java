@@ -121,6 +121,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -4086,26 +4088,33 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitColumnReference(StarRocksParser.ColumnReferenceContext context) {
+        // If parts.size() = 1, it must be a column name. Like `Select a FROM table`.
+        // If parts.size() = [2, 3, 4], it maybe a column name or specific struct subfield name.
         if (context.identifier() != null) {
             Identifier identifier = (Identifier) visit(context.identifier());
             return new SlotRef(null, identifier.getValue(), identifier.getValue());
         } else {
             QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
             List<String> parts = qualifiedName.getParts();
-            TableName tableName;
+            TableName tableName = null;
+            SlotRef slotRef = null;
             if (parts.size() == 4) {
                 tableName = new TableName(qualifiedName.getParts().get(0),
                         qualifiedName.getParts().get(1), qualifiedName.getParts().get(2));
-                return new SlotRef(tableName, parts.get(3), parts.get(3));
+                slotRef = new SlotRef(tableName, parts.get(3), parts.get(3));
             } else if (parts.size() == 3) {
                 tableName = new TableName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
-                return new SlotRef(tableName, parts.get(2), parts.get(2));
+                slotRef = new SlotRef(tableName, parts.get(2), parts.get(2));
             } else if (parts.size() == 2) {
                 tableName = new TableName(null, qualifiedName.getParts().get(0));
-                return new SlotRef(tableName, parts.get(1), parts.get(1));
+                slotRef = new SlotRef(tableName, parts.get(1), parts.get(1));
             } else {
-                throw new ParsingException("Unqualified column reference " + qualifiedName);
+                // If parts.size() > 4, it must refer to a struct subfield name, so we set SlotRef's TableName, col and
+                // label null here, and it will be parsed in Analyzer according context session.
+                slotRef = new SlotRef(null, null, null);
             }
+            slotRef.setQualifiedName(qualifiedName);
+            return slotRef;
         }
     }
 
@@ -4518,6 +4527,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return getDecimalType(context.decimalType());
         } else if (context.arrayType() != null) {
             return getArrayType(context.arrayType());
+        } else if (context.structType() != null) {
+            return getStructType(context.structType());
         }
         throw new IllegalArgumentException("Unsupported type specification: " + context.getText());
     }
@@ -4604,6 +4615,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public ArrayType getArrayType(StarRocksParser.ArrayTypeContext context) {
         return new ArrayType(getType(context.type()));
+    }
+
+    public StructType getStructType(StarRocksParser.StructTypeContext context) {
+        StructType structType = new StructType();
+
+        List<StarRocksParser.ColumnNameColonTypeContext> typeLists =
+                context.columnNameColonTypeList().columnNameColonType();
+        for (StarRocksParser.ColumnNameColonTypeContext type : typeLists) {
+            String comment = (type.comment() == null) ? null :
+                    ((StringLiteral) visit(type.comment().string())).getStringValue();
+            structType.addField(
+                    new StructField(type.identifier().getText(), getType(type.type()), comment)
+            );
+        }
+
+        return structType;
     }
 
     @Override

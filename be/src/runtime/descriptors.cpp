@@ -27,8 +27,6 @@
 
 #include "common/object_pool.h"
 #include "exprs/expr.h"
-#include "gen_cpp/Descriptors_types.h"
-#include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/descriptors.pb.h"
 
 namespace starrocks {
@@ -57,7 +55,18 @@ SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
           _slot_idx(tdesc.slotIdx),
           _slot_size(_type.get_slot_size()),
           _field_idx(-1),
-          _is_materialized(tdesc.isMaterialized) {}
+          _is_materialized(tdesc.isMaterialized) {
+    if (tdesc.__isset.used_struct_field_pos) {
+        DCHECK(tdesc.used_struct_field_pos.size() > 0);
+        // We need set used struct field position in TypeDescriptor
+        TypeDescriptor* tmp_type = &_type;
+        for (int32_t pos : tdesc.used_struct_field_pos) {
+            DCHECK(tmp_type->type == TYPE_STRUCT);
+            tmp_type->used_struct_field_pos = pos;
+            tmp_type = &tmp_type->children[pos];
+        }
+    }
+}
 
 SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
         : _id(pdesc.id()),
@@ -90,6 +99,10 @@ std::string SlotDescriptor::debug_string() const {
     out << "Slot(id=" << _id << " type=" << _type << " col=" << _col_pos << " name=" << _col_name
         << " offset=" << _tuple_offset << " null=" << _null_indicator_offset.debug_string() << ")";
     return out.str();
+}
+
+const std::vector<int32_t>& SlotDescriptor::used_struct_field_pos() const {
+    return _used_struct_field_pos;
 }
 
 TableDescriptor::TableDescriptor(const TTableDescriptor& tdesc)

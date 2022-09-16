@@ -22,6 +22,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
@@ -31,10 +32,18 @@ import com.starrocks.thrift.TTypeNode;
  * comments of struct fields. We set comment to null to avoid compatibility issues.
  */
 public class StructField {
-    protected final String name;
-    protected final Type type;
-    protected final String comment;
-    protected int position;  // in struct
+
+    @SerializedName(value = "name")
+    private final String name;
+
+    @SerializedName(value = "type")
+    private final Type type;
+
+    @SerializedName(value = "comment")
+    private final String comment;
+
+    @SerializedName(value = "position")
+    private int position;  // in struct
 
     public StructField(String name, Type type, String comment) {
         this.name = name;

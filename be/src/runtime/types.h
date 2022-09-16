@@ -63,6 +63,8 @@ struct TypeDescriptor {
 
     /// Only set if type == TYPE_STRUCT. The field name of each child.
     std::vector<std::string> field_names;
+    // Default value is -1, means use all fields in a StructType.
+    int32_t used_struct_field_pos{-1};
 
     TypeDescriptor() {}
 
