@@ -402,7 +402,7 @@ public class EditLog {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.replayDropFrontend(fe);
                     if (fe.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeName())) {
-                        new JournalInconsistentException("current fe " + fe + " is removed. will exit");
+                        throw new JournalInconsistentException("current fe " + fe + " is removed. will exit");
                     }
                     break;
                 }
