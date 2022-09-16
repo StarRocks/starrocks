@@ -21,7 +21,7 @@ This function can be used with WHERE and GROUP BY.
 
 ~~~sql
 COUNT(expr)
-COUNT(DISTINCT expr [,expr,...])`
+COUNT(DISTINCT expr)`
 ~~~
 
 ## Parameters
