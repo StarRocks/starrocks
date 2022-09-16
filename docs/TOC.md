@@ -364,6 +364,7 @@
     + [Build in Docker](./administration/Build_in_docker.md)
     + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/k8s_operator_cn.md)
     + [Deploy CN](./administration/deploy_cn.md)
+    + [Deploy Broker](./administration/deploy_broker.md)
   + Management
     + [Scale in and out](./administration/Scale_up_down.md)
     + [Backup and restore](./administration/Backup_and_restore.md)
