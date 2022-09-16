@@ -96,9 +96,13 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     if (s.size == 0) {
         size_t n = _buff.available();
         _should_stop_scan = true;
-        if (n >= _row_delimiter_length && _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
-            // Has reached the end of file but still no record delimiter found, which
-            // is valid, according the RFC, add the record delimiter ourself. ONLY IF we have space.
+        // Has reached the end of file but still no record delimiter found, which
+        // is valid, according the RFC, add the record delimiter ourself, ONLY IF we have space
+        // But if we don't have any space, which means a single csv record size has exceed buffer max size,
+        // and we can not and won't append row delimiter at all.
+        // We set `_should_stop_scan` true, and next call to this function will return EOF.
+        if (n >= _row_delimiter_length && _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr &&
+            _buff.free_space() >= _row_delimiter_length) {
             for (char ch : _row_delimiter) {
                 _buff.append(ch);
             }
