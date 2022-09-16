@@ -8,25 +8,15 @@ Create a new table in StarRocks.
 
 ```Plain%20Text
 CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
-
 (column_definition1[, column_definition2, ...]
-
 [, index_definition1[, ndex_definition12,]])
-
 [ENGINE = [olap|mysql|elasticsearch|hive]]
-
 [key_desc]
-
 [COMMENT "table comment"];
-
 [partition_desc]
-
 [distribution_desc]
-
 [rollup_index]
-
 [PROPERTIES ("key"="value", ...)]
-
 [BROKER PROPERTIES ("key"="value", ...)]
 ```
 
@@ -206,19 +196,12 @@ Default: olap. Optional: mysql, elasticsearch, and hive.
 
     ```Plain%20Text
     PROPERTIES (
-
         "host" = "mysql_server_host",
-
         "port" = "mysql_server_port",
-
         "user" = "your_user_name",
-
         "password" = "your_password",
-
         "database" = "database_name",
-
         "table" = "table_name"
-
     )
     ```
 
@@ -232,17 +215,11 @@ Default: olap. Optional: mysql, elasticsearch, and hive.
 
     ```Plain%20Text
     PROPERTIES (
-
         "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
-
         "user" = "root",
-
         "password" = "root",
-
         "index" = "tindex",
-
         "type" = "doc"
-
         )
         ```
 
@@ -257,13 +234,9 @@ Default: olap. Optional: mysql, elasticsearch, and hive.
 
     ```SQL
     PROPERTIES (
-
         "database" = "hive_db_name",
-
         "table" = "hive_table_name",
-
         "hive.metastore.uris" = "thrift://127.0.0.1:9083"
-
     )
     ```
 
@@ -311,13 +284,11 @@ Syntax:
 PARTITION BY RANGE (k1, k2, ...)
 
 (
-
     PARTITION partition_name1 VALUES LESS THAN MAXVALUE|("value1", "value2", ...),
 
     PARTITION partition_name2 VALUES LESS THAN MAXVALUE|("value1", "value2", ...)
 
     ...
-
 )
 ```
 
@@ -326,19 +297,14 @@ Note:
 Please use specified key columns and specified value ranges for partitioning.
 
 - Partition name only supports [A-z0-9_]
-
 - Columns in Range partition only support the following types: TINYINT, SAMLLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
-
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
-
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
-
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
 
 Please note:
 
 - Partitions are often used for managing data related to time.
-
 - When data backtracking is needed, you may want to consider emptying the first partition for adding partitions later when necessary.
 
 #### Fixed Range
@@ -347,15 +313,10 @@ Syntax:
 
 ```SQL
 PARTITION BY RANGE (k1, k2, k3, ...)
-
 (
-
     PARTITION partition_name1 VALUES [("k1-lower1", "k2-lower1", "k3-lower1",...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)),
-
     PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", MAXVALUE, )),
-
     "k3-upper1-2", ...
-
 )
 ```
 
@@ -407,13 +368,9 @@ It is recommended to use Hash bucketing method.
 
 ```Plain%20Text
 PROPERTIES (
-
     "storage_medium" = "[SSD|HDD]",
-
     [ "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss", ]
-
     [ "replication_num" = "3" ]
-
 )
 ```
 
@@ -431,9 +388,7 @@ When the table has only one partition, the properties belongs to the table. When
 
 ```SQL
 PROPERTIES (
-
     "bloom_filter_columns"="k1,k2,k3"
-
 )
 ```
 
@@ -441,9 +396,7 @@ PROPERTIES (
 
 ```SQL
 PROPERTIES (
-
     "colocate_with"="table1"
-
 )
 ```
 
@@ -451,18 +404,13 @@ PROPERTIES (
 
 ```SQL
 PROPERTIES (
-
     "dynamic_partition.enable" = "true|false",
-
     "dynamic_partition.time_unit" = "DAY|WEEK|MONTH",
-
     "dynamic_partition.start" = "${integer_value}",
-
     "dynamic_partitoin.end" = "${integer_value}",
-
     "dynamic_partition.prefix" = "${string_value}",
-
     "dynamic_partition.buckets" = "${integer_value}"
+)
 ```
 
 dynamic_partition.enable: It is used to specify whether dynamic partitioning at the table level is enabled. Default: true.
@@ -483,23 +431,9 @@ Syntax:
 
 ```SQL
 ROLLUP (rollup_name (column_name1, column_name2, ...)
-
 [FROM from_index_name]
-
 [PROPERTIES ("key"="value", ...)],...)
 ```
-
-- If you want to use inmemory table attributes, please specify it in properties.
-
-```SQL
-PROPERTIES (
-
-    "in_memory"="true"
-
-)
-```
-
-When the attribute is true, StarRocks will try to cache the data and index in this table to BE memory.
 
 ## Examples
 
@@ -507,27 +441,16 @@ When the attribute is true, StarRocks will try to cache the data and index in th
 
 ```SQL
 CREATE TABLE example_db.table_hash
-
 (
-
 k1 TINYINT,
-
 k2 DECIMAL(10, 2) DEFAULT "10.5",
-
 v1 CHAR(10) REPLACE,
-
 v2 INT SUM
-
 )
-
 ENGINE=olap
-
 AGGREGATE KEY(k1, k2)
-
 COMMENT "my first starrocks table"
-
-DISTRIBUTED BY HASH(k1) BUCKETS 32
-
+DISTRIBUTED BY HASH(k1) BUCKETS 10
 PROPERTIES ("storage_type"="column");
 ```
 
@@ -535,33 +458,19 @@ PROPERTIES ("storage_type"="column");
 
 ```SQL
 CREATE TABLE example_db.table_hash
-
 (
-
     k1 BIGINT,
-
     k2 LARGEINT,
-
     v1 VARCHAR(2048) REPLACE,
-
     v2 SMALLINT SUM DEFAULT "10"
-
 )
-
 ENGINE=olap
-
 UNIQUE KEY(k1, k2)
-
-DISTRIBUTED BY HASH (k1, k2) BUCKETS 32
-
+DISTRIBUTED BY HASH (k1, k2) BUCKETS 10
 PROPERTIES(
-
     "storage_type"="column",
-
     "storage_medium" = "SSD",
-
     "storage_cooldown_time" = "2015-06-04 00:00:00"
-
 );
 ```
 
@@ -569,33 +478,19 @@ Or
 
 ```SQL
 CREATE TABLE example_db.table_hash
-
 (
-
     k1 BIGINT,
-
     k2 LARGEINT,
-
     v1 VARCHAR(2048) REPLACE,
-
     v2 SMALLINT SUM DEFAULT "10"
-
 )
-
 ENGINE=olap
-
 PRIMARY KEY(k1, k2)
-
-DISTRIBUTED BY HASH (k1, k2) BUCKETS 32
-
+DISTRIBUTED BY HASH (k1, k2) BUCKETS 10
 PROPERTIES(
-
     "storage_type"="column",
-
     "storage_medium" = "SSD",
-
     "storage_cooldown_time" = "2015-06-04 00:00:00"
-
 );
 ```
 
@@ -605,43 +500,24 @@ LESS THAN
 
 ```SQL
 CREATE TABLE example_db.table_range
-
 (
-
 k1 DATE,
-
 k2 INT,
-
 k3 SMALLINT,
-
 v1 VARCHAR(2048),
-
 v2 DATETIME DEFAULT "2014-02-04 15:36:00"
-
 )
-
 ENGINE=olap
-
 DUPLICATE KEY(k1, k2, k3)
-
 PARTITION BY RANGE (k1)
-
 (
-
 PARTITION p1 VALUES LESS THAN ("2014-01-01"),
-
 PARTITION p2 VALUES LESS THAN ("2014-06-01"),
-
 PARTITION p3 VALUES LESS THAN ("2014-12-01")
-
 )
-
-DISTRIBUTED BY HASH(k2) BUCKETS 32
-
+DISTRIBUTED BY HASH(k2) BUCKETS 10
 PROPERTIES(
-
     "storage_medium" = "SSD", "storage_cooldown_time" = "2015-06-04 00:00:00"
-
 );
 ```
 
@@ -651,9 +527,7 @@ This statement will create 3 data partitions:
 
 ```SQL
 ( {    MIN     },   {"2014-01-01"} )
-
 [ {"2014-01-01"},   {"2014-06-01"} )
-
 [ {"2014-06-01"},   {"2014-12-01"} )
 ```
 
@@ -663,41 +537,24 @@ Fixed Range
 
 ```SQL
 CREATE TABLE table_range
-
 (
-
-k1 DATE,
-
-k2 INT,
-
-k3 SMALLINT,
-
-v1 VARCHAR(2048),
-
-v2 DATETIME DEFAULT "2014-02-04 15:36:00"
-
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    v1 VARCHAR(2048),
+    v2 DATETIME DEFAULT "2014-02-04 15:36:00"
 )
-
 ENGINE=olap
-
 DUPLICATE KEY(k1, k2, k3)
-
 PARTITION BY RANGE (k1, k2, k3)
-
 (
-
-PARTITION p1 VALUES [("2014-01-01", "10", "200"), ("2014-01-01", "20", "300")),
-
-PARTITION p2 VALUES [("2014-06-01", "100", "200"), ("2014-07-01", "100", "300"))
-
+    PARTITION p1 VALUES [("2014-01-01", "10", "200"), ("2014-01-01", "20", "300")),
+    PARTITION p2 VALUES [("2014-06-01", "100", "200"), ("2014-07-01", "100", "300"))
 )
-
-DISTRIBUTED BY HASH(k2) BUCKETS 32
+DISTRIBUTED BY HASH(k2) BUCKETS 10
 
 PROPERTIES(
-
     "storage_medium" = "SSD"
-
 );
 ```
 
@@ -705,39 +562,22 @@ PROPERTIES(
 
 ```SQL
 CREATE TABLE example_db.table_mysql
-
 (
-
-k1 DATE,
-
-k2 INT,
-
-k3 SMALLINT,
-
-k4 VARCHAR(2048),
-
-k5 DATETIME
-
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    k4 VARCHAR(2048),
+    k5 DATETIME
 )
-
 ENGINE=mysql
-
 PROPERTIES
-
 (
-
     "host" = "127.0.0.1",
-
     "port" = "8239",
-
     "user" = "mysql_user",
-
     "password" = "mysql_passwd",
-
     "database" = "mysql_db_test",
-
     "table" = "mysql_table_test"
-
 )
 ```
 
@@ -745,25 +585,15 @@ PROPERTIES
 
 ```SQL
 CREATE TABLE example_db.example_table
-
 (
-
-k1 TINYINT,
-
-k2 DECIMAL(10, 2) DEFAULT "10.5",
-
-v1 HLL HLL_UNION,
-
-v2 HLL HLL_UNION
-
+    k1 TINYINT,
+    k2 DECIMAL(10, 2) DEFAULT "10.5",
+    v1 HLL HLL_UNION,
+    v2 HLL HLL_UNION
 )
-
 ENGINE=olap
-
 AGGREGATE KEY(k1, k2)
-
-DISTRIBUTED BY HASH(k1) BUCKETS 32
-
+DISTRIBUTED BY HASH(k1) BUCKETS 10
 PROPERTIES ("storage_type"="column");
 ```
 
@@ -771,25 +601,15 @@ PROPERTIES ("storage_type"="column");
 
 ```SQL
 CREATE TABLE example_db.example_table
-
 (
-
-k1 TINYINT,
-
-k2 DECIMAL(10, 2) DEFAULT "10.5",
-
-v1 BITMAP BITMAP_UNION,
-
-v2 BITMAP BITMAP_UNION
-
+    k1 TINYINT,
+    k2 DECIMAL(10, 2) DEFAULT "10.5",
+    v1 BITMAP BITMAP_UNION,
+    v2 BITMAP BITMAP_UNION
 )
-
 ENGINE=olap
-
 AGGREGATE KEY(k1, k2)
-
-DISTRIBUTED BY HASH(k1) BUCKETS 32
-
+DISTRIBUTED BY HASH(k1) BUCKETS 10
 PROPERTIES ("storage_type"="column");
 ```
 
@@ -797,41 +617,25 @@ PROPERTIES ("storage_type"="column");
 
 ```SQL
 CREATE TABLE `t1` (
-
-`id` int(11) COMMENT "",
-
-`value` varchar(8) COMMENT ""
-
+    `id` int(11) COMMENT "",
+    `value` varchar(8) COMMENT ""
 ) ENGINE=OLAP
-
 DUPLICATE KEY(`id`)
-
 DISTRIBUTED BY HASH(`id`) BUCKETS 10
-
 PROPERTIES (
-
     "colocate_with" = "t1"
-
 );
 
 
 
 CREATE TABLE `t2` (
-
-`id` int(11) COMMENT "",
-
-`value` varchar(8) COMMENT ""
-
+    `id` int(11) COMMENT "",
+    `value` varchar(8) COMMENT ""
 ) ENGINE=OLAP
-
 DUPLICATE KEY(`id`)
-
 DISTRIBUTED BY HASH(`id`) BUCKETS 10
-
 PROPERTIES (
-
     "colocate_with" = "t1"
-
 );
 ```
 
@@ -839,29 +643,17 @@ PROPERTIES (
 
 ```SQL
 CREATE TABLE example_db.table_hash
-
 (
-
-k1 TINYINT,
-
-k2 DECIMAL(10, 2) DEFAULT "10.5",
-
-v1 CHAR(10) REPLACE,
-
-v2 INT SUM,
-
-INDEX k1_idx (k1) USING BITMAP COMMENT 'xxxxxx'
-
+    k1 TINYINT,
+    k2 DECIMAL(10, 2) DEFAULT "10.5",
+    v1 CHAR(10) REPLACE,
+    v2 INT SUM,
+    INDEX k1_idx (k1) USING BITMAP COMMENT 'xxxxxx'
 )
-
 ENGINE=olap
-
 AGGREGATE KEY(k1, k2)
-
 COMMENT "my first starrocks table"
-
-DISTRIBUTED BY HASH(k1) BUCKETS 32
-
+DISTRIBUTED BY HASH(k1) BUCKETS 10
 PROPERTIES ("storage_type"="column");
 ```
 
@@ -869,155 +661,54 @@ PROPERTIES ("storage_type"="column");
 
 ```Plain%20Text
 [types: [DATE]; keys: [2020-01-08]; ‥types: [DATE]; keys: [2020-01-09]; )
-
 [types: [DATE]; keys: [2020-01-09]; ‥types: [DATE]; keys: [2020-01-10]; )
-
 [types: [DATE]; keys: [2020-01-10]; ‥types: [DATE]; keys: [2020-01-11]; )
-
 [types: [DATE]; keys: [2020-01-11]; ‥types: [DATE]; keys: [2020-01-12]; )
+```
+
+```SQL
 CREATE TABLE example_db.dynamic_partition
-
 (
-
-k1 DATE,
-
-k2 INT,
-
-k3 SMALLINT,
-
-v1 VARCHAR(2048),
-
-v2 DATETIME DEFAULT "2014-02-04 15:36:00"
-
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    v1 VARCHAR(2048),
+    v2 DATETIME DEFAULT "2014-02-04 15:36:00"
 )
-
 ENGINE=olap
-
 DUPLICATE KEY(k1, k2, k3)
-
 PARTITION BY RANGE (k1)
-
 (
-
-PARTITION p1 VALUES LESS THAN ("2014-01-01"),
-
-PARTITION p2 VALUES LESS THAN ("2014-06-01"),
-
-PARTITION p3 VALUES LESS THAN ("2014-12-01")
-
+    PARTITION p1 VALUES LESS THAN ("2014-01-01"),
+    PARTITION p2 VALUES LESS THAN ("2014-06-01"),
+    PARTITION p3 VALUES LESS THAN ("2014-12-01")
 )
-
-DISTRIBUTED BY HASH(k2) BUCKETS 32
-
+DISTRIBUTED BY HASH(k2) BUCKETS 10
 PROPERTIES(
-
     "storage_medium" = "SSD",
-
     "dynamic_partition.time_unit" = "DAY",
-
     "dynamic_partition.start" = "-3",
-
     "dynamic_partition.end" = "3",
-
     "dynamic_partition.prefix" = "p",
-
-    "dynamic_partition.buckets" = "32"
-
+    "dynamic_partition.buckets" = "10"
 );
-```
-
-- Create a table with rollup index.
-
-```SQL
-CREATE TABLE example_db.rolup_index_table
-
-(
-
-event_day DATE,
-
-siteid INT DEFAULT '10',
-
-citycode SMALLINT,
-
-username VARCHAR(32) DEFAULT '',
-
-pv BIGINT SUM DEFAULT '0'
-
-)
-
-AGGREGATE KEY(event_day, siteid, citycode, username)
-
-DISTRIBUTED BY HASH(siteid) BUCKETS 10
-
-rollup (
-
-r1(event_day,siteid),
-
-r2(event_day,citycode),
-
-r3(event_day)
-
-)
-
-PROPERTIES("replication_num" = "3");
-```
-
-- Create an in-memory table.
-
-```SQL
-CREATE TABLE example_db.table_hash
-
-(
-
-k1 TINYINT,
-
-k2 DECIMAL(10, 2) DEFAULT "10.5",
-
-v1 CHAR(10) REPLACE,
-
-v2 INT SUM,
-
-INDEX k1_idx (k1) USING BITMAP COMMENT 'xxxxxx'
-
-)
-
-ENGINE=olap
-
-AGGREGATE KEY(k1, k2)
-
-COMMENT "my first starrocks table"
-
-DISTRIBUTED BY HASH(k1) BUCKETS 32
-
-PROPERTIES ("in_memory"="true");
 ```
 
 - Create an external table in hive.
 
 ```SQL
 CREATE TABLE example_db.table_hive
-
 (
-
-k1 TINYINT,
-
-k2 VARCHAR(50),
-
-v INT
-
+    k1 TINYINT,
+    k2 VARCHAR(50),
+    v INT
 )
-
 ENGINE=hive
-
 PROPERTIES
-
 (
     "resource" = "hive0",
-
     "database" = "hive_db_name",
-
     "table" = "hive_table_name"
-
 );
 ```
 
