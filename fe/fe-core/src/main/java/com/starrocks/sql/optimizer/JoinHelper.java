@@ -13,7 +13,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 
@@ -156,16 +155,4 @@ public class JoinHelper {
         return type.isCrossJoin() || JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN.equals(type) ||
                 (type.isInnerJoin() && equalOnPredicate.isEmpty()) || "BROADCAST".equalsIgnoreCase(hint);
     }
-
-    public static boolean isJoinConditionContainsEq(OptExpression joinOpt) {
-        LogicalJoinOperator joinOperator = (LogicalJoinOperator) joinOpt.getOp();
-        ScalarOperator predicate = joinOperator.getOnPredicate();
-        ColumnRefSet leftColumnSet = joinOpt.getInputs().get(0).getOutputColumns();
-        ColumnRefSet rightColumnSet = joinOpt.getInputs().get(1).getOutputColumns();
-        List<BinaryPredicateOperator> equalConjuncts = JoinHelper.
-                getEqualsPredicate(leftColumnSet, rightColumnSet, Utils.extractConjuncts(predicate));
-        return CollectionUtils.isNotEmpty(equalConjuncts);
-    }
-
-
 }
