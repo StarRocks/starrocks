@@ -227,7 +227,7 @@ partitionsRatio=1/1, tabletsRatio=10/10
 actualRows=0, avgRowSize=8.0
 cardinality: 150000000
 probe runtime filters:
-- filter_id = 0, probe_expr = (22: O_CUSTKEY), partition_exprs = (22: O_CUSTKEY)
+- filter_id = 0, probe_expr = (22: O_CUSTKEY)
 column statistics:
 * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
 [end]
