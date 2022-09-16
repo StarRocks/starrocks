@@ -64,7 +64,7 @@ Status HdfsScannerCSVReader::next_record(Record* record) {
     if (_should_stop_next) {
         return Status::EndOfFile("");
     }
-    Status st = CSVReader::next_record(record);
+    RETURN_IF_ERROR(CSVReader::next_record(record));
     // We should still read if remain_length is zero(we stop right at row delimiter)
     // because next scan range will skip a record till row delimiter.
     // so it's current reader's responsibility to consume this record.
@@ -74,7 +74,7 @@ Status HdfsScannerCSVReader::next_record(Record* record) {
     } else {
         _remain_length -= consume;
     }
-    return st;
+    return Status::OK();
 }
 
 Status HdfsScannerCSVReader::_fill_buffer() {
