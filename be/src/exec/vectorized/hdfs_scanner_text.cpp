@@ -47,6 +47,7 @@ private:
     size_t _remain_length = 0;
     size_t _file_length = 0;
     bool _should_stop_scan = false;
+    bool _should_stop_next = false;
 };
 
 Status HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
@@ -54,16 +55,25 @@ Status HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
     _offset = offset;
     _remain_length = remain_length;
     _should_stop_scan = false;
+    _should_stop_next = false;
     _buff.skip(_buff.limit() - _buff.position());
     return Status::OK();
 }
 
 Status HdfsScannerCSVReader::next_record(Record* record) {
-    if (_remain_length == 0) {
+    if (_should_stop_next) {
         return Status::EndOfFile("");
     }
     Status st = CSVReader::next_record(record);
-    _remain_length -= std::min(_remain_length, record->size + _row_delimiter_length);
+    // We should still read if remain_length is zero(we stop right at row delimiter)
+    // because next scan range will skip a record till row delimiter.
+    // so it's current reader's responsibility to consume this record.
+    size_t consume = record->size + _row_delimiter_length;
+    if (_remain_length < consume) {
+        _should_stop_next = true;
+    } else {
+        _remain_length -= consume;
+    }
     return st;
 }
 
