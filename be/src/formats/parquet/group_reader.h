@@ -49,6 +49,7 @@ struct GroupReaderParam {
     std::string timezone;
 
     vectorized::HdfsScanStats* stats = nullptr;
+    bool case_sensitive = false;
 };
 
 class GroupReader {
