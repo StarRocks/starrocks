@@ -34,7 +34,7 @@ namespace starrocks {
 void TimestampedVersionTracker::_construct_versioned_tracker(const std::vector<RowsetMetaSharedPtr>& rs_metas) {
     int64_t max_version = 0;
 
-    // construct the roset graph
+    // construct the rowset graph
     _version_graph.construct_version_graph(rs_metas, &max_version);
 }
 
