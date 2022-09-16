@@ -12,7 +12,8 @@
 tar -xzvf StarRocks-x.x.x.tar.gz
 ```
 
-> 注意
+> **注意**
+>
 > 将以上文件名修改为下载的二进制安装包名。
 
 ## 配置 Broker 节点
@@ -23,7 +24,8 @@ tar -xzvf StarRocks-x.x.x.tar.gz
 cd StarRocks-x.x.x/apache_hdfs_broker
 ```
 
-> 注意
+> **注意**
+>
 > 将以上路径名修改为解压后的路径名。
 
 修改 Broker 节点配置文件 **conf/apache_hdfs_broker.conf**。因默认配置即可启动集群，以下示例并未修改 Broker 点配置。您可以直接复制自己的 HDFS 集群配置文件并粘贴至 **conf** 路径下。
@@ -44,8 +46,10 @@ cd StarRocks-x.x.x/apache_hdfs_broker
 ALTER SYSTEM ADD BROKER broker_name "host:port";
 ```
 
-> 说明
-> 默认配置中，Broker 节点的端口为 8000。
+> **说明**
+>
+> - 默认配置中，Broker 节点的端口为 `8000`。
+> - 同时添加多个 Broker 节点时，该组节点共同使用同一个 `broker_name`.
 
 ## 确认 Broker 启动成功
 
@@ -78,7 +82,7 @@ LastUpdateTime: 2022-05-19 11:28:31
 运行以下命令停止 Broker 节点。
 
 ```bash
-./bin/stop_broker.sh --daemon
+sh ./bin/stop_broker.sh --daemon
 ```
 
 <br/>
