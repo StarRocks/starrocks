@@ -238,8 +238,6 @@
       + [week](./sql-reference/sql-functions/date-time-functions/week.md)
       + [weekofyear](./sql-reference/sql-functions/date-time-functions/weekofyear.md)
       + [year](./sql-reference/sql-functions/date-time-functions/year.md)
-<<<<<<< HEAD
-=======
     + Aggregate Functions
       + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
       + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
@@ -258,7 +256,6 @@
       + [variance](./sql-reference/sql-functions/aggregate-functions/variance.md)
       + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
       + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
->>>>>>> bd208e2ed (remove square from toc of agg function (#11304))
     + Geographic Functions
       + [st_astext](./sql-reference/sql-functions/spatial-functions/st_astext.md)
       + [st_circle](./sql-reference/sql-functions/spatial-functions/st_circle.md)
@@ -316,24 +313,6 @@
         + [JSON_EACH](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
         + [CAST](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/cast.md)
       + [JSON operators](./sql-reference/sql-functions/json-functions/json-operators.md)
-    + Aggregate Functions
-      + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
-      + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
-      + [avg](./sql-reference/sql-functions/aggregate-functions/avg.md)
-      + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
-      + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
-      + [hll_union_agg](./sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)
-      + [max](./sql-reference/sql-functions/aggregate-functions/max.md)
-      + [min](./sql-reference/sql-functions/aggregate-functions/min.md)
-      + [percentile_approx](./sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
-      + [retention](./sql-reference/sql-functions/aggregate-functions/retention.md)
-      + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
-      + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
-      + [sum](./sql-reference/sql-functions/aggregate-functions/sum.md)
-      + [variance](./sql-reference/sql-functions/aggregate-functions/variance.md)
-      + [square](./sql-reference/sql-functions/aggregate-functions/square.md)
-      + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
-      + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
     + Bitmap Functions
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](./sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
