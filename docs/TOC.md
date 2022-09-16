@@ -51,6 +51,7 @@
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
     + [Build in Docker](./administration/Build_in_docker.md)
+    + [Deploy Broker](./administration/deploy_broker.md)
   + Management
     + [Manage a cluster](./administration/Cluster_administration.md)
     + [Configuration](./administration/Configuration.md)
