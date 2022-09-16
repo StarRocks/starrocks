@@ -53,6 +53,7 @@ import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
+import com.starrocks.analysis.ShowSnapshotStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
@@ -485,6 +486,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitCreateRoleStatement(CreateRoleStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitShowSnapshotStmt(ShowSnapshotStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------

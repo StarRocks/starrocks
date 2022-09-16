@@ -100,6 +100,7 @@ import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
+import com.starrocks.analysis.ShowSnapshotStmt;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
@@ -3451,6 +3452,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return new ShowRestoreStmt(((Identifier) visit(context.identifier())).getValue(), null);
         }
+    }
+
+    // ----------------------------------------------- Snapshot Statement ----------------------------------------------
+
+    @Override
+    public ParseNode visitShowSnapshotStatement(StarRocksParser.ShowSnapshotStatementContext context) {
+        StarRocksParser.ExpressionContext expression = context.expression();
+        Expr where = null;
+        if (expression != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        String repoName = ((Identifier) visit(context.identifier())).getValue();
+
+        return new ShowSnapshotStmt(repoName, where);
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------
