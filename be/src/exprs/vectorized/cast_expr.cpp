@@ -18,16 +18,39 @@
 #include "exprs/vectorized/decimal_cast_expr.h"
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/casts.h"
+#include "gutil/strings/split.h"
+#include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "runtime/large_int_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
+#include "runtime/types.h"
 #include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
 
 namespace starrocks::vectorized {
+
+static const char* kArrayDelimeter = ",";
+
+// Cast string to array<ANY>
+class CastStringToArray final : public Expr {
+public:
+    CastStringToArray(const TExprNode& node, Expr* cast_element, const TypeDescriptor& type_desc)
+            : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(type_desc) {}
+    ~CastStringToArray() override = default;
+
+    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* input_chunk) override;
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }
+
+private:
+    Slice _unquote(Slice str);
+
+    Expr* _cast_elements_expr;
+    TypeDescriptor _cast_to_type_desc;
+};
+
 #define THROW_RUNTIME_ERROR_WITH_TYPE(TYPE)              \
     std::stringstream ss;                                \
     ss << "not supported type " << type_to_string(TYPE); \
@@ -1423,6 +1446,24 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node, bool allow_t
             return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_HLL, false>(node);
         }
     }
+    // Cast string to array<ANY>
+    if (from_type == TYPE_VARCHAR && to_type == TYPE_ARRAY) {
+        TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
+        TExprNode cast;
+        cast.type = cast_to.children[0].to_thrift();
+        cast.child_type = to_thrift(from_type);
+        cast.slot_ref.slot_id = 0;
+        cast.slot_ref.tuple_id = 0;
+
+        Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(cast, allow_throw_exception);
+        if (cast_element_expr == nullptr) {
+            return nullptr;
+        }
+        ColumnRef* child = new ColumnRef(cast);
+        cast_element_expr->add_child(child);
+
+        return new CastStringToArray(node, cast_element_expr, cast_to);
+    }
 
     if (to_type == TYPE_VARCHAR) {
         switch (from_type) {
@@ -1444,7 +1485,8 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node, bool allow_t
             CASE_TO_STRING_FROM(TYPE_DECIMAL128, allow_throw_exception);
             CASE_TO_STRING_FROM(TYPE_JSON, allow_throw_exception);
         default:
-            LOG(WARNING) << "vectorized engine not support from type: " << from_type << ", to type: " << to_type;
+            LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
+                         << ", to type: " << type_to_string(to_type);
             return nullptr;
         }
     } else if (from_type == TYPE_JSON || to_type == TYPE_JSON) {
@@ -1461,7 +1503,8 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node, bool allow_t
                 CASE_FROM_JSON_TO(TYPE_DOUBLE, allow_throw_exception);
                 CASE_FROM_JSON_TO(TYPE_JSON, allow_throw_exception);
             default:
-                LOG(WARNING) << "vectorized engine not support from type: " << from_type << ", to type: " << to_type;
+                LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
+                             << ", to type: " << type_to_string(to_type);
                 return nullptr;
             }
         } else {
@@ -1481,7 +1524,8 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node, bool allow_t
                 CASE_TO_JSON(TYPE_DECIMAL64, allow_throw_exception);
                 CASE_TO_JSON(TYPE_DECIMAL128, allow_throw_exception);
             default:
-                LOG(WARNING) << "vectorized engine not support from type: " << from_type << ", to type: " << to_type;
+                LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
+                             << ", to type: " << type_to_string(to_type);
                 return nullptr;
             }
         }
@@ -1503,7 +1547,7 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node, bool allow_t
             CASE_TO_TYPE(TYPE_DECIMAL64, allow_throw_exception);
             CASE_TO_TYPE(TYPE_DECIMAL128, allow_throw_exception);
         default:
-            LOG(WARNING) << "vectorized engine not support to type: " << to_type;
+            LOG(WARNING) << "vectorized engine not support cast to type: " << type_to_string(to_type);
             return nullptr;
         }
     }
@@ -1561,6 +1605,134 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
         pool->add(expr);
     }
     return expr;
+}
+
+ColumnPtr VectorizedCastArrayExpr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
+    ColumnPtr column = _children[0]->evaluate(context, ptr);
+    if (ColumnHelper::count_nulls(column) == column->size()) {
+        return ColumnHelper::create_const_null_column(column->size());
+    }
+    ColumnPtr cast_column = column->clone_shared();
+    ArrayColumn::Ptr array_col = nullptr;
+    NullableColumn::Ptr nullable_col = nullptr;
+    ColumnPtr src_col = cast_column;
+
+    if (src_col->is_nullable()) {
+        nullable_col = (ColumnHelper::as_column<NullableColumn>(src_col));
+        src_col = nullable_col->data_column();
+    }
+    while (src_col->is_array()) {
+        array_col = (ColumnHelper::as_column<ArrayColumn>(src_col));
+        src_col = array_col->elements_column();
+        if (src_col->is_nullable()) {
+            nullable_col = (ColumnHelper::as_column<NullableColumn>(src_col));
+            src_col = nullable_col->data_column();
+        } else {
+            nullable_col = nullptr;
+        }
+    }
+
+    if (nullable_col != nullptr) {
+        src_col = nullable_col;
+    }
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    auto column_ref = _cast_element_expr->get_child(0);
+    SlotId slot_id = (reinterpret_cast<ColumnRef*>(column_ref))->slot_id();
+    chunk->append_column(src_col, slot_id);
+    ColumnPtr dest_col = _cast_element_expr->evaluate(nullptr, chunk.get());
+    dest_col = ColumnHelper::unfold_const_column(column_ref->type(), chunk->num_rows(), dest_col);
+
+    if (src_col->is_nullable() && !dest_col->is_nullable()) {
+        // if the original column is nullable
+        auto nullable_col = (ColumnHelper::as_column<NullableColumn>(src_col))->null_column();
+        array_col->elements_column() = NullableColumn::create(dest_col, nullable_col);
+    } else {
+        array_col->elements_column() = dest_col;
+    }
+    return cast_column;
+};
+
+Slice CastStringToArray::_unquote(Slice slice) {
+    while (slice.starts_with(" ")) {
+        slice.remove_prefix(1);
+    }
+    while (slice.ends_with(" ")) {
+        slice.remove_suffix(1);
+    }
+    if (slice.starts_with("\"") || slice.starts_with("'")) {
+        slice.remove_prefix(1);
+    }
+    if (slice.ends_with("\"") || slice.ends_with("'")) {
+        slice.remove_suffix(1);
+    }
+    return slice;
+}
+
+ColumnPtr CastStringToArray::evaluate(ExprContext* context, vectorized::Chunk* input_chunk) {
+    ColumnPtr column = _children[0]->evaluate(context, input_chunk);
+    if (column->only_null()) {
+        return ColumnHelper::create_const_null_column(column->size());
+    }
+
+    PrimitiveType element_type = _cast_elements_expr->type().type;
+    ColumnViewer<TYPE_VARCHAR> src(column);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullColumn::Ptr null_column = NullColumn::create();
+
+    // 1. Split string with ',' delimiter
+    uint32_t offset = 0;
+    ColumnBuilder<TYPE_VARCHAR> slice_builder(src.size());
+    for (size_t i = 0; i < src.size(); i++) {
+        offsets->append(offset);
+        if (src.is_null(i)) {
+            null_column->append(1);
+            continue;
+        }
+        null_column->append(0);
+        Slice str = src.value(i);
+        if (str.starts_with("[")) {
+            str.data++;
+            str.size--;
+        }
+        if (str.ends_with("]")) {
+            str.size--;
+        }
+        if (!str.empty()) {
+            StringPiece str_piece(str.data, str.size);
+            std::vector<StringPiece> pieces;
+            SplitStringPieceToVector(str_piece, kArrayDelimeter, &pieces, false);
+
+            // Unquote slice for string type
+            if (element_type == TYPE_VARCHAR || element_type == TYPE_CHAR) {
+                for (auto& piece : pieces) {
+                    slice_builder.append(_unquote(Slice(piece.data(), piece.size())));
+                }
+            } else {
+                for (auto& piece : pieces) {
+                    slice_builder.append(Slice(piece.data(), piece.size()));
+                }
+            }
+            offset += pieces.size();
+        }
+    }
+    offsets->append(offset);
+
+    // 2. Cast string to specified type
+    ColumnPtr elements = slice_builder.build_nullable_column();
+    if (element_type != TYPE_VARCHAR && element_type != TYPE_CHAR) {
+        ChunkPtr chunk = std::make_shared<Chunk>();
+        SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
+        chunk->append_column(elements, slot_id);
+        elements = ColumnHelper::cast_to_nullable_column(_cast_elements_expr->evaluate(context, chunk.get()));
+    }
+
+    // 3. Assemble elements into array column
+    ColumnPtr res = ArrayColumn::create(elements, offsets);
+    if (column->is_nullable()) {
+        res = NullableColumn::create(res, null_column);
+    }
+
+    return res;
 }
 
 } // namespace starrocks::vectorized
