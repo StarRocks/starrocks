@@ -102,6 +102,6 @@ public class ResultSink extends DataSink {
 
     @Override
     public boolean canUsePipeLine() {
-        return sinkType == TResultSinkType.MYSQL_PROTOCAL;
+        return sinkType == TResultSinkType.MYSQL_PROTOCAL || sinkType == TResultSinkType.STATISTIC;
     }
 }

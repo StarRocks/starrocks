@@ -633,13 +633,6 @@ DROP MATERIALIZED VIEW order_mv;
 
 ### Caution
 
-- Sync refresh materialized views have the following limitations:
-  - You can only create a sync refresh materialized view based on a single table instead of multiple tables.
-  - You cannot change the partitioning and bucketing strategies of sync refresh materialized views. They must be consistent with that of the base table.
-  - You cannot directly query a sync refresh materialized view.
-  - Sync refresh materialized views do not support the clause WHERE.
-  - Sync refresh materialized views only supports limited aggregate functions, including sum, min, max, count, bitmap_union, hll_union, and percentile_union.
-
 - Async refresh materialized views have the following features:
   - You can directly query a async refresh materialized view, but the result may be inconsistent with that from the base tables.
   - You can set different partitioning and bucketing strategies for a async refresh materialized view from that of the base tables.
