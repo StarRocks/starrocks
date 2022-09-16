@@ -40,7 +40,7 @@ Broker Load 支持从如下外部存储系统导入数据：
 
 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。
 
-本文档假设您的 StarRocks 集群中已部署一个名称为“mybroker”的 Broker。
+本文档假设您的 StarRocks 集群中已部署一组名为“mybroker”的 Broker。
 
 ## 基本原理
 
