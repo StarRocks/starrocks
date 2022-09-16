@@ -47,6 +47,34 @@
   + [Approximate de-duplication with HLL](./using_starrocks/Using_HLL.md)
   + [Configure a time zone](./using_starrocks/timezone.md)
   + [File manager](./using_starrocks/filemanager.md)
++ Administration
+  + Deployment
+    + [Deploy StarRocks with StarGo](./administration/stargo.md)
+    + [Build in Docker](./administration/Build_in_docker.md)
+    + [Deploy Broker](./administration/deploy_broker.md)
+    + [Deploy FE cluster with high availability](./administration/Deployment.md)
+  + Management
+    + [Manage a cluster](./administration/Cluster_administration.md)
+    + [Configuration](./administration/Configuration.md)
+    + [Scale in and out](./administration/Scale_up_down.md)
+    + [Backup and restore](./administration/Backup_and_restore.md)
+    + [Monitor and alert](./administration/Monitor_and_Alert.md)
+    + Resource Management
+      + [Resource group](./administration/resource_group.md)
+      + [Query management](./administration/Query_management.md)
+      + [Memory management](./administration/Memory_management.md)
+      + [Load balancing](./administration/Load_balance.md)
+      + [Replica](./administration/Replica.md)
+      + [Blacklist](./administration/Blacklist.md)
+  + Data Recovery
+    + [Data recovery](./administration/Data_recovery.md)
+    + [Restore FEs](./administration/Metadata_recovery.md)
+  + User Privilege and Authentication
+    + [User privilege](./administration/User_privilege.md)
+    + [Authentication](./administration/Authentication.md)
+  + Performance Tuning
+    + [Query planning](./administration/Query_planning.md)
+    + [Profiling](./administration/Profiling.md)
 + Reference
   + SQL Reference
     + User Account Management
@@ -339,33 +367,6 @@
   + [System variables](./reference/System_variable.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
-+ Administration
-  + Deployment
-    + [Deploy StarRocks with StarGo](./administration/stargo.md)
-    + [Build in Docker](./administration/Build_in_docker.md)
-    + [AWS CloudFormation](./administration/AWS_Cloudformation.md)
-  + Management
-    + [Manage a cluster](./administration/Cluster_administration.md)
-    + [Configuration](./administration/Configuration.md)
-    + [Scale in and out](./administration/Scale_up_down.md)
-    + [Backup and restore](./administration/Backup_and_restore.md)
-    + [Monitor and alert](./administration/Monitor_and_Alert.md)
-    + Resource Management
-      + [Resource group](./administration/resource_group.md)
-      + [Query management](./administration/Query_management.md)
-      + [Memory management](./administration/Memory_management.md)
-      + [Load balancing](./administration/Load_balance.md)
-      + [Replica](./administration/Replica.md)
-      + [Blacklist](./administration/Blacklist.md)
-  + Data Recovery
-    + [Data recovery](./administration/Data_recovery.md)
-    + [Restore FEs](./administration/Metadata_recovery.md)
-  + User Privilege and Authentication
-    + [User privilege](./administration/User_privilege.md)
-    + [Authentication](./administration/Authentication.md)
-  + Performance Tuning
-    + [Query planning](./administration/Query_planning.md)
-    + [Profiling](./administration/Profiling.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration

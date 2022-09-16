@@ -39,7 +39,6 @@ set(EXEC_FILES
         ./exec/schema_columns_scanner_test.cpp
         ./exec/tablet_info_test.cpp
         ./exec/vectorized/sorting_test.cpp
-        ./exec/vectorized/chunks_sorter_test.cpp
         ./exec/vectorized/parquet_scanner_test.cpp
         ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/repeat_node_test.cpp
