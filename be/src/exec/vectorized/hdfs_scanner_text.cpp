@@ -24,17 +24,17 @@ class HdfsScannerCSVReader : public CSVReader {
 public:
     // |file| must outlive HdfsScannerCSVReader
     HdfsScannerCSVReader(RandomAccessFile* file, const string& row_delimiter, const string& column_separator,
-                         size_t offset, size_t remain_length, size_t file_length)
+                         size_t file_length)
             : CSVReader(row_delimiter, column_separator) {
         _file = file;
-        _offset = offset;
-        _remain_length = remain_length;
+        _offset = 0;
+        _remain_length = file_length;
         _file_length = file_length;
         _row_delimiter_length = row_delimiter.size();
         _column_separator_length = column_separator.size();
     }
 
-    void reset(size_t offset, size_t remain_length);
+    Status reset(size_t offset, size_t remain_length);
 
     Status next_record(Record* record);
 
@@ -49,12 +49,13 @@ private:
     bool _should_stop_scan = false;
 };
 
-void HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
-    _file->seek(offset);
+Status HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
+    RETURN_IF_ERROR(_file->seek(offset));
     _offset = offset;
     _remain_length = remain_length;
     _should_stop_scan = false;
     _buff.skip(_buff.limit() - _buff.position());
+    return Status::OK();
 }
 
 Status HdfsScannerCSVReader::next_record(Record* record) {
@@ -71,7 +72,7 @@ Status HdfsScannerCSVReader::_fill_buffer() {
 
     DCHECK(_buff.free_space() > 0);
     Slice s;
-    if (_remain_length <= 0) {
+    if (_remain_length == 0) {
         s = Slice(_buff.limit(), _buff.free_space());
     } else {
         size_t slice_len = _remain_length;
@@ -83,7 +84,7 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     // For compressed text file, we only can parse csv file in sequential way.
     ASSIGN_OR_RETURN(s.size, _file->read(s.data, s.size));
     _offset += s.size;
-    _remain_length -= s.size;
+    _remain_length -= std::min(_remain_length, s.size);
 
     _buff.add_limit(s.size);
     auto n = _buff.available();
@@ -105,7 +106,7 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     // For each scan range we always read the first record of next scan range,so _remain_length
     // may be negative here. Once we have read the first record of next scan range we
     // should stop scan in the next round.
-    if ((_remain_length < 0 && _buff.find(_row_delimiter, 0) != nullptr)) {
+    if ((_remain_length == 0 && _buff.find(_row_delimiter, 0) != nullptr)) {
         _should_stop_scan = true;
     }
 
@@ -323,25 +324,25 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
         _current_range_index = _scanner_params.scan_ranges.size() - 1;
         // we don't know real stream size in adavance, so we set a very large stream size
         size_t file_size = static_cast<size_t>(-1);
-        _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter, 0, file_size,
-                                                         file_size);
+        _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter, file_size);
         return Status::OK();
     }
 
     // no compressed file, splittable.
     const THdfsScanRange* scan_range = _scanner_params.scan_ranges[_current_range_index];
     if (_current_range_index == 0) {
-        _reader =
-                std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter,
-                                                       scan_range->offset, scan_range->length, scan_range->file_length);
-    } else {
-        down_cast<HdfsScannerCSVReader*>(_reader.get())->reset(scan_range->offset, scan_range->length);
+        _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter,
+                                                         scan_range->file_length);
     }
-    if (scan_range->offset != 0) {
-        // Always skip first record of scan range with non-zero offset.
-        // Notice that the first record will read by previous scan range.
-        CSVReader::Record dummy;
-        RETURN_IF_ERROR(down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&dummy));
+    {
+        HdfsScannerCSVReader* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
+        RETURN_IF_ERROR(reader->reset(scan_range->offset, scan_range->length));
+        if (scan_range->offset != 0) {
+            // Always skip first record of scan range with non-zero offset.
+            // Notice that the first record will read by previous scan range.
+            CSVReader::Record dummy;
+            RETURN_IF_ERROR(reader->next_record(&dummy));
+        }
     }
     return Status::OK();
 }
