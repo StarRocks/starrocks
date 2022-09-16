@@ -107,11 +107,7 @@ static int64_t calc_max_compaction_memory(int64_t process_mem_limit) {
 }
 
 static int64_t calc_max_consistency_memory(int64_t process_mem_limit) {
-    int64_t max_mem = MemInfo::physical_mem();
-    if (_mem_tracker->has_limit()) {
-        max_mem = _mem_tracker->limit();
-    }
-    int64_t limit = ParseUtil::parse_mem_spec(config::consistency_max_memory_limit, max_mem);
+    int64_t limit = ParseUtil::parse_mem_spec(config::consistency_max_memory_limit, process_mem_limit);
     int64_t percent = config::consistency_max_memory_limit_percent;
 
     if (process_mem_limit < 0) {
