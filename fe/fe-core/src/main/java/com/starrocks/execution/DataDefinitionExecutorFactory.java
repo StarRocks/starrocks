@@ -43,11 +43,13 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -56,9 +58,6 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.CreateViewStmt;
-import com.starrocks.sql.ast.DropAnalyzeJobStmt;
-import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
@@ -77,88 +76,419 @@ import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class DataDefinitionExecutorFactory {
-    private static final ImmutableMap<Class<? extends StatementBase>, DataDefinitionExecutor> EXECUTOR_MAP =
-            new ImmutableMap.Builder<Class<? extends StatementBase>, DataDefinitionExecutor>()
-                    .put(CreateDbStmt.class, new CreateDbExecutor())
-                    .put(DropDbStmt.class, new DropDbExecutor())
-                    .put(CreateFunctionStmt.class, new CreateFunctionExecutor())
-                    .put(DropFunctionStmt.class, new DropFunctionExecutor())
-                    .put(CreateTableStmt.class, new CreateTableExecutor())
-                    .put(CreateTableLikeStmt.class, new CreateTableLikeExecutor())
-                    .put(DropTableStmt.class, new DropTableExecutor())
-                    .put(CreateMaterializedViewStmt.class, new CreateMaterializedViewExecutor())
-                    .put(CreateMaterializedViewStatement.class, new CreateMaterializedViewStatementExecutor())
-                    .put(DropMaterializedViewStmt.class, new DropMaterializedViewExecutor())
-                    .put(AlterMaterializedViewStmt.class, new AlterMaterializedViewExecutor())
-                    .put(RefreshMaterializedViewStatement.class, new RefreshMaterializedViewExecutor())
-                    .put(CancelRefreshMaterializedViewStmt.class, new CancelRefreshMaterializedViewExecutor())
-                    .put(AlterTableStmt.class, new AlterTableExecutor())
-                    .put(AlterViewStmt.class, new AlterViewExecutor())
-                    .put(CancelAlterTableStmt.class, new CancelAlterTableExecutor())
-                    .put(LoadStmt.class, new LoadExecutor())
-                    .put(CancelLoadStmt.class, new CancelLoadExecutor())
-                    .put(CreateRoutineLoadStmt.class, new CreateRoutineLoadExecutor())
-                    .put(PauseRoutineLoadStmt.class, new PauseRoutineLoadExecutor())
-                    .put(ResumeRoutineLoadStmt.class, new ResumeRoutineLoadExecutor())
-                    .put(StopRoutineLoadStmt.class, new StopRoutineLoadExecutor())
-                    .put(AlterRoutineLoadStmt.class, new AlterRoutineLoadExecutor())
-                    .put(CreateUserStmt.class, new CreateUserExecutor())
-                    .put(AlterUserStmt.class, new AlterUserExecutor())
-                    .put(DropUserStmt.class, new DropUserExecutor())
-                    .put(RevokeRoleStmt.class, new RevokeRoleExecutor())
-                    .put(GrantRoleStmt.class, new GrantRoleExecutor())
-                    .put(GrantPrivilegeStmt.class, new GrantExecutor())
-                    .put(RevokePrivilegeStmt.class, new RevokeExecutor())
-                    .put(CreateRoleStmt.class, new CreateRoleExecutor())
-                    .put(DropRoleStmt.class, new DropRoleExecutor())
-                    .put(SetUserPropertyStmt.class, new SetUserPropertyExecutor())
-                    .put(AlterSystemStmt.class, new AlterSystemExecutor())
-                    .put(CancelAlterSystemStmt.class, new CancelAlterSystemExecutor())
-                    .put(AlterDatabaseQuotaStmt.class, new AlterDatabaseQuotaExecutor())
-                    .put(AlterDatabaseRename.class, new AlterDatabaseRenameExecutor())
-                    .put(RecoverDbStmt.class, new RecoverDbExecutor())
-                    .put(RecoverTableStmt.class, new RecoverTableExecutor())
-                    .put(RecoverPartitionStmt.class, new RecoverPartitionExecutor())
-                    .put(CreateViewStmt.class, new CreateViewExecutor())
-                    .put(BackupStmt.class, new BackupExecutor())
-                    .put(RestoreStmt.class, new RestoreExecutor())
-                    .put(CancelBackupStmt.class, new CancelBackupExecutor())
-                    .put(CreateRepositoryStmt.class, new CreateRepositoryExecutor())
-                    .put(DropRepositoryStmt.class, new DropRepositoryExecutor())
-                    .put(SyncStmt.class, new SyncExecutor())
-                    .put(TruncateTableStmt.class, new TruncateTableExecutor())
-                    .put(AdminRepairTableStmt.class, new AdminRepairTableExecutor())
-                    .put(AdminCancelRepairTableStmt.class, new AdminCancelRepairTableExecutor())
-                    .put(AdminSetConfigStmt.class, new AdminSetConfigExecutor())
-                    .put(CreateFileStmt.class, new CreateFileExecutor())
-                    .put(DropFileStmt.class, new DropFileExecutor())
-                    .put(InstallPluginStmt.class, new InstallPluginExecutor())
-                    .put(UninstallPluginStmt.class, new UninstallPluginExecutor())
-                    .put(AdminCheckTabletsStmt.class, new AdminCheckTabletsExecutor())
-                    .put(AdminSetReplicaStatusStmt.class, new AdminSetReplicaStatusExecutor())
-                    .put(CreateResourceStmt.class, new CreateResourceExecutor())
-                    .put(DropResourceStmt.class, new DropResourceExecutor())
-                    .put(AlterResourceStmt.class, new AlterResourceExecutor())
-                    .put(CancelExportStmt.class, new CancelExportExecutor())
-                    .put(CreateAnalyzeJobStmt.class, new CreateAnalyzeJobExecutor())
-                    .put(DropAnalyzeJobStmt.class, new DropAnalyzeJobExecutor())
-                    .put(RefreshTableStmt.class, new RefreshTableExecutor())
-                    .put(CreateResourceGroupStmt.class, new CreateResourceGroupExecutor())
-                    .put(DropResourceGroupStmt.class, new DropResourceGroupExecutor())
-                    .put(AlterResourceGroupStmt.class, new AlterResourceGroupExecutor())
-                    .put(CreateCatalogStmt.class, new CreateCatalogExecutor())
-                    .put(DropCatalogStmt.class, new DropCatalogExecutor())
-                    .put(SubmitTaskStmt.class, new SubmitTaskExecutor())
-                    .build();
+
+    static class StmtExecutorVisitor extends AstVisitor<ShowResultSet, ConnectContext> {
+
+        private static final Logger LOG = LogManager.getLogger(StmtExecutorVisitor.class);
+
+        private static final StmtExecutorVisitor INSTANCE = new StmtExecutorVisitor();
+
+        public static StmtExecutorVisitor getInstance() {
+            return INSTANCE;
+        }
+
+        @Override
+        public ShowResultSet visitCreateDbStatement(CreateDbStmt stmt, ConnectContext context) {
+            CreateDbStmt createDbStmt = stmt;
+            String fullDbName = createDbStmt.getFullDbName();
+            boolean isSetIfNotExists = createDbStmt.isSetIfNotExists();
+            try {
+                context.getGlobalStateMgr().getMetadata().createDb(fullDbName);
+            } catch (AlreadyExistsException e) {
+                if (isSetIfNotExists) {
+                    LOG.info("create database[{}] which already exists", fullDbName);
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_CREATE_EXISTS, fullDbName);
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropDbStatement(DropDbStmt stmt, ConnectContext context) {
+            DropDbStmt dropDbStmt = stmt;
+            String dbName = dropDbStmt.getDbName();
+            boolean isForceDrop = dropDbStmt.isForceDrop();
+            try {
+                context.getGlobalStateMgr().getMetadata().dropDb(dbName, isForceDrop);
+            } catch (MetaNotFoundException e) {
+                if (dropDbStmt.isSetIfExists()) {
+                    LOG.info("drop database[{}] which does not exist", dbName);
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_DROP_EXISTS, dbName);
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateFunctionStmt(CreateFunctionStmt stmt, ConnectContext context) {
+            CreateFunctionStmt createFunctionStmt = stmt;
+            FunctionName name = createFunctionStmt.getFunctionName();
+            Database db = context.getGlobalStateMgr().getDb(name.getDb());
+            if (db == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
+            }
+            db.addFunction(createFunctionStmt.getFunction());
+            return null;
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropFunctionStmt(DropFunctionStmt stmt, ConnectContext context) {
+            DropFunctionStmt dropFunctionStmt = stmt;
+            FunctionName name = dropFunctionStmt.getFunctionName();
+            Database db = context.getGlobalStateMgr().getDb(name.getDb());
+            if (db == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
+            }
+            db.dropFunction(dropFunctionStmt.getFunction());
+            return null;
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateTableStatement(CreateTableStmt stmt, ConnectContext context) {
+            return context.getGlobalStateMgr().createTable(stmt);
+        }
+
+        @Override
+        public ShowResultSet visitCreateTableLikeStatement(CreateTableLikeStmt stmt, ConnectContext context) {
+            return context.getGlobalStateMgr().createTableLike((CreateTableLikeStmt) stmt);
+        }
+
+        @Override
+        public ShowResultSet visitDropTableStmt(DropTableStmt stmt, ConnectContext context) {
+            return context.getGlobalStateMgr().dropTable(stmt);
+        }
+
+        @Override
+        public ShowResultSet visitCreateMaterializedViewStmt(CreateMaterializedViewStmt stmt, ConnectContext context) {
+            return context.getGlobalStateMgr().createMaterializedView(stmt);
+        }
+
+        @Override
+        public ShowResultSet visitCreateMaterializedViewStatement(CreateMaterializedViewStatement stmt, ConnectContext context) {
+            return context.getGlobalStateMgr().createMaterializedView(stmt);
+        }
+
+        @Override
+        public ShowResultSet visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, ConnectContext context) {
+            return context.getGlobalStateMgr().dropMaterializedView(stmt);
+        }
+
+        @Override
+        public ShowResultSet visitAlterMaterializedViewStatement(AlterMaterializedViewStatement stmt, ConnectContext context) {
+            return context.getGlobalStateMgr().alterMaterializedView(stmt);
+        }
+
+        @Override
+        public ShowResultSet visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement stmt,
+                                                                   ConnectContext context) {
+            context.getGlobalStateMgr().getLocalMetastore()
+                    .refreshMaterializedView(stmt.getMvName().getDb(),
+                            stmt.getMvName().getTbl(),
+                            Constants.TaskRunPriority.NORMAL.value());
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStatement stmt,
+                                                                         ConnectContext context) {
+            context.getGlobalStateMgr().getLocalMetastore()
+                    .cancelRefreshMaterializedView(
+                            stmt.getMvName().getDb(),
+                            stmt.getMvName().getTbl());
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterTableStatement(AlterTableStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterViewStatement(AlterViewStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCancelAlterTableStatement(CancelAlterTableStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitLoadStmt(LoadStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCancelLoadStmt(CancelLoadStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitPauseRoutineLoadStatement(PauseRoutineLoadStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitStopRoutineLoadStatement(StopRoutineLoadStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterRoutineLoadStmt(AlterRoutineLoadStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateUserStatement(CreateUserStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropUserStatement(DropUserStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitRevokeRoleStatement(RevokeRoleStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitGrantRoleStatement(GrantRoleStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitGrantPrivilegeStatement(GrantPrivilegeStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitRevokePrivilegeStatement(RevokePrivilegeStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropRoleStatement(DropRoleStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitSetUserPropertyStmt(SetUserPropertyStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterSystemStmt(AlterSystemStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCancelAlterSystemStmt(CancelAlterSystemStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterDatabaseRename(AlterDatabaseRename stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitRecoverDbStmt(RecoverDbStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitRecoverTableStatement(RecoverTableStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitRecoverPartitionStmt(RecoverPartitionStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitBackupStmt(BackupStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitRestoreStmt(RestoreStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCancelBackupStmt(CancelBackupStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateRepositoryStmt(CreateRepositoryStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropRepositoryStmt(DropRepositoryStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitSyncStmt(SyncStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitTruncateTableStatement(TruncateTableStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminRepairTableStatement(AdminRepairTableStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminSetConfigStatement(AdminSetConfigStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateFileStatement(CreateFileStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropFileStatement(DropFileStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitInstallPluginStatement(InstallPluginStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitUninstallPluginStatement(UninstallPluginStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminCheckTabletsStatement(AdminCheckTabletsStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateResourceStatement(CreateResourceStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropResourceStatement(DropResourceStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterResourceStatement(AlterResourceStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCancelExportStatement(CancelExportStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropAnalyzeJobStatement(DropAnalyzeJobStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitRefreshTableStatement(RefreshTableStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateResourceGroupStatement(CreateResourceGroupStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropResourceGroupStatement(DropResourceGroupStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterResourceGroupStatement(AlterResourceGroupStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateCatalogStatement(CreateCatalogStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropCatalogStatement(DropCatalogStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitSubmitTaskStmt(SubmitTaskStmt stmt, ConnectContext context) {
+            return null;
+        }
+
+    }
 
     public static ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
-        DataDefinitionExecutor executor = EXECUTOR_MAP.get(stmt.getClass());
-        if (executor != null) {
-            return executor.execute(stmt, context);
-        } else {
-            throw new DdlException("Unknown statement.");
-        }
+        return stmt.accept(StmtExecutorVisitor.getInstance(), context);
     }
 }
