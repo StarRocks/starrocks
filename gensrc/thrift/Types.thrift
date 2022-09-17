@@ -30,7 +30,6 @@ typedef i32 TSlotId
 typedef i64 TTableId
 typedef i64 TTabletId
 typedef i64 TVersion
-typedef i64 TVersionHash
 typedef i32 TSchemaHash
 typedef i32 TPort
 typedef i64 TCount
