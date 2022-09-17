@@ -7,6 +7,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.AddSqlBlackListStmt;
 import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
@@ -37,6 +38,7 @@ import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
+import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropFunctionStmt;
@@ -107,6 +109,8 @@ import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.ShowSnapshotStmt;
+import com.starrocks.analysis.ShowSqlBlackListStmt;
+import com.starrocks.analysis.ShowWhiteListStmt;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
@@ -1252,7 +1256,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new AlterSystemStmt((AlterClause) visit(context.alterClause()));
     }
 
-    // ------------------------------------------- Resource Statement ---------------------------------------------------
+    // -------------------------------- Sql BlackList And WhiteList Statement ------------------------------------------
+    @Override
+    public ParseNode visitAddSqlBlackListStatement(StarRocksParser.AddSqlBlackListStatementContext context) {
+        String sql = ((StringLiteral) visit(context.string())).getStringValue();
+        if (sql == null || sql.isEmpty()) {
+            throw new IllegalArgumentException("Sql to be add black list is empty");
+        }
+        return new AddSqlBlackListStmt(sql);
+    }
+
+    @Override
+    public ParseNode visitDelSqlBlackListStatement(StarRocksParser.DelSqlBlackListStatementContext context) {
+        List<Long> indexes = context.INTEGER_VALUE().stream().map(ParseTree::getText)
+                .map(Long::parseLong).collect(toList());
+        return new DelSqlBlackListStmt(indexes);
+    }
+
+    @Override
+    public ParseNode visitShowSqlBlackListStatement(StarRocksParser.ShowSqlBlackListStatementContext context) {
+        return new ShowSqlBlackListStmt();
+    }
+
+    @Override
+    public ParseNode visitShowWhiteListStatement(StarRocksParser.ShowWhiteListStatementContext context) {
+        return new ShowWhiteListStmt();
+    }
+
+    // ------------------------------------------- Resource Statement --------------------------------------------------
     public ParseNode visitCreateResourceStatement(StarRocksParser.CreateResourceStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         Map<String, String> properties = new HashMap<>();

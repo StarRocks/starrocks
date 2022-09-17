@@ -2,15 +2,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 
@@ -29,12 +21,13 @@ public class DelSqlBlackListStmt extends StatementBase {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-        }
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDelSqlBlackListStatement(this, context);
+    }
 
-        super.analyze(analyzer);
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     @Override
