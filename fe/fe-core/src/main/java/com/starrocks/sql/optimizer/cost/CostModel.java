@@ -63,6 +63,13 @@ public class CostModel {
                 costEstimate.getNetworkCost() * networkCostWeight;
     }
 
+    public static int getParallelExecInstanceNum() {
+        if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+            return 1;
+        }
+        return Math.max(1, ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
+    }
+
     private static class CostEstimator extends OperatorVisitor<CostEstimate, ExpressionContext> {
         @Override
         public CostEstimate visitOperator(Operator node, ExpressionContext context) {
@@ -194,12 +201,13 @@ public class CostModel {
                     result = CostEstimate.ofCpu(statistics.getOutputSize(outputColumns));
                     break;
                 case BROADCAST:
+                    int parallelExecInstanceNum = getParallelExecInstanceNum();
                     // beNum is the number of right table should broadcast, now use alive backends
                     int aliveBackendNumber = ctx.getAliveBackendNumber();
                     int beNum = Math.max(1, aliveBackendNumber);
                     result = CostEstimate.of(statistics.getOutputSize(outputColumns) * aliveBackendNumber,
-                            statistics.getOutputSize(outputColumns) * beNum,
-                            Math.max(statistics.getOutputSize(outputColumns) * beNum, 1));
+                            statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum,
+                            Math.max(statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum, 1));
                     if (statistics.getOutputSize(outputColumns) > sessionVariable.getMaxExecMemByte()) {
                         return CostEstimate.of(result.getCpuCost() * StatsConstants.BROADCAST_JOIN_MEM_EXCEED_PENALTY,
                                 result.getMemoryCost() * StatsConstants.BROADCAST_JOIN_MEM_EXCEED_PENALTY,
