@@ -5,7 +5,7 @@ import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.TableName;
 
 public class RefreshMaterializedViewStatement extends DdlStmt {
-    private TableName mvName;
+    private final TableName mvName;
 
     public RefreshMaterializedViewStatement(TableName mvName) {
         this.mvName = mvName;
@@ -14,7 +14,6 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
     public TableName getMvName() {
         return mvName;
     }
-
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

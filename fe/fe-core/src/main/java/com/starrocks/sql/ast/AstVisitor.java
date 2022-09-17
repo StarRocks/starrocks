@@ -2,7 +2,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.AddSqlBlackListStmt;
-import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
@@ -12,21 +11,15 @@ import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.CreateFunctionStmt;
-import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DdlStmt;
-import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
-import com.starrocks.analysis.DropFunctionStmt;
-import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
@@ -37,7 +30,6 @@ import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
@@ -45,13 +37,11 @@ import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
-import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowGrantsStmt;
-import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
@@ -65,7 +55,6 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.analysis.VariableExpr;
 
 public abstract class AstVisitor<R, C> {
@@ -228,7 +217,7 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement, C context) {
+    public R visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -236,7 +225,7 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStatement statement, C context) {
+    public R visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -399,6 +388,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitKillStatement(KillStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSyncStatement(SyncStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

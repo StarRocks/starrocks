@@ -26,7 +26,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.PartitionValue;
+import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;

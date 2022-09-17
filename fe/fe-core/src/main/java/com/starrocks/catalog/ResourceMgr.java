@@ -23,7 +23,6 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -35,6 +34,7 @@ import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import org.apache.logging.log4j.LogManager;
