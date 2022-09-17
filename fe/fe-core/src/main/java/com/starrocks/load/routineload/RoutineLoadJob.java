@@ -1203,7 +1203,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
 
         // check if partition has been changed
-        if (NeedReschedule()) {
+        if (needReschedule()) {
             writeLock();
             try {
                 LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
@@ -1220,12 +1220,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected void unprotectUpdateProgress() {
     }
 
-    // NeedRescheduleFromRunning check whether the running routine load job should be rescheduled.
-    protected boolean NeedRescheduleFromRunning() throws UserException {
+    // needRescheduleFromRunning check whether the running routine load job should be rescheduled.
+    protected boolean needRescheduleFromRunning() throws UserException {
         return false;
     }
 
-    private boolean NeedReschedule() throws UserException {
+    private boolean needReschedule() throws UserException {
         readLock();
         try {
             if (this.state == JobState.PAUSED) {
@@ -1237,14 +1237,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                             .build());
                 }
                 return autoSchedule;
-            } else if(this.state == JobState.CANCELLED || this.state == JobState.STOPPED) {
+            } else if (this.state == JobState.CANCELLED || this.state == JobState.STOPPED) {
                 return false;
             }
         } finally {
             readUnlock();
         }
 
-        return NeedRescheduleFromRunning();
+        return needRescheduleFromRunning();
     }
 
     public void setOrigStmt(OriginStatement origStmt) {
@@ -1433,196 +1433,196 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         out.writeLong(errorRows);
         out.writeLong(totalRows);
         out.writeLong(unselectedRows);
-            out.writeLong(receivedBytes);
-            out.writeLong(totalTaskExcutionTimeMs);
-            out.writeLong(committedTaskNum);
-            out.writeLong(abortedTaskNum);
+        out.writeLong(receivedBytes);
+        out.writeLong(totalTaskExcutionTimeMs);
+        out.writeLong(committedTaskNum);
+        out.writeLong(abortedTaskNum);
 
-            origStmt.write(out);
-            out.writeInt(jobProperties.size());
-            for (Map.Entry<String, String> entry : jobProperties.entrySet()) {
-                Text.writeString(out, entry.getKey());
-                Text.writeString(out, entry.getValue());
-            }
-
-            out.writeInt(sessionVariables.size());
-            for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
-                Text.writeString(out, entry.getKey());
-                Text.writeString(out, entry.getValue());
-            }
+        origStmt.write(out);
+        out.writeInt(jobProperties.size());
+        for (Map.Entry<String, String> entry : jobProperties.entrySet()) {
+            Text.writeString(out, entry.getKey());
+            Text.writeString(out, entry.getValue());
         }
 
-        public void readFields(DataInput in) throws IOException {
-            if (!isTypeRead) {
-                dataSourceType = LoadDataSourceType.valueOf(Text.readString(in));
-                isTypeRead = true;
-            }
-
-            id = in.readLong();
-            name = Text.readString(in);
-
-            // ignore the clusterName param
-            Text.readString(in);
-
-            dbId = in.readLong();
-            tableId = in.readLong();
-            desireTaskConcurrentNum = in.readInt();
-            state = JobState.valueOf(Text.readString(in));
-            maxErrorNum = in.readLong();
-            taskSchedIntervalS = in.readLong();
-            maxBatchRows = in.readLong();
-            maxBatchSizeBytes = in.readLong();
-
-            switch (dataSourceType) {
-                case KAFKA: {
-                    progress = new KafkaProgress();
-                    progress.readFields(in);
-                    break;
-                }
-                default:
-                    throw new IOException("unknown data source type: " + dataSourceType);
-            }
-
-            createTimestamp = in.readLong();
-            pauseTimestamp = in.readLong();
-            endTimestamp = in.readLong();
-
-            currentErrorRows = in.readLong();
-            currentTotalRows = in.readLong();
-            errorRows = in.readLong();
-            totalRows = in.readLong();
-            unselectedRows = in.readLong();
-            receivedBytes = in.readLong();
-            totalTaskExcutionTimeMs = in.readLong();
-            committedTaskNum = in.readLong();
-            abortedTaskNum = in.readLong();
-
-            if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_76) {
-                String stmt = Text.readString(in);
-                origStmt = new OriginStatement(stmt, 0);
-            } else {
-                origStmt = OriginStatement.read(in);
-            }
-
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_59) {
-                int size = in.readInt();
-                for (int i = 0; i < size; i++) {
-                    String key = Text.readString(in);
-                    String value = Text.readString(in);
-                    jobProperties.put(key, value);
-                }
-            } else {
-                // The behaviors of old broker load could not be changed
-                jobProperties.put(LoadStmt.STRICT_MODE, Boolean.toString(false));
-            }
-
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_66) {
-                int size = in.readInt();
-                for (int i = 0; i < size; i++) {
-                    String key = Text.readString(in);
-                    String value = Text.readString(in);
-                    sessionVariables.put(key, value);
-                }
-            } else {
-                // old version of load does not have sqlmode, set it to default
-                sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
-            }
-
-            setRoutineLoadDesc(CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables));
-        }
-
-        public void modifyJob(RoutineLoadDesc routineLoadDesc,
-                Map<String, String> jobProperties,
-                RoutineLoadDataSourceProperties dataSourceProperties,
-                OriginStatement originStatement,
-        boolean isReplay) throws DdlException {
-            writeLock();
-            try {
-                if (routineLoadDesc != null) {
-                    setRoutineLoadDesc(routineLoadDesc);
-                    mergeLoadDescToOriginStatement(routineLoadDesc);
-                }
-                if (jobProperties != null) {
-                    modifyCommonJobProperties(jobProperties);
-                }
-                if (dataSourceProperties != null) {
-                    modifyDataSourceProperties(dataSourceProperties);
-                }
-                if (!isReplay) {
-                    AlterRoutineLoadJobOperationLog log = new AlterRoutineLoadJobOperationLog(id,
-                            jobProperties, dataSourceProperties, originStatement);
-                    GlobalStateMgr.getCurrentState().getEditLog().logAlterRoutineLoadJob(log);
-                }
-            } finally {
-                writeUnlock();
-            }
-        }
-
-        public void mergeLoadDescToOriginStatement(RoutineLoadDesc routineLoadDesc) {
-            if (origStmt == null) {
-                return;
-            }
-
-            RoutineLoadDesc originLoadDesc = CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables);
-            if (originLoadDesc == null) {
-                originLoadDesc = new RoutineLoadDesc();
-            }
-            if (routineLoadDesc.getColumnSeparator() != null) {
-                originLoadDesc.setColumnSeparator(routineLoadDesc.getColumnSeparator());
-            }
-            if (routineLoadDesc.getRowDelimiter() != null) {
-                originLoadDesc.setRowDelimiter(routineLoadDesc.getRowDelimiter());
-            }
-            if (routineLoadDesc.getColumnsInfo() != null) {
-                originLoadDesc.setColumnsInfo(routineLoadDesc.getColumnsInfo());
-            }
-            if (routineLoadDesc.getWherePredicate() != null) {
-                originLoadDesc.setWherePredicate(routineLoadDesc.getWherePredicate());
-            }
-            if (routineLoadDesc.getPartitionNames() != null) {
-                originLoadDesc.setPartitionNames(routineLoadDesc.getPartitionNames());
-            }
-
-            String tableName = null;
-            try {
-                tableName = getTableName();
-            } catch (Exception e) {
-                LOG.warn("get table name failed", e);
-                tableName = "unknown";
-            }
-
-            // we use sql to persist the load properties, so we just put the load properties to sql.
-            String sql = String.format("CREATE ROUTINE LOAD %s ON %s %s" +
-                            " PROPERTIES (\"desired_concurrent_number\"=\"1\")" +
-                            " FROM KAFKA (\"kafka_topic\" = \"my_topic\")",
-                    name, tableName, originLoadDesc.toSql());
-            LOG.debug("merge result: {}", sql);
-            origStmt = new OriginStatement(sql, 0);
-        }
-
-        protected abstract void modifyDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties)
-            throws DdlException;
-
-        // for ALTER ROUTINE LOAD
-        private void modifyCommonJobProperties(Map<String, String> jobProperties) {
-            // Some properties will be remove from the map, so we copy the jobProperties to copiedJobProperties
-            Map<String, String> copiedJobProperties = new HashMap<>(jobProperties);
-            if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY)) {
-                this.desireTaskConcurrentNum = Integer.parseInt(
-                        copiedJobProperties.remove(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY));
-            }
-            if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY)) {
-                this.maxErrorNum = Long.parseLong(
-                        copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY));
-            }
-            if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY)) {
-                this.taskSchedIntervalS = Long.parseLong(
-                        copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY));
-            }
-            if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY)) {
-                this.maxBatchRows = Long.parseLong(
-                        copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY));
-            }
-            this.jobProperties.putAll(copiedJobProperties);
+        out.writeInt(sessionVariables.size());
+        for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
+            Text.writeString(out, entry.getKey());
+            Text.writeString(out, entry.getValue());
         }
     }
+
+    public void readFields(DataInput in) throws IOException {
+        if (!isTypeRead) {
+            dataSourceType = LoadDataSourceType.valueOf(Text.readString(in));
+            isTypeRead = true;
+        }
+
+        id = in.readLong();
+        name = Text.readString(in);
+
+        // ignore the clusterName param
+        Text.readString(in);
+
+        dbId = in.readLong();
+        tableId = in.readLong();
+        desireTaskConcurrentNum = in.readInt();
+        state = JobState.valueOf(Text.readString(in));
+        maxErrorNum = in.readLong();
+        taskSchedIntervalS = in.readLong();
+        maxBatchRows = in.readLong();
+        maxBatchSizeBytes = in.readLong();
+
+        switch (dataSourceType) {
+            case KAFKA: {
+                progress = new KafkaProgress();
+                progress.readFields(in);
+                break;
+            }
+            default:
+                throw new IOException("unknown data source type: " + dataSourceType);
+        }
+
+        createTimestamp = in.readLong();
+        pauseTimestamp = in.readLong();
+        endTimestamp = in.readLong();
+
+        currentErrorRows = in.readLong();
+        currentTotalRows = in.readLong();
+        errorRows = in.readLong();
+        totalRows = in.readLong();
+        unselectedRows = in.readLong();
+        receivedBytes = in.readLong();
+        totalTaskExcutionTimeMs = in.readLong();
+        committedTaskNum = in.readLong();
+        abortedTaskNum = in.readLong();
+
+        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_76) {
+            String stmt = Text.readString(in);
+            origStmt = new OriginStatement(stmt, 0);
+        } else {
+            origStmt = OriginStatement.read(in);
+        }
+
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_59) {
+            int size = in.readInt();
+            for (int i = 0; i < size; i++) {
+                String key = Text.readString(in);
+                String value = Text.readString(in);
+                jobProperties.put(key, value);
+            }
+        } else {
+            // The behaviors of old broker load could not be changed
+            jobProperties.put(LoadStmt.STRICT_MODE, Boolean.toString(false));
+        }
+
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_66) {
+            int size = in.readInt();
+            for (int i = 0; i < size; i++) {
+                String key = Text.readString(in);
+                String value = Text.readString(in);
+                sessionVariables.put(key, value);
+            }
+        } else {
+            // old version of load does not have sqlmode, set it to default
+            sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
+        }
+
+        setRoutineLoadDesc(CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables));
+    }
+
+    public void modifyJob(RoutineLoadDesc routineLoadDesc,
+                          Map<String, String> jobProperties,
+                          RoutineLoadDataSourceProperties dataSourceProperties,
+                          OriginStatement originStatement,
+                          boolean isReplay) throws DdlException {
+        writeLock();
+        try {
+            if (routineLoadDesc != null) {
+                setRoutineLoadDesc(routineLoadDesc);
+                mergeLoadDescToOriginStatement(routineLoadDesc);
+            }
+            if (jobProperties != null) {
+                modifyCommonJobProperties(jobProperties);
+            }
+            if (dataSourceProperties != null) {
+                modifyDataSourceProperties(dataSourceProperties);
+            }
+            if (!isReplay) {
+                AlterRoutineLoadJobOperationLog log = new AlterRoutineLoadJobOperationLog(id,
+                        jobProperties, dataSourceProperties, originStatement);
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterRoutineLoadJob(log);
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void mergeLoadDescToOriginStatement(RoutineLoadDesc routineLoadDesc) {
+        if (origStmt == null) {
+            return;
+        }
+
+        RoutineLoadDesc originLoadDesc = CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables);
+        if (originLoadDesc == null) {
+            originLoadDesc = new RoutineLoadDesc();
+        }
+        if (routineLoadDesc.getColumnSeparator() != null) {
+            originLoadDesc.setColumnSeparator(routineLoadDesc.getColumnSeparator());
+        }
+        if (routineLoadDesc.getRowDelimiter() != null) {
+            originLoadDesc.setRowDelimiter(routineLoadDesc.getRowDelimiter());
+        }
+        if (routineLoadDesc.getColumnsInfo() != null) {
+            originLoadDesc.setColumnsInfo(routineLoadDesc.getColumnsInfo());
+        }
+        if (routineLoadDesc.getWherePredicate() != null) {
+            originLoadDesc.setWherePredicate(routineLoadDesc.getWherePredicate());
+        }
+        if (routineLoadDesc.getPartitionNames() != null) {
+            originLoadDesc.setPartitionNames(routineLoadDesc.getPartitionNames());
+        }
+
+        String tableName = null;
+        try {
+            tableName = getTableName();
+        } catch (Exception e) {
+            LOG.warn("get table name failed", e);
+            tableName = "unknown";
+        }
+
+        // we use sql to persist the load properties, so we just put the load properties to sql.
+        String sql = String.format("CREATE ROUTINE LOAD %s ON %s %s" +
+                        " PROPERTIES (\"desired_concurrent_number\"=\"1\")" +
+                        " FROM KAFKA (\"kafka_topic\" = \"my_topic\")",
+                name, tableName, originLoadDesc.toSql());
+        LOG.debug("merge result: {}", sql);
+        origStmt = new OriginStatement(sql, 0);
+    }
+
+    protected abstract void modifyDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties)
+            throws DdlException;
+
+    // for ALTER ROUTINE LOAD
+    private void modifyCommonJobProperties(Map<String, String> jobProperties) {
+        // Some properties will be remove from the map, so we copy the jobProperties to copiedJobProperties
+        Map<String, String> copiedJobProperties = new HashMap<>(jobProperties);
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY)) {
+            this.desireTaskConcurrentNum = Integer.parseInt(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY));
+        }
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY)) {
+            this.maxErrorNum = Long.parseLong(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY));
+        }
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY)) {
+            this.taskSchedIntervalS = Long.parseLong(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY));
+        }
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY)) {
+            this.maxBatchRows = Long.parseLong(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY));
+        }
+        this.jobProperties.putAll(copiedJobProperties);
+    }
+}

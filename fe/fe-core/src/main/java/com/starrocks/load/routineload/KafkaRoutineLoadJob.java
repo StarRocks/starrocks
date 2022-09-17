@@ -279,7 +279,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     // update current kafka partition at the same time
     // current kafka partitions = customKafkaPartitions == 0 ? all of partition of kafka topic : customKafkaPartitions
     @Override
-    protected boolean NeedRescheduleFromRunning() throws UserException {
+    protected boolean needRescheduleFromRunning() throws UserException {
         List<Integer> newCurrentKafkaPartition;
 
         readLock();
@@ -307,7 +307,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 return false;
             }
 
-            if (currentKafkaPartitions.containsAll(newCurrentKafkaPartition) && currentKafkaPartitions.size() == newCurrentKafkaPartition.size()) {
+            if (currentKafkaPartitions.containsAll(newCurrentKafkaPartition) &&
+                    currentKafkaPartitions.size() == newCurrentKafkaPartition.size()) {
                 // partitions are not changed.
                 return false;
             }
