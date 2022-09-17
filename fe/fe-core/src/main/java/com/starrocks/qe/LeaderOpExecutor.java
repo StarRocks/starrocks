@@ -166,7 +166,7 @@ public class LeaderOpExecutor {
     }
 
     /**
-     * if a query statement is forwarded to the master, or if a show statement is automatically rewrote,
+     * if a query statement is forwarded to the leader, or if a show statement is automatically rewrote,
      * the result of the query will be returned in thrift body and should write into mysql channel.
      **/
     public boolean sendResultToChannel(MysqlChannel channel) throws IOException {
