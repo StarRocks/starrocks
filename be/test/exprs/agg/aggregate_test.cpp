@@ -639,6 +639,34 @@ TEST_F(AggregateTest, test_stddev_samp) {
     }
 }
 
+TEST_F(AggregateTest, test_maxby) {
+    const AggregateFunction* func = get_aggregate_function("max_by", TYPE_VARCHAR, TYPE_INT, true);
+
+    auto result_column = Int32Column::create();
+    auto aggr_state = ManagedAggrState::create(ctx, func);
+
+    auto int_column = Int32Column::create();
+    for (int i = 0; i < 10; i++) {
+        int_column->append(i);
+    }
+    auto varchar_column = BinaryColumn::create();
+    std::vector<Slice> strings{{"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}, {""}};
+    varchar_column->append_strings(strings);
+
+    Columns columns;
+    columns.emplace_back(int_column);
+    columns.emplace_back(varchar_column);
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(columns.size());
+    for (int i = 0; i < columns.size(); ++i) {
+        raw_columns[i] = columns[i].get();
+    }
+
+    func->update_batch_single_state(ctx, int_column->size(), raw_columns.data(), aggr_state->state());
+    func->finalize_to_column(ctx, aggr_state->state(), result_column.get());
+    ASSERT_EQ(2, result_column->get_data()[0]);
+}
+
 TEST_F(AggregateTest, test_max) {
     const AggregateFunction* func = get_aggregate_function("max", TYPE_SMALLINT, TYPE_SMALLINT, false);
     test_agg_function<int16_t, int16_t>(ctx, func, 1023, 2999, 2999);

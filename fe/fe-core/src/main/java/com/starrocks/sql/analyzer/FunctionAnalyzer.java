@@ -193,6 +193,22 @@ public class FunctionAnalyzer {
                 throw new SemanticException("window argument must be numerical type");
             }
         }
+        
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.MAX_BY)) {
+            if (functionCallExpr.getChildren().size() != 2 || functionCallExpr.getChildren().isEmpty()) {
+                throw new SemanticException(
+                        "max_by requires two parameters: " + functionCallExpr.toSql());
+            }
+            
+            fnParams.setIsDistinct(false);  // DISTINCT is meaningless here
+
+            Type maxByType = functionCallExpr.getChild(1).getType();
+            if (!maxByType.canApplyToNumeric()) {
+                throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+            }
+            
+            return;
+        }
 
         // SUM and AVG cannot be applied to non-numeric types
         if ((fnName.getFunction().equals(FunctionSet.SUM)

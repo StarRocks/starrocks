@@ -206,6 +206,7 @@ public class FunctionSet {
     public static final String COUNT = "count";
     public static final String HLL_UNION_AGG = "hll_union_agg";
     public static final String MAX = "max";
+    public static final String MAX_BY = "max_by";
     public static final String MIN = "min";
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_CONT = "percentile_cont";
@@ -757,6 +758,25 @@ public class FunctionSet {
             // Max
             addBuiltin(AggregateFunction.createBuiltin(MAX,
                     Lists.newArrayList(t), t, t, true, true, false));
+                    
+            // MAX_BY
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.TINYINT), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.SMALLINT), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.INT), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.LARGEINT), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.BIGINT), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.BOOLEAN), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.FLOAT), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.DOUBLE), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.DECIMAL32), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.DECIMAL64), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.DECIMAL128), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.DECIMALV2), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.VARCHAR), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.CHAR), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.DATETIME), t, Type.VARCHAR, true, true, false));
+            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.DATE), t, Type.VARCHAR, true, true, false));
+            
 
             // NDV
             // ndv return string

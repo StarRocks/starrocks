@@ -37,7 +37,7 @@ import java.util.Map;
 public class MergeTwoAggRule extends TransformationRule {
     private static final List<String> ALLOW_MERGE_AGGREGATE_FUNCTIONS = Lists.newArrayList(FunctionSet.SUM,
             FunctionSet.MAX, FunctionSet.MIN, FunctionSet.BITMAP_UNION, FunctionSet.HLL_UNION,
-            FunctionSet.PERCENTILE_UNION, FunctionSet.ANY_VALUE);
+            FunctionSet.PERCENTILE_UNION, FunctionSet.ANY_VALUE, FunctionSet.MAX_BY);
 
     public MergeTwoAggRule() {
         super(RuleType.TF_MERGE_TWO_AGG_RULE, Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(
@@ -84,7 +84,8 @@ public class MergeTwoAggRule extends TransformationRule {
                 // max/min on grouping column is equals with direct aggregate on column
                 if (!FunctionSet.MAX.equalsIgnoreCase(call.getFnName()) &&
                         !FunctionSet.MIN.equalsIgnoreCase(call.getFnName()) &&
-                        !FunctionSet.ANY_VALUE.equalsIgnoreCase(call.getFnName())) {
+                        !FunctionSet.ANY_VALUE.equalsIgnoreCase(call.getFnName()) &&
+                        !FunctionSet.MAX_BY.equalsIgnoreCase(call.getFnName())) {
                     return false;
                 }
             } else {

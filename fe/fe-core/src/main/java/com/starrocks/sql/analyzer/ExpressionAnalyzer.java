@@ -771,6 +771,18 @@ public class ExpressionAnalyzer {
                         node.getParams().isStar() ? "*" : Joiner.on(", ")
                                 .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
             }
+            
+            
+            if (FunctionSet.MAX_BY.equals(fnName)) {
+                if (argumentTypes[0].isDecimalV3()) {
+                    Type returnType = ScalarType.createDecimalV3Type(argumentTypes[0].getPrimitiveType(), 
+                            argumentTypes[0].getPrecision(), 
+                            ((ScalarType) argumentTypes[0]).getScalarScale());
+                    fn.setReturnType(returnType);
+                }
+                return fn;
+            }
+            
 
             if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_FUNCTION.contains(fnName)) {
                 Type argType = node.getChild(0).getType();
