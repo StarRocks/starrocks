@@ -1,4 +1,4 @@
-# MySQL 实时同步至StarRocks
+# 从 MySQL 实时同步
 
 ## 功能简介
 

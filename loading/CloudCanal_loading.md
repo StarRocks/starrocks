@@ -1,4 +1,4 @@
-# CloudCanal 数据导入
+# 使用 CloudCanal 导入
 
 ## 介绍
 
