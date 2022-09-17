@@ -34,8 +34,8 @@ namespace starrocks {
 void TimestampedVersionTracker::_construct_versioned_tracker(const std::vector<RowsetMetaSharedPtr>& rs_metas) {
     int64_t max_version = 0;
 
-    // construct the roset graph
-    _version_graph.reconstruct_version_graph(rs_metas, &max_version);
+    // construct the rowset graph
+    _version_graph.construct_version_graph(rs_metas, &max_version);
 }
 
 void TimestampedVersionTracker::construct_versioned_tracker(const std::vector<RowsetMetaSharedPtr>& rs_metas) {
@@ -102,6 +102,10 @@ void TimestampedVersionTracker::get_stale_version_path_json_doc(rapidjson::Docum
 
 int64_t TimestampedVersionTracker::get_max_continuous_version() const {
     return _version_graph.max_continuous_version();
+}
+
+int64_t TimestampedVersionTracker::get_min_readable_version() const {
+    return _version_graph.min_readable_version();
 }
 
 void TimestampedVersionTracker::add_version(const Version& version) {
@@ -219,6 +223,9 @@ std::vector<TimestampedVersionSharedPtr>& TimestampedVersionPathContainer::times
 }
 
 void VersionGraph::construct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version) {
+    _version_graph.clear();
+    _max_continuous_version = -1;
+    _min_readable_version = -1;
     if (rs_metas.empty()) {
         VLOG(3) << "there is no version in the header.";
         return;
@@ -234,12 +241,14 @@ void VersionGraph::construct_version_graph(const std::vector<RowsetMetaSharedPtr
         }
     }
     _max_continuous_version = _get_max_continuous_version_from(0);
-}
-
-void VersionGraph::reconstruct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version) {
-    _version_graph.clear();
-    _max_continuous_version = -1;
-    construct_version_graph(rs_metas, max_version);
+    _min_readable_version = -1;
+    for (const auto& rs_meta : rs_metas) {
+        const auto& version = rs_meta->version();
+        if (version.second <= _max_continuous_version && version.first != version.second) {
+            // it's a compacted version
+            _min_readable_version = std::max(version.second, _min_readable_version);
+        }
+    }
 }
 
 void VersionGraph::add_version_to_graph(const Version& version) {
@@ -327,6 +336,9 @@ Status VersionGraph::delete_version_from_graph(const Version& version) {
         _version_graph.erase(end_iter);
     }
 
+    if (version.second <= _max_continuous_version) {
+        _min_readable_version = std::max(_min_readable_version, version.second);
+    }
     return Status::OK();
 }
 

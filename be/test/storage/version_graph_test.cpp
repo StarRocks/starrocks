@@ -212,7 +212,7 @@ TEST(VersionGraphTest, capture) {
 
     rs_meta.clear();
     max_version = -1;
-    graph.reconstruct_version_graph(rs_meta, &max_version);
+    graph.construct_version_graph(rs_meta, &max_version);
 
     EXPECT_EQ(max_version, -1);
 }
@@ -340,17 +340,22 @@ TEST(VersionGraphTest, max_continuous_version) {
     auto input1 = gen_meta({{0, 1}, {2, 2}, {3, 3}, {4, 4}, {6, 6}});
     graph.construct_version_graph(input1, nullptr);
     EXPECT_EQ(graph.max_continuous_version(), 4);
+    EXPECT_EQ(graph.min_readable_version(), 1);
     graph.add_version_to_graph(Version(5, 5));
     EXPECT_EQ(graph.max_continuous_version(), 6);
+    EXPECT_EQ(graph.min_readable_version(), 1);
     graph.add_version_to_graph(Version(7, 7));
     EXPECT_EQ(graph.max_continuous_version(), 7);
+    EXPECT_EQ(graph.min_readable_version(), 1);
 
     // The following case may be happened in schema change
     // 1. Schema change first remove the existing rowset
     // 2. Add new version rowset into new tablet
     graph.delete_version_from_graph(Version(0, 1));
+    EXPECT_EQ(graph.min_readable_version(), 1);
     for (int i = 2; i <= 7; i++) {
         graph.delete_version_from_graph(Version(i, i));
+        EXPECT_EQ(graph.min_readable_version(), i);
     }
     EXPECT_EQ(graph.max_continuous_version(), 7);
     graph.add_version_to_graph(Version(0, 10));

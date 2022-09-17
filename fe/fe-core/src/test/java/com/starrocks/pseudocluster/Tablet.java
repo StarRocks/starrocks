@@ -90,6 +90,7 @@ public class Tablet {
         info.setPath_hash(PseudoBackend.PATH_HASH);
         info.setIs_in_memory(false);
         info.setVersion(maxContinuousVersion());
+        info.setMin_readable_version(minVersion());
         info.setVersion_miss(!pendingRowsets.isEmpty());
         info.setRow_count(getRowCount());
         info.setData_size(getDataSize());
@@ -323,7 +324,8 @@ public class Tablet {
     }
 
     public TTabletInfo getTabletInfo() {
-        TTabletInfo info = new TTabletInfo(id, schemaHash, maxContinuousVersion(), 1, getRowCount(), getDataSize());
+        TTabletInfo info = new TTabletInfo(id, schemaHash, maxContinuousVersion(), getRowCount(), getDataSize());
+        info.setMin_readable_version(minVersion());
         return info;
     }
 
@@ -390,8 +392,11 @@ public class Tablet {
             totalIncrementalClone.incrementAndGet();
             totalClone.incrementAndGet();
             cloneExecuted.incrementAndGet();
-            LOG.info("tablet:{} incremental clone src:{} {} before:{} after:{}", id, srcBackendId, src.versionInfo(),
-                    oldInfo, versionInfo());
+            String msg =
+                    String.format("tablet:%d incremental clone src:%d %s before:%s after:%s", id, srcBackendId, src.versionInfo(),
+                            oldInfo, versionInfo());
+            System.out.println(msg);
+            LOG.info(msg);
         }
     }
 
@@ -412,8 +417,10 @@ public class Tablet {
         totalFullClone.incrementAndGet();
         totalClone.incrementAndGet();
         cloneExecuted.incrementAndGet();
-        LOG.info("tablet:{} full clone src:{} {} before:{} after:{}", id, srcBackendId, src.versionInfo(), oldInfo,
-                versionInfo());
+        String msg = String.format("tablet:%d full clone src:%d %s before:%s after:%s", id, srcBackendId, src.versionInfo(),
+                oldInfo, versionInfo());
+        System.out.println(msg);
+        LOG.info(msg);
     }
 
     public synchronized void versionGC() {
