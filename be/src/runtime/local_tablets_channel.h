@@ -50,7 +50,7 @@ public:
 
     void abort() override;
 
-    void cancel(int64_t tablet_id);
+    void abort(int64_t tablet_id);
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 

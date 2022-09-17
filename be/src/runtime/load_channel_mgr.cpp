@@ -150,7 +150,7 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
     if (request.has_tablet_id()) {
         auto channel = _find_load_channel(load_id);
         if (channel != nullptr) {
-            channel->cancel(request.index_id(), request.tablet_id());
+            channel->abort(request.index_id(), request.tablet_id());
         }
     } else {
         if (auto channel = remove_load_channel(load_id); channel != nullptr) {

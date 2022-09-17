@@ -426,7 +426,7 @@ void LocalTabletsChannel::abort() {
               << " tablet_ids:" << tablet_id_list_str;
 }
 
-void LocalTabletsChannel::cancel(int64_t tablet_id) {
+void LocalTabletsChannel::abort(int64_t tablet_id) {
     auto it = _delta_writers.find(tablet_id);
     if (it != _delta_writers.end()) {
         it->second->abort(true);

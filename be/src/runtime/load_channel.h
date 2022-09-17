@@ -80,7 +80,7 @@ public:
 
     void abort();
 
-    void cancel(int64_t index_id, int64_t tablet_id);
+    void abort(int64_t index_id, int64_t tablet_id);
 
     time_t last_updated_time() const { return _last_updated_time.load(std::memory_order_relaxed); }
 
