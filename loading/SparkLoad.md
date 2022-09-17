@@ -1,4 +1,4 @@
-# Spark Load
+# 使用 Apache Spark™ 批量导入
 
 Spark Load 通过外部的 Spark 资源实现对导入数据的预处理，提高 StarRocks 大数据量的导入性能并且节省 StarRocks 集群的计算资源。主要用于 **初次迁移**、**大数据量导入** StarRocks 的场景（数据量可到 TB 级别）。
 
