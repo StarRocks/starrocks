@@ -632,4 +632,37 @@ public class CTEPlanTest extends PlanTestBase {
                 "\n" +
                 "  1:EMPTYSET");
     }
+
+    @Test
+    public void testMultiDistinctWithLimit() throws Exception {
+        {
+            String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 limit 1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  8:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
+                    "  |  group by: \n" +
+                    "  |  limit: 1");
+            assertContains(plan, "  26:AGGREGATE (merge finalize)\n" +
+                    "  |  output: count(9: count)\n" +
+                    "  |  group by: \n" +
+                    "  |  limit: 1");
+        }
+        {
+            String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 group by v3 limit 1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  |    19:HASH JOIN\n" +
+                    "  |    |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                    "  |    |  colocate: false, reason: \n" +
+                    "  |    |  equal join conjunct: 7: v3 <=> 13: v3\n" +
+                    "  |    |  \n" +
+                    "  |    |----18:AGGREGATE (update finalize)\n" +
+                    "  |    |    |  output: count(12: v2)\n" +
+                    "  |    |    |  group by: 13: v3\n" +
+                    "  |    |    |  \n" +
+                    "  |    |    17:AGGREGATE (merge serialize)\n" +
+                    "  |    |    |  group by: 12: v2, 13: v3\n" +
+                    "  |    |    |  \n" +
+                    "  |    |    16:EXCHANGE");
+        }
+    }
 }
