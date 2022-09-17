@@ -39,7 +39,7 @@ class CastStringToArray final : public Expr {
 public:
     CastStringToArray(const TExprNode& node, Expr* cast_element, const TypeDescriptor& type_desc)
             : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(type_desc) {}
-    ~CastStringToArray() override = default;
+    ~CastStringToArray() override { delete _cast_elements_expr; }
 
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* input_chunk) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }

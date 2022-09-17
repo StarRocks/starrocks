@@ -32,7 +32,7 @@ public:
     VectorizedCastArrayExpr(Expr* cast_element_expr, const TExprNode& node)
             : Expr(node), _cast_element_expr(cast_element_expr) {}
 
-    ~VectorizedCastArrayExpr() override = default;
+    ~VectorizedCastArrayExpr() override { delete _cast_element_expr; }
 
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
 
