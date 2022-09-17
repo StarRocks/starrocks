@@ -117,12 +117,14 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
                 break;
             case ZONE_MAP_INDEX:
                 _zonemap_index_meta.reset(index_meta->release_zone_map_index());
-                MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
-                                         _zonemap_index_meta->SpaceUsedLong());
-                _zonemap_index = std::make_unique<ZoneMapIndexReader>();
                 _segment_zone_map.reset(_zonemap_index_meta->release_segment_zone_map());
+                MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+                                         _zonemap_index_meta->SpaceUsedLong())
+                // the segment zone map will release from zonemap_index_map,
+                // so we should calc mem usage after release.
                 MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->segment_zonemap_mem_tracker(),
-                                         _segment_zone_map->SpaceUsedLong());
+                                         _segment_zone_map->SpaceUsedLong())
+                _zonemap_index = std::make_unique<ZoneMapIndexReader>();
                 break;
             case BITMAP_INDEX:
                 _bitmap_index_meta.reset(index_meta->release_bitmap_index());
