@@ -235,20 +235,18 @@ INNER JOIN (join-predicate [null] post-join-predicate [null])
 [sql]
 select v1,v2,v3,v4 from t0 full outer join t1 on v1=v5 and 1>2 and v1=v1 and v2 > v3
 [result]
-FULL OUTER JOIN (join-predicate [false] post-join-predicate [null])
-    EXCHANGE GATHER
-        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    EXCHANGE GATHER
-        SCAN (columns[4: v4] predicate[null])
+FULL OUTER JOIN (join-predicate [1: v1 = 5: v5 AND false] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+    EXCHANGE SHUFFLE[5]
+        SCAN (columns[4: v4, 5: v5] predicate[null])
 [end]
 
 [sql]
 select * from t0 full outer join t1 on v1 = v4 and 1 = 2 and v2 = 3
 [result]
-FULL OUTER JOIN (join-predicate [false] post-join-predicate [null])
-    EXCHANGE GATHER
-        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    EXCHANGE GATHER
+FULL OUTER JOIN (join-predicate [1: v1 = 4: v4 AND false] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+    EXCHANGE SHUFFLE[4]
         SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
 [end]
 

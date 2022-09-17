@@ -703,18 +703,17 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             scalarConjuncts.add(scalarConjunct);
         }
 
-        ScalarOperator scalarOperatorWithoutRewrite = Utils.compoundAnd(scalarConjuncts);
-
         // Step2
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         ScalarOperator scalarOperator = rewriter.rewrite(
-                scalarOperatorWithoutRewrite,
+                Utils.compoundAnd(scalarConjuncts),
                 ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
         //  If the on-predicate condition is rewrite to false.
         //  We need to extract the equivalence conditions to meet query analysis and
         //  avoid hash joins without equivalence conditions
         if (scalarOperator.isConstant() && scalarOperator.getType().isBoolean()
                 && !node.getJoinOp().isCrossJoin() && !node.getJoinOp().isInnerJoin()) {
+            ScalarOperator scalarOperatorWithoutRewrite = Utils.compoundAnd(scalarConjuncts);
             List<BinaryPredicateOperator> eqPredicate = JoinHelper.getEqualsPredicate(
                     new ColumnRefSet(leftOutputColumns),
                     new ColumnRefSet(rightOutputColumns),

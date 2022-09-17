@@ -1,7 +1,7 @@
 [sql]
 select t0.v1 from t0 where exists (select t3.v11 from t3)
 [result]
-    CROSS JOIN (join-predicate [null] post-join-predicate [null])
+CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1] predicate[null])
     EXCHANGE BROADCAST
         EXCHANGE GATHER
@@ -11,16 +11,14 @@ select t0.v1 from t0 where exists (select t3.v11 from t3)
 [sql]
 select t0.v1 from t0 where exists (select t3.v11 from t3 where t0.v3 = t3.v12)
 [result]
-    LEFT SEMI JOIN (join-predicate [3: v3 = 6: v12] post-join-predicate [null])
+LEFT SEMI JOIN (join-predicate [3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         SCAN (columns[6: v12] predicate[6: v12 IS NOT NULL])
 [end]
 
 [sql]
-select t0.v1
-from t0
-where not exists(select t3.v11 from t3)
+select t0.v1 from t0 where not exists (select t3.v11 from t3)
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1] predicate[null])
