@@ -105,7 +105,7 @@ Status HdfsScannerCSVReader::_fill_buffer() {
                     _buff.append(ch);
                 }
             } else {
-                return Status::RuntimeError("CSV does not end with row delimiter and has no free space for that");
+                return Status::InternalError("CSV line length exceed limit " + std::to_string(_buff.capacity()));
             }
         }
     }
