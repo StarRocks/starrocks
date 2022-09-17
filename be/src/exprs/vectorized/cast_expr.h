@@ -45,5 +45,36 @@ private:
     Expr* _cast_element_expr;
 };
 
+// Cast string to array<ANY>
+class CastStringToArray final : public Expr {
+public:
+    CastStringToArray(const TExprNode& node, Expr* cast_element, const TypeDescriptor& type_desc)
+            : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(type_desc) {}
+    ~CastStringToArray() override = default;
+    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* input_chunk) override;
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }
+
+private:
+    Slice _unquote(Slice slice);
+
+    Expr* _cast_elements_expr;
+    TypeDescriptor _cast_to_type_desc;
+};
+
+// Cast JsonArray to array<ANY>
+class CastJsonToArray final : public Expr {
+public:
+    CastJsonToArray(const TExprNode& node, Expr* cast_element, const TypeDescriptor& type_desc)
+            : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(type_desc) {}
+    ~CastJsonToArray() override = default;
+
+    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* input_chunk) override;
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastJsonToArray(*this)); }
+
+private:
+    Expr* _cast_elements_expr;
+    TypeDescriptor _cast_to_type_desc;
+};
+
 } // namespace vectorized
 } // namespace starrocks
