@@ -26,7 +26,7 @@
 
 namespace starrocks {
 
-int64_t ParseUtil::parse_mem_spec(const std::string& mem_spec_str) {
+int64_t ParseUtil::parse_mem_spec(const std::string& mem_spec_str, const int64_t memory_limit) {
     bool is_percent = false;
     if (mem_spec_str.empty()) {
         return 0;
@@ -91,7 +91,7 @@ int64_t ParseUtil::parse_mem_spec(const std::string& mem_spec_str) {
         }
 
         if (is_percent) {
-            bytes = (static_cast<double>(limit_val) / 100.0) * MemInfo::physical_mem();
+            bytes = (static_cast<double>(limit_val) / 100.0) * memory_limit;
         } else {
             bytes = limit_val;
         }
