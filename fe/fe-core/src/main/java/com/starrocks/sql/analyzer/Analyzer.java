@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CreateRoleStmt;
+import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
@@ -487,6 +488,12 @@ public class Analyzer {
         @Override
         public Void visitRecoverPartitionStmt(RecoverPartitionStmt statement, ConnectContext context) {
             RecoverPartitionAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, ConnectContext session) {
+            CreateRoutineLoadAnalyzer.analyze(statement, session);
             return null;
         }
 

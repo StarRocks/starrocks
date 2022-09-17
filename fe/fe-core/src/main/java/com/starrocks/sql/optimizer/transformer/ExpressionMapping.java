@@ -10,7 +10,6 @@ import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,8 +22,6 @@ public class ExpressionMapping {
      * This structure is responsible for the translation map from Expr to operator
      */
     private final Map<Expr, ColumnRefOperator> expressionToColumns = new HashMap<>();
-
-    private final Map<ScalarOperator, ColumnRefOperator> subqueryToColumns = new HashMap<>();
 
     /**
      * The purpose of below property is to hold the current plan built so far,
@@ -107,24 +104,12 @@ public class ExpressionMapping {
         expressionToColumns.put(expression, columnRefOperator);
     }
 
-    public void put(ScalarOperator operator, ColumnRefOperator columnRefOperator) {
-        subqueryToColumns.put(operator, columnRefOperator);
-    }
-
     public boolean hasExpression(Expr expr) {
         return expressionToColumns.containsKey(expr);
     }
 
-    public boolean hasScalarOperator(ScalarOperator operator) {
-        return subqueryToColumns.containsKey(operator);
-    }
-
     public ColumnRefOperator get(Expr expression) {
         return expressionToColumns.get(expression);
-    }
-
-    public ColumnRefOperator get(ScalarOperator operator) {
-        return subqueryToColumns.get(operator);
     }
 
     public List<Expr> getAllExpressions() {
