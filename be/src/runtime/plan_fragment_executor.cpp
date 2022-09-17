@@ -378,6 +378,9 @@ void PlanFragmentExecutor::cancel() {
         starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
                 _runtime_state->fragment_instance_id());
     }
+    if (_sink != nullptr) {
+        _sink->cancel();
+    }
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
     _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
 

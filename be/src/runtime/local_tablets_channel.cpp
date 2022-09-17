@@ -413,7 +413,9 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
 }
 
 void LocalTabletsChannel::cancel() {
+    int i = 0;
     for (auto& it : _delta_writers) {
+        std::cout<<"CANCEL:"<<i++<<std::endl;
         it.second->cancel(Status::Cancelled("cancel"));
     }
 }
