@@ -73,11 +73,11 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
     auto it = _fragment_contexts.find(fragment_id);
     if (it != _fragment_contexts.end()) {
         it->second->_finish_promise.set_value();
-        _fragment_contexts.erase(it);
         if (it->second->runtime_state()->query_options().query_type == TQueryType::LOAD) {
             starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
                                                                                                  fragment_id);
         }
+        _fragment_contexts.erase(it);
     }
 }
 

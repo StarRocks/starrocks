@@ -162,22 +162,28 @@ statement
 
     // privilege
     | grantRoleStatement
-    | grantImpersonateStatement
     | revokeRoleStatement
-    | revokeImpersonateStatement
     | executeAsStatement
     | alterUserStatement
     | createUserStatement
     | dropUserStatement
     | showAuthenticationStatement
     | createRoleStatement
+    | grantPrivilegeStatement
+    | revokePrivilegeStatement
     | showRolesStatement
     | showGrantsStatement
     | dropRoleStatement
 
+
     // Backup Restore Satement
     | backupStatement
     | showBackupStatement
+    | restoreStatement
+    | showRestoreStatement
+
+    // Snapshot Satement
+    | showSnapshotStatement
 
     // Sql BlackList And WhiteList Statement
     | addSqlBlackListStatement
@@ -545,6 +551,7 @@ alterClause
     //Alter partition clause
     | addPartitionClause
     | dropPartitionClause
+    | distributionClause
     | truncatePartitionClause
     | modifyPartitionClause
     | replacePartitionClause
@@ -654,6 +661,7 @@ rollupRenameClause
 addPartitionClause
     : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties?
     ;
+
 dropPartitionClause
     : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
     ;
@@ -664,6 +672,7 @@ truncatePartitionClause
 
 modifyPartitionClause
     : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
+    | MODIFY PARTITION distributionDesc
     ;
 
 replacePartitionClause
@@ -964,20 +973,61 @@ showWarningStatement
 
 // ------------------------------------------- Privilege Statement -----------------------------------------------------
 
+
+privilegeObjectName
+    : identifierOrString
+    | tablePrivilegeObjectName
+    | user
+    ;
+
+tablePrivilegeObjectName
+    : identifierOrStringOrStar
+    | identifierOrStringOrStar '.' identifierOrStringOrStar
+    ;
+
+identifierOrStringOrStar
+    : ASTERISK_SYMBOL
+    | identifier
+    | string
+    ;
+
+privilegeActionReserved
+    : ADMIN
+    | ALTER
+    | CREATE
+    | DROP
+    | GRANT
+    | LOAD
+    | SELECT
+    ;
+
+privilegeActionList
+    :  privilegeAction (',' privilegeAction)*
+    ;
+
+privilegeAction
+    : privilegeActionReserved
+    | identifier
+    ;
+
+grantPrivilegeStatement
+    : GRANT IMPERSONATE ON user TO ( user | ROLE identifierOrString )                                       #grantImpersonateBrief
+    | GRANT privilegeActionList ON tablePrivilegeObjectName TO (user | ROLE identifierOrString)        #grantTablePrivBrief
+    | GRANT privilegeActionList ON identifier privilegeObjectName TO (user | ROLE identifierOrString)  #grantPrivWithType
+    ;
+
+revokePrivilegeStatement
+    : REVOKE IMPERSONATE ON user FROM ( user | ROLE identifierOrString )                                  #revokeImpersonateBrief
+    | REVOKE privilegeActionList ON tablePrivilegeObjectName FROM (user | ROLE identifierOrString)   #revokeTablePrivBrief
+    | REVOKE privilegeActionList ON identifier privilegeObjectName FROM (user | ROLE identifierOrString) #revokePrivWithType
+    ;
+
 grantRoleStatement
     : GRANT identifierOrString TO user
     ;
 
-grantImpersonateStatement
-    : GRANT IMPERSONATE ON user TO (user | ROLE identifierOrString)
-    ;
-
 revokeRoleStatement
     : REVOKE identifierOrString FROM user
-    ;
-
-revokeImpersonateStatement
-    : REVOKE IMPERSONATE ON user FROM  (user | ROLE identifierOrString)
     ;
 
 executeAsStatement
@@ -1255,6 +1305,23 @@ showBackupStatement
     : SHOW BACKUP ((FROM | IN) identifier)?
     ;
 
+restoreStatement
+    : RESTORE SNAPSHOT qualifiedName
+    FROM identifier
+    ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
+    (PROPERTIES propertyList)?
+    ;
+
+showRestoreStatement
+    : SHOW RESTORE ((FROM | IN) identifier)? (WHERE where=expression)?
+    ;
+
+// ------------------------------------------- Snapshot Statement ------------------------------------------------------
+showSnapshotStatement
+    : SHOW SNAPSHOT ON identifier
+    (WHERE expression)?
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -1466,6 +1533,10 @@ tableDesc
     : qualifiedName partitionNames?
     ;
 
+restoreTableDesc
+    : qualifiedName partitionNames? (AS identifier)?
+    ;
+
 explainDesc
     : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
     ;
@@ -1519,13 +1590,18 @@ partitionValue
     : MAXVALUE | string
     ;
 
+distributionClause
+    : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+    | DISTRIBUTED BY HASH identifierList
+    ;
+
 distributionDesc
     : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+    | DISTRIBUTED BY HASH identifierList
     ;
 
 refreshSchemeDesc
-    : REFRESH (SYNC
-    | ASYNC
+    : REFRESH (ASYNC
     | ASYNC (START '(' string ')')? EVERY '(' interval ')'
     | MANUAL)
     ;

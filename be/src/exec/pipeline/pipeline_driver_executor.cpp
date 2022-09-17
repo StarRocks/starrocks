@@ -310,7 +310,8 @@ void GlobalDriverExecutor::_simplify_common_metrics(RuntimeProfile* driver_profi
                                               "JoinRuntimeFilterInputRows", "JoinRuntimeFilterOutputRows",
                                               "JoinRuntimeFilterEvaluate",  "JoinRuntimeFilterTime",
                                               "ConjunctsInputRows",         "ConjunctsOutputRows",
-                                              "ConjunctsEvaluate",          "ConjunctsTime"};
+                                              "ConjunctsEvaluate",          "ConjunctsTime",
+                                              "JoinRuntimeFilterHashTime"};
         for (auto& name : counter_names) {
             auto* counter = common_metrics->get_counter(name);
             if (counter != nullptr && counter->value() == 0) {

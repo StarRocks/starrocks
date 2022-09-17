@@ -68,7 +68,7 @@ Status MysqlResultWriter::append_chunk(vectorized::Chunk* chunk) {
         return Status::OK();
     }
     auto num_rows = chunk->num_rows();
-    auto status = process_chunk(chunk);
+    auto status = _process_chunk(chunk);
     if (!status.ok()) {
         return status.status();
     }
@@ -95,7 +95,7 @@ Status MysqlResultWriter::close() {
     return Status::OK();
 }
 
-StatusOr<TFetchDataResultPtr> MysqlResultWriter::process_chunk(vectorized::Chunk* chunk) {
+StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(vectorized::Chunk* chunk) {
     SCOPED_TIMER(_append_chunk_timer);
     int num_rows = chunk->num_rows();
     auto result = std::make_unique<TFetchDataResult>();
@@ -132,7 +132,7 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::process_chunk(vectorized::Chunk
     return result;
 }
 
-StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk_for_pipeline(vectorized::Chunk* chunk) {
+StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(vectorized::Chunk* chunk) {
     SCOPED_TIMER(_append_chunk_timer);
     int num_rows = chunk->num_rows();
     std::vector<TFetchDataResultPtr> results;

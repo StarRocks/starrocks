@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -184,6 +185,76 @@ public class UtilsTest {
         } catch (InternalError e) {
             Assert.assertTrue(e.getMessage().contains("Decimal32/64/128"));
         }
+    }
+
+    @Test
+    public void testMapString() throws DdlException {
+        ScalarType keyType = ScalarType.createType(PrimitiveType.TINYINT);
+        ScalarType valueType = ScalarType.createType(PrimitiveType.SMALLINT);
+        MapType mapType = new MapType(keyType, valueType);
+        String typeStr = "map<tinyint,smallint>";
+        Type resType = Utils.convertToMapType(typeStr);
+        Assert.assertEquals(mapType, resType);
+
+        keyType = ScalarType.createType(PrimitiveType.INT);
+        valueType = ScalarType.createType(PrimitiveType.INT);
+        mapType = new MapType(keyType, valueType);
+        typeStr = "Map<INT,INTEGER>";
+        resType = Utils.convertToMapType(typeStr);
+        Assert.assertEquals(mapType, resType);
+
+        keyType = ScalarType.createType(PrimitiveType.FLOAT);
+        valueType = ScalarType.createType(PrimitiveType.DOUBLE);
+        mapType = new MapType(keyType, valueType);
+        typeStr = "map<float,double>";
+        resType = Utils.convertToMapType(typeStr);
+        Assert.assertEquals(mapType, resType);
+
+        keyType = ScalarType.createUnifiedDecimalType(10, 7);
+        valueType = ScalarType.createType(PrimitiveType.DATETIME);
+        mapType = new MapType(keyType, valueType);
+        typeStr = "map<decimal(10,7),timestamp>";
+        resType = Utils.convertToMapType(typeStr);
+        Assert.assertEquals(mapType, resType);
+
+        keyType = ScalarType.createType(PrimitiveType.DATE);
+        valueType = ScalarType.createDefaultString();
+        mapType = new MapType(keyType, valueType);
+        typeStr = "map<date,string>";
+        resType = Utils.convertToMapType(typeStr);
+        Assert.assertEquals(mapType, resType);
+
+        keyType = ScalarType.createVarcharType(10);
+        valueType = ScalarType.createCharType(5);
+        mapType = new MapType(keyType, valueType);
+        typeStr = "map<varchar(10),char(5)>";
+        resType = Utils.convertToMapType(typeStr);
+        Assert.assertEquals(mapType, resType);
+
+        keyType = ScalarType.createType(PrimitiveType.BOOLEAN);
+        valueType = ScalarType.createVarcharType(10);
+        mapType = new MapType(keyType, valueType);
+        typeStr = "map<boolean,varchar(10)>";
+        resType = Utils.convertToMapType(typeStr);
+        Assert.assertEquals(mapType, resType);
+
+        keyType = ScalarType.createCharType(10);
+        ScalarType itemType = ScalarType.createType(PrimitiveType.INT);
+        ArrayType vType = new ArrayType(itemType);
+        mapType = new MapType(keyType, vType);
+        typeStr = "map<char(10),array<int>>";
+        resType = Utils.convertToMapType(typeStr);
+        Assert.assertEquals(mapType, resType);
+
+        keyType = ScalarType.createCharType(10);
+        ScalarType inKeyType = ScalarType.createType(PrimitiveType.INT);
+        itemType = ScalarType.createType(PrimitiveType.DATETIME);
+        ArrayType inValueType = new ArrayType(itemType);
+        MapType mValueType = new MapType(inKeyType, inValueType);
+        mapType = new MapType(keyType, mValueType);
+        typeStr = "map<char(10),map<int,array<timestamp>>>";
+        resType = Utils.convertToMapType(typeStr);
+        Assert.assertEquals(mapType, resType);
     }
 
     @Test

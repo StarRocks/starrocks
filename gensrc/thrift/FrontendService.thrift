@@ -440,7 +440,11 @@ struct TReportExecStatusParams {
 
   16: optional i64 backend_id
 
-  17: optional i64 loaded_bytes
+  17: optional i64 sink_load_bytes
+
+  18: optional i64 source_load_rows
+
+  19: optional i64 source_load_bytes
 }
 
 struct TFeResult {

@@ -3,6 +3,7 @@ package com.starrocks.sql.optimizer.base;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
@@ -19,6 +20,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class ColumnRefFactory {
     private int nextId = 1;
@@ -72,6 +74,16 @@ public class ColumnRefFactory {
     public ColumnRefOperator getColumnRef(int id) {
         return columnRefs.get(id - 1);
     }
+
+    public Set<ColumnRefOperator> getColumnRefs(ColumnRefSet columnRefSet) {
+        Set<ColumnRefOperator> columnRefOperators = Sets.newHashSet();
+        for (int idx : columnRefSet.getColumnIds()) {
+            columnRefOperators.add(getColumnRef(idx));
+        }
+        return columnRefOperators;
+    }
+
+
 
     public void updateColumnRefToColumns(ColumnRefOperator columnRef, Column column, Table table) {
         columnRefToColumns.put(columnRef, column);

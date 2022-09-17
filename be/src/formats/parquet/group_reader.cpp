@@ -45,7 +45,7 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
 
     vectorized::ChunkPtr active_chunk = _create_read_chunk(_active_column_indices);
     {
-        int rows_to_skip = _column_reader_opts.context->rows_to_skip;
+        size_t rows_to_skip = _column_reader_opts.context->rows_to_skip;
         _column_reader_opts.context->rows_to_skip = 0;
 
         SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
@@ -440,7 +440,7 @@ Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, vector
         return Status::OK();
     }
 
-    int rows_to_skip = ctx->rows_to_skip;
+    size_t rows_to_skip = ctx->rows_to_skip;
     vectorized::Filter empty_filter(1, 0);
     ctx->filter = &empty_filter;
     for (int col_idx : read_columns) {

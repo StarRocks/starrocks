@@ -13,7 +13,7 @@ This topic describes what the catalog is, and how to manage and query internal d
 
 Catalogs enable you to manage internal and external data in one system. They offer a flexible way for you to easily query and analyze data that is stored in various external systems. Currently, StarRocks provides two types of catalogs: internal catalog and external catalog.
 
-![figure1](/docs/assets/3.8.1.png)
+![figure1](../../assets/3.8.1.png)
 
 - **Internal catalog**: manages internal data of StarRocks. For example, if you execute the CREATE DATABASE or CREATE TABLE statements to create a database or a table, the database or table is stored in the internal catalog. Each StarRocks cluster has only one internal catalog named [default catalog](../catalog/default_catalog.md).
 

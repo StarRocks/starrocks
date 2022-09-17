@@ -115,7 +115,7 @@ public class UseMaterializedViewTest {
             Table table = database.getTable("mv_to_drop");
             Assert.assertTrue(table != null);
             MaterializedView materializedView = (MaterializedView) table;
-            long baseTableId = materializedView.getBaseTableIds().iterator().next();
+            long baseTableId = materializedView.getBaseTableInfos().iterator().next().getTableId();
             OlapTable baseTable = ((OlapTable) database.getTable(baseTableId));
             Assert.assertEquals(baseTable.getRelatedMaterializedViews().size(), 2);
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);

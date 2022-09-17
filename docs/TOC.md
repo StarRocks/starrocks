@@ -2,7 +2,11 @@
 
 ## Index
 
-+ [StarRocks](/introduction/StarRocks_intro.md)
++ [StarRocks](./introduction/StarRocks_intro.md)
++ Introduction to StarRocks
+  + [What is StarRocks?](./introduction/what_is_starrocks.md)
+  + [Architecture](./introduction/Architecture.md)
+  + [Features](./introduction/Features.md)
 + Quick Start
   + [Deploy](./quick_start/Deploy.md)
   + [Create a table](./quick_start/Create_table.md)
@@ -24,12 +28,12 @@
   + [Synchronize data from MySQL](./loading/Flink_cdc_load.md)
   + [Load data by using flink-connector-starrocks](./loading/Flink-connector-starrocks.md)
   + [DataX writer](./loading/DataX-starrocks-writer.md)
-+ Data Export
-  + [Export](./unloading/Export.md)
++ Data Unloading
+  + [Overview of data unloading](./unloading/Export.md)
   + [Spark connector](./unloading/Spark_connector.md)
   + [Flink connector](./unloading/Flink_connector.md)
 + Using StarRocks
-  + [Cost-based optimizer](./using_starrocks/Cost_based_optimizer.md)
+  + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Materialized view](./using_starrocks/Materialized_view.md)
   + [External tables](./using_starrocks/External_table.md)
   + Catalog
@@ -45,9 +49,41 @@
   + [Java UDFs](./using_starrocks/JAVA_UDF.md)
   + [Bitmap indexing](./table_design/Bitmap_index.md)
   + [Bloomfilter indexing](./table_design/Bloomfilter_index.md)
-  + [Precise de-duplication with bitmap](./using_starrocks/Using_bitmap.md)
+  + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
+  + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
   + [Configure a time zone](./using_starrocks/timezone.md)
   + [File manager](./using_starrocks/filemanager.md)
++ Administration
+  + Deployment
+    + [Deploy StarRocks with StarGo](./administration/stargo.md)
+    + [Build in Docker](./administration/Build_in_docker.md)
+    + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/k8s_operator_cn.md)
+    + [Deploy CN](./administration/deploy_cn.md)
+    + [Deploy Broker](./administration/deploy_broker.md)
+    + [Deploy FE cluster with high availability](./administration/Deployment.md)
+  + Management
+    + [Scale in and out](./administration/Scale_up_down.md)
+    + [Backup and restore](./administration/Backup_and_restore.md)
+    + [Configuration](./administration/Configuration.md)
+    + [Monitor and alert](./administration/Monitor_and_Alert.md)
+    + [Manage a cluster](./administration/Cluster_administration.md)
+    + [Enable FQDN access](./administration/enable_fqdn.md)
+    + Resource Management
+      + [Resource group](./administration/resource_group.md)
+      + [Query management](./administration/Query_management.md)
+      + [Memory management](./administration/Memory_management.md)
+      + [Load balance](./administration/Load_balance.md)
+      + [Replica](./administration/Replica.md)
+      + [Blacklist](./administration/Blacklist.md)
+  + Data Recovery
+    + [Data recovery](./administration/Data_recovery.md)
+    + [Restore FEs](./administration/Metadata_recovery.md)
+  + User Privilege and Authentication
+    + [User privilege](./administration/User_privilege.md)
+    + [Authentication](./administration/Authentication.md)
+  + Performance Tuning
+    + [Query planning](./administration/Query_planning.md)
+    + [Profiling](./administration/Profiling.md)
 + Reference
   + SQL Reference
     + User Account Management
@@ -187,7 +223,7 @@
     + Auxiliary Commands
       + [DESC](./sql-reference/sql-statements/Utility/DESCRIBE.md)
   + Function Reference
-    + Date functions
+    + Date Functions
       + [convert_tz](./sql-reference/sql-functions/date-time-functions/convert_tz.md)
       + [curdate](./sql-reference/sql-functions/date-time-functions/curdate.md)
       + [current_timestamp](./sql-reference/sql-functions/date-time-functions/current_timestamp.md)
@@ -222,7 +258,25 @@
       + [week](./sql-reference/sql-functions/date-time-functions/week.md)
       + [weekofyear](./sql-reference/sql-functions/date-time-functions/weekofyear.md)
       + [year](./sql-reference/sql-functions/date-time-functions/year.md)
-    + Geographic functions
+    + Aggregate Functions
+      + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
+      + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
+      + [avg](./sql-reference/sql-functions/aggregate-functions/avg.md)
+      + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
+      + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
+      + [hll_union_agg](./sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)
+      + [max](./sql-reference/sql-functions/aggregate-functions/max.md)
+      + [min](./sql-reference/sql-functions/aggregate-functions/min.md)
+      + [percentile_approx](./sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
+      + [percentile_cont](./sql-reference/sql-functions/aggregate-functions/percentile_cont.md)
+      + [retention](./sql-reference/sql-functions/aggregate-functions/retention.md)
+      + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
+      + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
+      + [sum](./sql-reference/sql-functions/aggregate-functions/sum.md)
+      + [variance](./sql-reference/sql-functions/aggregate-functions/variance.md)
+      + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
+      + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
+    + Geographic Functions
       + [st_astext](./sql-reference/sql-functions/spatial-functions/st_astext.md)
       + [st_circle](./sql-reference/sql-functions/spatial-functions/st_circle.md)
       + [st_contains](./sql-reference/sql-functions/spatial-functions/st_contains.md)
@@ -233,7 +287,7 @@
       + [st_polygon](./sql-reference/sql-functions/spatial-functions/st_polygon.md)
       + [st_x](./sql-reference/sql-functions/spatial-functions/st_x.md)
       + [st_y](./sql-reference/sql-functions/spatial-functions/st_y.md)
-    + String functions
+    + String Functions
       + [append_trailing_char_if_absent](./sql-reference/sql-functions/string-functions/append_trailing_char_if_absent.md)
       + [ascii](./sql-reference/sql-functions/string-functions/ascii.md)
       + [char_length](./sql-reference/sql-functions/string-functions/char_length.md)
@@ -266,7 +320,7 @@
       + [starts_with](./sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](./sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](./sql-reference/sql-functions/string-functions/strright.md)
-    + JSON functions
+    + JSON Functions
       + [Overview of JSON functions and operators](./sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md)
       + JSON constructor functions
         + [JSON_ARRAY](./sql-reference/sql-functions/json-functions/json-constructor-functions/json_array.md)
@@ -279,26 +333,7 @@
         + [JSON_EACH](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
         + [CAST](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/cast.md)
       + [JSON operators](./sql-reference/sql-functions/json-functions/json-operators.md)
-    + Aggregate functions
-      + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
-      + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
-      + [avg](./sql-reference/sql-functions/aggregate-functions/avg.md)
-      + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
-      + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
-      + [hll_union_agg](./sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)
-      + [max](./sql-reference/sql-functions/aggregate-functions/max.md)
-      + [min](./sql-reference/sql-functions/aggregate-functions/min.md)
-      + [percentile_approx](./sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
-      + [percentile_cont](./sql-reference/sql-functions/aggregate-functions/percentile_cont.md)
-      + [retention](./sql-reference/sql-functions/aggregate-functions/retention.md)
-      + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
-      + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
-      + [sum](./sql-reference/sql-functions/aggregate-functions/sum.md)
-      + [variance](./sql-reference/sql-functions/aggregate-functions/variance.md)
-      + [square](./sql-reference/sql-functions/aggregate-functions/square.md)
-      + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
-      + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
-    + Bitmap functions
+    + Bitmap Functions
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](./sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
       + [bitmap_contains](./sql-reference/sql-functions/bitmap-functions/bitmap_contains.md)
@@ -317,7 +352,7 @@
       + [bitmap_xor](./sql-reference/sql-functions/bitmap-functions/bitmap_xor.md)
       + [to_bitmap](./sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
       + [base64_to_bitmap](./sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
-    + Array functions
+    + Array Functions
       + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
       + [array_append](./sql-reference/sql-functions/array-functions/array_append.md)
       + [array_avg](./sql-reference/sql-functions/array-functions/array_avg.md)
@@ -353,53 +388,25 @@
   + [System variables](./reference/System_variable.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
-+ Administration
-  + Deployment
-    + [Deploy StarRocks with StarGo](./administration/stargo.md)
-    + [Build in Docker](./administration/Build_in_docker.md)
-    + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/k8s_operator_cn.md)
-    + [Deploy CN](./administration/deploy_cn.md)
-  + Management
-    + [Scale in and out](./administration/Scale_up_down.md)
-    + [Backup and restore](./administration/Backup_and_restore.md)
-    + [Configuration](./administration/Configuration.md)
-    + [Monitor and alert](./administration/Monitor_and_Alert.md)
-    + [Manage a cluster](./administration/Cluster_administration.md)
-    + [Enable FQDN access](./administration/enable_fqdn.md)
-    + Resource Management
-      + [Resource group](./administration/resource_group.md)
-      + [Query management](./administration/Query_management.md)
-      + [Memory management](./administration/Memory_management.md)
-      + [Load balance](./administration/Load_balance.md)
-      + [Replica](./administration/Replica.md)
-      + [Blacklist](./administration/Blacklist.md)
-  + Data Recovery
-    + [Data recovery](./administration/Data_recovery.md)
-    + [Restore FEs](./administration/Metadata_recovery.md)
-  + User privilege and authentication
-    + [User privilege](./administration/User_privilege.md)
-    + [Authentication](./administration/Authentication.md)
-  + Performance
-    + [Query planning](./administration/Query_planning.md)
-    + [Profiling](./administration/Profiling.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
-    + Data Ingestion
-      + [Data ingestion](./faq/loading/Loading_faq.md)
+    + Data Loading
+      + [Data loading](./faq/loading/Loading_faq.md)
       + [Stream Load](./faq/loading/Stream_load_faq.md)
       + [Routine Load](./faq/loading/Routine_load_faq.md)
       + [Broker Load](./faq/loading/Broker_load_faq.md)
       + [Insert Into](./faq/loading/Insert_into_faq.md)
       + [Flink connector](./faq/loading/Flink_connector_faq.md)
       + [DataX](./faq/loading/DataX_faq.md)
-    + [Data Export](./faq/Exporting_faq.md)
+    + [Data Unloading](./faq/Exporting_faq.md)
   + [SQL](./faq/Sql_faq.md)
   + [Other FAQs](./faq/Others.md)
 + Benchmark
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)
   + [TPC-H Benchmark](./benchmarking/TPC-H_Benchmarking.md)
 + Release Notes
+  + [v2.4](./release_notes/release-2.4.md)
   + [v2.3](./release_notes/release-2.3.md)
   + [v2.2](./release_notes/release-2.2.md)
   + [v2.1](./release_notes/release-2.1.md)

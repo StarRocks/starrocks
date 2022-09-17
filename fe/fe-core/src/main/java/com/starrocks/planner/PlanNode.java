@@ -33,6 +33,7 @@ import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -44,8 +45,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 /**
  * Each PlanNode represents a single relational operator
@@ -710,16 +713,83 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     public void checkRuntimeFilterOnNullValue(RuntimeFilterDescription description, Expr probeExpr) {
     }
 
-    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+    /**
+     * Return candidate slot exprs which is same to the expr, eg: tb1 join tb2 on tb1.a = tb2.b, when expr param is tb1.a,
+     * tb2.b is the candidate slot expr for tb1.a which has the same syntax for the query.
+     *
+     * @param expr: the slot expr that need to find its candidate slot exprs.
+     * @return List<Expr>: all the slot expr's candidate slot exprs.
+     */
+    public Optional<List<Expr>> candidatesOfSlotExpr(Expr expr) {
+        // NOTE: No need to check expr is slot or not here, each node should implement its `candidatesOfSlotExpr` itself.
+        if (!expr.isBoundByTupleIds(getTupleIds())) {
+            return Optional.empty();
+        }
+        return Optional.of(Lists.newArrayList(expr));
+    }
+
+    public Optional<List<List<Expr>>> candidatesOfSlotExprs(List<Expr> exprs) {
+        if (!exprs.stream().allMatch(expr -> candidatesOfSlotExpr(expr).isPresent())) {
+            return Optional.empty();
+        }
+        List<List<Expr>> candidatesOfSlotExprs =
+                exprs.stream().map(expr -> candidatesOfSlotExpr(expr).get()).collect(Collectors.toList());
+        return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
+    }
+
+    public static List<List<Expr>> candidateOfPartitionByExprs(List<List<Expr>> partitionByExprs) {
+        if (partitionByExprs.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        PermutationGenerator generator = new PermutationGenerator<Expr>(partitionByExprs);
+        int totalCount = 0;
+        List<List<Expr>> candidates = Lists.newArrayList();
+        while (generator.hasNext() && totalCount < 8) {
+            candidates.add(generator.next());
+            totalCount++;
+        }
+        return candidates;
+    }
+
+    public Optional<List<List<Expr>>> canPushDownRuntimeFilterCrossExchange(
+            List<Expr> partitionByExprs) {
+        if (partitionByExprs.isEmpty()) {
+            return Optional.of(Lists.newArrayList());
+        }
+
+        // rf be crossed exchange when partitionByExprs are slot refs and bound by the plan node.
+        return candidatesOfSlotExprs(partitionByExprs);
+    }
+
+    /**
+     * When push down runtime filter cross exchange, need take care partitionByExprs of exchange.
+     */
+    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
 
+        Optional<List<List<Expr>>> optCandidatePartitionByExprs = canPushDownRuntimeFilterCrossExchange(partitionByExprs);
+        if (!optCandidatePartitionByExprs.isPresent()) {
+            return false;
+        }
+        List<List<Expr>> candidatePartitionByExprs = optCandidatePartitionByExprs.get();
+
         // theoretically runtime filter can be applied on multiple child nodes.
         boolean accept = false;
         for (PlanNode node : children) {
-            if (node.pushDownRuntimeFilters(description, probeExpr)) {
-                accept = true;
+            if (candidatePartitionByExprs.isEmpty()) {
+                if (node.pushDownRuntimeFilters(description, probeExpr, Lists.newArrayList())) {
+                    accept = true;
+                    break;
+                }
+            } else {
+                for (List<Expr> candidateOfPartitionByExprs: candidatePartitionByExprs) {
+                    if (node.pushDownRuntimeFilters(description, probeExpr, candidateOfPartitionByExprs)) {
+                        accept = true;
+                        break;
+                    }
+                }
             }
         }
         boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds());
@@ -731,6 +801,65 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         }
         if (isBound && description.canProbeUse(this)) {
             description.addProbeExpr(id.asInt(), probeExpr);
+            description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
+            probeRuntimeFilters.add(description);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean tryPushdownRuntimeFilterToChild(RuntimeFilterDescription description,
+                                                    Optional<List<Expr>> optProbeExprCandidates,
+                                                    Optional<List<List<Expr>>> optPartitionByExprsCandidates,
+                                                    int childIdx) {
+        if (!optProbeExprCandidates.isPresent() || !optPartitionByExprsCandidates.isPresent()) {
+            return false;
+        }
+        List<Expr> probeExprCandidates = optProbeExprCandidates.get();
+        List<List<Expr>> partitionByExprsCandidates = optPartitionByExprsCandidates.get();
+
+        for (Expr candidateOfProbeExpr: probeExprCandidates) {
+            if (partitionByExprsCandidates.isEmpty()) {
+                if (children.get(childIdx).pushDownRuntimeFilters(description, candidateOfProbeExpr,
+                        Lists.newArrayList())) {
+                    return true;
+                }
+            } else {
+                for (List<Expr> candidateOfPartitionByExprs: partitionByExprsCandidates) {
+                    if (children.get(childIdx).pushDownRuntimeFilters(description, candidateOfProbeExpr, candidateOfPartitionByExprs)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Push down a runtime filter for the specific child with childIdx. `addProbeInfo` indicates whether
+     * add runtime filter info into this PlanNode.
+     */
+    protected boolean pushdownRuntimeFilterForChildOrAccept(RuntimeFilterDescription description,
+                                                            Expr probeExpr,
+                                                            Optional<List<Expr>> optProbeExprCandidates,
+                                                            List<Expr> partitionByExprs,
+                                                            Optional<List<List<Expr>>> optPartitionByExprsCandidates,
+                                                            int childIdx,
+                                                            boolean addProbeInfo) {
+        boolean accept = tryPushdownRuntimeFilterToChild(description, optProbeExprCandidates,
+                optPartitionByExprsCandidates, childIdx);
+        boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds());
+        if (isBound) {
+            checkRuntimeFilterOnNullValue(description, probeExpr);
+        }
+        if (accept) {
+            return true;
+        }
+        if (addProbeInfo && description.canProbeUse(this)) {
+            // can not push down to children.
+            // use runtime filter at this level.
+            description.addProbeExpr(id.asInt(), probeExpr);
+            description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
             probeRuntimeFilters.add(description);
             return true;
         }

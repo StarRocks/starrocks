@@ -337,7 +337,7 @@ DROP MATERIALIZED VIEW store_amt;
 
 ### Best practices
 
-#### Precise de-duplication
+#### Exact count distinct
 
 The following example is based on an advertisement business analysis table `advertiser_view_record`, which records the date that the ad is viewed `click_time`, the name of the ad `advertiser`, the channel of the ad `channel`, and the ID of the user who viewed the ID `user_id`.
 
@@ -358,7 +358,7 @@ FROM advertiser_view_record
 GROUP BY advertiser, channel;
 ```
 
-To accelerate the precise de-duplication query, you can create a materialized view based on this table and use the bitmap_union function to pre-aggregate the data.
+To accelerate exact count distinct, you can create a materialized view based on this table and use the bitmap_union function to pre-aggregate the data.
 
 ```SQL
 CREATE MATERIALIZED VIEW advertiser_uv AS
@@ -369,9 +369,9 @@ GROUP BY advertiser, channel;
 
 After the materialized view is created, the sub-query `count(distinct user_id)` in the subsequent queries will be automatically rewritten as `bitmap_union_count (to_bitmap(user_id))` so that they can hit the materialized view.
 
-#### Approximate de-duplication
+#### Approximate count distinct
 
-Use the table `advertiser_view_record` above as an example again. To accelerate the approximate de-duplication query, you can create a materialized view based on this table and use the hll_union function to pre-aggregate the data.
+Use the table `advertiser_view_record` above as an example again. To accelerate approximate count distinct, you can create a materialized view based on this table and use the hll_union function to pre-aggregate the data.
 
 ```SQL
 CREATE MATERIALIZED VIEW advertiser_uv2 AS
@@ -632,13 +632,6 @@ DROP MATERIALIZED VIEW order_mv;
 ```
 
 ### Caution
-
-- Sync refresh materialized views have the following limitations:
-  - You can only create a sync refresh materialized view based on a single table instead of multiple tables.
-  - You cannot change the partitioning and bucketing strategies of sync refresh materialized views. They must be consistent with that of the base table.
-  - You cannot directly query a sync refresh materialized view.
-  - Sync refresh materialized views do not support the clause WHERE.
-  - Sync refresh materialized views only supports limited aggregate functions, including sum, min, max, count, bitmap_union, hll_union, and percentile_union.
 
 - Async refresh materialized views have the following features:
   - You can directly query a async refresh materialized view, but the result may be inconsistent with that from the base tables.

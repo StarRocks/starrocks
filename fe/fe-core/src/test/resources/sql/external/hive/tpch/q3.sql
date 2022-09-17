@@ -21,7 +21,6 @@ group by
 order by
     revenue desc,
     o_orderdate limit 10;
-
 [fragment statistics]
 PLAN FRAGMENT 0(F07)
 Output Exprs:18: l_orderkey | 35: sum | 13: o_orderdate | 16: o_shippriority

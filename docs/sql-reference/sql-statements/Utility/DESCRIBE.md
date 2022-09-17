@@ -4,7 +4,7 @@
 
 You can use the statement to perform the following operations:
 
-- View the schema of a table stored in your StarRocks cluster, along with the type of the [sort key](https://docs.starrocks.com/en-us/latest/table_design/Sort_key) and [materialized view](https://docs.starrocks.com/en-us/latest/using_starrocks/Materialized_view) of the table.
+- View the schema of a table stored in your StarRocks cluster, along with the type of the [sort key](../../../table_design/Sort_key) and [materialized view](../../../using_starrocks/Materialized_view) of the table.
 - View the schema of a table stored in the following external data sources: Apache Hive™, Apache Iceberg, and Apache Hudi. Note that you can perform this operation only in StarRocks 2.4 and later versions.
 
 ## Syntax

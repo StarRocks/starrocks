@@ -519,4 +519,3 @@ column statistics:
 * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 * R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 [end]
-

@@ -5,6 +5,7 @@
 #include "column/const_column.h"
 #include "column/datum.h"
 #include "column/json_column.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized/sorting/sort_helper.h"
@@ -154,6 +155,17 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const vectorized::MapColumn& column) {
+        // Convert the datum to a array column
+        auto rhs_column = column.clone_empty();
+        rhs_column->append_datum(_rhs_value);
+        auto cmp = [&](int lhs_index) {
+            return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
+        };
+        _equal_count = compare_column_helper(_cmp_vector, cmp);
+        return Status::OK();
+    }
+
     template <typename T>
     Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
         const auto& lhs_datas = column.get_data();
@@ -273,6 +285,7 @@ public:
 
     Status do_visit(const vectorized::ConstColumn& column) { return Status::NotSupported("not support"); }
     Status do_visit(const vectorized::ArrayColumn& column) { return Status::NotSupported("not support"); }
+    Status do_visit(const vectorized::MapColumn& column) { return Status::NotSupported("not support"); }
     template <typename T>
     Status do_visit(const vectorized::ObjectColumn<T>& column) {
         return Status::NotSupported("not support");
