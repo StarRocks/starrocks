@@ -11,7 +11,7 @@ import org.junit.Test;
 
 import java.util.List;
 
-public class CoordinatorSchedulerTest {
+public class CoordinatorMonitorTest {
 
     @Test
     public void testDeadBackendAndComputeNodeChecker() throws InterruptedException {
@@ -29,7 +29,7 @@ public class CoordinatorSchedulerTest {
 
             final QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
 
-            new Expectations(qeProcessor, coord1, coord2, coord3) {
+            Expectations e = new Expectations(qeProcessor, coord1, coord2, coord3) {
                 {
                     qeProcessor.getCoordinators();
                     result = coordinators;
@@ -78,13 +78,13 @@ public class CoordinatorSchedulerTest {
                 }
             };
 
-            CoordinatorScheduler.getInstance().start();
+            CoordinatorMonitor.getInstance().start();
 
             // Set node#0,1,2 to dead, and stay node#3 alive.
             // coord1 and coord2 will be cancelled, and coord3 will be still alive.
-            CoordinatorScheduler.getInstance().addDeadBackend(0L);
-            CoordinatorScheduler.getInstance().addDeadBackend(1L);
-            CoordinatorScheduler.getInstance().addDeadBackend(2L);
+            CoordinatorMonitor.getInstance().addDeadBackend(0L);
+            CoordinatorMonitor.getInstance().addDeadBackend(1L);
+            CoordinatorMonitor.getInstance().addDeadBackend(2L);
 
             Thread.sleep(3 * 1000L);
         } finally {

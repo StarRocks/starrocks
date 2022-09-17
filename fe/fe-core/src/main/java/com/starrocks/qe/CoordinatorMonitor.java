@@ -16,11 +16,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * CoordinatorScheduler gets notified when some backends become dead and cancels coordinates related to them.
  */
-public class CoordinatorScheduler {
-    private static final Logger LOG = LogManager.getLogger(CoordinatorScheduler.class);
+public class CoordinatorMonitor {
+    private static final Logger LOG = LogManager.getLogger(CoordinatorMonitor.class);
 
     private static class SingletonHolder {
-        private static final CoordinatorScheduler INSTANCE = new CoordinatorScheduler();
+        private static final CoordinatorMonitor INSTANCE = new CoordinatorMonitor();
     }
 
     private static final int COMING_DEAD_BACKEND_QUEUE_CAPACITY = 1_000_000;
@@ -29,13 +29,13 @@ public class CoordinatorScheduler {
     private final AtomicBoolean started;
     private final DeadBackendAndComputeNodeChecker checker;
 
-    public CoordinatorScheduler() {
+    public CoordinatorMonitor() {
         comingDeadBackendIDQueue = Queues.newLinkedBlockingDeque(COMING_DEAD_BACKEND_QUEUE_CAPACITY);
         started = new AtomicBoolean(false);
         checker = new DeadBackendAndComputeNodeChecker();
     }
 
-    public static CoordinatorScheduler getInstance() {
+    public static CoordinatorMonitor getInstance() {
         return SingletonHolder.INSTANCE;
     }
 
