@@ -7,7 +7,6 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.TableName;

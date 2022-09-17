@@ -35,7 +35,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ImportColumnDesc;
 import com.starrocks.analysis.ImportColumnsStmt;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.catalog.Database;
@@ -67,6 +66,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -1570,8 +1570,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
         // we use sql to persist the load properties, so we just put the load properties to sql.
         String sql = String.format("CREATE ROUTINE LOAD %s ON %s %s" +
-                " PROPERTIES (\"desired_concurrent_number\"=\"1\")" +
-                " FROM KAFKA (\"kafka_topic\" = \"my_topic\")",
+                        " PROPERTIES (\"desired_concurrent_number\"=\"1\")" +
+                        " FROM KAFKA (\"kafka_topic\" = \"my_topic\")",
                 name, tableName, originLoadDesc.toSql());
         LOG.debug("merge result: {}", sql);
         origStmt = new OriginStatement(sql, 0);

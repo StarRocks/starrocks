@@ -196,6 +196,7 @@ statement
     | killStatement
     | setUserPropertyStatement
     | setStatement
+    | syncStatement
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -206,6 +207,11 @@ useDatabaseStatement
 
 useCatalogStatement
     : USE CATALOG identifierOrString
+    ;
+
+showDatabasesStatement
+    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 alterDbQuotaStmtatement
@@ -1120,11 +1126,6 @@ showWhiteListStatement
     ;
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
-showDatabasesStatement
-    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
-    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
-    ;
-
 showProcesslistStatement
     : SHOW FULL? PROCESSLIST
     ;
@@ -1174,6 +1175,10 @@ setExprOrDefault
     | ON
     | ALL
     | expression
+    ;
+
+syncStatement
+    : SYNC
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------

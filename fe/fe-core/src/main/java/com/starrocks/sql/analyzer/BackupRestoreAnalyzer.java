@@ -5,7 +5,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BackupStmt;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.StatementBase;
@@ -25,6 +24,7 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowBackupStmt;
 
 import java.util.HashMap;

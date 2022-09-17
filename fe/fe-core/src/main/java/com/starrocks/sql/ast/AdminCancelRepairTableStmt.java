@@ -4,7 +4,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DdlStmt;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.TableRef;
 
 import java.util.List;

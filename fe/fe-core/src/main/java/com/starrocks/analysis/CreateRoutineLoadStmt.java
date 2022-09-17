@@ -40,6 +40,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.PartitionNames;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -646,7 +648,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
         return sessionVariable;
     }
-  
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws RuntimeException {
         return visitor.visitCreateRoutineLoadStatement(this, context);

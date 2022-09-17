@@ -273,11 +273,6 @@ public class FunctionCallExpr extends Expr {
         return fn instanceof AggregateFunction && !isAnalyticFnCall;
     }
 
-    public boolean isBuiltin() {
-        Preconditions.checkState(fn != null);
-        return fn instanceof BuiltinAggregateFunction && !isAnalyticFnCall;
-    }
-
     public boolean isDistinct() {
         Preconditions.checkState(isAggregateFunction());
         return fnParams.isDistinct();
