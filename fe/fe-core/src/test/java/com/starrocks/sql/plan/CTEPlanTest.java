@@ -638,31 +638,30 @@ public class CTEPlanTest extends PlanTestBase {
         {
             String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 limit 1";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  8:AGGREGATE (merge finalize)\n" +
-                    "  |  output: sum(4: sum)\n" +
+            assertContains(plan, "  2:Project\n" +
+                    "  |  <slot 4> : 4: sum\n" +
+                    "  |  <slot 5> : CAST(7: multi_distinct_sum AS DOUBLE) / CAST(6: multi_distinct_count AS DOUBLE)\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: multi_distinct_sum(1: v1), multi_distinct_count(2: v2), multi_distinct_sum(2: v2)\n" +
                     "  |  group by: \n" +
-                    "  |  limit: 1");
-            assertContains(plan, "  26:AGGREGATE (merge finalize)\n" +
-                    "  |  output: count(9: count)\n" +
-                    "  |  group by: \n" +
-                    "  |  limit: 1");
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: t0");
         }
         {
             String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 group by v3 limit 1";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  |    19:HASH JOIN\n" +
-                    "  |    |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                    "  |    |  colocate: false, reason: \n" +
-                    "  |    |  equal join conjunct: 7: v3 <=> 13: v3\n" +
-                    "  |    |  \n" +
-                    "  |    |----18:AGGREGATE (update finalize)\n" +
-                    "  |    |    |  output: count(12: v2)\n" +
-                    "  |    |    |  group by: 13: v3\n" +
-                    "  |    |    |  \n" +
-                    "  |    |    17:AGGREGATE (merge serialize)\n" +
-                    "  |    |    |  group by: 12: v2, 13: v3\n" +
-                    "  |    |    |  \n" +
-                    "  |    |    16:EXCHANGE");
+            assertContains(plan, "  2:Project\n" +
+                    "  |  <slot 4> : 4: sum\n" +
+                    "  |  <slot 5> : CAST(7: multi_distinct_sum AS DOUBLE) / CAST(6: multi_distinct_count AS DOUBLE)\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: multi_distinct_sum(1: v1), multi_distinct_count(2: v2), multi_distinct_sum(2: v2)\n" +
+                    "  |  group by: 3: v3\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: t0");
         }
     }
 }

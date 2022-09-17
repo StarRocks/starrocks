@@ -124,6 +124,10 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
             return false;
         }
 
+        if (agg.getLimit() >= 0) {
+            return false;
+        }
+
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
 
