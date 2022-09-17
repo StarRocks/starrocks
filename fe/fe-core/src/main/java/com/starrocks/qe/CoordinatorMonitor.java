@@ -14,7 +14,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * CoordinatorScheduler gets notified when some backends become dead and cancels coordinates related to them.
+ * CoordinatorMonitor gets notified when some backends become dead and cancels coordinates related to them.
  */
 public class CoordinatorMonitor {
     private static final Logger LOG = LogManager.getLogger(CoordinatorMonitor.class);
