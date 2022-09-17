@@ -290,11 +290,11 @@ public class StmtExecutor {
         }
     }
 
-    public boolean forwardResultToChannel(MysqlChannel channel) throws IOException {
+    public boolean sendResultToChannel(MysqlChannel channel) throws IOException {
         if (leaderOpExecutor == null) {
             return false;
         } else {
-            return leaderOpExecutor.forwardResultToChannel(channel);
+            return leaderOpExecutor.sendResultToChannel(channel);
         }
     }
 

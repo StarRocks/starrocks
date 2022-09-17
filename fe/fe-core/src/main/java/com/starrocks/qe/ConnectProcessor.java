@@ -489,9 +489,10 @@ public class ConnectProcessor {
                 // ShowResultSet is null means this is not ShowStmt, use remote packet(executor.getOutputPacket())
                 // or use local packet (getResultPacket())
                 if (resultSet == null) {
-                    if (executor.forwardResultToChannel(ctx.getMysqlChannel())) {  // query statement result
+                    if (executor.sendResultToChannel(ctx.getMysqlChannel())) {  // query statement result
                         packet = getResultPacket();
                         if (packet == null) {
+                            LOG.debug("packet == null");
                             return;
                         }
                     } else { // for lower version, in consideration of compatibility
