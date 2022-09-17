@@ -203,7 +203,7 @@ void LoadChannelMgr::_start_load_channels_clean() {
     // otherwise some object may be invalid before trying to visit it.
     // eg: MemTracker in load channel
     for (auto& channel : timeout_channels) {
-        channel->cancel();
+        channel->abort();
         LOG(INFO) << "Deleted timeout channel. load id=" << channel->load_id() << " timeout=" << channel->timeout();
     }
 
