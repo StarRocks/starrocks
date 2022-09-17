@@ -7,6 +7,8 @@ import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
+import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 
 import java.util.Collections;
 import java.util.List;
@@ -14,26 +16,28 @@ import java.util.Objects;
 
 public class SubqueryOperator extends ScalarOperator {
 
-    // mark work way
-    private boolean useSemiAnti;
     private final QueryStatement queryStatement;
+    private final LogicalApplyOperator applyOperator;
+    private final OptExprBuilder rootBuilder;
 
-    public SubqueryOperator(boolean useSemiAnti, QueryStatement queryStatement) {
-        super(OperatorType.SUBQUERY, Type.SUBQUERY);
-        this.useSemiAnti = useSemiAnti;
+    public SubqueryOperator(Type type, QueryStatement queryStatement,
+                            LogicalApplyOperator applyOperator, OptExprBuilder rootBuilder) {
+        super(OperatorType.SUBQUERY, type);
         this.queryStatement = queryStatement;
-    }
-
-    public boolean isUseSemiAnti() {
-        return useSemiAnti;
-    }
-
-    public void setUseSemiAnti(boolean useSemiAnti) {
-        this.useSemiAnti = useSemiAnti;
+        this.applyOperator = applyOperator;
+        this.rootBuilder = rootBuilder;
     }
 
     public QueryStatement getQueryStatement() {
         return queryStatement;
+    }
+
+    public LogicalApplyOperator getApplyOperator() {
+        return applyOperator;
+    }
+
+    public OptExprBuilder getRootBuilder() {
+        return rootBuilder;
     }
 
     @Override
@@ -63,7 +67,7 @@ public class SubqueryOperator extends ScalarOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(useSemiAnti, queryStatement);
+        return Objects.hash(queryStatement, applyOperator);
     }
 
     @Override

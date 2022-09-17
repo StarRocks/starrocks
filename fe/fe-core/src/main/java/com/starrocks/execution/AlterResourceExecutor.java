@@ -2,11 +2,11 @@
 
 package com.starrocks.execution;
 
-import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.ast.AlterResourceStmt;
 
 public class AlterResourceExecutor implements DataDefinitionExecutor {
 

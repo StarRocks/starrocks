@@ -22,9 +22,9 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.sql.ast.DistributionDesc;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.io.DataInput;
@@ -65,6 +65,10 @@ public abstract class DistributionInfo implements Writable {
 
     public String getDistributionKey() {
         return "";
+    }
+
+    public void setBucketNum(int bucketNum) {
+        throw new NotImplementedException("not implemented");
     }
 
     public DistributionDesc toDistributionDesc() {

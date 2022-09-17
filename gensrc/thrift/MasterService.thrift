@@ -32,7 +32,6 @@ struct TTabletInfo {
     1: required Types.TTabletId tablet_id
     2: required Types.TSchemaHash schema_hash
     3: required Types.TVersion version
-    4: required Types.TVersionHash version_hash // Deprecated
     5: required Types.TCount row_count
     6: required Types.TSize data_size
     7: optional Types.TStorageMedium storage_medium
@@ -44,6 +43,7 @@ struct TTabletInfo {
     13: optional Types.TPartitionId partition_id
     14: optional bool is_in_memory
     15: optional bool enable_persistent_index
+    16: optional Types.TVersion min_readable_version
 }
 
 struct TTabletVersionPair {

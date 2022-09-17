@@ -28,6 +28,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.plan.ExecPlan;
@@ -46,7 +47,6 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class CreateMaterializedViewTest {
 
@@ -282,7 +282,7 @@ public class CreateMaterializedViewTest {
         LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
         String sql = "create materialized view mv1\n" +
                 "partition by date_trunc('month',k1)\n" +
-                "distributed by hash(s2)\n" +
+                "distributed by hash(s2) buckets 10\n" +
                 "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
                 "') EVERY(INTERVAL 3 SECOND)\n" +
                 "PROPERTIES (\n" +
@@ -309,8 +309,8 @@ public class CreateMaterializedViewTest {
             partitionFunctionCallExpr.collect(SlotRef.class, slotRefs);
             SlotRef partitionSlotRef = slotRefs.get(0);
             Assert.assertEquals("k1", partitionSlotRef.getColumnName());
-            Set<Long> baseTableIds = materializedView.getBaseTableIds();
-            Assert.assertEquals(1, baseTableIds.size());
+            List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+            Assert.assertEquals(1, baseTableInfos.size());
             Expr partitionRefTableExpr = materializedView.getPartitionRefTableExprs().get(0);
             List<SlotRef> tableSlotRefs = Lists.newArrayList();
             partitionRefTableExpr.collect(SlotRef.class, tableSlotRefs);
@@ -319,7 +319,7 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals(baseTableName.getDb(), testDb.getFullName());
             Table baseTable = testDb.getTable(baseTableName.getTbl());
             Assert.assertNotNull(baseTable);
-            Assert.assertTrue(baseTableIds.contains(baseTable.getId()));
+            Assert.assertEquals(baseTableInfos.get(0).getTableId(), baseTable.getId());
             Assert.assertEquals(1, ((OlapTable) baseTable).getRelatedMaterializedViews().size());
             Column baseColumn = baseTable.getColumn(slotRef.getColumnName());
             Assert.assertNotNull(baseColumn);
@@ -378,7 +378,7 @@ public class CreateMaterializedViewTest {
         LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
         String sql = "create materialized view mv1\n" +
                 "partition by date_trunc('month',k1)\n" +
-                "distributed by hash(s2)\n" +
+                "distributed by hash(s2) buckets 10\n" +
                 "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
                 "') EVERY(INTERVAL 3 MONTH)\n" +
                 "PROPERTIES (\n" +
@@ -387,7 +387,6 @@ public class CreateMaterializedViewTest {
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
         Assert.assertThrows(IllegalArgumentException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-
     }
 
     @Test
@@ -395,7 +394,7 @@ public class CreateMaterializedViewTest {
         LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
         String sql = "create materialized view mv1\n" +
                 "partition by date_trunc('month',k1)\n" +
-                "distributed by hash(s2)\n" +
+                "distributed by hash(s2) buckets 10\n" +
                 "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
                 "') EVERY(INTERVAL 3 DAY)\n" +
                 "PROPERTIES (\n" +
@@ -403,7 +402,6 @@ public class CreateMaterializedViewTest {
                 ")\n" +
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
         UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-
     }
 
     @Test
@@ -411,7 +409,7 @@ public class CreateMaterializedViewTest {
         LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
         String sql = "create materialized view mv1\n" +
                 "partition by date_trunc('month',k1)\n" +
-                "distributed by hash(s2)\n" +
+                "distributed by hash(s2) buckets 10\n" +
                 "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
                 "') EVERY(INTERVAL 3 day)\n" +
                 "PROPERTIES (\n" +
@@ -419,7 +417,26 @@ public class CreateMaterializedViewTest {
                 ")\n" +
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
         UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+    }
 
+    @Test
+    public void testCreateAsyncWithSingleTable() throws Exception {
+        String sql = "create materialized view mv1\n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2)\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
+                UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
+        Assert.assertEquals(MaterializedView.RefreshType.MANUAL,refreshSchemeDesc.getType());
+    }
+
+    @Test
+    public void testCreateSyncWithSingleTable() throws Exception {
+        String sql = "create materialized view mv1\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assert.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
     }
 
     @Test
@@ -431,7 +448,7 @@ public class CreateMaterializedViewTest {
         };
         String sql = "create materialized view mv1\n" +
                 "partition by s1\n" +
-                "distributed by hash(s2)\n" +
+                "distributed by hash(s2) buckets 10\n" +
                 "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -452,8 +469,8 @@ public class CreateMaterializedViewTest {
             Assert.assertTrue(partitionExpr instanceof SlotRef);
             SlotRef partitionSlotRef = (SlotRef) partitionExpr;
             Assert.assertEquals("s1", partitionSlotRef.getColumnName());
-            Set<Long> baseTableIds = materializedView.getBaseTableIds();
-            Assert.assertEquals(2, baseTableIds.size());
+            List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+            Assert.assertEquals(2, baseTableInfos.size());
             Expr partitionRefTableExpr = materializedView.getPartitionRefTableExprs().get(0);
             List<SlotRef> slotRefs = Lists.newArrayList();
             partitionRefTableExpr.collect(SlotRef.class, slotRefs);
@@ -462,8 +479,9 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals(baseTableName.getDb(), testDb.getFullName());
             Table baseTable = testDb.getTable(baseTableName.getTbl());
             Assert.assertNotNull(baseTable);
-            Assert.assertTrue(baseTableIds.contains(baseTable.getId()));
-            Assert.assertEquals(1, ((OlapTable) baseTable).getRelatedMaterializedViews().size());
+            Assert.assertTrue(baseTableInfos.stream().anyMatch(baseTableInfo ->
+                    baseTableInfo.getTableId() == baseTable.getId()));
+            Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
             Column baseColumn = baseTable.getColumn(slotRef.getColumnName());
             Assert.assertNotNull(baseColumn);
             Assert.assertEquals("k1", baseColumn.getName());
@@ -497,7 +515,7 @@ public class CreateMaterializedViewTest {
             }
         };
         String sql = "create materialized view mv1 " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -516,9 +534,9 @@ public class CreateMaterializedViewTest {
             Partition partition = materializedView.getPartitions().iterator().next();
             Assert.assertNotNull(partition);
             Assert.assertEquals("mv1", partition.getName());
-            Set<Long> baseTableIds = materializedView.getBaseTableIds();
-            Assert.assertEquals(1, baseTableIds.size());
-            Table baseTable = testDb.getTable(baseTableIds.iterator().next());
+            List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+            Assert.assertEquals(1, baseTableInfos.size());
+            Table baseTable = testDb.getTable(baseTableInfos.iterator().next().getTableId());
             Assert.assertEquals(1, ((OlapTable) baseTable).getRelatedMaterializedViews().size());
             // test sql
             Assert.assertEquals("SELECT `test`.`tbl1`.`k1` AS `k1`, `test`.`tbl1`.`k2` " +
@@ -546,10 +564,10 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testPartitionByTableAlias() {
+    public void testPartitionByTableAlias() throws Exception {
         String sql = "create materialized view mv1 " +
                 "partition by k1 " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -567,7 +585,7 @@ public class CreateMaterializedViewTest {
         starRocksAssert.withoutUseDatabase();
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -587,7 +605,7 @@ public class CreateMaterializedViewTest {
         starRocksAssert.withoutUseDatabase();
         String sql = "create materialized view test.mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -606,7 +624,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionNoNeed() {
         String sql = "create materialized view mv1 " +
                 "partition by (a+b) " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -639,7 +657,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionWithFunctionIn() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -661,7 +679,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionWithFunction() {
         String sql = "create materialized view mv1 " +
                 "partition by date_trunc('month',ss) " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -684,7 +702,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionWithFunctionNoAlias() {
         String sql = "create materialized view mv1 " +
                 "partition by date_trunc('month',k1) " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -707,7 +725,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionWithoutFunction() {
         String sql = "create materialized view mv1 " +
                 "partition by k1 " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -730,7 +748,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionWithFunctionIncludeFunction() {
         String sql = "create materialized view mv1 " +
                 "partition by date_trunc('month',date_trunc('month',ss)) " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -748,7 +766,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionWithFunctionIncludeFunctionInSelect() {
         String sql = "create materialized view mv1 " +
                 "partition by date_trunc('month',ss) " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -766,7 +784,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionColumnNoBaseTablePartitionColumn() {
         String sql = "create materialized view mv1 " +
                 "partition by s2 " +
-                "distributed by hash(s2) " +
+                "distributed by hash(s2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -784,7 +802,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionColumnBaseTableHasMultiPartitionColumn() {
         String sql = "create materialized view mv1 " +
                 "partition by s2 " +
-                "distributed by hash(s2) " +
+                "distributed by hash(s2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -802,7 +820,7 @@ public class CreateMaterializedViewTest {
     public void testBaseTableNoPartitionColumn() {
         String sql = "create materialized view mv1 " +
                 "partition by s1 " +
-                "distributed by hash(s2) " +
+                "distributed by hash(s2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -820,7 +838,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionByColumn() {
         String sql = "create materialized view mv1 " +
                 "partition by s1 " +
-                "distributed by hash(s2) " +
+                "distributed by hash(s2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -829,8 +847,8 @@ public class CreateMaterializedViewTest {
         try {
             CreateMaterializedViewStatement statementBase =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Set<Long> baseTableIds = statementBase.getBaseTableIds();
-            Assert.assertEquals(1, baseTableIds.size());
+            List<MaterializedView.BaseTableInfo> baseTableInfos = statementBase.getBaseTableInfos();
+            Assert.assertEquals(1, baseTableInfos.size());
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -840,7 +858,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionByColumnNoAlias() {
         String sql = "create materialized view mv1 " +
                 "partition by k1 " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -857,7 +875,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionByColumnMixAlias1() {
         String sql = "create materialized view mv1 " +
                 "partition by k1 " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -874,7 +892,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionByColumnMixAlias2() {
         String sql = "create materialized view mv1 " +
                 "partition by k1 " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -891,7 +909,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionByColumnNotInSelect() {
         String sql = "create materialized view mv1 " +
                 "partition by s8 " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -909,7 +927,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionByFunctionNotInSelect() {
         String sql = "create materialized view mv1 " +
                 "partition by date_trunc('month',s8) " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -927,7 +945,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionByFunctionColumnNoExists() {
         String sql = "create materialized view mv1\n" +
                 "partition by date_trunc('month',tb2.k1)\n" +
-                "distributed by hash(s2)\n" +
+                "distributed by hash(s2) buckets 10\n" +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -944,7 +962,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionByAllowedFunctionNoNeedParams() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -961,7 +979,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionByAllowedFunctionNoCorrParams() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -979,7 +997,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionByAllowedFunctionNoCorrParams1() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -996,7 +1014,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionByAllowedFunctionUseWeek() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1015,7 +1033,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionByNoAllowedFunction() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1032,7 +1050,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionByNoAlias() {
         String sql = "create materialized view mv1 " +
                 "partition by date_trunc('month',k1) " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1050,7 +1068,7 @@ public class CreateMaterializedViewTest {
     public void testDistributeKeyIsNotKey() {
         String sql = "create materialized view mv1 " +
                 "partition by s1 " +
-                "distributed by hash(s2) " +
+                "distributed by hash(s2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1107,7 +1125,7 @@ public class CreateMaterializedViewTest {
     public void testRefreshAsyncOnlyEvery() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async EVERY(INTERVAL 2 MINUTE)" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1133,7 +1151,7 @@ public class CreateMaterializedViewTest {
     public void testRefreshAsyncStartBeforeCurr() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2016-12-31') EVERY(INTERVAL 1 HOUR)" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1150,7 +1168,7 @@ public class CreateMaterializedViewTest {
     public void testRefreshManual() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh manual " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1164,47 +1182,6 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals(MaterializedView.RefreshType.MANUAL, refreshSchemeDesc.getType());
         } catch (Exception e) {
             Assert.fail(e.getMessage());
-        }
-    }
-
-    @Test
-    public void testRefreshSync() {
-        String sql = "create materialized view mv1 " +
-                "refresh sync " +
-                "as select k2 from tbl1 group by k2;";
-        try {
-            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            Assert.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
-        }
-    }
-
-    @Test
-    public void testRefreshSyncHasPartition() {
-        String sql = "create materialized view mv1 " +
-                "partition by ss " +
-                "refresh sync " +
-                "as select tbl1.k1 ss, k2 from tbl1 group by k2;";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            Assert.assertEquals("Partition by is not supported by SYNC " +
-                    "refresh type int materialized view", e.getMessage());
-        }
-    }
-
-    @Test
-    public void testRefreshSyncHasDistribution() {
-        String sql = "create materialized view mv1 " +
-                "distributed by hash(k2) " +
-                "refresh sync " +
-                "as select tbl1.k1 ss, k2 from tbl1 group by k2;";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            Assert.assertEquals("Distribution by is not supported by SYNC " +
-                    "refresh type in materialized view", e.getMessage());
         }
     }
 
@@ -1236,7 +1213,7 @@ public class CreateMaterializedViewTest {
     public void testAsNoSelectRelation() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1253,7 +1230,7 @@ public class CreateMaterializedViewTest {
     public void testAsTableNotInOneDatabase() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1271,7 +1248,7 @@ public class CreateMaterializedViewTest {
     public void testAsTableNoOlapTable() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1280,8 +1257,8 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Materialized view only supports olap table, " +
-                    "but the type of table: mysql_external_table is: MYSQL", e.getMessage());
+            // support partitioned mv for external table later
+            Assert.assertTrue(e.getMessage().contains("com.starrocks.catalog.MysqlTable cannot be cast to"));
         }
     }
 
@@ -1289,7 +1266,7 @@ public class CreateMaterializedViewTest {
     public void testAsTableOnMV() {
         String sql1 = "create materialized view mv1 " +
                 "partition by k1 " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1303,7 +1280,7 @@ public class CreateMaterializedViewTest {
         }
         String sql2 = "create materialized view mv2 " +
                 "partition by k1 " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1322,7 +1299,7 @@ public class CreateMaterializedViewTest {
     public void testAsHasStar() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(ss) " +
+                "distributed by hash(ss) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1339,7 +1316,7 @@ public class CreateMaterializedViewTest {
     public void testAsSelectItemNoAlias() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1357,7 +1334,7 @@ public class CreateMaterializedViewTest {
     public void testAsSelectItemHasNonDeterministicFunction1() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1376,7 +1353,7 @@ public class CreateMaterializedViewTest {
     public void testAsSelectItemHasNonDeterministicFunction2() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1563,7 +1540,7 @@ public class CreateMaterializedViewTest {
         Config.enable_materialized_view = false;
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1582,7 +1559,7 @@ public class CreateMaterializedViewTest {
     public void testExists() {
         String sql = "create materialized view tbl1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1599,7 +1576,7 @@ public class CreateMaterializedViewTest {
     public void testIfNotExists() {
         String sql = "create materialized view if not exists mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1616,7 +1593,7 @@ public class CreateMaterializedViewTest {
     public void testSupportedProperties() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
@@ -1635,7 +1612,7 @@ public class CreateMaterializedViewTest {
     public void testUnSupportedProperties() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"short_key\" = \"20\"\n" +
@@ -1652,7 +1629,7 @@ public class CreateMaterializedViewTest {
     public void testNoDuplicateKey() {
         String sql = "create materialized view mv1 " +
                 "partition by s1 " +
-                "distributed by hash(s2) " +
+                "distributed by hash(s2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1710,7 +1687,7 @@ public class CreateMaterializedViewTest {
     public void testNoExistDb() {
         String sql = "create materialized view db1.mv1\n" +
                 "partition by s1\n" +
-                "distributed by hash(s2)\n" +
+                "distributed by hash(s2) buckets 10\n" +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1727,7 +1704,7 @@ public class CreateMaterializedViewTest {
     public void testMvNameInvalid() {
         String sql = "create materialized view mvklajksdjksjkjfksdlkfgkllksdjkgjsdjfjklsdjkfgjkldfkljgljkljklgja\n" +
                 "partition by s1\n" +
-                "distributed by hash(s2)\n" +
+                "distributed by hash(s2) buckets 10\n" +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1745,7 +1722,7 @@ public class CreateMaterializedViewTest {
     public void testMvNameTooLong() {
         String sql = "create materialized view 22mv\n" +
                 "partition by s1\n" +
-                "distributed by hash(s2)\n" +
+                "distributed by hash(s2) buckets 10\n" +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1762,7 +1739,7 @@ public class CreateMaterializedViewTest {
     public void testPartitionAndDistributionByColumnNameIgnoreCase() {
         String sql = "create materialized view mv1 " +
                 "partition by K1 " +
-                "distributed by hash(K2) " +
+                "distributed by hash(K2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1779,7 +1756,7 @@ public class CreateMaterializedViewTest {
     public void testDuplicateColumn() {
         String sql = "create materialized view mv1 " +
                 "partition by K1 " +
-                "distributed by hash(K2) " +
+                "distributed by hash(K2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1796,7 +1773,7 @@ public class CreateMaterializedViewTest {
     public void testNoBaseTable() {
         String sql = "create materialized view mv1 " +
                 "partition by K1 " +
-                "distributed by hash(K2) " +
+                "distributed by hash(K2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
@@ -1829,7 +1806,7 @@ public class CreateMaterializedViewTest {
     public void testUseSubQuery() {
         String sql = "create materialized view mv1 " +
                 "partition by k1 " +
-                "distributed by hash(k2) " +
+                "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +

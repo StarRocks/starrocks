@@ -2,16 +2,16 @@
 
 package com.starrocks.execution;
 
-import com.starrocks.analysis.RevokeStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.ast.RevokePrivilegeStmt;
 
 public class RevokeExecutor implements DataDefinitionExecutor {
 
     public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws DdlException {
-        context.getGlobalStateMgr().getAuth().revoke((RevokeStmt) stmt);
+        context.getGlobalStateMgr().getAuth().revoke((RevokePrivilegeStmt) stmt);
         return null;
     }
 }

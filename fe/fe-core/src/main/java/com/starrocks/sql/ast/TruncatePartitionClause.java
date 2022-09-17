@@ -3,7 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.PartitionNames;
 
 public class TruncatePartitionClause extends AlterTableClause {
 

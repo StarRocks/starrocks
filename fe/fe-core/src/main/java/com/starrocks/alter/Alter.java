@@ -23,8 +23,6 @@ package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
@@ -66,12 +64,14 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
-import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ModifyPartitionClause;
@@ -168,23 +168,19 @@ public class Alter {
         }
         try {
             Table table = null;
-            if (stmt.getTblName() != null) {
-                table = db.getTable(stmt.getTblName());
-            } else {
-                boolean hasfindTable = false;
-                for (Table t : db.getTables()) {
-                    if (t instanceof OlapTable) {
-                        OlapTable olapTable = (OlapTable) t;
-                        for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
-                            if (olapTable.getIndexNameById(mvIdx.getId()).equals(stmt.getMvName())) {
-                                table = olapTable;
-                                hasfindTable = true;
-                                break;
-                            }
-                        }
-                        if (hasfindTable) {
+            boolean hasfindTable = false;
+            for (Table t : db.getTables()) {
+                if (t instanceof OlapTable) {
+                    OlapTable olapTable = (OlapTable) t;
+                    for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
+                        if (olapTable.getIndexNameById(mvIdx.getId()).equals(stmt.getMvName())) {
+                            table = olapTable;
+                            hasfindTable = true;
                             break;
                         }
+                    }
+                    if (hasfindTable) {
+                        break;
                     }
                 }
             }
@@ -216,7 +212,7 @@ public class Alter {
         }
     }
 
-    public void processAlterMaterializedView(AlterMaterializedViewStatement stmt)
+    public void processAlterMaterializedView(AlterMaterializedViewStmt stmt)
             throws DdlException, MetaNotFoundException {
         // check db
         final TableName mvName = stmt.getMvName();

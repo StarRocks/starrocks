@@ -3,12 +3,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.PartitionKeyDesc;
-import com.starrocks.analysis.PartitionValue;
-import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -24,6 +20,9 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionKeyDesc;
+import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
@@ -83,8 +82,17 @@ public class MaterializedViewTest {
         Assert.assertEquals(true, mv2.isActive());
         mv2.setActive(false);
         Assert.assertEquals(false, mv2.isActive());
-        mv2.setBaseTableIds(Sets.newHashSet(10L, 20L));
-        Assert.assertEquals(Sets.newHashSet(10L, 20L), mv2.getBaseTableIds());
+
+        List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        MaterializedView.BaseTableInfo baseTableInfo1 = new MaterializedView.BaseTableInfo(100L, 10L);
+        baseTableInfos.add(baseTableInfo1);
+        MaterializedView.BaseTableInfo baseTableInfo2 = new MaterializedView.BaseTableInfo(100L, 20L);
+        baseTableInfos.add(baseTableInfo2);
+        mv2.setBaseTableInfos(baseTableInfos);
+        List<MaterializedView.BaseTableInfo> baseTableInfosCheck = mv2.getBaseTableInfos();
+
+        Assert.assertEquals(10L, baseTableInfosCheck.get(0).getTableId());
+        Assert.assertEquals(20L, baseTableInfosCheck.get(1).getTableId());
 
         String mvDefinition = "create materialized view mv2 select col1, col2 from table1";
         mv2.setViewDefineSql(mvDefinition);
@@ -249,7 +257,16 @@ public class MaterializedViewTest {
         MaterializedIndex index = new MaterializedIndex(3, IndexState.NORMAL);
         Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
         mv.addPartition(partition);
-        mv.setBaseTableIds(Sets.newHashSet(10L, 20L, 30L));
+
+        List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        MaterializedView.BaseTableInfo baseTableInfo1 = new MaterializedView.BaseTableInfo(100L, 10L);
+        baseTableInfos.add(baseTableInfo1);
+        MaterializedView.BaseTableInfo baseTableInfo2 = new MaterializedView.BaseTableInfo(100L, 20L);
+        baseTableInfos.add(baseTableInfo2);
+        MaterializedView.BaseTableInfo baseTableInfo3 = new MaterializedView.BaseTableInfo(100L, 30L);
+        baseTableInfos.add(baseTableInfo3);
+
+        mv.setBaseTableInfos(baseTableInfos);
 
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(byteArrayOutputStream);
@@ -347,7 +364,11 @@ public class MaterializedViewTest {
         MaterializedIndex index = new MaterializedIndex(3, MaterializedIndex.IndexState.NORMAL);
         Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
         mv.addPartition(partition);
-        mv.setBaseTableIds(Sets.newHashSet(baseTable.getId()));
+
+        List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        MaterializedView.BaseTableInfo baseTableInfo = new MaterializedView.BaseTableInfo(100L, baseTable.getId());
+        baseTableInfos.add(baseTableInfo);
+        mv.setBaseTableInfos(baseTableInfos);
         mv.setViewDefineSql("select * from test.tbl1");
 
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
@@ -574,5 +595,36 @@ public class MaterializedViewTest {
         Assert.assertTrue(taskProperties.containsKey("query_timeout"));
         Assert.assertEquals("500", taskProperties.get("query_timeout"));
         Assert.assertEquals(Constants.TaskType.EVENT_TRIGGERED, task.getType());
+    }
+
+    @Test
+    public void testRollupMaterializedViewWithScalarFunction() throws Exception {
+        FeConstants.runningUnitTest = true;
+        UtFrameUtils.createMinStarRocksCluster();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE `part_with_mv` (\n" +
+                        "  `p_partkey` int(11) NOT NULL COMMENT \"\",\n" +
+                        "  `p_name` varchar(55) NOT NULL COMMENT \"\",\n" +
+                        "  `p_mfgr` varchar(25) NOT NULL COMMENT \"\",\n" +
+                        "  `p_brand` varchar(10) NOT NULL COMMENT \"\",\n" +
+                        "  `p_type` varchar(25) NOT NULL COMMENT \"\",\n" +
+                        "  `p_size` int(11) NOT NULL COMMENT \"\",\n" +
+                        "  `p_container` varchar(10) NOT NULL COMMENT \"\",\n" +
+                        "  `p_retailprice` decimal64(15, 2) NOT NULL COMMENT \"\",\n" +
+                        "  `p_comment` varchar(23) NOT NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`p_partkey`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 24\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\");");
+        String createMvSql = "create materialized view mv1 as select p_partkey, p_name, length(p_brand) from part_with_mv;";
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, createMvSql);
+        stmtExecutor.execute();
+        Assert.assertEquals("Materialized view does not support this function:length(`test`.`part_with_mv`.`p_brand`)," +
+                " supported functions are: [min, max, hll_union, percentile_union, count, sum, bitmap_union]",
+                connectContext.getState().getErrorMessage());
     }
 }

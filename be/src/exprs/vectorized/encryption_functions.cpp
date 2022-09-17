@@ -9,6 +9,7 @@
 #include "exprs/expr.h"
 #include "util/aes_util.h"
 #include "util/debug_util.h"
+#include "util/integer_util.h"
 #include "util/md5.h"
 #include "util/sha.h"
 
@@ -171,6 +172,34 @@ ColumnPtr EncryptionFunctions::md5sum(FunctionContext* ctx, const Columns& colum
         result.append(Slice(digest.hex().c_str(), digest.hex().size()));
     }
 
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr EncryptionFunctions::md5sum_numeric(FunctionContext* ctx, const Columns& columns) {
+    std::vector<ColumnViewer<TYPE_VARCHAR>> list;
+    list.reserve(columns.size());
+    for (const ColumnPtr& col : columns) {
+        list.emplace_back(ColumnViewer<TYPE_VARCHAR>(col));
+    }
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; row++) {
+        Md5Digest digest;
+        for (auto& view : list) {
+            if (view.is_null(row)) {
+                continue;
+            }
+            auto v = view.value(row);
+            digest.update(v.data, v.size);
+        }
+        digest.digest();
+        StringParser::ParseResult parse_res;
+        uint128_t int_val =
+                StringParser::string_to_int<uint128_t>(digest.hex().c_str(), digest.hex().size(), 16, &parse_res);
+        DCHECK_EQ(parse_res, StringParser::PARSE_SUCCESS);
+        std::string decimal_str = starrocks::integer_to_string<uint128_t>(int_val);
+        result.append(Slice(decimal_str.data(), decimal_str.size()));
+    }
     return result.build(ColumnHelper::is_all_const(columns));
 }
 

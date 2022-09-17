@@ -252,6 +252,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.scan_ranges = {&scan_range};
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
+    scanner_params.file_size = _scan_range.file_length;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;

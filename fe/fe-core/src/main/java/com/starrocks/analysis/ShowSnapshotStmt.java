@@ -17,6 +17,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.AstVisitor;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.CompoundPredicate.Operator;
@@ -134,6 +135,18 @@ public class ShowSnapshotStmt extends ShowStmt {
         return timestamp;
     }
 
+    public Expr getWhere() {
+        return where;
+    }
+
+    public void setSnapshotName(String snapshotName) {
+        this.snapshotName = snapshotName;
+    }
+
+    public void setTimestamp(String timestamp) {
+        this.timestamp = timestamp;
+    }
+
     @Override
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
@@ -149,5 +162,14 @@ public class ShowSnapshotStmt extends ShowStmt {
         return builder.build();
     }
 
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowSnapshotStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }
 

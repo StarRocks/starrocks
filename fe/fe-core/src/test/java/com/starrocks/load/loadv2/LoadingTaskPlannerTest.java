@@ -26,7 +26,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.LoadStmt;
@@ -52,6 +51,7 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -813,7 +813,7 @@ public class LoadingTaskPlannerTest {
 
     @Test
     public void testShuffle(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
-                    @Injectable Database db, @Injectable OlapTable table) throws Exception {
+                            @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
@@ -909,7 +909,7 @@ public class LoadingTaskPlannerTest {
 
     @Test
     public void testAggShuffle(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
-                    @Injectable Database db, @Injectable OlapTable table) throws Exception {
+                               @Injectable Database db, @Injectable OlapTable table) throws Exception {
         // table schema
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));

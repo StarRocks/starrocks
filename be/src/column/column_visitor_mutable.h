@@ -19,6 +19,7 @@ public:
     virtual Status visit(vectorized::NullableColumn* column);
     virtual Status visit(vectorized::ConstColumn* column);
     virtual Status visit(vectorized::ArrayColumn* column);
+    virtual Status visit(vectorized::MapColumn* column);
     virtual Status visit(vectorized::BinaryColumn* column);
     virtual Status visit(vectorized::LargeBinaryColumn* column);
     virtual Status visit(vectorized::Int8Column* column);

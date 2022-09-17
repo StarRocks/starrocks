@@ -441,4 +441,22 @@ void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* contro
     }
 }
 
+void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* controller,
+                                        const ::starrocks::lake::RestoreSnapshotsRequest* request,
+                                        ::starrocks::lake::RestoreSnapshotsResponse* response,
+                                        ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+    // TODO: Support fs download and restore directly
+    if (!request->has_broker()) {
+        cntl->SetFailed("missing broker");
+        return;
+    }
+
+    auto loader = std::make_unique<LakeSnapshotLoader>(_env);
+    auto st = loader->restore(request);
+    if (!st.ok()) {
+        cntl->SetFailed(st.to_string());
+    }
+}
 } // namespace starrocks

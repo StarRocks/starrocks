@@ -734,6 +734,58 @@ TEST_F(EncryptionFunctionsTest, md5sumNullTest) {
     }
 }
 
+TEST_F(EncryptionFunctionsTest, md5sum_numericTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+
+    std::string plains[] = {"dorisqq", "1", "324", "2111"};
+    std::string results[] = {"313541553194712735798834777371609380343"};
+
+    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+        auto plain = BinaryColumn::create();
+        plain->append(plains[j]);
+        columns.emplace_back(plain);
+    }
+
+    ColumnPtr result = EncryptionFunctions::md5sum_numeric(ctx.get(), columns);
+
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
+        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    }
+}
+
+TEST_F(EncryptionFunctionsTest, md5sum_numericNullTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+
+    std::string plains[] = {"dorisqq", "1", "324", "2111"};
+    std::string results[] = {"313541553194712735798834777371609380343"};
+
+    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+        auto plain = BinaryColumn::create();
+        plain->append(plains[j]);
+        columns.emplace_back(plain);
+    }
+
+    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+        auto plain = BinaryColumn::create();
+        plain->append(plains[j]);
+        auto plain_null = NullColumn::create();
+        plain_null->append(1);
+        columns.emplace_back(NullableColumn::create(plain, plain_null));
+    }
+
+    ColumnPtr result = EncryptionFunctions::md5sum_numeric(ctx.get(), columns);
+
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
+        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    }
+}
+
 class ShaTestFixture : public ::testing::TestWithParam<std::tuple<std::string, int, std::string>> {};
 
 TEST_P(ShaTestFixture, test_sha2) {

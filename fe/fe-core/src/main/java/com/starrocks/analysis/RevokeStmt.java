@@ -32,6 +32,7 @@ import java.util.List;
 //
 // REVOKE privilege [, privilege] ON db.tbl FROM user [ROLE 'role'];
 // REVOKE privilege [, privilege] ON resource 'resource' FROM user [ROLE 'role'];
+@Deprecated         // will remove after old analyzer died
 public class RevokeStmt extends DdlStmt {
     private UserIdentity userIdent;
     private String role;

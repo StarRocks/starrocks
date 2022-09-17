@@ -33,7 +33,6 @@ import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
 import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetVar;
@@ -41,7 +40,6 @@ import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UnsupportedStmt;
-import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
@@ -104,8 +102,10 @@ import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
+import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.common.DmlException;
@@ -1244,12 +1244,15 @@ public class StmtExecutor {
                     containOlapScanNode = true;
                 }
             }
-
+            
+            TLoadJobType type = null;
             if (containOlapScanNode) {
                 coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
+                type = TLoadJobType.INSERT_QUERY;
             } else {
                 estimateScanRows = execPlan.getFragments().get(0).getPlanRoot().getCardinality();
                 coord.setLoadJobType(TLoadJobType.INSERT_VALUES);
+                type = TLoadJobType.INSERT_VALUES;
             }
 
             jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
@@ -1258,7 +1261,8 @@ public class StmtExecutor {
                     targetTable.getId(),
                     EtlJobType.INSERT,
                     createTime,
-                    estimateScanRows);
+                    estimateScanRows,
+                    type);
             coord.setJobId(jobId);
 
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);

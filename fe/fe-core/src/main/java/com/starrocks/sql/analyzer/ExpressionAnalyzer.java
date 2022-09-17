@@ -17,7 +17,6 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprId;
@@ -57,6 +56,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -157,6 +157,10 @@ public class ExpressionAnalyzer {
                 throw new SemanticException("Lambda inputs should be arrays.");
             }
             Type itemType = ((ArrayType) expr.getType()).getItemType();
+            if (itemType == Type.NULL) { // Since slot_ref with Type.NULL is rewritten to Literal in toThrift(),
+                // rather than a common columnRef, so change its type here.
+                itemType = Type.BOOLEAN;
+            }
             scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
         }
         // visit LambdaFunction
@@ -683,6 +687,23 @@ public class ExpressionAnalyzer {
                 }
             } else if (FunctionSet.STR_TO_DATE.equals(fnName)) {
                 fn = getStrToDateFunction(node, argumentTypes);
+            } else if (fnName.equals(FunctionSet.ARRAY_FILTER)) {
+                if (node.getChildren().size() != 2) {
+                    throw new SemanticException(
+                            FunctionSet.ARRAY_FILTER + " should have 2 array inputs or lambda functions.");
+                }
+                if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                    throw new SemanticException("The first input of " + FunctionSet.ARRAY_FILTER +
+                            " should be an array or a lambda function.");
+                }
+                if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                    throw new SemanticException("The second input of " + FunctionSet.ARRAY_FILTER +
+                            " should be an array or a lambda function.");
+                }
+                // force the second array be of Type.ARRAY_BOOLEAN
+                node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
+                argumentTypes[1] = Type.ARRAY_BOOLEAN;
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }

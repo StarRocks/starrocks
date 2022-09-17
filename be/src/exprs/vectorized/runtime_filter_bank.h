@@ -108,8 +108,12 @@ public:
     void set_runtime_filter(const JoinRuntimeFilter* rf);
     void set_shared_runtime_filter(const std::shared_ptr<const JoinRuntimeFilter>& rf);
     bool is_bound(const std::vector<TupleId>& tuple_ids) const { return _probe_expr_ctx->root()->is_bound(tuple_ids); }
-    // When there are multi partition_by_exprs, disable pushing down runtime filters.
-    bool is_multi_partition_by_exprs() { return _partition_by_exprs_contexts.size() > 1; }
+    // Disable pushing down runtime filters when:
+    //  - partition_by_exprs have multi columns;
+    //  - partition_by_exprs only one column but differ with probe_expr;
+    // When pushing down runtime filters(probe_exprs) but partition_by_exprs are not changed
+    // which may cause wrong results.
+    bool can_push_down_runtime_filter() { return _partition_by_exprs_contexts.empty(); }
     bool is_probe_slot_ref(SlotId* slot_id) const {
         Expr* probe_expr = _probe_expr_ctx->root();
         if (!probe_expr->is_slotref()) return false;
@@ -127,7 +131,6 @@ public:
     void set_probe_plan_node_id(TPlanNodeId id) { _probe_plan_node_id = id; }
     const TRuntimeFilterBuildJoinMode::type join_mode() const { return _join_mode; };
     const std::vector<int32_t>* bucketseq_to_partition() const { return &_bucketseq_to_partition; }
-    const std::vector<SlotId>* partition_by_expr_ids() const { return &_partition_by_expr_ids; }
     const std::vector<ExprContext*>* partition_by_expr_contexts() const { return &_partition_by_exprs_contexts; }
 
 private:
@@ -149,7 +152,6 @@ private:
     TRuntimeFilterBuildJoinMode::type _join_mode;
     std::vector<int32_t> _bucketseq_to_partition;
     std::vector<ExprContext*> _partition_by_exprs_contexts;
-    std::vector<SlotId> _partition_by_expr_ids;
 };
 
 // RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.

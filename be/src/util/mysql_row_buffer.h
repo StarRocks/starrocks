@@ -55,6 +55,9 @@ public:
     void begin_push_array() { _enter_scope('['); }
     void finish_push_array() { _leave_scope(']'); }
 
+    void begin_push_map() { _enter_scope('{'); }
+    void finish_push_map() { _leave_scope('}'); }
+
     void separator(char c);
 
     int length() const { return _data.size(); }
