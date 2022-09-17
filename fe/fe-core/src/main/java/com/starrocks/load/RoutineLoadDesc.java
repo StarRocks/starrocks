@@ -22,11 +22,13 @@
 package com.starrocks.load;
 
 import com.starrocks.analysis.ColumnSeparator;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ImportColumnDesc;
 import com.starrocks.analysis.ImportColumnsStmt;
 import com.starrocks.analysis.ImportWhereStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.RowDelimiter;
+import com.starrocks.analysis.SlotRef;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -120,6 +122,7 @@ public class RoutineLoadDesc {
             subSQLs.add(subSQL);
         }
         if (wherePredicate != null) {
+            castSlotRef(wherePredicate.getExpr());
             subSQLs.add("WHERE " + wherePredicate.getExpr().toSql());
         }
         return String.join(", ", subSQLs);
@@ -127,6 +130,18 @@ public class RoutineLoadDesc {
 
     private String pack(String str) {
         return "`" + str + "`";
+    }
+
+    private void castSlotRef(Expr expr) {
+        for (int i = 0; i < expr.getChildren().size(); i++) {
+            Expr childExpr = expr.getChild(i);
+            if (childExpr instanceof SlotRef) {
+                SlotRef slotRef = (SlotRef) childExpr;
+                SlotRef newSlotRef = new SlotRef(slotRef.getTblNameWithoutAnalyzed(), slotRef.getColumnName());
+                expr.setChild(i, newSlotRef);
+            }
+            castSlotRef(childExpr);
+        }
     }
 
     public String columnToString(ImportColumnDesc desc) {
