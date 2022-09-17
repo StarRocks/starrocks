@@ -44,6 +44,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
@@ -102,7 +103,8 @@ public class EditLog {
         this.journalQueue = journalQueue;
     }
 
-    public static void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal) {
+    public static void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
+            throws JournalInconsistentException {
         short opCode = journal.getOpCode();
         if (opCode != OperationType.OP_SAVE_NEXTID && opCode != OperationType.OP_TIMESTAMP) {
             LOG.debug("replay journal op code: {}", opCode);
@@ -400,9 +402,7 @@ public class EditLog {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.replayDropFrontend(fe);
                     if (fe.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeName())) {
-                        System.out.println("current fe " + fe + " is removed. will exit");
-                        LOG.info("current fe " + fe + " is removed. will exit");
-                        System.exit(-1);
+                        throw new JournalInconsistentException("current fe " + fe + " is removed. will exit");
                     }
                     break;
                 }
@@ -476,10 +476,10 @@ public class EditLog {
                     String versionString = ((Text) journal.getData()).toString();
                     int version = Integer.parseInt(versionString);
                     if (version > FeConstants.meta_version) {
-                        LOG.error("invalid meta data version found, cat not bigger than FeConstants.meta_version."
-                                        + "please update FeConstants.meta_version bigger or equal to {} and restart.",
-                                version);
-                        System.exit(-1);
+                        throw new JournalInconsistentException(
+                                "invalid meta data version found, cat not bigger than FeConstants.meta_version."
+                                + "please update FeConstants.meta_version bigger or equal to " + version +
+                                " and restart.");
                     }
                     MetaContext.get().setMetaVersion(version);
                     break;
@@ -487,18 +487,14 @@ public class EditLog {
                 case OperationType.OP_META_VERSION_V2: {
                     MetaVersion metaVersion = (MetaVersion) journal.getData();
                     if (metaVersion.getCommunityVersion() > FeConstants.meta_version) {
-                        LOG.error("invalid meta data version found, cat not bigger than FeConstants.meta_version."
-                                        + "please update FeConstants.meta_version bigger or equal to {} and restart.",
-                                metaVersion.getCommunityVersion());
-                        System.exit(-1);
+                        throw new JournalInconsistentException("invalid meta data version found, cat not bigger than "
+                                + "FeConstants.meta_version. please update FeConstants.meta_version bigger or equal to "
+                                + metaVersion.getCommunityVersion() + "and restart.");
                     }
                     if (metaVersion.getStarRocksVersion() > FeConstants.starrocks_meta_version) {
-                        LOG.error(
-                                "invalid meta data version found, cat not bigger than FeConstants.starrocks_meta_version."
-                                        +
-                                        "please update FeConstants.starrocks_meta_version bigger or equal to {} and restart.",
-                                metaVersion.getStarRocksVersion());
-                        System.exit(-1);
+                        throw new JournalInconsistentException("invalid meta data version found, cat not bigger than "
+                                + "FeConstants.starrocks_meta_version. please update FeConstants.starrocks_meta_version"
+                                + " bigger or equal to " + metaVersion.getStarRocksVersion() + "and restart.");
                     }
                     MetaContext.get().setMetaVersion(metaVersion.getCommunityVersion());
                     MetaContext.get().setStarRocksMetaVersion(metaVersion.getStarRocksVersion());
@@ -895,8 +891,9 @@ public class EditLog {
                 }
             }
         } catch (Exception e) {
-            LOG.error("Operation Type {}", opCode, e);
-            System.exit(-1);
+            JournalInconsistentException exception = new JournalInconsistentException("failed to load journal type " + opCode);
+            exception.initCause(e);
+            throw exception;
         }
     }
 
