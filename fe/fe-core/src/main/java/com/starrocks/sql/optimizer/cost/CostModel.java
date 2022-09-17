@@ -194,13 +194,12 @@ public class CostModel {
                     result = CostEstimate.ofCpu(statistics.getOutputSize(outputColumns));
                     break;
                 case BROADCAST:
-                    int parallelExecInstanceNum = Math.max(1, getParallelExecInstanceNum(context));
                     // beNum is the number of right table should broadcast, now use alive backends
                     int aliveBackendNumber = ctx.getAliveBackendNumber();
                     int beNum = Math.max(1, aliveBackendNumber);
                     result = CostEstimate.of(statistics.getOutputSize(outputColumns) * aliveBackendNumber,
-                            statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum,
-                            Math.max(statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum, 1));
+                            statistics.getOutputSize(outputColumns) * beNum,
+                            Math.max(statistics.getOutputSize(outputColumns) * beNum, 1));
                     if (statistics.getOutputSize(outputColumns) > sessionVariable.getMaxExecMemByte()) {
                         return CostEstimate.of(result.getCpuCost() * StatsConstants.BROADCAST_JOIN_MEM_EXCEED_PENALTY,
                                 result.getMemoryCost() * StatsConstants.BROADCAST_JOIN_MEM_EXCEED_PENALTY,
@@ -218,11 +217,6 @@ public class CostModel {
                             ErrorType.UNSUPPORTED);
             }
             return result;
-        }
-
-        private int getParallelExecInstanceNum(ExpressionContext context) {
-            return Math.min(ConnectContext.get().getSessionVariable().getDegreeOfParallelism(),
-                    context.getRootProperty().getLeftMostScanTabletsNum());
         }
 
         @Override
