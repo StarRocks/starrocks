@@ -22,6 +22,7 @@ import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.UpdateStmt;
@@ -551,6 +552,12 @@ public class Analyzer {
 
         @Override
         public Void visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, ConnectContext session) {
+            ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitShowTransactionStmt(ShowTransactionStmt statement, ConnectContext session) {
             ShowStmtAnalyzer.analyze(statement, session);
             return null;
         }

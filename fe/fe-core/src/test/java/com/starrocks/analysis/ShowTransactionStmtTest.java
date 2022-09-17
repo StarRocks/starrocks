@@ -1,42 +1,34 @@
 package com.starrocks.analysis;
 
-import com.starrocks.qe.ConnectContext;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.UserException;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static org.junit.Assert.assertEquals;
 
 public class ShowTransactionStmtTest {
-
-    private ConnectContext ctx;
-
+    
     @Before
     public void setUp() throws Exception {
-        ctx = UtFrameUtils.createDefaultCtx();
-        ctx.setDatabase("testDb");
+        AnalyzeTestUtil.init();
     }
 
     @Test
     public void testNormal() throws Exception {
-        SlotRef slotRef = new SlotRef(null, "id");
-        StringLiteral stringLiteral = new StringLiteral("123");
-        IntLiteral intLiteral = new IntLiteral(123);
-        BinaryPredicate equalPredicate = new BinaryPredicate(BinaryPredicate.Operator.EQ, slotRef, intLiteral);
-        
-        ShowTransactionStmt stmt = new ShowTransactionStmt("", equalPredicate);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
+        ShowTransactionStmt stmt = (ShowTransactionStmt) analyzeSuccess("SHOW TRANSACTION FROM test WHERE `label` = 'abc'");
+        Assert.assertEquals("abc", stmt.getLabel());
+        Assert.assertEquals("test", stmt.getDbName());
 
-        Assert.assertEquals("SHOW TRANSACTION WHERE `id` = 123", stmt.toString());
+        stmt = (ShowTransactionStmt) analyzeSuccess("SHOW TRANSACTION FROM test WHERE `id` = 123");
+        Assert.assertEquals(123, stmt.getTxnId());
 
-        stmt = new ShowTransactionStmt("testDb", equalPredicate);
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-
-        Assert.assertEquals("SHOW TRANSACTION FROM `testDb` WHERE `id` = 123", stmt.toString());
-        Assert.assertEquals("testDb", stmt.getDbName());
-        
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);
         Assert.assertEquals("TransactionId", metaData.getColumn(0).getName());
@@ -53,6 +45,32 @@ public class ShowTransactionStmtTest {
         Assert.assertEquals("ListenerId", metaData.getColumn(11).getName());
         Assert.assertEquals("TimeoutMs", metaData.getColumn(12).getName());
         Assert.assertEquals("ErrMsg", metaData.getColumn(13).getName());
+    }
+
+    @Test
+    public void testNoDb() throws UserException, AnalysisException {
+        AnalyzeTestUtil.getStarRocksAssert().useDatabase(null);
+        analyzeFail("SHOW TRANSACTION", "No database selected");
+    }
+
+    @Test
+    public void testNoWhere() throws UserException, AnalysisException {
+        AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
+    }
+
+    @Test
+    public void testInvalidWhere() {
+        AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
+        String failMessage = "Where clause should looks like: LABEL = \"label_name\", or ID = $transaction_id";
+        analyzeFail("SHOW TRANSACTION", "should supply condition like: LABEL = \"label_name\", or ID = $transaction_id");
+        analyzeFail("SHOW TRANSACTION WHERE STATE = 'RUNNING'", failMessage);
+        analyzeFail("SHOW TRANSACTION WHERE STATE LIKE 'RUNNING'", failMessage);
+        analyzeFail("SHOW TRANSACTION WHERE STATE != 'LOADING'", failMessage);
+        analyzeFail("SHOW TRANSACTION WHERE LABEL = 123", failMessage);
+        analyzeFail("SHOW TRANSACTION WHERE LABEL LIKE 'abc' AND true", failMessage);
+        analyzeFail("SHOW TRANSACTION WHERE LABEL = ''", failMessage);
+        analyzeFail("SHOW TRANSACTION WHERE ID = ''", failMessage);
+        analyzeFail("SHOW TRANSACTION WHERE ID = '123'", failMessage);
     }
 
     @Test
