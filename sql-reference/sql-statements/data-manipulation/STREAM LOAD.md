@@ -29,7 +29,7 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 
 用于指定 StarRocks 集群账号的用户名和密码。必选参数。如果使用 `root` 账号、并且没有设置密码，这里只需要传入 `root:`。
 
-### `-``XPUT`
+### `XPUT`
 
 用于指定 HTTP 请求方法。必选参数。Stream Load 当前只支持 PUT 方法。
 
@@ -46,7 +46,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | **参数名称**  | **参数说明**                                                 |
 | ------------- | ------------------------------------------------------------ |
 | fe_host       | 指定 StarRocks 集群中 FE 的 IP 地址。说明：如果您直接提交导入作业给某一个 BE 节点，则需要传入该 BE 的 IP 地址。 |
-| fe_http_port  | 指定 StarRocks 集群中 FE 的 HTTP 端口号。 默认端口号为 `8030`。<br>说明：如果您直接提交导入作业给某一指定的 BE 节点，则需要传入该 BE 的 HTTP 端口号。默认端口号为 `8040`。<br/> |
+| fe_http_port  | 指定 StarRocks 集群中 FE 的 HTTP 端口号。 默认端口号为 `8030`。<br>说明：如果您直接提交导入作业给某一指定的 BE 节点，则需要传入该 BE 的 HTTP 端口号。默认端口号为 `8040`。 |
 | database_name | 指定目标 StarRocks 表所在的数据库的名称。                    |
 | table_name    | 指定目标 StarRocks 表的名称。                                |
 
@@ -81,7 +81,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 | **参数名称**     | **是否必选** | **参数说明**                                                 |
 | ---------------- | ------------ | ------------------------------------------------------------ |
-| column_separator | 否           | 用于指定待导入数据文件中的列分隔符。如果不指定该参数，则默认为 `\t`，即 Tab。必须确保这里指定的列分隔符与待导入数据文件中的列分隔符一致。<br>说明：StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (\|)。</br> |
+| column_separator | 否           | 用于指定待导入数据文件中的列分隔符。如果不指定该参数，则默认为 `\t`，即 Tab。必须确保这里指定的列分隔符与待导入数据文件中的列分隔符一致。<br>说明：StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (\|)。 |
 | row_delimiter    | 否           | 用于指定待导入数据文件中的行分隔符。如果不指定该参数，则默认为 `\n`。 |
 
 #### JSON 适用参数
@@ -112,8 +112,8 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | ---------------- | ------------ | ------------------------------------------------------------ |
 | label            | 否           | 用于指定导入作业的标签。如果您不指定标签，StarRocks 会自动为导入作业生成一个标签。相同标签的数据无法多次成功导入，这样可以避免一份数据重复导入。有关标签的命名规范，请参见[系统限制](/reference/System_limit.md)。StarRocks 默认保留最近 3 天内成功的导入作业的标签。您可以通过 [FE 配置参数](/administration/Configuration.md#导入和导出相关动态参数) `label_keep_max_second` 设置默认保留时长。 |
 | where            | 否           | 用于指定过滤条件。如果指定该参数，StarRocks 会按照指定的过滤条件对转换后的数据进行过滤。只有符合 WHERE 子句中指定的过滤条件的数据才会导入。 |
-| max_filter_ratio | 否           | 用于指定导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：`0`~`1`。默认值：`0` 。建议您保留默认值 `0`。这样的话，当导入的数据行中有错误时，导入作业会失败，从而保证数据的正确性。如果希望忽略错误的数据行，可以设置该参数的取值大于 `0`。这样的话，即使导入的数据行中有错误，导入作业也能成功。<br>说明：这里因数据质量不合格而过滤掉的数据行，不包括通过 WHERE 子句过滤掉的数据行。</br> |
-| timeout          | 否           | 用于导入作业的超时时间。单位：秒。取值范围：1 ~ 259200。默认值：600。<br>说明：除了 `timeout` 参数可以控制该导入作业的超时时间外，您还可以通过 [FE 配置参数](/administration/Configuration.md#导入和导出相关动态参数) `stream_load_default_timeout_second` 来统一控制 Stream Load 导入作业的超时时间。如果指定了`timeout` 参数，则该导入作业的超时时间以 `timeout` 参数为准；如果没有指定 `timeout` 参数，则该导入作业的超时时间以`stream_load_default_timeout_second` 为准。</br> |
+| max_filter_ratio | 否           | 用于指定导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：`0`~`1`。默认值：`0` 。建议您保留默认值 `0`。这样的话，当导入的数据行中有错误时，导入作业会失败，从而保证数据的正确性。如果希望忽略错误的数据行，可以设置该参数的取值大于 `0`。这样的话，即使导入的数据行中有错误，导入作业也能成功。<br>说明：这里因数据质量不合格而过滤掉的数据行，不包括通过 WHERE 子句过滤掉的数据行。 |
+| timeout          | 否           | 用于导入作业的超时时间。单位：秒。取值范围：1 ~ 259200。默认值：600。<br>说明：除了 `timeout` 参数可以控制该导入作业的超时时间外，您还可以通过 [FE 配置参数](/administration/Configuration.md#导入和导出相关动态参数) `stream_load_default_timeout_second` 来统一控制 Stream Load 导入作业的超时时间。如果指定了`timeout` 参数，则该导入作业的超时时间以 `timeout` 参数为准；如果没有指定 `timeout` 参数，则该导入作业的超时时间以`stream_load_default_timeout_second` 为准。 |
 | strict_mode      | 否           | 用于指定是否开启严格模式。取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。 |
 | timezone         | 否           | 用于指定导入作业所使用的时区。默认为东八区 (Asia/Shanghai)。该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](/using_starrocks/timezone.md)。 |
 | load_mem_limit   | 否           | 导入作业的内存限制，最大不超过 BE 的内存限制。单位：字节。默认内存限制为 2 GB。 |
