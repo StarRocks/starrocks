@@ -209,7 +209,7 @@ public class ReplayFromDumpTest {
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
         // Check the size of the left and right tables
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  49:NESTLOOP JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("49:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  other join predicates: cast([934: d_month_seq, INT, true] as BIGINT) <= [1017: expr, BIGINT, true]\n" +
                 "  |  cardinality: 18262\n" +
@@ -244,7 +244,7 @@ public class ReplayFromDumpTest {
                 "  |    \n" +
                 "  32:OlapScanNode\n" +
                 "     table: date_dim, rollup: date_dim"));
-        Assert.assertTrue(replayPair.second.contains(" |----18:EXCHANGE\n" +
+        Assert.assertTrue(replayPair.second.contains("  |----18:EXCHANGE\n" +
                 "  |       cardinality: 6304\n" +
                 "  |    \n" +
                 "  2:OlapScanNode\n" +
@@ -484,7 +484,7 @@ public class ReplayFromDumpTest {
                 getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), null,
                         TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  20:Project\n" +
-                "  |  <slot 6> : bitmap_and(24: bitmap_union, 32: bitmap_union)\n" +
+                "  |  <slot 33> : bitmap_and(21: bitmap_union, 29: bitmap_union)\n" +
                 "  |  \n" +
                 "  19:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
@@ -493,7 +493,7 @@ public class ReplayFromDumpTest {
                 "  |----18:EXCHANGE\n" +
                 "  |    \n" +
                 "  11:Project\n" +
-                "  |  <slot 24> : 21: bitmap_union"));
+                "  |  <slot 21> : 18: bitmap_union"));
     }
 
     @Test
