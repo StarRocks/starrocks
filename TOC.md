@@ -12,8 +12,8 @@
   + [创建表](/quick_start/Create_table.md)
   + [导入和查询数据](/quick_start/Import_and_query.md)
 + 表设计
-  + [理解 StarRocks 表设计](/table_design/StarRocks_table_design.md)
-  + [数据模型介绍](/table_design/Data_model.md)
+  + [理解表设计](/table_design/StarRocks_table_design.md)
+  + [数据模型](/table_design/Data_model.md)
   + [数据分布](/table_design/Data_distribution.md)
   + [排序键和前缀索引](/table_design/Sort_key.md)
 + 数据导入
@@ -21,12 +21,12 @@
   + [通过 HTTP Push 从本地文件系统或流式数据源导入](/loading/StreamLoad.md)
   + [从 HDFS 或外部云存储系统导入](/loading/BrokerLoad.md)
   + [从 Apache Kafka® 持续导入](/loading/RoutineLoad.md)
-  + [使用 Apache Spark™ 批量导入和数据转换](/loading/SparkLoad.md)
-  + [使用 INSERT 导入](/loading/InsertInto.md)
+  + [使用 Apache Spark™ 批量导入](/loading/SparkLoad.md)
+  + [使用 INSERT 语句导入](/loading/InsertInto.md)
+  + [从 MySQL 实时同步](/loading/Flink_cdc_load.md)
+  + [从 Apache Flink® 导入](/loading/Flink-connector-starrocks.md)
   + [通过导入实现数据变更](/loading/PrimaryKeyLoad.md)
   + [导入过程中实现数据转换](/loading/Etl_in_loading.md)
-  + [从 MySQL 实时同步](/loading/Flink_cdc_load.md)
-  + [使用 Apache Flink® 导入](/loading/Flink-connector-starrocks.md)
   + [使用 DataX 导入](/loading/DataX-starrocks-writer.md)
   + [使用 CloudCanal 导入](/loading/CloudCanal_loading.md)
 + 数据导出
@@ -63,8 +63,8 @@
     + [通过源码编译](/administration/Build_in_docker.md)
     + [部署 FE 高可用集群](/administration/Deployment.md)
     + [部署 Broker](/administration/deploy_broker.md)
-    + [使用 StarRocks Operator 在 Kubernetes 部署和管理 CN](/administration/k8s_operator_cn.md)
-    + [部署CN节点](/administration/deploy_cn.md)
+    + [手动部署 CN](/administration/deploy_cn.md)
+    + [通过 StarRocks Operator 在 Kubernetes 部署和管理 CN](/administration/k8s_operator_cn.md)
   + 运维集群
     + [扩容缩容](/administration/Scale_up_down.md)
     + [备份恢复](/administration/Backup_and_restore.md)
