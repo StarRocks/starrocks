@@ -1,4 +1,4 @@
-# 使用 flink-connector-starrocks 导入至 StarRocks
+# 从 Apache Flink® 持续导入
 
 ## 功能简介
 

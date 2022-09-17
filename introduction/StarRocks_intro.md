@@ -29,7 +29,7 @@
 <NavBoxPart title="表设计​">
 <NavBoxPartItem>
 
-- [表设计概览](/table_design/StarRocks_table_design)
+- [理解表设计](/table_design/StarRocks_table_design)
 - [数据模型](/table_design/Data_model)
 - [数据分布](/table_design/Data_distribution)
 - [排序键和前缀索引](/table_design/Sort_key)
@@ -40,12 +40,14 @@
 <NavBoxPart title="数据导入​">
 <NavBoxPartItem>
 
-- [数据导入概览](/loading/Loading_intro)
-- [从本地或网络导入](/loading/StreamLoad)
-- [从 HDFS 或对象存储导入](/loading/BrokerLoad)
-- [从 Apache Kafka® 导入](/loading/RoutineLoad)
-- [利用 Apache Spark™ 导入](/loading/SparkLoad)
-- [从 MySQL 实时导入](/loading/Flink_cdc_load)
+- [导入总览](/loading/Loading_intro)
+- [通过 HTTP Push 从本地文件系统或流式数据源导入](/loading/StreamLoad)
+- [从 HDFS 或外部云存储系统导入](/loading/BrokerLoad)
+- [从 Apache Kafka® 持续导入](/loading/RoutineLoad)
+- [使用 Apache Spark™ 导入](/loading/SparkLoad)
+- [使用 INSERT 语句导入](/loading/InsertInto)
+- [从 MySQL 实时同步](/loading/Flink_cdc_load)
+- [从 Apache Flink® 持续导入](/loading/Flink-connector-starrocks)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -71,9 +73,9 @@
 <NavBoxPart>
 <NavBoxPartItem title="查询外部数据源​">
 
-- [Apache Hive™](/using_starrocks/External_table#hive-%E5%A4%96%E8%A1%A8)
-- [Apache Hudi](/using_starrocks/External_table#apache-hudi-%E5%A4%96%E8%A1%A8)
-- [Apache Iceberg](/using_starrocks/External_table#apache-iceberg-%E5%A4%96%E8%A1%A8)
+- [Apache Hive™](/using_starrocks/catalog/hive_catalog)
+- [Apache Iceberg](/using_starrocks/catalog/iceberg_catalog)
+- [Apache Hudi](/using_starrocks/catalog/hudi_catalog)
 - [MySQL](/using_starrocks/External_table#mysql-%E5%A4%96%E9%83%A8%E8%A1%A8)
 - [Elasticsearch](/using_starrocks/External_table#elasticsearch-%E5%A4%96%E9%83%A8%E8%A1%A8)
 - [支持 JDBC 的数据库](/using_starrocks/External_table#更多数据库jdbc的外部表)
@@ -108,7 +110,7 @@
 <NavBoxPart title="常见问题​">
 <NavBoxPartItem>
 
-- [数据导入和提取](/faq/loading/Loading_faq)
+- [数据导入和导出](/faq/loading/Loading_faq)
 - [部署运维](/faq/Deploy_faq)
 - [SQL](/faq/Sql_faq)
 
