@@ -20,7 +20,9 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
 
+//SHOW WHITELIST;
 public class ShowWhiteListStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -29,11 +31,24 @@ public class ShowWhiteListStmt extends ShowStmt {
                     .build();
 
     @Override
-    public void analyze(Analyzer analyzer) {
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowWhiteListStatement(this, context);
     }
 
     @Override
+    public String toSql() {
+        return "SHOW WHITELIST;";
+    }
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+    @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+    @Override
+    public String toString() {
+        return toSql();
     }
 }

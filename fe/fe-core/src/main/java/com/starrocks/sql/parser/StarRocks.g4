@@ -186,6 +186,12 @@ statement
     // Snapshot Satement
     | showSnapshotStatement
 
+    // Sql BlackList And WhiteList Statement
+    | addSqlBlackListStatement
+    | delSqlBlackListStatement
+    | showSqlBlackListStatement
+    | showWhiteListStatement
+
     // Other statement
     | killStatement
     | setUserPropertyStatement
@@ -1099,6 +1105,19 @@ dropRoleStatement
     : DROP ROLE identifierOrString                                                          #dropRole
     ;
 
+// ------------------------------------ Sql BlackList And WhiteList Statement ------------------------------------------
+addSqlBlackListStatement
+    : ADD SQLBLACKLIST string
+    ;
+delSqlBlackListStatement
+    : DELETE SQLBLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+showSqlBlackListStatement
+    : SHOW SQLBLACKLIST
+    ;
+showWhiteListStatement
+    : SHOW WHITELIST
+    ;
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showDatabasesStatement
@@ -1795,13 +1814,13 @@ nonReserved
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
-    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE
+    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP | STORAGE
     | STRING | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
     | VALUE | VARIABLES | VIEW | VERBOSE
-    | WARNINGS | WEEK | WORK | WRITE
+    | WARNINGS | WEEK | WHITELIST | WORK | WRITE
     | YEAR
     | DOTDOTDOT
     ;
