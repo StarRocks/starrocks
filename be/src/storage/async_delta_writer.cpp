@@ -23,11 +23,13 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
     for (; iter; ++iter) {
         Status st;
         if (iter->cancel) {
+            std::cout<<"ASYSNC cancel"<<std::endl;
             st = Status::Cancelled("cancelled");
             writer->cancel(st);
             continue;
         }
         if (iter->abort) {
+            std::cout<<"ASYSNC abort"<<std::endl;
             writer->abort(iter->abort_with_log);
             continue;
         }
@@ -143,7 +145,7 @@ void AsyncDeltaWriter::abort(bool with_log) {
     task.abort_with_log = with_log;
 
     bthread::TaskOptions options;
-    options.high_priority = true;
+    options.high_priority = false;
     int r = bthread::execution_queue_execute(_queue_id, task, &options);
     LOG_IF(WARNING, r != 0) << "Fail to execution_queue_execute: " << r;
 

@@ -1286,8 +1286,12 @@ bool OlapTableSink::is_close_done() {
 }
 
 void OlapTableSink::cancel() {
-    Status st = Status::InternalError("cancel");
-    for_each_node_channel([&st](NodeChannel* ch) { ch->cancel(st); });
+    Status st = Status::Cancelled("cancel");
+    std::cout<<"SINK cancel size:"<<_channels.size()<<std::endl;
+    for_each_index_channel([&st](NodeChannel* ch) {
+        std::cout<<"SINK cancel"<<std::endl;
+        ch->cancel(st);
+    });
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {

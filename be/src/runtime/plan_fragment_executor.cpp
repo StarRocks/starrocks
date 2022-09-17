@@ -379,6 +379,7 @@ void PlanFragmentExecutor::cancel() {
                 _runtime_state->fragment_instance_id());
     }
     if (_sink != nullptr) {
+        std::cout<<"FRAGEMENT cancel"<<std::endl;
         _sink->cancel();
     }
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
