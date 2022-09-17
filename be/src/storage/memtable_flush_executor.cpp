@@ -89,7 +89,7 @@ Status FlushToken::submit(std::unique_ptr<vectorized::MemTable> memtable, bool e
     return _flush_token->submit(std::move(task));
 }
 
-void FlushToken::cancel() {
+void FlushToken::shutdown() {
     _flush_token->shutdown();
 }
 

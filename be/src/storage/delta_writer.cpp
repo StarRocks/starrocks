@@ -43,7 +43,7 @@ DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, MemTracker* mem_tracker,
 DeltaWriter::~DeltaWriter() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     if (_flush_token != nullptr) {
-        _flush_token->cancel();
+        _flush_token->shutdown();
     }
     if (_replicate_token != nullptr) {
         _replicate_token->cancel();
@@ -417,7 +417,7 @@ void DeltaWriter::abort(bool with_log) {
     if (_flush_token != nullptr) {
         // Wait until all background tasks finished/cancelled.
         // https://github.com/StarRocks/starrocks/issues/8906
-        _flush_token->cancel();
+        _flush_token->shutdown();
     }
     if (_replicate_token != nullptr) {
         _replicate_token->cancel();

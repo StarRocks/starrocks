@@ -68,7 +68,7 @@ public:
 
     // error has happpens, so we cancel this token
     // And remove all tasks in the queue.
-    void cancel();
+    void shutdown();
 
     // wait all tasks in token to be completed.
     Status wait();
