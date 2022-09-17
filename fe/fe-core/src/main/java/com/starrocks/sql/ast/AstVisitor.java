@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.AddSqlBlackListStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
@@ -17,6 +18,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DdlStmt;
+import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
@@ -45,7 +47,9 @@ import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.ShowSnapshotStmt;
+import com.starrocks.analysis.ShowSqlBlackListStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowWhiteListStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
@@ -526,6 +530,23 @@ public abstract class AstVisitor<R, C> {
 
     public R visitKillAnalyzeStatement(KillAnalyzeStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    // --------------------------------------- Sql BlackList And WhiteList Statement ------------------------------------
+    public R visitAddSqlBlackListStatement(AddSqlBlackListStmt stmt, C context) {
+        return visitStatement(stmt, context);
+    }
+
+    public R visitDelSqlBlackListStatement(DelSqlBlackListStmt stmt, C context) {
+        return visitStatement(stmt, context);
+    }
+
+    public R visitShowSqlBlackListStatement(ShowSqlBlackListStmt stmt, C context) {
+        return visitStatement(stmt, context);
+    }
+
+    public R visitShowWhiteListStatement(ShowWhiteListStmt stmt, C context) {
+        return visitStatement(stmt, context);
     }
 
     // ----------------- Resource Clause -------------
