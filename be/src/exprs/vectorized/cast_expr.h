@@ -16,7 +16,10 @@ namespace vectorized {
 
 class VectorizedCastExprFactory {
 public:
-    static Expr* from_thrift(const TExprNode& node, bool exception_if_failed = false);
+    static Expr* from_thrift(const TExprNode& node, bool exception_if_failed = false) {
+        return from_thrift(nullptr, node, exception_if_failed);
+    }
+    static Expr* from_thrift(ObjectPool* pool, const TExprNode& node, bool exception_if_failed = false);
 
     static Expr* from_type(const TypeDescriptor& from, const TypeDescriptor& to, Expr* child, ObjectPool* pool,
                            bool exception_if_failed = false);

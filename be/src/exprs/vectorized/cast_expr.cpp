@@ -29,6 +29,7 @@
 #include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
+#include "velocypack/Iterator.h"
 
 namespace starrocks::vectorized {
 
@@ -39,14 +40,148 @@ class CastStringToArray final : public Expr {
 public:
     CastStringToArray(const TExprNode& node, Expr* cast_element, const TypeDescriptor& type_desc)
             : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(type_desc) {}
-    ~CastStringToArray() override { delete _cast_elements_expr; }
+    ~CastStringToArray() override = default;
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* input_chunk) override;
+    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* input_chunk) override {
+        ColumnPtr column = _children[0]->evaluate(context, input_chunk);
+        if (column->only_null()) {
+            return ColumnHelper::create_const_null_column(column->size());
+        }
+
+        PrimitiveType element_type = _cast_elements_expr->type().type;
+        ColumnViewer<TYPE_VARCHAR> src(column);
+        UInt32Column::Ptr offsets = UInt32Column::create();
+        NullColumn::Ptr null_column = NullColumn::create();
+
+        // 1. Split string with ',' delimiter
+        uint32_t offset = 0;
+        ColumnBuilder<TYPE_VARCHAR> slice_builder(src.size());
+        for (size_t i = 0; i < src.size(); i++) {
+            offsets->append(offset);
+            if (src.is_null(i)) {
+                null_column->append(1);
+                continue;
+            }
+            null_column->append(0);
+            Slice str = src.value(i);
+            if (str.starts_with("[")) {
+                str.data++;
+                str.size--;
+            }
+            if (str.ends_with("]")) {
+                str.size--;
+            }
+            if (!str.empty()) {
+                StringPiece str_piece(str.data, str.size);
+                std::vector<StringPiece> pieces;
+                SplitStringPieceToVector(str_piece, kArrayDelimeter, &pieces, false);
+
+                // Unquote slice for string type
+                if (element_type == TYPE_VARCHAR || element_type == TYPE_CHAR) {
+                    for (auto& piece : pieces) {
+                        slice_builder.append(_unquote(Slice(piece.data(), piece.size())));
+                    }
+                } else {
+                    for (auto& piece : pieces) {
+                        slice_builder.append(Slice(piece.data(), piece.size()));
+                    }
+                }
+                offset += pieces.size();
+            }
+        }
+        offsets->append(offset);
+
+        // 2. Cast string to specified type
+        ColumnPtr elements = slice_builder.build_nullable_column();
+        if (element_type != TYPE_VARCHAR && element_type != TYPE_CHAR) {
+            ChunkPtr chunk = std::make_shared<Chunk>();
+            SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
+            chunk->append_column(elements, slot_id);
+            elements = ColumnHelper::cast_to_nullable_column(_cast_elements_expr->evaluate(context, chunk.get()));
+        }
+
+        // 3. Assemble elements into array column
+        ColumnPtr res = ArrayColumn::create(elements, offsets);
+        if (column->is_nullable()) {
+            res = NullableColumn::create(res, null_column);
+        }
+
+        return res;
+    }
+
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }
 
 private:
     Slice _unquote(Slice str);
 
+    Expr* _cast_elements_expr;
+    TypeDescriptor _cast_to_type_desc;
+};
+
+// Cast JsonArray to array<ANY>
+class CastJsonToArray final : public Expr {
+public:
+    CastJsonToArray(const TExprNode& node, Expr* cast_element, const TypeDescriptor& type_desc)
+            : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(type_desc) {}
+    ~CastJsonToArray() override = default;
+
+    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* input_chunk) override {
+        ColumnPtr column = _children[0]->evaluate(context, input_chunk);
+        if (column->only_null()) {
+            return ColumnHelper::create_const_null_column(column->size());
+        }
+
+        PrimitiveType element_type = _cast_elements_expr->type().type;
+        ColumnViewer<TYPE_JSON> src(column);
+        UInt32Column::Ptr offsets = UInt32Column::create();
+        NullColumn::Ptr null_column = NullColumn::create();
+
+        // 1. Cast JsonArray to ARRAY<JSON>
+        uint32_t offset = 0;
+        ColumnBuilder<TYPE_JSON> json_column_builder(src.size());
+        for (size_t i = 0; i < src.size(); i++) {
+            offsets->append(offset);
+            if (src.is_null(i)) {
+                null_column->append(1);
+                continue;
+            }
+            null_column->append(0);
+            const JsonValue* json_value = src.value(i);
+            if (json_value->get_type() == JsonType::JSON_ARRAY) {
+                vpack::Slice json_slice = json_value->to_vslice();
+                DCHECK(json_slice.isArray());
+                for (const auto& element : vpack::ArrayIterator(json_slice)) {
+                    JsonValue element_value(element);
+                    json_column_builder.append(std::move(element_value));
+                }
+                offset += json_slice.length();
+            } else {
+                null_column->append(1);
+            }
+        }
+        offsets->append(offset);
+
+        // 2. Cast json to specified type
+        ColumnPtr elements = json_column_builder.build_nullable_column();
+        if (element_type != TYPE_JSON) {
+            ChunkPtr chunk = std::make_shared<Chunk>();
+            SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
+            chunk->append_column(elements, slot_id);
+            elements = ColumnHelper::cast_to_nullable_column(_cast_elements_expr->evaluate(context, chunk.get()));
+        }
+
+        // 3. Assemble elements into array column
+        ColumnPtr res = ArrayColumn::create(elements, offsets);
+        if (column->is_nullable()) {
+            res = NullableColumn::create(res, null_column);
+        }
+
+        return res;
+    }
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastJsonToArray(*this)); }
+
+private:
     Expr* _cast_elements_expr;
     TypeDescriptor _cast_to_type_desc;
 };
@@ -1383,7 +1518,7 @@ private:
         }                                                                  \
     }
 
-Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node, bool allow_throw_exception) {
+Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& node, bool allow_throw_exception) {
     PrimitiveType to_type = TypeDescriptor::from_thrift(node.type).type;
     PrimitiveType from_type = thrift_to_type(node.child_type);
 
@@ -1411,7 +1546,7 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node, bool allow_t
             cast.slot_ref.slot_id = 0;
             cast.slot_ref.tuple_id = 0;
 
-            Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(cast, allow_throw_exception);
+            Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(pool, cast, allow_throw_exception);
             if (cast_element_expr == nullptr) {
                 LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", array_field_type_cast_from.debug_string(),
                                                     array_field_type_cast_to.debug_string());
@@ -1419,6 +1554,10 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node, bool allow_t
             }
             ColumnRef* child = new ColumnRef(cast);
             cast_element_expr->add_child(child);
+            if (pool) {
+                pool->add(cast_element_expr);
+                pool->add(child);
+            }
 
             return new VectorizedCastArrayExpr(cast_element_expr, node);
         } else {
@@ -1447,7 +1586,7 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node, bool allow_t
         }
     }
     // Cast string to array<ANY>
-    if (from_type == TYPE_VARCHAR && to_type == TYPE_ARRAY) {
+    if ((from_type == TYPE_VARCHAR || from_type == TYPE_JSON) && to_type == TYPE_ARRAY) {
         TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
         TExprNode cast;
         cast.type = cast_to.children[0].to_thrift();
@@ -1455,14 +1594,22 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node, bool allow_t
         cast.slot_ref.slot_id = 0;
         cast.slot_ref.tuple_id = 0;
 
-        Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(cast, allow_throw_exception);
+        Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(pool, cast, allow_throw_exception);
         if (cast_element_expr == nullptr) {
             return nullptr;
         }
         ColumnRef* child = new ColumnRef(cast);
         cast_element_expr->add_child(child);
+        if (pool) {
+            pool->add(cast_element_expr);
+            pool->add(child);
+        }
 
-        return new CastStringToArray(node, cast_element_expr, cast_to);
+        if (from_type == TYPE_VARCHAR) {
+            return new CastStringToArray(node, cast_element_expr, cast_to);
+        } else {
+            return new CastJsonToArray(node, cast_element_expr, cast_to);
+        }
     }
 
     if (to_type == TYPE_VARCHAR) {
@@ -1563,24 +1710,7 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
         node.type = to.to_thrift();
         node.child_type = to_thrift(from.type);
 
-        expr = from_thrift(node, allow_throw_exception);
-    } else if ((from.type == TYPE_VARCHAR || from.type == TYPE_CHAR) && to.type == TYPE_ARRAY) {
-        TExprNode cast;
-        cast.type = to.children[0].to_thrift();
-        cast.child_type = to_thrift(from.type);
-        cast.slot_ref.slot_id = 0;
-        cast.slot_ref.tuple_id = 0;
-
-        Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(cast, allow_throw_exception);
-        if (cast_element_expr == nullptr) {
-            return nullptr;
-        }
-        ColumnRef* child = new ColumnRef(cast);
-        pool->add(child);
-        pool->add(cast_element_expr);
-        cast_element_expr->add_child(child);
-
-        expr = new CastStringToArray(cast, cast_element_expr, to);
+        expr = from_thrift(pool, node, allow_throw_exception);
     } else {
         const TypeDescriptor* from_type = &from;
         const TypeDescriptor* to_type = &to;
@@ -1600,7 +1730,7 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
         node.slot_ref.slot_id = 0;
         node.slot_ref.tuple_id = 0;
 
-        Expr* cast_element_expr = from_thrift(node, allow_throw_exception);
+        Expr* cast_element_expr = from_thrift(pool, node, allow_throw_exception);
         if (cast_element_expr == nullptr) {
             LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", from.debug_string(), to.debug_string());
             return nullptr;

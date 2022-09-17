@@ -1547,7 +1547,8 @@ static std::string cast_string_to_array(TExprNode& cast_expr, PrimitiveType elem
     cast_expr.child_type = to_thrift(TYPE_VARCHAR);
     cast_expr.type = gen_array_type_desc(to_thrift(element_type));
 
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(cast_expr));
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
     MockVectorizedExpr<TYPE_VARCHAR> col1(cast_expr, 1, str);
     expr->_children.push_back(&col1);
 
@@ -1579,6 +1580,53 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
     EXPECT_EQ(R"(['a', 'b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a", "b"])"));
     EXPECT_EQ(R"(['a', ' b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a", " b"])"));
     EXPECT_EQ(R"(['1', '2'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([1, 2])"));
+}
+
+static std::string cast_json_to_array(TExprNode& cast_expr, PrimitiveType element_type, const std::string& str) {
+    cast_expr.child_type = to_thrift(TYPE_JSON);
+    cast_expr.type = gen_array_type_desc(to_thrift(element_type));
+
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+
+    auto json = JsonValue::parse(str);
+    if (!json.ok()) {
+        return "INVALID JSON";
+    }
+    MockVectorizedExpr<TYPE_JSON> col1(cast_expr, 1, &json.value());
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    if (ptr->size() != 1) {
+        return "EMPTY";
+    }
+    return ptr->debug_item(0);
+}
+
+TEST_F(VectorizedCastExprTest, json_to_array) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+
+    EXPECT_EQ("[1, 2, 3]", cast_json_to_array(cast_expr, TYPE_INT, "[1,2,3]"));
+    EXPECT_EQ("[1, 2, 3]", cast_json_to_array(cast_expr, TYPE_INT, "[1,   2,  3]"));
+    EXPECT_EQ("[]", cast_json_to_array(cast_expr, TYPE_INT, "[]"));
+    EXPECT_EQ("[]", cast_json_to_array(cast_expr, TYPE_INT, ""));
+    EXPECT_EQ("[NULL, NULL]", cast_json_to_array(cast_expr, TYPE_INT, "[\"a\",\"b\"]"));
+
+    EXPECT_EQ("[1.1, 2.2, 3.3]", cast_json_to_array(cast_expr, TYPE_DOUBLE, "[1.1,2.2,3.3]"));
+
+    EXPECT_EQ(R"(['a', 'b'])", cast_json_to_array(cast_expr, TYPE_VARCHAR, R"(["a","b"])"));
+    EXPECT_EQ(R"(['a', 'b'])", cast_json_to_array(cast_expr, TYPE_VARCHAR, R"(["a", "b"])"));
+    EXPECT_EQ(R"(['a', ' b'])", cast_json_to_array(cast_expr, TYPE_VARCHAR, R"(["a", " b"])"));
+    EXPECT_EQ(R"(['1', '2'])", cast_json_to_array(cast_expr, TYPE_VARCHAR, R"([1, 2])"));
+
+    EXPECT_EQ(R"([{"a": 1}, {"a": 2}])", cast_json_to_array(cast_expr, TYPE_JSON, R"([{"a": 1}, {"a": 2}])"));
+    EXPECT_EQ(R"([null, {"a": 2}])", cast_json_to_array(cast_expr, TYPE_JSON, R"( [null, {"a": 2}] )"));
+    EXPECT_EQ(R"([])", cast_json_to_array(cast_expr, TYPE_JSON, R"( {"a": 1} )"));
 }
 
 } // namespace vectorized
