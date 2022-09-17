@@ -131,7 +131,7 @@ public:
         auto col = down_cast<vectorized::NullableColumn*>(_column);
         AppendWithMask data_appender(col->data_column().get(), _sel_mask, _selected_size);
         RETURN_IF_ERROR(column->data_column()->accept_mutable(&data_appender));
-        AppendWithMask null_appender(col->data_column().get(), _sel_mask, _selected_size);
+        AppendWithMask null_appender(col->null_column().get(), _sel_mask, _selected_size);
         RETURN_IF_ERROR(column->null_column()->accept_mutable(&null_appender));
         return Status::OK();
     }
@@ -395,6 +395,9 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
 }
 
 StatusOr<vectorized::ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
+    if (_last_state == nullptr) {
+        return nullptr;
+    }
     auto agg_result_columns = _create_agg_result_columns();
     auto group_by_columns = _last_columns;
 

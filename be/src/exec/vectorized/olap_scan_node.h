@@ -81,7 +81,7 @@ public:
     static int compute_priority(int32_t num_submitted_tasks);
 
     int io_tasks_per_scan_operator() const override {
-        if (_sorted_result) {
+        if (_sorted_by_keys_per_tablet) {
             return 1;
         }
         return starrocks::ScanNode::io_tasks_per_scan_operator();
@@ -190,7 +190,7 @@ private:
 
     bool _enable_shared_scan = false;
 
-    bool _sorted_result = false;
+    bool _sorted_by_keys_per_tablet = false;
 
     // profile
     RuntimeProfile* _scan_profile = nullptr;

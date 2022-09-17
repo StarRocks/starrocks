@@ -51,7 +51,7 @@ public class UseSortAggregateRule extends OptExpressionVisitor<Void, Void> imple
         }
         
         OlapTable table = (OlapTable) scan.getTable();
-        if (table.getKeysType() != KeysType.AGG_KEYS && table.getKeysType() != KeysType.UNIQUE_KEYS) {
+        if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
             return null;
         }
 

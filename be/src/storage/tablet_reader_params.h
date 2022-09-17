@@ -63,6 +63,8 @@ struct TabletReaderParams {
     RowidRangeOptionPtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
+    bool sorted_by_keys = false;
+
 public:
     std::string to_string() const;
 };
