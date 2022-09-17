@@ -366,9 +366,9 @@ ANALYZE TABLE tbl_name DROP HISTOGRAM ON col_name [, col_name];
 
 ## 取消采集任务
 
-您可以通过 KILL ANALYZE 语句取消正在运行中（Running）的统计信息收集任务。
+您可以通过 KILL ANALYZE 语句取消正在运行中（Running）的统计信息采集任务，包括手动采集任务和自定义自动采集任务。
 
-任务 ID 可以在 SHOW ANALYZE STATUS 中查看。
+手动采集任务的任务 ID 可以在 SHOW ANALYZE STATUS 中查看。自定义自动采集任务的任务 ID 可以在 SHOW ANALYZE JOB 中查看。
 
 ```SQL
 KILL ANALYZE <ID>;
