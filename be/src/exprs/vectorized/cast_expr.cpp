@@ -1564,6 +1564,23 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
         node.child_type = to_thrift(from.type);
 
         expr = from_thrift(node, allow_throw_exception);
+    } else if ((from.type == TYPE_VARCHAR || from.type == TYPE_CHAR) && to.type == TYPE_ARRAY) {
+        TExprNode cast;
+        cast.type = to.children[0].to_thrift();
+        cast.child_type = to_thrift(from.type);
+        cast.slot_ref.slot_id = 0;
+        cast.slot_ref.tuple_id = 0;
+
+        Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(cast, allow_throw_exception);
+        if (cast_element_expr == nullptr) {
+            return nullptr;
+        }
+        ColumnRef* child = new ColumnRef(cast);
+        pool->add(child);
+        pool->add(cast_element_expr);
+        cast_element_expr->add_child(child);
+
+        expr = new CastStringToArray(cast, cast_element_expr, to);
     } else {
         const TypeDescriptor* from_type = &from;
         const TypeDescriptor* to_type = &to;
