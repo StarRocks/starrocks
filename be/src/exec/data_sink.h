@@ -53,7 +53,7 @@ public:
     // Setup. Call before send() or close().
     virtual Status open(RuntimeState* state) = 0;
 
-    virtual void cancel() = 0;
+    virtual void cancel() {}
 
     virtual Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk);
 
