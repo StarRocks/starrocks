@@ -63,17 +63,17 @@ public class CoordinatorMonitorTest {
                 }
 
                 {
-                    coord1.cancel((PPlanFragmentCancelReason) any);
+                    coord1.cancel((PPlanFragmentCancelReason) any, anyString);
                     times = 1;
                 }
 
                 {
-                    coord2.cancel((PPlanFragmentCancelReason) any);
+                    coord2.cancel((PPlanFragmentCancelReason) any, anyString);
                     times = 1;
                 }
 
                 {
-                    coord3.cancel((PPlanFragmentCancelReason) any);
+                    coord3.cancel((PPlanFragmentCancelReason) any, anyString);
                     times = 0;
                 }
             };

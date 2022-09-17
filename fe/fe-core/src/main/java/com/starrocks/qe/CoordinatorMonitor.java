@@ -74,7 +74,8 @@ public class CoordinatorMonitor {
                     if (isUsingDeadBackend) {
                         LOG.warn("Cancel query [{}], because some related backend is not alive",
                                 DebugUtil.printId(coord.getQueryId()));
-                        coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR);
+                        coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR,
+                                "Backend not found. Check if any backend is down or not");
                     }
                 }
 

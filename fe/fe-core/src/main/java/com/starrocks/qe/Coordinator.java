@@ -1363,7 +1363,7 @@ public class Coordinator {
     // Cancel execution of query. This includes the execution of the local plan
     // fragment,
     // if any, as well as all plan fragments on remote nodes.
-    public void cancel(PPlanFragmentCancelReason cancelReason) {
+    public void cancel(PPlanFragmentCancelReason cancelReason, String cancelledMessage) {
         lock();
         try {
             if (!queryStatus.ok()) {
@@ -1371,6 +1371,7 @@ public class Coordinator {
                 return;
             } else {
                 queryStatus.setStatus(Status.CANCELLED);
+                queryStatus.setErrorMsg(cancelledMessage);
             }
             LOG.warn("cancel execution of query, this is outside invoke");
             cancelInternal(cancelReason);
@@ -1380,7 +1381,7 @@ public class Coordinator {
     }
 
     public void cancel() {
-        cancel(PPlanFragmentCancelReason.USER_CANCEL);
+        cancel(PPlanFragmentCancelReason.USER_CANCEL, "");
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
