@@ -154,7 +154,7 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
         }
     } else {
         if (auto channel = remove_load_channel(load_id); channel != nullptr) {
-            channel->cancel();
+            channel->abort();
         }
     }
 }

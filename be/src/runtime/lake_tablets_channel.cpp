@@ -50,7 +50,7 @@ public:
     void add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
 
-    void cancel() override;
+    void abort() override;
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 
@@ -342,7 +342,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     return Status::OK();
 }
 
-void LakeTabletsChannel::cancel() {
+void LakeTabletsChannel::abort() {
     for (auto& it : _delta_writers) {
         it.second->close();
     }

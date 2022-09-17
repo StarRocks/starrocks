@@ -78,7 +78,7 @@ public:
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
 
-    void cancel();
+    void abort();
 
     void cancel(int64_t index_id, int64_t tablet_id);
 
