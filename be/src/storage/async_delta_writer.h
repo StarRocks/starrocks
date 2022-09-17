@@ -83,6 +83,8 @@ public:
     // [thread-safe and wait-free]
     void abort(bool with_log = true);
 
+    void cancel(const Status& st);
+
     int64_t partition_id() const { return _writer->partition_id(); }
 
     ReplicaState replica_state() const { return _writer->replica_state(); }
