@@ -233,6 +233,7 @@ public:
     size_t field_index(std::string_view field_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
+    const std::vector<size_t> sort_column_idxes() const { return _sort_column_idxes; }
     size_t num_columns() const { return _cols.size(); }
     size_t num_key_columns() const { return _num_key_columns; }
     size_t num_short_key_columns() const { return _num_short_key_columns; }
@@ -290,6 +291,7 @@ private:
 
     uint16_t _num_key_columns = 0;
     uint16_t _num_short_key_columns = 0;
+    std::vector<size_t> _sort_column_idxes;
 
     // Using `uint8_t` instead of `CompressKind` and `KeysType` for less memory usage.
     uint8_t _compress_kind = static_cast<uint8_t>(COMPRESS_NONE);

@@ -272,7 +272,9 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
             }
         }
     }
-
+    for (const auto idx : tablet_schema.sort_column_idxes) {
+        schema->add_sort_column_idxes(idx);
+    }
     schema->set_next_column_unique_id(next_unique_id);
     if (has_bf_columns && tablet_schema.__isset.bloom_filter_fpp) {
         schema->set_bf_fpp(tablet_schema.bloom_filter_fpp);

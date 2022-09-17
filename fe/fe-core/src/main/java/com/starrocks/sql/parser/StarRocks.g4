@@ -241,6 +241,7 @@ createTableStatement
           engineDesc?
           charsetDesc?
           keyDesc?
+          orderByDesc?
           comment?
           partitionDesc?
           distributionDesc?
@@ -277,6 +278,10 @@ charsetDesc
 
 keyDesc
     : (AGGREGATE | UNIQUE | PRIMARY | DUPLICATE) KEY identifierList
+    ;
+
+orderByDesc
+    : ORDER BY identifierList
     ;
 
 aggDesc

@@ -71,6 +71,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -224,6 +225,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         long backendId = rollupReplica.getBackendId();
                         Preconditions.checkNotNull(tabletIdMap.get(rollupTabletId)); // baseTabletId
                         countDownLatch.addMark(backendId, rollupTabletId);
+                        List<Integer> sortColumnIdxes = new ArrayList<>();
                         // create replica with version 1.
                         // version will be updated by following load process, or when rollup task finished.
                         CreateReplicaTask createReplicaTask = new CreateReplicaTask(
@@ -235,7 +237,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 tbl.getCopiedIndexes(),
                                 tbl.isInMemory(),
                                 tbl.enablePersistentIndex(),
-                                tabletType, tbl.getCompressionType());
+                                tabletType, tbl.getCompressionType(), sortColumnIdxes);
                         createReplicaTask.setBaseTablet(tabletIdMap.get(rollupTabletId), baseSchemaHash);
                         if (this.storageFormat != null) {
                             createReplicaTask.setStorageFormat(this.storageFormat);

@@ -59,6 +59,7 @@ import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -829,6 +830,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 globalStateMgr.getDbIncludeRecycleBin(dbId),
                 tblId);
         MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+        List<Integer> sortColumnIdxes = new ArrayList<>();
         CreateReplicaTask createReplicaTask = new CreateReplicaTask(destBackendId, dbId,
                 tblId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
                 indexMeta.getSchemaHash(), visibleVersion,
@@ -839,7 +841,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 olapTable.isInMemory(),
                 olapTable.enablePersistentIndex(),
                 olapTable.getPartitionInfo().getTabletType(partitionId),
-                olapTable.getCompressionType());
+                olapTable.getCompressionType(), sortColumnIdxes);
         createReplicaTask.setIsRecoverTask(true);
         taskTimeoutMs = Config.tablet_sched_min_clone_task_timeout_sec * 1000;
 

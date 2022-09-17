@@ -277,11 +277,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                             throw new AlterCancelException("No alive backend");
                         }
                         countDownLatch.addMark(backendId, shadowTabletId);
+                        List<Integer> sortColumnIdxes = new ArrayList<>();
                         CreateReplicaTask createReplicaTask = new CreateReplicaTask(backendId, dbId, tableId, partitionId,
                                 shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0, Partition.PARTITION_INIT_VERSION,
                                 originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema, bfColumns, bfFpp,
                                 countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
-                                TTabletType.TABLET_TYPE_LAKE, table.getCompressionType());
+                                TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), sortColumnIdxes);
 
                         Long baseTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
                         assert baseTabletId != null;

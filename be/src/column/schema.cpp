@@ -12,8 +12,9 @@ Schema::Schema(Fields fields) : Schema(fields, KeysType::DUP_KEYS) {}
 
 #endif
 
-Schema::Schema(Fields fields, KeysType keys_type)
+Schema::Schema(Fields fields, KeysType keys_type, std::vector<size_t> sort_column_idxes)
         : _fields(std::move(fields)),
+          _sort_key_idxes(sort_column_idxes),
           _name_to_index_append_buffer(nullptr),
           _share_name_to_index(false),
           _keys_type(static_cast<uint8_t>(keys_type)) {
@@ -43,6 +44,7 @@ Schema::Schema(Schema* schema)
     for (int i = 0; i < schema->_fields.size(); i++) {
         _fields[i] = schema->_fields[i];
     }
+    _sort_key_idxes = schema->sort_key_idxes();
     if (schema->_name_to_index_append_buffer == nullptr) {
         // share the name_to_index with schema, later append fields will be added to _name_to_index_append_buffer
         schema->_share_name_to_index = true;

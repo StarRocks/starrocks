@@ -88,6 +88,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -793,6 +794,7 @@ public class RestoreJob extends AbstractJob {
                 GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
                 for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
                     GlobalStateMgr.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
+                    List<Integer> sortColumnIdxes = new ArrayList<>();
                     CreateReplicaTask task = new CreateReplicaTask(restoreReplica.getBackendId(), dbId,
                             localTbl.getId(), restorePart.getId(), restoredIdx.getId(),
                             restoreTablet.getId(), indexMeta.getShortKeyColumnCount(),
@@ -804,7 +806,7 @@ public class RestoreJob extends AbstractJob {
                             localTbl.isInMemory(),
                             localTbl.enablePersistentIndex(),
                             localTbl.getPartitionInfo().getTabletType(restorePart.getId()),
-                            localTbl.getCompressionType());
+                            localTbl.getCompressionType(), sortColumnIdxes);
                     task.setInRestoreMode(true);
                     batchTask.addTask(task);
                 }

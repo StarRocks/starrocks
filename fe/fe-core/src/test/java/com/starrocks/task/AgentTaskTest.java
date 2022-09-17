@@ -47,6 +47,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -105,6 +106,7 @@ public class AgentTaskTest {
         PartitionKey pk3 = PartitionKey.createInfinityPartitionKey(Arrays.asList(columns.get(0)), true);
 
         // create tasks
+        List<Integer> sortColumnIdxes = new ArrayList<>();
 
         // create
         createReplicaTask = new CreateReplicaTask(backendId1, dbId, tableId, partitionId,
@@ -112,7 +114,7 @@ public class AgentTaskTest {
                 version, KeysType.AGG_KEYS,
                 storageType, TStorageMedium.SSD,
                 columns, null, 0, latch, null,
-                false, false, TTabletType.TABLET_TYPE_DISK, TCompressionType.LZ4_FRAME);
+                false, false, TTabletType.TABLET_TYPE_DISK, TCompressionType.LZ4_FRAME, sortColumnIdxes);
 
         // drop
         dropTask = new DropReplicaTask(backendId1, tabletId1, schemaHash1, false);

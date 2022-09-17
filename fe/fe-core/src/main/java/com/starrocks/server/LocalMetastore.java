@@ -1770,7 +1770,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }
-
                 CreateReplicaTask task = new CreateReplicaTask(
                         primaryBackendId,
                         dbId,
@@ -1792,7 +1791,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         table.getPartitionInfo().getIsInMemory(partition.getId()),
                         table.enablePersistentIndex(),
                         TTabletType.TABLET_TYPE_LAKE,
-                        table.getCompressionType());
+                        table.getCompressionType(), indexMeta.getSortKeyIdxes());
                 tasks.add(task);
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -1817,7 +1816,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             table.getPartitionInfo().getIsInMemory(partition.getId()),
                             table.enablePersistentIndex(),
                             table.getPartitionInfo().getTabletType(partition.getId()),
-                            table.getCompressionType());
+                            table.getCompressionType(), indexMeta.getSortKeyIdxes());
                     tasks.add(task);
                 }
             }
@@ -2160,8 +2159,23 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
         int schemaHash = Util.schemaHash(schemaVersion, baseSchema, bfColumns, bfFpp);
-        olapTable.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
-                shortKeyColumnCount, baseIndexStorageType, keysType);
+
+        if (stmt.getSortKeys() != null) {
+            List<String> baseSchemaNames = baseSchema.stream().map(Column::getName).collect(Collectors.toList());
+            List<Integer> sortKeyIdxes = new ArrayList<>();
+            for (String column : stmt.getSortKeys()) {
+                int idx = baseSchemaNames.indexOf(column);
+                if (idx == -1) {
+                    throw new DdlException("Invalid column '" + column + "': not exists in all columns.");
+                }
+                sortKeyIdxes.add(idx);
+            }
+            olapTable.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
+                    shortKeyColumnCount, baseIndexStorageType, keysType, null, sortKeyIdxes);
+        } else {
+            olapTable.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
+                    shortKeyColumnCount, baseIndexStorageType, keysType, null);
+        }
 
         for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
             AddRollupClause addRollupClause = (AddRollupClause) alterClause;

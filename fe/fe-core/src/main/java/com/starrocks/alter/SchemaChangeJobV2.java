@@ -276,6 +276,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         for (Replica shadowReplica : shadowReplicas) {
                             long backendId = shadowReplica.getBackendId();
                             countDownLatch.addMark(backendId, shadowTabletId);
+                            List<Integer> sortColumnIdxes = new ArrayList<>();
                             CreateReplicaTask createReplicaTask = new CreateReplicaTask(
                                     backendId, dbId, tableId, partitionId, shadowIdxId, shadowTabletId,
                                     shadowShortKeyColumnCount, shadowSchemaHash,
@@ -285,7 +286,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     tbl.isInMemory(),
                                     tbl.enablePersistentIndex(),
                                     tbl.getPartitionInfo().getTabletType(partitionId),
-                                    tbl.getCompressionType());
+                                    tbl.getCompressionType(), sortColumnIdxes);
                             createReplicaTask.setBaseTablet(
                                     partitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId),
                                     originSchemaHash);

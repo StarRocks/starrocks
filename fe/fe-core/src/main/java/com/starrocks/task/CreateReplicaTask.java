@@ -60,6 +60,7 @@ public class CreateReplicaTask extends AgentTask {
     private TStorageMedium storageMedium;
 
     private List<Column> columns;
+    private List<Integer> sortColumnIdxes;
 
     // bloom filter columns
     private Set<String> bfColumns;
@@ -96,7 +97,7 @@ public class CreateReplicaTask extends AgentTask {
                              List<Index> indexes,
                              boolean isInMemory,
                              boolean enablePersistentIndex,
-                             TTabletType tabletType, TCompressionType compressionType) {
+                             TTabletType tabletType, TCompressionType compressionType, List<Integer> sortColumnIdxes) {
         super(null, backendId, TTaskType.CREATE, dbId, tableId, partitionId, indexId, tabletId);
 
         this.shortKeyColumnCount = shortKeyColumnCount;
@@ -109,6 +110,7 @@ public class CreateReplicaTask extends AgentTask {
         this.storageMedium = storageMedium;
 
         this.columns = columns;
+        this.sortColumnIdxes = sortColumnIdxes;
 
         this.bfColumns = bfColumns;
         this.indexes = indexes;
@@ -194,6 +196,7 @@ public class CreateReplicaTask extends AgentTask {
             tColumns.add(tColumn);
         }
         tSchema.setColumns(tColumns);
+        tSchema.setSort_column_idxes(sortColumnIdxes);
 
         if (CollectionUtils.isNotEmpty(indexes)) {
             List<TOlapTableIndex> tIndexes = new ArrayList<>();

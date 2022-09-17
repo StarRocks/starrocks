@@ -91,6 +91,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -696,6 +697,7 @@ public class ReportHandler extends Daemon {
                                     MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
                                     Set<String> bfColumns = olapTable.getCopiedBfColumns();
                                     double bfFpp = olapTable.getBfFpp();
+                                    List<Integer> sortColumnIdxes = new ArrayList<>();
                                     CreateReplicaTask createReplicaTask = new CreateReplicaTask(backendId, dbId,
                                             tableId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
                                             indexMeta.getSchemaHash(), partition.getVisibleVersion(),
@@ -706,7 +708,7 @@ public class ReportHandler extends Daemon {
                                             olapTable.isInMemory(),
                                             olapTable.enablePersistentIndex(),
                                             olapTable.getPartitionInfo().getTabletType(partitionId),
-                                            olapTable.getCompressionType());
+                                            olapTable.getCompressionType(), sortColumnIdxes);
                                     createReplicaTask.setIsRecoverTask(true);
                                     createReplicaBatchTask.addTask(createReplicaTask);
                                 } else {
