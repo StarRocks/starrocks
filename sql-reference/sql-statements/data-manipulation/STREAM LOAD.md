@@ -177,7 +177,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | ---------------------- | ------------------------------------------------------------ |
 | TxnId                  | 导入作业的事务 ID。                                          |
 | Label                  | 导入作业的标签。                                             |
-| Status                 | 此次导入的数据的最终状态。<ul><li>`Success`：表示数据导入成功，数据已经可见。</li><li>`Publish Timeout`：表示导入作业已经成功提交，但是由于某种原因数据并不能立即可见。可以视作已经成功、不必重试导入。</li><li>`Label Already Exists`：表示该标签已经被其他导入作业占用。数据可能导入成功，也可能是正在导入。</li><li>`Fail`：表示数据导入失败。您可以指定标签重试该导入作业。</li><ul> |
+| Status                 | 此次导入的数据的最终状态。<ul><li>`Success`：表示数据导入成功，数据已经可见。</li><li>`Publish Timeout`：表示导入作业已经成功提交，但是由于某种原因数据并不能立即可见。可以视作已经成功、不必重试导入。</li><li>`Label Already Exists`：表示该标签已经被其他导入作业占用。数据可能导入成功，也可能是正在导入。</li><li>`Fail`：表示数据导入失败。您可以指定标签重试该导入作业。</li></ul> |
 | Message                | 导入作业的状态详情。如果导入作业失败，这里会返回具体的失败原因。 |
 | NumberTotalRows        | 读取到的总行数。                                             |
 | NumberLoadedRows       | 成功导入的总行数。只有当返回结果中的 `Status` 为 `Success` 时有效。 |
