@@ -70,6 +70,8 @@ public:
     // And remove all tasks in the queue.
     void shutdown();
 
+    void cancel(const Status& st);
+
     // wait all tasks in token to be completed.
     Status wait();
 

@@ -74,6 +74,8 @@ public:
     // [thread-safe and wait-free]
     void abort(bool with_log = true);
 
+    void cancel(const Status& st);
+
     int64_t partition_id() const { return _writer->partition_id(); }
 
     ReplicaState replica_state() const { return _writer->replica_state(); }
@@ -93,7 +95,9 @@ private:
         uint32_t indexes_size = 0;
         bool commit_after_write = false;
         bool abort = false;
+        bool cancel = false;
         bool abort_with_log = false;
+        Status st;
     };
 
     static int _execute(void* meta, bthread::TaskIterator<AsyncDeltaWriter::Task>& iter);

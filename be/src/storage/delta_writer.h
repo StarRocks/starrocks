@@ -80,6 +80,8 @@ public:
     // [NOT thread-safe]
     [[nodiscard]] Status close();
 
+    void cancel(const Status& st);
+
     // Wait until all data have been flushed to disk, then create a new Rowset.
     // Prerequite: the DeltaWriter has been successfully `close()`d.
     // [NOT thread-safe]

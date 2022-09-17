@@ -93,6 +93,14 @@ void FlushToken::shutdown() {
     _flush_token->shutdown();
 }
 
+void FlushToken::cancel(Status& st) {
+    if (st.ok()) return;
+    std::lock_guard l(_status_lock);
+    if (_status.ok()) {
+        _status = st;
+    }
+}
+
 Status FlushToken::wait() {
     _flush_token->wait();
     std::lock_guard l(_status_lock);

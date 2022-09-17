@@ -22,6 +22,10 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
     auto writer = static_cast<DeltaWriter*>(meta);
     for (; iter; ++iter) {
         Status st;
+        if (iter->cancel) {
+            writer->cancel(st);
+            continue;
+        }
         if (iter->abort) {
             writer->abort(iter->abort_with_log);
             continue;
@@ -119,6 +123,17 @@ void AsyncDeltaWriter::commit(AsyncDeltaWriterCallback* cb) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
         task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr);
     }
+}
+
+void AsyncDeltaWriter::cancel(const Status& st) {
+    Task task;
+    task.cancel = true;
+    task.st = st;
+
+    bthread::TaskOptions options;
+    options.high_priority = true;
+    int r = bthread::execution_queue_execute(_queue_id, task, &options);
+    LOG_IF(WARNING, r != 0) << "Fail to execution_queue_execute: " << r;
 }
 
 void AsyncDeltaWriter::abort(bool with_log) {

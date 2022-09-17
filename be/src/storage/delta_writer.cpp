@@ -411,6 +411,13 @@ Status DeltaWriter::commit() {
     return Status::OK();
 }
 
+void DeltaWriter::cancel(const Status& st) {
+    _set_state(kAborted);
+    if (_flush_token != nullptr) {
+        _flush_token->cancel(st);
+    }
+}
+
 void DeltaWriter::abort(bool with_log) {
     _set_state(kAborted);
     _with_rollback_log = with_log;
