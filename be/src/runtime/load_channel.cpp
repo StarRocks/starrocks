@@ -182,6 +182,13 @@ void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegm
     closure_guard.release();
 }
 
+void LoadChannel::cancel() {
+    std::lock_guard l(_lock);
+    for (auto& it : _tablets_channels) {
+        it.second->cancel();
+    }
+}
+
 void LoadChannel::abort() {
     _span->AddEvent("cancel");
     auto scoped = trace::Scope(_span);

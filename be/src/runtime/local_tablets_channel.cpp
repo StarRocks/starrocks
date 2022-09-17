@@ -412,6 +412,12 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     return Status::OK();
 }
 
+void LocalTabletsChannel::cancel() {
+    for (auto& it : _delta_writers) {
+        it.second->cancel(Status::Cancelled("cancel"));
+    }
+}
+
 void LocalTabletsChannel::abort() {
     vector<int64_t> tablet_ids;
     tablet_ids.reserve(_delta_writers.size());

@@ -150,10 +150,12 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
     if (request.has_tablet_id()) {
         auto channel = _find_load_channel(load_id);
         if (channel != nullptr) {
+            channel->cancel();
             channel->abort(request.index_id(), request.tablet_id());
         }
     } else {
         if (auto channel = remove_load_channel(load_id); channel != nullptr) {
+            channel->cancel();
             channel->abort();
         }
     }
@@ -202,6 +204,9 @@ void LoadChannelMgr::_start_load_channels_clean() {
     // we must cancel these load channels before destroying them
     // otherwise some object may be invalid before trying to visit it.
     // eg: MemTracker in load channel
+    for (auto& channel : timeout_channels) {
+        channel->cancel();
+    }
     for (auto& channel : timeout_channels) {
         channel->abort();
         LOG(INFO) << "Deleted timeout channel. load id=" << channel->load_id() << " timeout=" << channel->timeout();

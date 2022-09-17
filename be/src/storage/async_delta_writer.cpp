@@ -23,6 +23,7 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
     for (; iter; ++iter) {
         Status st;
         if (iter->cancel) {
+            st = Status::Cancelled("cancelled");
             writer->cancel(st);
             continue;
         }

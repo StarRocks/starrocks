@@ -48,6 +48,8 @@ public:
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
 
+    void cancel() override;
+
     void abort() override;
 
     void abort(int64_t tablet_id);

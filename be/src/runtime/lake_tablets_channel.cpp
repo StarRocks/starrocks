@@ -50,6 +50,8 @@ public:
     void add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
 
+    void cancel() override;
+
     void abort() override;
 
     MemTracker* mem_tracker() { return _mem_tracker; }
@@ -346,6 +348,10 @@ void LakeTabletsChannel::abort() {
     for (auto& it : _delta_writers) {
         it.second->close();
     }
+}
+
+void LakeTabletsChannel::cancel() {
+    //TODO:
 }
 
 StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::_create_write_context(
