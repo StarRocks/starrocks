@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <iomanip>
 
+#include "common/config.h"
 #include "orc/Exceptions.hh"
 
 namespace orc {
@@ -138,7 +139,7 @@ static uint64_t computeBlock(uint64_t request, uint64_t length) {
 }
 
 SeekableFileInputStream::SeekableFileInputStream(InputStream* stream, uint64_t offset, uint64_t byteCount,
-                                                 MemoryPool& _pool, uint64_t _blockSize)
+                                                 MemoryPool& _pool, uint64_t _blockSize, uint64_t _dataEnd)
         : pool(_pool), input(stream), start(offset), length(byteCount), blockSize(computeBlock(_blockSize, length)) {
     position = 0;
     buffer = nullptr;
@@ -165,7 +166,18 @@ bool SeekableFileInputStream::Next(const void** data, int* size) {
             bytesRead = std::min(bytesRead, input->getNaturalReadSizeAfterSeek());
         }
         if (bytesRead > 0) {
-            input->read(buffer->data(), bytesRead, start + position);
+            if (dataEnd != 0 && loadPrefetchIndex != nullptr && start > loadPrefetchIndex->last_max_read_offset &&
+                bytesRead < starrocks::config::orc_load_prefetch_size / 2 &&
+                (dataEnd - (start + position)) > bytesRead) {
+                uint64_t prefetchBytesSize =
+                        std::min((uint64_t)(starrocks::config::orc_load_prefetch_size), dataEnd - (start + position));
+                buffer.reset(new DataBuffer<char>(pool, prefetchBytesSize));
+                input->read(buffer->data(), prefetchBytesSize, start + position);
+                loadPrefetchIndex->fillOtherFileInputStreamBuffer(buffer.get(), start, start + position,
+                                                                  start + position + prefetchBytesSize);
+            } else {
+                input->read(buffer->data(), bytesRead, start + position);
+            }
             *data = static_cast<void*>(buffer->data());
         }
     }
@@ -173,6 +185,21 @@ bool SeekableFileInputStream::Next(const void** data, int* size) {
     pushBack = 0;
     *size = static_cast<int>(bytesRead);
     return bytesRead != 0;
+}
+
+bool SeekableFileInputStream::tryFillBuffer(DataBuffer<char>* prefetchBuffer, uint64_t bufferStartOffset,
+                                            uint64_t bufferEndOffset) {
+    if (buffer != nullptr) {
+        return false;
+    }
+
+    if (!(start >= bufferStartOffset && start + length < bufferEndOffset)) {
+        return false;
+    }
+    buffer.reset(new DataBuffer<char>(pool, length));
+    memcpy(buffer->data(), prefetchBuffer->data() + start - bufferStartOffset, length);
+    pushBack = length;
+    return true;
 }
 
 void SeekableFileInputStream::BackUp(int signedCount) {

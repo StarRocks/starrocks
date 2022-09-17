@@ -718,6 +718,8 @@ CONF_Bool(enable_orc_late_materialization, "true");
 CONF_Int32(orc_file_cache_max_size, "8388608");
 CONF_Int32(orc_natural_read_size, "8388608");
 CONF_mBool(orc_coalesce_read_enable, "true");
+CONF_mBool(enable_orc_load_prefetch, "true");
+CONF_Int32(orc_load_prefetch_size, "16777216");
 
 // parquet reader, each column will reserve X bytes for read
 // but with coalesce read enabled, this value is not used.

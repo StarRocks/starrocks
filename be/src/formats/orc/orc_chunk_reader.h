@@ -84,6 +84,7 @@ public:
     bool get_broker_load_mode() const { return _broker_load_mode; }
     bool get_strict_mode() const { return _strict_mode; }
     std::shared_ptr<Column::Filter> get_broker_load_fiter() { return _broker_load_filter; }
+    void enable_sequential_read() { _enable_sequential_read = true; }
 
     void set_hive_column_names(const std::vector<std::string>* v) {
         if (v != nullptr && v->size() != 0) {
@@ -171,6 +172,7 @@ private:
     std::string _current_file_name;
     int _error_message_counter;
     LazyLoadContext* _lazy_load_ctx;
+    bool _enable_sequential_read;
 };
 
 } // namespace starrocks::vectorized

@@ -34,6 +34,8 @@
 
 namespace orc {
 
+class FileInputStreamLoadPrefetchIndex;
+
 void printBuffer(std::ostream& out, const char* buffer, uint64_t length);
 
 class PositionProvider {
@@ -102,10 +104,12 @@ private:
     uint64_t position;
     uint64_t pushBack;
     bool hasSeek;
+    std::shared_ptr<FileInputStreamLoadPrefetchIndex> loadPrefetchIndex;
+    uint64_t dataEnd;
 
 public:
     SeekableFileInputStream(InputStream* input, uint64_t offset, uint64_t byteCount, MemoryPool& pool,
-                            uint64_t blockSize = 0);
+                            uint64_t blockSize = 0, uint64_t dataEnd = 0);
     ~SeekableFileInputStream() override;
 
     bool Next(const void** data, int* size) override;
@@ -114,6 +118,30 @@ public:
     int64_t ByteCount() const override;
     void seek(PositionProvider& position) override;
     std::string getName() const override;
+    bool tryFillBuffer(DataBuffer<char>* buffer, uint64_t bufferStartOffset, uint64_t bufferEndOffset);
+    void setloadPrefetchIndex(std::shared_ptr<FileInputStreamLoadPrefetchIndex>& _loadPrefetchIndex) {
+        loadPrefetchIndex = _loadPrefetchIndex;
+    }
+    void setDataEnd(uint64_t _dataEnd) { dataEnd = _dataEnd; }
+};
+
+class FileInputStreamLoadPrefetchIndex {
+public:
+    void fillOtherFileInputStreamBuffer(DataBuffer<char>* buffer, uint64_t curStreamStartOffset,
+                                        uint64_t bufferStartOffset, uint64_t bufferEndOffset) {
+        last_max_read_offset = std::max(last_max_read_offset, curStreamStartOffset);
+        auto iter = index.find(curStreamStartOffset);
+        while (iter != index.end()) {
+            iter++;
+            if (!(iter->second->tryFillBuffer(buffer, bufferStartOffset, bufferEndOffset))) {
+                break;
+            }
+            last_max_read_offset = std::max(last_max_read_offset, iter->first);
+        }
+    }
+
+    uint64_t last_max_read_offset = 0;
+    std::map<uint64_t, SeekableFileInputStream*> index; // offset to SeekableFileInputStream
 };
 
 } // namespace orc

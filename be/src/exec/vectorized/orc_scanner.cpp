@@ -220,6 +220,7 @@ Status ORCScanner::_open_next_orc_reader() {
         _orc_reader->set_read_chunk_size(_max_chunk_size);
         _orc_reader->set_current_file_name(file_name);
         st = _orc_reader->init(std::move(inStream));
+        _orc_reader->enable_sequential_read();
         if (st.is_end_of_file()) {
             LOG(WARNING) << "Failed to init orc reader. filename: " << file_name << ", status: " << st.to_string();
             continue;

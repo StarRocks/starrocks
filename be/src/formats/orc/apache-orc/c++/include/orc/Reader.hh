@@ -312,6 +312,9 @@ public:
     bool getUseWriterTimezone() const;
     RowReaderOptions& includeLazyLoadColumnNames(const std::list<std::string>& include);
     const std::list<std::string>& getLazyLoadColumnNames() const;
+
+    void setSequentialRead();
+    bool getSequentialRead() const;
 };
 
 class RowReader;

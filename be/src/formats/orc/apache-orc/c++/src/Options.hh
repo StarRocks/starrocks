@@ -146,6 +146,9 @@ struct RowReaderOptionsPrivate {
     std::shared_ptr<RowReaderFilter> filter;
     std::string readerTimezone;
     bool useWriterTimezone;
+    // if sequentialRead is true, which means we will sequential read
+    // all data from orc file, to avoid many random io, we will enable prefetch
+    bool sequentialRead;
 
     RowReaderOptionsPrivate() {
         selection = ColumnSelection_NONE;
@@ -156,6 +159,7 @@ struct RowReaderOptionsPrivate {
         enableLazyDecoding = false;
         readerTimezone = "GMT";
         useWriterTimezone = false;
+        sequentialRead = false;
     }
 };
 
@@ -283,6 +287,14 @@ RowReaderOptions& RowReaderOptions::searchArgument(std::unique_ptr<SearchArgumen
 
 std::shared_ptr<SearchArgument> RowReaderOptions::getSearchArgument() const {
     return privateBits->sargs;
+}
+
+void RowReaderOptions::setSequentialRead() {
+    privateBits->sequentialRead = true;
+}
+
+bool RowReaderOptions::getSequentialRead() const {
+    return privateBits->sequentialRead;
 }
 
 RowReaderOptions& RowReaderOptions::rowReaderFilter(std::shared_ptr<RowReaderFilter> filter) {

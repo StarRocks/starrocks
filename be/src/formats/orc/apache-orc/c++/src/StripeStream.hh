@@ -46,11 +46,13 @@ private:
     InputStream& input;
     const Timezone& writerTimezone;
     const Timezone& readerTimezone;
+    bool sequentialRead;
+    mutable std::shared_ptr<FileInputStreamLoadPrefetchIndex> loadPrefetchIndex;
 
 public:
     StripeStreamsImpl(const RowReaderImpl& reader, uint64_t index, const proto::StripeInformation& stripeInfo,
                       const proto::StripeFooter& footer, uint64_t stripeStart, InputStream& input,
-                      const Timezone& writerTimezone, const Timezone& readerTimezone);
+                      const Timezone& writerTimezone, const Timezone& readerTimezone, bool sequentialRead = false);
 
     ~StripeStreamsImpl() override;
 

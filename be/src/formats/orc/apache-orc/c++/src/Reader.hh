@@ -169,6 +169,10 @@ private:
 
     mutable DataBuffer<char> sharedBuffer;
 
+    // if sequentialRead is true, which means we will sequential read
+    // all data from orc file, to avoid many random io, we will enable prefetch
+    bool sequentialRead;
+
     // load stripe index if not done so
     void loadStripeIndex();
 

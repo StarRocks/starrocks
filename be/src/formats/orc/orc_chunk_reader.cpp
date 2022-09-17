@@ -1144,6 +1144,9 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
         builder->literal(orc::TruthValue::YES_NO_NULL);
         _row_reader_options.searchArgument(builder->build());
     }
+    if (_enable_sequential_read) {
+        _row_reader_options.setSequentialRead();
+    }
     RETURN_IF_ERROR(_init_include_columns());
     try {
         _row_reader = _reader->createRowReader(_row_reader_options);

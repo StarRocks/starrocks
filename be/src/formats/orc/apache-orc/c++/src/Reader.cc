@@ -230,7 +230,8 @@ RowReaderImpl::RowReaderImpl(const std::shared_ptr<FileContents>& _contents, con
           enableEncodedBlock(opts.getEnableLazyDecoding()),
           readerTimezone(getTimezoneByName(opts.getTimezoneName())),
           useWriterTimezone(opts.getUseWriterTimezone()),
-          sharedBuffer(*contents->pool, 0) {
+          sharedBuffer(*contents->pool, 0),
+          sequentialRead(opts.getSequentialRead()) {
     uint64_t numberOfStripes;
     numberOfStripes = static_cast<uint64_t>(footer->stripes_size());
     currentStripe = numberOfStripes;
@@ -1083,7 +1084,7 @@ void RowReaderImpl::startNextStripe() {
 
             StripeStreamsImpl stripeStreams(*this, currentStripe, currentStripeInfo, currentStripeFooter,
                                             currentStripeInfo.offset(), *contents->stream, writerTimezone,
-                                            readerTimezone);
+                                            readerTimezone, sequentialRead);
             reader = buildReader(*contents->schema, stripeStreams);
 
             if (sargsApplier) {

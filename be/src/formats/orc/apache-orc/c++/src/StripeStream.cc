@@ -22,6 +22,7 @@
 
 // note(yan): include order matters
 // clang-format off
+#include "common/config.h"
 #include "orc/Exceptions.hh"
 #include "RLE.hh"
 #include "Reader.hh"
@@ -35,7 +36,7 @@ namespace orc {
 StripeStreamsImpl::StripeStreamsImpl(const RowReaderImpl& _reader, uint64_t _index,
                                      const proto::StripeInformation& _stripeInfo, const proto::StripeFooter& _footer,
                                      uint64_t _stripeStart, InputStream& _input, const Timezone& _writerTimezone,
-                                     const Timezone& _readerTimezone)
+                                     const Timezone& _readerTimezone, bool _sequentialRead)
         : reader(_reader),
           stripeInfo(_stripeInfo),
           footer(_footer),
@@ -43,7 +44,9 @@ StripeStreamsImpl::StripeStreamsImpl(const RowReaderImpl& _reader, uint64_t _ind
           stripeStart(_stripeStart),
           input(_input),
           writerTimezone(_writerTimezone),
-          readerTimezone(_readerTimezone) {
+          readerTimezone(_readerTimezone),
+          sequentialRead(_sequentialRead),
+          loadPrefetchIndex(std::make_shared<FileInputStreamLoadPrefetchIndex>()) {
     // PASS
 }
 
@@ -113,9 +116,14 @@ std::unique_ptr<SeekableInputStream> StripeStreamsImpl::getStream(uint64_t colum
                     << ", stripeDataLength=" << stripeInfo.datalength();
                 throw ParseError(msg.str());
             }
-            return createDecompressor(reader.getCompression(),
-                                      std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
-                                              &input, offset, stream.length(), *pool, myBlock)),
+            SeekableFileInputStream* fileInputStream =
+                    new SeekableFileInputStream(&input, offset, stream.length(), *pool, myBlock);
+            if (sequentialRead && starrocks::config::enable_orc_load_prefetch) {
+                loadPrefetchIndex->index.emplace(std::make_pair(offset, fileInputStream));
+                fileInputStream->setloadPrefetchIndex(loadPrefetchIndex);
+                fileInputStream->setDataEnd(dataEnd);
+            }
+            return createDecompressor(reader.getCompression(), std::unique_ptr<SeekableInputStream>(fileInputStream),
                                       reader.getCompressionSize(), *pool, reader.getFileContents().readerMetrics);
         }
         offset += stream.length();
