@@ -10,9 +10,7 @@
 DROP MATERIALIZED VIEW [IF EXISTS] [db_name.]mv_name;
 ```
 
-说明：
-
-**IF EXISTS**
+## 参数
 
 如果物化视图不存在，不要抛出错误。如果不声明此关键字，物化视图不存在则报错。
 

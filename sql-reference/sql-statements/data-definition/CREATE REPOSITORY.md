@@ -15,8 +15,6 @@ ON LOCATION `repo_location`
 PROPERTIES ("key"="value", ...);
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 说明：
 
 1. 仓库的创建，依赖于已存在的 broker, broker 的详细介绍及部署方法请参考 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 章节。

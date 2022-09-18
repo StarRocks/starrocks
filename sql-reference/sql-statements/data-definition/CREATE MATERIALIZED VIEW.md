@@ -19,9 +19,7 @@ CREATE MATERIALIZED VIEW [MV name] as [query]
 [PROPERTIES ("key" = "value")];
 ```
 
-注：方括号 [] 中内容可省略不写。
-
-说明：
+## 参数
 
 1. MV name
 

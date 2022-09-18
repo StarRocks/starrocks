@@ -6,8 +6,6 @@
 
 ## 语法
 
-注：方括号 [] 中内容可省略不写。
-
 ```sql
 ALTER ROUTINE LOAD FOR [db.]job_name
 [load_properties]

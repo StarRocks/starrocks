@@ -10,8 +10,6 @@
 DROP TABLE [IF EXISTS] [db_name.]table_name [FORCE];
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 说明：
 
 1. 执行 DROP TABLE 一段时间内(默认 1 天)，可以通过 [RECOVER](../data-definition/RECOVER.md) 语句恢复被删除的表。详见 RECOVER 语句

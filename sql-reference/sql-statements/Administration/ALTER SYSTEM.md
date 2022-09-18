@@ -64,8 +64,6 @@ ALTER SYSTEM DROP ALL BROKER broker_name
 ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES ("key" = "value"[, ...]);
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 说明：
 
 1. host 可以是主机名或者 ip 地址。

@@ -10,8 +10,6 @@
 CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name LIKE [database.]table_name
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 说明:
 
 1. 复制的表结构包括 Column Defination、Partitions、Table Properties 等。

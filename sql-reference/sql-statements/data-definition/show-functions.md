@@ -10,8 +10,6 @@
 SHOW [FULL] [BUILTIN] FUNCTIONS [IN|FROM db] [LIKE 'function_pattern'];
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 说明：
 
 ```plain text

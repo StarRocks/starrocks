@@ -11,8 +11,6 @@ ADMIN SHOW REPLICA STATUS FROM [db_name.]tbl_name [PARTITION (p1, ...)]
 [WHERE STATUS [!]= "replica_status"];
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 说明：
 
 ```plain text
