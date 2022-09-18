@@ -18,7 +18,7 @@ DROP FILE "file_name" [FROM database]
 | database   | 否       | 文件所属的数据库                                 |
 | properties | 是       | 文件属性，具体配置项见下表：`properties`配置项。 |
 
-`**properties**` **配置项**
+`properties` 配置项
 
 | **配置项** | **必填** | **描述**     |
 | ---------- | -------- | ------------ |
@@ -26,7 +26,7 @@ DROP FILE "file_name" [FROM database]
 
 ## 示例
 
-删除文件 **ca.pem**
+删除文件 `ca.pem`。
 
 ```SQL
 DROP FILE "ca.pem" properties("catalog" = "kafka");
