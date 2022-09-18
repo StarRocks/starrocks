@@ -6,8 +6,6 @@
 
 ## 语法
 
-注：方括号 [] 中内容可省略不写。
-
 ```sql
 SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT];
 ```

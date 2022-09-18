@@ -6,8 +6,6 @@
 
 ## 语法
 
-> 说明：方括号 [] 中的内容为可选配置。
-
 ```sql
 CREATE ROUTINE LOAD [db.]job_name ON tbl_name
 [load_properties]

@@ -27,8 +27,6 @@ AS (query)
 [PROPERTIES ("key"="value", ...)];
 ```
 
- 注：方括号 [] 中内容可省略不写。
-
 ## 参数
 
 **mv_name**（必填）

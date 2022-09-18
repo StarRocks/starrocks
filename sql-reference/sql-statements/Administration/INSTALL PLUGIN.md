@@ -10,8 +10,6 @@
 INSTALL PLUGIN FROM [source] [PROPERTIES ("key"="value", ...)]
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 **source 支持三种类型：**
 
 ```plain text

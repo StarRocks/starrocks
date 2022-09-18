@@ -14,8 +14,6 @@
 REFRESH MATERIALIZED VIEW [database.]mv_name
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 ## 参数
 
 | **参数** | **必选** | **说明**                     |

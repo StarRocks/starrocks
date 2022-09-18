@@ -10,8 +10,6 @@
 ADMIN SHOW REPLICA DISTRIBUTION FROM [db_name.]tbl_name [PARTITION (p1, ...)];
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 说明：
 
 结果中的 Graph 列以图形的形式展示副本分布比例。

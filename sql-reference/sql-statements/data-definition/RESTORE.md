@@ -16,8 +16,6 @@ ON (
 PROPERTIES ("key"="value", ...);
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 说明：
 
 1. 同一数据库下只能有一个正在执行的 [BACKUP](/sql-reference/sql-statements/data-definition/BACKUP.md)  或 [RESTORE](/sql-reference/sql-statements/data-definition/RESTORE.md) 任务。

@@ -6,8 +6,6 @@
 
 ## 语法
 
-注：方括号 [] 中内容可省略不写。
-
 ```sql
 SHOW TABLET
 [FROM [db_name.]table_name | tablet_id] [partiton(partition_name_1, partition_name_1)]

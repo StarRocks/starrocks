@@ -8,8 +8,6 @@ Spark load 是一种异步导入方式，用户需要通过 MySQL 协议创建 S
 
 ## 语法
 
-注：方括号 [] 中内容可省略不写。
-
 ```sql
 LOAD LABEL load_label
 (

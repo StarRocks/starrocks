@@ -6,8 +6,6 @@
 
 ## 语法
 
-注：方括号 [] 中内容如无需指定可省略不写。
-
 ```sql
 SHOW DATA [FROM db_name[.table_name]];
 ```

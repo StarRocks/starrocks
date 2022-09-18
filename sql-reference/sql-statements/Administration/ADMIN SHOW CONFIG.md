@@ -10,8 +10,6 @@
 ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 说明：
 
 结果中的各列含义如下：

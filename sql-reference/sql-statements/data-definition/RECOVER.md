@@ -24,8 +24,6 @@ RECOVER TABLE [db_name.]table_name;
 RECOVER PARTITION partition_name FROM [db_name.]table_name;
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 说明：
 
 1. 该操作仅能恢复之前一段时间内删除的元信息。默认为 1 天。（可通过 fe.conf 中 `catalog_trash_expire_second` 参数配置）
