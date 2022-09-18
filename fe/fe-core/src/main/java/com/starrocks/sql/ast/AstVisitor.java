@@ -2,7 +2,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.AddSqlBlackListStmt;
-
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -16,7 +15,6 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.CancelExportStmt;
-import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
@@ -668,7 +666,7 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-   public R visitSyncStmt(SyncStmt statement, C context) {
+    public R visitSyncStmt(SyncStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

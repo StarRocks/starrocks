@@ -2,7 +2,6 @@
 
 package com.starrocks.execution;
 
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelAlterSystemStmt;
@@ -14,9 +13,9 @@ import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DropFileStmt;
-import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
@@ -26,15 +25,20 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
+import com.starrocks.catalog.Database;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
-import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -49,7 +53,6 @@ import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
-
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -58,6 +61,8 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
@@ -93,116 +98,144 @@ public class DataDefinitionExecutorFactory {
 
         @Override
         public ShowResultSet visitCreateDbStatement(CreateDbStmt stmt, ConnectContext context) {
-            CreateDbStmt createDbStmt = stmt;
-            String fullDbName = createDbStmt.getFullDbName();
-            boolean isSetIfNotExists = createDbStmt.isSetIfNotExists();
-            try {
-                context.getGlobalStateMgr().getMetadata().createDb(fullDbName);
-            } catch (AlreadyExistsException e) {
-                if (isSetIfNotExists) {
-                    LOG.info("create database[{}] which already exists", fullDbName);
-                } else {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_CREATE_EXISTS, fullDbName);
+            String fullDbName = stmt.getFullDbName();
+            boolean isSetIfNotExists = stmt.isSetIfNotExists();
+            ErrorReport.wrapWithRuntimeException(() -> {
+                try {
+                    context.getGlobalStateMgr().getMetadata().createDb(fullDbName);
+                } catch (AlreadyExistsException e) {
+                    if (isSetIfNotExists) {
+                        LOG.info("create database[{}] which already exists", fullDbName);
+                    } else {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_DB_CREATE_EXISTS, fullDbName);
+                    }
                 }
-            }
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitDropDbStatement(DropDbStmt stmt, ConnectContext context) {
-            DropDbStmt dropDbStmt = stmt;
-            String dbName = dropDbStmt.getDbName();
-            boolean isForceDrop = dropDbStmt.isForceDrop();
-            try {
-                context.getGlobalStateMgr().getMetadata().dropDb(dbName, isForceDrop);
-            } catch (MetaNotFoundException e) {
-                if (dropDbStmt.isSetIfExists()) {
-                    LOG.info("drop database[{}] which does not exist", dbName);
-                } else {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_DROP_EXISTS, dbName);
+            ErrorReport.wrapWithRuntimeException(() -> {
+                String dbName = stmt.getDbName();
+                boolean isForceDrop = stmt.isForceDrop();
+                try {
+                    context.getGlobalStateMgr().getMetadata().dropDb(dbName, isForceDrop);
+                } catch (MetaNotFoundException e) {
+                    if (stmt.isSetIfExists()) {
+                        LOG.info("drop database[{}] which does not exist", dbName);
+                    } else {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_DB_DROP_EXISTS, dbName);
+                    }
                 }
-            }
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCreateFunctionStmt(CreateFunctionStmt stmt, ConnectContext context) {
-            CreateFunctionStmt createFunctionStmt = stmt;
-            FunctionName name = createFunctionStmt.getFunctionName();
-            Database db = context.getGlobalStateMgr().getDb(name.getDb());
-            if (db == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
-            }
-            db.addFunction(createFunctionStmt.getFunction());
-            return null;
+            ErrorReport.wrapWithRuntimeException(() -> {
+                FunctionName name = stmt.getFunctionName();
+                Database db = context.getGlobalStateMgr().getDb(name.getDb());
+                if (db == null) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
+                }
+                db.addFunction(stmt.getFunction());
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitDropFunctionStmt(DropFunctionStmt stmt, ConnectContext context) {
-            DropFunctionStmt dropFunctionStmt = stmt;
-            FunctionName name = dropFunctionStmt.getFunctionName();
-            Database db = context.getGlobalStateMgr().getDb(name.getDb());
-            if (db == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
-            }
-            db.dropFunction(dropFunctionStmt.getFunction());
-            return null;
+            ErrorReport.wrapWithRuntimeException(() -> {
+
+                FunctionName name = stmt.getFunctionName();
+                Database db = context.getGlobalStateMgr().getDb(name.getDb());
+                if (db == null) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
+                }
+                db.dropFunction(stmt.getFunction());
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCreateTableStatement(CreateTableStmt stmt, ConnectContext context) {
-            return context.getGlobalStateMgr().createTable(stmt);
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().createTable(stmt);
+            });
+            return null;
         }
 
         @Override
         public ShowResultSet visitCreateTableLikeStatement(CreateTableLikeStmt stmt, ConnectContext context) {
-            return context.getGlobalStateMgr().createTableLike((CreateTableLikeStmt) stmt);
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().createTableLike(stmt);
+            });
+            return null;
         }
 
         @Override
         public ShowResultSet visitDropTableStmt(DropTableStmt stmt, ConnectContext context) {
-            return context.getGlobalStateMgr().dropTable(stmt);
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().dropTable(stmt);
+            });
+            return null;
         }
 
         @Override
         public ShowResultSet visitCreateMaterializedViewStmt(CreateMaterializedViewStmt stmt, ConnectContext context) {
-            return context.getGlobalStateMgr().createMaterializedView(stmt);
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().createMaterializedView(stmt);
+            });
+            return null;
         }
 
         @Override
         public ShowResultSet visitCreateMaterializedViewStatement(CreateMaterializedViewStatement stmt, ConnectContext context) {
-            return context.getGlobalStateMgr().createMaterializedView(stmt);
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().createMaterializedView(stmt);
+            });
+            return null;
         }
 
         @Override
         public ShowResultSet visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, ConnectContext context) {
-            return context.getGlobalStateMgr().dropMaterializedView(stmt);
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().dropMaterializedView(stmt);
+            });
+            return null;
         }
 
         @Override
-        public ShowResultSet visitAlterMaterializedViewStatement(AlterMaterializedViewStatement stmt, ConnectContext context) {
-            return context.getGlobalStateMgr().alterMaterializedView(stmt);
+        public ShowResultSet visitAlterMaterializedViewStatement(AlterMaterializedViewStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().alterMaterializedView(stmt);
+            });
+            return null;
         }
 
         @Override
         public ShowResultSet visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement stmt,
                                                                    ConnectContext context) {
-            context.getGlobalStateMgr().getLocalMetastore()
-                    .refreshMaterializedView(stmt.getMvName().getDb(),
-                            stmt.getMvName().getTbl(),
-                            Constants.TaskRunPriority.NORMAL.value());
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getLocalMetastore()
+                        .refreshMaterializedView(stmt.getMvName().getDb(),
+                                stmt.getMvName().getTbl(),
+                                Constants.TaskRunPriority.NORMAL.value());
+            });
             return null;
         }
 
         @Override
-        public ShowResultSet visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStatement stmt,
+        public ShowResultSet visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt stmt,
                                                                          ConnectContext context) {
-            context.getGlobalStateMgr().getLocalMetastore()
-                    .cancelRefreshMaterializedView(
-                            stmt.getMvName().getDb(),
-                            stmt.getMvName().getTbl());
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getLocalMetastore()
+                        .cancelRefreshMaterializedView(
+                                stmt.getMvName().getDb(),
+                                stmt.getMvName().getTbl());
+            });
             return null;
         }
 
@@ -362,11 +395,6 @@ public class DataDefinitionExecutorFactory {
         }
 
         @Override
-        public ShowResultSet visitDropRepositoryStmt(DropRepositoryStmt stmt, ConnectContext context) {
-            return null;
-        }
-
-        @Override
         public ShowResultSet visitSyncStmt(SyncStmt stmt, ConnectContext context) {
             return null;
         }
@@ -447,11 +475,6 @@ public class DataDefinitionExecutorFactory {
         }
 
         @Override
-        public ShowResultSet visitDropAnalyzeJobStatement(DropAnalyzeJobStmt stmt, ConnectContext context) {
-            return null;
-        }
-
-        @Override
         public ShowResultSet visitRefreshTableStatement(RefreshTableStmt stmt, ConnectContext context) {
             return null;
         }
@@ -489,6 +512,14 @@ public class DataDefinitionExecutorFactory {
     }
 
     public static ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
-        return stmt.accept(StmtExecutorVisitor.getInstance(), context);
+        try {
+            return stmt.accept(StmtExecutorVisitor.getInstance(), context);
+        } catch (RuntimeException re) {
+            if (re.getCause() instanceof DdlException) {
+                throw (DdlException) re.getCause();
+            } else {
+                throw new DdlException(re.getCause().getMessage());
+            }
+        }
     }
 }

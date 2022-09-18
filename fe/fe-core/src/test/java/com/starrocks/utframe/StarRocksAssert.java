@@ -219,7 +219,11 @@ public class StarRocksAssert {
         Assert.assertTrue(statement.getClass().getSimpleName().contains("ResourceGroupStmt"));
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        DataDefinitionExecutorFactory.execute((DdlStmt) statement, connectCtx);
+        try {
+            DataDefinitionExecutorFactory.execute((DdlStmt) statement, connectCtx);
+        } catch (Throwable e) {
+            throw new Exception(e);
+        }
 
     }
 
