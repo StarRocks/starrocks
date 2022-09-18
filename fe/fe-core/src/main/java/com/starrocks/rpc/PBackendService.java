@@ -11,7 +11,6 @@ import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
-import com.starrocks.proto.PTriggerProfileReportRequest;
 import com.starrocks.proto.PTriggerProfileReportResult;
 
 import java.util.concurrent.Future;
@@ -41,6 +40,6 @@ public interface PBackendService {
     Future<PProxyResult> getInfo(PProxyRequest request);
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "get_pulsar_info", onceTalkTimeout = 10000)
-    PPulsarProxyResult getPulsarInfo(PPulsarProxyRequest request);
+    Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request);
 }
 

@@ -80,7 +80,7 @@ public class RoutineLoadDataSourceProperties {
     }
 
     public boolean hasAnalyzedProperties() {
-        if (type == "KAFKA") {
+        if (type.equals("KAFKA")) {
             return !kafkaPartitionOffsets.isEmpty() || !customKafkaProperties.isEmpty();
         } else if (type.equals("PULSAR")) {
             return !pulsarPartitionInitialPositions.isEmpty() || !customPulsarProperties.isEmpty();
@@ -204,7 +204,7 @@ public class RoutineLoadDataSourceProperties {
 
         StringBuilder sb = new StringBuilder();
         sb.append("type: ").append(type);
-        if (type == "KAFKA") {
+        if (type.equals("KAFKA")) {
             sb.append(", kafka partition offsets: ").append(kafkaPartitionOffsets);
             sb.append(", custom properties: ").append(customKafkaProperties);
         } else if (type.equals("PULSAR")) {

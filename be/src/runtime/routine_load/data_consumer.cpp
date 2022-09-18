@@ -433,7 +433,8 @@ Status PulsarDataConsumer::init(StreamLoadContext* ctx) {
     return Status::OK();
 }
 
-Status PulsarDataConsumer::assign_partition(const std::string& partition, StreamLoadContext* ctx, int64_t initial_position) {
+Status PulsarDataConsumer::assign_partition(const std::string& partition, StreamLoadContext* ctx,
+                                            int64_t initial_position) {
     DCHECK(_p_client);
 
     std::stringstream ss;
@@ -449,15 +450,15 @@ Status PulsarDataConsumer::assign_partition(const std::string& partition, Stream
         return Status::InternalError("PAUSE: failed to create pulsar consumer: " + result);
     }
 
-    if (initial_position == 0 || initial_position == 1) {
-        pulsar::InitialPosition p_initial_position = initial_position == 0
+    if (initial_position == InitialPosition::LATEST || initial_position == InitialPosition::EARLIEST) {
+        pulsar::InitialPosition p_initial_position = initial_position == InitialPosition::LATEST
                                                              ? pulsar::InitialPosition::InitialPositionLatest
                                                              : pulsar::InitialPosition::InitialPositionEarliest;
-      result = _p_consumer.seek(p_initial_position);
-      if (result != pulsar::ResultOk) {
-          LOG(WARNING) << "PAUSE: failed to reset the subscription: " << ctx->brief(true) << ", err: " << result;
-          return Status::InternalError("PAUSE: failed to reset the subscription: " + result);
-      }
+        result = _p_consumer.seek(p_initial_position);
+        if (result != pulsar::ResultOk) {
+            LOG(WARNING) << "PAUSE: failed to reset the subscription: " << ctx->brief(true) << ", err: " << result;
+            return Status::InternalError("PAUSE: failed to reset the subscription: " + result);
+        }
     }
 
     return Status::OK();
@@ -544,7 +545,8 @@ Status PulsarDataConsumer::get_partition_backlog(int64_t* backlog) {
     pulsar::BrokerConsumerStats brokerConsumerStats;
     pulsar::Result result = _p_consumer.getBrokerConsumerStats(brokerConsumerStats);
     if (result != pulsar::ResultOk) {
-        LOG(WARNING) << "Failed to get broker consumer stats: " << ", err: " << result;
+        LOG(WARNING) << "Failed to get broker consumer stats: "
+                     << ", err: " << result;
         return Status::InternalError("Failed to get broker consumer stats: " + result);
     }
     *backlog = brokerConsumerStats.getMsgBacklog();
@@ -552,7 +554,7 @@ Status PulsarDataConsumer::get_partition_backlog(int64_t* backlog) {
     return Status::OK();
 }
 
-Status PulsarDataConsumer::get_partition_meta(std::vector<std::string>* partitions) {
+Status PulsarDataConsumer::get_topic_partition(std::vector<std::string>* partitions) {
     _last_visit_time = time(nullptr);
     pulsar::Result result = _p_client->getPartitionsForTopic(_topic, *partitions);
     if (result != pulsar::ResultOk) {

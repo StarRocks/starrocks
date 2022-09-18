@@ -139,7 +139,7 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_meta(const PPulsarMetaProxy
     std::shared_ptr<DataConsumer> consumer;
     RETURN_IF_ERROR(_data_consumer_pool.get_consumer(&ctx, &consumer));
 
-    Status st = std::static_pointer_cast<PulsarDataConsumer>(consumer)->get_partition_meta(partitions);
+    Status st = std::static_pointer_cast<PulsarDataConsumer>(consumer)->get_topic_partition(partitions);
     if (st.ok()) {
         _data_consumer_pool.return_consumer(consumer);
     }

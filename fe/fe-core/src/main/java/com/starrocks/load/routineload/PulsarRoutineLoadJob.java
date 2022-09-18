@@ -1,19 +1,4 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.load.routineload;
 
@@ -33,7 +18,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -94,9 +78,9 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         super(-1, LoadDataSourceType.PULSAR);
     }
 
-    public PulsarRoutineLoadJob(Long id, String name, String clusterName,
-                                long dbId, long tableId, String serviceUrl, String topic, String subscription) {
-        super(id, name, clusterName, dbId, tableId, LoadDataSourceType.PULSAR);
+    public PulsarRoutineLoadJob(Long id, String name, long dbId, long tableId,
+                                String serviceUrl, String topic, String subscription) {
+        super(id, name, dbId, tableId, LoadDataSourceType.PULSAR);
         this.serviceUrl = serviceUrl;
         this.topic = topic;
         this.subscription = subscription;
@@ -184,9 +168,8 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                         }
                     }
                     long timeToExecuteMs = System.currentTimeMillis() + taskSchedIntervalS * 1000;
-                    PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(UUID.randomUUID(), id, clusterName,
-                            taskSchedIntervalS * 1000,
-                            timeToExecuteMs, partitions, initialPositions);
+                    PulsarTaskInfo pulsarTaskInfo = new PulsarTaskInfo(UUID.randomUUID(), id,
+                            taskSchedIntervalS * 1000, timeToExecuteMs, partitions, initialPositions);
                     LOG.debug("pulsar routine load task created: " + pulsarTaskInfo);
                     routineLoadTaskInfoList.add(pulsarTaskInfo);
                     result.add(pulsarTaskInfo);
@@ -395,8 +378,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         // init pulsar routine load job
         long id = GlobalStateMgr.getCurrentState().getNextId();
         PulsarRoutineLoadJob pulsarRoutineLoadJob = new PulsarRoutineLoadJob(id, stmt.getName(),
-                SystemInfoService.DEFAULT_CLUSTER, db.getId(), tableId,
-                stmt.getPulsarServiceUrl(), stmt.getPulsarTopic(),
+                db.getId(), tableId, stmt.getPulsarServiceUrl(), stmt.getPulsarTopic(),
                 stmt.getPulsarSubscription());
         pulsarRoutineLoadJob.setOptional(stmt);
         pulsarRoutineLoadJob.checkCustomProperties();
@@ -512,14 +494,12 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
             customPulsarPartitions.add(Text.readString(in));
         }
 
-        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_51) {
-            int count = in.readInt();
-            for (int i = 0; i < count; i++) {
-                String propertyKey = Text.readString(in);
-                String propertyValue = Text.readString(in);
-                if (propertyKey.startsWith("property.")) {
-                    this.customProperties.put(propertyKey.substring(propertyKey.indexOf(".") + 1), propertyValue);
-                }
+        int count = in.readInt();
+        for (int i = 0; i < count; i++) {
+            String propertyKey = Text.readString(in);
+            String propertyValue = Text.readString(in);
+            if (propertyKey.startsWith("property.")) {
+                this.customProperties.put(propertyKey.substring(propertyKey.indexOf(".") + 1), propertyValue);
             }
         }
     }

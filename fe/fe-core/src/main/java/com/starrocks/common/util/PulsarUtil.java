@@ -1,19 +1,4 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.common.util;
 
@@ -48,22 +33,22 @@ import java.util.concurrent.TimeUnit;
 public class PulsarUtil {
     private static final Logger LOG = LogManager.getLogger(PulsarUtil.class);
 
-    private static final ProxyAPI proxyApi = new ProxyAPI();
+    private static final PulsarUtil.ProxyAPI PROXY_API = new PulsarUtil.ProxyAPI();
 
     public static List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
                                                        ImmutableMap<String, String> properties) throws UserException {
-        return proxyApi.getAllPulsarPartitions(serviceUrl, topic, subscription, properties);
+        return PROXY_API.getAllPulsarPartitions(serviceUrl, topic, subscription, properties);
     }
 
     public static Map<String, Long> getBacklogNums(String serviceUrl, String topic, String subscription,
                                                     ImmutableMap<String, String> properties,
                                                     List<String> partitions) throws UserException {
-        return proxyApi.getBacklogNums(serviceUrl, topic, subscription, properties, partitions);
+        return PROXY_API.getBacklogNums(serviceUrl, topic, subscription, properties, partitions);
     }
 
     public static List<PPulsarBacklogProxyResult> getBatchBacklogNums(List<PPulsarBacklogProxyRequest> requests)
             throws UserException {
-        return proxyApi.getBatchBacklogNums(requests);
+        return PROXY_API.getBatchBacklogNums(requests);
     }
 
     public static PPulsarLoadInfo genPPulsarLoadInfo(String serviceUrl, String topic, String subscription,

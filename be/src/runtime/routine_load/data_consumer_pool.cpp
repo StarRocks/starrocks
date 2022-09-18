@@ -99,11 +99,11 @@ Status DataConsumerPool::get_consumer_grp(StreamLoadContext* ctx, std::shared_pt
   
       // Cumulative acknowledge is not supported for multiple topic subscribtion,
       // so one consumer can only subscribe one topic/partition
-      int max_consumer_num = config::max_consumer_num_per_group;
+      int max_consumer_num = config::max_pulsar_consumer_num_per_group;
       if (max_consumer_num < ctx->pulsar_info->partitions.size()) {
           return Status::InternalError(
                   "PAUSE: Partition num is more than max consumer num in one data consumer group on some BEs, please "
-                  "increase max_consumer_num_per_group from BE side or just add more BEs");
+                  "increase max_pulsar_consumer_num_per_group from BE side or just add more BEs");
       }
       size_t consumer_num = ctx->pulsar_info->partitions.size();
   

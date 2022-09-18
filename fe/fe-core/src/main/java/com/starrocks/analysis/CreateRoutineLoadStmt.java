@@ -681,9 +681,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             throw new AnalysisException(PULSAR_SERVICE_URL_PROPERTY + " is a required property");
         }
 
-        if (!Pattern.matches(ENDPOINT_REGEX, pulsarServiceUrl)) {
-            throw new AnalysisException(PULSAR_SERVICE_URL_PROPERTY + ":" + pulsarServiceUrl
-                    + " not match pattern " + ENDPOINT_REGEX);
+        String[] pulsarServiceUrlList = this.pulsarServiceUrl.split(",");
+        for (String serviceUrl : pulsarServiceUrlList) {
+            if (!Pattern.matches(ENDPOINT_REGEX, serviceUrl)) {
+                throw new AnalysisException(PULSAR_SERVICE_URL_PROPERTY + ":" + serviceUrl
+                        + " not match pattern " + ENDPOINT_REGEX);
+            }
         }
 
         // check topic

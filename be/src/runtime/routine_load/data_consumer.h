@@ -171,6 +171,8 @@ public:
         }
     }
 
+    enum InitialPosition { LATEST, EARLIEST };
+
     Status init(StreamLoadContext* ctx) override;
     Status assign_partition(const std::string& partition, StreamLoadContext* ctx, int64_t initial_position = -1);
     // TODO(cmy): currently do not implement single consumer start method, using group_consume
@@ -186,7 +188,7 @@ public:
     Status group_consume(TimedBlockingQueue<pulsar::Message*>* queue, int64_t max_running_time_ms);
 
     // get the partitions of the topic
-    Status get_partition_meta(std::vector<std::string>* partitions);
+    Status get_topic_partition(std::vector<std::string>* partitions);
 
     // get backlog num of partition
     Status get_partition_backlog(int64_t* backlog);

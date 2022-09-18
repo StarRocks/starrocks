@@ -244,15 +244,14 @@ Status PulsarDataConsumerGroup::assign_topic_partitions(StreamLoadContext* ctx) 
     // assign partition to consumers
     int consumer_size = _consumers.size();
     for (int i = 0; i < consumer_size; ++i) {
-      auto iter = ctx->pulsar_info->initial_positions.find(ctx->pulsar_info->partitions[i]);
-      if (iter != ctx->pulsar_info->initial_positions.end()) {
-          RETURN_IF_ERROR(std::static_pointer_cast<PulsarDataConsumer>(_consumers[i])
-                                  ->assign_partition(ctx->pulsar_info->partitions[i], ctx,
-                                                     iter->second));
-      } else {
-          RETURN_IF_ERROR(std::static_pointer_cast<PulsarDataConsumer>(_consumers[i])
-                                  ->assign_partition(ctx->pulsar_info->partitions[i], ctx));
-      }
+        auto iter = ctx->pulsar_info->initial_positions.find(ctx->pulsar_info->partitions[i]);
+        if (iter != ctx->pulsar_info->initial_positions.end()) {
+            RETURN_IF_ERROR(std::static_pointer_cast<PulsarDataConsumer>(_consumers[i])
+                                    ->assign_partition(ctx->pulsar_info->partitions[i], ctx, iter->second));
+        } else {
+            RETURN_IF_ERROR(std::static_pointer_cast<PulsarDataConsumer>(_consumers[i])
+                                    ->assign_partition(ctx->pulsar_info->partitions[i], ctx));
+        }
     }
 
     return Status::OK();
@@ -380,8 +379,7 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             std::size_t len = msg->getLength();
 
             VLOG(3) << "get pulsar message"
-                    << ", partition: " << partition << ", message id: " << msg_id
-                    << ", len: " << len;
+                    << ", partition: " << partition << ", message id: " << msg_id << ", len: " << len;
 
             Status st = (pulsar_pipe.get()->*append_data)(static_cast<const char*>(msg->getData()),
                                                           static_cast<size_t>(len), row_delimiter);
@@ -415,8 +413,8 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
 }
 
 void PulsarDataConsumerGroup::actual_consume(const std::shared_ptr<DataConsumer>& consumer,
-                                            TimedBlockingQueue<pulsar::Message*>* queue, int64_t max_running_time_ms,
-                                            const ConsumeFinishCallback& cb) {
+                                             TimedBlockingQueue<pulsar::Message*>* queue, int64_t max_running_time_ms,
+                                             const ConsumeFinishCallback& cb) {
     Status st = std::static_pointer_cast<PulsarDataConsumer>(consumer)->group_consume(queue, max_running_time_ms);
     cb(st);
 }
