@@ -6,8 +6,6 @@
 
 ## 语法
 
-注：方括号 [] 中内容可省略不写。
-
 ```sql
  -- 命令
  DROP USER 'user_identity';
@@ -20,8 +18,8 @@ user_identity:user@'host'
 
 ## 示例
 
-1. 删除用户 jack@'192.%'
+删除用户 jack@'192.%'。
 
-    ```sql
-    DROP USER 'jack'@'192.%'
-    ```
+```sql
+DROP USER 'jack'@'192.%'
+```

@@ -30,7 +30,7 @@ SHOW PROPERTY FOR 'user';
 
 ### 调整查询并发度
 
-如需调整查询并发度，推荐你您修改 Pipeline 执行引擎相关变量。
+如需调整查询并发度，推荐您修改 Pipeline 执行引擎相关变量。
 
 > 注意：自 StarRocks 2.2 版本起，正式发布 Pipeline 引擎。
 
