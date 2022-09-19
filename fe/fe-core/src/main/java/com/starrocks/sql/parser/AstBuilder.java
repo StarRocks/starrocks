@@ -8,7 +8,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AddSqlBlackListStmt;
-import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
@@ -73,8 +72,6 @@ import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.analysis.RowDelimiter;
-import com.starrocks.analysis.SelectList;
-import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetNamesVar;
 import com.starrocks.analysis.SetPassVar;
 import com.starrocks.analysis.SetStmt;
@@ -1865,10 +1862,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
                 for (StarRocksParser.AssignmentListContext assignmentListContext :
                         loadPropertiesContext.columnProperties().assignmentList()) {
-                    ColumnAssignment columnAssignment = (ColumnAssignment) (visit(assignmentListContext));
-                    Expr expr = columnAssignment.getExpr();
-                    ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
-                    columns.add(columnDesc);
+                    for (StarRocksParser.AssignmentContext assignmentContext : assignmentListContext.assignment()) {
+                        ColumnAssignment columnAssignment = (ColumnAssignment) (visit(assignmentContext));
+                        Expr expr = columnAssignment.getExpr();
+                        ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
+                        columns.add(columnDesc);
+                    }
                 }
                 loadPropertyList.add(new ImportColumnsStmt(columns));
             }

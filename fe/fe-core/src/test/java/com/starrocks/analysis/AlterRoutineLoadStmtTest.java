@@ -123,6 +123,80 @@ public class AlterRoutineLoadStmtTest {
     }
 
     @Test
+    public void testLoadColumns() {
+        String sql = "ALTER ROUTINE LOAD for testdb.routine_name " +
+                " COLUMNS(`k1`, `k2`, `k3`, `k4`, `k5`," +
+                " `v1` = to_bitmap(`k1`))" +
+                " PROPERTIES (\"desired_concurrent_number\"=\"1\")" +
+                " FROM KAFKA (" +
+                "\"kafka_partitions\" = \"0, 1, 2\",\n" +
+                "\"kafka_offsets\" = \"100, 200, 100\",\n" +
+                "\"property.group.id\" = \"group1\"\n" +
+                ")";
+        List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        AlterRoutineLoadStmt alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
+        AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
+        Assert.assertEquals(6, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+
+        sql = "ALTER ROUTINE LOAD for testdb.routine_name" +
+                " COLUMNS(`k1`, `k2`, `k3`, `k4`, `k5`)" +
+                " PROPERTIES (\"desired_concurrent_number\"=\"1\")";
+        stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
+        AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
+        Assert.assertEquals(5, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+
+        sql = "ALTER ROUTINE LOAD for testdb.routine_name " +
+                " COLUMNS( `v1` = to_bitmap(`k1`)," +
+                " `v2` = to_bitmap(`k2`)," +
+                " `v3` = to_bitmap(`k3`)," +
+                " `v4` = to_bitmap(`k4`)," +
+                " `v5` = to_bitmap(`k5`))" +
+                " PROPERTIES (\"desired_concurrent_number\"=\"1\")";
+        stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
+        AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
+        Assert.assertEquals(5, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+
+        sql = "ALTER ROUTINE LOAD for testdb.routine_name " +
+                " COLUMNS( `v1` = to_bitmap(`k1`)," +
+                " `v2` = to_bitmap(`k2`)," +
+                " `v3` = to_bitmap(`k3`)," +
+                " `v4` = to_bitmap(`k4`)," +
+                " `v5` = to_bitmap(`k5`)," +
+                " `k1`, `k2`, `k3`, `k4`, `k5` )";
+        stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
+        AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
+        Assert.assertEquals(10, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+
+        sql = "ALTER ROUTINE LOAD for testdb.routine_name " +
+                " COLUMNS( `v1` = to_bitmap(`k1`), `k1`," +
+                " `v2` = to_bitmap(`k2`), `k2`," +
+                " `v3` = to_bitmap(`k3`), `k3`," +
+                " `v4` = to_bitmap(`k4`), `k4`," +
+                " `v5` = to_bitmap(`k5`), `k5`)" +
+                " PROPERTIES (\"desired_concurrent_number\"=\"1\")";
+        stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
+        AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
+        Assert.assertEquals(10, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+
+        sql = "ALTER ROUTINE LOAD for testdb.routine_name " +
+                " COLUMNS(`k1`, `k2`, `k3`, `k4`, `k5`," +
+                " `v1` = to_bitmap(`k1`)," +
+                " `v2` = to_bitmap(`k2`)," +
+                " `v3` = to_bitmap(`k3`)," +
+                " `v4` = to_bitmap(`k4`)," +
+                " `v5` = to_bitmap(`k5`))" +
+                " PROPERTIES (\"desired_concurrent_number\"=\"1\")";
+        stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
+        AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
+        Assert.assertEquals(10, alterRoutineLoadStmt.getRoutineLoadDesc().getColumnsInfo().getColumns().size());
+    }
+
+    @Test
     public void testNormal() {
         {
             Map<String, String> jobProperties = Maps.newHashMap();
