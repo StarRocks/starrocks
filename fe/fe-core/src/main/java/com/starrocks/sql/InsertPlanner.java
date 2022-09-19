@@ -51,6 +51,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -145,12 +146,22 @@ public class InsertPlanner {
                     }
                     values.add(valuesRow);
                 }
-                OptExpression res = OptExpression.create(new PhysicalValuesOperator(valuesOutputColumns, values, 0, null, null));
+                OptExpression res = OptExpression.create(new PhysicalValuesOperator(valuesOutputColumns, values, 0, null,
+                        optExpr.getOp().getProjection()));
                 // Avoid set statistic and cost here
                 res.setStatistics(optExpr.getStatistics());
                 res.setCost(optExpr.getCost());
                 res.setPlanCount(optExpr.getPlanCount());
                 res.setLogicalProperty(optExpr.getLogicalProperty());
+                if (optExpr.getOp().getPredicate() != null) {
+                    res = OptExpression.create(new PhysicalFilterOperator(optExpr.getOp().getPredicate(), 0, null), res);
+                    // Avoid set statistic and cost here
+                    res.setStatistics(optExpr.getStatistics());
+                    res.setCost(optExpr.getCost());
+                    res.setPlanCount(optExpr.getPlanCount());
+                    res.setLogicalProperty(optExpr.getLogicalProperty());
+                }
+
                 return res;
             }
             return optExpr;
