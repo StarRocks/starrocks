@@ -17,6 +17,9 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -74,6 +77,11 @@ public class MaterializedViewAnalyzer {
             SECOND
         }
 
+        private boolean isSupportBasedOnTable(Table table) {
+            return table instanceof OlapTable || table instanceof HiveTable || table instanceof HudiTable ||
+                    table instanceof IcebergTable;
+        }
+
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
@@ -117,7 +125,7 @@ public class MaterializedViewAnalyzer {
             // convert queryStatement to sql and set
             statement.setInlineViewDef(ViewDefBuilder.build(queryStatement));
             // collect table from query statement
-            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(queryStatement);
+            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTableAndView(queryStatement);
             List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();
             Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
             if (db == null) {
@@ -131,6 +139,10 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view do not support table: " + tableNameInfo.getTbl() +
                             " do not exist in database: " + tableNameInfo.getCatalog() + ":" +
                             tableNameInfo.getDb());
+                }
+                if (!isSupportBasedOnTable(table)) {
+                    throw new SemanticException("Create materialized view do not support the table type : " +
+                            table.getType());
                 }
                 if (table instanceof MaterializedView) {
                     throw new SemanticException(
