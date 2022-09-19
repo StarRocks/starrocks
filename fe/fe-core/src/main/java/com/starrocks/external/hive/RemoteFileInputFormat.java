@@ -5,14 +5,14 @@ package com.starrocks.external.hive;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.thrift.THdfsFileFormat;
 
-public enum HdfsFileFormat {
+public enum RemoteFileInputFormat {
     UNKNOWN,
     PARQUET,
     ORC,
     TEXT;
 
-    private static final ImmutableMap<String, HdfsFileFormat> VALID_INPUT_FORMATS =
-            new ImmutableMap.Builder<String, HdfsFileFormat>()
+    private static final ImmutableMap<String, RemoteFileInputFormat> VALID_INPUT_FORMATS =
+            new ImmutableMap.Builder<String, RemoteFileInputFormat>()
                     .put("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat", PARQUET)
                     .put("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat", ORC)
                     .put("org.apache.hadoop.mapred.TextInputFormat", TEXT)
@@ -25,7 +25,7 @@ public enum HdfsFileFormat {
                     .put("org.apache.hadoop.mapred.TextInputFormat", true)
                     .build();
 
-    public static HdfsFileFormat fromHdfsInputFormatClass(String className) {
+    public static RemoteFileInputFormat fromHdfsInputFormatClass(String className) {
         return VALID_INPUT_FORMATS.get(className);
     }
 

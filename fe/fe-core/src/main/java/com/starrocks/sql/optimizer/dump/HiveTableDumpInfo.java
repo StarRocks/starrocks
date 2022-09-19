@@ -16,11 +16,11 @@ import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.external.hive.HdfsFileDesc;
-import com.starrocks.external.hive.HdfsFileFormat;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HivePartitionStats;
 import com.starrocks.external.hive.HiveTableStats;
+import com.starrocks.external.hive.RemoteFileInputFormat;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.lang.reflect.Type;
@@ -220,7 +220,7 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
             Map<PartitionKey, HivePartition> hivePartitions = Maps.newHashMap();
             for (Map.Entry<String, JsonElement> entry : partitionsObject.entrySet()) {
                 JsonObject partition = entry.getValue().getAsJsonObject();
-                HdfsFileFormat format = HdfsFileFormat.valueOf(partition.get("format").getAsString());
+                RemoteFileInputFormat format = RemoteFileInputFormat.valueOf(partition.get("format").getAsString());
                 String fullPath = partition.get("fullPath").getAsString();
                 List<HdfsFileDesc> fileDescs = Lists.newArrayList();
                 for (JsonElement file : partition.get("files").getAsJsonArray()) {

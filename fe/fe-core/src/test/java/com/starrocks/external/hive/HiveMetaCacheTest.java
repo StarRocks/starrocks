@@ -82,13 +82,13 @@ public class HiveMetaCacheTest {
         HivePartition partition = metaCache.getPartition(hmsTable,
                 Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         Assert.assertEquals(1, partition.getFiles().size());
-        Assert.assertEquals(HdfsFileFormat.PARQUET, partition.getFormat());
+        Assert.assertEquals(RemoteFileInputFormat.PARQUET, partition.getFormat());
         Assert.assertEquals(partitionPath, partition.getFullPath());
 
         partition = metaCache.getPartition(hmsTable,
                 Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         Assert.assertEquals(1, partition.getFiles().size());
-        Assert.assertEquals(HdfsFileFormat.PARQUET, partition.getFormat());
+        Assert.assertEquals(RemoteFileInputFormat.PARQUET, partition.getFormat());
         Assert.assertEquals(partitionPath, partition.getFullPath());
 
         Assert.assertEquals(1, clientMethodGetPartitionCalledTimes);
@@ -192,7 +192,7 @@ public class HiveMetaCacheTest {
                 Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         Assert.assertTrue(metaCache.partitionExistInCache(partitionKey));
         Assert.assertEquals(5, partitionStats.getNumRows());
-        Assert.assertSame(partition.getFormat(), HdfsFileFormat.TEXT);
+        Assert.assertSame(partition.getFormat(), RemoteFileInputFormat.TEXT);
         long totalSize = partition.getFiles().stream().mapToLong(HdfsFileDesc::getLength).sum();
         Assert.assertEquals(partitionStats.getTotalFileBytes(), totalSize);
         file.delete();
@@ -287,7 +287,7 @@ public class HiveMetaCacheTest {
         public HivePartition getPartition(String dbName, String tableName, List<String> partValues)
                 throws DdlException {
             clientMethodGetPartitionCalledTimes++;
-            return new HivePartition(HdfsFileFormat.PARQUET,
+            return new HivePartition(RemoteFileInputFormat.PARQUET,
                     ImmutableList.of(new HdfsFileDesc("file1",
                             "",
                             10000L,
