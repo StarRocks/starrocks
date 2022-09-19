@@ -226,7 +226,7 @@ void LocalTabletsChannel::add_chunk(vectorized::Chunk* chunk, const PTabletWrite
             if (delta_writer->replica_state() != vectorized::Secondary) {
                 if (UNLIKELY(_partition_ids.count(delta_writer->partition_id()) == 0)) {
                     // no data load, abort txn without printing log
-                    delta_writer->abort(false);
+                    delta_writer->abort(Status::OK(), false);
                     abort_tablets << tablet_id << ", ";
                 } else {
                     auto cb = new WriteCallback(context);
@@ -416,15 +416,17 @@ void LocalTabletsChannel::cancel() {
     int i = 0;
     for (auto& it : _delta_writers) {
         std::cout<<"CANCEL:"<<i++<<std::endl;
-        it.second->cancel(Status::Cancelled("cancel"));
+        it.second->cancel(Status::Cancelled("cancel: " + std::to_string(i)));
     }
 }
 
 void LocalTabletsChannel::abort() {
     vector<int64_t> tablet_ids;
     tablet_ids.reserve(_delta_writers.size());
+    int i = 0;
     for (auto& it : _delta_writers) {
-        (void)it.second->abort(false);
+        std::cout<<"ABORT:"<<i++<<std::endl;
+        (void)it.second->abort(Status::Cancelled("abort: " + std::to_string(i)), false);
         tablet_ids.emplace_back(it.first);
     }
     string tablet_id_list_str;
@@ -437,7 +439,7 @@ void LocalTabletsChannel::abort() {
 void LocalTabletsChannel::abort(int64_t tablet_id) {
     auto it = _delta_writers.find(tablet_id);
     if (it != _delta_writers.end()) {
-        it->second->abort(true);
+        it->second->abort(Status::OK(), true);
     }
 }
 

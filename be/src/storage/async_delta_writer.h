@@ -72,7 +72,7 @@ public:
     void commit(AsyncDeltaWriterCallback* cb);
 
     // [thread-safe and wait-free]
-    void abort(bool with_log = true);
+    void abort(const Status& st, bool with_log = true);
 
     void cancel(const Status& st);
 
