@@ -2,6 +2,7 @@
 
 package com.starrocks.service;
 
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -11,7 +12,10 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
+import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetTablesConfigRequest;
@@ -24,6 +28,7 @@ import org.apache.thrift.TException;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -38,8 +43,12 @@ public class FrontendServiceImplTest {
     @Mocked
     GlobalStateMgr globalStateMgr;
 
+    @Mocked
+    Auth auth;
+
     @Test
-    public void testGetTablesConfig() throws TException {
+    public void testGetTablesConfig() throws TException, NoSuchFieldException, 
+        SecurityException, IllegalArgumentException, IllegalAccessException {
 
         Database db = new Database(1, "test_db");
         
@@ -115,6 +124,24 @@ public class FrontendServiceImplTest {
             {
                 globalStateMgr.getDbNames();
                 result = Arrays.asList("test_db");
+            }
+        };
+
+        Field field = globalStateMgr.getClass().getDeclaredField("auth");
+        field.setAccessible(true);
+        field.set(globalStateMgr, auth);
+
+        new MockUp<Auth>() {
+            @Mock
+            public boolean checkDbPriv(UserIdentity currentUser, String db, PrivPredicate wanted) {
+                return true;
+            }
+        };
+
+        new MockUp<PatternMatcher>() {
+            @Mock
+            public boolean match(String candidate) {
+                return true;
             }
         };
 
