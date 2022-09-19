@@ -127,8 +127,13 @@ public class BDBEnvironmentTest {
                 return;
             } catch (Exception e) {
                 // sleep 5 ~ 15 seconds
+<<<<<<< HEAD
                int sleepSeconds = new Random().nextInt() % 10 + 5;
                 LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds);
+=======
+                int sleepSeconds = ThreadLocalRandom.current().nextInt(5, 15);
+                LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds, e);
+>>>>>>> 258165f16 ([BugFix] fix sleep negative for BDB UT (#11347))
                 Thread.sleep(sleepSeconds * 1000L);
             }
         }
