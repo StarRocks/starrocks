@@ -11,11 +11,18 @@ import java.util.List;
 import java.util.Map;
 
 public interface HiveMetaStoreTable {
+    // TODO(stephen): remove the dependencies on resource
     String getResourceName();
+
+    String getCatalogName();
 
     String getDbName();
 
     String getTableName();
+
+    List<String> getDataColumnNames();
+
+    boolean isUnPartitioned();
 
     List<String> getPartitionColumnNames();
 

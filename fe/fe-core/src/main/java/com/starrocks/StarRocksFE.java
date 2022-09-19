@@ -36,6 +36,7 @@ import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.BDBTool;
 import com.starrocks.journal.bdbje.BDBToolOptions;
+import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.QeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
@@ -140,6 +141,8 @@ public class StarRocksFE {
             GlobalStateMgr.getCurrentState().waitForReady();
 
             FrontendOptions.saveStartType();
+
+            CoordinatorMonitor.getInstance().start();
 
             // init and start:
             // 1. QeService for MySQL Server

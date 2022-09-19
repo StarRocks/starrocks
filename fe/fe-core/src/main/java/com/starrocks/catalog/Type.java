@@ -36,8 +36,6 @@ import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -50,7 +48,7 @@ import java.util.stream.Collectors;
  * as abstract methods that subclasses must implement.
  */
 public abstract class Type implements Cloneable {
-    private static final Logger LOG = LogManager.getLogger(Type.class);
+
     public static final int BINARY = 63;
     public static final int CHARSET_UTF8 = 33;
 
@@ -115,7 +113,6 @@ public abstract class Type implements Cloneable {
 
     public static final PseudoType ANY_ELEMENT = PseudoType.ANY_ELEMENT;
     public static final PseudoType ANY_ARRAY = PseudoType.ANY_ARRAY;
-    public static final PseudoType SUBQUERY = PseudoType.SUBQUERY;
 
     public static final Type ARRAY_BOOLEAN = new ArrayType(Type.BOOLEAN);
     public static final Type ARRAY_TINYINT = new ArrayType(Type.TINYINT);

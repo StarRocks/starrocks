@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.operator.scalar;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+import java.util.List;
 import java.util.Objects;
 
 public class BetweenPredicateOperator extends PredicateOperator {
@@ -14,6 +15,12 @@ public class BetweenPredicateOperator extends PredicateOperator {
         super(OperatorType.BETWEEN, arguments);
         this.notBetween = notBetween;
         Preconditions.checkState(arguments.length == 3);
+    }
+
+    public BetweenPredicateOperator(boolean notBetween, List<ScalarOperator> arguments) {
+        super(OperatorType.BETWEEN, arguments);
+        this.notBetween = notBetween;
+        Preconditions.checkState(arguments != null && arguments.size() == 3);
     }
 
     public boolean isNotBetween() {

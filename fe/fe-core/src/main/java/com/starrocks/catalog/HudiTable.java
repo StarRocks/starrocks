@@ -131,6 +131,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return resourceName;
     }
 
+    @Override
+    public String getCatalogName() {
+        return null;
+    }
+
     public HoodieTableType getTableType() {
         return HoodieTableType.valueOf(hudiProperties.get(HUDI_TABLE_TYPE));
     }
@@ -164,6 +169,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     public List<String> getDataColumnNames() {
         return dataColumnNames;
+    }
+
+    @Override
+    public boolean isUnPartitioned() {
+        return partColumnNames.size() == 0;
     }
 
     @Override

@@ -80,6 +80,7 @@ statement
     | deleteStatement
 
     //Routine Statement
+    | createRoutineLoadStatement
     | stopRoutineLoadStatement
     | resumeRoutineLoadStatement
     | pauseRoutineLoadStatement
@@ -185,10 +186,17 @@ statement
     // Snapshot Satement
     | showSnapshotStatement
 
+    // Sql BlackList And WhiteList Statement
+    | addSqlBlackListStatement
+    | delSqlBlackListStatement
+    | showSqlBlackListStatement
+    | showWhiteListStatement
+
     // Other statement
     | killStatement
     | setUserPropertyStatement
     | setStatement
+    | syncStatement
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -199,6 +207,11 @@ useDatabaseStatement
 
 useCatalogStatement
     : USE CATALOG identifierOrString
+    ;
+
+showDatabasesStatement
+    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 alterDbQuotaStmtatement
@@ -694,6 +707,43 @@ deleteStatement
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
+createRoutineLoadStatement
+    : CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier ON table=qualifiedName
+        (loadProperties (',' loadProperties)*)?
+        jobProperties?
+        FROM source=identifier
+        dataSourceProperties?
+    ;
+
+loadProperties
+    : (colSeparatorProperty)
+    | (rowDelimiterProperty)
+    | (COLUMNS columnProperties)
+    | (WHERE expression)
+    | (partitionNames)
+    ;
+
+colSeparatorProperty
+    : COLUMNS TERMINATED BY string
+    ;
+
+rowDelimiterProperty
+    : ROWS TERMINATED BY string
+    ;
+
+columnProperties
+    : '('
+        (qualifiedName | assignmentList) (',' (qualifiedName | assignmentList))*
+      ')'
+    ;
+
+jobProperties
+    : properties
+    ;
+
+dataSourceProperties
+    : propertyList
+    ;
 
 stopRoutineLoadStatement
     : STOP ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
@@ -1061,12 +1111,20 @@ dropRoleStatement
     : DROP ROLE identifierOrString                                                          #dropRole
     ;
 
-// ------------------------------------------- Other Statement ---------------------------------------------------------
-
-showDatabasesStatement
-    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
-    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
+// ------------------------------------ Sql BlackList And WhiteList Statement ------------------------------------------
+addSqlBlackListStatement
+    : ADD SQLBLACKLIST string
     ;
+delSqlBlackListStatement
+    : DELETE SQLBLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+showSqlBlackListStatement
+    : SHOW SQLBLACKLIST
+    ;
+showWhiteListStatement
+    : SHOW WHITELIST
+    ;
+// ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showProcesslistStatement
     : SHOW FULL? PROCESSLIST
@@ -1117,6 +1175,10 @@ setExprOrDefault
     | ON
     | ALL
     | expression
+    ;
+
+syncStatement
+    : SYNC
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -1757,13 +1819,13 @@ nonReserved
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
-    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE
+    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP | STORAGE
     | STRING | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
     | VALUE | VARIABLES | VIEW | VERBOSE
-    | WARNINGS | WEEK | WORK | WRITE
+    | WARNINGS | WEEK | WHITELIST | WORK | WRITE
     | YEAR
     | DOTDOTDOT
     ;

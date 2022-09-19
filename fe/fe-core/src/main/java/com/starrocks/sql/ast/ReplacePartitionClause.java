@@ -4,7 +4,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.PartitionNames;
 
 import java.util.List;
 import java.util.Map;

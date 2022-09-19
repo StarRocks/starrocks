@@ -506,4 +506,9 @@ public class AnalyzeSingleTest {
         QueryStatement queryStatement = (QueryStatement) analyzeSuccess(sql);
         Assert.assertTrue(((TableRelation) ((SelectRelation) queryStatement.getQueryRelation()).getRelation()).isMetaQuery());
     }
+
+    @Test
+    public void testSync() {
+        analyzeSuccess("sync");
+    }
 }

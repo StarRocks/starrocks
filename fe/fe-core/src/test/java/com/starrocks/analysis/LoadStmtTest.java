@@ -21,19 +21,9 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.ImmutableSet;
-import com.starrocks.catalog.ResourceMgr;
-import com.starrocks.catalog.SparkResource;
 import com.starrocks.common.UserException;
-import com.starrocks.load.EtlJobType;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import mockit.Expectations;
-import mockit.Injectable;
-import mockit.Mocked;
+import com.starrocks.sql.ast.DataDescription;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -58,8 +48,10 @@ public class LoadStmtTest {
         Assert.assertFalse(dataDescription.isLoadFromTable());
         Assert.assertTrue(dataDescription.isHadoopLoad());
         Assert.assertNull(stmt.getProperties());
-        Assert.assertEquals("LOAD LABEL `test`.`testLabel`\n" +
-                "(DATA INFILE ('hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file') INTO TABLE t0)", stmt.toString());
+        Assert.assertEquals("`test`.`testLabel`", stmt.getLabel().toString());
+        Assert.assertEquals(
+                "[DATA INFILE ('hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file') INTO TABLE t0]",
+                stmt.getDataDescriptions().toString());
     }
 
     @Test

@@ -37,11 +37,11 @@ public class ShowPartitionsStmt extends ShowStmt {
             .add(FILTER_LAST_CONSISTENCY_CHECK_TIME).build();
 
     private String dbName;
-    private String tableName;
-    private Expr whereClause;
-    private List<OrderByElement> orderByElements;
-    private LimitElement limitElement;
-    private boolean isTempPartition = false;
+    private final String tableName;
+    private final Expr whereClause;
+    private final List<OrderByElement> orderByElements;
+    private final LimitElement limitElement;
+    private boolean isTempPartition;
 
     private List<OrderByPair> orderByPairs;
     private Map<String, Expr> filterMap;

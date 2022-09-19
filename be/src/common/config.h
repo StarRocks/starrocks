@@ -134,6 +134,10 @@ CONF_Int32(sleep_one_second, "1");
 // The sleep time for five seconds.
 CONF_Int32(sleep_five_seconds, "5");
 
+// The count of thread to compact
+CONF_Int32(compact_threads, "4");
+CONF_Int32(compact_thread_pool_queue_size, "100");
+
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 // The user function dir.

@@ -24,6 +24,7 @@ package com.starrocks.analysis;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ShowMaterializedViewStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
@@ -44,7 +45,6 @@ public class ShowMaterializedViewTest {
         ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("");
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW MATERIALIZED VIEW FROM testDb", stmt.toString());
         Assert.assertEquals("testDb", stmt.getDb());
         Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
@@ -55,7 +55,6 @@ public class ShowMaterializedViewTest {
 
         stmt = new ShowMaterializedViewStmt("abc", (String) null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW MATERIALIZED VIEW FROM abc", stmt.toString());
         Assert.assertEquals("abc", stmt.getDb());
         Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
@@ -67,7 +66,6 @@ public class ShowMaterializedViewTest {
         stmt = new ShowMaterializedViewStmt("abc", "bcd");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("bcd", stmt.getPattern());
-        Assert.assertEquals("SHOW MATERIALIZED VIEW FROM abc LIKE 'bcd'", stmt.toString());
         Assert.assertEquals("abc", stmt.getDb());
         Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());

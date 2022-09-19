@@ -21,10 +21,10 @@
 
 package com.starrocks.external.elasticsearch;
 
-import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.PartitionDesc;
-import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import org.json.JSONObject;
 
 public class EsUtil {
