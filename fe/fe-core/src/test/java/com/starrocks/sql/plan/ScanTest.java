@@ -372,7 +372,7 @@ public class ScanTest extends PlanTestBase {
     }
 
     @Test
-    public void testMetabaseScan() throws Exception {
+    public void testSchemaScanWithWhereConstantFunction() throws Exception {
         String sql = "SELECT TABLE_SCHEMA TABLE_CAT, NULL TABLE_SCHEM, TABLE_NAME, " +
                 "IF(TABLE_TYPE='BASE TABLE' or TABLE_TYPE='SYSTEM VERSIONED', 'TABLE', TABLE_TYPE) as TABLE_TYPE, " +
                 "TABLE_COMMENT REMARKS, NULL TYPE_CAT, NULL TYPE_SCHEM, NULL TYPE_NAME, NULL SELF_REFERENCING_COL_NAME, " +
