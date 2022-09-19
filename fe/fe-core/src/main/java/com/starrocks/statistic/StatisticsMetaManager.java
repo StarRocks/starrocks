@@ -79,6 +79,9 @@ public class StatisticsMetaManager extends LeaderDaemon {
         Preconditions.checkState(db != null);
         OlapTable table = (OlapTable) db.getTable(tableName);
         Preconditions.checkState(table != null);
+        if (table.isLakeTable()) {
+            return true;
+        }
 
         boolean check = true;
         for (Partition partition : table.getPartitions()) {
@@ -170,7 +173,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                     tableName,
                     StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
                     "starrocks",
-                    new KeysDesc(KeysType.PRIMARY_KEYS, FULL_STATISTICS_KEY_COLUMNS),
+                    new KeysDesc(KeysType.UNIQUE_KEYS, FULL_STATISTICS_KEY_COLUMNS),
                     null,
                     new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
                     properties,
@@ -214,7 +217,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                     tableName,
                     StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
                     "starrocks",
-                    new KeysDesc(KeysType.PRIMARY_KEYS, HISTOGRAM_KEY_COLUMNS),
+                    new KeysDesc(KeysType.UNIQUE_KEYS, HISTOGRAM_KEY_COLUMNS),
                     null,
                     new HashDistributionDesc(10, HISTOGRAM_KEY_COLUMNS),
                     properties,
