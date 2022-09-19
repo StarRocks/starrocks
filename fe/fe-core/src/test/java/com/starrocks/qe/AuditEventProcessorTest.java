@@ -46,6 +46,7 @@ public class AuditEventProcessorTest {
                 .setTimestamp(System.currentTimeMillis())
                 .setClientIp("127.0.0.1")
                 .setUser("user1")
+                .setAuthorizedUser("user2")
                 .setDb("db1")
                 .setState("EOF")
                 .setQueryTime(2000)
@@ -59,6 +60,7 @@ public class AuditEventProcessorTest {
         Assert.assertEquals("127.0.0.1", event.clientIp);
         Assert.assertEquals(200000, event.scanRows);
         Assert.assertEquals("catalog1", event.catalog);
+        Assert.assertEquals("user2", event.authorizedUser);
     }
 
     @Test
@@ -73,6 +75,7 @@ public class AuditEventProcessorTest {
                         .setTimestamp(System.currentTimeMillis())
                         .setClientIp("127.0.0.1")
                         .setUser("user1")
+                        .setAuthorizedUser("user2")
                         .setDb("db1")
                         .setState("EOF")
                         .setQueryTime(2000)
@@ -99,6 +102,7 @@ public class AuditEventProcessorTest {
                     .setTimestamp(System.currentTimeMillis())
                     .setClientIp("127.0.0.1")
                     .setUser("user1")
+                    .setAuthorizedUser("user2")
                     .setDb("db1")
                     .setState("EOF")
                     .setQueryTime(2000)

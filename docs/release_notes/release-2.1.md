@@ -1,5 +1,24 @@
 # StarRocks version 2.1
 
+## 2.1.13
+
+Release date: September 6, 2022
+
+### Improvements
+
+- Added a BE configuration item `enable_check_string_lengths` to check the length of loaded data. This mechanism helps prevent compaction failures caused by VARCHAR data size out of range. [#10380](https://github.com/StarRocks/starrocks/issues/10380)
+- Optimized the query performance when a query contains more than 1000 OR operators. [#9332](https://github.com/StarRocks/starrocks/pull/9332)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- An error may occur and BEs may crash when you query ARRAY columns (calculated by using the REPLACE_IF_NOT_NULL function) from a table using the Aggregate Key model. [#10144](https://github.com/StarRocks/starrocks/issues/10144)
+- The query result is incorrect if more than one IFNULL() function is nested in the query. [#5028](https://github.com/StarRocks/starrocks/issues/5028) [#10486](https://github.com/StarRocks/starrocks/pull/10486)
+- After a dynamic partition is truncated, the number of tablets in the partition changes from the value configured by dynamic partitioning to the default value. [#10435](https://github.com/StarRocks/starrocks/issues/10435)
+- If the Kafka cluster is stopped when you use Routine Load to load data into StarRocks, deadlocks may occur, affecting query performance. [#8947](https://github.com/StarRocks/starrocks/issues/8947)
+- An error occurs when a query contains both subqueries and ORDER BY clauses. [#10066](https://github.com/StarRocks/starrocks/pull/10066)
+
 ## 2.1.12
 
 Release date: August 9, 2022

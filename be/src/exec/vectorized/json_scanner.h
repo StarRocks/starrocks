@@ -101,7 +101,7 @@ private:
     bool _strict_mode = false;
 
     std::shared_ptr<SequentialFile> _file;
-    bool _closed;
+    bool _closed = false;
     std::vector<SlotDescriptor*> _slot_descs;
     std::unordered_map<std::string, SlotDescriptor*> _slot_desc_dict;
 

@@ -6,6 +6,7 @@
 #include <ryu/ryu.h>
 
 #include <algorithm>
+#include <memory>
 #include <sstream>
 
 #include "column/chunk.h"
@@ -126,15 +127,14 @@ Status JsonScanner::_construct_json_types() {
                 slot_type->type == TYPE_TINYINT) {
                 // Treat these types as what they are.
                 child_type->children.emplace_back(slot_type->type);
-
             } else if (slot_type->type == TYPE_VARCHAR) {
                 auto varchar_type = TypeDescriptor::create_varchar_type(slot_type->len);
                 child_type->children.emplace_back(varchar_type);
-
             } else if (slot_type->type == TYPE_CHAR) {
                 auto char_type = TypeDescriptor::create_char_type(slot_type->len);
                 child_type->children.emplace_back(char_type);
-
+            } else if (slot_type->type == TYPE_JSON) {
+                child_type->children.emplace_back(TypeDescriptor::create_json_type());
             } else {
                 // Treat other types as VARCHAR.
                 auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
@@ -515,7 +515,7 @@ Status JsonReader::_construct_row_in_object_order(simdjson::ondemand::object* ro
         if (col_name == "__op") {
             // special treatment for __op column, fill default value '0' rather than null
             if (column->is_binary()) {
-                column->append_strings(std::vector{Slice{"0"}});
+                std::ignore = column->append_strings(std::vector{Slice{"0"}});
             } else {
                 column->append_datum(Datum((uint8_t)0));
             }
@@ -544,7 +544,7 @@ Status JsonReader::_construct_row_in_slot_order(simdjson::ondemand::object* row,
             if (col_name == "__op") {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {
-                    column->append_strings(std::vector{Slice{"0"}});
+                    std::ignore = column->append_strings(std::vector{Slice{"0"}});
                 } else {
                     column->append_datum(Datum((uint8_t)0));
                 }
@@ -595,7 +595,6 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
                 continue;
             }
 
-            simdjson::ondemand::value val;
             // NOTE
             // Why not process this syntax in extract_from_object?
             // simdjson's api is limited, which coult not convert ondemand::object to ondemand::value.
@@ -609,19 +608,25 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
                 row->reset();
                 RETURN_IF_ERROR(add_nullable_column(column, _slot_descs[i]->type(), _slot_descs[i]->col_name(), row,
                                                     !_strict_mode));
-            } else if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], &val).ok()) {
-                if (strcmp(column_name, "__op") == 0) {
-                    // special treatment for __op column, fill default value '0' rather than null
-                    if (column->is_binary()) {
-                        column->append_strings(std::vector{Slice{"0"}});
+            } else {
+                simdjson::ondemand::value val;
+                auto st = JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], &val);
+                if (st.ok()) {
+                    RETURN_IF_ERROR(_construct_column(val, column, _slot_descs[i]->type(), _slot_descs[i]->col_name()));
+                } else if (st.is_not_found()) {
+                    if (strcmp(column_name, "__op") == 0) {
+                        // special treatment for __op column, fill default value '0' rather than null
+                        if (column->is_binary()) {
+                            column->append_strings(std::vector{Slice{"0"}});
+                        } else {
+                            column->append_datum(Datum((uint8_t)0));
+                        }
                     } else {
-                        column->append_datum(Datum((uint8_t)0));
+                        column->append_nulls(1);
                     }
                 } else {
-                    column->append_nulls(1);
+                    return st;
                 }
-            } else {
-                RETURN_IF_ERROR(_construct_column(val, column, _slot_descs[i]->type(), _slot_descs[i]->col_name()));
             }
         }
         return Status::OK();
@@ -704,7 +709,7 @@ Status JsonReader::_read_and_parse_json() {
 
 #else
     // TODO: Remove the down_cast, should not rely on the specific implementation.
-    StreamLoadPipeInputStream* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
+    auto* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
     {
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         ASSIGN_OR_RETURN(_parser_buf, stream_file->pipe()->read());
@@ -748,23 +753,24 @@ Status JsonReader::_read_and_parse_json() {
         if (_scanner->_strip_outer_array) {
             // Expand outer array automatically according to _is_ndjson.
             if (_is_ndjson) {
-                _parser.reset(new ExpandedJsonDocumentStreamParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
+                _parser = std::make_unique<ExpandedJsonDocumentStreamParserWithRoot>(&_simdjson_parser,
+                                                                                     _scanner->_root_paths);
             } else {
-                _parser.reset(new ExpandedJsonArrayParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
+                _parser = std::make_unique<ExpandedJsonArrayParserWithRoot>(&_simdjson_parser, _scanner->_root_paths);
             }
         } else {
             if (_is_ndjson) {
-                _parser.reset(new JsonDocumentStreamParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
+                _parser = std::make_unique<JsonDocumentStreamParserWithRoot>(&_simdjson_parser, _scanner->_root_paths);
             } else {
-                _parser.reset(new JsonArrayParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
+                _parser = std::make_unique<JsonArrayParserWithRoot>(&_simdjson_parser, _scanner->_root_paths);
             }
         }
     } else {
         // Without json root set, the strip_outer_array determines whether to expand outer array.
         if (_scanner->_strip_outer_array) {
-            _parser.reset(new JsonArrayParser(&_simdjson_parser));
+            _parser = std::make_unique<JsonArrayParser>(&_simdjson_parser);
         } else {
-            _parser.reset(new JsonDocumentStreamParser(&_simdjson_parser));
+            _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
         }
     }
 

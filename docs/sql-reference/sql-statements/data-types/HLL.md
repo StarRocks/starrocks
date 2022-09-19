@@ -1,14 +1,23 @@
 # HLL(HyperLogLog)
 
-## description
+## Description
 
-VARCHAR(M)
+HLL columns can only be queried or used through the matching hll_union_agg, hll_raw_agg, hll_cardinality, and hll_hash functions.
 
-Variable length string, M represents the length of variable length string. The range of M is 1-16385
+## Examples
 
-user does not need to specify the length and default value. The length is controlled within the system according to the degree of data aggregation.
+Specify the data type as HLL when you create a table.
 
-And HLL columns can only be queried or used through the matching hll_union_agg, hll_raw_agg, hll_cardinality, and hll_hash]
+~~~sql
+CREATE TABLE hllDemo
+(
+    k1 TINYINT,
+    v1 HLL HLL_UNION
+)
+ENGINE=olap
+AGGREGATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 8;
+~~~
 
 ## keyword
 

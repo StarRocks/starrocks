@@ -80,7 +80,7 @@ StatusOr<ScanTask> WorkGroupScanTaskQueue::take() {
 bool WorkGroupScanTaskQueue::try_offer(ScanTask task) {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
-    auto* wg_entity = task.workgroup->scan_sched_entity();
+    auto* wg_entity = _sched_entity(task.workgroup);
     wg_entity->set_in_queue(this);
     RETURN_IF_UNLIKELY(!wg_entity->queue()->try_offer(std::move(task)), false);
 
@@ -96,7 +96,7 @@ bool WorkGroupScanTaskQueue::try_offer(ScanTask task) {
 void WorkGroupScanTaskQueue::update_statistics(WorkGroup* wg, int64_t runtime_ns) {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
-    auto* wg_entity = wg->scan_sched_entity();
+    auto* wg_entity = _sched_entity(wg);
 
     // Update bandwidth control information.
     _update_bandwidth_control_period();
@@ -118,12 +118,12 @@ void WorkGroupScanTaskQueue::update_statistics(WorkGroup* wg, int64_t runtime_ns
 }
 
 bool WorkGroupScanTaskQueue::should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const {
-    if (_throttled(wg->scan_sched_entity(), unaccounted_runtime_ns)) {
+    if (_throttled(_sched_entity(wg), unaccounted_runtime_ns)) {
         return true;
     }
 
     // Return true, if the minimum-vruntime workgroup is not current workgroup anymore.
-    auto* wg_entity = wg->scan_sched_entity();
+    auto* wg_entity = _sched_entity(wg);
     return _min_wg_entity.load() != wg_entity &&
            _min_vruntime_ns.load() < wg_entity->vruntime_ns() + unaccounted_runtime_ns / wg_entity->cpu_limit();
 }
@@ -214,6 +214,22 @@ void WorkGroupScanTaskQueue::_update_bandwidth_control_period() {
 
 int64_t WorkGroupScanTaskQueue::_bandwidth_quota_ns() const {
     return BANDWIDTH_CONTROL_PERIOD_NS * workgroup::WorkGroupManager::instance()->normal_workgroup_cpu_hard_limit();
+}
+
+workgroup::WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_sched_entity(workgroup::WorkGroup* wg) {
+    if (_sched_entity_type == SchedEntityType::CONNECTOR) {
+        return wg->connector_scan_sched_entity();
+    } else {
+        return wg->scan_sched_entity();
+    }
+}
+
+const workgroup::WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_sched_entity(const workgroup::WorkGroup* wg) const {
+    if (_sched_entity_type == SchedEntityType::CONNECTOR) {
+        return wg->connector_scan_sched_entity();
+    } else {
+        return wg->scan_sched_entity();
+    }
 }
 
 } // namespace starrocks::workgroup

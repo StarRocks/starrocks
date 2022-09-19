@@ -1792,6 +1792,7 @@ public class Coordinator {
             fragmentProfile.removeAllChildren();
             instanceProfile0.getChildList().forEach(pair -> {
                 RuntimeProfile pipelineProfile = pair.first;
+                foldUnnecessaryLimitOperators(pipelineProfile);
                 fragmentProfile.addChild(pipelineProfile);
             });
         }
@@ -1841,6 +1842,35 @@ public class Coordinator {
                 }
             }
         }
+    }
+
+    /**
+     * Remove unnecessary LimitOperator, which has same input rows and output rows
+     * to keep the profile concise
+     */
+    private void foldUnnecessaryLimitOperators(RuntimeProfile pipelineProfile) {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        if (!sessionVariable.isProfileLimitFold()) {
+            return;
+        }
+
+        List<String> foldNames = Lists.newArrayList();
+        for (Pair<RuntimeProfile, Boolean> child : pipelineProfile.getChildList()) {
+            RuntimeProfile operatorProfile = child.first;
+            if (operatorProfile.getName().contains("LIMIT")) {
+                RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
+                Preconditions.checkNotNull(commonMetrics);
+                Counter pullRowNum = commonMetrics.getCounter("PullRowNum");
+                Counter pushRowNum = commonMetrics.getCounter("PushRowNum");
+                Preconditions.checkNotNull(pullRowNum);
+                Preconditions.checkNotNull(pushRowNum);
+                if (Objects.equals(pullRowNum.getValue(), pushRowNum.getValue())) {
+                    foldNames.add(operatorProfile.getName());
+                }
+            }
+        }
+
+        foldNames.forEach(pipelineProfile::removeChild);
     }
 
     /*

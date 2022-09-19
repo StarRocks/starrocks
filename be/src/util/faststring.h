@@ -202,9 +202,12 @@ public:
             assert(rhs.capacity_ == kInitialCapacity);
             ASAN_UNPOISON_MEMORY_REGION(initial_data_, kInitialCapacity);
             ASAN_UNPOISON_MEMORY_REGION(rhs.initial_data_, kInitialCapacity);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wuninitialized"
             memcpy(tmp_buff, initial_data_, kInitialCapacity);
             memcpy(initial_data_, rhs.initial_data_, kInitialCapacity);
             memcpy(rhs.initial_data_, tmp_buff, kInitialCapacity);
+#pragma GCC diagnostic pop
             std::swap(len_, rhs.len_);
         } else if (data_ == initial_data_) {
             assert(capacity_ == kInitialCapacity);

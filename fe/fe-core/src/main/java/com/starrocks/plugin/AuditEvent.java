@@ -55,8 +55,13 @@ public class AuditEvent {
     public long timestamp = -1;
     @AuditField(value = "Client")
     public String clientIp = "";
+    // The original login user
     @AuditField(value = "User")
     public String user = "";
+    // The user used to authorize
+    // `User` could be different from `AuthorizedUser` if impersonated
+    @AuditField(value = "AuthorizedUser")
+    public String authorizedUser = "";
     @AuditField(value = "ResourceGroup")
     public String resourceGroup = "default_wg";
     @AuditField(value = "Catalog")
@@ -124,6 +129,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setUser(String user) {
             auditEvent.user = user;
+            return this;
+        }
+
+        public AuditEventBuilder setAuthorizedUser(String authorizedUser) {
+            auditEvent.authorizedUser = authorizedUser;
             return this;
         }
 

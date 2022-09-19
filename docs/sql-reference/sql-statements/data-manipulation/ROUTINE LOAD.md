@@ -234,7 +234,7 @@ The function is equivalent to the"--property" parameter in the kafka shell.
 
 When the value of a parameter is a file, the keyword "FILE:" needs to be added before the value.
 
-For information on how to create a file, see "HELP CREATE FILE;"
+For information on how to create a file, see CREATE FILE.
 
 For more supported custom parameters, see the client-side configuration item in librdkafka's official CONFIGURATION document.
 

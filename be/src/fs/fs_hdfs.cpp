@@ -45,7 +45,7 @@ HdfsInputStream::~HdfsInputStream() {
         if (r == 0) {
             return Status::OK();
         } else {
-            return Status::IOError("");
+            return Status::IOError(fmt::format("hdfsFileGetReadStatistics failed: {}", _file_name));
         }
     });
     Status st = ret->get_future().get();

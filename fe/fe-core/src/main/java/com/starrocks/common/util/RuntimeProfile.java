@@ -36,8 +36,6 @@ import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.Formatter;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +50,7 @@ import java.util.stream.Collectors;
  * {@link com.starrocks.common.proc.CurrentQueryInfoProvider}.
  */
 public class RuntimeProfile {
+
     private static final Logger LOG = LogManager.getLogger(RuntimeProfile.class);
     private static final String ROOT_COUNTER = "";
     private static final Set<String> NON_MERGE_COUNTER_NAMES =
@@ -101,6 +100,10 @@ public class RuntimeProfile {
 
     public Map<String, RuntimeProfile> getChildMap() {
         return childMap;
+    }
+
+    public RuntimeProfile getChild(String childName) {
+        return childMap.get(childName);
     }
 
     public void removeAllChildren() {
@@ -338,8 +341,7 @@ public class RuntimeProfile {
         printChildCounters(prefix, ROOT_COUNTER, builder);
 
         // 4. children
-        for (int i = 0; i < childList.size(); i++) {
-            Pair<RuntimeProfile, Boolean> childPair = childList.get(i);
+        for (Pair<RuntimeProfile, Boolean> childPair : childList) {
             boolean indent = childPair.second;
             RuntimeProfile profile = childPair.first;
             profile.prettyPrint(builder, prefix + (indent ? "  " : ""));
@@ -454,16 +456,23 @@ public class RuntimeProfile {
             return;
         }
 
-        this.childMap.put(child.name, child);
+        childMap.put(child.name, child);
         Pair<RuntimeProfile, Boolean> pair = Pair.create(child, true);
-        this.childList.add(pair);
+        childList.add(pair);
+    }
+
+    public void removeChild(String childName) {
+        RuntimeProfile childProfile = childMap.remove(childName);
+        if (childProfile == null) {
+            return;
+        }
+        childList.removeIf(childPair -> childPair.first == childProfile);
     }
 
     // Because the profile of summary and child fragment is not a real parent-child relationship
     // Each child profile needs to calculate the time proportion consumed by itself
     public void computeTimeInChildProfile() {
-        childMap.values().stream().
-                forEach(child -> child.computeTimeInProfile());
+        childMap.values().forEach(RuntimeProfile::computeTimeInProfile);
     }
 
     public void computeTimeInProfile() {
@@ -478,30 +487,26 @@ public class RuntimeProfile {
         // Add all the total times in all the children
         long totalChildTime = 0;
 
-        for (int i = 0; i < this.childList.size(); ++i) {
-            totalChildTime += childList.get(i).first.getCounterTotalTime().getValue();
+        for (Pair<RuntimeProfile, Boolean> pair : this.childList) {
+            totalChildTime += pair.first.getCounterTotalTime().getValue();
         }
         long localTime = this.getCounterTotalTime().getValue() - totalChildTime;
         // Counters have some margin, set to 0 if it was negative.
         localTime = Math.max(0, localTime);
-        this.localTimePercent = Double.valueOf(localTime) / Double.valueOf(total);
+        this.localTimePercent = (double) localTime / (double) total;
         this.localTimePercent = Math.min(1.0, this.localTimePercent) * 100;
 
         // Recurse on children
-        for (int i = 0; i < this.childList.size(); i++) {
-            childList.get(i).first.computeTimeInProfile(total);
+        for (Pair<RuntimeProfile, Boolean> pair : this.childList) {
+            pair.first.computeTimeInProfile(total);
         }
     }
 
     // from bigger to smaller
     public void sortChildren() {
-        Collections.sort(this.childList, new Comparator<Pair<RuntimeProfile, Boolean>>() {
-            @Override
-            public int compare(Pair<RuntimeProfile, Boolean> profile1, Pair<RuntimeProfile, Boolean> profile2) {
-                return Long.compare(profile2.first.getCounterTotalTime().getValue(),
-                        profile1.first.getCounterTotalTime().getValue());
-            }
-        });
+        this.childList.sort((profile1, profile2) ->
+                Long.compare(profile2.first.getCounterTotalTime().getValue(),
+                        profile1.first.getCounterTotalTime().getValue()));
     }
 
     public void addInfoString(String key, String value) {

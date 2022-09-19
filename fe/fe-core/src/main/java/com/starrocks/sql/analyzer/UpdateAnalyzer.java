@@ -43,7 +43,11 @@ public class UpdateAnalyzer {
         List<ColumnAssignment> assignmentList = updateStmt.getAssignments();
         Map<String, ColumnAssignment> assignmentByColName = assignmentList.stream().collect(
                 Collectors.toMap(assign -> assign.getColumn().toLowerCase(), a -> a));
-
+        for (String colName : assignmentByColName.keySet()) {
+            if (table.getColumn(colName) == null) {
+                throw new SemanticException("table '%s' do not existing column '%s'", tableName.getTbl(), colName);
+            }
+        }
         SelectList selectList = new SelectList();
         for (Column col : table.getBaseSchema()) {
             SelectListItem item;

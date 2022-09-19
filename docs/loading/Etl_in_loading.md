@@ -2,7 +2,7 @@
 
 StarRocks supports data transformation at loading.
 
-This feature supports [Stream Load](/docs/loading/StreamLoad.md), [Broker Load](/docs/loading/BrokerLoad.md), and [Routine Load](/docs/loading/RoutineLoad.md) but does not support [Spark Load](/docs/loading/SparkLoad.md).
+This feature supports [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), and [Routine Load](../loading/RoutineLoad.md) but does not support [Spark Load](../loading/SparkLoad.md).
 
 This topic uses CSV data as an example to describe how to extract and transform data at loading. The data file formats that are supported vary depending on the loading method of your choice.
 
@@ -30,7 +30,7 @@ When you load a data file into a StarRocks table, the data of the data file may 
 
 ## Prerequisites
 
-If you choose Broker Load, make sure that a broker is deployed in your StarRocks cluster. You can use the [SHOW BROKER](/docs/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no broker is deployed, you must deploy a broker by following the instructions provided in [Deploy a broker](/docs/quick_start/Deploy.md#deploy-broker). Assume that you have deployed a broker named `broker1`.
+If you choose Broker Load, make sure that a broker is deployed in your StarRocks cluster. You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no broker is deployed, you must deploy a broker by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker). Assume that you have deployed a broker named `broker1`.
 
 If you choose Routine Load, make sure that topics are created in your Apache Kafka® cluster. Assume that you have created two topics: `topic1` and `topic2`.
 
@@ -113,7 +113,7 @@ This section uses `file1.csv` and `table1` as an example. The four columns of `f
 
 #### Load data from a local file system
 
-If `file1.csv` is stored in your local file system, run the following command to create a [Stream Load](/docs/loading/StreamLoad.md) job:
+If `file1.csv` is stored in your local file system, run the following command to create a [Stream Load](../loading/StreamLoad.md) job:
 
 ```Bash
 curl --location-trusted -u root: \
@@ -125,11 +125,11 @@ curl --location-trusted -u root: \
 
 > Note: If you choose Stream Load, you must use the `columns` parameter to temporarily name the columns of the data file to create a column mapping between the data file and the StarRocks table.
 
-For detailed syntax and parameter descriptions, see [STREAM LOAD](/docs/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
 #### Load data from an HDFS cluster
 
-If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](/docs/loading/BrokerLoad.md) job:
+If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/BrokerLoad.md) job:
 
 ```SQL
 LOAD LABEL test_db.label1
@@ -145,11 +145,11 @@ WITH BROKER "broker1";
 
 > Note: If you choose Broker Load, you must use the `column_list` parameter to temporarily name the columns of the data file to create a column mapping between the data file and the StarRocks table.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](/docs/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 #### Load data from a Kafka cluster
 
-If the data of `file1.csv` is published to `topic1` of your Kafka cluster, execute the following statement to create a [Routine Load](/docs/loading/RoutineLoad.md) job:
+If the data of `file1.csv` is published to `topic1` of your Kafka cluster, execute the following statement to create a [Routine Load](../loading/RoutineLoad.md) job:
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table101 ON table1
@@ -165,7 +165,7 @@ FROM KAFKA
 
 > Note: If you choose Routine Load, you must use the `COLUMNS` parameter to temporarily name the columns of the data file to create a column mapping between the data file and the StarRocks table.
 
-For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](/docs/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
 
 ### Query data
 
@@ -203,7 +203,7 @@ This section uses `file1.csv` and `table1` as an example. If you want to load on
 
 #### Load data from a local file system
 
-If `file1.csv` is stored in your local file system, run the following command to create a [Stream Load](/docs/loading/StreamLoad.md) job:
+If `file1.csv` is stored in your local file system, run the following command to create a [Stream Load](../loading/StreamLoad.md) job:
 
 ```Bash
 curl --location-trusted -u root: \
@@ -214,11 +214,11 @@ curl --location-trusted -u root: \
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
 
-For detailed syntax and parameter descriptions, see [STREAM LOAD](/docs/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
 #### Load data from an HDFS cluster
 
-If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](/docs/loading/BrokerLoad.md) job:
+If `file1.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/BrokerLoad.md) job:
 
 ```SQL
 LOAD LABEL test_db.label2
@@ -233,11 +233,11 @@ LOAD LABEL test_db.label2
 WITH BROKER "broker1";
 ```
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](/docs/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 #### Load data from a Kafka cluster
 
-If the data of `file1.csv` is published to `topic1` of your Kafka cluster, execute the following statement to create a [Routine Load](/docs/loading/RoutineLoad.md) job:
+If the data of `file1.csv` is published to `topic1` of your Kafka cluster, execute the following statement to create a [Routine Load](../loading/RoutineLoad.md) job:
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table102 ON table1
@@ -252,7 +252,7 @@ FROM KAFKA
 );
 ```
 
-For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](/docs/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
 
 ### Query data
 
@@ -282,13 +282,13 @@ This feature supports loading data from the following data sources:
 
 - Kafka
 
-This section uses `file2.csv` and `table2` as an example. `file2.csv` consists of only one column that represents date. You can use the [year](/docs/sql-reference/sql-functions/date-time-functions/year.md), [month](/docs/sql-reference/sql-functions/date-time-functions/month.md), and [day](/docs/sql-reference/sql-functions/date-time-functions/day.md) functions to extract the year, month, and day in each date from `file2.csv` and load the extracted data into the `year`, `month`, and `day` columns of `table2`.
+This section uses `file2.csv` and `table2` as an example. `file2.csv` consists of only one column that represents date. You can use the [year](../sql-reference/sql-functions/date-time-functions/year.md), [month](../sql-reference/sql-functions/date-time-functions/month.md), and [day](../sql-reference/sql-functions/date-time-functions/day.md) functions to extract the year, month, and day in each date from `file2.csv` and load the extracted data into the `year`, `month`, and `day` columns of `table2`.
 
 ### Load data
 
 #### Load data from a local file system
 
-If `file2.csv` is stored in your local file system, run the following command to create a [Stream Load](/docs/loading/StreamLoad.md) job:
+If `file2.csv` is stored in your local file system, run the following command to create a [Stream Load](../loading/StreamLoad.md) job:
 
 ```Bash
 curl --location-trusted -u root: \
@@ -304,11 +304,11 @@ curl --location-trusted -u root: \
 >
 > - Stream Load does not support `column_name = function(column_name)` but supports `column_name = function(column_name)`.
 
-For detailed syntax and parameter descriptions, see [STREAM LOAD](/docs/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
 #### Load data from an HDFS cluster
 
-If `file2.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](/docs/loading/BrokerLoad.md) job:
+If `file2.csv` is stored in your HDFS cluster, execute the following statement to create a [Broker Load](../loading/BrokerLoad.md) job:
 
 ```SQL
 LOAD LABEL test_db.label3
@@ -325,11 +325,11 @@ WITH BROKER "broker1";
 
 > Note: You must first use the `column_list` parameter to temporarily name **all columns** of the data file, and then use the SET clause to temporarily name the new columns that you want to generate from the original columns of the data file. As shown in the preceding example, the only column of `file2.csv` is temporarily named as `date` in the `column_list` parameter, and then the `year=year(date)`, `month=month(date)`, and `day=day(date)` functions are invoked in the SET clause to generate three new columns, which are temporarily named as `year`, `month`, and `day`.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](/docs/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 #### Load data from a Kafka cluster
 
-If the data of `file2.csv` is published to `topic2` of your Kafka cluster, execute the following statement to create a [Routine Load](/docs/loading/RoutineLoad.md) job:
+If the data of `file2.csv` is published to `topic2` of your Kafka cluster, execute the following statement to create a [Routine Load](../loading/RoutineLoad.md) job:
 
 ```SQL
 CREATE ROUTINE LOAD test_db.table201 ON table2
@@ -345,7 +345,7 @@ FROM KAFKA
 
 > Note: In the `COLUMNS` parameter, you must first temporarily name **all columns** of the data file, and then temporarily name the new columns that you want to generate from the original columns of the data file. As shown in the preceding example, the only column of `file2.csv` is temporarily named as `date`, and then the `year=year(date)`, `month=month(date)`, and `day=day(date)` functions are invoked to generate three new columns, which are temporarily named as `year`, `month`, and `day`.
 
-For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](/docs/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
 
 ### Query data
 
@@ -385,7 +385,7 @@ The four data files are stored in the `/user/starrocks/data/input/` path of your
 
 ### Load data from an HDFS cluster
 
-Execute the following statement to create a [Broker Load](/docs/loading/BrokerLoad.md) job, which enables you to extract the `date` partition field values from the `/user/starrocks/data/input/` file path and use a wildcard (*) to specify that you want to load all data files in the file path to `table1`:
+Execute the following statement to create a [Broker Load](../loading/BrokerLoad.md) job, which enables you to extract the `date` partition field values from the `/user/starrocks/data/input/` file path and use a wildcard (*) to specify that you want to load all data files in the file path to `table1`:
 
 ```SQL
 LOAD LABEL test_db.label4
@@ -403,7 +403,7 @@ WITH BROKER "broker1";
 
 > Note: In the preceding example, the `date` partition field in the specified file path is equivalent to the `event_date` column of `table1`. Therefore, you need to use the SET clause to map the `date` partition field onto the `event_date` column. If the partition field in the specified file path has the same name as a column of the StarRocks table, you do not need to use the SET clause to create a mapping.
 
-For detailed syntax and parameter descriptions, see [BROKER LOAD](/docs/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 ### Query data
 

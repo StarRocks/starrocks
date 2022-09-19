@@ -39,10 +39,15 @@ WorkGroup::WorkGroup(const std::string& name, int64_t id, int64_t version, size_
           _memory_limit(memory_limit),
           _concurrency_limit(concurrency),
           _driver_sched_entity(this),
-          _scan_sched_entity(this) {}
+          _scan_sched_entity(this),
+          _connector_scan_sched_entity(this) {}
 
 WorkGroup::WorkGroup(const TWorkGroup& twg)
-        : _name(twg.name), _id(twg.id), _driver_sched_entity(this), _scan_sched_entity(this) {
+        : _name(twg.name),
+          _id(twg.id),
+          _driver_sched_entity(this),
+          _scan_sched_entity(this),
+          _connector_scan_sched_entity(this) {
     if (twg.__isset.cpu_core_limit) {
         _cpu_limit = twg.cpu_core_limit;
     } else {
@@ -113,6 +118,8 @@ void WorkGroup::init() {
 
     _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>());
     _scan_sched_entity.set_queue(std::make_unique<PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size));
+    _connector_scan_sched_entity.set_queue(
+            std::make_unique<PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size));
 }
 
 std::string WorkGroup::to_string() const {
@@ -235,6 +242,11 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
         bool scan_ratio_registered = StarRocksMetrics::instance()->metrics()->register_metric(
                 "resource_group_scan_use_ratio", MetricLabels().add("name", wg->name()),
                 resource_group_scan_use_ratio.get());
+        // connector scan use ratio.
+        auto resource_group_connector_scan_use_ratio = std::make_unique<starrocks::DoubleGauge>(MetricUnit::PERCENT);
+        bool connector_scan_ratio_registered = StarRocksMetrics::instance()->metrics()->register_metric(
+                "resource_group_connector_scan_use_ratio", MetricLabels().add("name", wg->name()),
+                resource_group_connector_scan_use_ratio.get());
         // mem limit.
         auto resource_group_mem_limit_bytes = std::make_unique<starrocks::IntGauge>(MetricUnit::BYTES);
         bool mem_limit_registered = StarRocksMetrics::instance()->metrics()->register_metric(
@@ -273,6 +285,8 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
         if (cpu_limit_registered) _wg_cpu_limit_metrics.emplace(wg->name(), std::move(resource_group_cpu_limit_ratio));
         if (cpu_ratio_registered) _wg_cpu_metrics.emplace(wg->name(), std::move(resource_group_cpu_use_ratio));
         if (scan_ratio_registered) _wg_scan_metrics.emplace(wg->name(), std::move(resource_group_scan_use_ratio));
+        if (connector_scan_ratio_registered)
+            _wg_connector_scan_metrics.emplace(wg->name(), std::move(resource_group_connector_scan_use_ratio));
         if (mem_limit_registered) _wg_mem_limit_metrics.emplace(wg->name(), std::move(resource_group_mem_limit_bytes));
         if (mem_inuse_registered) _wg_mem_metrics.emplace(wg->name(), std::move(resource_group_mem_allocated_bytes));
         if (running_registered) _wg_running_queries.emplace(wg->name(), std::move(resource_group_running_queries));
@@ -287,9 +301,11 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
 void WorkGroupManager::update_metrics_unlocked() {
     int64_t sum_cpu_runtime_ns = 0;
     int64_t sum_scan_runtime_ns = 0;
+    int64_t sum_connector_scan_runtime_ns = 0;
     for (const auto& [_, wg] : _workgroups) {
         sum_cpu_runtime_ns += wg->driver_sched_entity()->runtime_ns();
         sum_scan_runtime_ns += wg->scan_sched_entity()->runtime_ns();
+        sum_connector_scan_runtime_ns += wg->connector_scan_sched_entity()->runtime_ns();
     }
 
     for (const auto& [name, wg_id] : _wg_metrics) {
@@ -303,10 +319,15 @@ void WorkGroupManager::update_metrics_unlocked() {
                     sum_cpu_runtime_ns <= 0 ? 0 : double(wg->driver_sched_entity()->runtime_ns()) / sum_cpu_runtime_ns;
             double scan_use_ratio =
                     sum_scan_runtime_ns <= 0 ? 0 : double(wg->scan_sched_entity()->runtime_ns()) / sum_scan_runtime_ns;
+            double connector_scan_use_ratio =
+                    sum_connector_scan_runtime_ns <= 0
+                            ? 0
+                            : double(wg->connector_scan_sched_entity()->runtime_ns()) / sum_connector_scan_runtime_ns;
 
             _wg_cpu_limit_metrics[name]->set_value(cpu_expected_use_ratio);
             _wg_cpu_metrics[name]->set_value(cpu_use_ratio);
             _wg_scan_metrics[name]->set_value(scan_use_ratio);
+            _wg_connector_scan_metrics[name]->set_value(connector_scan_use_ratio);
             _wg_mem_limit_metrics[name]->set_value(wg->mem_limit_bytes());
             _wg_mem_metrics[name]->set_value(wg->mem_tracker()->consumption());
             _wg_running_queries[name]->set_value(wg->num_running_queries());
@@ -319,6 +340,7 @@ void WorkGroupManager::update_metrics_unlocked() {
             _wg_cpu_limit_metrics[name]->set_value(0);
             _wg_cpu_metrics[name]->set_value(0);
             _wg_scan_metrics[name]->set_value(0);
+            _wg_connector_scan_metrics[name]->set_value(0);
             _wg_mem_limit_metrics[name]->set_value(0);
             _wg_mem_metrics[name]->set_value(0);
             _wg_running_queries[name]->set_value(0);
