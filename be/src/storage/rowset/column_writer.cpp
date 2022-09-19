@@ -983,17 +983,29 @@ Status StringColumnWriter::finish() {
 
 Status StringColumnWriter::check_string_lengths(const vectorized::Column& column) {
     size_t limit = get_field()->length();
-    const Slice* slices = (const Slice*)column.raw_data();
+    auto row_count = column.size();
     const uint8_t* null =
             is_nullable() ? down_cast<const vectorized::NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
-    for (size_t i = 0; i < column.size(); i++) {
+    const vectorized::BinaryColumn* bin_col;
+
+    if (is_nullable()) {
+        const auto& data_col = down_cast<const vectorized::NullableColumn*>(&column)->data_column();
+        bin_col = down_cast<const vectorized::BinaryColumn*>(data_col.get());
+    } else {
+        bin_col = down_cast<const vectorized::BinaryColumn*>(&column);
+    }
+    for (size_t i = 0; i < row_count; i++) {
         // skip string length check if it is null
         if (null != nullptr && null[i] == starrocks::vectorized::DATUM_NULL) {
             continue;
         }
-        if (slices[i].get_size() > limit) {
-            return Status::InvalidArgument(fmt::format("string length({}) > limit({}), string: {}",
-                                                       slices[i].get_size(), limit, slices[i].get_data()));
+        // here we shouldn't use raw_data() api of column to get a vector of slices in advance,
+        // because raw_data() will call _build_slices() api, which will create a vector of slices,
+        // if there are many StringColumnWriter, each of them will have a vector of slices, which will consume many memory.
+        Slice slice = bin_col->get_slice(i);
+        if (slice.get_size() > limit) {
+            return Status::InvalidArgument(fmt::format("string length({}) > limit({}), string: {}", slice.get_size(),
+                                                       limit, slice.get_data()));
         }
     }
     return Status::OK();

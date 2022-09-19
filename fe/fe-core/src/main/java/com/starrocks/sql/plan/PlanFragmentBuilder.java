@@ -885,7 +885,8 @@ public class PlanFragmentBuilder {
                 if (predicate instanceof BinaryPredicateOperator) {
                     if (((BinaryPredicateOperator) predicate).getBinaryType() ==
                             BinaryPredicateOperator.BinaryType.EQ) {
-                        if (predicate.getChildren().get(0) instanceof ColumnRefOperator) {
+                        if (predicate.getChildren().get(0) instanceof ColumnRefOperator &&
+                                predicate.getChildren().get(1) instanceof ConstantOperator) {
                             ColumnRefOperator columnRefOperator = (ColumnRefOperator) predicate.getChildren().get(0);
                             ConstantOperator constantOperator = (ConstantOperator) predicate.getChildren().get(1);
                             switch (columnRefOperator.getName()) {

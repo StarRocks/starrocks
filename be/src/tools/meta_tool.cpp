@@ -99,6 +99,8 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool --operation=delete_rowset_meta "
           "--root_path=/path/to/storage/path --tablet_uid=tablet_uid "
           "--rowset_id=rowset_id\n";
+    ss << "./meta_tool --operation=delete_persistent_index_meta "
+          "--root_path=/path/to/storage/path --tablet_id=tabletid\n";
     ss << "./meta_tool --operation=compact_meta --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=get_meta_stats --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=ls --root_path=/path/to/storage/path\n";
@@ -189,6 +191,18 @@ void delete_rowset_meta(DataDir* data_dir) {
         return;
     }
     std::cout << "delete rowset meta successfully" << std::endl;
+}
+
+void delete_persistent_index_meta(DataDir* data_dir) {
+    std::string key = "tpi_";
+    starrocks::put_fixed64_le(&key, BigEndian::FromHost64(FLAGS_tablet_id));
+    Status st = data_dir->get_meta()->remove(starrocks::META_COLUMN_FAMILY_INDEX, key);
+    if (st.ok()) {
+        std::cout << "delete tablet persistent index meta success, tablet_id: " << FLAGS_tablet_id << std::endl;
+    } else {
+        std::cout << "delete tablet persistent index meta failed, tablet_id: " << FLAGS_tablet_id
+                  << ", status: " << st.to_string() << std::endl;
+    }
 }
 
 void compact_meta(DataDir* data_dir) {
@@ -545,9 +559,15 @@ int meta_tool_main(int argc, char** argv) {
         show_segment_footer(FLAGS_file);
     } else {
         // operations that need root path should be written here
-        std::set<std::string> valid_operations = {
-                "get_meta",     "load_meta",      "delete_meta", "delete_rowset_meta",
-                "compact_meta", "get_meta_stats", "ls",          "check_table_meta_consistency"};
+        std::set<std::string> valid_operations = {"get_meta",
+                                                  "load_meta",
+                                                  "delete_meta",
+                                                  "delete_rowset_meta",
+                                                  "delete_persistent_index_meta",
+                                                  "compact_meta",
+                                                  "get_meta_stats",
+                                                  "ls",
+                                                  "check_table_meta_consistency"};
         if (valid_operations.find(FLAGS_operation) == valid_operations.end()) {
             std::cout << "invalid operation:" << FLAGS_operation << std::endl;
             return -1;
@@ -574,6 +594,8 @@ int meta_tool_main(int argc, char** argv) {
             delete_meta(data_dir.get());
         } else if (FLAGS_operation == "delete_rowset_meta") {
             delete_rowset_meta(data_dir.get());
+        } else if (FLAGS_operation == "delete_persistent_index_meta") {
+            delete_persistent_index_meta(data_dir.get());
         } else if (FLAGS_operation == "compact_meta") {
             compact_meta(data_dir.get());
         } else if (FLAGS_operation == "get_meta_stats") {

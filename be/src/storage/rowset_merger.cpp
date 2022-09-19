@@ -34,11 +34,10 @@ struct MergeEntry {
     const T* pk_cur = nullptr;
     const T* pk_last = nullptr;
     const T* pk_start = nullptr;
-    uint32_t cur_segment_idx = 0;
     uint32_t rowset_seg_id = 0;
     ColumnPtr chunk_pk_column;
     ChunkPtr chunk;
-    vector<ChunkIteratorPtr> segment_itrs;
+    ChunkIteratorPtr segment_itr;
     std::unique_ptr<RowsetReleaseGuard> rowset_release_guard;
     // set |encode_schema| if require encode chunk pk columns
     const vectorized::Schema* encode_schema = nullptr;
@@ -49,8 +48,7 @@ struct MergeEntry {
 
     string debug_string() {
         string ret;
-        StringAppendF(&ret, "%u: %ld/%ld %u/%zu : ", rowset_seg_id, offset(pk_cur), offset(pk_last) + 1,
-                      cur_segment_idx, segment_itrs.size());
+        StringAppendF(&ret, "%u: %ld/%ld : ", rowset_seg_id, offset(pk_cur), offset(pk_last) + 1);
         for (const T* cur = pk_cur; cur <= pk_last; cur++) {
             if constexpr (std::is_arithmetic_v<T>) {
                 StringAppendF(&ret, " %ld", (long int)*cur);
@@ -69,32 +67,20 @@ struct MergeEntry {
     void close() {
         chunk_pk_column.reset();
         chunk.reset();
-        for (auto& itr : segment_itrs) {
-            if (itr) {
-                itr->close();
-                itr.reset();
-            }
+        if (segment_itr != nullptr) {
+            segment_itr->close();
+            segment_itr.reset();
         }
-        STLClearObject(&segment_itrs);
         rowset_release_guard.reset();
     }
 
-    Status init() {
-        while (cur_segment_idx < segment_itrs.size() && !segment_itrs[cur_segment_idx]) {
-            cur_segment_idx++;
-        }
-        return next();
-    }
+    Status init() { return next(); }
 
     Status next() {
-        if (cur_segment_idx >= segment_itrs.size()) {
-            return Status::EndOfFile("End of merge entry iterator");
-        }
         DCHECK(pk_cur == nullptr || pk_cur > pk_last);
         chunk->reset();
         while (true) {
-            auto& itr = segment_itrs[cur_segment_idx];
-            auto st = itr->get_next(chunk.get());
+            auto st = segment_itr->get_next(chunk.get());
             if (st.ok()) {
                 // 1. setup chunk_pk_column
                 if (encode_schema != nullptr) {
@@ -113,19 +99,7 @@ struct MergeEntry {
                 pk_last = pk_start + chunk_pk_column->size() - 1;
                 return Status::OK();
             } else if (st.is_end_of_file()) {
-                itr->close();
-                itr.reset();
-                while (true) {
-                    cur_segment_idx++;
-                    rowset_seg_id++;
-                    if (cur_segment_idx == segment_itrs.size()) {
-                        return Status::EndOfFile("End of merge entry iterator");
-                    }
-                    if (segment_itrs[cur_segment_idx]) {
-                        break;
-                    }
-                }
-                continue;
+                return Status::EndOfFile("End of merge entry iterator");
             } else {
                 // error
                 return st;
@@ -293,8 +267,12 @@ private:
                 return res.status();
             }
             entry.rowset_seg_id = rowset->rowset_meta()->get_rowset_seg_id();
-            entry.segment_itrs.swap(res.value());
             entry.chunk = ChunkHelper::new_chunk(schema, _chunk_size);
+            if (res.value().empty()) {
+                entry.segment_itr = new_empty_iterator(schema, _chunk_size);
+            } else {
+                entry.segment_itr = new_heap_merge_iterator(res.value());
+            }
             if (pk_column) {
                 entry.encode_schema = &schema;
                 entry.chunk_pk_column = pk_column->clone_shared();
