@@ -49,8 +49,6 @@ public class MetastoreEventFactory implements EventFactory {
                 return AlterPartitionEvent.getEvents(event, metaCache);
             case DROP_PARTITION:
                 return DropPartitionEvent.getEvents(event, metaCache, table.getPartitionColumns());
-            case INSERT:
-                return InsertEvent.getEvents(event, metaCache);
             default:
                 // ignore all the unknown events by creating a IgnoredEvent
                 return Lists.newArrayList(new IgnoredEvent(event, metaCache));

@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import avro.shaded.com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableList;
 import com.clearspring.analytics.util.Lists;
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
