@@ -196,8 +196,7 @@ bool SeekableFileInputStream::tryFillBuffer(DataBuffer<char>* prefetchBuffer, ui
     if (!(start >= bufferStartOffset && start + length < bufferEndOffset)) {
         return false;
     }
-    buffer.reset(new DataBuffer<char>(pool, length));
-    memcpy(buffer->data(), prefetchBuffer->data() + start - bufferStartOffset, length);
+    buffer.reset(new DataBuffer<char>(pool, prefetchBuffer->data() + start - bufferStartOffset, length));
     pushBack = length;
     return true;
 }

@@ -131,12 +131,16 @@ public:
                                         uint64_t bufferStartOffset, uint64_t bufferEndOffset) {
         last_max_read_offset = std::max(last_max_read_offset, curStreamStartOffset);
         auto iter = index.find(curStreamStartOffset);
+        if (iter == index.end()) {
+            return;
+        }
+        iter++;
         while (iter != index.end()) {
-            iter++;
             if (!(iter->second->tryFillBuffer(buffer, bufferStartOffset, bufferEndOffset))) {
                 break;
             }
             last_max_read_offset = std::max(last_max_read_offset, iter->first);
+            iter++;
         }
     }
 

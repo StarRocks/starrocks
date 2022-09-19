@@ -47,6 +47,7 @@ private:
     uint64_t currentSize;
     // maximal capacity (actual allocated memory)
     uint64_t currentCapacity;
+    bool manageByPool;
 
     // not implemented
     DataBuffer(DataBuffer& buffer) = delete;
@@ -56,6 +57,11 @@ public:
     DataBuffer(MemoryPool& pool, uint64_t _size = 0);
 
     DataBuffer(DataBuffer<T>&& buffer) ORC_NOEXCEPT;
+
+    // optimize for creating a data buffer in the middle of another data buffer,
+    // should perform reserve or resize on such data buffer,
+    // also ~DataBuffer will not release the memory as its memory is managed by another data buffer
+    DataBuffer(MemoryPool& pool, T* _buf, uint64_t _size) ORC_NOEXCEPT;
 
     virtual ~DataBuffer();
 

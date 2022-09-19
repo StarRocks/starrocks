@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "common/logging.h"
 #include "orc/Int128.hh"
 
 namespace orc {
@@ -55,7 +56,7 @@ MemoryPoolImpl::~MemoryPoolImpl() {
 
 template <class T>
 DataBuffer<T>::DataBuffer(MemoryPool& pool, uint64_t newSize)
-        : memoryPool(pool), buf(nullptr), currentSize(0), currentCapacity(0) {
+        : memoryPool(pool), buf(nullptr), currentSize(0), currentCapacity(0), manageByPool(true) {
     resize(newSize);
 }
 
@@ -64,24 +65,32 @@ DataBuffer<T>::DataBuffer(DataBuffer<T>&& buffer) noexcept
         : memoryPool(buffer.memoryPool),
           buf(buffer.buf),
           currentSize(buffer.currentSize),
-          currentCapacity(buffer.currentCapacity) {
+          currentCapacity(buffer.currentCapacity),
+          manageByPool(true) {
     buffer.buf = nullptr;
     buffer.currentSize = 0;
     buffer.currentCapacity = 0;
 }
 
 template <class T>
+DataBuffer<T>::DataBuffer(MemoryPool& _pool, T* _buf, uint64_t _size) noexcept
+        : memoryPool(_pool), buf(_buf), currentSize(_size), currentCapacity(_size), manageByPool(false) {}
+
+template <class T>
 DataBuffer<T>::~DataBuffer() {
-    for (uint64_t i = currentSize; i > 0; --i) {
-        (buf + i - 1)->~T();
-    }
-    if (buf) {
-        memoryPool.free(reinterpret_cast<char*>(buf));
+    if (manageByPool) {
+        for (uint64_t i = currentSize; i > 0; --i) {
+            (buf + i - 1)->~T();
+        }
+        if (buf) {
+            memoryPool.free(reinterpret_cast<char*>(buf));
+        }
     }
 }
 
 template <class T>
 void DataBuffer<T>::resize(uint64_t newSize) {
+    DCHECK(manageByPool);
     reserve(newSize);
     if (currentSize > newSize) {
         for (uint64_t i = currentSize; i > newSize; --i) {
@@ -97,6 +106,7 @@ void DataBuffer<T>::resize(uint64_t newSize) {
 
 template <class T>
 void DataBuffer<T>::reserve(uint64_t newCapacity) {
+    DCHECK(manageByPool);
     if (newCapacity > currentCapacity || !buf) {
         if (buf) {
             T* buf_old = buf;
@@ -174,13 +184,14 @@ void DataBuffer<T>::filter(const uint8_t* f_data, size_t f_size, size_t true_siz
 
 template <>
 DataBuffer<char>::~DataBuffer() {
-    if (buf) {
+    if (manageByPool && buf) {
         memoryPool.free(reinterpret_cast<char*>(buf));
     }
 }
 
 template <>
 void DataBuffer<char>::resize(uint64_t newSize) {
+    DCHECK(manageByPool);
     reserve(newSize);
     if (newSize > currentSize) {
         memset(buf + currentSize, 0, newSize - currentSize);
@@ -192,13 +203,14 @@ void DataBuffer<char>::resize(uint64_t newSize) {
 
 template <>
 DataBuffer<char*>::~DataBuffer() {
-    if (buf) {
+    if (manageByPool && buf) {
         memoryPool.free(reinterpret_cast<char*>(buf));
     }
 }
 
 template <>
 void DataBuffer<char*>::resize(uint64_t newSize) {
+    DCHECK(manageByPool);
     reserve(newSize);
     if (newSize > currentSize) {
         memset(buf + currentSize, 0, (newSize - currentSize) * sizeof(char*));
@@ -210,13 +222,14 @@ void DataBuffer<char*>::resize(uint64_t newSize) {
 
 template <>
 DataBuffer<double>::~DataBuffer() {
-    if (buf) {
+    if (manageByPool && buf) {
         memoryPool.free(reinterpret_cast<char*>(buf));
     }
 }
 
 template <>
 void DataBuffer<double>::resize(uint64_t newSize) {
+    DCHECK(manageByPool);
     reserve(newSize);
     if (newSize > currentSize) {
         memset(buf + currentSize, 0, (newSize - currentSize) * sizeof(double));
@@ -228,13 +241,14 @@ void DataBuffer<double>::resize(uint64_t newSize) {
 
 template <>
 DataBuffer<int64_t>::~DataBuffer() {
-    if (buf) {
+    if (manageByPool && buf) {
         memoryPool.free(reinterpret_cast<char*>(buf));
     }
 }
 
 template <>
 void DataBuffer<int64_t>::resize(uint64_t newSize) {
+    DCHECK(manageByPool);
     reserve(newSize);
     if (newSize > currentSize) {
         memset(buf + currentSize, 0, (newSize - currentSize) * sizeof(int64_t));
@@ -246,13 +260,14 @@ void DataBuffer<int64_t>::resize(uint64_t newSize) {
 
 template <>
 DataBuffer<uint64_t>::~DataBuffer() {
-    if (buf) {
+    if (manageByPool && buf) {
         memoryPool.free(reinterpret_cast<char*>(buf));
     }
 }
 
 template <>
 void DataBuffer<uint64_t>::resize(uint64_t newSize) {
+    DCHECK(manageByPool);
     reserve(newSize);
     if (newSize > currentSize) {
         memset(buf + currentSize, 0, (newSize - currentSize) * sizeof(uint64_t));
@@ -264,13 +279,14 @@ void DataBuffer<uint64_t>::resize(uint64_t newSize) {
 
 template <>
 DataBuffer<unsigned char>::~DataBuffer() {
-    if (buf) {
+    if (manageByPool && buf) {
         memoryPool.free(reinterpret_cast<char*>(buf));
     }
 }
 
 template <>
 void DataBuffer<unsigned char>::resize(uint64_t newSize) {
+    DCHECK(manageByPool);
     reserve(newSize);
     if (newSize > currentSize) {
         memset(buf + currentSize, 0, newSize - currentSize);
