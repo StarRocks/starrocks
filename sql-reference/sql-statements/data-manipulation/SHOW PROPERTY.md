@@ -1,40 +1,59 @@
+
 # SHOW PROPERTY
 
 ## 功能
 
-该语句用于查看用户的属性。
+查看单个用户的最大连接数。只有拥有`grant_priv`权限的用户才能查看。
 
-语法：
+## 语法
 
-```sql
-SHOW PROPERTY [FOR user] [LIKE key];
+```SQL
+SHOW PROPERTY [FOR 'user_name'] [LIKE 'max_user_connections'];
 ```
+
+## 参数说明
+
+| **参数**              | **必选** | **说明**                                    |
+| -------------------- | -------- | ----------------------------------------- |
+| user_name            | 否       | 用户名称。如不指定，默认查看当前用户的最大连接数。 |
+| max_user_connections | 否       | 用户的最大连接数。                           |
 
 ## 示例
 
-1. 查看 jack 用户的属性。
+示例一：查看当前用户的最大连接数。
 
-    ```sql
-    SHOW PROPERTY FOR 'jack';
-    +------------------------+-------+
-    | Key                    | Value |
-    +------------------------+-------+
-    | default_load_cluster   |       |
-    | max_user_connections   | 100   |
-    | quota.high             | 800   |
-    | quota.low              | 100   |
-    | quota.normal           | 400   |
-    | resource.cpu_share     | 1000  |
-    | resource.hdd_read_iops | 80    |
-    | resource.hdd_read_mbps | 30    |
-    | resource.io_share      | 1000  |
-    | resource.ssd_read_iops | 1000  |
-    | resource.ssd_read_mbps | 30    |
-    +------------------------+-------+
-    ```
+```Plain
+SHOW PROPERTY;
 
-2. 查看 jack 用户导入 cluster 相关属性。
++----------------------+-------+
+| Key                  | Value |
++----------------------+-------+
+| max_user_connections | 10000 |
++----------------------+-------+
+```
 
-    ```sql
-    SHOW PROPERTY FOR 'jack' LIKE '%load_cluster%';
-    ```
+示例二：查看用户 `jack` 的最大连接数。
+
+```SQL
+SHOW PROPERTY FOR 'jack';
+```
+
+或
+
+```SQL
+SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
+```
+
+返回信息如下：
+
+```Plain
++----------------------+-------+
+| Key                  | Value |
++----------------------+-------+
+| max_user_connections | 100   |
++----------------------+-------+
+```
+
+## 相关操作
+
+如要设置用户的最大连接数，请参见 [SET PROPERTY](../account-management/SET%20PROPERTY.md)。
