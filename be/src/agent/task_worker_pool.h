@@ -103,20 +103,6 @@ protected:
     std::vector<std::thread> _worker_threads;
 }; // class TaskWorkerPool
 
-class CreateTabletTaskWorkerPool : public TaskWorkerPool<CreateTabletAgentTaskRequest> {
-public:
-    CreateTabletTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
-        _callback_function = _worker_thread_callback;
-    }
-
-private:
-    static void* _worker_thread_callback(void* arg_this);
-
-    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
-        return std::make_shared<CreateTabletAgentTaskRequest>(task, task.create_tablet_req, recv_time);
-    }
-};
-
 class PushTaskWorkerPool : public TaskWorkerPool<PushReqAgentTaskRequest> {
 public:
     PushTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
@@ -145,20 +131,6 @@ private:
     }
 };
 
-class ClearTransactionTaskWorkerPool : public TaskWorkerPool<ClearTransactionAgentTaskRequest> {
-public:
-    ClearTransactionTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
-        _callback_function = _worker_thread_callback;
-    }
-
-private:
-    static void* _worker_thread_callback(void* arg_this);
-
-    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
-        return std::make_shared<ClearTransactionAgentTaskRequest>(task, task.clear_transaction_task_req, recv_time);
-    }
-};
-
 class DeleteTaskWorkerPool : public TaskWorkerPool<PushReqAgentTaskRequest> {
 public:
     DeleteTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
@@ -170,65 +142,6 @@ private:
 
     AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
         return std::make_shared<PushReqAgentTaskRequest>(task, task.push_req, recv_time);
-    }
-};
-
-class AlterTableTaskWorkerPool : public TaskWorkerPool<AlterTabletAgentTaskRequest> {
-public:
-    AlterTableTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
-        _callback_function = _worker_thread_callback;
-    }
-
-private:
-    static void* _worker_thread_callback(void* arg_this);
-
-    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
-        return std::make_shared<AlterTabletAgentTaskRequest>(task, task.alter_tablet_req_v2, recv_time);
-    }
-
-    static void _alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signature, TTaskType::type task_type,
-                              TFinishTaskRequest* finish_task_request);
-};
-
-class CloneTaskWorkerPool : public TaskWorkerPool<CloneAgentTaskRequest> {
-public:
-    CloneTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
-        _callback_function = _worker_thread_callback;
-    }
-
-private:
-    static void* _worker_thread_callback(void* arg_this);
-
-    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
-        return std::make_shared<CloneAgentTaskRequest>(task, task.clone_req, recv_time);
-    }
-};
-
-class StorageMediumMigrateTaskWorkerPool : public TaskWorkerPool<StorageMediumMigrateTaskRequest> {
-public:
-    StorageMediumMigrateTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
-        _callback_function = _worker_thread_callback;
-    }
-
-private:
-    static void* _worker_thread_callback(void* arg_this);
-
-    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
-        return std::make_shared<StorageMediumMigrateTaskRequest>(task, task.storage_medium_migrate_req, recv_time);
-    }
-};
-
-class CheckConsistencyTaskWorkerPool : public TaskWorkerPool<CheckConsistencyTaskRequest> {
-public:
-    CheckConsistencyTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
-        _callback_function = _worker_thread_callback;
-    }
-
-private:
-    static void* _worker_thread_callback(void* arg_this);
-
-    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
-        return std::make_shared<CheckConsistencyTaskRequest>(task, task.check_consistency_req, recv_time);
     }
 };
 
@@ -285,94 +198,6 @@ private:
 
     AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
         return std::make_shared<AgentTaskRequestWithoutReqBody>(task, recv_time);
-    }
-};
-
-class UploadTaskWorkerPool : public TaskWorkerPool<UploadAgentTaskRequest> {
-public:
-    UploadTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
-        _callback_function = _worker_thread_callback;
-    }
-
-private:
-    static void* _worker_thread_callback(void* arg_this);
-
-    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
-        return std::make_shared<UploadAgentTaskRequest>(task, task.upload_req, recv_time);
-    }
-};
-
-class DownloadTaskWorkerPool : public TaskWorkerPool<DownloadAgentTaskRequest> {
-public:
-    DownloadTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
-        _callback_function = _worker_thread_callback;
-    }
-
-private:
-    static void* _worker_thread_callback(void* arg_this);
-
-    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
-        return std::make_shared<DownloadAgentTaskRequest>(task, task.download_req, recv_time);
-    }
-};
-
-class MakeSnapshotTaskWorkerPool : public TaskWorkerPool<SnapshotAgentTaskRequest> {
-public:
-    MakeSnapshotTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
-        _callback_function = _worker_thread_callback;
-    }
-
-private:
-    static void* _worker_thread_callback(void* arg_this);
-
-    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
-        return std::make_shared<SnapshotAgentTaskRequest>(task, task.snapshot_req, recv_time);
-    }
-};
-
-class ReleaseSnapshotTaskWorkerPool : public TaskWorkerPool<ReleaseSnapshotAgentTaskRequest> {
-public:
-    ReleaseSnapshotTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
-        _callback_function = _worker_thread_callback;
-    }
-
-private:
-    static void* _worker_thread_callback(void* arg_this);
-
-    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
-        return std::make_shared<ReleaseSnapshotAgentTaskRequest>(task, task.release_snapshot_req, recv_time);
-    }
-};
-
-class MoveTaskWorkerPool : public TaskWorkerPool<MoveDirAgentTaskRequest> {
-public:
-    MoveTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
-        _callback_function = _worker_thread_callback;
-    }
-
-private:
-    static void* _worker_thread_callback(void* arg_this);
-
-    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
-        return std::make_shared<MoveDirAgentTaskRequest>(task, task.move_dir_req, recv_time);
-    }
-
-    AgentStatus _move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::string& src, int64_t job_id,
-                          bool overwrite, std::vector<std::string>* error_msgs);
-};
-
-class UpdateTabletMetaInfoTaskWorkerPool : public TaskWorkerPool<UpdateTabletMetaInfoAgentTaskRequest> {
-public:
-    UpdateTabletMetaInfoTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
-        _callback_function = _worker_thread_callback;
-    }
-
-private:
-    static void* _worker_thread_callback(void* arg_this);
-
-    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
-        return std::make_shared<UpdateTabletMetaInfoAgentTaskRequest>(task, task.update_tablet_meta_info_req,
-                                                                      recv_time);
     }
 };
 
