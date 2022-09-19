@@ -487,8 +487,11 @@ struct TShowResultSet {
 struct TMasterOpResult {
     1: required i64 maxJournalId;
     2: required binary packet;
+    // for show statement
     3: optional TShowResultSet resultSet;
     4: optional string state;
+    // for query statement
+    5: optional list<binary> channelBufferList;
 }
 
 struct TIsMethodSupportedRequest {
