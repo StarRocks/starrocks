@@ -112,6 +112,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregate
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
+import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
@@ -263,11 +264,18 @@ public class RuleSet {
                 new PushDownApplyLeftRule()
         ));
 
-        REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE_STAGE_1, ImmutableList.of(
                 new PushDownApplyProjectRule(),
                 new PushDownApplyFilterRule(),
                 new PushDownApplyAggFilterRule(),
-                new PushDownApplyAggProjectFilterRule(),
+                new PushDownApplyAggProjectFilterRule()
+        ));
+
+        REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE_STAGE_2, ImmutableList.of(
+                new ScalarApply2AnalyticRule()
+        ));
+
+        REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE_STAGE_3, ImmutableList.of(
                 new QuantifiedApply2JoinRule(),
                 new ExistentialApply2JoinRule(),
                 new ScalarApply2JoinRule(),

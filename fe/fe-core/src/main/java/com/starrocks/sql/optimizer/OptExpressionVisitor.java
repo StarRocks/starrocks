@@ -82,6 +82,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitLogicalTreeAnchor(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     public R visitLogicalCTEAnchor(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
