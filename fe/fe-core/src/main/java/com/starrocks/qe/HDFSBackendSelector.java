@@ -57,6 +57,7 @@ public class HDFSBackendSelector implements BackendSelector {
     private final ScanNode scanNode;
     private final List<TScanRangeLocations> locations;
     private final Coordinator.FragmentScanRangeAssignment assignment;
+    private final Set<Long> usedBackendIDs;
     private final Map<TNetworkAddress, Long> addressToBackendId;
     private final ImmutableCollection<ComputeNode> computeNodes;
     private boolean forceScheduleLocal;
@@ -114,6 +115,7 @@ public class HDFSBackendSelector implements BackendSelector {
     public HDFSBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
                                Coordinator.FragmentScanRangeAssignment assignment,
                                Map<TNetworkAddress, Long> addressToBackendId,
+                               Set<Long> usedBackendIDs,
                                ImmutableCollection<ComputeNode> computeNodes,
                                boolean forceScheduleLocal) {
         this.scanNode = scanNode;
@@ -122,6 +124,7 @@ public class HDFSBackendSelector implements BackendSelector {
         this.computeNodes = computeNodes;
         this.forceScheduleLocal = forceScheduleLocal;
         this.addressToBackendId = addressToBackendId;
+        this.usedBackendIDs = usedBackendIDs;
         this.hdfsScanRangeHasher = new HdfsScanRangeHasher();
     }
 
@@ -306,6 +309,7 @@ public class HDFSBackendSelector implements BackendSelector {
 
     private void recordScanRangeAssignment(ComputeNode node, TScanRangeLocations scanRangeLocations) {
         TNetworkAddress address = new TNetworkAddress(node.getHost(), node.getBePort());
+        usedBackendIDs.add(node.getId());
         addressToBackendId.put(address, node.getId());
 
         // update statistic
