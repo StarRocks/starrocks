@@ -34,7 +34,6 @@ public class ShowTransactionStmt extends ShowStmt {
     private String dbName;
     private Expr whereClause;
     private long txnId;
-    private String label;
 
     public ShowTransactionStmt(String dbName, Expr whereClause) {
         this.dbName = dbName;
@@ -52,21 +51,13 @@ public class ShowTransactionStmt extends ShowStmt {
     public long getTxnId() {
         return txnId;
     }
-
-    public String getLabel() {
-        return label;
-    }
-
+    
     public void setDbName(String dbName) {
         this.dbName = dbName;
     }
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
-    }
-
-    public void setLabel(String label) {
-        this.label = label;
     }
 
     @Override

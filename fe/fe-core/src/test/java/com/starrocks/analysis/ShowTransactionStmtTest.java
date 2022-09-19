@@ -22,11 +22,7 @@ public class ShowTransactionStmtTest {
     @Test
     public void testNormal() throws Exception {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
-        ShowTransactionStmt stmt = (ShowTransactionStmt) analyzeSuccess("SHOW TRANSACTION FROM test WHERE `label` = 'abc'");
-        Assert.assertEquals("abc", stmt.getLabel());
-        Assert.assertEquals("test", stmt.getDbName());
-
-        stmt = (ShowTransactionStmt) analyzeSuccess("SHOW TRANSACTION FROM test WHERE `id` = 123");
+        ShowTransactionStmt stmt = (ShowTransactionStmt) analyzeSuccess("SHOW TRANSACTION FROM test WHERE `id` = 123");
         Assert.assertEquals(123, stmt.getTxnId());
 
         ShowResultSetMetaData metaData = stmt.getMetaData();
@@ -61,14 +57,11 @@ public class ShowTransactionStmtTest {
     @Test
     public void testInvalidWhere() {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
-        String failMessage = "Where clause should looks like: LABEL = \"label_name\", or ID = $transaction_id";
-        analyzeFail("SHOW TRANSACTION", "should supply condition like: LABEL = \"label_name\", or ID = $transaction_id");
+        String failMessage = "Where clause should looks like: ID = $transaction_id";
+        analyzeFail("SHOW TRANSACTION", "should supply condition like: ID = $transaction_id");
         analyzeFail("SHOW TRANSACTION WHERE STATE = 'RUNNING'", failMessage);
         analyzeFail("SHOW TRANSACTION WHERE STATE LIKE 'RUNNING'", failMessage);
         analyzeFail("SHOW TRANSACTION WHERE STATE != 'LOADING'", failMessage);
-        analyzeFail("SHOW TRANSACTION WHERE LABEL = 123", failMessage);
-        analyzeFail("SHOW TRANSACTION WHERE LABEL LIKE 'abc' AND true", failMessage);
-        analyzeFail("SHOW TRANSACTION WHERE LABEL = ''", failMessage);
         analyzeFail("SHOW TRANSACTION WHERE ID = ''", failMessage);
         analyzeFail("SHOW TRANSACTION WHERE ID = '123'", failMessage);
     }

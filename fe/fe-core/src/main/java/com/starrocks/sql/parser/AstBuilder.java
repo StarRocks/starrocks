@@ -86,8 +86,6 @@ import com.starrocks.analysis.ShowSnapshotStmt;
 import com.starrocks.analysis.ShowSqlBlackListStmt;
 import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.ShowWhiteListStmt;
-import com.starrocks.analysis.SingleItemListPartitionDesc;
-import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;

@@ -7,7 +7,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -23,13 +22,11 @@ public class ShowTransactionStmtAnalyzer {
     
     static class ShowTransactionStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         
-        private String label;
         private long txnId;
         
         private static final Logger LOG = LogManager.getLogger(ShowTransactionStmtAnalyzerVisitor.class);
         
         public ShowTransactionStmtAnalyzerVisitor() {
-            this.label = null;
             this.txnId = 0;
         }
         
@@ -58,19 +55,16 @@ public class ShowTransactionStmtAnalyzer {
         private void analyzeWhereClause(ShowTransactionStmt statement, ConnectContext context) {
             Expr whereClause = statement.getWhereClause();
             analyzeSubPredicate(whereClause);
-            statement.setLabel(label);
             statement.setTxnId(txnId);
         }
         
         private void analyzeSubPredicate(Expr subExpr) {
             if (subExpr == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "should supply condition like: LABEL = \"label_name\","
-                                + " or ID = $transaction_id");
+                        "should supply condition like: ID = $transaction_id");
             }
 
             boolean valid = false;
-            boolean hasLabel = false;
             boolean hasTxnId = false;
             do {
                 if (subExpr == null) {
@@ -95,28 +89,11 @@ public class ShowTransactionStmtAnalyzer {
                     break;
                 }
                 String leftKey = ((SlotRef) subExpr.getChild(0)).getColumnName();
-                if (leftKey.equalsIgnoreCase("label")) {
-                    hasLabel = true;
-                } else if (leftKey.equalsIgnoreCase("id")) {
+                if (leftKey.equalsIgnoreCase("id")) {
                     hasTxnId = true;
                 } else {
                     valid = false;
                     break;
-                }
-
-                if (hasLabel) {
-                    if (!(subExpr.getChild(1) instanceof StringLiteral)) {
-                        valid = false;
-                        break;
-                    }
-
-                    String value = ((StringLiteral) subExpr.getChild(1)).getStringValue();
-                    if (Strings.isNullOrEmpty(value)) {
-                        valid = false;
-                        break;
-                    }
-
-                    label = value;
                 }
 
                 if (hasTxnId) {
@@ -133,8 +110,7 @@ public class ShowTransactionStmtAnalyzer {
             
             if (!valid) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "Where clause should looks like: LABEL = \"label_name\","
-                                + " or ID = $transaction_id");
+                        "Where clause should looks like: ID = $transaction_id");
             }
         }
     }
