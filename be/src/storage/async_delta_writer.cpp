@@ -23,13 +23,13 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
     for (; iter; ++iter) {
         Status st;
         if (iter->cancel) {
-            std::cout<<"ASYSNC cancel: "<<iter->st.to_string()<<std::endl;
+            std::cout<<"ASYSNC cancel: "<<iter->st.to_string()<<":"<<writer->tablet()->tablet_id()<<std::endl;
             st = Status::Cancelled("cancelled");
             writer->cancel(st);
             continue;
         }
         if (iter->abort) {
-            std::cout<<"ASYSNC abort: "<<iter->st.to_string()<<std::endl;
+            std::cout<<"ASYSNC abort: "<<iter->st.to_string()<<":"<<writer->tablet()->tablet_id()<<std::endl;
             writer->abort(iter->abort_with_log);
             continue;
         }
@@ -129,6 +129,7 @@ void AsyncDeltaWriter::commit(AsyncDeltaWriterCallback* cb) {
 }
 
 void AsyncDeltaWriter::cancel(const Status& st) {
+    /*
     Task task;
     task.cancel = true;
     task.st = st;
@@ -137,6 +138,8 @@ void AsyncDeltaWriter::cancel(const Status& st) {
     options.high_priority = true;
     int r = bthread::execution_queue_execute(_queue_id, task, &options);
     LOG_IF(WARNING, r != 0) << "Fail to execution_queue_execute: " << r;
+    */
+    _writer->cancel(st);
 }
 
 void AsyncDeltaWriter::abort(const Status& st, bool with_log) {
