@@ -10,8 +10,6 @@
 CREATE DATABASE [IF NOT EXISTS] db_name;
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 ## 示例
 
 1. 新建数据库 db_test。

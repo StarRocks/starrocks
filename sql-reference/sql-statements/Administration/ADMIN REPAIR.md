@@ -10,8 +10,6 @@
 ADMIN REPAIR TABLE table_name[ PARTITION (p1,...)];
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 说明：
 
 1. 该语句仅表示让系统尝试以高优先级修复指定表或分区的分片副本，并不保证能够修复成功。用户可以通过 `ADMIN SHOW REPLICA STATUS;` 命令查看修复情况。

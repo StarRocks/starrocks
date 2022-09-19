@@ -20,8 +20,6 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [BROKER PROPERTIES ("key"="value", ...)]
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 ## 参数说明
 
 ### **column_definition**

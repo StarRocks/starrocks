@@ -10,8 +10,6 @@
 CANCEL DECOMMISSION BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...];
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 ## 示例
 
 1. 取消两个节点的下线操作:

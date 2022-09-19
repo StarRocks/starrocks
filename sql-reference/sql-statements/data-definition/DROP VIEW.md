@@ -10,8 +10,6 @@
 DROP VIEW [IF EXISTS] [db_name.]view_name;
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 ## 示例
 
 1. 如果存在，删除 example_db 上的逻辑视图 example_view。

@@ -11,8 +11,6 @@ SHOW TABLE STATUS
 [FROM db] [LIKE "pattern"]
 ```
 
-注：方括号 [] 中内容可省略不写。
-
 说明：
 
 ```PLAIN TEXT
