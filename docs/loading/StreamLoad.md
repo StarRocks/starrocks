@@ -147,7 +147,7 @@ curl -v --location-trusted -u root: -H "strict_mode: true" \
 
 `example2.json` consists of two keys, `name` and `code`, which are mapped onto the `id` and `city` columns of `table2`, as shown in the following figure.
 
-![JSON - Column Mapping](../assets/4.2-2en.png)
+![JSON - Column Mapping](../assets/4.2-2.png)
 
 The mappings shown in the preceding figure are described as follows:
 
@@ -159,7 +159,7 @@ The mappings shown in the preceding figure are described as follows:
 
 > Note: In the preceding example, the value of `code` in `example2.json` is multiplied by 100 before it is loaded into the `id` column of `table2`.
 
-For detailed mappings between `jsonpaths`, `columns`, and the columns of the StarRocks table, see the "Usage notes" section in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+For detailed mappings between `jsonpaths`, `columns`, and the columns of the StarRocks table, see the "Column mappings" section in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
 ##### Query data
 
