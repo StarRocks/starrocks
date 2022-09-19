@@ -283,7 +283,7 @@ private:
     void _evict_one_entry(LRUHandle* e);
 
     // Initialized before use.
-    size_t _capacity;
+    size_t _capacity{0};
 
     // _mutex protects the following state.
     std::mutex _mutex;

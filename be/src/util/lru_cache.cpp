@@ -129,7 +129,6 @@ bool HandleTable::_resize() {
 
         while (h != nullptr) {
             LRUHandle* next = h->next_hash;
-            CacheKey key = h->key();
             uint32_t hash = h->hash;
             LRUHandle** ptr = &new_list[hash & (new_length - 1)];
             h->next_hash = *ptr;
@@ -397,7 +396,10 @@ uint32_t ShardedLRUCache::_shard(uint32_t hash) {
 }
 
 ShardedLRUCache::ShardedLRUCache(size_t capacity) : _last_id(0), _capacity(capacity) {
-    set_capacity(capacity);
+    const size_t per_shard = (_capacity + (kNumShards - 1)) / kNumShards;
+    for (auto& _shard : _shards) {
+        _shard.set_capacity(per_shard);
+    }
 }
 
 void ShardedLRUCache::set_capacity(size_t capacity) {
