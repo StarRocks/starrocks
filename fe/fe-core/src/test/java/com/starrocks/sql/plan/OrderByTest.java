@@ -152,8 +152,8 @@ public class OrderByTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 3> : 3: v3\n" +
-                "  |  <slot 4> : 9: sum\n" +
-                "  |  <slot 10> : 14: sum\n" +
+                "  |  <slot 8> : 8: sum\n" +
+                "  |  <slot 13> : 12: sum\n" +
                 "  |  \n" +
                 "  13:NESTLOOP JOIN");
     }
@@ -171,8 +171,8 @@ public class OrderByTest extends PlanTestBase {
                 "  15:Project\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 4> : 4: sum\n" +
-                "  |  <slot 5> : 10: sum\n" +
-                "  |  <slot 11> : 15: sum\n" +
+                "  |  <slot 9> : 9: sum\n" +
+                "  |  <slot 14> : 13: sum\n" +
                 "  |  \n" +
                 "  14:NESTLOOP JOIN\n");
     }

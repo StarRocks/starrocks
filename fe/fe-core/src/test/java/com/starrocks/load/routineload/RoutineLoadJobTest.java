@@ -488,5 +488,22 @@ public class RoutineLoadJobTest {
                 "WHERE `a` = 5 " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        // alter where again
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+                "ALTER ROUTINE LOAD FOR job " +
+                        "WHERE a = 5 and b like 'c1%' and c between 1 and 100 and substring(d,1,5) = 'cefd' ", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+                "COLUMNS TERMINATED BY '\t', " +
+                "ROWS TERMINATED BY 'a', " +
+                "COLUMNS(`a`), " +
+                "PARTITION(`p1`, `p2`), " +
+                "WHERE (((`a` = 5) " +
+                "AND (`b` LIKE 'c1%')) " +
+                "AND (`c` BETWEEN 1 AND 100)) " +
+                "AND (substring(`d`, 1, 5) = 'cefd') " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
     }
 }

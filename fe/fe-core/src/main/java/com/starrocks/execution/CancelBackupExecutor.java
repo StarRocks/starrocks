@@ -2,7 +2,7 @@
 
 package com.starrocks.execution;
 
-import com.starrocks.analysis.CancelBackupStmt;
+import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;

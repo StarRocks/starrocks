@@ -4,10 +4,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BackupStmt;
-import com.starrocks.analysis.PartitionNames;
-import com.starrocks.analysis.RestoreStmt;
-import com.starrocks.analysis.ShowRestoreStmt;
+import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
@@ -25,7 +22,11 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BackupStmt;
+import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ShowBackupStmt;
+import com.starrocks.sql.ast.ShowRestoreStmt;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -106,6 +107,13 @@ public class BackupRestoreAnalyzer {
                         "Unknown backup job properties: " + copiedProperties.keySet());
             }
 
+            return null;
+        }
+
+        @Override
+        public Void visitCancelBackupStmt(CancelBackupStmt cancelBackupStmt, ConnectContext context) {
+            String dbName = getDbName(cancelBackupStmt.getDbName(), context);
+            cancelBackupStmt.setDbName(dbName);
             return null;
         }
 

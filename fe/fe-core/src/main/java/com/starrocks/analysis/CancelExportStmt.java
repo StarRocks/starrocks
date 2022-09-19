@@ -6,6 +6,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.UUID;
 
@@ -82,17 +83,12 @@ public class CancelExportStmt extends DdlStmt {
     }
 
     @Override
-    public String toSql() {
-        StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append("CANCEL EXPORT");
-        if (!Strings.isNullOrEmpty(dbName)) {
-            stringBuilder.append(" FROM " + dbName);
-        }
-
-        if (whereClause != null) {
-            stringBuilder.append(" WHERE " + whereClause.toSql());
-        }
-        return stringBuilder.toString();
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCancelExportStatement(this, context);
     }
 
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

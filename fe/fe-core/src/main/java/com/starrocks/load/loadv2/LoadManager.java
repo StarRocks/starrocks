@@ -25,7 +25,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
@@ -46,6 +45,7 @@ import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -153,14 +153,14 @@ public class LoadManager implements Writable {
         labelToLoadJobs.get(loadJob.getLabel()).add(loadJob);
     }
 
-    public void recordFinishedOrCacnelledLoadJob(long jobId,  EtlJobType jobType, String failMsg, String trackingUrl)
+    public void recordFinishedOrCacnelledLoadJob(long jobId, EtlJobType jobType, String failMsg, String trackingUrl)
             throws UserException {
         LoadJob loadJob = getLoadJob(jobId);
         if (loadJob.isTxnDone() && !Strings.isNullOrEmpty(failMsg)) {
-            throw new LoadException("LoadJob " + jobId +  " state " + loadJob.getState().name() + ", can not be cancal");
+            throw new LoadException("LoadJob " + jobId + " state " + loadJob.getState().name() + ", can not be cancal");
         }
         if (loadJob.isCompleted()) {
-            throw new LoadException("LoadJob " + jobId +  " state " + loadJob.getState().name() + ", can not be cancal/publish");
+            throw new LoadException("LoadJob " + jobId + " state " + loadJob.getState().name() + ", can not be cancal/publish");
         }
         switch (jobType) {
             case INSERT:

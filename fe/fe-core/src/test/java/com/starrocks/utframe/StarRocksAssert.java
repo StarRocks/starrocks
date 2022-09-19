@@ -21,10 +21,8 @@
 
 package com.starrocks.utframe;
 
-
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
@@ -44,6 +42,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateTableStmt;

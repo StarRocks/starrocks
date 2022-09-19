@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
@@ -229,11 +230,11 @@ terminal String KW_ADD, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ARR
     KW_CANCEL, KW_CASE, KW_CAST, KW_CHAIN, KW_CHAR, KW_CHARSET, KW_CHECK, KW_CLUSTER, KW_CLUSTERS,
     KW_COLLATE, KW_COLLATION, KW_COLUMNS, KW_COMMENT, KW_COMMIT, KW_COMMITTED,
     KW_CONFIG, KW_CONNECTION, KW_CONNECTION_ID, KW_CONSISTENT, KW_COUNT, KW_CREATE, KW_CURRENT, KW_CURRENT_TIMESTAMP, KW_CURRENT_USER,
-    KW_DATA, KW_DATABASE, KW_DATABASES, KW_DATE, KW_DATETIME, KW_DAY, KW_DECIMAL, KW_DECIMALV2, KW_DECIMAL32, KW_DECIMAL64, KW_DECIMAL128, KW_DECOMMISSION, KW_DEFAULT, KW_DESC,
+    KW_DATA, KW_DATABASE, KW_DATE, KW_DATETIME, KW_DAY, KW_DECIMAL, KW_DECIMALV2, KW_DECIMAL32, KW_DECIMAL64, KW_DECIMAL128, KW_DECOMMISSION, KW_DEFAULT, KW_DESC,
     KW_DELETE, KW_DISTINCT, KW_DISTINCTPC, KW_DISTINCTPCSA, KW_DYNAMIC, KW_BUCKETS, KW_DIV, KW_DOUBLE, KW_DROP,
     KW_ELSE, KW_END, KW_ENGINE, KW_ENGINES, KW_ERRORS, KW_EVENTS, KW_EXISTS,
     KW_EXTERNAL, KW_EXTRACT,
-    KW_FALSE, KW_FOLLOWING, KW_FREE, KW_FROM, KW_FILE, KW_FIRST, KW_FLOAT, KW_FOR, KW_FORMAT, KW_FRONTENDS, KW_FULL, KW_FN, KW_FUNCTION,
+    KW_FALSE, KW_FOLLOWING, KW_FREE, KW_FROM, KW_FILE, KW_FIRST, KW_FLOAT, KW_FOR, KW_FORMAT, KW_FN, KW_FUNCTION,
     KW_GLOBAL, KW_GRANT, KW_GRANTS, KW_GROUPING,
     KW_HASH, KW_HELP,KW_HLL, KW_HLL_UNION, KW_HOUR, KW_HUB,
     KW_IDENTIFIED, KW_IF, KW_IN, KW_INDEXES, KW_INSTALL,
@@ -241,7 +242,7 @@ terminal String KW_ADD, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ARR
     KW_JSON,
     KW_LABEL, KW_LARGEINT, KW_LAST, KW_LEFT, KW_LESS, KW_LEVEL, KW_LIKE, KW_LIMIT, KW_LINK, KW_LIST, KW_LOAD,
     KW_LOCAL, KW_LOCATION, KW_LOGICAL,
-    KW_MATERIALIZED, KW_MAX, KW_MERGE, KW_MIN, KW_MINUTE, KW_MODIFY, KW_MONTH,
+    KW_MAX, KW_MERGE, KW_MIN, KW_MINUTE, KW_MODIFY, KW_MONTH,
     KW_NAME, KW_NAMES, KW_NEGATIVE, KW_NO, KW_NOT, KW_NULL, KW_NULLS,
     KW_OFFSET, KW_ON, KW_ONLY, KW_OPEN, KW_OR, KW_ORDER, KW_OVER,
     KW_PARTITION, KW_PARTITIONS, KW_PASSWORD, KW_PATH, KW_PAUSE, KW_PIPE, KW_PRECEDING,
@@ -251,14 +252,14 @@ terminal String KW_ADD, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ARR
     KW_RANGE, KW_READ, KW_RECOVER, KW_REGEXP, KW_RELEASE, KW_RENAME,
     KW_REPEATABLE, KW_REPOSITORY, KW_REPOSITORIES, KW_REPLACE, KW_REPLACE_IF_NOT_NULL, KW_RESOURCE, KW_RESOURCES, KW_RESTORE, KW_RETURNS, KW_RESUME, KW_REVOKE,
     KW_RIGHT, KW_ROLE, KW_ROLES, KW_ROLLBACK, KW_ROLLUP, KW_ROUTINE, KW_ROW, KW_ROWS,
-    KW_SCHEMA, KW_SCHEMAS, KW_SECOND, KW_SERIALIZABLE, KW_SESSION, KW_SET, KW_SHOW,
+    KW_SCHEMA, KW_SECOND, KW_SERIALIZABLE, KW_SESSION, KW_SET, KW_SHOW,
     KW_SMALLINT, KW_SNAPSHOT, KW_SONAME, KW_SPLIT, KW_START, KW_STATUS, KW_STOP, KW_STORAGE, KW_STRING,
-    KW_SUM, KW_SUPERUSER, KW_SYNC,
+    KW_SUM, KW_SUPERUSER,
     KW_TABLE, KW_TABLES, KW_TABLET, KW_TASK, KW_TEMPORARY, KW_TERMINATED, KW_THAN, KW_TIME, KW_THEN, KW_TIMESTAMP, KW_TINYINT,
     KW_TO, KW_TRANSACTION, KW_TRIGGERS, KW_TRIM, KW_TRUE, KW_TRUNCATE, KW_TYPE, KW_TYPES,
     KW_UNCOMMITTED, KW_UNBOUNDED, KW_USER, KW_UNINSTALL,
     KW_VALUE, KW_VARCHAR, KW_VARIABLES, KW_VERBOSE, KW_VIEW,
-    KW_WARNINGS, KW_WEEK, KW_WHEN, KW_SQLBLACKLIST, KW_WHITELIST, KW_WHERE, KW_WITH, KW_WORK, KW_WRITE,
+    KW_WARNINGS, KW_WEEK, KW_WHEN, KW_WHERE, KW_WITH, KW_WORK, KW_WRITE,
     KW_YEAR;
 
 terminal COMMA, DOT, AT, STAR, LPAREN, RPAREN, COLON, SEMICOLON, LBRACE, RBRACE, LBRACKET, RBRACKET, DIVIDE, MOD, ADD, SUBTRACT;
@@ -279,7 +280,7 @@ terminal String UNMATCHED_STRING_LITERAL;
 nonterminal List<StatementBase> stmts;
 nonterminal StatementBase stmt, show_stmt, show_param, help_stmt, create_routine_load_stmt, pause_routine_load_stmt, resume_routine_load_stmt, stop_routine_load_stmt,
     show_routine_load_stmt, show_routine_load_task_stmt, alter_stmt,
-    drop_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt,
+    drop_stmt, create_stmt, set_stmt, cancel_stmt, cancel_param, delete_stmt,
     unsupported_stmt,
     import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt;
 
@@ -294,9 +295,6 @@ nonterminal from_or_in, opt_wild_where,
             charset, equal, transaction_characteristics, isolation_level,
             transaction_access_mode, isolation_types;
 
-nonterminal BackupStmt backup_stmt;
-nonterminal RestoreStmt restore_stmt;
-
 nonterminal Expr expr, non_pred_expr, arithmetic_expr, timestamp_arithmetic_expr;
 nonterminal Expr array_expr, array_subscript, array_slice;
 nonterminal Expr set_expr_or_default;
@@ -306,7 +304,7 @@ nonterminal ArrayList<Expr> func_arg_list;
 nonterminal ArrayList<Expr> expr_pipe_list;
 nonterminal ArrayList<String> ident_list;
 nonterminal PartitionNames opt_partition_names, partition_names;
-nonterminal TableName table_name, opt_table_name;
+nonterminal TableName table_name;
 nonterminal FunctionName function_name;
 nonterminal Expr where_clause;
 nonterminal Predicate predicate, between_predicate, comparison_predicate,
@@ -333,7 +331,7 @@ nonterminal Subquery subquery;
 nonterminal Expr sign_chain_expr;
 
 // Set type
-nonterminal SetType option_type, opt_var_type, var_ident_type;
+nonterminal SetType option_type, var_ident_type;
 
 // Set variable
 nonterminal SetVar option_value, option_value_follow_option_type, option_value_no_option_type;
@@ -346,7 +344,6 @@ nonterminal Map<String, String> key_value_map, opt_properties;
 nonterminal Long opt_field_length;
 
 nonterminal List<String> string_list;
-nonterminal List<Long> integer_list;
 
 nonterminal LabelName job_label;
 nonterminal ColumnSeparator column_separator;
@@ -364,7 +361,6 @@ nonterminal String keyword, ident, ident_or_text, variable_name,
         collation_name_or_default, type_func_name_keyword, type_function_name, time_unit;
 
 nonterminal String opt_db;
-nonterminal Boolean opt_if_exists;
 
 nonterminal RoutineLoadDataSourceProperties opt_datasource_properties;
 
@@ -373,7 +369,7 @@ precedence nonassoc STRING_LITERAL;
 precedence nonassoc KW_COLUMNS;
 precedence nonassoc KW_WITH;
 
-precedence left KW_FULL, KW_MERGE;
+precedence left KW_MERGE;
 precedence left DOT;
 precedence left SET_VAR;
 precedence left KW_OR;
@@ -471,8 +467,6 @@ stmt ::=
     {: RESULT = stmt; :}
     | set_stmt:set
     {: RESULT = set; :}
-    | KW_ADD KW_SQLBLACKLIST STRING_LITERAL:sql
-    {: RESULT = new AddSqlBlackListStmt(sql); :}
     | show_stmt:show
     {: RESULT = show; :}
     | help_stmt : stmt
@@ -492,12 +486,6 @@ stmt ::=
     | cancel_stmt : stmt
     {: RESULT = stmt; :}
     | delete_stmt : stmt
-    {: RESULT = stmt; :}
-    | sync_stmt : stmt
-    {: RESULT = stmt; :}
-    | backup_stmt : stmt
-    {: RESULT = stmt; :}
-	| restore_stmt : stmt
     {: RESULT = stmt; :}
     | unsupported_stmt : stmt
     {: RESULT = stmt; :}
@@ -545,14 +533,6 @@ opt_datasource_properties ::=
     | KW_FROM ident:type LPAREN key_value_map:customProperties RPAREN
     {:
         RESULT = new RoutineLoadDataSourceProperties(type, customProperties);
-    :}
-    ;
-
-// Sync Stmt
-sync_stmt ::=
-    KW_SYNC
-    {:
-        RESULT = new SyncStmt();
     :}
     ;
 
@@ -725,10 +705,6 @@ drop_stmt ::=
     {:
         RESULT = new DropFileStmt(fileName, dbName, properties);
     :}
-    | KW_DROP KW_MATERIALIZED KW_VIEW opt_if_exists:ifExists table_name:dbMvName opt_table_name:dbTblName
-    {:
-        RESULT = new DropMaterializedViewStmt(ifExists, dbMvName, dbTblName);
-    :}
     ;
 
 key_value_map ::=
@@ -754,16 +730,6 @@ opt_properties ::=
     :}
     ;
 
-opt_if_exists ::=
-    {:
-        RESULT = false;
-    :}
-    | KW_IF KW_EXISTS
-    {:
-        RESULT = true;
-    :}
-    ;
-
 // Show statement
 show_stmt ::=
     KW_SHOW show_param:stmt
@@ -773,25 +739,7 @@ show_stmt ::=
     ;
 
 show_param ::=
-    // show sqlblacklist
-    KW_SQLBLACKLIST
-    {:
-        RESULT = new ShowSqlBlackListStmt();
-    :}
-    | KW_WHITELIST
-    {:
-        RESULT = new ShowWhiteListStmt();
-    :}
-    /* show materialized view */
-    | KW_MATERIALIZED KW_VIEW opt_db:db
-    {:
-        RESULT = new ShowMaterializedViewStmt(db);
-    :}
-    | KW_SNAPSHOT KW_ON ident:repo opt_wild_where
-    {:
-        RESULT = new ShowSnapshotStmt(repo, parser.where);
-    :}
-    | KW_FILE opt_db:dbName
+    KW_FILE opt_db:dbName
     {:
         RESULT = new ShowSmallFilesStmt(dbName);
     :}
@@ -811,17 +759,6 @@ opt_db ::=
         RESULT = db;
     :}
     ;
-
-opt_table_name ::=
-     /* empty */
-     {:
-         RESULT = null;
-     :}
-     | from_or_in table_name:table
-     {:
-         RESULT = table;
-     :}
-     ;
 
 charset ::=
     KW_CHAR KW_SET
@@ -917,10 +854,6 @@ delete_stmt ::=
     KW_DELETE KW_FROM table_name:table opt_partition_names:partitionNames where_clause:wherePredicate
     {:
         RESULT = new DeleteStmt(table, partitionNames, wherePredicate);
-    :}
-    | KW_DELETE KW_SQLBLACKLIST integer_list:ids
-    {:
-        RESULT = new DelSqlBlackListStmt(ids);
     :}
     ;
 
@@ -1072,17 +1005,6 @@ option_type ::=
     :}
     ;
 
-opt_var_type ::=
-    /* empty */
-    {: RESULT = SetType.DEFAULT; :}
-    | KW_GLOBAL
-    {: RESULT = SetType.GLOBAL; :}
-    | KW_LOCAL
-    {: RESULT = SetType.SESSION; :}
-    | KW_SESSION
-    {: RESULT = SetType.SESSION; :}
-    ;
-
 var_ident_type ::=
     KW_GLOBAL DOT
     {:
@@ -1225,13 +1147,6 @@ partition_names ::=
     | KW_TEMPORARY KW_PARTITION STRING_LITERAL:partName
     {:
         RESULT = new PartitionNames(true, Lists.newArrayList(partName));
-    :}
-    ;
-
-tablet_list ::=
-    KW_TABLET LPAREN integer_list:tabletIds RPAREN
-    {:
-        RESULT = Lists.newArrayList(tabletIds);
     :}
     ;
 
@@ -2004,18 +1919,6 @@ string_list ::=
     :}
     ;
 
-integer_list ::=
-    integer_list:l COMMA INTEGER_LITERAL:item
-    {:
-        l.add(item);
-        RESULT = l;
-    :}
-    | INTEGER_LITERAL:item
-    {:
-        RESULT = Lists.newArrayList(item);
-    :}
-    ;
-
 unsupported_stmt ::=
     KW_START KW_TRANSACTION opt_with_consistent_snapshot:v
     {:
@@ -2207,8 +2110,6 @@ keyword ::=
     | KW_LOCATION:id
     {: RESULT = id; :}
     | KW_LOGICAL:id
-    {: RESULT = id; :}
-    | KW_MATERIALIZED:id
     {: RESULT = id; :}
     | KW_MERGE:id
     {: RESULT = id; :}

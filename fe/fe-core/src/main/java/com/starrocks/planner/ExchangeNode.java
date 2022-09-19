@@ -226,7 +226,7 @@ public class ExchangeNode extends PlanNode {
         if (probeExpr.isBoundByTupleIds(getTupleIds())) {
             if (onExchangeNode || (description.isLocalApplicable() && description.inLocalFragmentInstance())) {
                 description.addProbeExpr(id.asInt(), probeExpr);
-                description.addPartitionByExprs(id.asInt(), partitionByExprs);
+                description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
                 probeRuntimeFilters.add(description);
                 accept = true;
             }

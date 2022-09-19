@@ -32,11 +32,11 @@ Broker Load supports the following storage systems:
 
 ## Prerequisites
 
-A broker is deployed in your StarRocks cluster.
+Brokers are deployed in your StarRocks cluster.
 
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no broker is deployed, you must deploy a broker by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker).
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker).
 
-In this topic, assume that a broker named mybroker is deployed in your StarRocks cluster.
+In this topic, assume that a group of brokers collectively named 'mybroker' are deployed in your StarRocks cluster.
 
 ## Principles
 

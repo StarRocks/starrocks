@@ -22,7 +22,7 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.CancelStmt;
+import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;

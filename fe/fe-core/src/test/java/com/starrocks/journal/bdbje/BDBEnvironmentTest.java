@@ -94,12 +94,12 @@ public class BDBEnvironmentTest {
     }
 
     /**
-     * used for cluster test from here, 1 master + 2 follower + 1 observer
+     * used for cluster test from here, 1 leader + 2 follower + 1 observer
      */
-    private String masterNodeHostPort = null;
-    private File masterPath = null;
-    private BDBEnvironment masterEnvironment = null;
-    private String masterName;
+    private String leaderNodeHostPort = null;
+    private File leaderPath = null;
+    private BDBEnvironment leaderEnvironment = null;
+    private String leaderName;
     private BDBEnvironment[] followerEnvironments = new BDBEnvironment[2];
     private String[] followerNodeHostPorts = new String[2];
     private File[] followerPaths = new File[2];
@@ -123,7 +123,7 @@ public class BDBEnvironmentTest {
     }
     private void initClusterMasterFollowerNoRetry() throws Exception {
         BDBEnvironment.RETRY_TIME = 3;
-        // give master time to update membership
+        // give leader time to update membership
         // otherwise may get error Conflicting node types: uses: SECONDARY Replica is configured as type: ELECTABLE
         BDBEnvironment.SLEEP_INTERVAL_SEC = ThreadLocalRandom.current().nextInt(5, 15);;
         // set timeout to a really long time so that ut can pass even when IO load is very high
@@ -131,18 +131,18 @@ public class BDBEnvironmentTest {
         Config.bdbje_replica_ack_timeout_second = 60;
         Config.bdbje_lock_timeout_second = 60;
 
-        // setup master
-        masterNodeHostPort = findUnbindHostPort();
-        masterPath = createTmpDir();
-        masterName = "master";
-        masterEnvironment = new BDBEnvironment(
-                masterPath,
-                masterName,
-                masterNodeHostPort,
-                masterNodeHostPort,
+        // setup leader
+        leaderNodeHostPort = findUnbindHostPort();
+        leaderPath = createTmpDir();
+        leaderName = "leader";
+        leaderEnvironment = new BDBEnvironment(
+                leaderPath,
+                leaderName,
+                leaderNodeHostPort,
+                leaderNodeHostPort,
                 true);
-        masterEnvironment.setup();
-        Assert.assertEquals(0, masterEnvironment.getDatabaseNames().size());
+        leaderEnvironment.setup();
+        Assert.assertEquals(0, leaderEnvironment.getDatabaseNames().size());
 
         // set up 2 followers
         for (int i = 0; i < 2; i++) {
@@ -153,7 +153,7 @@ public class BDBEnvironmentTest {
                     followerPaths[i],
                     followerNames[i],
                     followerNodeHostPorts[i],
-                    masterNodeHostPort,
+                    leaderNodeHostPort,
                     true);
             followerEnvironments[i] = followerEnvironment;
             followerEnvironment.setup();
@@ -167,16 +167,16 @@ public class BDBEnvironmentTest {
     public void testNormalCluster() throws Exception {
         initClusterMasterFollower();
 
-        // master write
+        // leader write
         Long dbIndex1 = 0L;
         String dbName1 = String.valueOf(dbIndex1);
-        CloseSafeDatabase masterDb = masterEnvironment.openDatabase(dbName1);
-        Assert.assertEquals(1, masterEnvironment.getDatabaseNames().size());
-        Assert.assertEquals(dbIndex1, masterEnvironment.getDatabaseNames().get(0));
+        CloseSafeDatabase leaderDb = leaderEnvironment.openDatabase(dbName1);
+        Assert.assertEquals(1, leaderEnvironment.getDatabaseNames().size());
+        Assert.assertEquals(dbIndex1, leaderEnvironment.getDatabaseNames().get(0));
         DatabaseEntry key = randomEntry();
         DatabaseEntry value = randomEntry();
-        masterDb.put(null, key, value);
-        masterDb.close();
+        leaderDb.put(null, key, value);
+        leaderDb.close();
 
         Thread.sleep(1000);
 
@@ -197,7 +197,7 @@ public class BDBEnvironmentTest {
                 createTmpDir(),
                 "observer",
                 findUnbindHostPort(),
-                masterNodeHostPort,
+                leaderNodeHostPort,
                 false);
         observerEnvironment.setup();
 
@@ -212,7 +212,7 @@ public class BDBEnvironmentTest {
         observerDb.close();
 
         // close
-        masterEnvironment.close();
+        leaderEnvironment.close();
         for (BDBEnvironment followerEnvironment : followerEnvironments) {
             followerEnvironment.close();
         }
@@ -231,12 +231,12 @@ public class BDBEnvironmentTest {
         for (int i = 0; i < dbNameArr.length; ++ i) {
             dbNameArr[i] = String.valueOf(dbIndexArr[i]);
 
-            // master write
-            CloseSafeDatabase masterDb = masterEnvironment.openDatabase(dbNameArr[i]);
-            Assert.assertEquals(i + 1, masterEnvironment.getDatabaseNames().size());
-            Assert.assertEquals(dbIndexArr[i], masterEnvironment.getDatabaseNames().get(i));
-            masterDb.put(null, key, value);
-            masterDb.close();
+            // leader write
+            CloseSafeDatabase leaderDb = leaderEnvironment.openDatabase(dbNameArr[i]);
+            Assert.assertEquals(i + 1, leaderEnvironment.getDatabaseNames().size());
+            Assert.assertEquals(dbIndexArr[i], leaderEnvironment.getDatabaseNames().get(i));
+            leaderDb.put(null, key, value);
+            leaderDb.close();
 
             Thread.sleep(1000);
 
@@ -254,15 +254,15 @@ public class BDBEnvironmentTest {
         }
 
         // drop first 2 dbs
-        masterEnvironment.removeDatabase(dbNameArr[0]);
-        masterEnvironment.removeDatabase(dbNameArr[1]);
+        leaderEnvironment.removeDatabase(dbNameArr[0]);
+        leaderEnvironment.removeDatabase(dbNameArr[1]);
 
         // check dbnames
         List<Long> expectDbNames = new ArrayList<>();
         for (int i = 2;  i != dbNameArr.length; ++ i) {
             expectDbNames.add(dbIndexArr[i]);
         }
-        Assert.assertEquals(expectDbNames, masterEnvironment.getDatabaseNames());
+        Assert.assertEquals(expectDbNames, leaderEnvironment.getDatabaseNames());
         Thread.sleep(1000);
         // follower read
         for (BDBEnvironment followerEnvironment : followerEnvironments) {
@@ -270,7 +270,7 @@ public class BDBEnvironmentTest {
         }
 
         // close
-        masterEnvironment.close();
+        leaderEnvironment.close();
         for (BDBEnvironment followerEnvironment : followerEnvironments) {
             followerEnvironment.close();
         }
@@ -278,21 +278,26 @@ public class BDBEnvironmentTest {
 
     /**
      * see https://github.com/StarRocks/starrocks/issues/4977
+     *
+     * This test case tries to simulate an unexpected scenario where a leader was down before it got way ahead of all
+     * followers. Normally BDB will cause a `RollbackException`, which we should handle and turn to a
+     * `JournalException`. But there is a slight chance that BDB may handle it well and nothing goes wrong. Either way,
+     * we think it's reached our expectation.
      */
-    @Test(expected = JournalException.class)
+    @Test
     public void testRollbackExceptionOnSetupCluster() throws Exception {
         initClusterMasterFollower();
 
-        // master write db 0
+        // leader write db 0
         Long dbIndexOld = 0L;
         String dbNameOld = String.valueOf(dbIndexOld);
-        CloseSafeDatabase masterDb = masterEnvironment.openDatabase(dbNameOld);
+        CloseSafeDatabase leaderDb = leaderEnvironment.openDatabase(dbNameOld);
         DatabaseEntry key = randomEntry();
         DatabaseEntry value = randomEntry();
-        masterDb.put(null, key, value);
-        masterDb.close();
-        Assert.assertEquals(1, masterEnvironment.getDatabaseNames().size());
-        Assert.assertEquals(dbIndexOld, masterEnvironment.getDatabaseNames().get(0));
+        leaderDb.put(null, key, value);
+        leaderDb.close();
+        Assert.assertEquals(1, leaderEnvironment.getDatabaseNames().size());
+        Assert.assertEquals(dbIndexOld, leaderEnvironment.getDatabaseNames().get(0));
 
         Thread.sleep(1000);
 
@@ -314,20 +319,20 @@ public class BDBEnvironmentTest {
             FileUtils.copyDirectory(followerPath, dst);
         }
 
-        // master write 2 * txn_rollback_limit lines in new db and quit
+        // leader write 2 * txn_rollback_limit lines in new db and quit
         Long dbIndexNew = 1L;
         String dbNameNew = String.valueOf(dbIndexNew);
-        masterDb = masterEnvironment.openDatabase(dbNameNew);
+        leaderDb = leaderEnvironment.openDatabase(dbNameNew);
         for (int i = 0; i < Config.txn_rollback_limit * 2; i++) {
-            masterDb.put(null, randomEntry(), randomEntry());
+            leaderDb.put(null, randomEntry(), randomEntry());
         }
-        masterDb.close();
-        Assert.assertEquals(2, masterEnvironment.getDatabaseNames().size());
-        Assert.assertEquals(dbIndexOld, masterEnvironment.getDatabaseNames().get(0));
-        Assert.assertEquals(dbIndexNew, masterEnvironment.getDatabaseNames().get(1));
+        leaderDb.close();
+        Assert.assertEquals(2, leaderEnvironment.getDatabaseNames().size());
+        Assert.assertEquals(dbIndexOld, leaderEnvironment.getDatabaseNames().get(0));
+        Assert.assertEquals(dbIndexNew, leaderEnvironment.getDatabaseNames().get(1));
 
         // close all environment
-        masterEnvironment.close();
+        leaderEnvironment.close();
         for (BDBEnvironment followerEnvironment : followerEnvironments) {
             followerEnvironment.close();
         }
@@ -365,11 +370,11 @@ public class BDBEnvironmentTest {
             for (int i = 0; i < 2; ++ i) {
                 if (followerEnvironments[i].getReplicatedEnvironment().getState() == ReplicatedEnvironment.State.MASTER) {
                     newMasterEnvironment = followerEnvironments[i];
-                    LOG.warn("=========> new master is {}", newMasterEnvironment.getReplicatedEnvironment().getNodeName());
-                    masterDb = newMasterEnvironment.openDatabase(dbNameOld);
+                    LOG.warn("=========> new leader is {}", newMasterEnvironment.getReplicatedEnvironment().getNodeName());
+                    leaderDb = newMasterEnvironment.openDatabase(dbNameOld);
                     key = randomEntry();
                     value = randomEntry();
-                    masterDb.put(null, key, value);
+                    leaderDb.put(null, key, value);
 
                     Thread.sleep(1000);
 
@@ -385,28 +390,31 @@ public class BDBEnvironmentTest {
 
         // set retry times = 1 to ensure no recovery
         BDBEnvironment.RETRY_TIME = 1;
-        // start master will get rollback exception
+        // start leader will get rollback exception
         BDBEnvironment maserEnvironment = new BDBEnvironment(
-                masterPath,
-                "master",
-                masterNodeHostPort,
-                masterNodeHostPort,
+                leaderPath,
+                "leader",
+                leaderNodeHostPort,
+                leaderNodeHostPort,
                 true);
         Assert.assertTrue(true);
-        maserEnvironment.setup();
-        Assert.fail();
+        try {
+            maserEnvironment.setup();
+        } catch (JournalException e) {
+            LOG.warn("got Rollback Exception, as expect, ", e);
+        }
     }
 
     /**
-     * simulate master failover, return the index of the instance that remains follower
+     * simulate leader failover, return the index of the instance that remains follower
      */
-    private void masterFailOver() throws Exception {
-        // master down
-        masterEnvironment.close();
-        LOG.warn("======> master env is closed");
+    private void leaderFailOver() throws Exception {
+        // leader down
+        leaderEnvironment.close();
+        LOG.warn("======> leader env is closed");
         Thread.sleep(1000);
 
-        // find the new master
+        // find the new leader
         BDBEnvironment newMasterEnvironment = null;
         int newMasterFollowerIndex = 0;
         while (newMasterEnvironment == null) {
@@ -414,7 +422,7 @@ public class BDBEnvironmentTest {
             for (int i = 0; i < 2; ++ i) {
                 if (followerEnvironments[i].getReplicatedEnvironment().getState() == ReplicatedEnvironment.State.MASTER) {
                     newMasterEnvironment = followerEnvironments[i];
-                    LOG.warn("=========> new master is {}", newMasterEnvironment.getReplicatedEnvironment().getNodeName());
+                    LOG.warn("=========> new leader is {}", newMasterEnvironment.getReplicatedEnvironment().getNodeName());
                     newMasterEnvironment.setup();
                     newMasterFollowerIndex = i;
                     break;
@@ -422,25 +430,25 @@ public class BDBEnvironmentTest {
             }
         }
 
-        // start the old master
+        // start the old leader
         BDBEnvironment oldMasterEnvironment = new BDBEnvironment(
-                masterPath,
-                "master",
-                masterNodeHostPort,
-                masterNodeHostPort,
+                leaderPath,
+                "leader",
+                leaderNodeHostPort,
+                leaderNodeHostPort,
                 true);
         oldMasterEnvironment.setup();
-        LOG.warn("============> old master is setup as follower");
+        LOG.warn("============> old leader is setup as follower");
         Thread.sleep(1000);
 
-        masterEnvironment = newMasterEnvironment;
-        masterNodeHostPort = followerNodeHostPorts[newMasterFollowerIndex];
+        leaderEnvironment = newMasterEnvironment;
+        leaderNodeHostPort = followerNodeHostPorts[newMasterFollowerIndex];
     }
 
     private void printHAStatus() {
         LOG.info("---------------------");
-        LOG.info("{}", masterEnvironment.getReplicatedEnvironment().getGroup().getRepGroupImpl().toString());
-        RepGroupImpl imp = masterEnvironment.getReplicatedEnvironment().getGroup().getRepGroupImpl();
+        LOG.info("{}", leaderEnvironment.getReplicatedEnvironment().getGroup().getRepGroupImpl().toString());
+        RepGroupImpl imp = leaderEnvironment.getReplicatedEnvironment().getGroup().getRepGroupImpl();
         LOG.info("---------------------");
     }
 
@@ -458,7 +466,7 @@ public class BDBEnvironmentTest {
         initClusterMasterFollower();
 
         if (failover) {
-            masterFailOver();
+            leaderFailOver();
         }
 
         printHAStatus();
@@ -475,18 +483,18 @@ public class BDBEnvironmentTest {
                 newFollowerHostPort,
                 true);
         LOG.warn("=========> start new follower for the first time");
-        // should set up successfully as a standalone master
+        // should set up successfully as a standalone leader
         newfollowerEnvironment.setup();
         Thread.sleep(10000);
         newfollowerEnvironment.close();
 
         // 2. bad new follower start for the second time
-        // helper = master
+        // helper = leader
         newfollowerEnvironment = new BDBEnvironment(
                 newFollowerPath,
                 newFollowerName,
                 newFollowerHostPort,
-                masterNodeHostPort,
+                leaderNodeHostPort,
                 true);
         LOG.warn("==========> start new follower for the second time");
         try {
@@ -495,10 +503,10 @@ public class BDBEnvironmentTest {
             LOG.warn("===========> failed for the second time, as expect, ", e);
         }
 
-        // 5. normally master won't down
+        // 5. normally leader won't down
         for (int i = 0; i < 5; ++i) {
             Thread.sleep(1000);
-            LOG.warn("==============> getDatabasesNames() {}", masterEnvironment.getDatabaseNames());
+            LOG.warn("==============> getDatabasesNames() {}", leaderEnvironment.getDatabaseNames());
         }
     }
 

@@ -229,7 +229,7 @@ OutPut Exchange Id: 33
 26:EXCHANGE
 cardinality: 16000000
 probe runtime filters:
-- filter_id = 5, probe_expr = (29: ps_partkey), partition_exprs = (29: ps_partkey)
+- filter_id = 5, probe_expr = (29: ps_partkey)
 
 PLAN FRAGMENT 4(F15)
 
@@ -300,7 +300,7 @@ numNodes=0
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 4, probe_expr = (30: ps_suppkey)
-- filter_id = 5, probe_expr = (29: ps_partkey), partition_exprs = (29: ps_partkey)
+- filter_id = 5, probe_expr = (29: ps_partkey)
 column statistics:
 * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
@@ -467,7 +467,7 @@ numNodes=0
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (13: s_nationkey)
-- filter_id = 8, probe_expr = (10: s_suppkey), partition_exprs = (10: s_suppkey)
+- filter_id = 8, probe_expr = (10: s_suppkey)
 column statistics:
 * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 * s_name-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE

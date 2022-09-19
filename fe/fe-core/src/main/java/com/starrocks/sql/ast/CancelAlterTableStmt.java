@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.CancelStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.ast.ShowAlterStmt.AlterType;
 

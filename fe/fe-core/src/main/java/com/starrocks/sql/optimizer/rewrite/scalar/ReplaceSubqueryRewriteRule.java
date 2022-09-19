@@ -2,13 +2,14 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
-import com.google.common.base.Preconditions;
-import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
-import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
+import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
+
+import java.util.Arrays;
+import java.util.Map;
 
 /**
  * The processing flow of the subquery is as follows:
@@ -20,31 +21,30 @@ import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
  */
 public class ReplaceSubqueryRewriteRule extends TopDownScalarOperatorRewriteRule {
 
-    private final ExpressionMapping expressionMapping;
+    private final Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders;
+    private OptExprBuilder builder;
 
-    public ReplaceSubqueryRewriteRule(ExpressionMapping expressionMapping) {
-        this.expressionMapping = expressionMapping;
+    public ReplaceSubqueryRewriteRule(Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders,
+                                      OptExprBuilder builder) {
+        this.subqueryPlaceholders = subqueryPlaceholders;
+        this.builder = builder;
+    }
+
+    public OptExprBuilder getBuilder() {
+        return builder;
     }
 
     @Override
-    public ScalarOperator visitSubqueryOperator(SubqueryOperator operator, ScalarOperatorRewriteContext context) {
-        Preconditions.checkState(expressionMapping.hasScalarOperator(operator));
-        return expressionMapping.get(operator);
-    }
-
-    @Override
-    public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
-        if (!(predicate.getChild(1) instanceof SubqueryOperator)) {
-            return predicate;
+    public ScalarOperator visit(ScalarOperator scalarOperator, ScalarOperatorRewriteContext context) {
+        if (subqueryPlaceholders == null) {
+            return scalarOperator;
         }
-        Preconditions.checkState(expressionMapping.hasScalarOperator(predicate));
-        return expressionMapping.get(predicate);
-    }
-
-    @Override
-    public ScalarOperator visitExistsPredicate(ExistsPredicateOperator predicate,
-                                               ScalarOperatorRewriteContext context) {
-        Preconditions.checkState(expressionMapping.hasScalarOperator(predicate));
-        return expressionMapping.get(predicate);
+        if (subqueryPlaceholders.containsKey(scalarOperator)) {
+            SubqueryOperator subqueryOperator = subqueryPlaceholders.get(scalarOperator);
+            LogicalApplyOperator applyOperator = subqueryOperator.getApplyOperator();
+            builder = new OptExprBuilder(applyOperator, Arrays.asList(builder, subqueryOperator.getRootBuilder()),
+                    builder.getExpressionMapping());
+        }
+        return scalarOperator;
     }
 }

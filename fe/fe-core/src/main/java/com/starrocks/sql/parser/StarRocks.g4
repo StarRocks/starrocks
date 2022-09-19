@@ -80,6 +80,7 @@ statement
     | deleteStatement
 
     //Routine Statement
+    | createRoutineLoadStatement
     | stopRoutineLoadStatement
     | resumeRoutineLoadStatement
     | pauseRoutineLoadStatement
@@ -96,9 +97,10 @@ statement
     | adminCancelRepairTableStatement
     | adminCheckTabletsStatement
 
-    // Cluster Mangement Statement
+    // Cluster Management Statement
     | alterSystemStatement
-    | showNodesStatement
+    | cancelAlterSystemStatement
+    | showComputeNodesStatement
 
     // Analyze Statement
     | analyzeStatement
@@ -112,7 +114,7 @@ statement
     | showHistogramMetaStatement
     | killAnalyzeStatement
 
-    // Work Group Statement
+    // Resource Group Statement
     | createResourceGroupStatement
     | dropResourceGroupStatement
     | alterResourceGroupStatement
@@ -124,7 +126,7 @@ statement
     | dropResourceStatement
     | showResourceStatement
 
-    //UDF
+    // UDF Statement
     | showFunctionsStatement
     | dropFunctionStatement
     | createFunctionStatement
@@ -160,7 +162,7 @@ statement
     | showVariablesStatement
     | showWarningStatement
 
-    // privilege
+    // Privilege Statement
     | grantRoleStatement
     | revokeRoleStatement
     | executeAsStatement
@@ -175,12 +177,20 @@ statement
     | showGrantsStatement
     | dropRoleStatement
 
-
-    // Backup Restore Satement
+    // Backup Restore Statement
     | backupStatement
+    | cancelBackupStatement
     | showBackupStatement
     | restoreStatement
+    | cancelRestoreStatement
     | showRestoreStatement
+    | showSnapshotStatement
+
+    // Sql BlackList And WhiteList Statement
+    | addSqlBlackListStatement
+    | delSqlBlackListStatement
+    | showSqlBlackListStatement
+    | showWhiteListStatement
 
     //Export Statement
     | exportStatement
@@ -191,6 +201,7 @@ statement
     | killStatement
     | setUserPropertyStatement
     | setStatement
+    | syncStatement
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -201,6 +212,11 @@ useDatabaseStatement
 
 useCatalogStatement
     : USE CATALOG identifierOrString
+    ;
+
+showDatabasesStatement
+    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 alterDbQuotaStmtatement
@@ -499,6 +515,14 @@ alterSystemStatement
     : ALTER SYSTEM alterClause
     ;
 
+cancelAlterSystemStatement
+    : CANCEL DECOMMISSION BACKEND string (',' string)*
+    ;
+
+showComputeNodesStatement
+    : SHOW COMPUTE NODES
+    ;
+
 // ------------------------------------------- Catalog Statement -------------------------------------------------------
 
 createExternalCatalogStatement
@@ -696,6 +720,43 @@ deleteStatement
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
+createRoutineLoadStatement
+    : CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier ON table=qualifiedName
+        (loadProperties (',' loadProperties)*)?
+        jobProperties?
+        FROM source=identifier
+        dataSourceProperties?
+    ;
+
+loadProperties
+    : (colSeparatorProperty)
+    | (rowDelimiterProperty)
+    | (COLUMNS columnProperties)
+    | (WHERE expression)
+    | (partitionNames)
+    ;
+
+colSeparatorProperty
+    : COLUMNS TERMINATED BY string
+    ;
+
+rowDelimiterProperty
+    : ROWS TERMINATED BY string
+    ;
+
+columnProperties
+    : '('
+        (qualifiedName | assignmentList) (',' (qualifiedName | assignmentList))*
+      ')'
+    ;
+
+jobProperties
+    : properties
+    ;
+
+dataSourceProperties
+    : propertyList
+    ;
 
 stopRoutineLoadStatement
     : STOP ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
@@ -1063,6 +1124,61 @@ dropRoleStatement
     : DROP ROLE identifierOrString                                                          #dropRole
     ;
 
+// ---------------------------------------- Backup Restore Statement ---------------------------------------------------
+
+backupStatement
+    : BACKUP SNAPSHOT qualifiedName
+    TO identifier
+    ON '(' tableDesc (',' tableDesc) * ')'
+    (PROPERTIES propertyList)?
+    ;
+
+cancelBackupStatement
+    : CANCEL BACKUP ((FROM | IN) identifier)?
+    ;
+
+showBackupStatement
+    : SHOW BACKUP ((FROM | IN) identifier)?
+    ;
+
+restoreStatement
+    : RESTORE SNAPSHOT qualifiedName
+    FROM identifier
+    ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
+    (PROPERTIES propertyList)?
+    ;
+
+cancelRestoreStatement
+    : CANCEL RESTORE ((FROM | IN) identifier)?
+    ;
+
+showRestoreStatement
+    : SHOW RESTORE ((FROM | IN) identifier)? (WHERE where=expression)?
+    ;
+
+showSnapshotStatement
+    : SHOW SNAPSHOT ON identifier
+    (WHERE expression)?
+    ;
+
+// ------------------------------------ Sql BlackList And WhiteList Statement ------------------------------------------
+
+addSqlBlackListStatement
+    : ADD SQLBLACKLIST string
+    ;
+
+delSqlBlackListStatement
+    : DELETE SQLBLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+showSqlBlackListStatement
+    : SHOW SQLBLACKLIST
+    ;
+
+showWhiteListStatement
+    : SHOW WHITELIST
+    ;
+
 // ------------------------------------------- Export Statement --------------------------------------------------------
 
 exportStatement
@@ -1083,11 +1199,6 @@ showExportStatement
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
-showDatabasesStatement
-    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
-    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
-    ;
-
 showProcesslistStatement
     : SHOW FULL? PROCESSLIST
     ;
@@ -1107,10 +1218,6 @@ killStatement
 
 setUserPropertyStatement
     : SET PROPERTY (FOR string)? userPropertyList
-    ;
-
-showNodesStatement
-    : SHOW COMPUTE NODES                                                       #showComputeNodes
     ;
 
 showBrokerStatement
@@ -1137,6 +1244,10 @@ setExprOrDefault
     | ON
     | ALL
     | expression
+    ;
+
+syncStatement
+    : SYNC
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -1294,29 +1405,6 @@ tabletList
     : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
 
-// ---------------------------------------- Backup Restore Statement -----------------------------------------------------
-backupStatement
-    : BACKUP SNAPSHOT qualifiedName
-    TO identifier
-    ON '(' tableDesc (',' tableDesc) * ')'
-    (PROPERTIES propertyList)?
-    ;
-
-showBackupStatement
-    : SHOW BACKUP ((FROM | IN) identifier)?
-    ;
-
-restoreStatement
-    : RESTORE SNAPSHOT qualifiedName
-    FROM identifier
-    ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
-    (PROPERTIES propertyList)?
-    ;
-
-showRestoreStatement
-    : SHOW RESTORE ((FROM | IN) identifier)? (WHERE where=expression)?
-    ;
-
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -1418,7 +1506,12 @@ literalExpression
     | (DATE | DATETIME) string                                                            #dateLiteral
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
+
     ;
+
+    unitBoundary
+         : START | END
+         ;
 
 functionCall
     : EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
@@ -1771,13 +1864,13 @@ nonReserved
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
-    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE
+    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP | STORAGE
     | STRING | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
     | VALUE | VARIABLES | VIEW | VERBOSE
-    | WARNINGS | WEEK | WORK | WRITE
+    | WARNINGS | WEEK | WHITELIST | WORK | WRITE
     | YEAR
     | DOTDOTDOT
     ;
