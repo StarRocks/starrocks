@@ -40,6 +40,21 @@ select t0_c0, t0_c1, t1_c0, t1_c1
 from t0
 join t1 on t0_c0 = t1_c0;
 
+drop materialized view mv2;
+
+-- step 3
+-- support projection and select in MV
+create materialized view mv3
+distributed by hash(mv3_c0) 
+refresh realtime 
+as 
+select t0_c0 + 1 as mv3_c0, t0_c1, t1_c0, t1_c1
+from t0
+join t1 on t0_c0 = t1_c0
+where t0_c1 = 'star';
+
+drop materialized view mv3;
+
 
 -- cleanup
 drop table t0;
