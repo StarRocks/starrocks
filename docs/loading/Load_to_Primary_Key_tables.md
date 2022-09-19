@@ -396,7 +396,7 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
 
   ```SQL
   CREATE ROUTINE LOAD test_db.table3 ON table3
-  COLUMNS(id, name, score, __op)
+  COLUMNS(id, name, score, temp, __op)
   PROPERTIES
   (
       "desired_concurrent_number" = "3",
