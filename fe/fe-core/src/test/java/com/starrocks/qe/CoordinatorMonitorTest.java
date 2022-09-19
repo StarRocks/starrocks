@@ -7,9 +7,12 @@ import com.starrocks.common.Config;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class CoordinatorMonitorTest {
 
@@ -29,7 +32,8 @@ public class CoordinatorMonitorTest {
 
             final QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
 
-            Expectations e = new Expectations(qeProcessor, coord1, coord2, coord3) {
+            CountDownLatch cancelInvocationLatch = new CountDownLatch(2);
+            new Expectations(qeProcessor, coord1, coord2, coord3) {
                 {
                     qeProcessor.getCoordinators();
                     result = coordinators;
@@ -64,29 +68,40 @@ public class CoordinatorMonitorTest {
 
                 {
                     coord1.cancel((PPlanFragmentCancelReason) any, anyString);
+                    result = new mockit.Delegate<Boolean>() {
+                        void cancel(PPlanFragmentCancelReason cancelReason, String cancelledMessage) {
+                            cancelInvocationLatch.countDown();
+                        }
+                    };
                     times = 1;
                 }
 
                 {
                     coord2.cancel((PPlanFragmentCancelReason) any, anyString);
-                    times = 1;
+                    times = 0;
                 }
 
                 {
                     coord3.cancel((PPlanFragmentCancelReason) any, anyString);
-                    times = 0;
+                    result = new mockit.Delegate<Boolean>() {
+                        void cancel(PPlanFragmentCancelReason cancelReason, String cancelledMessage) {
+                            cancelInvocationLatch.countDown();
+                        }
+                    };
+                    times = 1;
                 }
             };
 
             CoordinatorMonitor.getInstance().start();
 
-            // Set node#0,1,2 to dead, and stay node#3 alive.
-            // coord1 and coord2 will be cancelled, and coord3 will be still alive.
+            // Set node#0,1,3 to dead, and stay node#2 alive.
+            // coord1 and coord3 will be cancelled, and coord2 will be still alive.
             CoordinatorMonitor.getInstance().addDeadBackend(0L);
             CoordinatorMonitor.getInstance().addDeadBackend(1L);
-            CoordinatorMonitor.getInstance().addDeadBackend(2L);
+            CoordinatorMonitor.getInstance().addDeadBackend(3L);
 
-            Thread.sleep(3 * 1000L);
+            // Wait until invoking coord1.cancel and coord3.cancel once or timeout.
+            Assert.assertTrue(cancelInvocationLatch.await(5, TimeUnit.SECONDS));
         } finally {
             Config.heartbeat_timeout_second = prevHeartbeatTimeout;
         }
