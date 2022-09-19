@@ -154,7 +154,8 @@ public class Coordinator {
     // status or to CANCELLED, if Cancel() is called.
     Status queryStatus = new Status();
     // save of related backends of this query
-    Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
+    private final Set<Long> usedBackendIDs = Sets.newConcurrentHashSet();
+    private final Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
     // backends which this query will use
     private ImmutableMap<Long, Backend> idToBackend = ImmutableMap.of();
     // compute node which this query will use
@@ -415,6 +416,10 @@ public class Coordinator {
 
     public List<TTabletCommitInfo> getCommitInfos() {
         return commitInfos;
+    }
+
+    public boolean isUsingBackend(Long backendID) {
+        return usedBackendIDs.contains(backendID);
     }
 
     // Initialize
@@ -1358,7 +1363,7 @@ public class Coordinator {
     // Cancel execution of query. This includes the execution of the local plan
     // fragment,
     // if any, as well as all plan fragments on remote nodes.
-    public void cancel() {
+    public void cancel(PPlanFragmentCancelReason cancelReason, String cancelledMessage) {
         lock();
         try {
             if (!queryStatus.ok()) {
@@ -1366,12 +1371,17 @@ public class Coordinator {
                 return;
             } else {
                 queryStatus.setStatus(Status.CANCELLED);
+                queryStatus.setErrorMsg(cancelledMessage);
             }
             LOG.warn("cancel execution of query, this is outside invoke");
-            cancelInternal(PPlanFragmentCancelReason.USER_CANCEL);
+            cancelInternal(cancelReason);
         } finally {
             unlock();
         }
+    }
+
+    public void cancel() {
+        cancel(PPlanFragmentCancelReason.USER_CANCEL, "");
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
@@ -1659,7 +1669,7 @@ public class Coordinator {
                     LOG.warn("DataPartition UNPARTITIONED, no scanNode Backend");
                     throw new UserException("Backend not found. Check if any backend is down or not");
                 }
-                this.addressToBackendID.put(execHostport, backendIdRef.getRef());
+                recordUsedBackend(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
                         0, params);
                 params.instanceExecParams.add(instanceParam);
@@ -1712,7 +1722,7 @@ public class Coordinator {
                         }
                         TNetworkAddress addr = new TNetworkAddress(computeNode.getHost(), computeNode.getBePort());
                         hostSet.add(addr);
-                        this.addressToBackendID.put(addr, computeNode.getId());
+                        this.recordUsedBackend(addr, computeNode.getId());
                     }
                     //make olapScan maxParallelism equals prefer compute node number
                     maxParallelism = hostSet.size() * fragment.getParallelExecNum();
@@ -1855,7 +1865,7 @@ public class Coordinator {
                 if (execHostport == null) {
                     throw new UserException("Backend not found. Check if any backend is down or not");
                 }
-                this.addressToBackendID.put(execHostport, backendIdRef.getRef());
+                this.recordUsedBackend(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
                         0, params);
                 params.instanceExecParams.add(instanceParam);
@@ -2125,7 +2135,7 @@ public class Coordinator {
             if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode) {
                 HDFSBackendSelector selector =
-                        new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID,
+                        new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                 getSelectorComputeNodes(hasComputeNode),
                                 forceScheduleLocal);
                 selector.computeScanRangeAssignment();
@@ -2207,7 +2217,7 @@ public class Coordinator {
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }
 
-        if (params.isSetLoaded_rows() && params.isSetSink_load_bytes() && params.isSetSource_load_rows() 
+        if (params.isSetLoaded_rows() && params.isSetSink_load_bytes() && params.isSetSource_load_rows()
                 && params.isSetSource_load_bytes()) {
             GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
                     jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
@@ -3129,7 +3139,7 @@ public class Coordinator {
                 if (execHostPort == null) {
                     throw new UserException("Backend not found. Check if any backend is down or not");
                 }
-                addressToBackendID.put(execHostPort, backendIdRef.getRef());
+                recordUsedBackend(execHostPort, backendIdRef.getRef());
 
                 Map<Integer, List<TScanRangeParams>> scanRanges = BackendSelector.findOrInsert(
                         assignment, execHostPort, new HashMap<Integer, List<TScanRangeParams>>());
@@ -3226,8 +3236,7 @@ public class Coordinator {
                 //fill scanRangeParamsList
                 List<TScanRangeLocations> locations = scanNode.bucketSeq2locations.get(bucketSeq);
                 if (!bucketSeqToAddress.containsKey(bucketSeq)) {
-                    getExecHostPortForFragmentIDAndBucketSeq(locations.get(0), fragmentId, bucketSeq,
-                            idToBackend, addressToBackendID);
+                    getExecHostPortForFragmentIDAndBucketSeq(locations.get(0), fragmentId, bucketSeq, idToBackend);
                 }
 
                 for (TScanRangeLocations location : locations) {
@@ -3255,7 +3264,7 @@ public class Coordinator {
                         if (execHostport == null) {
                             throw new UserException("Backend not found. Check if any backend is down or not");
                         }
-                        addressToBackendID.put(execHostport, backendIdRef.getRef());
+                        recordUsedBackend(execHostport, backendIdRef.getRef());
                         bucketSeqToAddress.put(bucketSeq, execHostport);
                     }
                     if (!bucketSeqToScanRange.containsKey(bucketSeq)) {
@@ -3282,8 +3291,7 @@ public class Coordinator {
         // Make sure each host have average bucket to scan
         private void getExecHostPortForFragmentIDAndBucketSeq(TScanRangeLocations seqLocation,
                                                               PlanFragmentId fragmentId, Integer bucketSeq,
-                                                              ImmutableMap<Long, Backend> idToBackend,
-                                                              Map<TNetworkAddress, Long> addressToBackendID)
+                                                              ImmutableMap<Long, Backend> idToBackend)
                 throws Exception {
             Map<Long, Integer> buckendIdToBucketCountMap = fragmentIdToBackendIdBucketCountMap.get(fragmentId);
             int maxBucketNum = Integer.MAX_VALUE;
@@ -3309,8 +3317,13 @@ public class Coordinator {
                 throw new UserException("Backend not found. Check if any backend is down or not");
             }
 
-            addressToBackendID.put(execHostPort, backendIdRef.getRef());
+            recordUsedBackend(execHostPort, backendIdRef.getRef());
             fragmentIdToSeqToAddressMap.get(fragmentId).put(bucketSeq, execHostPort);
         }
+    }
+
+    private void recordUsedBackend(TNetworkAddress addr, Long backendID) {
+        usedBackendIDs.add(backendID);
+        addressToBackendID.put(addr, backendID);
     }
 }
