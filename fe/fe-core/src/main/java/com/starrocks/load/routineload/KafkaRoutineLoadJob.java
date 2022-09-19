@@ -282,52 +282,59 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     protected boolean needRescheduleFromRunning() throws UserException {
         List<Integer> newCurrentKafkaPartition;
 
-        readLock();
+        writeLock();
         try {
             // Customized partition, no need to check kafka.
             if (customKafkaPartitions != null && customKafkaPartitions.size() != 0) {
                 currentKafkaPartitions = customKafkaPartitions;
                 return false;
             }
+        } finally {
+            writeUnlock();
+        }
 
+        try {
+            //Try to kafka partition info without lock, since this operation may be slow.
+            newCurrentKafkaPartition = getAllKafkaPartitions();
+        } catch (Exception e) {
+            String msg = "Job failed to fetch all current partition with error [" + e.getMessage() + "]";
+            LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                    .add("error_msg", msg)
+                    .build(), e);
+
+            writeLock();
             try {
-                // It may be slow to get info from kafka.
-                // It's ok to hold read lock here.
-                newCurrentKafkaPartition = getAllKafkaPartitions();
-            } catch (Exception e) {
-                String msg = "Job failed to fetch all current partition with error [" + e.getMessage() + "]";
-                LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
-                        .add("error_msg", msg)
-                        .build(), e);
                 if (this.state == JobState.NEED_SCHEDULE) {
                     unprotectUpdateState(JobState.PAUSED,
                             new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg),
                             false /* not replay */);
                 }
                 return false;
+            } finally {
+                writeUnlock();
             }
+        }
 
+        writeLock();
+        try {
             if (currentKafkaPartitions.containsAll(newCurrentKafkaPartition) &&
                     currentKafkaPartitions.size() == newCurrentKafkaPartition.size()) {
                 // partitions are not changed.
                 return false;
             }
 
+            // The partitions of kafka have been changed, the job should be rescheduled.
+            if (LOG.isDebugEnabled()) {
+                LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                        .add("current_kafka_partitions", Joiner.on(",").join(currentKafkaPartitions))
+                        .add("msg", "current kafka partitions have been changed")
+                        .build());
+            }
+            currentKafkaPartitions = newCurrentKafkaPartition;
+            return true;
         } finally {
-            readUnlock();
+            writeUnlock();
         }
-
-        // The partitions of kafka have been changed, the job should be rescheduled.
-        if (LOG.isDebugEnabled()) {
-            LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
-                    .add("current_kafka_partitions", Joiner.on(",").join(currentKafkaPartitions))
-                    .add("msg", "current kafka partitions have been changed")
-                    .build());
-        }
-        writeLock();
-        currentKafkaPartitions = newCurrentKafkaPartition;
-        writeUnlock();
-        return true;
     }
 
     @Override
