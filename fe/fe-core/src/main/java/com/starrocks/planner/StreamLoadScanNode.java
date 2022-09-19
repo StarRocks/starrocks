@@ -62,7 +62,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FN;
+import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
 
 /**
  * used to scan from stream
@@ -222,7 +222,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                     if (defaultValueType == Column.DefaultValueType.CONST) {
                         expr = new StringLiteral(column.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        if (SUPPORTED_DEFAULT_FN.contains(column.getDefaultExpr().getExpr())) {
+                        if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
                             expr = column.getDefaultExpr().obtainExpr();
                         } else {
                             throw new UserException("Column(" + column + ") has unsupported default value:"

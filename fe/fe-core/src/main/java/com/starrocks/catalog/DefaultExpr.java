@@ -12,7 +12,7 @@ import java.util.Set;
 
 public class DefaultExpr {
 
-    public static final Set<String> SUPPORTED_DEFAULT_FN = ImmutableSet.of("uuid()", "uuid_numeric()");
+    public static final Set<String> SUPPORTED_DEFAULT_FNS = ImmutableSet.of("uuid()", "uuid_numeric()");
 
     @SerializedName("expr")
     private String expr;
@@ -30,7 +30,7 @@ public class DefaultExpr {
     }
 
     public Expr obtainExpr() {
-        if (SUPPORTED_DEFAULT_FN.contains(expr)) {
+        if (SUPPORTED_DEFAULT_FNS.contains(expr)) {
             String functionName = expr.replace("()", "");
             FunctionCallExpr functionCallExpr = new FunctionCallExpr(new FunctionName(functionName), Lists.newArrayList());
             Function fn = Expr.getBuiltinFunction(functionName, new Type[] {}, Function.CompareMode.IS_IDENTICAL);
