@@ -50,7 +50,7 @@ public:
             return CompressionTypePB::SNAPPY;
         } else if (ext == "lzo") {
             return CompressionTypePB::LZO;
-        } else if (ext == "zstd") {
+        } else if (ext == "zstd" || ext == "zst") {
             return CompressionTypePB::ZSTD;
         } else {
             return CompressionTypePB::UNKNOWN_COMPRESSION;
