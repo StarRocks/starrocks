@@ -478,7 +478,6 @@ public class ScalarOperatorToExpr {
             return result;
         }
 
-
         @Override
         public Expr visitLambdaFunctionOperator(LambdaFunctionOperator operator, FormatterContext context) {
             // lambda arguments
@@ -534,7 +533,7 @@ public class ScalarOperatorToExpr {
         @Override
         public Expr visitSubqueryOperator(SubqueryOperator operator, FormatterContext context) {
             Subquery subquery = new Subquery(operator.getQueryStatement());
-            subquery.setUseSemiAnti(operator.isUseSemiAnti());
+            subquery.setUseSemiAnti(operator.getApplyOperator().isUseSemiAnti());
             return subquery;
         }
     }

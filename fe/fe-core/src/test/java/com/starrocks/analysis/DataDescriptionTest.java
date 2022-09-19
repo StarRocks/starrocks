@@ -29,6 +29,8 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.PartitionNames;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -156,7 +158,7 @@ public class DataDescriptionTest {
                 "testHiveTable", false, Lists.newArrayList(predicate), null);
         desc.analyze("testDb");
         sql = "DATA FROM TABLE testHiveTable INTO TABLE testTable PARTITIONS (p1, p2) SET (`k1` = bitmap_dict(`k2`))";
-        Assert.assertEquals(sql, desc.toSql());
+        Assert.assertEquals(sql, desc.toString());
     }
 
     @Test(expected = AnalysisException.class)

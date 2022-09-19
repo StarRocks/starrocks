@@ -29,7 +29,6 @@ protected:
     void SetCreateTabletReq(TCreateTabletReq* request, int64_t tablet_id, TKeysType::type type = TKeysType::DUP_KEYS) {
         request->tablet_id = tablet_id;
         request->__set_version(1);
-        request->__set_version_hash(0);
         request->tablet_schema.schema_hash = 270068375;
         request->tablet_schema.short_key_column_count = 2;
         request->tablet_schema.keys_type = type;

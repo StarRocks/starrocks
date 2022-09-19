@@ -26,6 +26,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapUnionPattern;
 import mockit.Expectations;
 import mockit.Injectable;
 import org.junit.Assert;

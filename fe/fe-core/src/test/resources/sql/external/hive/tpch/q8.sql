@@ -291,7 +291,7 @@ numNodes=0
 cardinality: 600037902
 probe runtime filters:
 - filter_id = 3, probe_expr = (18: l_partkey)
-- filter_id = 5, probe_expr = (19: l_suppkey), partition_exprs = (19: l_suppkey)
+- filter_id = 5, probe_expr = (19: l_suppkey)
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
@@ -365,7 +365,7 @@ numNodes=0
 cardinality: 45530146
 probe runtime filters:
 - filter_id = 2, probe_expr = (34: o_custkey)
-- filter_id = 6, probe_expr = (33: o_orderkey), partition_exprs = (33: o_orderkey)
+- filter_id = 6, probe_expr = (33: o_orderkey)
 column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 4.5530145530145526E7] ESTIMATE
 * o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 1.0031873E7] ESTIMATE

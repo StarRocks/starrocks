@@ -9,7 +9,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
 import java.time.LocalDateTime;
@@ -39,11 +38,6 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
 
     @Override
     public ScalarOperator visitCastOperator(CastOperator operator, ScalarOperatorRewriteContext context) {
-        // @Todo: remove the check later
-        if (operator.getChild(0) instanceof SubqueryOperator) {
-            return operator;
-        }
-
         // remove duplicate cast
         if (operator.getChild(0) instanceof CastOperator && checkCastTypeReduceAble(operator.getType(),
                 operator.getChild(0).getType(), operator.getChild(0).getChild(0).getType())) {

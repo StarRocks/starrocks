@@ -7,21 +7,23 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.task.TaskContext;
 
 /**
  * Rewrite PhysicalDistribute with child topN(FINAL) to
  * two phase topN (partial -> final)
  * TOP-N not split to two phase may be constructed by property enforce
  */
-public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression, Void> {
-    public OptExpression rewrite(OptExpression optExpression) {
+public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression, Void> implements TreeRewriteRule {
+    @Override
+    public OptExpression rewrite(OptExpression optExpression, TaskContext taskContext) {
         return optExpression.getOp().accept(this, optExpression, null);
     }
 
     @Override
     public OptExpression visit(OptExpression optExpr, Void context) {
         for (int idx = 0; idx < optExpr.arity(); ++idx) {
-            optExpr.setChild(idx, rewrite(optExpr.inputAt(idx)));
+            optExpr.setChild(idx, rewrite(optExpr.inputAt(idx), null));
         }
         return optExpr;
     }

@@ -23,8 +23,8 @@ package com.starrocks.external.elasticsearch;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

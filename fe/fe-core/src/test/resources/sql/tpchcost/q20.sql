@@ -212,7 +212,7 @@ OutPut Exchange Id: 14
 3:EXCHANGE
 cardinality: 86732673
 probe runtime filters:
-- filter_id = 1, probe_expr = (32: L_PARTKEY), partition_exprs = (32: L_PARTKEY)
+- filter_id = 1, probe_expr = (32: L_PARTKEY)
 - filter_id = 2, probe_expr = (33: L_SUPPKEY)
 
 PLAN FRAGMENT 5(F02)
@@ -256,7 +256,7 @@ actualRows=0, avgRowSize=20.0
 cardinality: 80000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (14: PS_PARTKEY)
-- filter_id = 4, probe_expr = (15: PS_SUPPKEY), partition_exprs = (15: PS_SUPPKEY)
+- filter_id = 4, probe_expr = (15: PS_SUPPKEY)
 column statistics:
 * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
@@ -321,8 +321,8 @@ partitionsRatio=1/1, tabletsRatio=20/20
 actualRows=0, avgRowSize=24.0
 cardinality: 86732673
 probe runtime filters:
-- filter_id = 1, probe_expr = (32: L_PARTKEY), partition_exprs = (32: L_PARTKEY)
-- filter_id = 4, probe_expr = (33: L_SUPPKEY), partition_exprs = (33: L_SUPPKEY)
+- filter_id = 1, probe_expr = (32: L_PARTKEY)
+- filter_id = 4, probe_expr = (33: L_SUPPKEY)
 column statistics:
 * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE

@@ -107,7 +107,7 @@ static int64_t calc_max_compaction_memory(int64_t process_mem_limit) {
 }
 
 static int64_t calc_max_consistency_memory(int64_t process_mem_limit) {
-    int64_t limit = ParseUtil::parse_mem_spec(config::consistency_max_memory_limit);
+    int64_t limit = ParseUtil::parse_mem_spec(config::consistency_max_memory_limit, process_mem_limit);
     int64_t percent = config::consistency_max_memory_limit_percent;
 
     if (process_mem_limit < 0) {
@@ -320,7 +320,7 @@ Status ExecEnv::init_mem_tracker() {
     int64_t bytes_limit = 0;
     std::stringstream ss;
     // --mem_limit="" means no memory limit
-    bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit);
+    bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
     // use 90% of mem_limit as the soft mem limit of BE
     bytes_limit = bytes_limit * 0.9;
     if (bytes_limit <= 0) {
@@ -382,7 +382,11 @@ Status ExecEnv::init_mem_tracker() {
 }
 
 Status ExecEnv::_init_storage_page_cache() {
-    int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit);
+    int64_t mem_limit = MemInfo::physical_mem();
+    if (_mem_tracker->has_limit()) {
+        mem_limit = _mem_tracker->limit();
+    }
+    int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
                      << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();

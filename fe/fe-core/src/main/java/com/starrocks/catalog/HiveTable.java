@@ -140,6 +140,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return resourceName;
     }
 
+    @Override
+    public String getCatalogName() {
+        return null;
+    }
+
     public String getDbName() {
         return hiveDbName;
     }
@@ -165,6 +170,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     public List<String> getDataColumnNames() {
         return dataColumnNames;
+    }
+
+    @Override
+    public boolean isUnPartitioned() {
+        return partColumnNames.size() == 0;
     }
 
     public String getHdfsPath() {

@@ -6,11 +6,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
 
@@ -27,10 +27,9 @@ public class HashJoinImplementationRule extends JoinImplementationRule {
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
-        LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
-        JoinOperator joinType = joinOperator.getJoinType();
-        ScalarOperator predicate = joinOperator.getOnPredicate();
-        return predicate == null || Utils.containsEqualBinaryPredicate(predicate);
+        JoinOperator joinType = getJoinType(input);
+        List<BinaryPredicateOperator> eqPredicates = extractEqPredicate(input, context);
+        return !joinType.isCrossJoin() && CollectionUtils.isNotEmpty(eqPredicates);
     }
 
     @Override

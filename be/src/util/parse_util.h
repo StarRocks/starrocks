@@ -34,11 +34,10 @@ public:
     // '<int>[bB]?'  -> bytes (default if no unit given)
     // '<float>[mM]' -> megabytes
     // '<float>[gG]' -> in gigabytes
-    // '<int>%'      -> in percent of MemInfo::physical_mem()
-    // Requires MemInfo to be initialized for the '%' spec to work.
+    // '<int>%'      -> in percent of memory_limit
     // Returns 0 if mem_spec_str is empty or '-1'.
     // Returns -1 if parsing failed.
-    static int64_t parse_mem_spec(const std::string& mem_spec_str);
+    static int64_t parse_mem_spec(const std::string& mem_spec_str, const int64_t memory_limit);
 };
 
 } // namespace starrocks
