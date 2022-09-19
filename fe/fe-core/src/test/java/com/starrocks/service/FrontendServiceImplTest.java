@@ -13,6 +13,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import mockit.Expectations;
@@ -119,6 +120,9 @@ public class FrontendServiceImplTest {
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("test parttern");
+        req.setAuth_info(authInfo);
         TGetTablesConfigResponse response = impl.getTablesConfig(req);
         response.tables_config_infos.forEach(info -> {
             if (info.getTable_name().equals("test_table_pk") || 
