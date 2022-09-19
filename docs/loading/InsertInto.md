@@ -2,11 +2,11 @@
 
 This topic describes how to load data into StarRocks by using a DML statement - INSERT.
 
-Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT command. You can insert one or more rows with the VALUES syntax, or data defined by the results of a query on an internal or an [external table](../using_starrocks/External_table.md).
+Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT command. You can insert one or more rows with the VALUES syntax to test a function or a DEMO. You can also insert data defined by the results of a query on an internal or an [external table](../using_starrocks/External_table.md) to build mathematical models for small-scale datasets or back up your data in HDFS.
 
-StarRocks v2.4 further supports overwriting data into a table by using INSERT OVERWRITE statement. The INSERT OVERWRITE statement integrates the following operations to implement the overwriting overwriting:
+StarRocks v2.4 further supports overwriting data into a table by using INSERT OVERWRITE statement. The INSERT OVERWRITE statement integrates the following operations to implement the overwriting function:
 
-1. Creating temporary partitions for the partitions that store the original data
+1. Creating temporary partitions according to the partitions that store the original data
 2. Inserting data into the temporary partitions
 3. Swapping the original partitions with the temporary partitions
 
@@ -14,11 +14,11 @@ If you need to verify the data before swapping the partitions, you can follow th
 
 ## Precautions
 
-- You can cancel the INSERT transaction only by pressing the **C** key while holding down the **Ctrl** key from your MySQL client.
+- Because INSERT transaction is synchronous, you can cancel it only by pressing the **Ctrl** and **C** keys from your MySQL client.
 
 - As for the current version of StarRocks, the INSERT transaction fails by default if the data of any rows does not comply with the schema of the table. For example, the INSERT transaction fails if the length of a field in any row exceeds the length limit for the mapping field in the table. You can set the session variable `enable_insert_strict` to `false` to allow the transaction to continue by filtering out the rows that mismatch the table.
 
-- If you execute the INSERT statement frequently to load small batches of data into StarRocks, excessive data versions are generated. This severely affects query performance. We recommend that, in production, you should not load data with the INSERT command too often or use it as a routine for data loading on a daily basis. Should your application or analytic scenario demand solutions to loading streaming data or small data batches separately, we recommend you use Apache Kafka® as your data source and load the data via [Routine Load](../loading/RoutineLoad.md).
+- If you execute the INSERT statement frequently to load small batches of data into StarRocks, excessive data versions are generated. It severely affects query performance. We recommend that, in production, you should not load data with the INSERT command too often or use it as a routine for data loading on a daily basis. Should your application or analytic scenario demand solutions to loading streaming data or small data batches separately, we recommend you use Apache Kafka® as your data source and load the data via [Routine Load](../loading/RoutineLoad.md).
 
 - If you execute the INSERT OVERWRITE statement, StarRocks creates temporary partitions for the partitions which store the original data, inserts new data into the temporary partitions, and swaps the original partitions with the temporary partitions. All these operations are executed in the FE Leader node. Hence, if the FE Leader node crashes while executing INSERT OVERWRITE command, the whole load transaction will fail, and the temporary partitions will be truncated.
 
@@ -43,11 +43,11 @@ CREATE TABLE insert_wiki_edit
     is_new TINYINT DEFAULT '0',
     is_robot TINYINT DEFAULT '0',
     is_unpatrolled TINYINT DEFAULT '0',
-    delta INT SUM DEFAULT '0',
-    added INT SUM DEFAULT '0',
-    deleted INT SUM DEFAULT '0'
+    delta INT DEFAULT '0',
+    added INT DEFAULT '0',
+    deleted INT DEFAULT '0'
 )
-AGGREGATE KEY(event_time, channel, user, is_anonymous, is_minor, is_new, is_robot, is_unpatrolled)
+DUPLICATE KEY(event_time, channel, user, is_anonymous, is_minor, is_new, is_robot, is_unpatrolled)
 PARTITION BY RANGE(event_time)
 (
     PARTITION p06 VALUES LESS THAN ('2015-09-12 06:00:00'),
@@ -67,11 +67,11 @@ CREATE TABLE source_wiki_edit
     is_new TINYINT DEFAULT '0',
     is_robot TINYINT DEFAULT '0',
     is_unpatrolled TINYINT DEFAULT '0',
-    delta INT SUM DEFAULT '0',
-    added INT SUM DEFAULT '0',
-    deleted INT SUM DEFAULT '0'
+    delta INT DEFAULT '0',
+    added INT DEFAULT '0',
+    deleted INT DEFAULT '0'
 )
-AGGREGATE KEY(event_time, channel, user, is_anonymous, is_minor, is_new, is_robot, is_unpatrolled)
+DUPLICATE KEY(event_time, channel, user, is_anonymous, is_minor, is_new, is_robot, is_unpatrolled)
 PARTITION BY RANGE(event_time)
 (
     PARTITION p06 VALUES LESS THAN ('2015-09-12 06:00:00'),
@@ -124,9 +124,9 @@ WITH LABEL insert_load_wikipedia_2
 SELECT * FROM source_wiki_edit;
 ```
 
-If you truncate the `p06` and `p12` partitions, the data will not be returned in a query.
+Query the target table to make sure there is data in them.
 
-```Plain
+```Plain text
 MySQL > select * from insert_wiki_edit;
 +---------------------+---------------+----------+--------------+----------+--------+----------+----------------+-------+-------+---------+
 | event_time          | channel       | user     | is_anonymous | is_minor | is_new | is_robot | is_unpatrolled | delta | added | deleted |
@@ -135,7 +135,11 @@ MySQL > select * from insert_wiki_edit;
 | 2015-09-12 00:00:00 | #ca.wikipedia | helloSR  |            0 |        1 |      0 |        1 |              0 |     3 |    23 |       0 |
 +---------------------+---------------+----------+--------------+----------+--------+----------+----------------+-------+-------+---------+
 2 rows in set (0.00 sec)
+```
 
+If you [truncate](../sql-reference/sql-functions/math-functions/truncate.md) the `p06` and `p12` partitions, the data will not be returned in a query.
+
+```Plain
 MySQL > TRUNCATE TABLE insert_wiki_edit PARTITION(p06, p12);
 Query OK, 0 rows affected (0.01 sec)
 
@@ -143,7 +147,7 @@ MySQL > select * from insert_wiki_edit;
 Empty set (0.00 sec)
 ```
 
-- The following example inserts the `event_time` and `channel` columns from the source table to the target table `insert_wiki_edit`. The default value will be assigned to the columns into which no data is inserted.
+- The following example inserts the `event_time` and `channel` columns from the source table to the target table `insert_wiki_edit`. Default values are used in the columns that are not specified here.
 
 ```SQL
 INSERT INTO insert_wiki_edit
@@ -233,7 +237,7 @@ WITH LABEL insert_load_wikipedia_ow_1
 SELECT * FROM source_wiki_edit;
 ```
 
-- The following example overwrites the `p06` and `p12` partitions of the table `insert_wiki_edit` with the data from the source table. If no partition is specified, the data is overwritten into all partitions. Otherwise, the data will be overwritten only into the specified partitions.
+- The following example overwrites the `p06` and `p12` partitions of the table `insert_wiki_edit` with the data from the source table.
 
 ```SQL
 INSERT OVERWRITE insert_wiki_edit PARTITION(p06, p12)
@@ -241,9 +245,9 @@ WITH LABEL insert_load_wikipedia_ow_2
 SELECT * FROM source_wiki_edit;
 ```
 
-If you truncate the `p06` and `p12` partitions, the data will not be returned in a query.
+Query the target table to make sure there is data in them.
 
-```Plain
+```plain text
 MySQL > select * from insert_wiki_edit;
 +---------------------+---------------+--------------+--------------+----------+--------+----------+----------------+-------+-------+---------+
 | event_time          | channel       | user         | is_anonymous | is_minor | is_new | is_robot | is_unpatrolled | delta | added | deleted |
@@ -252,7 +256,11 @@ MySQL > select * from insert_wiki_edit;
 | 2015-09-12 00:00:00 | #cn.wikipedia | GELongstreet |            0 |        0 |      0 |        0 |              0 |    36 |    36 |       0 |
 +---------------------+---------------+--------------+--------------+----------+--------+----------+----------------+-------+-------+---------+
 2 rows in set (0.01 sec)
+```
 
+If you [truncate](../sql-reference/sql-functions/math-functions/truncate.md) the `p06` and `p12` partitions, the data will not be returned in a query.
+
+```Plain
 MySQL > TRUNCATE TABLE insert_wiki_edit PARTITION(p06, p12);
 Query OK, 0 rows affected (0.01 sec)
 
@@ -283,16 +291,9 @@ The INSERT transaction returns different status in accordance with the result of
 StarRocks returns the following if the transaction succeeds:
 
 ```Plain
-Query OK, 2 rows affected, 2 warnings (0.05 sec)
+Query OK, 2 rows affected (0.05 sec)
 {'label':'insert_load_wikipedia', 'status':'VISIBLE', 'txnId':'1006'}
 ```
-
-| Return        | Description                                                  |
-| ------------- | ------------------------------------------------------------ |
-| rows affected | Indicates how many rows are loaded. `warnings` indicates the rows that are filtered out. |
-| label         | The unique identification label for each data load transaction within the database. It can be assigned by user or automatically by the system. |
-| status        | Indicates if the loaded data is visible. `VISIBLE`: the data is successfully loaded and visible. `COMMITTED`: the data is successfully loaded but invisible for now. |
-| txnId         | The ID number corresponding to each INSERT transaction.      |
 
 - **Transaction fails**
 
@@ -374,7 +375,7 @@ You can set the following configuration items for INSERT transaction:
 
 | FE configuration                   | Description                                                  |
 | ---------------------------------- | ------------------------------------------------------------ |
-| insert_load_default_timeout_second | Default timeout for INSERT transaction. Unit: second. If the current INSERT transaction is not completed within the time set by this parameter, it will be canceled by the system and the status will be CANCELLED. As for current version of StarRocks, you can only specify a uniform timeout for all INSERT transactions in this parameter, and you cannot set a different timeout for a specific INSERT transaction. The default is 3600 seconds (1 hour). If the INSERT transaction cannot be completed within the specified time, you can extend the timeout by adjusting this parameter. |
+| insert_load_default_timeout_second | Default timeout for INSERT transaction. Unit: second. If the current INSERT transaction is not completed within the time set by this parameter, it will be canceled by the system and the status will be CANCELLED. As for current version of StarRocks, you can only specify a uniform timeout for all INSERT transactions using this parameter, and you cannot set a different timeout for a specific INSERT transaction. The default is 3600 seconds (1 hour). If the INSERT transaction cannot be completed within the specified time, you can extend the timeout by adjusting this parameter. |
 
 - **Session variables**
 
