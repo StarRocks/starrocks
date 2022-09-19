@@ -41,7 +41,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 [NEGATIVE]
 INTO TABLE <table_name>
 [PARTITION (<partition_name>[, <partition_name> ...])]
-[FORMAT AS "CSV | JSON | Parquet"]
+[FORMAT AS "CSV | Parquet | ORC"]
 [COLUMNS TERMINATED BY "<column_separator>"]
 [(column_list)]
 [COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
@@ -53,7 +53,7 @@ INTO TABLE <table_name>
 
 - `file_path`
 
-  用于指定待导入数据文件所在的路径。您可以指定导入一个具体的数据文件，也可以用通配符 (*) 指定导入某个路径下所有的数据文件。中间的目录也可以使用通配符匹配。Broker Load 支持如下通配符：`?`、`*`、`[]`、`{}` 和 `^`。具体请参见[通配符使用规则参考](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/fs/FileSystem.html#globStatus-org.apache.hadoop.fs.Path-)。
+  用于指定待导入数据文件所在的路径。您可以指定导入一个具体的数据文件，也可以用通配符指定导入某个路径下所有的数据文件。中间的目录也可以使用通配符匹配。Broker Load 支持如下通配符：`?`、`*`、`[]`、`{}` 和 `^`。具体请参见[通配符使用规则参考](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/fs/FileSystem.html#globStatus-org.apache.hadoop.fs.Path-)。
 
   例如， 通过指定 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` 路径可以匹配 `/user/data/tablename` 目录下所有分区内的数据文件，通过 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` 路径可以匹配 `/user/data/tablename` 目录下所有 `202104` 分区内的数据文件。
 
@@ -80,13 +80,13 @@ INTO TABLE <table_name>
 
 - `FORMAT AS`
 
-  用于指定待导入数据文件的格式。取值包括 `CSV`、`JSON` 和 `Parquet`。如果不指定该参数，则默认通过 `INTO TABLE` 参数中指定的文件扩展名（**.csv**、**.orc 和 .parquet**）来判断文件格式。
+  用于指定待导入数据文件的格式。取值包括 `CSV`、`Parquet` 和 `ORC`。如果不指定该参数，则默认通过 `INTO TABLE` 参数中指定的文件扩展名（**.csv**、**.parquet**、和 **.orc**）来判断文件格式。
 
 - `COLUMNS TERMINATED BY`
 
   用于指定待导入数据文件中的列分隔符。如果不指定该参数，则默认列分隔符为 `\t`，即 Tab。必须确保这里指定的列分隔符与待导入数据文件中的列分隔符一致；否则，导入作业会因数据质量错误而失败，作业状态 (`State`) 会显示为 `CANCELLED`。
 
-  需要注意的是，Broker Load 通过 MySQL 协议提交导入请求，除了 StarRocks 会做转义处理以外，MySQL 协议也会做转义处理。因此，如果列分隔符是 Tab 等不可见字符，则需要在列分隔字符前面多加一个反斜线 (\)。例如，如果列分隔符是 `\t`，这里必须输入 `\\t`；如果列分隔符是 `\n`，这里必须输入 `\\n`。Apache Hive™ 文件的列分隔符为 `\x01`，因此，如果待导入数据文件是 Hive 文件，这里必须传入 `\\x01`。
+  需要注意的是，Broker Load 通过 MySQL 协议提交导入请求，除了 StarRocks 会做转义处理以外，MySQL 协议也会做转义处理。因此，如果列分隔符是 Tab 等不可见字符，则需要在列分隔字符前面多加一个反斜线 (\\)。例如，如果列分隔符是 `\t`，这里必须输入 `\\t`；如果列分隔符是 `\n`，这里必须输入 `\\n`。Apache Hive™ 文件的列分隔符为 `\x01`，因此，如果待导入数据文件是 Hive 文件，这里必须传入 `\\x01`。
 
   > 说明：StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
 
@@ -102,13 +102,13 @@ INTO TABLE <table_name>
 
   用于从指定的文件路径中提取一个或多个分区字段的信息。当指定的文件路径中存在分区字段时，允许使用 `COLUMNS FROM PATH AS` 参数指定要提取文件路径中哪些分区字段的信息。
 
-  例如，待导入数据文件所在的路径为 `/path/col_name=col_value/file1`，其中 `col_name` 可以对应到 StarRocks 表中的列，则导入时会将 `col_value` 导入到 `col_name` 对应的列中。
+  例如，待导入数据文件所在的路径为 `/path/col_name=col_value/file1`，其中 `col_name` 可以对应到 StarRocks 表中的列，因此导入时会将 `col_value` 落入 `col_name` 对应的列中。
 
   > 说明：该参数只有在从 HDFS 导入数据时可用。
 
 - `SET`
 
-  用于将待导入数据文件的某一列按照指定的函数进行转化，然后将转化后的结果落到 StarRocks 表中。语法如下：`column_name = expression`。以下为两个示例：
+  用于将待导入数据文件的某一列按照指定的函数进行转化，然后将转化后的结果落入 StarRocks 表中。语法如下：`column_name = expression`。以下为两个示例：
 
   - StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3`；待导入数据文件中有四列，前两列按顺序依次对应 StarRocks 表中的 `col1`、`col2` 列，后两列之和对应 StarRocks 表中的 `col3` 列。这种情况下，需要通过 `column_list` 参数声明 `(col1,col2,tmp_col3,tmp_col4)`，并使用 SET 子句指定 `SET (col3=tmp_col3+tmp_col4)` 来实现数据转换。
   - StarRocks 表中有三列，按顺序依次为 `year`、`month` 和 `day`；待导入数据文件中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。这种情况下，需要通过 `column_list` 参数声明 `(tmp_time)`、并使用 SET 子句指定 `SET (year = year(tmp_time), month=month(tmp_time), day=day(tmp_time))` 来实现数据转换。
@@ -159,7 +159,7 @@ INTO TABLE <table_name>
 
     | **参数名称**            | **参数说明**                                                 |
     | ----------------------- | ------------------------------------------------------------ |
-    | kerberos_principal      | 用于指定 Kerberos 的用户或服务 (Principal)。每个 Principal 在 HDFS 集群内唯一，由如下三部分组成：<ul><li>`username` 或 `servicename`：HDFS 集群中用户或服务的名称。</li><li>`instance`：HDFS 集群要认证的节点所在服务器的名称，用来保证用户或服务全局唯一。比如，HDFS 集群中有多个 DataNode 节点，各节点需要各自独立认证。</li><li>`realm`：域，必须全大写。</li></ul>举例：`nn/``zelda1@ZELDA.COM`。 |
+    | kerberos_principal      | 用于指定 Kerberos 的用户或服务 (Principal)。每个 Principal 在 HDFS 集群内唯一，由如下三部分组成：<ul><li>`username` 或 `servicename`：HDFS 集群中用户或服务的名称。</li><li>`instance`：HDFS 集群要认证的节点所在服务器的名称，用来保证用户或服务全局唯一。比如，HDFS 集群中有多个 DataNode 节点，各节点需要各自独立认证。</li><li>`realm`：域，必须全大写。</li></ul>举例：`nn/zelda1@ZELDA.COM`。 |
     | kerberos_keytab         | 用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。该文件必须在 Broker 所在服务器上。 |
     | kerberos_keytab_content | 用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数跟 `kerberos_keytab` 参数二选一配置。 |
 
@@ -221,7 +221,7 @@ INTO TABLE <table_name>
 
 ### `opt_properties`
 
-用于指定一些导入相关的可选参数，指定的参数设置作用于整个导入作业。Broker Load 支持如下可选参数：
+用于指定一些导入相关的可选参数，指定的参数设置作用于整个导入作业。语法如下：
 
 ```Plain
 PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
@@ -261,7 +261,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
   如果因为设置最大容忍率为 `0` 而导致作业失败，可以通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句来查看导入作业的结果信息。然后，判断错误的数据行是否可以被过滤掉。如果可以被过滤掉，则可以根据结果信息中的 `dpp.abnorm.ALL` 和 `dpp.norm.ALL` 来计算导入作业的最大容忍率，然后调整后重新提交导入作业。计算公式如下：
 
-  `max_filter_ratio` = [`dpp.abnorm.ALL`/(`dpp.abnorm.ALL` + `dpp.norm.ALL`)]
+  **`max_filter_ratio` = [`dpp.abnorm.ALL`/(`dpp.abnorm.ALL` + `dpp.norm.ALL`)]**
 
   `dpp.abnorm.ALL` 和 `dpp.norm.ALL` 的总和就等于待导入的总行数。
 
@@ -296,7 +296,9 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 #### 设置超时时间和错误容忍率
 
-StarRocks 数据库 `test_db` 里的表 `table1` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。数据文件 `example1.csv` 也包含三列，按顺序一一对应 `table1` 中的三列。
+StarRocks 数据库 `test_db` 里的表 `table1` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example1.csv` 也包含三列，按顺序一一对应 `table1` 中的三列。
 
 如果要把 `example1.csv` 中所有的数据都导入到 `table1` 中，并且要求超时时间最大不超过 3600 秒，可以执行如下语句：
 
@@ -319,7 +321,9 @@ PROPERTIES
 
 #### 设置最大容错率
 
-StarRocks 数据库 `test_db` 里的表 `table2` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。数据文件 `example2.csv` 也包含三列，按顺序一一对应 `table2` 中的三列。
+StarRocks 数据库 `test_db` 里的表 `table2` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example2.csv` 也包含三列，按顺序一一对应 `table2` 中的三列。
 
 如果要把 `example2.csv` 中所有的数据都导入到 `table2` 中，并且要求容错率最大不超过 `0.1`，可以执行如下语句：
 
@@ -342,7 +346,9 @@ PROPERTIES
 
 #### 导入指定路径下所有数据文件
 
-StarRocks 数据库 `test_db` 里的表 `table3` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。HDFS 集群的 `/user/starrocks/data/input/` 路径下所有数据文件也包含三列，按顺序一一对应 `table3` 中的三列，并且列分隔符为 Hive 文件的默认列分隔符 `\x01`。
+StarRocks 数据库 `test_db` 里的表 `table3` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+HDFS 集群的 `/user/starrocks/data/input/` 路径下所有数据文件也包含三列，按顺序一一对应 `table3` 中的三列，并且列分隔符为 Hive 文件的默认列分隔符 `\x01`。
 
 如果要把 `hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/` 路径下所有数据文件的数据都导入到 `table3` 中，可以执行如下语句：
 
@@ -362,7 +368,9 @@ WITH BROKER "mybroker"
 
 #### 设置 NameNode HA 机制
 
-StarRocks 数据库 `test_db` 里的表 `table4` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。数据文件 `example4.csv` 也包含三列，按顺序一一对应 `table4` 中的三列。
+StarRocks 数据库 `test_db` 里的表 `table4` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example4.csv` 也包含三列，按顺序一一对应 `table4` 中的三列。
 
 如果要把 `example4.csv` 中所有的数据都导入到 `table4` 中，并且要求使用 NameNode HA 机制，可以执行如下语句：
 
@@ -386,7 +394,9 @@ WITH BROKER "mybroker"
 
 #### 设置 Kerberos 认证方式
 
-StarRocks 数据库 `test_db` 里的表 `table5` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。数据文件 `example5.csv` 也包含三列，按顺序一一对应 `table5` 中的三列。
+StarRocks 数据库 `test_db` 里的表 `table5` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example5.csv` 也包含三列，按顺序一一对应 `table5` 中的三列。
 
 如果要把 `example5.csv` 中所有的数据都导入到 `table5` 中，并且要求使用 Kerberos 认证方式、提供 keytab 文件的路径，可以执行如下语句：
 
@@ -408,7 +418,11 @@ WITH BROKER "mybroker"
 
 #### 撤销已导入的数据
 
-StarRocks 数据库 `test_db` 里的表 `table6` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。数据文件 `example6.csv` 也包含三列，按顺序一一对应 `table6` 中的三列。并且，您已经通过 Broker Load 把 `example6.csv` 中所有的数据都导入到了 `table6` 中。
+StarRocks 数据库 `test_db` 里的表 `table6` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example6.csv` 也包含三列，按顺序一一对应 `table6` 中的三列。
+
+并且，您已经通过 Broker Load 把 `example6.csv` 中所有的数据都导入到了 `table6` 中。
 
 如果您想撤销已导入的数据，可以执行如下语句：
 
@@ -430,7 +444,9 @@ WITH BROKER "mybroker"
 
 #### 设置目标分区
 
-StarRocks 数据库 `test_db` 里的表 `table7` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。数据文件 `example7.csv` 也包含三列，按顺序一一对应 `table7` 中的三列。
+StarRocks 数据库 `test_db` 里的表 `table7` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example7.csv` 也包含三列，按顺序一一对应 `table7` 中的三列。
 
 如果要把 `example7.csv` 中所有的数据都导入到 `table7` 所在的分区 `p1` 和 `p2`，可以执行如下语句：
 
@@ -451,7 +467,9 @@ WITH BROKER "mybroker"
 
 #### 设置列映射关系
 
-StarRocks 数据库 `test_db` 里的表 `table8` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。数据文件 `example8.csv` 也包含三列，按顺序依次对应 `table8` 中 `col2`、`col1`、`col3`。
+StarRocks 数据库 `test_db` 里的表 `table8` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example8.csv` 也包含三列，按顺序依次对应 `table8` 中 `col2`、`col1`、`col3`。
 
 如果要把 `example3.csv` 中所有的数据都导入到 `table3` 中，可以执行如下语句：
 
@@ -475,7 +493,9 @@ WITH BROKER "mybroker"
 
 #### 设置筛选条件
 
-StarRocks 数据库 `test_db` 里的表 `table9` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。数据文件 `example9.csv` 也包含三列，按顺序一一对应 `table9` 中的三列。
+StarRocks 数据库 `test_db` 里的表 `table9` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example9.csv` 也包含三列，按顺序一一对应 `table9` 中的三列。
 
 如果只想把 `example9.csv` 中第一列的值大于 `20180601` 的数据行导入到 `table9` 中，可以执行如下语句：
 
@@ -498,7 +518,9 @@ WITH BROKER "mybroker"
 
 #### 导入数据到含有 HLL 类型列的表
 
-StarRocks 数据库 `test_db` 里的表 `table10` 包含四列，按顺序依次为 `id`、`col1`、`col2`、`col3`，其中 `col1` 和 `col2` 是 HLL 类型的列。数据文件 `example10.csv` 包含三列，第一列对应 `table10` 中的 `id` 列；第二列和第三列分别对应 `table10` 中 HLL 类型的列 `col1` 和 `col2`，可以通过函数转换成 HLL 类型的数据并分别落入 `col1`、`col2` 列。
+StarRocks 数据库 `test_db` 里的表 `table10` 包含四列，按顺序依次为 `id`、`col1`、`col2`、`col3`，其中 `col1` 和 `col2` 是 HLL 类型的列。
+
+数据文件 `example10.csv` 包含三列，第一列对应 `table10` 中的 `id` 列；第二列和第三列分别对应 `table10` 中 HLL 类型的列 `col1` 和 `col2`，可以通过函数转换成 HLL 类型的数据并分别落入 `col1`、`col2` 列。
 
 如果要把 `example10.csv` 中所有的数据都导入到 `table10` 中，可以执行如下语句：
 
@@ -527,7 +549,7 @@ WITH BROKER "mybroker"
 >
 > 上述示例中，通过 `column_list` 参数，把 `example10.csv` 中的三列按顺序依次临时命名为 `id`、`temp1`、`temp2`，然后使用函数指定数据转换规则，包括：
 >
-> - 使用 `hll_hash` 函数把 `example10.csv` 中的 `temp1`、`temp2` 列转换成 HLL 类型的数据，并分别对应到 `table10`中的 `col1`、`col2` 列。
+> - 使用 `hll_hash` 函数把 `example10.csv` 中的 `temp1`、`temp2` 列转换成 HLL 类型的数据，并分别落入 `table10`中的 `col1`、`col2` 列。
 >
 > - 使用 `empty_hll` 函数给导入的数据行在 `table10` 中的第四列补充默认值。
 
