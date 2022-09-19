@@ -27,6 +27,7 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -36,6 +37,7 @@ import com.starrocks.thrift.TQueryOptions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public class MasterOpExecutor {
@@ -154,6 +156,20 @@ public class MasterOpExecutor {
         } else {
             return null;
         }
+    }
+
+    /**
+     * if a query statement is forwarded to the leader, or if a show statement is automatically rewrote,
+     * the result of the query will be returned in thrift body and should write into mysql channel.
+     **/
+    public boolean sendResultToChannel(MysqlChannel channel) throws IOException {
+        if (!result.isSetChannelBufferList() || result.channelBufferList.isEmpty()) {
+            return false;
+        }
+        for (ByteBuffer byteBuffer : result.channelBufferList) {
+            channel.sendOnePacket(byteBuffer);
+        }
+        return true;
     }
 
     public void setResult(TMasterOpResult result) {
