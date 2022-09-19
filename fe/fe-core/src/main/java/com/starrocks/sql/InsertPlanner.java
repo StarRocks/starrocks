@@ -105,7 +105,7 @@ public class InsertPlanner {
                 optExpr.setChild(childIdx, rewrite(optExpr.inputAt(childIdx), context));
             }
 
-            return OptExpression.create(optExpr.getOp(), optExpr.getInputs());
+            return optExpr;
         }
 
         @Override
