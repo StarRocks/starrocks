@@ -2,7 +2,9 @@
 
 #pragma once
 
+#include "common/config.h"
 #include "gen_cpp/lake_service.pb.h"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -10,7 +12,14 @@ class ExecEnv;
 
 class LakeServiceImpl : public ::starrocks::lake::LakeService {
 public:
-    explicit LakeServiceImpl(ExecEnv* env) : _env(env) {}
+    explicit LakeServiceImpl(ExecEnv* env) : _env(env) {
+        auto st = ThreadPoolBuilder("compact")
+                          .set_min_threads(0)
+                          .set_max_threads(config::compact_threads)
+                          .set_max_queue_size(config::compact_thread_pool_queue_size)
+                          .build(&(_compact_thread_pool));
+        CHECK(st.ok()) << st;
+    }
 
     ~LakeServiceImpl() override = default;
 
@@ -66,6 +75,8 @@ public:
 
 private:
     ExecEnv* _env;
+
+    std::unique_ptr<ThreadPool> _compact_thread_pool;
 };
 
 } // namespace starrocks
