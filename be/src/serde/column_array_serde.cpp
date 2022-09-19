@@ -24,6 +24,7 @@
 
 namespace starrocks::serde {
 namespace {
+constexpr int ENCODE_SIZE_LIMIT = 4;
 uint8_t* write_little_endian_32(uint32_t value, uint8_t* buff) {
     encode_fixed32_le(buff, value);
     return buff + sizeof(value);
@@ -54,16 +55,17 @@ const uint8_t* read_raw(const uint8_t* buff, void* target, size_t size) {
     return buff + size;
 }
 
+// encode size_t?
 uint8_t* encode_integers(const void* data, size_t size, uint8_t* buff, int encode_level) {
     if (encode_level == 0) {
-        throw std::runtime_error("encode level does not work.");
+        throw std::runtime_error("integer encode level does not work.");
     }
     uint32_t encode_size = streamvbyte_encode(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0,
                                               buff + sizeof(uint32_t));
     buff = write_little_endian_32(encode_size, buff);
-    if (encode_level > 1) {
-        LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, compression ratio = {}\n", size, encode_size,
-                                    encode_size * 1.0 / size);
+    if (encode_level == -1) {
+        LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, integers compression ratio = {}\n", size,
+                                    encode_size, encode_size * 1.0 / size);
     }
     return buff + encode_size;
 }
@@ -80,14 +82,48 @@ const uint8_t* decode_integers(const uint8_t* buff, void* target, size_t size) {
     return buff + encode_size1;
 }
 
+uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int encode_level) {
+    if (encode_level == 0) {
+        throw std::runtime_error("string encode level does not work.");
+    }
+    uint32_t encode_size = LZ4_compress_default(reinterpret_cast<const uint32_t*>(data), buff + sizeof(uint32_t), size,
+                                                LZ4_compressBound(size));
+    if (encode_size <= 0) {
+        throw std::runtime_error("lz4 compress error.");
+    }
+    buff = write_little_endian_32(encode_size, buff);
+    if (encode_level == -1) {
+        LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, string compression ratio = {}\n", size,
+                                    encode_size, encode_size * 1.0 / size);
+    }
+    return buff + encode_size;
+}
+
+const uint8_t* decode_string_lz4(const uint8_t* buff, void* target, size_t size) {
+    uint32_t encode_size = 0;
+    buff = read_little_endian_32(buff, &encode_size);
+    uint32_t encode_size1 = LZ4_decompress_safe(buff, target, encode_size, size);
+    if (encode_size1 <= 0) {
+        throw std::runtime_error("lz4 decompress error.");
+    }
+    if (encode_size != encode_size1) {
+        throw std::runtime_error(
+                fmt::format("string encode size does not equal when decoding, encode size = {}, but decode get size = "
+                            "{}, raw size = {}.",
+                            encode_size, encode_size1, size));
+    }
+    return buff + encode_size1;
+}
+
 template <typename T>
 class FixedLengthColumnSerde {
 public:
     static int64_t max_serialized_size(const vectorized::FixedLengthColumnBase<T>& column, const int encode_level = 0) {
-        if (encode_level == 0) {
-            return sizeof(uint32_t) + sizeof(T) * column.size();
+        uint32_t size = sizeof(T) * column.size();
+        if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
+            return sizeof(uint32_t) + streamvbyte_max_compressedbytes((size + 3) / 4.0);
         } else {
-            return sizeof(uint32_t) + streamvbyte_max_compressedbytes((sizeof(T) * column.size() + 3) / 4.0);
+            return sizeof(uint32_t) + size;
         }
     }
 
@@ -95,10 +131,10 @@ public:
                               const int encode_level = 0) {
         uint32_t size = sizeof(T) * column.size();
         buff = write_little_endian_32(size, buff);
-        if (encode_level == 0 || size < 4) {
-            buff = write_raw(column.raw_data(), size, buff);
-        } else {
+        if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
             buff = encode_integers(column.raw_data(), size, buff, encode_level);
+        } else {
+            buff = write_raw(column.raw_data(), size, buff);
         }
         return buff;
     }
@@ -109,10 +145,10 @@ public:
         buff = read_little_endian_32(buff, &size);
         std::vector<T>& data = column->get_data();
         raw::make_room(&data, size / sizeof(T));
-        if (encode_level == 0 || size < 4) {
-            buff = read_raw(buff, data.data(), size);
-        } else {
+        if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
             buff = decode_integers(buff, data.data(), size);
+        } else {
+            buff = read_raw(buff, data.data(), size);
         }
         return buff;
     }
@@ -121,14 +157,27 @@ public:
 class BinaryColumnSerde {
 public:
     template <typename T>
-    static int64_t max_serialized_size(const vectorized::BinaryColumnBase<T>& column) {
+    static int64_t max_serialized_size(const vectorized::BinaryColumnBase<T>& column, const int encode_level = 0) {
         const auto& bytes = column.get_bytes();
         const auto& offsets = column.get_offset();
-        return bytes.size() + offsets.size() * sizeof(typename vectorized::BinaryColumnBase<T>::Offset) + sizeof(T) * 2;
+        int64_t res = sizeof(T) * 2;
+        int64_t offsets_size = offsets.size() * sizeof(typename vectorized::BinaryColumnBase<T>::Offset);
+        if ((encode_level & 1) && offsets_size >= ENCODE_SIZE_LIMIT) {
+            res += sizeof(uint32_t) + streamvbyte_max_compressedbytes((offsets_size + 3) / 4.0);
+        } else {
+            res += offsets_size;
+        }
+        if ((encode_level & 2) && bytes.size() >= ENCODE_SIZE_LIMIT) {
+            res += LZ4_compressBound(bytes.size());
+        } else {
+            res += bytes.size();
+        }
+        return res;
     }
 
     template <typename T>
-    static uint8_t* serialize(const vectorized::BinaryColumnBase<T>& column, uint8_t* buff) {
+    static uint8_t* serialize(const vectorized::BinaryColumnBase<T>& column, uint8_t* buff,
+                              const int encode_level = 0) {
         const auto& bytes = column.get_bytes();
         const auto& offsets = column.get_offset();
 
@@ -147,12 +196,17 @@ public:
         } else {
             buff = write_little_endian_64(offsets_size, buff);
         }
-        buff = write_raw(offsets.data(), offsets_size, buff);
+        if ((encode_level & 1) && offsets_size >= ENCODE_SIZE_LIMIT) {
+            buff = encode_integers(offsets.data(), offsets_size, buff, encode_level);
+        } else {
+            buff = write_raw(offsets.data(), offsets_size, buff);
+        }
         return buff;
     }
 
     template <typename T>
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::BinaryColumnBase<T>* column) {
+    static const uint8_t* deserialize(const uint8_t* buff, vectorized::BinaryColumnBase<T>* column,
+                                      const int encode_level = 0) {
         T bytes_size = 0;
         if constexpr (std::is_same_v<T, uint32_t>) {
             buff = read_little_endian_32(buff, &bytes_size);
@@ -169,7 +223,11 @@ public:
             buff = read_little_endian_64(buff, &offsets_size);
         }
         raw::make_room(&column->get_offset(), offsets_size / sizeof(typename vectorized::BinaryColumnBase<T>::Offset));
-        buff = read_raw(buff, column->get_offset().data(), offsets_size);
+        if ((encode_level & 1) && offsets_size >= ENCODE_SIZE_LIMIT) {
+            buff = decode_integers(buff, column->get_offset().data(), offsets_size);
+        } else {
+            buff = read_raw(buff, column->get_offset().data(), offsets_size);
+        }
         return buff;
     }
 };
