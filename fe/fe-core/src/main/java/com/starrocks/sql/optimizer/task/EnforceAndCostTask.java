@@ -282,7 +282,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         double leftOutputSize = leftChildStats.getOutputSize(groupExpression.getChildOutputColumns(curChildIndex - 1));
         double rightOutputSize = rightChildStats.getOutputSize(groupExpression.getChildOutputColumns(curChildIndex));
 
-        int parallelExecInstance = CostModel.getParallelExecInstanceNum();
+        int parallelExecInstance = CostModel.getParallelExecInstanceNum(
+                groupExpression.getGroup().getLogicalProperty().getLeftMostScanTabletsNum());
         if (leftOutputSize < rightOutputSize * parallelExecInstance * beNum * sv.getBroadcastRightTableScaleFactor()
                 && rightChildStats.getOutputRowCount() >
                 sv.getBroadcastRowCountLimit()) {
