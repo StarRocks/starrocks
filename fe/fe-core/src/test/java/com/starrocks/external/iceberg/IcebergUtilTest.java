@@ -5,7 +5,7 @@ package com.starrocks.external.iceberg;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.external.hive.HdfsFileFormat;
+import com.starrocks.external.hive.RemoteFileInputFormat;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.types.Types;
@@ -28,8 +28,8 @@ public class IcebergUtilTest {
 
     @Test
     public void testGetHdfsFileFormat() {
-        HdfsFileFormat fileFormat = IcebergUtil.getHdfsFileFormat(FileFormat.PARQUET);
-        Assert.assertTrue(fileFormat.equals(HdfsFileFormat.PARQUET));
+        RemoteFileInputFormat fileFormat = IcebergUtil.getHdfsFileFormat(FileFormat.PARQUET);
+        Assert.assertTrue(fileFormat.equals(RemoteFileInputFormat.PARQUET));
         Assert.assertThrows("Unexpected file format: %s", StarRocksIcebergException.class, () -> {
             IcebergUtil.getHdfsFileFormat(FileFormat.AVRO);
         });

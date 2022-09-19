@@ -373,10 +373,10 @@ public class HiveMetaCache {
     }
 
     private HivePartition getPartitionByEvent(StorageDescriptor sd) throws Exception {
-        HdfsFileFormat format = HdfsFileFormat.fromHdfsInputFormatClass(sd.getInputFormat());
+        RemoteFileInputFormat format = RemoteFileInputFormat.fromHdfsInputFormatClass(sd.getInputFormat());
         String path = ObjectStorageUtils.formatObjectStoragePath(sd.getLocation());
         boolean isSplittable = ObjectStorageUtils.isObjectStorage(path) ||
-                HdfsFileFormat.isSplittable(sd.getInputFormat());
+                RemoteFileInputFormat.isSplittable(sd.getInputFormat());
         List<HdfsFileDesc> fileDescs = client.getHdfsFileDescs(path, isSplittable, sd);
         return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
     }
