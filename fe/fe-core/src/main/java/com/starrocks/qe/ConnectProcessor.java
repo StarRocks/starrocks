@@ -491,10 +491,6 @@ public class ConnectProcessor {
                 if (resultSet == null) {
                     if (executor.sendResultToChannel(ctx.getMysqlChannel())) {  // query statement result
                         packet = getResultPacket();
-                        if (packet == null) {
-                            LOG.debug("packet == null");
-                            return;
-                        }
                     } else { // for lower version, in consideration of compatibility
                         packet = executor.getOutputPacket();
                     }
