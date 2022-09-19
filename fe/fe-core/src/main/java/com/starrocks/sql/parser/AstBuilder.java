@@ -1784,15 +1784,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     ImportColumnDesc columnDesc = new ImportColumnDesc(column);
                     columns.add(columnDesc);
                 }
-
-                for (StarRocksParser.AssignmentListContext assignmentListContext :
-                        loadPropertiesContext.columnProperties().assignmentList()) {
-                    for (StarRocksParser.AssignmentContext assignmentContext : assignmentListContext.assignment()) {
-                        ColumnAssignment columnAssignment = (ColumnAssignment) (visit(assignmentContext));
-                        Expr expr = columnAssignment.getExpr();
-                        ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
-                        columns.add(columnDesc);
-                    }
+                for (StarRocksParser.AssignmentContext assignmentContext :
+                        loadPropertiesContext.columnProperties().assignment()) {
+                    ColumnAssignment columnAssignment = (ColumnAssignment) (visit(assignmentContext));
+                    Expr expr = columnAssignment.getExpr();
+                    ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
+                    columns.add(columnDesc);
                 }
                 loadPropertyList.add(new ImportColumnsStmt(columns));
             }
@@ -1859,15 +1856,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     ImportColumnDesc columnDesc = new ImportColumnDesc(column);
                     columns.add(columnDesc);
                 }
-
-                for (StarRocksParser.AssignmentListContext assignmentListContext :
-                        loadPropertiesContext.columnProperties().assignmentList()) {
-                    for (StarRocksParser.AssignmentContext assignmentContext : assignmentListContext.assignment()) {
-                        ColumnAssignment columnAssignment = (ColumnAssignment) (visit(assignmentContext));
-                        Expr expr = columnAssignment.getExpr();
-                        ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
-                        columns.add(columnDesc);
-                    }
+                for (StarRocksParser.AssignmentContext assignmentContext :
+                        loadPropertiesContext.columnProperties().assignment()) {
+                    ColumnAssignment columnAssignment = (ColumnAssignment) (visit(assignmentContext));
+                    Expr expr = columnAssignment.getExpr();
+                    ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
+                    columns.add(columnDesc);
                 }
                 loadPropertyList.add(new ImportColumnsStmt(columns));
             }

@@ -745,7 +745,7 @@ rowDelimiterProperty
 
 columnProperties
     : '('
-        (qualifiedName | assignmentList) (',' (qualifiedName | assignmentList))*
+        (qualifiedName | assignment) (',' (qualifiedName | assignment))*
       ')'
     ;
 
