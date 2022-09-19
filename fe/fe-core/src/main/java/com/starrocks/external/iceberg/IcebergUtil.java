@@ -11,7 +11,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
-import com.starrocks.external.hive.HdfsFileFormat;
+import com.starrocks.external.hive.RemoteFileInputFormat;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
@@ -89,14 +89,14 @@ public class IcebergUtil {
      * Get hdfs file format in StarRocks use iceberg file format.
      *
      * @param format
-     * @return HdfsFileFormat
+     * @return RemoteFileInputFormat
      */
-    public static HdfsFileFormat getHdfsFileFormat(FileFormat format) {
+    public static RemoteFileInputFormat getHdfsFileFormat(FileFormat format) {
         switch (format) {
             case ORC:
-                return HdfsFileFormat.ORC;
+                return RemoteFileInputFormat.ORC;
             case PARQUET:
-                return HdfsFileFormat.PARQUET;
+                return RemoteFileInputFormat.PARQUET;
             default:
                 throw new StarRocksIcebergException(
                         "Unexpected file format: " + format.toString());

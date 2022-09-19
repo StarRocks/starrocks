@@ -80,7 +80,7 @@ To query the latest Hudi data, make sure that the metadata cached in StarRocks i
     [PARTITION ('partition_name', ...)];
     ```
 
-For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABEL](../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md). Note that only users with the `ALTER_PRIV` permission can manually update the metadata cached in StarRocks.
+For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABEL](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md). Note that only users with the `ALTER_PRIV` permission can manually update the metadata cached in StarRocks.
 
 ## What to do next
 

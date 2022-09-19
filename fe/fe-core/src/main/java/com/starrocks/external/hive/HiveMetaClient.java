@@ -254,14 +254,14 @@ public class HiveMetaClient {
                 Table table = client.hiveClient.getTable(dbName, tableName);
                 sd = table.getSd();
             }
-            HdfsFileFormat format = HdfsFileFormat.fromHdfsInputFormatClass(sd.getInputFormat());
+            RemoteFileInputFormat format = RemoteFileInputFormat.fromHdfsInputFormatClass(sd.getInputFormat());
             if (format == null) {
                 throw new DdlException("unsupported file format [" + sd.getInputFormat() + "]");
             }
 
             String path = ObjectStorageUtils.formatObjectStoragePath(sd.getLocation());
             List<HdfsFileDesc> fileDescs = getHdfsFileDescs(path,
-                    ObjectStorageUtils.isObjectStorage(path) || HdfsFileFormat.isSplittable(sd.getInputFormat()),
+                    ObjectStorageUtils.isObjectStorage(path) || RemoteFileInputFormat.isSplittable(sd.getInputFormat()),
                     sd);
             return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
         } catch (NoSuchObjectException e) {
@@ -291,13 +291,13 @@ public class HiveMetaClient {
                     HoodieTableMetaClient.builder().setConf(conf).setBasePath(basePath).build();
             HoodieFileFormat hudiBaseFileFormat = metaClient.getTableConfig().getBaseFileFormat();
 
-            HdfsFileFormat format;
+            RemoteFileInputFormat format;
             switch (hudiBaseFileFormat) {
                 case PARQUET:
-                    format = HdfsFileFormat.PARQUET;
+                    format = RemoteFileInputFormat.PARQUET;
                     break;
                 case ORC:
-                    format = HdfsFileFormat.ORC;
+                    format = RemoteFileInputFormat.ORC;
                     break;
                 default:
                     throw new DdlException("unsupported file format [" + hudiBaseFileFormat.name() + "]");
@@ -333,7 +333,7 @@ public class HiveMetaClient {
             long fileLength = baseFile.map(BaseFile::getFileLen).orElse(-1L);
             List<String> logs = fileSlice.getLogFiles().map(HoodieLogFile::getFileName).collect(Collectors.toList());
             fileDescs.add(new HdfsFileDesc(fileName, "", fileLength,
-                    ImmutableList.of(), ImmutableList.copyOf(logs), HdfsFileFormat.isSplittable(sd.getInputFormat()),
+                    ImmutableList.of(), ImmutableList.copyOf(logs), RemoteFileInputFormat.isSplittable(sd.getInputFormat()),
                     getTextFileFormatDesc(sd)));
         }
         return fileDescs;

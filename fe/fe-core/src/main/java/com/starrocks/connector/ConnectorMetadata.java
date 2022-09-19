@@ -4,12 +4,14 @@ package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.external.RemoteFileInfo;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -25,6 +27,9 @@ import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
 
@@ -57,6 +62,41 @@ public interface ConnectorMetadata {
      */
     default Table getTable(String dbName, String tblName) {
         return null;
+    }
+
+    /**
+     * Return all partition names of the table.
+     * @param databaseName the name of the database
+     * @param tableName the name of the table
+     * @return a list of partition names
+     */
+    default List<String> getPartitionNames(String databaseName, String tableName) {
+        return Lists.newArrayList();
+    }
+
+    /**
+     * Get statistics for the table.
+     * @param session optimizer context
+     * @param table
+     * @param columns selected columns
+     * @param partitionKeys selected partition keys
+     * @return the table statistics for the table.
+     */
+    default Statistics getTableStatistics(OptimizerContext session,
+                                          Table table,
+                                          List<ColumnRefOperator> columns,
+                                          List<PartitionKey> partitionKeys) {
+        return Statistics.builder().build();
+    }
+
+    /**
+     * Get the remote file information from hdfs or s3. It is mainly used to generate ScanRange for scheduling.
+     * @param table
+     * @param partitionKeys selected columns
+     * @return the remote file information of the query to scan.
+     */
+    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
+        return Lists.newArrayList();
     }
 
     default void createDb(String dbName) throws DdlException, AlreadyExistsException {

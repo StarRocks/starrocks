@@ -139,6 +139,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -166,6 +167,7 @@ public class StmtExecutor {
     private LeaderOpExecutor leaderOpExecutor = null;
     private RedirectStatus redirectStatus = null;
     private final boolean isProxy;
+    private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
 
@@ -175,6 +177,9 @@ public class StmtExecutor {
         this.originStmt = originStmt;
         this.serializer = context.getSerializer();
         this.isProxy = isProxy;
+        if (isProxy) {
+            proxyResultBuffer = new ArrayList<>();
+        }
     }
 
     // this constructor is only for test now.
@@ -282,6 +287,14 @@ public class StmtExecutor {
             return null;
         } else {
             return leaderOpExecutor.getProxyResultSet();
+        }
+    }
+
+    public boolean sendResultToChannel(MysqlChannel channel) throws IOException {
+        if (leaderOpExecutor == null) {
+            return false;
+        } else {
+            return leaderOpExecutor.sendResultToChannel(channel);
         }
     }
 
@@ -733,7 +746,7 @@ public class StmtExecutor {
                     sendFields(colNames, outputExprs);
                     isSendFields = true;
                 }
-                if (channel.isSendBufferNull()) {
+                if (!isProxy && channel.isSendBufferNull()) {
                     int bufferSize = 0;
                     for (ByteBuffer row : batch.getBatch().getRows()) {
                         bufferSize += (row.position() - row.limit());
@@ -743,7 +756,11 @@ public class StmtExecutor {
                 }
 
                 for (ByteBuffer row : batch.getBatch().getRows()) {
-                    channel.sendOnePacket(row);
+                    if (isProxy) {
+                        proxyResultBuffer.add(row);
+                    } else {
+                        channel.sendOnePacket(row);
+                    }
                 }
                 context.updateReturnRows(batch.getBatch().getRows().size());
             }
@@ -945,18 +962,30 @@ public class StmtExecutor {
         // sends how many columns
         serializer.reset();
         serializer.writeVInt(colNames.size());
-        context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        if (isProxy) {
+            proxyResultBuffer.add(serializer.toByteBuffer());
+        } else {
+            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        }
         // send field one by one
         for (int i = 0; i < colNames.size(); ++i) {
             serializer.reset();
             serializer.writeField(colNames.get(i), exprs.get(i).getOriginType());
-            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+            if (isProxy) {
+                proxyResultBuffer.add(serializer.toByteBuffer());
+            } else {
+                context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+            }
         }
         // send EOF
         serializer.reset();
         MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
         eofPacket.writeTo(serializer);
-        context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        if (isProxy) {
+            proxyResultBuffer.add(serializer.toByteBuffer());
+        } else {
+            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        }
     }
 
     public void sendShowResult(ShowResultSet resultSet) throws IOException {
@@ -1487,5 +1516,9 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
         return Pair.create(sqlResult, coord.getExecStatus());
+    }
+
+    public List<ByteBuffer> getProxyResultBuffer() {
+        return proxyResultBuffer;
     }
 }
