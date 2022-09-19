@@ -694,13 +694,17 @@ public class Backend implements Writable {
                 this.heartbeatRetryTimes++;
             } else {
                 if (isAlive.compareAndSet(true, false)) {
-                    isChanged = true;
                     LOG.info("{} is dead,", this.toString());
                 }
-
                 heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
                 lastMissingHeartbeatTime = System.currentTimeMillis();
             }
+            // When the leader receives an error heartbeat info which status not ok, 
+            // this heartbeat info also need to be synced to follower.
+            // Since the failed heartbeat info also modifies fe's memory, (this.heartbeatRetryTimes++;)
+            // if this heartbeat is not synchronized to the follower, 
+            // that will cause the Follower and master’s memory to be inconsistent
+            isChanged = true;
         }
 
         return isChanged;
