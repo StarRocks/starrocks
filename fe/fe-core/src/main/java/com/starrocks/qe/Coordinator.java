@@ -2378,9 +2378,9 @@ public class Coordinator {
                     RuntimeProfile operatorProfile = operatorProfilePair.first;
                     RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
                     RuntimeProfile uniqueMetrics = operatorProfile.getChild("UniqueMetrics");
-                    Preconditions.checkNotNull(commonMetrics);
-                    Preconditions.checkNotNull(uniqueMetrics);
-
+                    if (commonMetrics == null || uniqueMetrics == null) {
+                        continue;
+                    }
                     Counter operatorTotalTime = commonMetrics.getMaxCounter("OperatorTotalTime");
                     Preconditions.checkNotNull(operatorTotalTime);
                     executionTime += operatorTotalTime.getValue();
