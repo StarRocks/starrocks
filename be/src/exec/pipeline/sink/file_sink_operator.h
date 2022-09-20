@@ -71,7 +71,6 @@ private:
     std::vector<ExprContext*> _output_expr_ctxs;
     std::shared_ptr<ResultFileOptions> _file_opts;
     int32_t _num_sinkers;
-    // std::shared_ptr<BufferControlBlock> _sender;
 
     std::shared_ptr<FileSinkBuffer> _file_sink_buffer;
     RuntimeProfile* _profile = nullptr;
