@@ -186,6 +186,9 @@ statement
     // Snapshot Satement
     | showSnapshotStatement
 
+    //  Repository Satement
+    | createRepositoryStatement
+
     // Sql BlackList And WhiteList Statement
     | addSqlBlackListStatement
     | delSqlBlackListStatement
@@ -1363,6 +1366,14 @@ showRestoreStatement
 showSnapshotStatement
     : SHOW SNAPSHOT ON identifier
     (WHERE expression)?
+    ;
+
+// ------------------------------------------ Repository Statement -----------------------------------------------------
+createRepositoryStatement
+    : CREATE (READ ONLY)? REPOSITORY identifier
+    WITH BROKER identifier?
+    ON LOCATION string
+    PROPERTIES propertyList
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------
