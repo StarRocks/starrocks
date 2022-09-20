@@ -4,6 +4,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
@@ -25,9 +26,10 @@ public class CoordinatorMonitorTest {
             // Prepare coordinators.
             ConnectContext connCtx = new ConnectContext();
             connCtx.setExecutionId(new TUniqueId(0, 0));
-            Coordinator coord1 = new Coordinator(connCtx, null, null, null);
-            Coordinator coord2 = new Coordinator(connCtx, null, null, null);
-            Coordinator coord3 = new Coordinator(connCtx, null, null, null);
+            List<PlanFragment> fragments = ImmutableList.of();
+            Coordinator coord1 = new Coordinator(connCtx, fragments, null, null);
+            Coordinator coord2 = new Coordinator(connCtx, fragments, null, null);
+            Coordinator coord3 = new Coordinator(connCtx, fragments, null, null);
             List<Coordinator> coordinators = ImmutableList.of(coord1, coord2, coord3);
 
             final QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
