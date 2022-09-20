@@ -361,7 +361,7 @@ HdfsScannerContext* FileReaderTest::_create_file4_base_context() {
     };
     ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(_file2_path));
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file4_path));
 
     return ctx;
 }
