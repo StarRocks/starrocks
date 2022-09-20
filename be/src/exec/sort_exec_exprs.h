@@ -62,6 +62,7 @@ public:
     const std::vector<ExprContext*>& rhs_ordering_expr_ctxs() const { return _rhs_ordering_expr_ctxs; }
 
 private:
+    ObjectPool* _pool = nullptr;
     // Create two ExprContexts for evaluating over the TupleRows.
     std::vector<ExprContext*> _lhs_ordering_expr_ctxs;
     std::vector<ExprContext*> _rhs_ordering_expr_ctxs;
