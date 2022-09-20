@@ -252,7 +252,6 @@ public class ExportStmt extends StatementBase {
                 }
 
                 Set<String> tableColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-                int index = 0;
                 for (Column column : table.getBaseSchema()) {
                     tableColumns.add(column.getName());
                 }
