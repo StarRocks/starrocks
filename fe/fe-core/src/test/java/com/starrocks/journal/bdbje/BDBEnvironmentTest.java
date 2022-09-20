@@ -127,8 +127,8 @@ public class BDBEnvironmentTest {
                 return;
             } catch (Exception e) {
                 // sleep 5 ~ 15 seconds
-               int sleepSeconds = new Random().nextInt() % 10 + 5;
-                LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds);
+                int sleepSeconds = ThreadLocalRandom.current().nextInt(5, 15);
+                LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds, e);
                 Thread.sleep(sleepSeconds * 1000L);
             }
         }

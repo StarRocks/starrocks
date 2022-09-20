@@ -148,6 +148,8 @@ public class FileSystemManager {
     private ConcurrentHashMap<FileSystemIdentity, BrokerFileSystem> cachedFileSystem;
     private ClientContextManager clientContextManager;
 
+    private boolean hasSetGlobalUGI = false;
+
     public FileSystemManager() {
         cachedFileSystem = new ConcurrentHashMap<>();
         clientContextManager = new ClientContextManager(handleManagementPool);
@@ -332,6 +334,11 @@ public class FileSystemManager {
                     UserGroupInformation.setConfiguration(conf);
 
                     ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab);
+                    if (!hasSetGlobalUGI) {
+                        // set a global ugi so that other components(kms for example) can get the kerberos token.
+                        UserGroupInformation.setLoginUser(ugi);
+                        hasSetGlobalUGI = true;
+                    }
                     if (properties.containsKey(KERBEROS_KEYTAB_CONTENT)) {
                         try {
                             File file = new File(tmpFilePath);
