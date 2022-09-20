@@ -19,6 +19,7 @@ DIAGNOSTIC_POP
 
 namespace starrocks::pipeline {
 
+// FileSinkBuffer accepts input from all FileSinkOperators, it uses an execution queue to asynchronously write chunks to file one by one.
 class FileSinkBuffer {
 public:
     FileSinkBuffer(std::vector<ExprContext*>& output_expr_ctxs, std::shared_ptr<ResultFileOptions> file_opts,
@@ -208,7 +209,8 @@ void FileSinkBuffer::close(RuntimeState* state) {
         _sender->close(final_status);
         _sender.reset();
 
-        _state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
+        _state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
+                                                         state->fragment_instance_id());
     }
     _is_finished = true;
     bthread::execution_queue_stop(*_exec_queue_id);
