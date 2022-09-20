@@ -1,8 +1,8 @@
 # StarRocks version 2.4
 
-## 2.4.0 RC01
+## 2.4.0 RC
 
-发布日期： 2022 年 9 月 9 日
+发布日期： 2022 年 9 月 17 日
 
 ### 新增特性
 
@@ -22,8 +22,6 @@
 
 - 支持通过 GRANT 或 REVOKE 语句授予或撤销用户特定角色或 IMPERSONATE 权限，并支持通过 EXECUTE AS 语句使用 IMPERSONATE 权限执行当前会话。相关文档，请参见 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 、 [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) 和 [EXECUTE AS](../sql-reference/sql-statements/account-management/EXECUTE%20AS.md)。
 
-- 支持 FQDN 访问：您可以用域名或结合主机名与端口的方式作为 FE 或 BE 节点的唯一标识，有效避免因 IP 变更导致无法访问的问题。相关文档，请参见 [启用 FQDN 访问](../administration/enable_fqdn.md)。
-
 - flink-connector-starrocks 支持主键模型 Partial Update。相关文档，请参见[使用 flink-connector-starrocks 导入至 StarRocks](../loading/Flink-connector-starrocks.md)。
 
 - 函数相关：
@@ -32,9 +30,7 @@
 
 ### 功能优化
 
-- 主键模型支持持久化 VARCHAR 类型主键索引。
-  
-  自 2.4.0 版本起，主键模型的主键索引磁盘持久化模式和常驻内存模式支持相同的数据类型。
+- 主键模型支持持久化 VARCHAR 类型主键索引。自 2.4.0 版本起，主键模型的主键索引磁盘持久化模式和常驻内存模式支持相同的数据类型。
 
 - 优化外表查询性能。
   - 支持查询 Parquet 格式文件时延迟物化，提升小范围过滤场景下的数据湖查询性能。
@@ -47,6 +43,10 @@
 - 统计信息支持直方图，并进一步完善全量统计信息采集。相关文档，请参见[CBO统计信息](../using_starrocks/Cost_based_optimizer.md)。
 
 - 支持 Tablet 自适应多线程 Scan，降低 Scan 性能对同磁盘 Tablet 数量的依赖，从而可以简化分桶数量的设定。相关文档，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+
+- 支持查询 Apache  Hive 中的压缩文本（.txt）文件。
+
+- 调整了计算默认 PageCache Size 和一致性校验内存的方法，避免多实例部署时的 OOM 问题。
 
 - 函数相关：
   - count distinct 支持多个字段，可计算多字段组合去重后的结果数目。相关文档，请参见[count](../sql-reference/sql-functions/aggregate-functions/count.md)。
@@ -69,6 +69,12 @@
 - 数据湖分析相关问题：
   - 查询 HIVE 外表中 Parquet 格式数据失败。 [#7413](https://github.com/StarRocks/starrocks/pull/7413) [#7482](https://github.com/StarRocks/starrocks/pull/7482) [#7624](https://github.com/StarRocks/starrocks/pull/7624)
   - Elasticsearch 外表 Limit 查询结果不正确。[#9226](https://github.com/StarRocks/starrocks/pull/9226)
+
+- 查询存有复杂数据类型的 Apache Iceberg 表返回未知错误。[#11298](https://github.com/StarRocks/starrocks/pull/11298)
+
+- Leader FE 节点和 Follower FE 节点间元数据不同步。[#11215](https://github.com/StarRocks/starrocks/pull/11215)
+
+- 当 BITMAP 类型数据大于 2GB 时，BE 停止服务。[#11178](https://github.com/StarRocks/starrocks/pull/11178)
 
 ### 行为变更
 
