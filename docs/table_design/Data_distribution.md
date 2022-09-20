@@ -27,7 +27,7 @@ To achieve more flexible data distribution, you can combine the preceding four p
 
 - **Hash**: A hash-partitioned table has only one partition (the entire table is considered a partition). The partition is divided into tablets based on the bucketing column and the number of tablets that you specified.
 
-For example, the following statement creates a table `site_access`. The table is divided into 10 tablets based on the `site_id` column.
+  For example, the following statement creates a table `site_access`. The table is divided into 10 tablets based on the `site_id` column.
 
   ```SQL
   CREATE TABLE site_access(
@@ -42,7 +42,7 @@ For example, the following statement creates a table `site_access`. The table is
 
 - **Range-hash**: A range-hash partitioned table divides data into multiple partitions based on the partitioning column. Each partition is further divided into tablets based on the bucketing column and the number of tablets that you specified.
 
-For example, the following statement creates a table `site_access` that is partitioned by the `event_day` column. The table contains 3 partitions: `p1`, `p2`, and `p3`. Each partition is divided into 10 tablets based on the `site_id` column.
+  For example, the following statement creates a table `site_access` that is partitioned by the `event_day` column. The table contains 3 partitions: `p1`, `p2`, and `p3`. Each partition is divided into 10 tablets based on the `site_id` column.
 
   ```SQL
   CREATE TABLE site_access(
@@ -60,7 +60,7 @@ For example, the following statement creates a table `site_access` that is parti
       PARTITION p3 VALUES LESS THAN ("2020-03-31")
   )
   DISTRIBUTED BY HASH(site_id) BUCKETS 10;
-```
+  ```
 
 ## Design partitioning and bucketing rules
 
@@ -313,7 +313,7 @@ ALTER TABLE site_access
 DROP PARTITION p1;
 ```
 
-> Note: If a partition is deleted within 24 hours, the data of the partition remains in Trash. During the period, you can execute the RECOVER statement to restore this data.
+> Note: If a partition is deleted within 24 hours, the data of the partition remains in Trash. During the period, you can execute the [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) statement to restore this data.
 
 ### Restore a partition
 
