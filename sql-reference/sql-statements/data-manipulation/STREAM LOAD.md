@@ -217,7 +217,7 @@ wget http://172.26.195.68:8045/api/_load_error_log?file=error_log_3a4eb8421f0878
 
 本小节以 CSV 格式的数据为例，重点阐述在创建导入作业的时候，如何运用各种参数配置来满足不同业务场景下的各种导入要求。
 
-#### 设置超时时间
+#### **设置超时时间**
 
 StarRocks 数据库 `test_db` 里的表 `table1` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
@@ -233,7 +233,7 @@ curl --location-trusted -u root: -H "label:label1" \
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
 
-#### 设置最大容错率
+#### **设置最大容错率**
 
 StarRocks 数据库 `test_db` 里的表 `table2` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
@@ -248,7 +248,7 @@ curl --location-trusted -u root: -H "label:label3" \
     http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
 ```
 
-#### 设置列映射关系
+#### **设置列映射关系**
 
 StarRocks 数据库 `test_db` 里的表 `table3` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
@@ -265,7 +265,7 @@ curl --location-trusted -u root:  -H "label:label4" \
 
 > 说明：上述示例中，因为 `example3.csv` 和 `table3` 所包含的列不能按顺序依次对应，因此需要通过 `columns` 参数来设置 `example3.csv` 和 `table3` 之间的列映射关系。
 
-#### 设置筛选条件
+#### **设置筛选条件**
 
 StarRocks 数据库 `test_db` 里的表 `table4` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
@@ -283,7 +283,7 @@ curl --location-trusted -u root: -H "label:label2" \
 
 > 说明：上述示例中，虽然 `example4.csv` 和 `table4` 所包含的列数目相同、并且按顺序一一对应，但是因为需要通过 WHERE 子句指定基于列的过滤条件，因此需要通过 `columns` 参数对 `example4.csv` 中的列进行临时命名。
 
-#### 设置目标分区
+#### **设置目标分区**
 
 StarRocks 数据库 `test_db` 里的表 `table5` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
@@ -298,7 +298,7 @@ curl --location-trusted -u root:  -H "label:label5" \
     http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
 ```
 
-#### 设置严格模式和时区
+#### **设置严格模式和时区**
 
 StarRocks 数据库 `test_db` 里的表 `table6` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
@@ -314,7 +314,7 @@ curl --location-trusted -u root: \
     http://<fe_host>:<fe_http_port>/api/test_db/table6/_stream_load
 ```
 
-#### 导入数据到含有 HLL 类型列的表
+#### **导入数据到含有 HLL 类型列的表**
 
 StarRocks 数据库 `test_db` 里的表 `table7` 包含两个 HLL 类型的列，按顺序依次为 `col1`、`col2`。
 
@@ -339,7 +339,7 @@ curl --location-trusted -u root: \
 
 有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [HLL](https://docs.starrocks.com/zh-cn/2.3/sql-reference/sql-statements/data-definition/HLL)。
 
-#### 导入数据到含有 BITMAP 类型列的表
+#### **导入数据到含有 BITMAP 类型列的表**
 
 StarRocks 数据库 `test_db` 里的表 `table8` 包含两个 BITMAP 类型的列，按顺序依次为 `col1`、`col2`。
 
@@ -377,7 +377,7 @@ StarRocks 数据库 `test_db` 里的表 `tbl1` 拥有如下表结构：
 `price` double NULL COMMENT ""
 ```
 
-#### 使用简单模式导入数据
+#### **使用简单模式导入数据**
 
 假设数据文件 `example1.json` 包含如下数据：
 
@@ -406,7 +406,7 @@ curl --location-trusted -u root: -H "label:label6" \
 ]
 ```
 
-#### 使用匹配模式导入数据
+#### **使用匹配模式导入数据**
 
 假设数据文件 `example2.json` 包含如下数据：
 
@@ -436,7 +436,7 @@ curl --location-trusted -u root: -H "label:label7" \
 >
 > - 如果 JSON 数据是以数组开始，并且数组中每个对象是一条记录，在设置 `jsonpaths` 时，我们的 ROOT 节点实际上是数组中对象。
 
-#### 导入数据并指定 JSON 根节点
+#### **导入数据并指定 JSON 根节点**
 
 假设数据文件 `example3.json` 包含如下数据：
 
