@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <string_view>
+
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "env/env.h"
@@ -87,14 +89,11 @@ private:
 
     Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk);
 
-    Status _construct_row_in_object_order(simdjson::ondemand::object* row, Chunk* chunk);
-    Status _construct_row_in_slot_order(simdjson::ondemand::object* row, Chunk* chunk);
+    Status _construct_row_without_jsonpath(simdjson::ondemand::object* row, Chunk* chunk);
+    Status _construct_row_with_jsonpath(simdjson::ondemand::object* row, Chunk* chunk);
 
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                              const std::string& col_name);
-
-    // _build_slot_descs builds _slot_descs as the order of first json object and builds _slot_desc_dict;
-    Status _build_slot_descs();
 
 private:
     RuntimeState* _state = nullptr;
@@ -105,7 +104,9 @@ private:
     std::shared_ptr<SequentialFile> _file;
     bool _closed;
     std::vector<SlotDescriptor*> _slot_descs;
-    std::unordered_map<std::string, SlotDescriptor*> _slot_desc_dict;
+    //Attention: _slot_desc_dict's key is the string_view of the column of _slot_descs,
+    // so the lifecycle of _slot_descs should be longer than _slot_desc_dict;
+    std::unordered_map<std::string_view, SlotDescriptor*> _slot_desc_dict;
 
     // For performance reason, the simdjson parser should be reused over several files.
     //https://github.com/simdjson/simdjson/blob/master/doc/performance.md
