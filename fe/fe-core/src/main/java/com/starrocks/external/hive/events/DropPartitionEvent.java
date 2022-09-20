@@ -8,8 +8,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.external.hive.HiveMetaCache;
-import com.starrocks.external.hive.HivePartitionKey;
 import com.starrocks.external.hive.HivePartitionKeysKey;
+import com.starrocks.external.hive.HivePartitionName;
 import com.starrocks.external.hive.Utils;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.messaging.DropPartitionMessage;
@@ -47,7 +47,7 @@ public class DropPartitionEvent extends MetastoreTableEvent {
             Preconditions.checkState(!partCols.isEmpty());
             this.partCols = partCols;
             hivePartitionKeys.clear();
-            hivePartitionKeys.add(new HivePartitionKey(dbName, tblName, Table.TableType.HIVE,
+            hivePartitionKeys.add(new HivePartitionName(dbName, tblName, Table.TableType.HIVE,
                     Lists.newArrayList(droppedPartition.values())));
         } catch (Exception ex) {
             throw new MetastoreNotificationException(

@@ -134,6 +134,10 @@ CONF_Int32(sleep_one_second, "1");
 // The sleep time for five seconds.
 CONF_Int32(sleep_five_seconds, "5");
 
+// The count of thread to compact
+CONF_Int32(compact_threads, "4");
+CONF_Int32(compact_thread_pool_queue_size, "100");
+
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 // The user function dir.
@@ -250,7 +254,7 @@ CONF_Int64(index_stream_cache_capacity, "10737418240");
 // CONF_Int64(max_packed_row_block_size, "20971520");
 
 // Cache for storage page size
-CONF_String(storage_page_cache_limit, "20%");
+CONF_mString(storage_page_cache_limit, "20%");
 // whether to disable page cache feature in storage
 CONF_Bool(disable_storage_page_cache, "false");
 // whether to disable column pool

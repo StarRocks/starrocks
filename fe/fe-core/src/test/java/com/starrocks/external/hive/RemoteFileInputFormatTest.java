@@ -5,12 +5,12 @@ package com.starrocks.external.hive;
 import org.junit.Assert;
 import org.junit.Test;
 
-public class HdfsFileFormatTest {
+public class RemoteFileInputFormatTest {
     @Test
     public void testParquetFormat() {
-        Assert.assertSame(HdfsFileFormat.PARQUET, HdfsFileFormat
+        Assert.assertSame(RemoteFileInputFormat.PARQUET, RemoteFileInputFormat
                 .fromHdfsInputFormatClass("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"));
-        Assert.assertSame(HdfsFileFormat.ORC,
-                HdfsFileFormat.fromHdfsInputFormatClass("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"));
+        Assert.assertSame(RemoteFileInputFormat.ORC,
+                RemoteFileInputFormat.fromHdfsInputFormatClass("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"));
     }
 }

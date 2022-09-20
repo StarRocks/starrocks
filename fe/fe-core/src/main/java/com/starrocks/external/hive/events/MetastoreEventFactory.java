@@ -9,7 +9,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveMetaCache;
-import com.starrocks.external.hive.HivePartitionKey;
+import com.starrocks.external.hive.HivePartitionName;
 import com.starrocks.external.hive.HiveTableName;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
@@ -104,15 +104,15 @@ public class MetastoreEventFactory implements EventFactory {
     }
 
     /**
-     * Create batch event tasks according to HivePartitionKey to facilitate subsequent parallel processing.
+     * Create batch event tasks according to HivePartitionName to facilitate subsequent parallel processing.
      * For ADD_PARTITION and DROP_PARTITION, we directly override any events before that partition.
      * For a partition, it is meaningless to process any events before the drop partition.
      */
     List<MetastoreEvent> createBatchEvents(List<MetastoreEvent> events) {
-        Map<HivePartitionKey, MetastoreEvent> batchEvents = Maps.newHashMap();
+        Map<HivePartitionName, MetastoreEvent> batchEvents = Maps.newHashMap();
         for (MetastoreEvent event : events) {
             MetastoreTableEvent metastoreTableEvent = (MetastoreTableEvent) event;
-            HivePartitionKey hivePartitionKey = metastoreTableEvent.getHivePartitionKey();
+            HivePartitionName hivePartitionKey = metastoreTableEvent.getHivePartitionKey();
             switch (event.getEventType()) {
                 case ADD_PARTITION:
                 case DROP_PARTITION:
