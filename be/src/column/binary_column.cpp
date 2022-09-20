@@ -129,6 +129,7 @@ ColumnPtr BinaryColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
             dest_offsets[j + 1] = pos;
         }
     }
+    return dest;
 }
 
 template <typename T>
