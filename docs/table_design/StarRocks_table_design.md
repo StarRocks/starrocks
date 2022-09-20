@@ -1,4 +1,4 @@
-# Understand StarRocks table design
+# Understand table design
 
 ## Columnar storage
 
