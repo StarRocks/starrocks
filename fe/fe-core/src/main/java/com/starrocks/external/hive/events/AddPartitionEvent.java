@@ -8,8 +8,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.external.hive.HiveMetaCache;
-import com.starrocks.external.hive.HivePartitionKey;
 import com.starrocks.external.hive.HivePartitionKeysKey;
+import com.starrocks.external.hive.HivePartitionName;
 import com.starrocks.external.hive.HiveTableKey;
 import com.starrocks.external.hive.Utils;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
@@ -52,7 +52,7 @@ public class AddPartitionEvent extends MetastoreTableEvent {
             hmsTbl = addPartitionMessage.getTableObj();
             hivePartitionKeys.clear();
             hivePartitionKeys.add(
-                    new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, addedPartition.getValues()));
+                    new HivePartitionName(dbName, tblName, Table.TableType.HIVE, addedPartition.getValues()));
         } catch (Exception ex) {
             throw new MetastoreNotificationException(ex);
         }

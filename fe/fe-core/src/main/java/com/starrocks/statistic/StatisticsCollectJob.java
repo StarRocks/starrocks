@@ -91,6 +91,8 @@ public abstract class StatisticsCollectJob {
         executor.execute();
 
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+            LOG.warn("Statistics collect fail | Error Message [" + context.getState().getErrorMessage() + "] | " +
+                    "SQL [" + sql + "]");
             throw new DdlException(context.getState().getErrorMessage());
         }
     }
