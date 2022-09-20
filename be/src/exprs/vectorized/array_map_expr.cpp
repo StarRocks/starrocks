@@ -15,6 +15,7 @@
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/lambda_function.h"
 #include "runtime/user_function_cache.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::vectorized {
 ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
@@ -76,7 +77,7 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
         inputs.push_back(cur_array->elements_column());
     }
 
-    ColumnPtr column;
+    ColumnPtr column = nullptr;
     if (input_array->elements_column()->size() == 0) { // arrays may be null or empty
         column = input_array->elements_column();
     } else {
@@ -97,13 +98,27 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
             DCHECK(id > 0);
             auto captured = chunk->get_column_by_slot_id(id);
             if (captured->size() != input_array->size()) {
-                throw std::runtime_error(
-                        fmt::format("The size of the captured column {} does not equal to array's size"),
-                        captured->get_name());
+                throw std::runtime_error(fmt::format(
+                        "The size of the captured column {} does not equal to array's size.", captured->get_name()));
             }
             cur_chunk->append_column(captured->replicate(input_array->offsets_column()->get_data()), id);
         }
-        column = EVALUATE_NULL_IF_ERROR(context, _children[0], cur_chunk.get());
+        if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
+            column = EVALUATE_NULL_IF_ERROR(context, _children[0], cur_chunk.get());
+        } else {
+            ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
+            accumulator.push(std::move(cur_chunk));
+            accumulator.finalize();
+            while (auto tmp_chunk = accumulator.pull()) {
+                auto tmp_col = EVALUATE_NULL_IF_ERROR(context, _children[0], tmp_chunk.get());
+                if (column == nullptr) {
+                    column = tmp_col;
+                } else {
+                    column->append(*tmp_col);
+                }
+            }
+        }
+
         // construct the result array
         DCHECK(column != nullptr);
         // the elements of the new array should be nullable and not const.
