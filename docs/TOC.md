@@ -73,7 +73,6 @@
     + [Configuration](./administration/Configuration.md)
     + [Monitor and alert](./administration/Monitor_and_Alert.md)
     + [Manage a cluster](./administration/Cluster_administration.md)
-    + [Enable FQDN access](./administration/enable_fqdn.md)
     + Resource Management
       + [Resource group](./administration/resource_group.md)
       + [Query management](./administration/Query_management.md)
