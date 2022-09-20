@@ -273,9 +273,6 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         // shuffling large left-hand table data
         ConnectContext ctx = ConnectContext.get();
         SessionVariable sv = ConnectContext.get().getSessionVariable();
-        int parallelExecInstance = Math.max(1,
-                Math.min(groupExpression.getGroup().getLogicalProperty().getLeftMostScanTabletsNum(),
-                        sv.getDegreeOfParallelism()));
         int beNum = Math.max(1, ctx.getAliveBackendNumber());
         Statistics leftChildStats = groupExpression.getInputs().get(curChildIndex - 1).getStatistics();
         Statistics rightChildStats = groupExpression.getInputs().get(curChildIndex).getStatistics();
@@ -285,6 +282,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         double leftOutputSize = leftChildStats.getOutputSize(groupExpression.getChildOutputColumns(curChildIndex - 1));
         double rightOutputSize = rightChildStats.getOutputSize(groupExpression.getChildOutputColumns(curChildIndex));
 
+        int parallelExecInstance = CostModel.getParallelExecInstanceNum(
+                groupExpression.getGroup().getLogicalProperty().getLeftMostScanTabletsNum());
         if (leftOutputSize < rightOutputSize * parallelExecInstance * beNum * sv.getBroadcastRightTableScaleFactor()
                 && rightChildStats.getOutputRowCount() >
                 sv.getBroadcastRowCountLimit()) {
