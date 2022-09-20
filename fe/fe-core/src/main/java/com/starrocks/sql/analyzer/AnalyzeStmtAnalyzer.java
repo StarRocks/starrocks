@@ -30,7 +30,6 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class AnalyzeStmtAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -78,10 +77,7 @@ public class AnalyzeStmtAnalyzer {
             Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
 
             List<String> columnNames = statement.getColumnNames();
-            if (columnNames == null || columnNames.isEmpty()) {
-                statement.setColumnNames(
-                        analyzeTable.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList()));
-            } else {
+            if (columnNames != null) {
                 for (String colName : columnNames) {
                     Column col = analyzeTable.getColumn(colName);
                     if (col == null) {
