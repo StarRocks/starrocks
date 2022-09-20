@@ -47,6 +47,34 @@
   + [Approximate de-duplication with HLL](./using_starrocks/Using_HLL.md)
   + [Configure a time zone](./using_starrocks/timezone.md)
   + [File manager](./using_starrocks/filemanager.md)
++ Administration
+  + Deployment
+    + [Deploy StarRocks with StarGo](./administration/stargo.md)
+    + [Build in Docker](./administration/Build_in_docker.md)
+    + [Deploy Broker](./administration/deploy_broker.md)
+    + [Deploy FE cluster with high availability](./administration/Deployment.md)
+  + Management
+    + [Manage a cluster](./administration/Cluster_administration.md)
+    + [Configuration](./administration/Configuration.md)
+    + [Scale in and out](./administration/Scale_up_down.md)
+    + [Backup and restore](./administration/Backup_and_restore.md)
+    + [Monitor and alert](./administration/Monitor_and_Alert.md)
+    + Resource Management
+      + [Resource group](./administration/resource_group.md)
+      + [Query management](./administration/Query_management.md)
+      + [Memory management](./administration/Memory_management.md)
+      + [Load balancing](./administration/Load_balance.md)
+      + [Replica](./administration/Replica.md)
+      + [Blacklist](./administration/Blacklist.md)
+  + Data Recovery
+    + [Data recovery](./administration/Data_recovery.md)
+    + [Restore FEs](./administration/Metadata_recovery.md)
+  + User Privilege and Authentication
+    + [User privilege](./administration/User_privilege.md)
+    + [Authentication](./administration/Authentication.md)
+  + Performance Tuning
+    + [Query planning](./administration/Query_planning.md)
+    + [Profiling](./administration/Profiling.md)
 + Reference
   + SQL Reference
     + User Account Management
@@ -210,6 +238,24 @@
       + [week](./sql-reference/sql-functions/date-time-functions/week.md)
       + [weekofyear](./sql-reference/sql-functions/date-time-functions/weekofyear.md)
       + [year](./sql-reference/sql-functions/date-time-functions/year.md)
+    + Aggregate Functions
+      + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
+      + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
+      + [avg](./sql-reference/sql-functions/aggregate-functions/avg.md)
+      + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
+      + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
+      + [hll_union_agg](./sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)
+      + [max](./sql-reference/sql-functions/aggregate-functions/max.md)
+      + [min](./sql-reference/sql-functions/aggregate-functions/min.md)
+      + [percentile_approx](./sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
+      + [percentile_cont](./sql-reference/sql-functions/aggregate-functions/percentile_cont.md)
+      + [retention](./sql-reference/sql-functions/aggregate-functions/retention.md)
+      + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
+      + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
+      + [sum](./sql-reference/sql-functions/aggregate-functions/sum.md)
+      + [variance](./sql-reference/sql-functions/aggregate-functions/variance.md)
+      + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
+      + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
     + Geographic Functions
       + [st_astext](./sql-reference/sql-functions/spatial-functions/st_astext.md)
       + [st_circle](./sql-reference/sql-functions/spatial-functions/st_circle.md)
@@ -267,24 +313,6 @@
         + [JSON_EACH](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
         + [CAST](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/cast.md)
       + [JSON operators](./sql-reference/sql-functions/json-functions/json-operators.md)
-    + Aggregate Functions
-      + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
-      + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
-      + [avg](./sql-reference/sql-functions/aggregate-functions/avg.md)
-      + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
-      + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
-      + [hll_union_agg](./sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)
-      + [max](./sql-reference/sql-functions/aggregate-functions/max.md)
-      + [min](./sql-reference/sql-functions/aggregate-functions/min.md)
-      + [percentile_approx](./sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
-      + [retention](./sql-reference/sql-functions/aggregate-functions/retention.md)
-      + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
-      + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
-      + [sum](./sql-reference/sql-functions/aggregate-functions/sum.md)
-      + [variance](./sql-reference/sql-functions/aggregate-functions/variance.md)
-      + [square](./sql-reference/sql-functions/aggregate-functions/square.md)
-      + [var_samp](./sql-reference/sql-functions/aggregate-functions/var_samp.md)
-      + [window_funnel](./sql-reference/sql-functions/aggregate-functions/window_funnel.md)
     + Bitmap Functions
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](./sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
@@ -339,39 +367,6 @@
   + [System variables](./reference/System_variable.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
-+ Administration
-  + Deployment
-    + [Deploy StarRocks with StarGo](./administration/stargo.md)
-    + [Build in Docker](./administration/Build_in_docker.md)
-<<<<<<< HEAD
-    + [AWS CloudFormation](./administration/AWS_Cloudformation.md)
-=======
-    + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/k8s_operator_cn.md)
-    + [Deploy CN](./administration/deploy_cn.md)
-    + [Deploy Broker](./administration/deploy_broker.md)
->>>>>>> b01b74b7f ([Doc] Revise Broker Doc (#11278))
-  + Management
-    + [Manage a cluster](./administration/Cluster_administration.md)
-    + [Configuration](./administration/Configuration.md)
-    + [Scale in and out](./administration/Scale_up_down.md)
-    + [Backup and restore](./administration/Backup_and_restore.md)
-    + [Monitor and alert](./administration/Monitor_and_Alert.md)
-    + Resource Management
-      + [Resource group](./administration/resource_group.md)
-      + [Query management](./administration/Query_management.md)
-      + [Memory management](./administration/Memory_management.md)
-      + [Load balancing](./administration/Load_balance.md)
-      + [Replica](./administration/Replica.md)
-      + [Blacklist](./administration/Blacklist.md)
-  + Data Recovery
-    + [Data recovery](./administration/Data_recovery.md)
-    + [Restore FEs](./administration/Metadata_recovery.md)
-  + User Privilege and Authentication
-    + [User privilege](./administration/User_privilege.md)
-    + [Authentication](./administration/Authentication.md)
-  + Performance Tuning
-    + [Query planning](./administration/Query_planning.md)
-    + [Profiling](./administration/Profiling.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration

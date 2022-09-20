@@ -150,6 +150,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PIPELINE_DOP = "pipeline_dop";
 
     public static final String PROFILE_TIMEOUT = "profile_timeout";
+    public static final String PROFILE_LIMIT_FOLD = "profile_limit_fold";
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
 
     public static final String WORKGROUP_ID = "workgroup_id";
@@ -412,6 +413,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PROFILE_TIMEOUT, flag = VariableMgr.INVISIBLE)
     private int profileTimeout = 2;
+
+    @VariableMgr.VarAttr(name = PROFILE_LIMIT_FOLD, flag = VariableMgr.INVISIBLE)
+    private boolean profileLimitFold = true;
 
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
@@ -915,6 +919,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getProfileTimeout() {
         return profileTimeout;
+    }
+
+    public boolean isProfileLimitFold() {
+        return profileLimitFold;
     }
 
     public int getPipelineProfileLevel() {
