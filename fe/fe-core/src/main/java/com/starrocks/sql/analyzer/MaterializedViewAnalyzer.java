@@ -11,6 +11,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
@@ -22,6 +23,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -48,16 +50,20 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -377,6 +383,72 @@ public class MaterializedViewAnalyzer {
             }
         }
 
+        // TODO(murphy) infer from Plan instead of AST
+        private static class PKInference extends AstVisitor<HashDistributionDesc, Void> {
+            private static final PKInference INSTANCE = new PKInference();
+
+            public static HashDistributionDesc inferPK(StatementBase stmt) {
+                return stmt.accept(INSTANCE, null);
+            }
+
+            @Override
+            public HashDistributionDesc visitNode(ParseNode node, Void c) {
+                return null;
+            }
+
+            @Override
+            public HashDistributionDesc visitQueryStatement(QueryStatement stmt, Void c) {
+                return visit(stmt.getQueryRelation());
+            }
+
+            @Override
+            public HashDistributionDesc visitTable(TableRelation table, Void c) {
+                if (!table.getTable().isOlapTable()) {
+                    throw new RuntimeException("unsupported table type in materialized-view: " + table.getTable().getType());
+                }
+                OlapTable olap = (OlapTable) table.getTable();
+                return (HashDistributionDesc) olap.getDefaultDistributionInfo().toDistributionDesc();
+            }
+
+            @Override
+            public HashDistributionDesc visitSelect(SelectRelation select, Void c) {
+                HashDistributionDesc fromDist = visit(select.getRelation(), c);
+                List<Expr> groupByExprs = select.getGroupBy();
+                List<String> distColumns = fromDist.getDistributionColumnNames();
+
+                if (!CollectionUtils.isEmpty(groupByExprs)) {
+                    distColumns = new ArrayList<>();
+                    for (Expr expr : groupByExprs) {
+                        if (expr instanceof SlotRef) {
+                            distColumns.add(((SlotRef) expr).getColumnName());
+                        } else {
+                            throw new RuntimeException("unsupported group by in materialized-view: " + expr.toSql());
+                        }
+                    }
+                }
+
+                Set<String> selectColumn = new HashSet<>(select.getColumnOutputNames());
+                for (String distKey : distColumns) {
+                    if (!selectColumn.contains(distKey)) {
+                        throw new RuntimeException("output column must contains distribution key: " + distKey);
+                    }
+                }
+                return new HashDistributionDesc(fromDist.getBuckets(), distColumns);
+            }
+
+            @Override
+            public HashDistributionDesc visitJoin(JoinRelation join, Void c) {
+                HashDistributionDesc leftDist = visit(join.getLeft(), c);
+                HashDistributionDesc rightDist = visit(join.getLeft(), c);
+                // TODO(murphy) consider join key
+                // TODO(murphy) check output columns contains pk
+                Set<String> columns = new HashSet<>();
+                columns.addAll(leftDist.getDistributionColumnNames());
+                columns.addAll(rightDist.getDistributionColumnNames());
+                return new HashDistributionDesc(leftDist.getBuckets(), new ArrayList<>(columns));
+            }
+        }
+
         private void checkDistribution(CreateMaterializedViewStatement statement,
                                        Map<TableName, Table> tableNameTableMap) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();
@@ -391,7 +463,11 @@ public class MaterializedViewAnalyzer {
                         autoInferReplicationNum(tableNameTableMap).toString());
             }
             if (distributionDesc == null) {
-                if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
+                if (statement.getRefreshSchemeDesc().getType().equals(MaterializedView.RefreshType.REALTIME)) {
+                    statement.setKeysType(KeysType.PRIMARY_KEYS);
+                    distributionDesc = PKInference.inferPK(statement.getQueryStatement());
+                    statement.setDistributionDesc(distributionDesc);
+                } else if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
                     distributionDesc = new HashDistributionDesc(Config.default_bucket_num,
                             Lists.newArrayList(mvColumnItems.get(0).getName()));
                     statement.setDistributionDesc(distributionDesc);

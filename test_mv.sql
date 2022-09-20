@@ -55,6 +55,18 @@ where t0_c1 = 'star';
 
 drop materialized view mv3;
 
+-- step 4
+-- infer primary key
+create materialized view mv4
+refresh realtime 
+as 
+select t0_c0, t0_c1
+from t0
+join t1 on t0_c0 = t1_c0;
+
+drop materialized view mv4;
+
+
 
 -- cleanup
 drop table t0;
