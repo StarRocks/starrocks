@@ -167,11 +167,11 @@ public class AnalyzeStmtTest {
                 Lists.newArrayList("v1", "v2"), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap());
         Assert.assertEquals("INSERT INTO column_statistics SELECT 10004, 10003, 'v1', 10002, 'test.t0', 't0', " +
-                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_union(hll_hash(`v1`)), hll_empty()), COUNT(1) - COUNT(`v1`), " +
+                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_raw(`v1`), hll_empty()), COUNT(1) - COUNT(`v1`), " +
                         "IFNULL(MAX(`v1`), ''), IFNULL(MIN(`v1`), ''), NOW() FROM test.t0 partition t0",
                 collectJob.buildCollectSQLList().get(0));
         Assert.assertEquals("INSERT INTO column_statistics SELECT 10004, 10003, 'v2', 10002, 'test.t0', 't0', " +
-                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_union(hll_hash(`v2`)), hll_empty()), COUNT(1) - COUNT(`v2`), " +
+                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_raw(`v2`), hll_empty()), COUNT(1) - COUNT(`v2`), " +
                         "IFNULL(MAX(`v2`), ''), IFNULL(MIN(`v2`), ''), NOW() FROM test.t0 partition t0",
                 collectJob.buildCollectSQLList().get(1));
     }
