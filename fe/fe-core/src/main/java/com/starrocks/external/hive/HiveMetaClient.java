@@ -14,6 +14,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.external.ObjectStorageUtils;
 import com.starrocks.external.hive.text.TextFileFormatDesc;
 import org.apache.hadoop.conf.Configuration;
@@ -49,7 +50,6 @@ import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.thrift.TException;
 import org.apache.thrift.transport.TTransportException;
 
 import java.io.FileNotFoundException;
@@ -111,7 +111,14 @@ public class HiveMetaClient {
         }
     }
 
-    private void init() throws DdlException {
+    public HiveMetaClient(HiveConf conf) {
+        this.conf = conf;
+        if (Config.enable_hms_events_incremental_sync) {
+            init();
+        }
+    }
+
+    private void init() {
         CurrentNotificationEventId currentNotificationEventId = getCurrentNotificationEventId();
         this.baseHmsEventId = currentNotificationEventId.getEventId();
     }
@@ -164,48 +171,62 @@ public class HiveMetaClient {
         }
     }
 
-    public Table getTable(String dbName, String tableName) throws DdlException {
+    public Table getTable(String dbName, String tableName) {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.getTable(dbName, tableName);
         } catch (Exception e) {
             LOG.warn("get hive table failed", e);
-            throw new DdlException("get hive table from meta store failed: " + e.getMessage());
+            throw new StarRocksConnectorException("get hive table [%s.%s] from meta store failed: %s",
+                    dbName, tableName, e.getMessage());
         }
     }
 
-    public List<String> getAllDatabaseNames() throws DdlException {
+    public List<String> getAllDatabaseNames() {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.getAllDatabases();
         } catch (Exception e) {
-            LOG.warn("Failed to get all database names", e);
-            throw new DdlException("Failed to get all database names from meta store: " + e.getMessage());
+            LOG.error("Failed to get all database names", e);
+            throw new StarRocksConnectorException("Failed to get all database names from meta store: " + e.getMessage());
         }
     }
 
-    public List<String> getAllTableNames(String dbName) throws DdlException {
+    public List<String> getAllTableNames(String dbName) {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.getAllTables(dbName);
         } catch (Exception e) {
-            LOG.warn("Failed to get all table names on database: " + dbName, e);
-            throw new DdlException("Failed to get all table names from meta store: " + e.getMessage());
+            LOG.error("Failed to get all table names on database: " + dbName, e);
+            throw new StarRocksConnectorException("Failed to get all table names on database [%s] from meta store: %s",
+                    dbName, e.getMessage());
         }
     }
 
-    public Table getTable(HiveTableName hiveTableName) throws TException {
+    public Table getTable(HiveTableName hiveTableName) {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.getTable(hiveTableName.getDatabaseName(), hiveTableName.getTableName());
         } catch (Exception e) {
-            LOG.warn("Failed to get table {}", hiveTableName, e);
-            throw e;
+            LOG.error("Failed to get table {}", hiveTableName, e);
+            throw new StarRocksConnectorException("Failed to get table [%s.%s] from meta store: %s",
+                    hiveTableName.getDatabaseName(), hiveTableName.getTableName(), e.getMessage());
         }
     }
 
-    public Database getDb(String dbName) throws TException {
+    public Database getDb(String dbName) {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.getDatabase(dbName);
         } catch (Exception e) {
-            LOG.warn("Failed to get database on {}", dbName, e);
-            throw e;
+            LOG.error("Failed to get database {}", dbName, e);
+            throw new StarRocksConnectorException("Failed to get database [%s] from meta store: %s",
+                    dbName, e.getMessage());
+        }
+    }
+
+    public List<String> getPartitionKeys(String dbName, String tableName) {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.listPartitionNames(dbName, tableName, (short) -1);
+        } catch (Exception e) {
+            LOG.error("Failed to get partitionKeys on {}.{}", dbName, tableName, e);
+            throw new StarRocksConnectorException("Failed to get partition keys on [%s.%s] from meta store: %s",
+                    dbName, tableName, e.getMessage());
         }
     }
 
@@ -244,6 +265,17 @@ public class HiveMetaClient {
         }
     }
 
+    // TODO(stephen) : refactor this method after removing getPartition(String, String, List<String>)
+    public Partition getPartition(HiveTableName name, List<String> partitionValues) {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.getPartition(name.getDatabaseName(), name.getTableName(), partitionValues);
+        } catch (Exception e) {
+            LOG.error("Failed to get partition on {}.{}", name.getDatabaseName(), name.getTableName(), e);
+            throw new StarRocksConnectorException("Failed to get partition on [%s.%s] from meta store: %s",
+                    name.getDatabaseName(), name.getTableName(), e.getMessage());
+        }
+    }
+
     public HivePartition getPartition(String dbName, String tableName, List<String> partValues) throws DdlException {
         try (AutoCloseClient client = getClient()) {
             StorageDescriptor sd;
@@ -271,6 +303,46 @@ public class HiveMetaClient {
         } catch (Exception e) {
             LOG.warn("get partition failed", e);
             throw new DdlException("get hive partition meta data failed: " + e.getMessage());
+        }
+    }
+
+    public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionValues) {
+        try (AutoCloseClient client = getClient()) {
+            List<Partition> partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, partitionValues);
+            if (partitions.size() != partitionValues.size()) {
+                LOG.warn("Expect to fetch {} partition on [{}.{}], but actually fetched {} partition",
+                        partitionValues.size(), dbName, tblName, partitions.size());
+            }
+            return partitions;
+        } catch (Exception e) {
+            LOG.error("Failed to get partitions on {}.{}", dbName, tblName, e);
+            throw new StarRocksConnectorException("Failed to get partitions on [%s.%s] from meta store: %s",
+                    dbName, tblName, e.getMessage());
+        }
+    }
+
+    public List<ColumnStatisticsObj> getTableColumnStats(String dbName, String tableName, List<String> columns) {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.getTableColumnStatistics(dbName, tableName, columns);
+        } catch (Exception e) {
+            LOG.error("Failed to get table column statistics on [{}.{}]", dbName, tableName, e);
+            throw new StarRocksConnectorException("Failed to get table column statistics on [%s.%s], msg: %s",
+                    dbName, tableName, e.getMessage());
+        }
+    }
+
+    public Map<String, List<ColumnStatisticsObj>> getPartitionColumnStats(String dbName,
+                                                                          String tableName,
+                                                                          List<String> columns,
+                                                                          List<String> partitionNames) {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.getPartitionColumnStatistics(dbName, tableName, columns, partitionNames);
+        } catch (Exception e) {
+            LOG.error("Failed to get partitions column statistics on [{}.{}]. partition size: {}, columns size: {}",
+                    dbName, tableName, partitionNames.size(), columns.size(), e);
+            throw new StarRocksConnectorException("Failed to get partitions column statistics on [%s.%s]." +
+                    " partition size: %d, columns size: %d. msg: %s", dbName, tableName, partitionNames.size(),
+                    columns.size(), e.getMessage());
         }
     }
 
@@ -700,11 +772,12 @@ public class HiveMetaClient {
         return fileDescs;
     }
 
-    public CurrentNotificationEventId getCurrentNotificationEventId() throws DdlException {
+    public CurrentNotificationEventId getCurrentNotificationEventId() {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.getCurrentNotificationEventId();
         } catch (Exception e) {
-            throw new DdlException("Failed to get current notification event id. msg: " + e.getMessage());
+            LOG.error("Failed to fetch current notification event id", e);
+            throw new StarRocksConnectorException("Failed to get current notification event id. msg: " + e.getMessage());
         }
     }
 
