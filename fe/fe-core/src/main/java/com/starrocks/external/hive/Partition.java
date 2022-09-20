@@ -68,4 +68,61 @@ public class Partition {
     public int hashCode() {
         return Objects.hash(parameters, inputFormat, textFileFormatDesc, fullPath, isSplittable);
     }
+
+    @Override
+    public String toString() {
+        final StringBuilder sb = new StringBuilder("Partition{");
+        sb.append("parameters=").append(parameters);
+        sb.append(", inputFormat=").append(inputFormat);
+        sb.append(", textFileFormatDesc=").append(textFileFormatDesc);
+        sb.append(", fullPath='").append(fullPath).append('\'');
+        sb.append(", isSplittable=").append(isSplittable);
+        sb.append('}');
+        return sb.toString();
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder {
+        private Map<String, String> params;
+        private RemoteFileInputFormat inputFormat;
+        private TextFileFormatDesc textFileFormatDesc;
+        private String fullPath;
+        private boolean isSplittable;
+
+        public Builder() {
+        }
+
+        public Builder setParams(Map<String, String> params) {
+            this.params = params;
+            return this;
+        }
+
+        public Builder setInputFormat(RemoteFileInputFormat inputFormat) {
+            this.inputFormat = inputFormat;
+            return this;
+        }
+
+        public Builder setTextFileFormatDesc(TextFileFormatDesc textFileFormatDesc) {
+            this.textFileFormatDesc = textFileFormatDesc;
+            return this;
+        }
+
+        public Builder setFullPath(String fullPath) {
+            this.fullPath = fullPath;
+            return this;
+        }
+
+        public Builder setSplittable(boolean splittable) {
+            isSplittable = splittable;
+            return this;
+        }
+
+        public Partition build() {
+            return new Partition(params, inputFormat, textFileFormatDesc, fullPath, isSplittable);
+        }
+
+    }
 }

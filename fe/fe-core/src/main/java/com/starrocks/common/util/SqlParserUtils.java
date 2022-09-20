@@ -30,7 +30,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-// Utils about SQL parser
+// ColumnTypeConverter about SQL parser
 public class SqlParserUtils {
 
     private static final Logger LOG = LogManager.getLogger(SqlParserUtils.class);

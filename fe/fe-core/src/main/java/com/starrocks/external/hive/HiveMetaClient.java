@@ -15,7 +15,9 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.external.ColumnTypeConverter;
 import com.starrocks.external.ObjectStorageUtils;
+import com.starrocks.external.Utils;
 import com.starrocks.external.hive.text.TextFileFormatDesc;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
@@ -175,7 +177,7 @@ public class HiveMetaClient {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.getTable(dbName, tableName);
         } catch (Exception e) {
-            LOG.warn("get hive table failed", e);
+            LOG.error("Failed to get table [{}.{}]", dbName, tableName, e);
             throw new StarRocksConnectorException("get hive table [%s.%s] from meta store failed: %s",
                     dbName, tableName, e.getMessage());
         }
@@ -672,7 +674,7 @@ public class HiveMetaClient {
     }
 
     private boolean isStringType(String hiveType) {
-        hiveType = Utils.getTypeKeyword(hiveType);
+        hiveType = ColumnTypeConverter.getTypeKeyword(hiveType);
         return hiveType.equalsIgnoreCase("string")
                 || hiveType.equalsIgnoreCase("char")
                 || hiveType.equalsIgnoreCase("varchar");
@@ -759,7 +761,7 @@ public class HiveMetaClient {
                 } else if (locatedFileStatus.isDirectory() && Config.recursive_dir_search_enabled) {
                     fileDescs.addAll(getHdfsFileDescs(locatedFileStatus.getPath().toString(), isSplittable, sd));
                 }
-                String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
+                String fileName = ColumnTypeConverter.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                 List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
                 fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),

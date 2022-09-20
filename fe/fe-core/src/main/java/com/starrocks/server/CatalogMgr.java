@@ -46,7 +46,7 @@ public class CatalogMgr {
     private final ConnectorMgr connectorMgr;
     private final ReadWriteLock catalogLock = new ReentrantReadWriteLock();
 
-    public static final String INTERNAL_RESOURCE_TO_CATALOG_NAME_PREFIX = "internal_resource_to_catalog_";
+    public static final String RESOURCE_MAPPING_CATALOG_PREFIX = "resource_mapping_inside_catalog_";
 
     public static final ImmutableList<String> CATALOG_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Catalog").add("Type").add("Comment")
@@ -57,6 +57,10 @@ public class CatalogMgr {
     public CatalogMgr(ConnectorMgr connectorMgr) {
         Preconditions.checkNotNull(connectorMgr, "ConnectorMgr is null");
         this.connectorMgr = connectorMgr;
+    }
+
+    public static boolean isResourceMappingCatalog(String catalogName) {
+        return catalogName.startsWith(RESOURCE_MAPPING_CATALOG_PREFIX);
     }
 
     public void createCatalog(CreateCatalogStmt stmt) throws DdlException {
