@@ -651,7 +651,7 @@ ColumnPtr JsonFunctions::json_length(FunctionContext* context, const Columns& co
 
         if (target_slice.isObject() || target_slice.isArray()) {
             result.append(target_slice.length());
-        } else if (target_slice.isNone() || target_slice.isNull()) {
+        } else if (target_slice.isNone()) {
             result.append(0);
         } else {
             result.append(1);
