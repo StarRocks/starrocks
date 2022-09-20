@@ -139,60 +139,6 @@ public class TaskManagerTest {
     }
 
     @Test
-    public void submitMvAsyncTaskTest() {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-            }
-        };
-        String sql = "create materialized view test.mv1\n" +
-                "partition by date_trunc('month',k1)\n" +
-                "distributed by hash(k2)\n" +
-                "refresh async every(interval 20 second)\n" +
-                "properties('replication_num' = '1')\n" +
-                "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;";
-        Database testDb = null;
-        try {
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            TaskRunHistory taskRunHistory = taskManager.getTaskRunManager().getTaskRunHistory();
-            taskRunHistory.getAllHistory().clear();
-
-            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-            testDb = GlobalStateMgr.getCurrentState().getDb("test");
-
-            // at least 2 times = schedule 1 times + execute 1 times
-            List<TaskRunStatus> taskRuns = null;
-            int retryCount = 0;
-            int maxRetry = 5;
-            while (retryCount < maxRetry) {
-                ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-                taskRuns = taskManager.showTaskRunStatus(null);
-                if (taskRuns.size() == 2) {
-                    Set<Constants.TaskRunState> taskRunStates =
-                            taskRuns.stream().map(TaskRunStatus::getState).collect(Collectors.toSet());
-                    if (taskRunStates.size() == 1 && (taskRunStates.contains(Constants.TaskRunState.FAILED) ||
-                            taskRunStates.contains(Constants.TaskRunState.SUCCESS))) {
-                        break;
-                    }
-                }
-                retryCount++;
-                LOG.info("SubmitMvAsyncTaskTest is waiting for TaskRunState retryCount:" + retryCount);
-            }
-            for (TaskRunStatus taskRun : taskRuns) {
-                Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRun.getState());
-            }
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
-        } finally {
-            if (testDb != null) {
-                testDb.dropTable("mv1");
-            }
-        }
-    }
-
-    @Test
     public void taskSerializeTest() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String submitSQL = "submit task as create table temp as select count(*) as cnt from tbl1";
