@@ -202,6 +202,7 @@ import org.apache.hadoop.util.ThreadUtil;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -218,7 +219,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import javax.validation.constraints.NotNull;
 
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
@@ -3210,38 +3210,27 @@ public class LocalMetastore implements ConnectorMetadata {
         } else {
             partitionInfo = new SinglePartitionInfo();
         }
-        // create distribution info
+
+        // create refresh scheme
+        MaterializedView.MvRefreshScheme mvRefreshScheme = getMvRefreshScheme(stmt);
+
+        // Infer primary key for realtime refresh
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
+
+        // create distribution info
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
         if (distributionInfo.getBucketNum() == 0) {
             int numBucket = calBucketNumAccordingToBackends();
             distributionInfo.setBucketNum(numBucket);
         }
-        // create refresh scheme
-        MaterializedView.MvRefreshScheme mvRefreshScheme;
-        RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
-        if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.ASYNC) {
-            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-            MaterializedView.AsyncRefreshContext asyncRefreshContext = mvRefreshScheme.getAsyncRefreshContext();
-            asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
-            asyncRefreshContext.setDefineStartTime(asyncRefreshSchemeDesc.isDefineStartTime());
-            if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
-                asyncRefreshContext.setStep(
-                        ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
-                asyncRefreshContext.setTimeUnit(
-                        asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
-            }
-        } else {
-            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-            mvRefreshScheme.setType(refreshSchemeDesc.getType());
-        }
+
         // create mv
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         MaterializedView materializedView =
                 new MaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,
                         distributionInfo, mvRefreshScheme);
+
         // set comment
         materializedView.setComment(stmt.getComment());
         // set baseTableIds
@@ -3355,6 +3344,28 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
         createTaskForMaterializedView(dbName, materializedView, optHints);
+    }
+
+    private static MaterializedView.MvRefreshScheme getMvRefreshScheme(CreateMaterializedViewStatement stmt) {
+        MaterializedView.MvRefreshScheme mvRefreshScheme;
+        RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
+        if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.ASYNC) {
+            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+            MaterializedView.AsyncRefreshContext asyncRefreshContext = mvRefreshScheme.getAsyncRefreshContext();
+            asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+            asyncRefreshContext.setDefineStartTime(asyncRefreshSchemeDesc.isDefineStartTime());
+            if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
+                asyncRefreshContext.setStep(
+                        ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
+                asyncRefreshContext.setTimeUnit(
+                        asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
+            }
+        } else {
+            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+            mvRefreshScheme.setType(refreshSchemeDesc.getType());
+        }
+        return mvRefreshScheme;
     }
 
     private void createTaskForMaterializedView(String dbName, MaterializedView materializedView,

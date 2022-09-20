@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -106,5 +107,10 @@ public class HashDistributionDesc extends DistributionDesc {
         for (int i = 0; i < count; i++) {
             distributionColumnNames.add(Text.readString(in));
         }
+    }
+
+    @Override
+    public String toString() {
+        return "DISTRIBUTED BY HASH" + Joiner.on(",").join(distributionColumnNames) + " BUCKETS " + numBucket;
     }
 }
