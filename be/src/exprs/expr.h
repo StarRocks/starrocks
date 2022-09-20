@@ -170,8 +170,8 @@ public:
     /// Clones each ExprContext for multiple expr trees. 'new_ctxs' must be non-NULL.
     /// Idempotent: if '*new_ctxs' is empty, a clone of each context in 'ctxs' will be added
     /// to it, and if non-empty, it is assumed CloneIfNotExists() was already called and the
-    /// call is a no-op. The new ExprContexts are created in state->obj_pool().
-    static Status clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeState* state,
+    /// call is a no-op. The new ExprContexts are created in provided object pool.
+    static Status clone_if_not_exists(RuntimeState* state, ObjectPool* pool, const std::vector<ExprContext*>& ctxs,
                                       std::vector<ExprContext*>* new_ctxs);
 
     /// Convenience function for closing multiple expr trees.
