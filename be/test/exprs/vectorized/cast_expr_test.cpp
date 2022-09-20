@@ -1577,6 +1577,8 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
     EXPECT_EQ("[1.1, 2.2, 3.3]", cast_string_to_array(cast_expr, TYPE_DOUBLE, "[1.1,2.2,3.3]"));
 
     EXPECT_EQ(R"(['a', 'b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a","b"])"));
+    EXPECT_EQ(R"(['a', 'b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([a,b])"));
+    EXPECT_EQ(R"(['"a', '"b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a,"b])"));
     EXPECT_EQ(R"(['a', 'b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a", "b"])"));
     EXPECT_EQ(R"(['a', ' b'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"(["a", " b"])"));
     EXPECT_EQ(R"(['1', '2'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([1, 2])"));

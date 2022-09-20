@@ -136,10 +136,8 @@ Slice CastStringToArray::_unquote(Slice slice) {
     while (slice.ends_with(" ")) {
         slice.remove_suffix(1);
     }
-    if (slice.starts_with("\"") || slice.starts_with("'")) {
+    if ((slice.starts_with("\"") && slice.ends_with("\"")) || (slice.starts_with("'") && slice.ends_with("'"))) {
         slice.remove_prefix(1);
-    }
-    if (slice.ends_with("\"") || slice.ends_with("'")) {
         slice.remove_suffix(1);
     }
     return slice;
