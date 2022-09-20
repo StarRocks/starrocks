@@ -189,11 +189,38 @@ INTO TABLE <table_name>
 
 | **参数名称**      | **参数说明**                                            |
 | ----------------- | ------------------------------------------------------- |
-| fs.s3a.access.key | 访问 Amazon S3 资源的访问秘钥 ID (Access Key ID)。      |
-| fs.s3a.secret.key | 访问 Amazon S3 资源的秘密访问秘钥 (Secret Access Key)。 |
-| fs.s3a.endpoint   | 访问 Amazon S3 的连接地址。                             |
+| fs.s3a.access.key | 访问 Amazon S3 存储空间的 Access Key ID。      |
+| fs.s3a.secret.key | 访问 Amazon S3 存储空间的 Secret Access Key。 |
+| fs.s3a.endpoint   | 访问 Amazon S3 存储空间的连接地址。                             |
 
-请参见 AWS 官方文档[访问秘钥](https://docs.aws.amazon.com/zh_cn/IAM/latest/UserGuide/id_credentials_access-keys.html)。
+请参见 AWS 官方文档[访问密钥](https://docs.aws.amazon.com/zh_cn/IAM/latest/UserGuide/id_credentials_access-keys.html)。
+
+#### Google CGS
+
+如果数据源为 Google CGS，需要提供如下配置信息。
+
+| **参数名称**      | **参数说明**                                                 |
+| ----------------- | ------------------------------------------------------------ |
+| fs.s3a.access.key | 访问 Google CGS 存储空间的 Access Key。      |
+| fs.s3a.secret.key | 访问 Google CGS 存储空间的 Secret Key。 |
+| fs.s3a.endpoint   | 访问 Google CGS 存储空间的连接地址。                         |
+|                   |                                                              |
+|                   |                                                              |
+|                   |                                                              |
+
+创建访问 Google CGS 存储空间的密钥对的操作步骤如下：
+
+1. 登录 [Google GCP](https://console.cloud.google.com/storage/settings)。
+
+2. 在左侧导航栏，选择 **Google Cloud Storage**，然后选择 **Settings**。
+
+3. 选择 **Interoperability** 页签。
+
+   如果还没有启用 Interoperability 特性，请单击 **Interoperable Access**。
+
+   ![Google GCS - Access Key Pair](/assets/8.2.2-1.png)
+
+4. 单击 **Create new Key** 按钮，按界面提示完成密钥对的创建。
 
 #### 阿里云 OSS
 
@@ -201,9 +228,9 @@ INTO TABLE <table_name>
 
 | **参数名称**           | **参数说明**                                                 |
 | ---------------------- | ------------------------------------------------------------ |
-| fs.oss.accessKeyId     | 访问阿里云 OSS 资源的 AccessKey ID，用于标识用户。           |
-| fs.oss.accessKeySecret | 访问阿里云 OSS 资源的 AccessKey Secret，是用于加密签名字符串和 OSS 用来验证签名字符串的密钥。 |
-| fs.oss.endpoint        | 访问阿里云 OSS 资源的连接地址。                              |
+| fs.oss.accessKeyId     | 访问阿里云 OSS 存储空间的 AccessKey ID，用于标识用户。           |
+| fs.oss.accessKeySecret | 访问阿里云 OSS 存储空间的 AccessKey Secret，是用于加密签名字符串和 OSS 用来验证签名字符串的密钥。 |
+| fs.oss.endpoint        | 访问阿里云 OSS 存储空间的连接地址。                              |
 
 请参见阿里云官方文档[用户签名验证](https://help.aliyun.com/document_detail/31950.html)。
 
@@ -213,9 +240,9 @@ INTO TABLE <table_name>
 
 | **参数名称**                   | **参数说明**                                                 |
 | ------------------------------ | ------------------------------------------------------------ |
-| fs.cosn.userinfo.secretId      | 访问腾讯云 COS 资源的 SecretId，用于标识 API 调用者的身份。  |
-| fs.cosn.userinfo.secretKey     | 访问腾讯云 COS 资源的 SecretKey，是用于加密签名字符串和服务端验证签名字符串的秘钥。 |
-| fs.cosn.bucket.endpoint_suffix | 访问腾讯云 COS 资源的连接地址。                              |
+| fs.cosn.userinfo.secretId      | 访问腾讯云 COS 存储空间的 SecretId，用于标识 API 调用者的身份。  |
+| fs.cosn.userinfo.secretKey     | 访问腾讯云 COS 存储空间的 SecretKey，是用于加密签名字符串和服务端验证签名字符串的密钥。 |
+| fs.cosn.bucket.endpoint_suffix | 访问腾讯云 COS 存储空间的连接地址。                              |
 
 请参见腾讯云官方文档[使用永久密钥访问 COS](https://cloud.tencent.com/document/product/436/68282)。
 
