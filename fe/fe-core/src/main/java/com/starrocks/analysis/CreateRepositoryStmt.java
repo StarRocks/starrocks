@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.AstVisitor;
 import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -112,5 +113,15 @@ public class CreateRepositoryStmt extends DdlStmt {
         sb.append("REPOSITORY `").append(name).append("` ").append("WITH BROKER `").append(brokerName).append("` ");
         sb.append("PROPERTIES(").append(new PrintableMap<>(properties, " = ", true, false)).append(")");
         return sb.toString();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateRepositoryStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

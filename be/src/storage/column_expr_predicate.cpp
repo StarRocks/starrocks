@@ -42,7 +42,7 @@ void ColumnExprPredicate::_add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx) {
     if (expr_ctx != nullptr) {
         DCHECK(expr_ctx->opened());
         // Transfer the ownership to object pool
-        auto* ctx = _state->obj_pool()->add(expr_ctx.release());
+        auto* ctx = _pool.add(expr_ctx.release());
         _expr_ctxs.emplace_back(ctx);
         _monotonic &= ctx->root()->is_monotonic();
     }
@@ -52,7 +52,7 @@ void ColumnExprPredicate::_add_expr_ctx(ExprContext* expr_ctx) {
     if (expr_ctx != nullptr) {
         DCHECK(expr_ctx->opened());
         ExprContext* ctx = nullptr;
-        DCHECK_IF_ERROR(expr_ctx->clone(_state, &ctx));
+        DCHECK_IF_ERROR(expr_ctx->clone(_state, &_pool, &ctx));
         _expr_ctxs.emplace_back(ctx);
         _monotonic &= ctx->root()->is_monotonic();
     }

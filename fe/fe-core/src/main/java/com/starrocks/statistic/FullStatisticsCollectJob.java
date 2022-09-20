@@ -66,7 +66,16 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             for (String columnName : columns) {
                 sqlInUnion.add(buildCollectFullStatisticSQL(db, table, partition, columnName));
                 scanRowCount += partition.getRowCount();
-                if (scanRowCount >= Config.statistic_collect_max_row_count_per_query) {
+                if (scanRowCount >= Config.statistic_collect_max_row_count_per_query
+                        /*
+                         * Because the previous code has filtered empty partitions, the partition row count of 0 here means.
+                         * 1. The load has just been completed, and the number of lines has not been collected.
+                         * 2. Just restarted, the number of lines has not been collected
+                         *
+                         * In order to avoid that a single query is too large because the number of rows is 0,
+                         * we no longer accumulate unions for this special case.
+                         */
+                        || partition.getRowCount() == 0) {
                     collectSQLList.add("INSERT INTO column_statistics " + Joiner.on(" UNION ALL ").join(sqlInUnion));
                     scanRowCount = 0;
                     sqlInUnion.clear();
@@ -101,7 +110,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("maxFunction", "''");
             context.put("minFunction", "''");
         } else {
-            context.put("countDistinctFunction", "IFNULL(hll_union(hll_hash(`" + columnNames + "`)), hll_empty())");
+            context.put("countDistinctFunction", "IFNULL(hll_raw(`" + columnNames + "`), hll_empty())");
             context.put("countNullFunction", "COUNT(1) - COUNT(`" + columnNames + "`)");
             context.put("maxFunction", "IFNULL(MAX(`" + columnNames + "`), '')");
             context.put("minFunction", "IFNULL(MIN(`" + columnNames + "`), '')");
