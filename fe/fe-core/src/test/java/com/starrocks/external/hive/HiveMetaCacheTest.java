@@ -263,7 +263,7 @@ public class HiveMetaCacheTest {
             super("");
         }
 
-        public CurrentNotificationEventId getCurrentNotificationEventId() throws DdlException {
+        public CurrentNotificationEventId getCurrentNotificationEventId() {
             return new CurrentNotificationEventId(1L);
         }
 
