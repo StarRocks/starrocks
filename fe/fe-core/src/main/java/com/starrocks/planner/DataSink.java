@@ -22,8 +22,10 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.MysqlTable;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
 
@@ -70,6 +72,13 @@ public abstract class DataSink {
         } else {
             throw new AnalysisException("Unknown table type " + table.getType());
         }
+    }
+
+    public static boolean canTableSinkUsePipeline(Table table) {
+        if (table instanceof OlapTable) {
+            return Config.enable_pipeline_load;
+        }
+        return false;
     }
 
     public boolean canUsePipeLine() {
