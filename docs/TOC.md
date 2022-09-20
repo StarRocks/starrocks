@@ -8,7 +8,7 @@
   + [Architecture](./introduction/Architecture.md)
   + [Features](./introduction/Features.md)
 + Quick Start
-  + [Deploy](./quick_start/Deploy.md)
+  + [Deploy StarRocks](./quick_start/Deploy.md)
   + [Create a table](./quick_start/Create_table.md)
   + [Import and query](./quick_start/Import_and_query.md)
 + Table Design
@@ -20,14 +20,13 @@
   + [Overview of data loading](./loading/Loading_intro.md)
   + [Load data from a local file system or a streaming data source using HTTP push](./loading/StreamLoad.md)
   + [Load data from HDFS or cloud storage](./loading/BrokerLoad.md)
-  + [Routine Load](./loading/RoutineLoad.md)
-  + [Spark Load](./loading/SparkLoad.md)
+  + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
+  + [Bulk load using Apache Spark™](./loading/SparkLoad.md)
   + [Load data using INSERT](./loading/InsertInto.md)
+  + [Realtime synchronization from MySQL](./loading/Flink_cdc_load.md)
+  + [Continuously load data from Apache Flink®](./loading/Flink-connector-starrocks.md)
   + [Change data through loading](./loading/Load_to_Primary_Key_tables.md)
   + [Transform data at loading](./loading/Etl_in_loading.md)
-  + [Synchronize data from MySQL](./loading/Flink_cdc_load.md)
-  + [Load data by using flink-connector-starrocks](./loading/Flink-connector-starrocks.md)
-  + [DataX writer](./loading/DataX-starrocks-writer.md)
 + Data Unloading
   + [Overview of data unloading](./unloading/Export.md)
   + [Spark connector](./unloading/Spark_connector.md)
