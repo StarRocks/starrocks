@@ -70,70 +70,69 @@ Status DataConsumerPool::get_consumer(StreamLoadContext* ctx, std::shared_ptr<Da
 }
 
 Status DataConsumerPool::get_consumer_grp(StreamLoadContext* ctx, std::shared_ptr<DataConsumerGroup>* ret) {
-    if (ctx->load_src_type != TLoadSourceType::KAFKA
-        && ctx->load_src_type != TLoadSourceType::PULSAR) {
+    if (ctx->load_src_type != TLoadSourceType::KAFKA && ctx->load_src_type != TLoadSourceType::PULSAR) {
         return Status::InternalError("PAUSE: Currently only support consumer group for Kafka or Palsur data source");
     }
 
     if (ctx->load_src_type == TLoadSourceType::KAFKA) {
-      DCHECK(ctx->kafka_info);
-  
-      // one data consumer group contains at least one data consumers.
-      int max_consumer_num = config::max_consumer_num_per_group;
-      size_t consumer_num = std::min((size_t)max_consumer_num, ctx->kafka_info->begin_offset.size());
-  
-      std::shared_ptr<KafkaDataConsumerGroup> grp = std::make_shared<KafkaDataConsumerGroup>(consumer_num);
-  
-      for (int i = 0; i < consumer_num; ++i) {
-          std::shared_ptr<DataConsumer> consumer;
-          RETURN_IF_ERROR(get_consumer(ctx, &consumer));
-          grp->add_consumer(consumer);
-      }
+        DCHECK(ctx->kafka_info);
 
-      LOG(INFO) << "get consumer group " << grp->grp_id() << " with " << consumer_num << " consumers";
-      *ret = grp;
-      return Status::OK();
+        // one data consumer group contains at least one data consumers.
+        int max_consumer_num = config::max_consumer_num_per_group;
+        size_t consumer_num = std::min((size_t)max_consumer_num, ctx->kafka_info->begin_offset.size());
+
+        std::shared_ptr<KafkaDataConsumerGroup> grp = std::make_shared<KafkaDataConsumerGroup>(consumer_num);
+
+        for (int i = 0; i < consumer_num; ++i) {
+            std::shared_ptr<DataConsumer> consumer;
+            RETURN_IF_ERROR(get_consumer(ctx, &consumer));
+            grp->add_consumer(consumer);
+        }
+
+        LOG(INFO) << "get consumer group " << grp->grp_id() << " with " << consumer_num << " consumers";
+        *ret = grp;
+        return Status::OK();
     } else {
-      DCHECK(ctx->pulsar_info);
-      DCHECK_GE(ctx->pulsar_info->partitions.size(), 1);
-  
-      // Cumulative acknowledge is not supported for multiple topic subscribtion,
-      // so one consumer can only subscribe one topic/partition
-      int max_consumer_num = config::max_pulsar_consumer_num_per_group;
-      if (max_consumer_num < ctx->pulsar_info->partitions.size()) {
-          return Status::InternalError(
-                  "PAUSE: Partition num is more than max consumer num in one data consumer group on some BEs, please "
-                  "increase max_pulsar_consumer_num_per_group from BE side or just add more BEs");
-      }
-      size_t consumer_num = ctx->pulsar_info->partitions.size();
-  
-      std::shared_ptr<PulsarDataConsumerGroup> grp = std::make_shared<PulsarDataConsumerGroup>(consumer_num);
-  
-      for (int i = 0; i < consumer_num; ++i) {
-          std::shared_ptr<DataConsumer> consumer;
-          RETURN_IF_ERROR(get_consumer(ctx, &consumer));
-          grp->add_consumer(consumer);
-      }
+        DCHECK(ctx->pulsar_info);
+        DCHECK_GE(ctx->pulsar_info->partitions.size(), 1);
 
-      LOG(INFO) << "get consumer group " << grp->grp_id() << " with " << consumer_num << " consumers";
-      *ret = grp;
-      return Status::OK();
+        // Cumulative acknowledge is not supported for multiple topic subscribtion,
+        // so one consumer can only subscribe one topic/partition
+        int max_consumer_num = config::max_pulsar_consumer_num_per_group;
+        if (max_consumer_num < ctx->pulsar_info->partitions.size()) {
+            return Status::InternalError(
+                    "PAUSE: Partition num is more than max consumer num in one data consumer group on some BEs, please "
+                    "increase max_pulsar_consumer_num_per_group from BE side or just add more BEs");
+        }
+        size_t consumer_num = ctx->pulsar_info->partitions.size();
+
+        std::shared_ptr<PulsarDataConsumerGroup> grp = std::make_shared<PulsarDataConsumerGroup>(consumer_num);
+
+        for (int i = 0; i < consumer_num; ++i) {
+            std::shared_ptr<DataConsumer> consumer;
+            RETURN_IF_ERROR(get_consumer(ctx, &consumer));
+            grp->add_consumer(consumer);
+        }
+
+        LOG(INFO) << "get consumer group " << grp->grp_id() << " with " << consumer_num << " consumers";
+        *ret = grp;
+        return Status::OK();
     }
 }
 
 void DataConsumerPool::return_consumer(const std::shared_ptr<DataConsumer>& consumer) {
-  std::unique_lock<std::mutex> l(_lock);
-  
-  consumer->reset();
+    std::unique_lock<std::mutex> l(_lock);
 
-  if (_pool.size() == _max_pool_size) {
-      VLOG(3) << "data consumer pool is full: " << _pool.size() << "-" << _max_pool_size
-              << ", discard the returned consumer: " << consumer->id();
-      return;
-  }
-  
-  _pool.push_back(consumer);
-  VLOG(3) << "return the data consumer: " << consumer->id() << ", current pool size: " << _pool.size();
+    consumer->reset();
+
+    if (_pool.size() == _max_pool_size) {
+        VLOG(3) << "data consumer pool is full: " << _pool.size() << "-" << _max_pool_size
+                << ", discard the returned consumer: " << consumer->id();
+        return;
+    }
+
+    _pool.push_back(consumer);
+    VLOG(3) << "return the data consumer: " << consumer->id() << ", current pool size: " << _pool.size();
 }
 
 void DataConsumerPool::return_consumers(DataConsumerGroup* grp) {

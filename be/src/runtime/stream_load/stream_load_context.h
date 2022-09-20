@@ -31,6 +31,7 @@
 #include "common/utils.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/FrontendService_types.h"
+#include "pulsar/Client.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
@@ -38,7 +39,6 @@
 #include "util/string_util.h"
 #include "util/time.h"
 #include "util/uid_util.h"
-#include "pulsar/Client.h"
 
 namespace starrocks {
 
@@ -88,10 +88,10 @@ public:
               subscription(t_info.subscription),
               partitions(t_info.partitions),
               properties(t_info.properties) {
-                if (t_info.__isset.initial_positions) {
-                  initial_positions = t_info.initial_positions;
-                }
-              }
+        if (t_info.__isset.initial_positions) {
+            initial_positions = t_info.initial_positions;
+        }
+    }
 
     void clear_backlog() {
         // clear the backlog

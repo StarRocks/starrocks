@@ -200,11 +200,11 @@ std::string StreamLoadContext::brief(bool detail) const {
                 ss << "], initial positions: [";
                 for (const auto& [key, value] : pulsar_info->initial_positions) {
                     ss << key << ":" << value << ",";
-                } 
+                }
                 ss << "], properties: [";
                 for (auto& propertie : pulsar_info->properties) {
-                    ss << propertie.first << ": " << propertie.second<< ",";
-                } 
+                    ss << propertie.first << ": " << propertie.second << ",";
+                }
                 ss << "].";
             }
             break;
