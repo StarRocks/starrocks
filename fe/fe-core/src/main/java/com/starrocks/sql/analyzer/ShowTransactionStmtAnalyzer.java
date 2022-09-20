@@ -22,13 +22,7 @@ public class ShowTransactionStmtAnalyzer {
     
     static class ShowTransactionStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         
-        private long txnId;
-        
         private static final Logger LOG = LogManager.getLogger(ShowTransactionStmtAnalyzerVisitor.class);
-        
-        public ShowTransactionStmtAnalyzerVisitor() {
-            this.txnId = 0;
-        }
         
         public void analyze(ShowTransactionStmt statement, ConnectContext context) {
             visit(statement, context);
@@ -54,11 +48,10 @@ public class ShowTransactionStmtAnalyzer {
         
         private void analyzeWhereClause(ShowTransactionStmt statement, ConnectContext context) {
             Expr whereClause = statement.getWhereClause();
-            analyzeSubPredicate(whereClause);
-            statement.setTxnId(txnId);
+            analyzeSubPredicate(statement, whereClause);
         }
         
-        private void analyzeSubPredicate(Expr subExpr) {
+        private void analyzeSubPredicate(ShowTransactionStmt statement, Expr subExpr) {
             if (subExpr == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "should supply condition like: ID = $transaction_id");
@@ -102,7 +95,8 @@ public class ShowTransactionStmtAnalyzer {
                         valid = false;
                         break;
                     }
-                    txnId = ((IntLiteral) subExpr.getChild(1)).getLongValue();
+                    long txnId = ((IntLiteral) subExpr.getChild(1)).getLongValue();
+                    statement.setTxnId(txnId);
                 }
 
                 valid = true;
