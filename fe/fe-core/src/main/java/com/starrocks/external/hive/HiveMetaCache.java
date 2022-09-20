@@ -17,6 +17,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.ObjectStorageUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -26,10 +27,13 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 import static com.google.common.cache.CacheLoader.asyncReloading;
@@ -69,6 +73,11 @@ public class HiveMetaCache {
 
     LoadingCache<String, List<String>> databaseNamesCache;
     LoadingCache<String, List<String>> tableNamesCache;
+
+    // hive partition refresh executors
+    private final ExecutorService partitionRefreshExecutor =
+            ThreadPoolManager.newDaemonFixedThreadPool(Config.hive_partition_refresh_concurrency,
+                    Integer.MAX_VALUE, "hive-partition-refresh-pool", true);
 
 
     public HiveMetaCache(HiveMetaClient hiveMetaClient, Executor executor) {
@@ -480,13 +489,31 @@ public class HiveMetaCache {
 
     public void refreshPartition(HiveMetaStoreTableInfo hmsTable, List<String> partNames) throws DdlException {
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
+        Map<HivePartitionKey, Future<HivePartition>> hivePartitionFutures =
+                new HashMap<HivePartitionKey, Future<HivePartition>>();
+        Map<HivePartitionKey, Future<HivePartitionStats>> hivePartitionStatsFutures =
+                new HashMap<HivePartitionKey, Future<HivePartitionStats>>();
         try {
             for (String partName : partNames) {
                 List<String> partValues = client.partitionNameToVals(partName);
                 HivePartitionName key = new HivePartitionName(hmsTable.getDb(), hmsTable.getTable(),
                         hmsTable.getTableType(), partValues);
-                partitionsCache.put(key, loadPartition(key));
-                partitionStatsCache.put(key, loadPartitionStats(key));
+                Future<HivePartition> partitionFuture = partitionRefreshExecutor.submit(() -> loadPartition(key));
+                hivePartitionFutures.put(key, partitionFuture);
+            }
+            for (Map.Entry<HivePartitionKey, Future<HivePartition>> entry : hivePartitionFutures.entrySet()) {
+                partitionsCache.put(entry.getKey(), entry.getValue().get());
+            }
+            for (String partName : partNames) {
+                List<String> partValues = client.partitionNameToVals(partName);
+                HivePartitionKey key = new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(),
+                        hmsTable.getTableType(), partValues);
+                Future<HivePartitionStats> partitionStatsFuture = partitionRefreshExecutor.
+                        submit(() -> loadPartitionStats(key));
+                hivePartitionStatsFutures.put(key, partitionStatsFuture);
+            }
+            for (Map.Entry<HivePartitionKey, Future<HivePartitionStats>> entry : hivePartitionStatsFutures.entrySet()) {
+                partitionStatsCache.put(entry.getKey(), entry.getValue().get());
             }
         } catch (Exception e) {
             LOG.warn("refresh partition cache failed", e);

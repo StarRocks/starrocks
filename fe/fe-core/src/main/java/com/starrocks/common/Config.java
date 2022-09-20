@@ -1455,6 +1455,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static int hive_meta_load_concurrency = 4;
 
+    /**
+     * num of thread to refresh hive external table partition info
+     */
+    @ConfField
+    public static int hive_partition_refresh_concurrency = Runtime.getRuntime().availableProcessors();
+
     @ConfField
     public static long hive_meta_cache_refresh_interval_s = 3600L * 2L;
 
