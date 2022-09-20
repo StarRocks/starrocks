@@ -194,7 +194,7 @@ public class FunctionAnalyzer {
             }
         }
         
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.MAX_BY)) {
+        if (fnName.getFunction().equals(FunctionSet.MAX_BY)) {
             if (functionCallExpr.getChildren().size() != 2 || functionCallExpr.getChildren().isEmpty()) {
                 throw new SemanticException(
                         "max_by requires two parameters: " + functionCallExpr.toSql());

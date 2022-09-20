@@ -37,7 +37,7 @@ import java.util.Map;
 public class MergeTwoAggRule extends TransformationRule {
     private static final List<String> ALLOW_MERGE_AGGREGATE_FUNCTIONS = Lists.newArrayList(FunctionSet.SUM,
             FunctionSet.MAX, FunctionSet.MIN, FunctionSet.BITMAP_UNION, FunctionSet.HLL_UNION,
-            FunctionSet.PERCENTILE_UNION, FunctionSet.ANY_VALUE, FunctionSet.MAX_BY);
+            FunctionSet.PERCENTILE_UNION, FunctionSet.ANY_VALUE);
 
     public MergeTwoAggRule() {
         super(RuleType.TF_MERGE_TWO_AGG_RULE, Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(
