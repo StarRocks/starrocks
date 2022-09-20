@@ -192,9 +192,9 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 tableName,
                 StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
                 engine,
-                new KeysDesc(KeysType.PRIMARY_KEYS, FULL_STATISTICS_KEY_COLUMNS),
+                new KeysDesc(KeysType.UNIQUE_KEYS, HISTOGRAM_KEY_COLUMNS),
                 null,
-                new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
+                new HashDistributionDesc(10, HISTOGRAM_KEY_COLUMNS),
                 properties,
                 null,
                 "");
