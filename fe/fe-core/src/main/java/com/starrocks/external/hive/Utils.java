@@ -9,6 +9,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
 public class Utils {
     public static final String DECIMAL_PATTERN = "^decimal\\((\\d+),(\\d+)\\)";
     public static final String ARRAY_PATTERN = "^array<([0-9a-z<>(),]+)>";
+    public static final String MAP_PATTERN = "^map<([0-9a-z<>(),:]+)>";
     public static final String CHAR_PATTERN = "^char\\(([0-9]+)\\)";
     public static final String VARCHAR_PATTERN = "^varchar\\(([0-9,-1]+)\\)";
     protected static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("STRUCT", "BINARY", "MAP", "UNIONTYPE");
@@ -184,6 +186,40 @@ public class Utils {
             itemType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         }
         return itemType;
+    }
+
+    public static String[] getKeyValueStr(String typeStr) throws DdlException {
+        Matcher matcher = Pattern.compile(MAP_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
+        if (matcher.find()) {
+            String kvStr = matcher.group(1);
+            int size = kvStr.length();
+            int stack = 0;
+            int index = 0;
+            for (int i = 0; i < size; i++) {
+                char c = kvStr.charAt(i);
+                if (c == '<' || c == '(') {
+                    stack++;
+                } else if (c == '>' || c == ')') {
+                    stack--;
+                } else if (c == ',' && stack == 0) {
+                    index = i;
+                    break;
+                }
+            }
+            if (index == 0 || index == size - 1) {
+                throw new DdlException("Error Map Type" + typeStr);
+            }
+            return new String[] {kvStr.substring(0, index).trim(), kvStr.substring(index + 1, size).trim()};
+        } else {
+            throw new DdlException("Failed to get MapType at " + typeStr);
+        }
+    }
+
+    // Map string like map<keytype, valuetype>
+    public static Type convertToMapType(String typeStr) throws DdlException {
+        String[] kv = getKeyValueStr(typeStr);
+        return new MapType(HiveMetaStoreTableUtils.convertHiveTableColumnType(kv[0]),
+                HiveMetaStoreTableUtils.convertHiveTableColumnType(kv[1]));
     }
 
     // Char string like char(100)

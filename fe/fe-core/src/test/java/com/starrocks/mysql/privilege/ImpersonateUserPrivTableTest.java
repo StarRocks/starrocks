@@ -3,10 +3,11 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.persist.ImpersonatePrivInfo;
-import com.starrocks.sql.ast.GrantImpersonateStmt;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -22,14 +23,15 @@ public class ImpersonateUserPrivTableTest {
     public void testPersist() throws Exception {
         // SET UP
         UtFrameUtils.setUpForPersistTest();
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
 
         // 1. prepare for test
         // 1.1 create 2 users
-        Auth auth = new Auth();
+        Auth auth = GlobalStateMgr.getCurrentState().getAuth();
         UserIdentity harry = UserIdentity.createAnalyzedUserIdentWithIp("Harry", "%");
-        auth.createUser(new CreateUserStmt(new UserDesc(harry)));
+        auth.createUser((CreateUserStmt) UtFrameUtils.parseStmtWithNewParser("create user Harry", ctx));
         UserIdentity gregory = UserIdentity.createAnalyzedUserIdentWithIp("Gregory", "%");
-        auth.createUser(new CreateUserStmt(new UserDesc(gregory)));
+        auth.createUser((CreateUserStmt) UtFrameUtils.parseStmtWithNewParser("create user Gregory", ctx));
         // 1.2 make initialized checkpoint here for later use
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
         auth.saveAuth(pseudoImage.getDataOutputStream(), -1);
@@ -37,7 +39,8 @@ public class ImpersonateUserPrivTableTest {
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
 
         // 2. master grant impersonate
-        auth.grantImpersonate(new GrantImpersonateStmt(harry, gregory));
+        auth.grant((GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT impersonate on Gregory to Harry", ctx));
 
         // 3. verify follower replay
         // 3.1 follower load initialized checkpoint

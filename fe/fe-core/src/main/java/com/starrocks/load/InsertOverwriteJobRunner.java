@@ -4,7 +4,6 @@ package com.starrocks.load;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -18,6 +17,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.LogManager;
@@ -322,6 +322,6 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("table:% does not exist in database:%s", tableId, db.getFullName());
         }
         Preconditions.checkState(table instanceof OlapTable);
-        return  (OlapTable) table;
+        return (OlapTable) table;
     }
 }

@@ -89,7 +89,6 @@ TEST_F(LakeTabletManagerTest, create_and_delete_tablet) {
     TCreateTabletReq req;
     req.tablet_id = 65535;
     req.__set_version(1);
-    req.__set_version_hash(0);
     req.tablet_schema.schema_hash = 270068375;
     req.tablet_schema.short_key_column_count = 2;
     EXPECT_OK(_tablet_manager->create_tablet(req));
@@ -326,7 +325,6 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         TCreateTabletReq req;
         req.tablet_id = 65535;
         req.__set_version(1);
-        req.__set_version_hash(0);
         req.tablet_schema.__set_id(1);
         req.tablet_schema.__set_schema_hash(0);
         req.tablet_schema.__set_short_key_column_count(1);
@@ -363,7 +361,6 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         TCreateTabletReq req;
         req.tablet_id = 65536;
         req.__set_version(1);
-        req.__set_version_hash(0);
         req.__set_base_tablet_id(65535);
         req.tablet_schema.__set_id(2);
         req.tablet_schema.__set_schema_hash(0);
@@ -413,7 +410,6 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         TCreateTabletReq req;
         req.tablet_id = 65537;
         req.__set_version(1);
-        req.__set_version_hash(0);
         req.__set_base_tablet_id(65536);
         req.tablet_schema.__set_id(3);
         req.tablet_schema.__set_schema_hash(0);

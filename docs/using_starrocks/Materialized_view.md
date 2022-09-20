@@ -425,13 +425,13 @@ When a query is executed with a materialized view, the original query statement 
 
 StarRocks 2.4 supports creating asynchronous materialized views for multiple base tables to allow modeling data warehouse.
 
-As for the current version, materialized views three refresh strategies:
+As for the current version, multi-table materialized views support two refresh strategies:
 
 - **Async refresh**
-  -  Async refresh strategy allows materialized views refresh through asynchronous tasks, and does not guarantee strict consistency between the base table and its subordinate materialized views. Async refresh strategy is supported on materialized view for multiple base tables.
+  Async refresh strategy allows materialized views refresh through asynchronous tasks, and does not guarantee strict consistency between the base table and its subordinate materialized views. Async refresh strategy is supported on materialized view for multiple base tables.
 
 - **Manual refresh**
-  -  With manual refresh strategy, you can trigger a refresh task for a materialized view by running a SQL command. It does not guarantee strict consistency between the base table and its subordinate materialized views.
+  With manual refresh strategy, you can trigger a refresh task for a materialized view by running a SQL command. It does not guarantee strict consistency between the base table and its subordinate materialized views.
 
 ### Preparation
 
@@ -632,13 +632,6 @@ DROP MATERIALIZED VIEW order_mv;
 ```
 
 ### Caution
-
-- Sync refresh materialized views have the following limitations:
-  - You can only create a sync refresh materialized view based on a single table instead of multiple tables.
-  - You cannot change the partitioning and bucketing strategies of sync refresh materialized views. They must be consistent with that of the base table.
-  - You cannot directly query a sync refresh materialized view.
-  - Sync refresh materialized views do not support the clause WHERE.
-  - Sync refresh materialized views only supports limited aggregate functions, including sum, min, max, count, bitmap_union, hll_union, and percentile_union.
 
 - Async refresh materialized views have the following features:
   - You can directly query a async refresh materialized view, but the result may be inconsistent with that from the base tables.

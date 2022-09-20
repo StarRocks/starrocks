@@ -11,6 +11,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -164,6 +165,18 @@ public class HiveMetaStoreTableUtils {
                 }
                 return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
                         ((ArrayType) type).getItemType());
+            case "MAP":
+                if (!type.isMapType()) {
+                    return false;
+                }
+                try {
+                    String[] kvStr = Utils.getKeyValueStr(hiveType);
+                    return validateColumnType(kvStr[0], ((MapType) type).getKeyType()) &&
+                            validateColumnType(kvStr[1], ((MapType) type).getValueType());
+                } catch (DdlException e) {
+                    return false;
+                }
+
             default:
                 // for BINARY and other types, we transfer it to UNKNOWN_TYPE
                 return primitiveType == PrimitiveType.UNKNOWN_TYPE;
@@ -217,6 +230,15 @@ public class HiveMetaStoreTableUtils {
                 Type type = Utils.convertToArrayType(hiveType);
                 if (type.isArrayType()) {
                     return type;
+                } else {
+                    return Type.UNKNOWN_TYPE;
+                }
+            case "MAP":
+                Type mapType = Utils.convertToMapType(hiveType);
+                if (mapType.isMapType()) {
+                    return mapType;
+                } else {
+                    return Type.UNKNOWN_TYPE;
                 }
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;

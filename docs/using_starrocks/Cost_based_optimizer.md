@@ -184,7 +184,7 @@ PROPERTIES(
 
 You can use the CREATE ANALYZE statement to customize an automatic collection task.
 
-Before creating a custom automatic collection task, you need to disable automatic full collection (`enable_collect_full_statistic = false`). Otherwise, custom tasks cannot take effect.
+Before creating a custom automatic collection task, you must disable automatic full collection (`enable_collect_full_statistic = false`). Otherwise, custom tasks cannot take effect.
 
 ```SQL
 -- Automatically collect stats of all databases.
@@ -278,7 +278,7 @@ SHOW ANALYZE JOB
 SHOW ANALYZE JOB where `database` = 'test';
 ```
 
-#### Delete custom collection tasks
+#### Delete a custom collection task
 
 ```SQL
 DROP ANALYZE <ID>;
@@ -323,7 +323,7 @@ This statement returns the following columns.
 ### View metadata of basic statistics
 
 ```SQL
-SHOW STATS META [WHERE predicate];
+SHOW STATS META [WHERE];
 ```
 
 This statement returns the following columns.
@@ -341,7 +341,7 @@ This statement returns the following columns.
 ### View metadata of histograms
 
 ```SQL
-SHOW HISTOGRAM META [WHERE predicate];
+SHOW HISTOGRAM META [WHERE];
 ```
 
 This statement returns the following columns.
@@ -373,13 +373,13 @@ ANALYZE TABLE tbl_name DROP HISTOGRAM ON col_name [, col_name];
 
 ## Cancel a collection task
 
-You can use the KILL ANALYZE statement to cancel a **running** collection task.
-
-The task ID can be obtained from SHOW ANALYZE STATUS.
+You can use the KILL ANALYZE statement to cancel a **running** collection task, including manual and custom tasks.
 
 ```SQL
 KILL ANALYZE <ID>;
 ```
+
+The task ID for a manual collection task can be obtained from SHOW ANALYZE STATUS. The task ID for a custom collection task can be obtained from SHOW ANALYZE SHOW ANALYZE JOB.
 
 ## FE configuration items
 

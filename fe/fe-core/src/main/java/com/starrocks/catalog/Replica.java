@@ -79,6 +79,18 @@ public class Replica implements Writable {
     // the version could be queried
     @SerializedName(value = "version")
     private volatile long version;
+
+    // minimal readable version for this replica, the value is 0 at beginning and will change to larger values when:
+    //   1. replica perform some version GC, and then tablet report from BE
+    //   2. a replica clone task finishes, and report TTabletInfo to FE with the new minReadableVersion
+    // the main purpose of adding this field is to avoid the situation that:
+    //   1. tablet has 2 replica A has version[7,8,9,10], B: [7,8,9,10]
+    //   2. a newly cloned replica C full clone from replica A, then has version [10]
+    //   3. current partition visible version is still 9
+    //   4. A query read this tablet at version 9, and picks replica C, but replica C doesn't have version 10,
+    //      causing `version not found` error
+    @SerializedName(value = "minReadableVersion")
+    private volatile long minReadableVersion = 0;
     private int schemaHash = -1;
     @SerializedName(value = "dataSize")
     private volatile long dataSize = 0;
@@ -130,16 +142,16 @@ public class Replica implements Writable {
      * <p>
      * 1. BE X generates tablet report and sends it to FE<p>
      * 2. FE creates clone task(for balance or repair) and a new replica on BE X,
-     *    so the corresponding tablet is not included in the report sent above.<p>
+     * so the corresponding tablet is not included in the report sent above.<p>
      * 3. BE X finishes clone and then FE will receive the message and set the state
-     *    of new replica to NORMAL<p>
+     * of new replica to NORMAL<p>
      * 4. FE processes the tablet report from step 1 and finds that BE X doesn't report
-     *    the tablet info corresponding to the newly created replica, so it will delete
-     *    the replica from its meta<p>
+     * the tablet info corresponding to the newly created replica, so it will delete
+     * the replica from its meta<p>
      * 5. On the next tablet report of BE X which will include the tablet info, FE finds
-     *    that the tablet reported by BE X doesn't exist in its meta, so it will send a
-     *    request asking BE X to delete the newly cloned replica physically.
-     *  <p>
+     * that the tablet reported by BE X doesn't exist in its meta, so it will send a
+     * request asking BE X to delete the newly cloned replica physically.
+     * <p>
      * The main reason causes this problem is that FE handles tablet report task and clone
      * task concurrently, with specific timing, this will happen. So we add a new state
      * `deferReplicaDeleteToNextReport` for `Replica`, default to true. When FE meets a replica
@@ -193,6 +205,10 @@ public class Replica implements Writable {
 
     public long getVersion() {
         return this.version;
+    }
+
+    public long getMinReadableVersion() {
+        return this.minReadableVersion;
     }
 
     public int getSchemaHash() {
@@ -292,22 +308,28 @@ public class Replica implements Writable {
         this.versionCount = versionCount;
     }
 
+    public synchronized void updateRowCount(long newVersion, long minReadableVersion, long newDataSize,
+                                            long newRowCount) {
+        updateReplicaInfo(newVersion, this.lastFailedVersion,
+                this.lastSuccessVersion, minReadableVersion, newDataSize, newRowCount);
+    }
+
     public synchronized void updateRowCount(long newVersion, long newDataSize,
                                             long newRowCount) {
         updateReplicaInfo(newVersion, this.lastFailedVersion,
-                this.lastSuccessVersion, newDataSize, newRowCount);
+                this.lastSuccessVersion, this.minReadableVersion, newDataSize, newRowCount);
     }
 
     public synchronized void updateVersionInfo(long newVersion,
                                                long lastFailedVersion,
                                                long lastSuccessVersion) {
         updateReplicaInfo(newVersion, lastFailedVersion,
-                lastSuccessVersion, dataSize, rowCount);
+                lastSuccessVersion, this.minReadableVersion, dataSize, rowCount);
     }
 
     public synchronized void updateVersion(long version) {
         updateReplicaInfo(version, this.lastFailedVersion,
-                this.lastSuccessVersion, dataSize, rowCount);
+                this.lastSuccessVersion, this.minReadableVersion, dataSize, rowCount);
     }
 
     public void updateVersionInfoForRecovery(
@@ -353,7 +375,9 @@ public class Replica implements Writable {
     private void updateReplicaInfo(long newVersion,
                                    long lastFailedVersion,
                                    long lastSuccessVersion,
-                                   long newDataSize, long newRowCount) {
+                                   long minReadableVersion,
+                                   long newDataSize,
+                                   long newRowCount) {
         if (LOG.isDebugEnabled()) {
             LOG.debug("before update: {}", this.toString());
         }
@@ -414,6 +438,10 @@ public class Replica implements Writable {
             }
         }
 
+        if (minReadableVersion <= this.version) {
+            this.minReadableVersion = minReadableVersion;
+        }
+
         if (LOG.isDebugEnabled()) {
             LOG.debug("after update {}", this.toString());
         }
@@ -421,7 +449,7 @@ public class Replica implements Writable {
 
     public synchronized void updateLastFailedVersion(long lastFailedVersion) {
         updateReplicaInfo(this.version, lastFailedVersion,
-                this.lastSuccessVersion, dataSize, rowCount);
+                this.lastSuccessVersion, this.minReadableVersion, dataSize, rowCount);
     }
 
     /*
@@ -493,6 +521,8 @@ public class Replica implements Writable {
         strBuffer.append(lastFailedTimestamp);
         strBuffer.append(", schemaHash=");
         strBuffer.append(schemaHash);
+        strBuffer.append(", minReadableVersion=");
+        strBuffer.append(minReadableVersion);
         strBuffer.append(", state=");
         strBuffer.append(state.name());
         strBuffer.append("]");
@@ -510,7 +540,7 @@ public class Replica implements Writable {
         Text.writeString(out, state.name());
 
         out.writeLong(lastFailedVersion);
-        out.writeLong(0); // write a version_hash for compatibility
+        out.writeLong(minReadableVersion); // originally used as version_hash, now reused as minReadableVersion
         out.writeLong(lastSuccessVersion);
         out.writeLong(0); // write a version_hash for compatibility
     }
@@ -525,7 +555,7 @@ public class Replica implements Writable {
         state = ReplicaState.valueOf(Text.readString(in));
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_45) {
             lastFailedVersion = in.readLong();
-            in.readLong(); // read a version_hash for compatibility
+            minReadableVersion = in.readLong(); // originally used as version_hash, now reused as minReadableVersion
             lastSuccessVersion = in.readLong();
             in.readLong(); // read a version_hash for compatibility
         }
@@ -554,7 +584,8 @@ public class Replica implements Writable {
                 && (rowCount == replica.rowCount)
                 && (state.equals(replica.state))
                 && (lastFailedVersion == replica.lastFailedVersion)
-                && (lastSuccessVersion == replica.lastSuccessVersion);
+                && (lastSuccessVersion == replica.lastSuccessVersion)
+                && (minReadableVersion == replica.minReadableVersion);
     }
 
     private static class VersionComparator<T extends Replica> implements Comparator<T> {

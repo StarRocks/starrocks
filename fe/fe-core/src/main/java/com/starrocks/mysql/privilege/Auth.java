@@ -32,9 +32,7 @@ import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
-import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.ResourcePattern;
-import com.starrocks.analysis.RevokeStmt;
 import com.starrocks.analysis.SetPassVar;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.TablePattern;
@@ -55,9 +53,9 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
-import com.starrocks.sql.ast.GrantImpersonateStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
-import com.starrocks.sql.ast.RevokeImpersonateStmt;
+import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -822,14 +820,6 @@ public class Auth implements Writable {
         LOG.info("revoke {} from {}, isReplay = {}", roleName, userIdent, isReplay);
     }
 
-    public void grantImpersonate(GrantImpersonateStmt stmt) throws DdlException {
-        if (stmt.getAuthorizedRoleName() == null) {
-            grantImpersonateToUserInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
-        } else {
-            grantImpersonateToRoleInternal(stmt.getAuthorizedRoleName(), stmt.getSecuredUser(), false);
-        }
-    }
-
     public void replayGrantImpersonate(ImpersonatePrivInfo info) {
         try {
             if (info.getAuthorizedRoleName() == null) {
@@ -839,14 +829,6 @@ public class Auth implements Writable {
             }
         } catch (DdlException e) {
             LOG.error("should not happend", e);
-        }
-    }
-
-    public void revokeImpersonate(RevokeImpersonateStmt stmt) throws DdlException {
-        if (stmt.getAuthorizedRoleName() == null) {
-            revokeImpersonateFromUserInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
-        } else {
-            revokeImpersonateFromRoleInternal(stmt.getAuthorizedRoleName(), stmt.getSecuredUser(), false);
         }
     }
 
@@ -863,14 +845,18 @@ public class Auth implements Writable {
     }
 
     // grant
-    public void grant(GrantStmt stmt) throws DdlException {
-        PrivBitSet privs = PrivBitSet.of(stmt.getPrivileges());
-        if (stmt.getTblPattern() != null) {
-            grantInternal(stmt.getUserIdent(), stmt.getQualifiedRole(), stmt.getTblPattern(), privs,
-                    true /* err on non exist */, false /* not replay */);
+    public void grant(GrantPrivilegeStmt stmt) throws DdlException {
+        PrivBitSet privs = stmt.getPrivBitSet();
+        if (stmt.getPrivType().equals("TABLE")) {
+            grantInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getTblPattern(), privs, true, false);
+        } else if (stmt.getPrivType().equals("RESOURCE")) {
+            grantInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getResourcePattern(), privs, true, false);
         } else {
-            grantInternal(stmt.getUserIdent(), stmt.getQualifiedRole(), stmt.getResourcePattern(), privs,
-                    true /* err on non exist */, false /* not replay */);
+            if (stmt.getRole() == null) {
+                grantImpersonateToUserInternal(stmt.getUserIdentity(), stmt.getUserPrivilegeObject(), false);
+            } else {
+                grantImpersonateToRoleInternal(stmt.getRole(), stmt.getUserPrivilegeObject(), false);
+            }
         }
     }
 
@@ -1106,14 +1092,20 @@ public class Auth implements Writable {
     }
 
     // revoke
-    public void revoke(RevokeStmt stmt) throws DdlException {
-        PrivBitSet privs = PrivBitSet.of(stmt.getPrivileges());
-        if (stmt.getTblPattern() != null) {
-            revokeInternal(stmt.getUserIdent(), stmt.getQualifiedRole(), stmt.getTblPattern(), privs,
+    public void revoke(RevokePrivilegeStmt stmt) throws DdlException {
+        PrivBitSet privs = stmt.getPrivBitSet();
+        if (stmt.getPrivType().equals("TABLE")) {
+            revokeInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getTblPattern(), privs,
+                    true /* err on non exist */, false /* is replay */);
+        } else if (stmt.getPrivType().equals("RESOURCE")) {
+            revokeInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getResourcePattern(), privs,
                     true /* err on non exist */, false /* is replay */);
         } else {
-            revokeInternal(stmt.getUserIdent(), stmt.getQualifiedRole(), stmt.getResourcePattern(), privs,
-                    true /* err on non exist */, false /* is replay */);
+            if (stmt.getRole() == null) {
+                revokeImpersonateFromUserInternal(stmt.getUserIdentity(), stmt.getUserPrivilegeObject(), false);
+            } else {
+                revokeImpersonateFromRoleInternal(stmt.getRole(), stmt.getUserPrivilegeObject(), false);
+            }
         }
     }
 

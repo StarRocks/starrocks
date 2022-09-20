@@ -14,6 +14,7 @@ import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeFunctionTest {
 
@@ -213,5 +214,33 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("SELECT {fn UCASE(ucase(`ta`))} FROM tall");
         analyzeSuccess("select { fn extract(year from th)} from tall");
         analyzeFail("select {fn date_format(th, \"%Y\")} from tall", "invalid odbc scalar function");
+    }
+
+    @Test
+    public void testCreateFunction() throws Exception {
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer("CREATE FUNCTION f(INT, INT) RETURNS INT",
+                getConnectContext());
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                "CREATE FUNCTION f(INT, INT, CHAR(10), BIGINT, ...) RETURNS INT",
+                getConnectContext());
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                "CREATE AGGREGATE FUNCTION f(INT, INT) RETURNS INT INTERMEDIATE INT",
+                getConnectContext());
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                "CREATE TABLE FUNCTION f(INT, INT) RETURNS INT",
+                getConnectContext());
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                "CREATE FUNCTION f(INT, INT) RETURNS INT PROPERTIES (\"key\"=\"value\")",
+                getConnectContext());
+    }
+
+    @Test
+    public void testDropFunction() throws Exception {
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer("DROP FUNCTION f()", getConnectContext());
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer("DROP FUNCTION f(int)", getConnectContext());
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                "DROP FUNCTION f(int, ...)", getConnectContext());
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                "DROP FUNCTION db.f(int, char(2))", getConnectContext());
     }
 }

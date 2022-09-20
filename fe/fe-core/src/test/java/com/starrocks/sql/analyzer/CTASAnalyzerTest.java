@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -11,6 +10,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -317,7 +317,7 @@ public class CTASAnalyzerTest {
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
         CreateTableAsSelectStmt createTableStmt2 =
-                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql2, ctx);
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql2, ctx);
 
         String ctasSql3 = "CREATE TABLE json_kv as select * from test, lateral json_each(parse_json(c1));";
         CreateTableAsSelectStmt createTableStmt3 =

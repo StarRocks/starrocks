@@ -10,6 +10,7 @@ namespace starrocks {
 VISIT_IMPL(vectorized::NullableColumn)
 VISIT_IMPL(vectorized::ConstColumn)
 VISIT_IMPL(vectorized::ArrayColumn)
+VISIT_IMPL(vectorized::MapColumn)
 VISIT_IMPL(vectorized::BinaryColumn)
 VISIT_IMPL(vectorized::LargeBinaryColumn)
 VISIT_IMPL(vectorized::Int8Column)
