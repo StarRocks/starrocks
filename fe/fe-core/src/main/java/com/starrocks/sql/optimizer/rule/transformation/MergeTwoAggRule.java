@@ -84,8 +84,7 @@ public class MergeTwoAggRule extends TransformationRule {
                 // max/min on grouping column is equals with direct aggregate on column
                 if (!FunctionSet.MAX.equalsIgnoreCase(call.getFnName()) &&
                         !FunctionSet.MIN.equalsIgnoreCase(call.getFnName()) &&
-                        !FunctionSet.ANY_VALUE.equalsIgnoreCase(call.getFnName()) &&
-                        !FunctionSet.MAX_BY.equalsIgnoreCase(call.getFnName())) {
+                        !FunctionSet.ANY_VALUE.equalsIgnoreCase(call.getFnName())) {
                     return false;
                 }
             } else {
