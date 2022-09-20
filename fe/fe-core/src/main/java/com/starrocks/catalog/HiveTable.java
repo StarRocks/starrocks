@@ -47,6 +47,7 @@ import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.HiveTableStats;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
@@ -100,19 +101,20 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_RESOURCE = "resource";
 
+    private String catalogName;
     private String hiveDbName;
     private String hiveTableName;
     private String resourceName;
     private String hdfsPath;
-    private final List<String> partColumnNames = Lists.newArrayList();
+    private List<String> partColumnNames = Lists.newArrayList();
     // dataColumnNames stores all the non-partition columns of the hive table,
     // consistent with the order defined in the hive table
-    private final List<String> dataColumnNames = Lists.newArrayList();
-    private final Map<String, String> hiveProperties = Maps.newHashMap();
+    private List<String> dataColumnNames = Lists.newArrayList();
+    private Map<String, String> hiveProperties = Maps.newHashMap();
 
     private HiveMetaStoreTableInfo hmsTableInfo;
 
-    private final HiveRepository hiveRepository;
+    private HiveRepository hiveRepository;
 
     public HiveTable() {
         super(TableType.HIVE);
@@ -131,6 +133,20 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         initHmsTableInfo();
     }
 
+    public HiveTable(long id, String name, List<Column> fullSchema, String resourceName, String catalog,
+                     String hiveDbName, String hiveTableName, String hdfsPath, List<String> partColumnNames,
+                     List<String> dataColumnNames, Map<String, String> properties) {
+        super(id, name, TableType.HIVE, fullSchema);
+        this.resourceName = resourceName;
+        this.catalogName = catalog;
+        this.hiveDbName = hiveDbName;
+        this.hiveTableName = hiveTableName;
+        this.hdfsPath = hdfsPath;
+        this.partColumnNames = partColumnNames;
+        this.dataColumnNames = dataColumnNames;
+        this.hiveProperties = properties;
+    }
+
     public String getHiveDbTable() {
         return String.format("%s.%s", hiveDbName, hiveTableName);
     }
@@ -142,7 +158,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public String getCatalogName() {
-        return null;
+        return catalogName == null ? CatalogMgr.INTERNAL_RESOURCE_TO_CATALOG_NAME_PREFIX + resourceName : catalogName;
     }
 
     public String getDbName() {
@@ -634,5 +650,80 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder {
+        private long id;
+        private String catalogName;
+        private String hiveDbName;
+        private String hiveTableName;
+        private String resourceName;
+        private String hdfsPath;
+        private List<Column> fullSchema;
+        private List<String> partitionColNames = Lists.newArrayList();
+        private List<String> dataColNames = Lists.newArrayList();
+        private Map<String, String> properties = Maps.newHashMap();
+
+        public Builder() {
+        }
+
+        public Builder setId(long id) {
+            this.id = id;
+            return this;
+        }
+
+        public Builder setCatalogName(String catalogName) {
+            this.catalogName = catalogName;
+            return this;
+        }
+
+        public Builder setHiveDbName(String hiveDbName) {
+            this.hiveDbName = hiveDbName;
+            return this;
+        }
+
+        public Builder setHiveTableName(String hiveTableName) {
+            this.hiveTableName = hiveTableName;
+            return this;
+        }
+
+        public Builder setResourceName(String resourceName) {
+            this.resourceName = resourceName;
+            return this;
+        }
+
+        public Builder setHdfsPath(String hdfsPath) {
+            this.hdfsPath = hdfsPath;
+            return this;
+        }
+
+        public Builder setFullSchema(List<Column> fullSchema) {
+            this.fullSchema = fullSchema;
+            return this;
+        }
+
+        public Builder setDataColumnNames(List<String> dataColumnNames) {
+            this.dataColNames = dataColumnNames;
+            return this;
+        }
+
+        public Builder setPartitionColumnNames(List<String> partitionColumnNames) {
+            this.partitionColNames = partitionColumnNames;
+            return this;
+        }
+
+        public Builder setProperties(Map<String, String> properties) {
+            this.properties = properties;
+            return this;
+        }
+
+        public HiveTable build() {
+            return new HiveTable(id, hiveTableName, fullSchema, resourceName, catalogName, hiveDbName, hiveTableName,
+                    hdfsPath, partitionColNames, dataColNames, properties);
+        }
     }
 }

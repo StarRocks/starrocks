@@ -46,6 +46,8 @@ public class CatalogMgr {
     private final ConnectorMgr connectorMgr;
     private final ReadWriteLock catalogLock = new ReentrantReadWriteLock();
 
+    public static final String INTERNAL_RESOURCE_TO_CATALOG_NAME_PREFIX = "internal_resource_to_catalog_";
+
     public static final ImmutableList<String> CATALOG_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Catalog").add("Type").add("Comment")
             .build();
