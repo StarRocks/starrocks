@@ -2,6 +2,8 @@
 
 #include "exprs/vectorized/array_map_expr.h"
 
+#include <fmt/format.h>
+
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -94,10 +96,12 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
         for (auto id : slot_ids) {
             DCHECK(id > 0);
             auto captured = chunk->get_column_by_slot_id(id);
-            auto aligned_col = captured->clone_empty();
-            cur_chunk->append_column(
-                    ColumnHelper::duplicate_column(captured, std::move(aligned_col), input_array->offsets_column()),
-                    id);
+            if (captured->size() != input_array->size()) {
+                throw std::runtime_error(
+                        fmt::format("The size of the captured column {} does not equal to array's size"),
+                        captured->get_name());
+            }
+            cur_chunk->append_column(captured->replicate(input_array->offsets_column()->get_data()), id);
         }
         column = EVALUATE_NULL_IF_ERROR(context, _children[0], cur_chunk.get());
         // construct the result array

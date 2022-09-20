@@ -318,4 +318,28 @@ PARALLEL_TEST(ConstColumnTest, test_clone_empty) {
     ASSERT_TRUE(c2->data_column().unique());
 }
 
+// NOLINTNEXTLINE
+PARALLEL_TEST(ConstColumnTest, test_replicate) {
+    auto create_const_column = [](int32_t value, size_t size) {
+        auto c = Int32Column::create();
+        c->append_numbers(&value, sizeof(value));
+        return ConstColumn::create(c, size);
+    };
+
+    auto c1 = create_const_column(1, 3);
+
+    ASSERT_EQ(3, c1->size());
+
+    Offsets offsets;
+    offsets.push_back(0);
+    offsets.push_back(2);
+    offsets.push_back(5);
+    offsets.push_back(7);
+
+    auto c2 = c1->replicate(offsets);
+
+    ASSERT_EQ(7, c2->size());
+    ASSERT_EQ(1, c2->get(6));
+}
+
 } // namespace starrocks::vectorized

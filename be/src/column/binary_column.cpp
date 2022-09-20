@@ -105,6 +105,32 @@ void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_
     _slices_cache = false;
 }
 
+//TODO(fzh): optimize copy using SIMD
+template <typename T>
+ColumnPtr BinaryColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
+    auto dest = std::dynamic_pointer_cast<BinaryColumnBase<T>>(BinaryColumnBase<T>::create());
+    auto& dest_offsets = dest->get_offset();
+    auto& dest_bytes = dest->get_bytes();
+    auto src_size = this->size();
+    size_t total_size = 0; // total size to copy
+    for (auto i = 0; i < src_size; ++i) {
+        auto bytes_size = _offsets[i + 1] - _offsets[i];
+        total_size += bytes_size * (offsets[i + 1] - offsets[i]);
+    }
+    dest_bytes.resize(total_size);
+    dest_offsets.resize(dest_offsets.size() + offsets.back());
+
+    auto pos = 0;
+    for (auto i = 0; i < src_size; ++i) {
+        auto bytes_size = _offsets[i + 1] - _offsets[i];
+        for (auto j = offsets[i]; j < offsets[i + 1]; ++j) {
+            strings::memcpy_inlined(dest_bytes.data() + pos, _bytes.data() + _offsets[i], bytes_size);
+            pos += bytes_size;
+            dest_offsets[j + 1] = pos;
+        }
+    }
+}
+
 template <typename T>
 bool BinaryColumnBase<T>::append_strings(const Buffer<Slice>& strs) {
     for (const auto& s : strs) {

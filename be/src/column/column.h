@@ -152,6 +152,17 @@ public:
 
     virtual void append(const Column& src) { append(src, 0, src.size()); }
 
+    // TODO(fzh): optimize replicate() for specific columns, such as array_column, object_column.
+    virtual ColumnPtr replicate(const std::vector<uint32_t>& offsets) {
+        auto dest = this->clone_empty();
+        auto dest_size = offsets.size() - 1;
+        DCHECK(this->size() >= dest_size) << "The size of the source column is less when duplicating it.";
+        dest->reserve(offsets.back());
+        for (int i = 0; i < offsets.size() - 1; ++i) {
+            dest->append_value_multiple_times(*this, i, offsets[i + 1] - offsets[i]);
+        }
+        return dest;
+    }
     // Update elements to default value which hit by the filter
     virtual void fill_default(const Filter& filter) = 0;
 
