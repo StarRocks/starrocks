@@ -641,10 +641,8 @@ TEST_F(AggregateTest, test_stddev_samp) {
 
 TEST_F(AggregateTest, test_maxby) {
     const AggregateFunction* func = get_aggregate_function("max_by", TYPE_VARCHAR, TYPE_INT, true);
-
     auto result_column = Int32Column::create();
     auto aggr_state = ManagedAggrState::create(ctx, func);
-
     auto int_column = Int32Column::create();
     for (int i = 0; i < 10; i++) {
         int_column->append(i);
@@ -652,7 +650,6 @@ TEST_F(AggregateTest, test_maxby) {
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}, {""}};
     varchar_column->append_strings(strings);
-
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -661,10 +658,41 @@ TEST_F(AggregateTest, test_maxby) {
     for (int i = 0; i < columns.size(); ++i) {
         raw_columns[i] = columns[i].get();
     }
-
     func->update_batch_single_state(ctx, int_column->size(), raw_columns.data(), aggr_state->state());
     func->finalize_to_column(ctx, aggr_state->state(), result_column.get());
     ASSERT_EQ(2, result_column->get_data()[0]);
+
+    //test nullable column
+    func = get_aggregate_function("max_by", TYPE_DECIMALV2, TYPE_DOUBLE, true);
+    aggr_state = ManagedAggrState::create(ctx, func);
+    auto data_column1 = DoubleColumn::create();
+    auto null_column1 = NullColumn::create();
+    for (int i = 0; i < 100; i++) {
+        data_column1->append(i + 0.11);
+        null_column1->append(i % 13 ? false : true);
+    }
+    auto doubleColumn = NullableColumn::create(std::move(data_column1), std::move(null_column1));
+    auto data_column2 = DecimalColumn::create();
+    auto null_column2 = NullColumn::create();
+    for (int i = 0; i < 100; i++) {
+        data_column2->append(DecimalV2Value(i));
+        null_column2->append(i % 11 ? false : true);
+    }
+    auto decimalColumn = NullableColumn::create(std::move(data_column2), std::move(null_column2));
+    auto data_column3 = DoubleColumn::create();
+    auto null_column3 = NullColumn::create();
+    auto nullable_result_column = NullableColumn::create(std::move(data_column3), std::move(null_column3));
+    Columns nullColumns;
+    nullColumns.emplace_back(doubleColumn);
+    nullColumns.emplace_back(decimalColumn);
+    std::vector<const Column*> raw_nullColumns;
+    raw_nullColumns.resize(nullColumns.size());
+    for (int i = 0; i < nullColumns.size(); ++i) {
+        raw_nullColumns[i] = nullColumns[i].get();
+    }
+    func->update_batch_single_state(ctx, doubleColumn->size(), raw_nullColumns.data(), aggr_state->state());
+    func->finalize_to_column(ctx, aggr_state->state(), nullable_result_column.get());
+    ASSERT_EQ(98.11, nullable_result_column->data_column()->get(0).get<double>());
 }
 
 TEST_F(AggregateTest, test_max) {

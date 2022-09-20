@@ -200,6 +200,10 @@ public class FunctionAnalyzer {
                         "max_by requires two parameters: " + functionCallExpr.toSql());
             }
             
+            if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
+                throw new SemanticException("max_by function args must be column");
+            }
+            
             fnParams.setIsDistinct(false);  // DISTINCT is meaningless here
 
             Type maxByType = functionCallExpr.getChild(1).getType();
