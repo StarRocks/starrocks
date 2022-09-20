@@ -285,7 +285,7 @@ The following examples demonstrate how to partition a table by specifying START,
   )
   ```
 
-- After a table is created, you can use the ALTER TABLE statement to add partitions for the table.
+- After a table is created, you can use the [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) statement to add partitions for the table.
 
   ```SQL
   ALTER TABLE site_access 
@@ -383,7 +383,7 @@ SHOW PARTITIONS FROM site_access;
 
 ### Modify properties of dynamic partitioning
 
-You can use the ALTER TABLE statement to modify properties of dynamic partitioning, such as disabling dynamic partitioning. Take the following statement as an example.
+You can use the [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) statement to modify properties of dynamic partitioning, such as disabling dynamic partitioning. Take the following statement as an example.
 
 ```SQL
 ALTER TABLE site_access 
