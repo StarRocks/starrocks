@@ -4,6 +4,7 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.analysis.AddSqlBlackListStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
@@ -1258,6 +1259,14 @@ public class PrivilegeChecker {
                     && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
                     PrivPredicate.OPERATOR)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN/OPERATOR");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRepositoryStmt(CreateRepositoryStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
         }

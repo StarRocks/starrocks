@@ -15,6 +15,7 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DdlStmt;
@@ -446,6 +447,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowRestoreStmt(ShowRestoreStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    public R visitCreateRepositoryStmt(CreateRepositoryStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 
     // ------------------------------------------- Admin Statement -----------------------------------------------------
