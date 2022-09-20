@@ -227,10 +227,7 @@ public class SplitAggregateRule extends TransformationRule {
                     }
                 }
             } else {
-                if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0) {
-                    return implementOneDistinctWithOutGroupByAgg(context.getColumnRefFactory(),
-                            input, operator, distinctColumns, singleDistinctFunctionPos);
-                } else if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 2 &&
+                if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 2 &&
                         canGenerateTwoStageAggregate(operator, distinctColumns)) {
                     return implementTwoStageAgg(input, operator);
                 } else {
