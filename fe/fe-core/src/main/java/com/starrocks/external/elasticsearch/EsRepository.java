@@ -77,8 +77,8 @@ public class EsRepository extends LeaderDaemon {
                 // After synchronize success, we should set LastMetaDataSyncException to null.
                 esTable.setLastMetaDataSyncException(null);
             } catch (Exception e) {
-                LOG.warn("Exception happens when fetch index [{}] meta data from remote es cluster", esTable.getName(),
-                        e);
+                LOG.warn(String.format("Exception happens when fetch index [%s] meta data from remote es cluster", 
+                        esTable.getName()), e);
                 esTable.setEsTablePartitions(null);
                 esTable.setLastMetaDataSyncException(e);
             }

@@ -20,7 +20,7 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.PartitionValue;
+import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;

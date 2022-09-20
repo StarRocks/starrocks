@@ -80,6 +80,8 @@ public:
 
     virtual bool is_array() const { return false; }
 
+    virtual bool is_map() const { return false; }
+
     virtual bool low_cardinality() const { return false; }
 
     virtual const uint8_t* raw_data() const = 0;

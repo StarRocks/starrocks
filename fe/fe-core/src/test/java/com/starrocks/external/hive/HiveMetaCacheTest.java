@@ -82,13 +82,13 @@ public class HiveMetaCacheTest {
         HivePartition partition = metaCache.getPartition(hmsTable,
                 Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         Assert.assertEquals(1, partition.getFiles().size());
-        Assert.assertEquals(HdfsFileFormat.PARQUET, partition.getFormat());
+        Assert.assertEquals(RemoteFileInputFormat.PARQUET, partition.getFormat());
         Assert.assertEquals(partitionPath, partition.getFullPath());
 
         partition = metaCache.getPartition(hmsTable,
                 Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         Assert.assertEquals(1, partition.getFiles().size());
-        Assert.assertEquals(HdfsFileFormat.PARQUET, partition.getFormat());
+        Assert.assertEquals(RemoteFileInputFormat.PARQUET, partition.getFormat());
         Assert.assertEquals(partitionPath, partition.getFullPath());
 
         Assert.assertEquals(1, clientMethodGetPartitionCalledTimes);
@@ -145,7 +145,7 @@ public class HiveMetaCacheTest {
                 new HivePartitionKeysKey("db", "tbl", Table.TableType.HIVE, partColumns);
         List<String> partValues = Lists.newArrayList("11", "22", "33");
         PartitionKey newPartitionKey = Utils.createPartitionKey(partValues, partColumns);
-        HivePartitionKey newHivePartitionKey = new HivePartitionKey("db", "tbl", Table.TableType.HIVE, partValues);
+        HivePartitionName newHivePartitionKey = new HivePartitionName("db", "tbl", Table.TableType.HIVE, partValues);
         metaCache.addPartitionKeyByEvent(newPartitionKeysKey, newPartitionKey, newHivePartitionKey);
         partitionKeys = metaCache.getPartitionKeys(hmsTable);
         Assert.assertEquals(4, partitionKeys.size());
@@ -177,7 +177,7 @@ public class HiveMetaCacheTest {
         Map<String, String> params = Maps.newHashMap();
         params.put("numRows", "5");
         List<String> partValues = Lists.newArrayList("1", "2", "3");
-        HivePartitionKey partitionKey = new HivePartitionKey("db", "tbl", Table.TableType.HIVE, partValues);
+        HivePartitionName partitionKey = new HivePartitionName("db", "tbl", Table.TableType.HIVE, partValues);
         StorageDescriptor sd = new StorageDescriptor();
         sd.setInputFormat("org.apache.hadoop.mapred.TextInputFormat");
         SerDeInfo serDeInfo = new SerDeInfo();
@@ -192,7 +192,7 @@ public class HiveMetaCacheTest {
                 Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         Assert.assertTrue(metaCache.partitionExistInCache(partitionKey));
         Assert.assertEquals(5, partitionStats.getNumRows());
-        Assert.assertSame(partition.getFormat(), HdfsFileFormat.TEXT);
+        Assert.assertSame(partition.getFormat(), RemoteFileInputFormat.TEXT);
         long totalSize = partition.getFiles().stream().mapToLong(HdfsFileDesc::getLength).sum();
         Assert.assertEquals(partitionStats.getTotalFileBytes(), totalSize);
         file.delete();
@@ -216,7 +216,7 @@ public class HiveMetaCacheTest {
                 new HivePartitionKeysKey("db", "tbl", Table.TableType.HIVE, partColumns);
         List<String> partValues = Lists.newArrayList("1", "2", "3");
         PartitionKey dropPartitionKey = Utils.createPartitionKey(partValues, partColumns);
-        HivePartitionKey dropHivePartitionKey = new HivePartitionKey("db", "tbl", Table.TableType.HIVE, partValues);
+        HivePartitionName dropHivePartitionKey = new HivePartitionName("db", "tbl", Table.TableType.HIVE, partValues);
         metaCache.dropPartitionKeyByEvent(dropPartitionKeysKey, dropPartitionKey, dropHivePartitionKey);
         partitionKeys = metaCache.getPartitionKeys(hmsTable);
         Assert.assertEquals(2, partitionKeys.size());
@@ -287,7 +287,7 @@ public class HiveMetaCacheTest {
         public HivePartition getPartition(String dbName, String tableName, List<String> partValues)
                 throws DdlException {
             clientMethodGetPartitionCalledTimes++;
-            return new HivePartition(HdfsFileFormat.PARQUET,
+            return new HivePartition(RemoteFileInputFormat.PARQUET,
                     ImmutableList.of(new HdfsFileDesc("file1",
                             "",
                             10000L,

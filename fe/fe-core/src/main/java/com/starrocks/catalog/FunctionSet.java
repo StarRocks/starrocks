@@ -117,6 +117,7 @@ public class FunctionSet {
     public static final String TO_BASE64 = "to_base64";
     public static final String MD5 = "md5";
     public static final String MD5_SUM = "md5sum";
+    public static final String MD5_SUM_NUMERIC = "md5sum_numeric";
     public static final String SHA2 = "sha2";
     public static final String SM3 = "sm3";
 
@@ -469,6 +470,7 @@ public class FunctionSet {
                     .add(FunctionSet.NOW)
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .add(FunctionSet.MD5_SUM)
+                    .add(FunctionSet.MD5_SUM_NUMERIC)
                     .build();
 
     public static final Set<String> decimalRoundFunctions =

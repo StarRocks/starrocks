@@ -11,6 +11,7 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column_base.h"
 #include "column/json_column.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
@@ -57,6 +58,15 @@ public:
     }
 
     Status do_visit(const vectorized::ArrayColumn& column) {
+        auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
+            return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
+        };
+
+        return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+                                   _build_tie);
+    }
+
+    Status do_visit(const vectorized::MapColumn& column) {
         auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
             return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
         };
@@ -254,6 +264,19 @@ public:
     }
 
     Status do_visit(const vectorized::ArrayColumn& column) {
+        auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
+            auto& lhs_col = _vertical_columns[lhs.chunk_index];
+            auto& rhs_col = _vertical_columns[rhs.chunk_index];
+            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.nan_direction());
+        };
+
+        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+                                            _build_tie, _limit, &_pruned_limit));
+        _prune_limit();
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::MapColumn& column) {
         auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
             auto& lhs_col = _vertical_columns[lhs.chunk_index];
             auto& rhs_col = _vertical_columns[rhs.chunk_index];

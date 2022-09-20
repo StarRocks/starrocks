@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.operator.scalar;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+import java.util.List;
 import java.util.Objects;
 
 public class LikePredicateOperator extends PredicateOperator {
@@ -19,6 +20,12 @@ public class LikePredicateOperator extends PredicateOperator {
         super(OperatorType.LIKE, arguments);
         this.likeType = likeType;
         Preconditions.checkState(arguments.length == 2);
+    }
+
+    public LikePredicateOperator(LikeType likeType, List<ScalarOperator> arguments) {
+        super(OperatorType.LIKE, arguments);
+        this.likeType = likeType;
+        Preconditions.checkState(arguments != null && arguments.size() == 2);
     }
 
     public enum LikeType {

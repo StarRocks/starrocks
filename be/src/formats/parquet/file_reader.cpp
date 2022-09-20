@@ -222,8 +222,8 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, cons
     return Status::OK();
 }
 
-int FileReader::_get_partition_column_idx(const std::string& col_name) const {
-    for (size_t i = 0; i < _scanner_ctx->partition_columns.size(); i++) {
+int32_t FileReader::_get_partition_column_idx(const std::string& col_name) const {
+    for (int32_t i = 0; i < _scanner_ctx->partition_columns.size(); i++) {
         if (_scanner_ctx->partition_columns[i].col_name == col_name) {
             return i;
         }

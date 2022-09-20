@@ -296,7 +296,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             // use runtime filter at this level if rf can not be pushed down to children.
             if (description.canProbeUse(this)) {
                 description.addProbeExpr(id.asInt(), probeExpr);
-                description.addPartitionByExprs(id.asInt(), partitionByExprs);
+                description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
                 probeRuntimeFilters.add(description);
                 return true;
             }

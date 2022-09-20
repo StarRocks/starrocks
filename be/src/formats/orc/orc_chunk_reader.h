@@ -62,7 +62,7 @@ public:
     void set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
                                            const RuntimeFilterProbeCollector* rf_collector);
     Status set_timezone(const std::string& tz);
-    int num_columns() const { return _src_slot_descriptors.size(); }
+    size_t num_columns() const { return _src_slot_descriptors.size(); }
 
     // to decode min and max value from column stats.
     Status decode_min_max_value(SlotDescriptor* slot, const orc::proto::ColumnStatistics&, ColumnPtr min_col,

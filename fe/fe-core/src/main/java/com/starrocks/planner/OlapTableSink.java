@@ -157,6 +157,7 @@ public class OlapTableSink extends DataSink {
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
         StringBuilder strBuilder = new StringBuilder();
         strBuilder.append(prefix + "OLAP TABLE SINK\n");
+        strBuilder.append(prefix + "  TABLE: " + dstTable.getName() + "\n");
         strBuilder.append(prefix + "  TUPLE ID: " + tupleDescriptor.getId() + "\n");
         strBuilder.append(prefix + "  " + DataPartition.RANDOM.getExplainString(explainLevel));
         return strBuilder.toString();
@@ -209,14 +210,6 @@ public class OlapTableSink extends DataSink {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distInfo;
                 for (Column column : hashDistributionInfo.getDistributionColumns()) {
                     distColumns.add(column.getName());
-                }
-                break;
-            }
-            case RANDOM: {
-                for (Column column : table.getBaseSchema()) {
-                    if (column.isKey()) {
-                        distColumns.add(column.getName());
-                    }
                 }
                 break;
             }

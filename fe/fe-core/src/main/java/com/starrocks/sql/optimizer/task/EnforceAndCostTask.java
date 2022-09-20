@@ -235,8 +235,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
     private void optimizeChildGroup(PhysicalPropertySet inputProperty, Group childGroup) {
         pushTask((EnforceAndCostTask) clone());
         double newUpperBound = context.getUpperBoundCost() - curTotalCost;
-        TaskContext taskContext = new TaskContext(context.getOptimizerContext(),
-                inputProperty, context.getRequiredColumns(), newUpperBound, context.getAllScanOperators());
+        TaskContext taskContext = new TaskContext(context.getOptimizerContext(), inputProperty,
+                context.getRequiredColumns(), newUpperBound);
         pushTask(new OptimizeGroupTask(taskContext, childGroup));
     }
 

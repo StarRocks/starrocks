@@ -27,8 +27,14 @@ public:
 
     Status close() override;
 
+    StatusOr<TFetchDataResultPtrs> process_chunk(vectorized::Chunk* chunk) override;
+
+    StatusOr<bool> try_add_batch(TFetchDataResultPtrs& results) override;
+
 private:
     void _init_profile();
+
+    StatusOr<TFetchDataResultPtr> _process_chunk(vectorized::Chunk* chunk);
 
     Status _fill_statistic_data_v1(int version, const vectorized::Columns& columns, const vectorized::Chunk* chunk,
                                    TFetchDataResult* result);

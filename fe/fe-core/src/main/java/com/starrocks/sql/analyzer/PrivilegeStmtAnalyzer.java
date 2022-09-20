@@ -6,9 +6,12 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
+import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -18,16 +21,20 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.mysql.privilege.PrivBitSet;
+import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.mysql.privilege.Role;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
-import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
+import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import org.jetbrains.annotations.NotNull;
 
+import java.util.List;
 
 public class PrivilegeStmtAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -99,23 +106,104 @@ public class PrivilegeStmtAnalyzer {
             return null;
         }
 
-        /**
-         * GRANT IMPERSONATE ON XX TO XX
-         * GRANT IMPERSONATE ON XX TO ROLE XX
-         * REVOKE IMPERSONATE ON XX FROM XX
-         * REVOKE IMPERSONATE ON XX FROM ROLE XX
-         */
         @Override
-        public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getSecuredUser(), session, true);
-            if (stmt.getAuthorizedUser() != null) {
-                analyseUser(stmt.getAuthorizedUser(), session, true);
+        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+            // validate user/role
+            if (stmt.getUserIdentity() != null) {
+                analyseUser(stmt.getUserIdentity(), session, true);
             } else {
-                String qulifiedRole = analyseRoleName(stmt.getAuthorizedRoleName(), session, true,
-                        "Can not granted/revoke role to user");
-                stmt.setAuthorizedRoleName(qulifiedRole);
+                stmt.setRole(analyseRoleName(stmt.getRole(), session, true, "invalide role"));
             }
+
+            // parse privilege actions to PrivBitSet
+            PrivBitSet privs = getPrivBitSet(stmt.getPrivList());
+            String privType = stmt.getPrivType();
+            if (privType.equals("TABLE")) {
+                analyseTablePrivs(stmt, privs, stmt.getPrivilegeObjectNameTokenList());
+            } else if (privType.equals("RESOURCE")) {
+                analyseResourcePrivs(stmt, privs, stmt.getPrivilegeObjectNameTokenList());
+            } else if (privType.equals("USER")) {
+                if (stmt.getPrivList().size() != 1 || !privs.containsPrivs(Privilege.IMPERSONATE_PRIV)) {
+                    throw new SemanticException("only IMPERSONATE can only be granted on user");
+                }
+                stmt.setPrivBitSet(privs);
+                analyseUser(stmt.getUserPrivilegeObject(), session, true);
+            } else {
+                throw new SemanticException("unsupported privilege type " + privType);
+            }
+
             return null;
+        }
+
+        @NotNull
+        private static PrivBitSet getPrivBitSet(List<String> privList) {
+            if (privList.isEmpty()) {
+                throw new SemanticException("No privileges in grant statement.");
+            }
+            PrivBitSet privs = PrivBitSet.of();
+            for (String privStr : privList) {
+                AccessPrivilege accessPrivilege;
+                try {
+                    accessPrivilege = AccessPrivilege.valueOf(privStr);
+                } catch (IllegalArgumentException e) {
+                    try {
+                        // SELECT -> SELECT_PRIV
+                        accessPrivilege = AccessPrivilege.valueOf(privStr + "_PRIV");
+                    } catch (IllegalArgumentException e1) {
+                        throw new SemanticException("Unknown privilege " + privStr);
+                    }
+                }
+                if (accessPrivilege == null) {
+                    throw new SemanticException("Unknown privilege " + privStr);
+                }
+                privs.or(accessPrivilege.toPrivilege());
+            }
+            return privs;
+        }
+
+        private static void analyseResourcePrivs(BaseGrantRevokePrivilegeStmt stmt, PrivBitSet privs,
+                                                 List<String> privilegeObjectList) {
+            if (privilegeObjectList == null || privilegeObjectList.size() != 1) {
+                throw new SemanticException("invalid resource pattern!");
+            }
+            ResourcePattern resourcePattern = new ResourcePattern(privilegeObjectList.get(0));
+            try {
+                resourcePattern.analyze();
+            } catch (AnalysisException e) {
+                SemanticException exception = new SemanticException("invalid resource pattern " + resourcePattern);
+                exception.initCause(e);
+                throw exception;
+            }
+            if (resourcePattern.getPrivLevel() != Auth.PrivLevel.GLOBAL
+                    && privs.containsPrivs(Privilege.NODE_PRIV, Privilege.ADMIN_PRIV)) {
+                throw new SemanticException(privs.toPrivilegeList() + " can only be granted on resource *");
+            }
+            stmt.setAnalysedResource(privs, resourcePattern);
+        }
+
+        private static void analyseTablePrivs(BaseGrantRevokePrivilegeStmt stmt, PrivBitSet privs,
+                                              List<String> privilegeObjectList) {
+            if (privilegeObjectList == null) {
+                throw new SemanticException("invalid table pattern!");
+            }
+            TablePattern tablePattern;
+            if (privilegeObjectList.size() == 1) {
+                tablePattern = new TablePattern(privilegeObjectList.get(0), "*");
+            } else {
+                tablePattern = new TablePattern(privilegeObjectList.get(0), privilegeObjectList.get(1));
+            }
+            try {
+                tablePattern.analyze();
+            } catch (AnalysisException e) {
+                SemanticException exception = new SemanticException("invalid table pattern " + tablePattern.toString());
+                exception.initCause(e);
+                throw exception;
+            }
+            if (tablePattern.getPrivLevel() != Auth.PrivLevel.GLOBAL
+                    && privs.containsPrivs(Privilege.NODE_PRIV, Privilege.ADMIN_PRIV)) {
+                throw new SemanticException(privs.toPrivilegeList() + " can only be granted on table *.*");
+            }
+            stmt.setAnalysedTable(privs, tablePattern);
         }
 
         /**

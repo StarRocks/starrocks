@@ -140,7 +140,9 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     // updatable tablet require extra processing
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         _rowset_meta_pb->set_num_delete_files(_num_delfile);
-        _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
+        if (_num_segment <= 1) {
+            _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
+        }
         // if load only has delete, we can skip the partial update logic
         if (_context.partial_update_tablet_schema && _flush_chunk_state != FlushChunkState::DELETE) {
             DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
@@ -281,9 +283,7 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
 StatusOr<std::unique_ptr<SegmentWriter>> HorizontalBetaRowsetWriter::_create_segment_writer() {
     std::lock_guard<std::mutex> l(_lock);
     std::string path;
-    if ((_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
-         _context.segments_overlap != NONOVERLAPPING) ||
-        _context.schema_change_sorting) {
+    if (_context.schema_change_sorting) {
         path = Rowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
         _tmp_segment_files.emplace_back(path);
     } else {
@@ -450,19 +450,10 @@ StatusOr<RowsetSharedPtr> HorizontalBetaRowsetWriter::build() {
     }
 }
 
-// why: when the data is large, multi segment files created, may be OVERLAPPINGed.
-// what: do final merge for NONOVERLAPPING state among segment files
-// when: segment files number larger than one, no delete files(for now, ignore it when just one segment)
-// how: for final merge scenario, temporary files created at first, merge them, create final segment files.
+// final merge is still used for sorting schema change right now, so we keep the logic in RowsetWriter
+// we may move this logic to `schema change` in near future, we can remove the following logic at that time
 Status HorizontalBetaRowsetWriter::_final_merge() {
-    if (_num_segment == 1) {
-        RETURN_IF_ERROR_WITH_WARN(
-                _fs->rename_file(Rowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, 0),
-                                 Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, 0)),
-                "Fail to rename file");
-        return Status::OK();
-    }
-
+    DCHECK(_context.schema_change_sorting);
     auto span = Tracer::Instance().start_trace_txn_tablet("final_merge", _context.txn_id, _context.tablet_id);
     auto scoped = trace::Scope(span);
     MonotonicStopWatch timer;

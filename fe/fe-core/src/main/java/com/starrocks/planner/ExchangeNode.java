@@ -226,7 +226,7 @@ public class ExchangeNode extends PlanNode {
         if (probeExpr.isBoundByTupleIds(getTupleIds())) {
             if (onExchangeNode || (description.isLocalApplicable() && description.inLocalFragmentInstance())) {
                 description.addProbeExpr(id.asInt(), probeExpr);
-                description.addPartitionByExprs(id.asInt(), partitionByExprs);
+                description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
                 probeRuntimeFilters.add(description);
                 accept = true;
             }
@@ -257,7 +257,7 @@ public class ExchangeNode extends PlanNode {
             // If partitionByExprs's size is 1 and it is not the probeExpr, don't push down it
             // because multi GRFs will cause performance decrease which multi GRFs will increase
             // scan's wait time.
-            if (partitionByExprs.size() == 1) {
+            if (description.getEqualCount() > 1 && partitionByExprs.size() == 1) {
                 return false;
             }
             if (!ConnectContext.get().getSessionVariable().isEnableMultiColumnsOnGlobbalRuntimeFilter()) {

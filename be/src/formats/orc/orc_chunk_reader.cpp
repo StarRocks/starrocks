@@ -13,6 +13,7 @@
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
 #include "column/array_column.h"
+#include "column/map_column.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/literal.h"
 #include "gen_cpp/Exprs_types.h"
@@ -935,6 +936,70 @@ static void fill_array_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& 
     }
 }
 
+static void fill_map_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
+                            const TypeDescriptor& type_desc, void* ctx) {
+    auto* orc_map = down_cast<orc::MapVectorBatch*>(cvb);
+    auto* col_map = down_cast<MapColumn*>(col.get());
+
+    UInt32Column* offsets = col_map->offsets_column().get();
+    copy_array_offset(orc_map->offsets, from, size + 1, offsets);
+
+    ColumnPtr& keys = col_map->keys_column();
+    const TypeDescriptor& key_type = type_desc.children[0];
+    const FillColumnFunction& fn_fill_keys = find_fill_func(key_type.type, true);
+    const int keys_from = implicit_cast<int>(orc_map->offsets[from]);
+    const int keys_size = implicit_cast<int>(orc_map->offsets[from + size] - keys_from);
+
+    fn_fill_keys(orc_map->keys.get(), keys, keys_from, keys_size, key_type, ctx);
+
+    ColumnPtr& values = col_map->values_column();
+    const TypeDescriptor& value_type = type_desc.children[1];
+    const FillColumnFunction& fn_fill_values = find_fill_func(value_type.type, true);
+
+    fn_fill_values(orc_map->elements.get(), values, keys_from, keys_size, value_type, ctx);
+}
+
+static void fill_map_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
+                                      const TypeDescriptor& type_desc, void* ctx) {
+    auto* orc_map = down_cast<orc::MapVectorBatch*>(cvb);
+    auto* col_nullable = down_cast<NullableColumn*>(col.get());
+    auto* col_map = down_cast<MapColumn*>(col_nullable->data_column().get());
+
+    if (!orc_map->hasNulls) {
+        fill_map_column(orc_map, col_nullable->data_column(), from, size, type_desc, ctx);
+        col_nullable->null_column()->resize(col_map->size());
+        return;
+    }
+    // else
+
+    const int end = from + size;
+
+    int i = from;
+    while (i < end) {
+        int j = i;
+        // Loop until NULL or end of batch.
+        while (j < end && orc_map->notNull[j]) {
+            j++;
+        }
+        if (j > i) {
+            fill_map_column(orc_map, col_nullable->data_column(), i, j - i, type_desc, ctx);
+            col_nullable->null_column()->resize(col_map->size());
+        }
+
+        if (j == end) {
+            break;
+        }
+        DCHECK(!orc_map->notNull[j]);
+        i = j++;
+        // Loop until not NULL or end of batch.
+        while (j < end && !orc_map->notNull[j]) {
+            j++;
+        }
+        col_nullable->append_nulls(j - i);
+        i = j;
+    }
+}
+
 class FunctionsMap {
 public:
     static FunctionsMap* instance() {
@@ -966,6 +1031,7 @@ private:
         _funcs[TYPE_DATE] = &fill_date_column;
         _funcs[TYPE_DATETIME] = &fill_timestamp_column;
         _funcs[TYPE_ARRAY] = &fill_array_column;
+        _funcs[TYPE_MAP] = &fill_map_column;
 
         _nullable_funcs[TYPE_BOOLEAN] = &fill_boolean_column_with_null;
         _nullable_funcs[TYPE_TINYINT] = &fill_int_column_with_null<TYPE_TINYINT>;
@@ -985,6 +1051,7 @@ private:
         _nullable_funcs[TYPE_DATE] = &fill_date_column_with_null;
         _nullable_funcs[TYPE_DATETIME] = &fill_timestamp_column_with_null;
         _nullable_funcs[TYPE_ARRAY] = &fill_array_column_with_null;
+        _nullable_funcs[TYPE_MAP] = &fill_map_column_with_null;
     }
 
     std::array<FillColumnFunction, 64> _funcs;
@@ -1218,6 +1285,15 @@ static Status _orc_type_to_type_descriptor(const orc::Type* orc_type, TypeDescri
         result->children.emplace_back();
         TypeDescriptor& element_type = result->children.back();
         RETURN_IF_ERROR(_orc_type_to_type_descriptor(orc_type->getSubtype(0), &element_type));
+    } else if (kind == orc::MAP) {
+        result->type = TYPE_MAP;
+        DCHECK_EQ(0, result->children.size());
+        result->children.emplace_back();
+        TypeDescriptor& key_type = result->children.back();
+        RETURN_IF_ERROR(_orc_type_to_type_descriptor(orc_type->getSubtype(0), &key_type));
+        result->children.emplace_back();
+        TypeDescriptor& value_type = result->children.back();
+        RETURN_IF_ERROR(_orc_type_to_type_descriptor(orc_type->getSubtype(1), &value_type));
     } else {
         auto precision = (int)orc_type->getPrecision();
         auto scale = (int)orc_type->getScale();

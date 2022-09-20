@@ -220,17 +220,10 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
 
     if (desc.__isset.plan_node_id_to_partition_by_exprs) {
         const auto& it = const_cast<TRuntimeFilterDescription&>(desc).plan_node_id_to_partition_by_exprs.find(node_id);
+        // TODO(lishuming): maybe reuse probe exprs because partition_by_exprs and probe_expr
+        // must be overlapped.
         if (it != desc.plan_node_id_to_partition_by_exprs.end()) {
             RETURN_IF_ERROR(Expr::create_expr_trees(pool, it->second, &_partition_by_exprs_contexts));
-            for (auto ctx : _partition_by_exprs_contexts) {
-                if (!ctx->root()->is_slotref()) {
-                    return Status::NotFound("partition_by_exprs only support column_ref type. node_id = " +
-                                            std::to_string(node_id));
-                } else {
-                    auto ref = (vectorized::ColumnRef*)ctx->root();
-                    _partition_by_expr_ids.push_back(ref->slot_id());
-                }
-            }
         }
     }
 
@@ -250,6 +243,9 @@ Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, const RowDescr
     if (_probe_expr_ctx != nullptr) {
         RETURN_IF_ERROR(_probe_expr_ctx->prepare(state));
     }
+    for (auto* partition_by_expr : _partition_by_exprs_contexts) {
+        RETURN_IF_ERROR(partition_by_expr->prepare(state));
+    }
     _open_timestamp = UnixMillis();
     _latency_timer = ADD_COUNTER(p, strings::Substitute("JoinRuntimeFilter/$0/latency", _filter_id), TUnit::TIME_NS);
     // not set yet.
@@ -261,12 +257,18 @@ Status RuntimeFilterProbeDescriptor::open(RuntimeState* state) {
     if (_probe_expr_ctx != nullptr) {
         RETURN_IF_ERROR(_probe_expr_ctx->open(state));
     }
+    for (auto* partition_by_expr : _partition_by_exprs_contexts) {
+        RETURN_IF_ERROR(partition_by_expr->open(state));
+    }
     return Status::OK();
 }
 
 void RuntimeFilterProbeDescriptor::close(RuntimeState* state) {
     if (_probe_expr_ctx != nullptr) {
         _probe_expr_ctx->close(state);
+    }
+    for (auto* partition_by_expr : _partition_by_exprs_contexts) {
+        partition_by_expr->close(state);
     }
 }
 
@@ -505,7 +507,8 @@ void RuntimeFilterProbeCollector::push_down(RuntimeFilterProbeCollector* parent,
     auto iter = parent->_descriptors.begin();
     while (iter != parent->_descriptors.end()) {
         RuntimeFilterProbeDescriptor* desc = iter->second;
-        if (desc->is_multi_partition_by_exprs()) {
+        if (!desc->can_push_down_runtime_filter()) {
+            ++iter;
             continue;
         }
         if (desc->is_bound(tuple_ids)) {

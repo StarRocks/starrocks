@@ -15,7 +15,6 @@ import com.starrocks.thrift.TTypeDesc;
 public class PseudoType extends Type {
     public static final PseudoType ANY_ELEMENT = new AnyElementType();
     public static final PseudoType ANY_ARRAY = new AnyArrayType();
-    public static final PseudoType SUBQUERY = new SubqueryType();
 
     @Override
     protected String prettyPrint(int lpad) {

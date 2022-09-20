@@ -139,7 +139,10 @@ public class HiveTableTest {
         Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("BINARY", Type.UNKNOWN_TYPE));
         Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("uniontype<int,double>", Type.UNKNOWN_TYPE));
         Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("array<struct<col_int:int>>", Type.UNKNOWN_TYPE));
-        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("map<int,bigint>", Type.UNKNOWN_TYPE));
+        ScalarType keyType = ScalarType.createType(PrimitiveType.INT);
+        ScalarType valueType = ScalarType.createType(PrimitiveType.BIGINT);
+        MapType mapType = new MapType(keyType, valueType);
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("map<int,bigint>", mapType));
         Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("struct<col_int:int>", Type.UNKNOWN_TYPE));
         // test case for hiveType mis input
         Assert.assertEquals(Type.UNKNOWN_TYPE,

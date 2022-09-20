@@ -7,19 +7,19 @@ import com.google.gson.annotations.SerializedName;
 
 public class HivePartition {
     @SerializedName(value = "format")
-    private HdfsFileFormat format;
+    private RemoteFileInputFormat format;
     @SerializedName(value = "files")
     private ImmutableList<HdfsFileDesc> files;
     @SerializedName(value = "fullPath")
     private String fullPath;
 
-    public HivePartition(HdfsFileFormat format, ImmutableList<HdfsFileDesc> files, String fullPath) {
+    public HivePartition(RemoteFileInputFormat format, ImmutableList<HdfsFileDesc> files, String fullPath) {
         this.format = format;
         this.files = files;
         this.fullPath = fullPath;
     }
 
-    public HdfsFileFormat getFormat() {
+    public RemoteFileInputFormat getFormat() {
         return format;
     }
 

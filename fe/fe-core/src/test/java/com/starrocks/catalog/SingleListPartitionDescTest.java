@@ -4,9 +4,9 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.utframe.UtFrameUtils;
@@ -29,7 +29,7 @@ public class SingleListPartitionDescTest {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
     }
-    
+
     @Test
     public void testToSQL() {
         String partitionName = "p1";
@@ -49,7 +49,7 @@ public class SingleListPartitionDescTest {
                         "('tianjin','guangdong') (\"storage_cooldown_time\" = \"2122-07-09 12:12:12\", " +
                         "\"storage_medium\" = \"SSD\", \"replication_num\" = \"1\", " +
                         "\"tablet_type\" = \"memory\", \"in_memory\" = \"true\")";
-        Assert.assertEquals(sql, partitionDesc.toSql());
+        Assert.assertEquals(sql, partitionDesc.toString());
     }
 
     @Test

@@ -34,6 +34,7 @@ public:
     StatusOr<int64_t> position() override { return _offset; }
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override;
     Status seek(int64_t offset) override;
+    void set_size(int64_t size) override;
 
 private:
     hdfsFS _fs;
@@ -89,6 +90,10 @@ StatusOr<int64_t> HdfsInputStream::get_size() {
         if (!st.ok()) return st;
     }
     return _file_size;
+}
+
+void HdfsInputStream::set_size(int64_t value) {
+    _file_size = value;
 }
 
 StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {

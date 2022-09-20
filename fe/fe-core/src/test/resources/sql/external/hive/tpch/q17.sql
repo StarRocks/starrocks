@@ -131,7 +131,7 @@ OutPut Exchange Id: 10
 3:EXCHANGE
 cardinality: 20000000
 probe runtime filters:
-- filter_id = 0, probe_expr = (27: l_partkey), partition_exprs = (27: l_partkey)
+- filter_id = 0, probe_expr = (27: l_partkey)
 
 PLAN FRAGMENT 3(F03)
 
@@ -182,7 +182,7 @@ avgRowSize=16.0
 numNodes=0
 cardinality: 600037902
 probe runtime filters:
-- filter_id = 0, probe_expr = (27: l_partkey), partition_exprs = (27: l_partkey)
+- filter_id = 0, probe_expr = (27: l_partkey)
 column statistics:
 * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE

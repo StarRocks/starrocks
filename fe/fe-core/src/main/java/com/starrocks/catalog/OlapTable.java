@@ -81,6 +81,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -116,6 +117,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     @SerializedName(value = "clusterId")
+    @Deprecated
     protected int clusterId;
 
     @SerializedName(value = "state")
@@ -175,10 +177,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
 
-    // not serialized field
-    // record all materialized views based on this OlapTable
-    private Set<Long> relatedMaterializedViews;
-
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -197,7 +195,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         this.indexes = null;
 
         this.tableProperty = null;
-        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
@@ -239,7 +236,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         this.indexes = indexes;
 
         this.tableProperty = null;
-        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public void setTableProperty(TableProperty tableProperty) {
@@ -262,10 +258,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     public long getBaseIndexId() {
         return baseIndexId;
-    }
-
-    public void setClusterId(int clusterId) {
-        this.clusterId = clusterId;
     }
 
     public int getClusterId() {
@@ -884,6 +876,17 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return partitions;
     }
 
+    public Collection<Partition> getRecentPartitions(int recentPartitionNum) {
+        List<Partition> partitions = Lists.newArrayList(idToPartition.values());
+        Collections.sort(partitions, new Comparator<Partition>() {
+            @Override
+            public int compare(Partition h1, Partition h2) {
+                return (int) (h2.getVisibleVersion() - h1.getVisibleVersion());
+            }
+        });
+        return partitions.subList(0, recentPartitionNum);
+    }
+
     // get all partitions' name except the temp partitions
     public Set<String> getPartitionNames() {
         return Sets.newHashSet(nameToPartition.keySet());
@@ -1342,8 +1345,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
         // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.
         rebuildFullSchema();
-
-        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
 
         // Recover nameToPartition from idToPartition
         nameToPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
@@ -1853,19 +1854,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getCompressionType();
     }
 
-    // should call this when create materialized view
-    public void addRelatedMaterializedView(long mvId) {
-        relatedMaterializedViews.add(mvId);
-    }
-
-    // should call this when drop materialized view
-    public void removeRelatedMaterializedView(long mvId) {
-        relatedMaterializedViews.remove(mvId);
-    }
-
-    public Set<Long> getRelatedMaterializedViews() {
-        return relatedMaterializedViews;
-    }
 
     @Override
     public void onCreate() {
