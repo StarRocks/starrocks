@@ -633,7 +633,7 @@ PARALLEL_TEST(BinaryColumnTest, test_replicate) {
 
     auto c2 = c1->replicate(offsets);
 
-    slices = down_cast<BinaryColumn*>(c2.get())->get_data();
+    auto slices = down_cast<BinaryColumn*>(c2.get())->get_data();
     ASSERT_EQ(5, c2->size());
     ASSERT_EQ("abc", slices[0]);
     ASSERT_EQ("abc", slices[1]);
