@@ -156,26 +156,26 @@ public class StatisticsMetaManager extends LeaderDaemon {
         CreateTableStmt stmt = null;
         if (Config.use_staros) {
             stmt = new CreateTableStmt(false, false,
-                tableName,
-                StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
-                CreateTableStmt.LAKE_ENGINE_NAME,
-                new KeysDesc(KeysType.UNIQUE_KEYS, FULL_STATISTICS_KEY_COLUMNS),
-                null,
-                new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
-                properties,
-                null,
-                "");
+                    tableName,
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
+                    CreateTableStmt.LAKE_ENGINE_NAME,
+                    new KeysDesc(KeysType.UNIQUE_KEYS, FULL_STATISTICS_KEY_COLUMNS),
+                    null,
+                    new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
+                    properties,
+                    null,
+                    "");
         } else {
             stmt = new CreateTableStmt(false, false,
-                tableName,
-                StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
-                "olap",
-                new KeysDesc(KeysType.PRIMARY_KEYS, FULL_STATISTICS_KEY_COLUMNS),
-                null,
-                new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
-                properties,
-                null,
-                "");
+                    tableName,
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
+                    "olap",
+                    new KeysDesc(KeysType.PRIMARY_KEYS, FULL_STATISTICS_KEY_COLUMNS),
+                    null,
+                    new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
+                    properties,
+                    null,
+                    "");
         }
    
         Analyzer.analyze(stmt, StatisticUtils.buildConnectContext());
@@ -201,26 +201,26 @@ public class StatisticsMetaManager extends LeaderDaemon {
         CreateTableStmt stmt = null;
         if (Config.use_staros) {
             stmt = new CreateTableStmt(false, false,
-                tableName,
-                StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
-                CreateTableStmt.LAKE_ENGINE_NAME,
-                new KeysDesc(KeysType.UNIQUE_KEYS, HISTOGRAM_KEY_COLUMNS),
-                null,
-                new HashDistributionDesc(10, HISTOGRAM_KEY_COLUMNS),
-                properties,
-                null,
-                "");
+                    tableName,
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
+                    CreateTableStmt.LAKE_ENGINE_NAME,
+                    new KeysDesc(KeysType.UNIQUE_KEYS, HISTOGRAM_KEY_COLUMNS),
+                    null,
+                    new HashDistributionDesc(10, HISTOGRAM_KEY_COLUMNS),
+                    properties,
+                    null,
+                    "");
         } else {
             stmt = new CreateTableStmt(false, false,
-                tableName,
-                StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
-                "olap",
-                new KeysDesc(KeysType.PRIMARY_KEYS, HISTOGRAM_KEY_COLUMNS),
-                null,
-                new HashDistributionDesc(10, HISTOGRAM_KEY_COLUMNS),
-                properties,
-                null,
-                "");
+                    tableName,
+                    StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
+                    "olap",
+                    new KeysDesc(KeysType.PRIMARY_KEYS, HISTOGRAM_KEY_COLUMNS),
+                    null,
+                    new HashDistributionDesc(10, HISTOGRAM_KEY_COLUMNS),
+                    properties,
+                    null,
+                    "");
         }
         
         Analyzer.analyze(stmt, StatisticUtils.buildConnectContext());
