@@ -1762,7 +1762,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         String name = ((Identifier) visit(context.name)).getValue();
         List<StarRocksParser.LoadPropertiesContext> loadPropertiesContexts = context.loadProperties();
-        Preconditions.checkNotNull(loadPropertiesContexts, "load properties is null");
         List<ParseNode> loadPropertyList = getLoadPropertyList(loadPropertiesContexts);
         String typeName = context.source.getText();
         Map<String, String> jobProperties = getJobProperties(context.jobProperties());
@@ -1781,7 +1780,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         String name = ((Identifier) visit(context.name)).getValue();
         List<StarRocksParser.LoadPropertiesContext> loadPropertiesContexts = context.loadProperties();
-        Preconditions.checkNotNull(loadPropertiesContexts, "load properties is null");
         List<ParseNode> loadPropertyList = getLoadPropertyList(loadPropertiesContexts);
         Map<String, String> jobProperties = getJobProperties(context.jobProperties());
 
