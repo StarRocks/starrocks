@@ -164,10 +164,6 @@ static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletRea
         LOG(ERROR) << "reader prepare failed";
         return nullptr;
     }
-    if (!reader.open(params)) {
-        LOG(ERROR) << "reader open failed";
-        return nullptr;
-    }
     std::vector<ChunkIteratorPtr> seg_iters;
     if (!reader.get_segment_iterators(params, &seg_iters).ok()) {
         LOG(ERROR) << "reader get segment iterators fail";

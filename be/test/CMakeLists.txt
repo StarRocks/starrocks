@@ -199,6 +199,7 @@ set(EXEC_FILES
         ./storage/table_schema_test.cpp
         ./storage/tablet_updates_test.cpp
         ./storage/tablet_reader_test.cpp
+        ./storage/datum_row_test.cpp
         ./storage/update_manager_test.cpp
         ./storage/compaction_utils_test.cpp
         ./storage/compaction_context_test.cpp
