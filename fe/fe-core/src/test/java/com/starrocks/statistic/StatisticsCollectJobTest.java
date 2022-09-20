@@ -67,7 +67,6 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         new ArrayList<>(t1.getPartitions()).get(0).updateVisibleVersion(2);
         setTableStatistics(t1, 20000000);
 
-
         starRocksAssert.withTable("CREATE TABLE `t0_stats_partition` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +
@@ -93,15 +92,9 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
-
         OlapTable t0p = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats_partition");
-
-        int i = 1;
-        for (Partition p : t0p.getAllPartitions()) {
-            p.updateVisibleVersion(2);
-            p.getBaseIndex().setRowCount(i * 100L);
-            i++;
-        }
+        new ArrayList<>(t0p.getPartitions()).get(0).updateVisibleVersion(2);
+        setTableStatistics(t0p, 20000000);
     }
 
     @Test
@@ -318,6 +311,15 @@ public class StatisticsCollectJobTest extends PlanTestBase {
 
     @Test
     public void testFullStatisticsBuildCollectSQLList() {
+        OlapTable t0p = (OlapTable) connectContext.getGlobalStateMgr()
+                .getDb("test").getTable("t0_stats_partition");
+        int i = 1;
+        for (Partition p : t0p.getAllPartitions()) {
+            p.updateVisibleVersion(2);
+            p.getBaseIndex().setRowCount(i * 100L);
+            i++;
+        }
+
         Database database = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) database.getTable("t0_stats_partition");
         List<Long> partitionIdList = table.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
@@ -356,5 +358,15 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v1`)"));
         Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v3`)"));
         Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v5`)"));
+
+
+        for (Partition p : t0p.getAllPartitions()) {
+            p.updateVisibleVersion(2);
+            p.getBaseIndex().setRowCount(0);
+        }
+
+        Config.statistic_collect_max_row_count_per_query = 1000000000;
+        collectSqlList = collectJob.buildCollectSQLList();
+        Assert.assertEquals(50, collectSqlList.size());
     }
 }
