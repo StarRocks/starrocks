@@ -2328,6 +2328,16 @@ public class Coordinator {
             List<RuntimeProfile> instanceProfiles = fragmentProfile.getChildList().stream()
                     .map(pair -> pair.first)
                     .collect(Collectors.toList());
+
+            // Setup backend address infos
+            Set<String> backendAddresses = Sets.newHashSet();
+            instanceProfiles.forEach(instanceProfile -> {
+                backendAddresses.add(instanceProfile.getInfoString("Address"));
+                instanceProfile.removeInfoString("Address");
+            });
+            fragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
+
+            // Setup number of instance
             Counter counter = fragmentProfile.addCounter("InstanceNum", TUnit.UNIT);
             counter.setValue(instanceProfiles.size());
 
@@ -2366,32 +2376,40 @@ public class Coordinator {
             backendNum.setValue(networkAddresses.size());
         }
 
-        // Calculate Fe time and Be time
-        boolean found = false;
-        for (int i = 0; !found && i < fragments.size(); i++) {
-            PlanFragment fragment = fragments.get(i);
-            DataSink sink = fragment.getSink();
-            if (!(sink instanceof ResultSink)) {
-                continue;
-            }
-            RuntimeProfile profile = fragmentProfiles.get(i);
+        // Calculate ExecutionTotalTime, which comprising all operator's sync time and async time
+        // We can get Operator's sync time from OperatorTotalTime, and for async time, only ScanOperator and
+        // ExchangeOperator have async operations, we can get async time from ScanTime(for ScanOperator) and
+        // NetworkTime(for ExchangeOperator)
+        long executionTime = 0;
+        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+            for (Pair<RuntimeProfile, Boolean> pipelineProfilePair : fragmentProfile.getChildList()) {
+                RuntimeProfile pipelineProfile = pipelineProfilePair.first;
+                for (Pair<RuntimeProfile, Boolean> operatorProfilePair : pipelineProfile.getChildList()) {
+                    RuntimeProfile operatorProfile = operatorProfilePair.first;
+                    RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
+                    RuntimeProfile uniqueMetrics = operatorProfile.getChild("UniqueMetrics");
+                    if (commonMetrics == null || uniqueMetrics == null) {
+                        continue;
+                    }
+                    Counter operatorTotalTime = commonMetrics.getMaxCounter("OperatorTotalTime");
+                    Preconditions.checkNotNull(operatorTotalTime);
+                    executionTime += operatorTotalTime.getValue();
 
-            for (int j = 0; !found && j < profile.getChildList().size(); j++) {
-                RuntimeProfile pipelineProfile = profile.getChildList().get(j).first;
-                if (pipelineProfile.getChildList().isEmpty()) {
-                    LOG.warn("pipeline's profile miss children, profileName={}", pipelineProfile.getName());
-                    continue;
-                }
-                RuntimeProfile operatorProfile = pipelineProfile.getChildList().get(0).first;
-                if (operatorProfile.getName().contains("RESULT_SINK")) {
-                    long beTotalTime = pipelineProfile.getCounter("DriverTotalTime").getValue();
-                    Counter executionTotalTime = queryProfile.addCounter("ExecutionTotalTime", TUnit.TIME_NS);
-                    queryProfile.getCounterTotalTime().setValue(0);
-                    executionTotalTime.setValue(beTotalTime);
-                    found = true;
+                    Counter scanTime = uniqueMetrics.getMaxCounter("ScanTime");
+                    if (scanTime != null) {
+                        executionTime += scanTime.getValue();
+                    }
+
+                    Counter networkTime = uniqueMetrics.getMaxCounter("NetworkTime");
+                    if (networkTime != null) {
+                        executionTime += networkTime.getValue();
+                    }
                 }
             }
         }
+        Counter executionTotalTime = queryProfile.addCounter("ExecutionTotalTime", TUnit.TIME_NS);
+        queryProfile.getCounterTotalTime().setValue(0);
+        executionTotalTime.setValue(executionTime);
     }
 
     /**
@@ -2592,6 +2610,7 @@ public class Coordinator {
                     "Instance " + DebugUtil.printId(uniqueRpcParams.params.fragment_instance_id) + " (host=" + address +
                             ")";
             this.profile = new RuntimeProfile(name);
+            this.profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
             this.hasCanceled = false;
             this.lastMissingHeartbeatTime = backend.getLastMissingHeartbeatTime();
         }
