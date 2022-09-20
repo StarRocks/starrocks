@@ -60,7 +60,7 @@ inline void avx2_select_if(uint8_t*& selector, T*& dst, const T*& a, const T*& b
         __m128i v = _mm_set1_epi64x(value);
         __m256i loaded_mask = _mm256_cvtepi8_epi32(v);
         __m256i cond = _mm256_cmpeq_epi8(loaded_mask, _mm256_setzero_si256());
-        loaded_mask = ~loaded_mask;
+        cond = ~cond;
 
         // Mask Shuffle
         // convert 0x 10 00 00 00 14 00 00 00
