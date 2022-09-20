@@ -2,5 +2,10 @@
 
 package com.starrocks.external;
 
-public abstract class RemoteFileIO {
+import java.util.List;
+import java.util.Map;
+
+public interface RemoteFileIO {
+
+    Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey);
 }
