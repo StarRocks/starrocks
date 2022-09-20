@@ -123,30 +123,17 @@ public class StatisticsMetaManager extends LeaderDaemon {
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         // if use_staros, create lake table
         CreateTableStmt stmt = null;
-        if (Config.use_staros) {
-            stmt = new CreateTableStmt(false, false,
-                    tableName,
-                    StatisticUtils.buildStatsColumnDef(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME),
-                    "olap",
-                    new KeysDesc(KeysType.UNIQUE_KEYS, KEY_COLUMN_NAMES),
-                    null,
-                    new HashDistributionDesc(10, KEY_COLUMN_NAMES),
-                    properties,
-                    null,
-                    "");
-        } else {
-            stmt = new CreateTableStmt(false, false,
-                    tableName,
-                    StatisticUtils.buildStatsColumnDef(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME),
-                    "olap",
-                    new KeysDesc(KeysType.UNIQUE_KEYS, KEY_COLUMN_NAMES),
-                    null,
-                    new HashDistributionDesc(10, KEY_COLUMN_NAMES),
-                    properties,
-                    null,
-                    "");
-        }
-
+        String engine = Config.use_staros ? CreateTableStmt.LAKE_ENGINE_NAME : "olap";
+        stmt = new CreateTableStmt(false, false,
+                tableName,
+                StatisticUtils.buildStatsColumnDef(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME),
+                engine,
+                new KeysDesc(KeysType.UNIQUE_KEYS, KEY_COLUMN_NAMES),
+                null,
+                new HashDistributionDesc(10, KEY_COLUMN_NAMES),
+                properties,
+                null,
+                "");
         Analyzer.analyze(stmt, StatisticUtils.buildConnectContext());
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
@@ -168,29 +155,17 @@ public class StatisticsMetaManager extends LeaderDaemon {
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         // if use_staros, create lake table
         CreateTableStmt stmt = null;
-        if (Config.use_staros) {
-            stmt = new CreateTableStmt(false, false,
-                    tableName,
-                    StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
-                    "starrocks",
-                    new KeysDesc(KeysType.UNIQUE_KEYS, FULL_STATISTICS_KEY_COLUMNS),
-                    null,
-                    new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
-                    properties,
-                    null,
-                    "");
-        } else {
-            stmt = new CreateTableStmt(false, false,
-                    tableName,
-                    StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
-                    "olap",
-                    new KeysDesc(KeysType.PRIMARY_KEYS, FULL_STATISTICS_KEY_COLUMNS),
-                    null,
-                    new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
-                    properties,
-                    null,
-                    "");
-        }
+        String engine = Config.use_staros ? CreateTableStmt.LAKE_ENGINE_NAME : "olap";
+        stmt = new CreateTableStmt(false, false,
+                tableName,
+                StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
+                engine,
+                new KeysDesc(KeysType.UNIQUE_KEYS, FULL_STATISTICS_KEY_COLUMNS),
+                null,
+                new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
+                properties,
+                null,
+                "");
         Analyzer.analyze(stmt, StatisticUtils.buildConnectContext());
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
@@ -212,29 +187,17 @@ public class StatisticsMetaManager extends LeaderDaemon {
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         // if use_staros, create lake table
         CreateTableStmt stmt = null;
-        if (Config.use_staros) {
-            stmt = new CreateTableStmt(false, false,
-                    tableName,
-                    StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
-                    "starrocks",
-                    new KeysDesc(KeysType.UNIQUE_KEYS, HISTOGRAM_KEY_COLUMNS),
-                    null,
-                    new HashDistributionDesc(10, HISTOGRAM_KEY_COLUMNS),
-                    properties,
-                    null,
-                    "");
-        } else {
-            stmt = new CreateTableStmt(false, false,
-                    tableName,
-                    StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
-                    "olap",
-                    new KeysDesc(KeysType.PRIMARY_KEYS, HISTOGRAM_KEY_COLUMNS),
-                    null,
-                    new HashDistributionDesc(10, HISTOGRAM_KEY_COLUMNS),
-                    properties,
-                    null,
-                    "");
-        }
+        String engine = Config.use_staros ? CreateTableStmt.LAKE_ENGINE_NAME : "olap";
+        stmt = new CreateTableStmt(false, false,
+                tableName,
+                StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
+                engine,
+                new KeysDesc(KeysType.PRIMARY_KEYS, FULL_STATISTICS_KEY_COLUMNS),
+                null,
+                new HashDistributionDesc(10, FULL_STATISTICS_KEY_COLUMNS),
+                properties,
+                null,
+                "");
         Analyzer.analyze(stmt, StatisticUtils.buildConnectContext());
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
