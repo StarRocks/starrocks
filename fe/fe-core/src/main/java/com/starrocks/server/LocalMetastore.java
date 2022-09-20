@@ -2412,7 +2412,7 @@ public class LocalMetastore implements ConnectorMetadata {
             unlock();
         }
 
-        LOG.info("successfully create table{} with id {}", tableName, tableId);
+        LOG.info("successfully create table {} with id {}", tableName, tableId);
     }
 
     private void createHiveTable(Database db, CreateTableStmt stmt) throws DdlException {
