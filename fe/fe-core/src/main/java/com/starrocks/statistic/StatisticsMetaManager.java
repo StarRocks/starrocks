@@ -190,7 +190,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         String engine = Config.use_staros ? CreateTableStmt.LAKE_ENGINE_NAME : "olap";
         stmt = new CreateTableStmt(false, false,
                 tableName,
-                StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
+                StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
                 engine,
                 new KeysDesc(KeysType.UNIQUE_KEYS, HISTOGRAM_KEY_COLUMNS),
                 null,
