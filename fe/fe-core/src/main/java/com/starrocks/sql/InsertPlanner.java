@@ -69,6 +69,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
+
 public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
@@ -224,10 +226,14 @@ public class InsertPlanner {
                     } else if (defaultValueType == Column.DefaultValueType.CONST) {
                         scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        throw new SemanticException(
-                                "Column:" + targetColumn.getName() + " has unsupported default value:"
-                                        + targetColumn.getDefaultExpr().getExpr());
-
+                        if (SUPPORTED_DEFAULT_FNS.contains(targetColumn.getDefaultExpr().getExpr())) {
+                            scalarOperator = SqlToScalarOperatorTranslator.
+                                    translate(targetColumn.getDefaultExpr().obtainExpr());
+                        } else {
+                            throw new SemanticException(
+                                    "Column:" + targetColumn.getName() + " has unsupported default value:"
+                                            + targetColumn.getDefaultExpr().getExpr());
+                        }
                     } else {
                         throw new SemanticException("Unknown default value type:%s", defaultValueType.toString());
                     }

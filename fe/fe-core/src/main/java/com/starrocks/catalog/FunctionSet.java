@@ -197,6 +197,7 @@ public class FunctionSet {
     public static final String CURRENT_VERSION = "current_version";
     public static final String LAST_QUERY_ID = "last_query_id";
     public static final String UUID = "uuid";
+    public static final String UUID_NUMERIC = "uuid_numeric";
     public static final String SLEEP = "sleep";
     public static final String ISNULL = "isnull";
     public static final String ASSERT_TRUE = "assert_true";
