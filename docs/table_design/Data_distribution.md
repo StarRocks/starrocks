@@ -136,7 +136,7 @@ DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 10;
 
 ### Determine the number of tablets
 
-Tablets reflect how data files are organized in StarRocks. StarRocks 2.4 and later versions support using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contains about 10 GB of raw data. You can estimate the amount of data in each partition of a table and then decide the number of tablets. To enable the parallel scanning on tablet, run the `SET GLOBAL enable_tablet_internal_parallel;` command.
+Tablets reflect how data files are organized in StarRocks. StarRocks 2.4 and later versions support using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contains about 10 GB of raw data. You can estimate the amount of data in each partition of a table and then decide the number of tablets. To enable the parallel scanning on tablets, run the `SET GLOBAL enable_tablet_internal_parallel;` command.
 
 > Note: You cannot modify the number of tablets for an existing partition. You can only modify the number of tablets when you add a partition.
 
