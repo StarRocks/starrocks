@@ -3,9 +3,21 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.Explain;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -33,6 +45,8 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggT
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialize.MaterializationContext;
+import com.starrocks.sql.optimizer.rule.transformation.materialize.RewriteUtils;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
@@ -43,11 +57,15 @@ import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.sql.parser.ParsingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Optimizer's entrance class
@@ -58,6 +76,24 @@ public class Optimizer {
 
     public OptimizerContext getContext() {
         return context;
+    }
+
+    public OptExpression optimizeByRule(ConnectContext connectContext,
+                                        OptExpression logicOperatorTree,
+                                        PhysicalPropertySet requiredProperty,
+                                        ColumnRefSet requiredColumns,
+                                        ColumnRefFactory columnRefFactory) {
+        // Phase 1: none
+        OptimizerTraceUtil.logOptExpression(connectContext, "origin logicOperatorTree:\n%s", logicOperatorTree);
+        // Phase 2: rewrite based on memo and group
+        Memo memo = new Memo();
+
+        context = new OptimizerContext(memo, columnRefFactory, connectContext);
+        context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
+        TaskContext rootTaskContext =
+                new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
+        logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext);
+        return logicOperatorTree;
     }
 
     /**
@@ -84,6 +120,16 @@ public class Optimizer {
         context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
+
+        // register materialized views
+        // TODO(hkp): add session variables and config to control
+        if (Config.enable_experimental_mv) {
+            try {
+                registerMaterializedViews(logicOperatorTree, context);
+            } catch (AnalysisException e) {
+                e.printStackTrace();
+            }
+        }
 
         logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext);
 
@@ -353,5 +399,77 @@ public class Optimizer {
         List<Rule> rules = Collections.singletonList(rule);
         context.getTaskScheduler().pushTask(new RewriteTreeTask(rootTaskContext, tree, rules, true));
         context.getTaskScheduler().executeTasks(rootTaskContext);
+    }
+
+    // TODO(hkp): put it in right place
+    private void registerMaterializedViews(OptExpression logicOperatorTree, OptimizerContext context)
+            throws AnalysisException {
+        List<Table> tables = RewriteUtils.getAllTables(logicOperatorTree);
+        Set<Long[]> relatedMvs = Sets.newHashSet();
+        for (Table table : tables) {
+            Set<Long[]> mvs = table.getRelatedMaterializedViews();
+            if (mvs != null) {
+                relatedMvs.addAll(mvs);
+            }
+        }
+        for (Long[] mvIds : relatedMvs) {
+            Preconditions.checkState(mvIds.length == 2);
+            long dbId = mvIds[0];
+            Database db = context.getCatalog().getDb(dbId);
+            if (db == null) {
+                continue;
+            }
+            long mvId = mvIds[1];
+            Table table = db.getTable(mvId);
+            if (table == null) {
+                continue;
+            }
+            Preconditions.checkState(table instanceof MaterializedView);
+            MaterializedView mv = (MaterializedView) table;
+            MaterializationContext materializationContext = mv.getMaterializationContext();
+            if (materializationContext != null) {
+                context.addCandidateMvs(materializationContext);
+                continue;
+            }
+
+            // 1. build mv query logical plan
+            String mvSql = mv.getViewDefineSql();
+            StatementBase mvStmt;
+            try {
+                mvStmt = com.starrocks.sql.parser.SqlParser.parseSingleSql(mvSql, context.getSessionVariable());
+            } catch (ParsingException parsingException) {
+                throw new AnalysisException(parsingException.getMessage());
+            }
+            Preconditions.checkState(mvStmt instanceof QueryStatement);
+            ConnectContext connectContext = ConnectContext.get();
+            Analyzer.analyze(mvStmt, connectContext);
+            QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            LogicalPlan logicalPlan =
+                    new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
+            Optimizer optimizer = new Optimizer();
+            OptExpression optimizedPlan = optimizer.optimizeByRule(
+                    connectContext,
+                    logicalPlan.getRoot(),
+                    new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
+
+            if (!RewriteUtils.isLogicalSPJG(optimizedPlan)) {
+                continue;
+            }
+
+            // check up-to-date
+
+            // 2. create scan mv operator
+            TableName tableName = new TableName(db.getFullName(), mv.getName());
+            TableRelation tableRelation = new TableRelation(tableName);
+            LogicalPlan mvQueryPlan =
+                    new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(tableRelation);
+            materializationContext = new MaterializationContext(mv,
+                    mvQueryPlan.getRoot().getOp(), optimizedPlan);
+            mv.setMaterializationContext(materializationContext);
+            context.addCandidateMvs(materializationContext);
+        }
     }
 }

@@ -124,7 +124,7 @@ public class Table extends MetaObject implements Writable {
 
     // not serialized field
     // record all materialized views based on this Table
-    private Set<Long> relatedMaterializedViews;
+    private Set<Long[]> relatedMaterializedViews;
 
     public Table(TableType type) {
         this.type = type;
@@ -506,16 +506,16 @@ public class Table extends MetaObject implements Writable {
     }
 
     // should call this when create materialized view
-    public void addRelatedMaterializedView(long mvId) {
+    public void addRelatedMaterializedView(Long[] mvId) {
         relatedMaterializedViews.add(mvId);
     }
 
     // should call this when drop materialized view
-    public void removeRelatedMaterializedView(long mvId) {
+    public void removeRelatedMaterializedView(Long[] mvId) {
         relatedMaterializedViews.remove(mvId);
     }
 
-    public Set<Long> getRelatedMaterializedViews() {
+    public Set<Long[]> getRelatedMaterializedViews() {
         return relatedMaterializedViews;
     }
 

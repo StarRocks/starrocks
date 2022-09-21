@@ -33,6 +33,7 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.sql.optimizer.rule.transformation.materialize.MaterializationContext;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.commons.lang3.StringUtils;
@@ -47,6 +48,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
@@ -329,6 +331,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "partitionRefTableExprs")
     private List<Expr> partitionRefTableExprs;
 
+    private AtomicReference<MaterializationContext> materializationContext;
+
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
         this.tableProperty = null;
@@ -499,7 +503,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 active = false;
                 continue;
             }
-            table.addRelatedMaterializedView(id);
+            Long[] ids = {db.getId(), id};
+            table.addRelatedMaterializedView(ids);
         }
         if (partitionInfo instanceof SinglePartitionInfo) {
             return;
@@ -628,4 +633,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return sb.toString();
     }
 
+    public void setMaterializationContext(MaterializationContext materializationContext) {
+        this.materializationContext.compareAndSet(null, materializationContext);
+    }
+
+    public MaterializationContext getMaterializationContext() {
+        return this.materializationContext.get();
+    }
 }
