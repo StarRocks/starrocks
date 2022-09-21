@@ -74,7 +74,25 @@ http://<fe_host>:<fe_http_port>/api/bootstrap
 
 StarRocks 可以通过滚动升级的方式，平滑进行升级。**升级顺序是先升级 BE，再升级 FE**。StarRocks 保证 BE 后向兼容 FE。升级的过程可以分为：测试升级的正确性，滚动升级，观察服务。
 
-### 升级准备
+### 升级 BE 前的准备
+
+为了避免 BE 重启期间不必要的 Tablet 修复，进而影响升级后的集群性能，建议在升级前先在 FE Leader 上执行如下命令以禁用 Tablet 调度功能，
+
+```sql
+admin set frontend config ("max_scheduling_tablets"="0");
+admin set frontend config ("disable_balance"="true");
+admin set frontend config ("disable_colocate_balance"="true");
+```
+
+在**所有** BE 重启升级完成后，通过 `show backends` 命令确认所有 BE 的 `Alive` 状态为 `true` 后，启用 Tablet 调度功能，
+
+```sql
+admin set frontend config ("max_scheduling_tablets"="2000");
+admin set frontend config ("disable_balance"="false");
+admin set frontend config ("disable_colocate_balance"="false");
+```
+
+### 测试 BE 升级的正确性
 
 * 在完成数据正确性验证后，将 BE 和 FE 新版本的二进制文件分发到各自目录下。
 
@@ -138,6 +156,24 @@ BE、FE 启动顺序不能颠倒。因为如果升级导致新旧 FE、BE 不兼
 StarRocks 各版本（包名为 StarRocks-xx 的版本）之间都是支持回滚操作的，回滚操作与升级操作一致，顺序相反。**回滚顺序是先回滚 FE，再回滚 BE** 。当升级后发现出现异常状况，不符合预期，想快速恢复服务的，可以按照下述操作回滚版本。
 
 ### 回滚准备
+
+### 回滚 BE 节点前的准备
+
+为了避免 BE 重启期间不必要的 Tablet 修复，进而影响回滚后的集群性能，建议在回滚前先在 FE Leader 上执行如下命令以禁用 Tablet 调度功能，
+
+```sql
+admin set frontend config ("max_scheduling_tablets"="0");
+admin set frontend config ("disable_balance"="true");
+admin set frontend config ("disable_colocate_balance"="true");
+```
+
+在**所有** BE 重启回滚完成后，通过 `show backends` 命令确认所有 BE 的 `Alive` 状态为 `true` 后，启用 Tablet 调度功能，
+
+```sql
+admin set frontend config ("max_scheduling_tablets"="2000");
+admin set frontend config ("disable_balance"="false");
+admin set frontend config ("disable_colocate_balance"="false");
+```
 
 * 小版本回滚（例 2.0.x 回滚至 2.0.x），BE 只需替换 starrocks_be；FE 只需替换 starrocks-fe.jar。
 
