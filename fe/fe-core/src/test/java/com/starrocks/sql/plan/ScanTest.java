@@ -381,4 +381,11 @@ public class ScanTest extends PlanTestBase {
                 "'MATERIALIZED VIEW','EXTERNAL TABLE') ORDER BY TABLE_TYPE, TABLE_SCHEMA, TABLE_NAME";
         getExecPlan(sql);
     }
+
+    @Test
+    public void test() throws Exception {
+        String sql = "select * from ods_order where order_no not like \"%hehe%\"";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
 }
