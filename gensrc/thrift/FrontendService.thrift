@@ -979,7 +979,7 @@ struct TAuthInfo {
 }
 
 struct TGetTablesConfigRequest {
-    1: required TAuthInfo auth_info
+    1: optional TAuthInfo auth_info
 }
 
 struct TGetTablesConfigResponse {
