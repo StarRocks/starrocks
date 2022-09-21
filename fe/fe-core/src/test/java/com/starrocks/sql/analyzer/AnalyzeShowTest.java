@@ -56,8 +56,15 @@ public class AnalyzeShowTest {
     @Test
     public void testShowTables() throws AnalysisException {
         analyzeSuccess("show tables;");
+<<<<<<< HEAD
         ShowStmt statement = (ShowStmt) analyzeSuccess("show tables where table_name = 't1';");
         Assert.assertEquals("SELECT TABLE_NAME AS Tables_in_test FROM information_schema.tables WHERE table_name = 't1'",
+=======
+        ShowTableStmt statement = (ShowTableStmt) analyzeSuccess("show tables where table_name = 't1';");
+        Assert.assertEquals(
+                "SELECT TABLE_NAME AS Tables_in_test FROM information_schema.tables"
+                        + " WHERE (TABLE_SCHEMA = 'test') AND (table_name = 't1')",
+>>>>>>> 46e3aa7ac ([BugFix] Add predicate on database for `SHOW TABLES WHERE` (#11411))
                 AST2SQL.toString(statement.toSelectStmt()));
         analyzeSuccess("show tables from `test` like 'test'");
     }
