@@ -46,7 +46,6 @@ public class CachingHiveMetastore implements IHiveMetastore {
     protected LoadingCache<String, Database> databaseCache;
     protected LoadingCache<HiveTableName, Table> tableCache;
 
-    // Partition stores some necessary information used in the planner phase
     protected LoadingCache<NewHivePartitionName, Partition> partitionCache;
     protected LoadingCache<HiveTableName, HivePartitionStatistics> tableStatsCache;
     protected LoadingCache<NewHivePartitionName, HivePartitionStatistics> partitionStatsCache;
