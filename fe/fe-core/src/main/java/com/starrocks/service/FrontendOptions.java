@@ -81,11 +81,6 @@ public class FrontendOptions {
             System.exit(-1);
         }
 
-        if (!Config.enable_fqdn_func) {
-            initAddrUseIp(hosts);
-            return;
-        }
-
         HostType specifiedHostType = HostType.NOT_SPECIFIED;
 
         for (int i = 0; i < args.length; i++) {
@@ -113,10 +108,12 @@ public class FrontendOptions {
             initAddrUseIp(hosts);
             return;
         }
+
+        // Check if it is a new cluster, new clusters start with IP by default
         String roleFilePath = Config.meta_dir + ROLE_FILE_PATH;
         File roleFile = new File(roleFilePath);
         if (!roleFile.exists()) {
-            initAddrUseFqdn(hosts);
+            initAddrUseIp(hosts);
             return;
         }
         
@@ -129,10 +126,14 @@ public class FrontendOptions {
             System.exit(-1);
         }
         fileStoredHostType = prop.getProperty(HOST_TYPE, null);
+        // Check if the ROLE file has property 'hostType'
+        // If it not has property 'hostType', start with IP
+        // If it has property 'hostType' & hostType = IP, start with IP
         if (null == fileStoredHostType || fileStoredHostType.equals(HostType.IP.toString())) {
             initAddrUseIp(hosts);
             return;
         }
+        // If it has property 'hostType' & hostType = FQDN, start with FQDN
         initAddrUseFqdn(hosts);
     }
 
@@ -198,7 +199,7 @@ public class FrontendOptions {
         if (hasInetAddr) {
             localAddr = uncheckedInetAddress;
         } else {
-            LOG.error("Fail to find right localhost when start fe use fqdn");
+            LOG.error("Fail to find right address to start fe by using fqdn");
             System.exit(-1);
         }
     }

@@ -33,11 +33,6 @@ public class FrontendOptionsTest {
     private boolean useFqdn = true;
     private boolean useFqdnFile = true;
 
-    @Before
-    public void setUp() {
-        Config.enable_fqdn_func = true;
-    }
-
     @Test
     public void cidrTest() {
 
