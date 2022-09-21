@@ -73,22 +73,6 @@ public class PipelineParallelismTest extends PlanTestBase {
     }
 
     @Test
-    public void testOutfile() throws Exception {
-        ExecPlan plan = getExecPlan("SELECT v1,v2,v3 FROM t0  INTO OUTFILE \"hdfs://path/to/result_\""
-                + "FORMAT AS CSV PROPERTIES" +
-                "(\"broker.name\" = \"my_broker\"," +
-                "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
-                "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
-        System.out.println(plan.getExplainString(StatementBase.ExplainLevel.COST));
-        PlanFragment fragment0 = plan.getFragments().get(0);
-        assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "RESULT SINK");
-        // Outfile ResultSink doesn't support pipeline, so ParallelExecNum of fragment is 
-        // equal to the corresponding session variables.
-        Assert.assertEquals(parallelExecInstanceNum, fragment0.getParallelExecNum());
-        Assert.assertEquals(1, fragment0.getPipelineDop());
-    }
-
-    @Test
     public void testInsert() throws Exception {
         boolean prevEnablePipelineLoad = Config.enable_pipeline_load;
         try {
