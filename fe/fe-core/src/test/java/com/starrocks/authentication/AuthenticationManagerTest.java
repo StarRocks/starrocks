@@ -4,6 +4,7 @@ package com.starrocks.authentication;
 
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.qe.ConnectContext;
@@ -33,37 +34,48 @@ public class AuthenticationManagerTest {
 
     @Test
     public void testCreateUserAndReplay() throws Exception {
-        AuthenticationManager masterMaanger = new AuthenticationManager();
-        masterMaanger.init();
         UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test", "%");
         UserIdentity testUserWithIp = UserIdentity.createAnalyzedUserIdentWithIp("test", "10.1.1.1");
-        Assert.assertFalse(masterMaanger.doesUserExist(testUser));
-        Assert.assertFalse(masterMaanger.doesUserExist(testUserWithIp));
+        byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
+        byte[] scramble = MysqlPassword.scramble(seed, "abc");
+
+        AuthenticationManager masterManager = new AuthenticationManager();
+        masterManager.init();
+        Assert.assertNull(masterManager.checkPassword(
+                testUserWithIp.getQualifiedUser(), testUserWithIp.getHost(), scramble, seed));
+        Assert.assertFalse(masterManager.doesUserExist(testUser));
+        Assert.assertFalse(masterManager.doesUserExist(testUserWithIp));
         UtFrameUtils.setUpForPersistTest();
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
 
         // master create test@%; no password
         String sql = "create user test";
         CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        masterMaanger.createUser(stmt);
-        Assert.assertTrue(masterMaanger.doesUserExist(testUser));
-        Assert.assertFalse(masterMaanger.doesUserExist(testUserWithIp));
-        UserIdentity user = masterMaanger.checkPassword(testUser.getQualifiedUser(), "10.1.1.1", new byte[0], new byte[0]);
+        masterManager.createUser(stmt);
+        Assert.assertTrue(masterManager.doesUserExist(testUser));
+        Assert.assertFalse(masterManager.doesUserExist(testUserWithIp));
+        UserIdentity user = masterManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.1", new byte[0], new byte[0]);
         Assert.assertEquals(user, testUser);
+
+        // create twice fail
+        try {
+            masterManager.createUser(stmt);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("failed to create user"));
+        }
 
         // master create test@10.1.1.1
         sql = "create user 'test'@'10.1.1.1' identified by 'abc'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        masterMaanger.createUser(stmt);
-        Assert.assertTrue(masterMaanger.doesUserExist(testUser));
-        Assert.assertTrue(masterMaanger.doesUserExist(testUserWithIp));
-        byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
-        byte[] scramble = MysqlPassword.scramble(seed, "abc");
-        user = masterMaanger.checkPassword(testUser.getQualifiedUser(), testUserWithIp.getHost(), scramble, seed);
+        masterManager.createUser(stmt);
+        Assert.assertTrue(masterManager.doesUserExist(testUser));
+        Assert.assertTrue(masterManager.doesUserExist(testUserWithIp));
+        user = masterManager.checkPassword(testUser.getQualifiedUser(), testUserWithIp.getHost(), scramble, seed);
         Assert.assertEquals(user, testUserWithIp);
 
         // login from 10.1.1.2 with password will fail
-        user = masterMaanger.checkPassword(testUser.getQualifiedUser(), "10.1.1.2", scramble, seed);
+        user = masterManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.2", scramble, seed);
         Assert.assertNull(user);
 
         // start to replay

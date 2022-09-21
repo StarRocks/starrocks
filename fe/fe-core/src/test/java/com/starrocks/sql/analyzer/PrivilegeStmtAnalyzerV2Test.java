@@ -4,6 +4,7 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -39,5 +40,13 @@ public class PrivilegeStmtAnalyzerV2Test {
         Assert.assertEquals("%", stmt.getUserIdent().getHost());
         Assert.assertEquals("abc", stmt.getOriginalPassword());
         Assert.assertEquals(PlainPasswordAuthenticationProvider.PLUGIN_NAME, stmt.getAuthPlugin());
+
+        sql = "create user 'aaa~bbb'";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("invalid user name"));
+        }
     }
 }

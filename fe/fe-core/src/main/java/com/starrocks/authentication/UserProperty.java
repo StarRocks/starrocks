@@ -8,10 +8,6 @@ public class UserProperty {
     @SerializedName(value = "m")
     private long maxConn = 100;
 
-    public void setMaxConn(long maxConn) {
-        this.maxConn = maxConn;
-    }
-
     public long getMaxConn() {
         return maxConn;
     }

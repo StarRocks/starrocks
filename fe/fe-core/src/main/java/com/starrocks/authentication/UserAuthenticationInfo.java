@@ -73,14 +73,6 @@ public class UserAuthenticationInfo implements Writable {
         return authPlugin;
     }
 
-    public String getTextForAuthPlugin() {
-        return textForAuthPlugin;
-    }
-
-    public UserProperty getUserProperty() {
-        return userProperty;
-    }
-
     public void setPassword(byte[] password) {
         this.password = password;
     }
@@ -91,10 +83,6 @@ public class UserAuthenticationInfo implements Writable {
 
     public void setTextForAuthPlugin(String textForAuthPlugin) {
         this.textForAuthPlugin = textForAuthPlugin;
-    }
-
-    public void setUserProperty(UserProperty userProperty) {
-        this.userProperty = userProperty;
     }
 
     public void setOrigUserHost(String origUser, String origHost) throws AuthenticationException {

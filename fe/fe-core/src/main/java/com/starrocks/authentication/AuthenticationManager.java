@@ -100,13 +100,9 @@ public class AuthenticationManager {
     }
 
     public void createUser(CreateUserStmt stmt) throws DdlException {
-        String pluginName = stmt.getAuthPlugin();
-        if (pluginName == null) {
-            pluginName = DEFAULT_PLUGIN;
-        }
-
         try {
             // validate authentication info by plugin
+            String pluginName = stmt.getAuthPlugin();
             AuthenticationProvider provider = AuthenticationProviderFactory.create(pluginName);
             UserIdentity userIdentity = stmt.getUserIdent();
             UserAuthenticationInfo info = provider.validAuthenticationInfo(

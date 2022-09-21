@@ -21,7 +21,7 @@ public class AuthenticationProviderFactory {
         pluginNameToAuthenticationProvider.put(pluginName, provider);
     }
 
-    public static void unInstallPlugin(String pluginName) {
+    public static void uninstallPlugin(String pluginName) {
         if (!pluginNameToAuthenticationProvider.containsKey(pluginName)) {
             LOG.warn("Cannot find {} from {} ", pluginName, pluginNameToAuthenticationProvider.keySet());
         }

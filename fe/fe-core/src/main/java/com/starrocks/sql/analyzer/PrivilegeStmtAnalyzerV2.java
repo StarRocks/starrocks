@@ -29,7 +29,7 @@ public class PrivilegeStmtAnalyzerV2 {
         /**
          * analyse user identity + check if user exists in UserPrivTable
          */
-        private void analyseUser(UserIdentity userIdent, ConnectContext session, boolean checkExist) {
+        private void analyseUser(UserIdentity userIdent, boolean checkExist) {
             // analyse user identity
             try {
                 userIdent.analyze();
@@ -48,7 +48,7 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdent(), session, stmt instanceof AlterUserStmt);
+            analyseUser(stmt.getUserIdent(), stmt instanceof AlterUserStmt);
 
             if (stmt.getAuthPlugin() == null) {
                 stmt.setAuthPlugin(authenticationManager.getDefaultPlugin());
