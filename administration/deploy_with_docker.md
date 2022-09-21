@@ -26,7 +26,7 @@ RUN cd /data/deploy/ && tar zxf StarRocks-x.x.x.tar.gz
 # Install Java JDK.
 RUN yum -y install java-1.8.0-openjdk-devel.x86_64
 RUN rpm -ql java-1.8.0-openjdk-devel.x86_64 | grep bin$
-RUN /usr/lib/jvm/java-1.8.0-openjdk-1.8.0.322.b09-1.el7_9.x86_64/bin/java -version
+RUN /usr/lib/jvm/java-1.8.0-openjdk-1.8.0.342.b07-1.el7_9.x86_64/bin/java -version
 
 # Create directory for FE meta and BE storage in StarRocks.
 RUN mkdir -p /data/deploy/StarRocks-x.x.x/fe/meta
@@ -53,7 +53,7 @@ CMD /data/deploy/run_script.sh
 #!/bin/bash
 
 # Set JAVA_HOME.
-export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.322.b06-1.el7_9.x86_64
+export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.342.b07-1.el7_9.x86_64
 
 # Start FE.
 cd /data/deploy/StarRocks-x.x.x/fe/bin/
