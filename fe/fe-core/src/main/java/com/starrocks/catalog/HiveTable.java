@@ -41,6 +41,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
+import com.starrocks.external.ColumnTypeConverter;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
@@ -70,7 +71,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.util.Util.validateMetastoreUris;
-import static com.starrocks.external.HiveMetaStoreTableUtils.convertHiveTableColumnType;
 import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
 
 /**
@@ -158,7 +158,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public String getCatalogName() {
-        return catalogName == null ? CatalogMgr.INTERNAL_RESOURCE_TO_CATALOG_NAME_PREFIX + resourceName : catalogName;
+        return catalogName == null ? CatalogMgr.RESOURCE_MAPPING_CATALOG_PREFIX + resourceName : catalogName;
     }
 
     public String getDbName() {
@@ -176,7 +176,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public List<Column> getPartitionColumns() {
-        return HiveMetaStoreTableUtils.getPartitionColumns(hmsTableInfo);
+        return partColumnNames.stream()
+                .map(name -> nameToColumn.get(name))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -284,7 +286,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                     needRefreshColumn = true;
                     break;
                 }
-                Type type = convertHiveTableColumnType(fieldSchema.getType());
+                Type type = ColumnTypeConverter.fromHiveType(fieldSchema.getType());
                 if (!type.equals(column.getType())) {
                     needRefreshColumn = true;
                     break;
@@ -303,7 +305,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
         // TODO: Column type conversion should not throw an exception, use invalidate type instead.
         for (FieldSchema fieldSchema : allHiveColumns) {
-            Type srType = convertHiveTableColumnType(fieldSchema.getType());
+            Type srType = ColumnTypeConverter.fromHiveType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
             fullSchemaTemp.add(column);
             nameToColumnTemp.put(column.getName(), column);
