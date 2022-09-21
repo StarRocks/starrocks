@@ -50,6 +50,7 @@ import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.ShowSnapshotStmt;
 import com.starrocks.analysis.ShowSqlBlackListStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.ShowWhiteListStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
@@ -146,6 +147,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowFrontendsStmt(ShowFrontendsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowTransactionStmt(ShowTransactionStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
