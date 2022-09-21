@@ -161,7 +161,7 @@ public:
         auto dest_size = offsets.size() - 1;
         DCHECK(this->size() >= dest_size) << "The size of the source column is less when duplicating it.";
         dest->reserve(offsets.back());
-        for (int i = 0; i < offsets.size() - 1; ++i) {
+        for (int i = 0; i < dest_size; ++i) {
             dest->append_value_multiple_times(*this, i, offsets[i + 1] - offsets[i]);
         }
         return dest;

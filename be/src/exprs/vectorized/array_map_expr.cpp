@@ -105,7 +105,7 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
         }
         if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
             column = EVALUATE_NULL_IF_ERROR(context, _children[0], cur_chunk.get());
-        } else {
+        } else { // split large chunks into small ones to avoid too large or various batch_size
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             accumulator.push(std::move(cur_chunk));
             accumulator.finalize();
