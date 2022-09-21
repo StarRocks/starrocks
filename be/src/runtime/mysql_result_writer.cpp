@@ -79,8 +79,8 @@ Status MysqlResultWriter::append_chunk(vectorized::Chunk* chunk) {
     // Note: this method will delete result pointer if status is OK
     // TODO(kks): use std::unique_ptr instead of raw pointer
     auto add_status = _sinker->add_batch(fetch_data);
-    if (status.ok()) {
-        _written_rows += num_rows;
+    if (add_status.ok()) {
+        _written_rows += static_cast<int64_t>(num_rows);
         return add_status;
     } else {
         LOG(WARNING) << "append result batch to sink failed.";
