@@ -19,9 +19,20 @@
 // specific language governing permissions and limitations
 // under the License.
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/analysis/ShowTableStmt.java
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
+=======
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.ExprSubstitutionMap;
+import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
+>>>>>>> 46e3aa7ac ([BugFix] Add predicate on database for `SHOW TABLES WHERE` (#11411)):fe/fe-core/src/main/java/com/starrocks/sql/ast/ShowTableStmt.java
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
@@ -90,8 +101,18 @@ public class ShowTableStmt extends ShowStmt {
             aliasMap.put(new SlotRef(null, TYPE_COL), item.getExpr().clone(null));
         }
         where = where.substitute(aliasMap);
+        // where databases_name = currentdb
+        Expr whereDbEQ = new BinaryPredicate(
+                BinaryPredicate.Operator.EQ,
+                new SlotRef(TABLE_NAME, "TABLE_SCHEMA"),
+                new StringLiteral(db));
+        // old where + and + db where
+        Expr finalWhere = new CompoundPredicate(
+                CompoundPredicate.Operator.AND,
+                whereDbEQ,
+                where);
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                where, null, null));
+                finalWhere, null, null));
     }
 
     @Override
