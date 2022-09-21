@@ -40,12 +40,13 @@ public class CachingHiveMetastore implements IHiveMetastore {
     protected LoadingCache<String, List<String>> databaseNamesCache;
     protected LoadingCache<String, List<String>> tableNamesCache;
 
-    // HiveTableName -> List("year=2022/month=10", "year=2022/month=11")
+    // eg: HiveTableName -> List("year=2022/month=10", "year=2022/month=11")
     protected LoadingCache<HiveTableName, List<String>> partitionKeysCache;
 
     protected LoadingCache<String, Database> databaseCache;
     protected LoadingCache<HiveTableName, Table> tableCache;
 
+    // Partition stores some necessary information used in the planner phase
     protected LoadingCache<NewHivePartitionName, Partition> partitionCache;
     protected LoadingCache<HiveTableName, HivePartitionStatistics> tableStatsCache;
     protected LoadingCache<NewHivePartitionName, HivePartitionStatistics> partitionStatsCache;

@@ -7,6 +7,7 @@ import com.starrocks.external.hive.text.TextFileFormatDesc;
 import java.util.Map;
 import java.util.Objects;
 
+// Partition stores some necessary information used in the planner phase
 public class Partition {
     private final Map<String, String> parameters;
     private final RemoteFileInputFormat inputFormat;
