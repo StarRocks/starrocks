@@ -56,7 +56,7 @@ ColumnPtr FixedLengthColumnBase<T>::replicate(const std::vector<uint32_t>& offse
     auto dest = this->clone_empty();
     auto& dest_data = down_cast<FixedLengthColumnBase<T>&>(*dest);
     dest_data._data.resize(offsets.back());
-    size_t orig_size = _data.size();
+    size_t orig_size = offsets.size() - 1; // this->size() may be large than offsets->size() -1
     for (auto i = 0; i < orig_size; ++i) {
         for (auto j = offsets[i]; j < offsets[i + 1]; ++j) {
             dest_data._data[j] = _data[i];
