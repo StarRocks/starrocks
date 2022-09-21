@@ -2,6 +2,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -12,6 +13,9 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -24,8 +28,10 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -47,6 +53,7 @@ import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 public class MaterializedView extends OlapTable implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(MaterializedView.class);
 
+
     public enum RefreshType {
         SYNC,
         ASYNC,
@@ -55,7 +62,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public static class BaseTableInfo {
         @SerializedName(value = "catalogName")
-        private String catalogName;
+        private final String catalogName;
 
         @SerializedName(value = "dbId")
         private long dbId = -1;
@@ -186,7 +193,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // partition id maybe changed after insert overwrite, so use partition name as key.
         // partition id which in BasePartitionInfo can be used to check partition is changed
         @SerializedName("baseTableVisibleVersionMap")
-        private Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap;
+        private final Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap;
 
         @SerializedName(value = "defineStartTime")
         private boolean defineStartTime;
@@ -306,6 +313,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "viewDefineSql")
     private String viewDefineSql;
 
+    @SerializedName(value = "simpleDefineSql")
+    private String simpleDefineSql;
+
     // record expression table column
     @SerializedName(value = "partitionRefTableExprs")
     private List<Expr> partitionRefTableExprs;
@@ -345,6 +355,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setViewDefineSql(String viewDefineSql) {
         this.viewDefineSql = viewDefineSql;
+    }
+
+    public String getSimpleDefineSql() {
+        return simpleDefineSql;
+    }
+
+    public void setSimpleDefineSql(String simple) {
+        this.simpleDefineSql = simple;
     }
 
     public List<BaseTableInfo> getBaseTableInfos() {
@@ -499,11 +517,85 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
      * Refresh the materialized view if the following conditions are met:
      * 1. Refresh type of materialized view is ASYNC
      * 2. timeunit and step not set for AsyncRefreshContext
+     *
      * @return
      */
     public boolean isLoadTriggeredRefresh() {
         AsyncRefreshContext asyncRefreshContext = this.refreshScheme.asyncRefreshContext;
         return this.refreshScheme.getType() == MaterializedView.RefreshType.ASYNC &&
-                asyncRefreshContext.step == 0 &&  null == asyncRefreshContext.timeUnit;
+                asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
     }
+
+    public String getMaterializedViewDdlStmt(boolean simple) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE MATERIALIZED VIEW `").append(this.getName()).append("`");
+        if (!Strings.isNullOrEmpty(this.getComment())) {
+            sb.append("\nCOMMENT \"").append(this.getComment()).append("\"");
+        }
+
+        // partition
+        PartitionInfo partitionInfo = this.getPartitionInfo();
+        if (!(partitionInfo instanceof SinglePartitionInfo)) {
+            sb.append("\n").append(partitionInfo.toSql(this, null));
+        }
+
+        // distribution
+        DistributionInfo distributionInfo = this.getDefaultDistributionInfo();
+        sb.append("\n").append(distributionInfo.toSql());
+
+        // refresh scheme
+        MvRefreshScheme refreshScheme = this.getRefreshScheme();
+        if (refreshScheme == null) {
+            sb.append("\nREFRESH ").append("UNKNOWN");
+        } else {
+            sb.append("\nREFRESH ").append(refreshScheme.getType());
+        }
+        if (refreshScheme != null && refreshScheme.getType() == RefreshType.ASYNC) {
+            AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
+            if (asyncRefreshContext.isDefineStartTime()) {
+                sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
+                                .format(DateUtils.DATE_TIME_FORMATTER))
+                        .append("\")");
+            }
+            if (asyncRefreshContext.getTimeUnit() != null) {
+                sb.append(" EVERY(INTERVAL ").append(asyncRefreshContext.getStep()).append(" ")
+                        .append(asyncRefreshContext.getTimeUnit()).append(")");
+            }
+        }
+
+        // properties
+        sb.append("\nPROPERTIES (\n");
+
+        // replicationNum
+        Short replicationNum = this.getDefaultReplicationNum();
+        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
+        sb.append(replicationNum).append("\"");
+
+        // storageMedium
+        String storageMedium = this.getStorageMedium();
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                .append("\" = \"");
+        sb.append(storageMedium).append("\"");
+
+        // storageCooldownTime
+        Map<String, String> properties = this.getTableProperty().getProperties();
+        if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
+            sb.append("\n");
+        } else {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
+                    .append("\" = \"");
+            sb.append(TimeUtils.longToTimeString(
+                    Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)))).append("\"");
+            sb.append("\n");
+        }
+        sb.append(")");
+        String define = this.getSimpleDefineSql();
+        if (StringUtils.isEmpty(define) || !simple) {
+            define = this.getViewDefineSql();
+        }
+        sb.append("\nAS ").append(define);
+        sb.append(";");
+        return sb.toString();
+    }
+
 }

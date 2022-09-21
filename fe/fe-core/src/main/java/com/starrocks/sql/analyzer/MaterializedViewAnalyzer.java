@@ -124,6 +124,7 @@ public class MaterializedViewAnalyzer {
             Analyzer.analyze(queryStatement, context);
             // convert queryStatement to sql and set
             statement.setInlineViewDef(ViewDefBuilder.build(queryStatement));
+            statement.setSimpleViewDef(ViewDefBuilder.buildSimple(queryStatement));
             // collect table from query statement
             Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTableAndView(queryStatement);
             List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();

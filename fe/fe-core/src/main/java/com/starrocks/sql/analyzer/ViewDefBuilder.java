@@ -22,24 +22,29 @@ import java.util.Map;
 import static java.util.stream.Collectors.toList;
 
 public class ViewDefBuilder {
-    public static String build(StatementBase statement) {
+
+    public static String buildSimple(StatementBase statement) {
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(statement);
         boolean sameDb = tables.keySet().stream().map(TableName::getDb).distinct().count() == 1;
         return new ViewDefBuilderVisitor(sameDb).visit(statement);
     }
 
+    public static String build(StatementBase statement) {
+        return new ViewDefBuilderVisitor(false).visit(statement);
+    }
+
     private static class ViewDefBuilderVisitor extends AST2SQL.SQLBuilder {
 
-        private final boolean sameDb;
+        private final boolean simple;
 
-        public ViewDefBuilderVisitor(boolean sameDb) {
-            this.sameDb = sameDb;
+        public ViewDefBuilderVisitor(boolean simple) {
+            this.simple = simple;
         }
 
         private String buildColumnName(TableName tableName, String fieldName, String columnName) {
             String res = "";
             if (tableName != null) {
-                if (!sameDb) {
+                if (!simple) {
                     res = tableName.toSql();
                 } else {
                     res = "`" + tableName.getTbl() + "`";
@@ -146,7 +151,7 @@ public class ViewDefBuilder {
         @Override
         public String visitTable(TableRelation node, Void outerScope) {
             StringBuilder sqlBuilder = new StringBuilder();
-            if (sameDb) {
+            if (simple) {
                 sqlBuilder.append("`").append(node.getName().getTbl()).append("`");
             } else {
                 sqlBuilder.append(node.getName().toSql());

@@ -37,6 +37,9 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private DistributionDesc distributionDesc;
     private KeysType keysType = KeysType.DUP_KEYS;
     protected String inlineViewDef;
+
+
+    private String simpleViewDef;
     // for create column in mv
     private List<Column> mvColumnItems = Lists.newArrayList();
     private List<MaterializedView.BaseTableInfo> baseTableInfos;
@@ -128,6 +131,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setInlineViewDef(String inlineViewDef) {
         this.inlineViewDef = inlineViewDef;
+    }
+
+    public String getSimpleViewDef() {
+        return simpleViewDef;
+    }
+
+    public void setSimpleViewDef(String simpleViewDef) {
+        this.simpleViewDef = simpleViewDef;
     }
 
     public QueryStatement getQueryStatement() {
