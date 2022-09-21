@@ -277,10 +277,6 @@ CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "1000");
 // -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 // CONF_Int32(cumulative_compaction_write_mbytes_per_sec, "100");
-// cumulative compaction skips recently published deltas in order to prevent
-// compacting a version that might be queried (in case the query planning phase took some time).
-// the following config set the window size
-CONF_mInt32(cumulative_compaction_skip_window_seconds, "30");
 
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_Int32(update_compaction_num_threads_per_disk, "1");
