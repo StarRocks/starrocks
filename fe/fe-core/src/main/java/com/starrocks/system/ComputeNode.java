@@ -72,7 +72,10 @@ public class ComputeNode implements IComputable, Writable {
     private int heartbeatRetryTimes = 0;
 
     // port of starlet on BE
+    @SerializedName("starletPort")
     private volatile int starletPort;
+
+    private boolean gotStarletPort;
 
     public ComputeNode() {
         this.host = "";
@@ -90,6 +93,8 @@ public class ComputeNode implements IComputable, Writable {
         this.backendState = Backend.BackendState.free.ordinal();
 
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
+
+        this.gotStarletPort = false;
     }
 
     public ComputeNode(long id, String host, int heartbeatPort) {
@@ -109,6 +114,7 @@ public class ComputeNode implements IComputable, Writable {
         this.ownerClusterName = "";
         this.backendState = Backend.BackendState.free.ordinal();
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
+        this.gotStarletPort = false;
     }
 
     public int getStarletPort() {
@@ -384,6 +390,7 @@ public class ComputeNode implements IComputable, Writable {
 
             if (Config.integrate_starmgr && this.starletPort != hbResponse.getStarletPort()) {
                 isChanged = true;
+                gotStarletPort = true;
                 this.starletPort = hbResponse.getStarletPort();
             }
 
