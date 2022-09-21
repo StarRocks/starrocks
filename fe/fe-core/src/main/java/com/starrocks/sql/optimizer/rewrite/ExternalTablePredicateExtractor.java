@@ -65,7 +65,12 @@ public class ExternalTablePredicateExtractor {
                     return;
                 }
                 case NOT: {
-                    extract(op.getChild(0));
+                    if (op.getChild(0).accept(new CanFullyPushDownVisitor(), null)) {
+                        pushedPredicates.add(op);
+                    } else {
+                        reservedPredicates.add(op);
+                    }
+
                     return;
                 }
             }
