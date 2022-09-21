@@ -73,7 +73,7 @@ public class ShowTableStmtTest {
         stmt = (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         QueryStatement queryStatement = stmt.toSelectStmt();
         String expect = "SELECT TABLE_NAME AS Tables_in_testDb, TABLE_TYPE AS Table_type FROM information_schema.tables"
-                + " WHERE (TABLE_SCHEMA = 'testCluster:testDb') AND (TABLE_TYPE != 'VIEW')";
+                + " WHERE (TABLE_SCHEMA = 'testDb') AND (TABLE_TYPE != 'VIEW')";
         Assert.assertEquals(expect, AST2SQL.toString(queryStatement));
     }
 
