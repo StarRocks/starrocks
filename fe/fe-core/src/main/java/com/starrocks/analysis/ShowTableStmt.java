@@ -91,8 +91,18 @@ public class ShowTableStmt extends ShowStmt {
             aliasMap.put(new SlotRef(null, TYPE_COL), item.getExpr().clone(null));
         }
         where = where.substitute(aliasMap);
+        // where databases_name = currentdb
+        Expr whereDbEQ = new BinaryPredicate(
+                BinaryPredicate.Operator.EQ,
+                new SlotRef(TABLE_NAME, "TABLE_SCHEMA"),
+                new StringLiteral(db));
+        // old where + and + db where
+        Expr finalWhere = new CompoundPredicate(
+                CompoundPredicate.Operator.AND,
+                whereDbEQ,
+                where);
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                where, null, null));
+                finalWhere, null, null));
     }
 
     @Override
