@@ -95,7 +95,7 @@ public class ShowTableStmt extends ShowStmt {
         Expr whereDbEQ = new BinaryPredicate(
                 BinaryPredicate.Operator.EQ,
                 new SlotRef(TABLE_NAME, "TABLE_SCHEMA"),
-                new StringLiteral(db));
+                new StringLiteral((ClusterNamespace.getNameFromFullName(db))));
         // old where + and + db where
         Expr finalWhere = new CompoundPredicate(
                 CompoundPredicate.Operator.AND,
