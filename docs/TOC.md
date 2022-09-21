@@ -46,17 +46,10 @@
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Window functions](./using_starrocks/Window_function.md)
   + [Java UDFs](./using_starrocks/JAVA_UDF.md)
-<<<<<<< HEAD
   + [Bitmap indexing](./table_design/Bitmap_index.md)
   + [Bloomfilter indexing](./table_design/Bloomfilter_index.md)
-  + [Precise de-duplication with bitmap](./using_starrocks/Using_bitmap.md)
-  + [Approximate de-duplication with HLL](./using_starrocks/Using_HLL.md)
-=======
-  + [Bitmap indexing](./using_starrocks/Bitmap_index.md)
-  + [Bloomfilter indexing](./using_starrocks/Bloomfilter_index.md)
   + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
   + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
->>>>>>> 14aa18d03 ([Doc] update data distribution (#11426))
   + [Configure a time zone](./using_starrocks/timezone.md)
   + [File manager](./using_starrocks/filemanager.md)
 + Administration
