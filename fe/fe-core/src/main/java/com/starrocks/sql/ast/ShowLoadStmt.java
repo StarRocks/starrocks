@@ -16,7 +16,6 @@ import com.starrocks.common.proc.LoadProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.ArrayList;
 import java.util.HashSet;

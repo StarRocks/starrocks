@@ -1,8 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -1268,6 +1269,14 @@ public class PrivilegeChecker {
                     && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
                     PrivPredicate.OPERATOR)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN/OPERATOR");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRepositoryStmt(CreateRepositoryStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
         }

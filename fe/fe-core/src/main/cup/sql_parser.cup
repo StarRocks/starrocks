@@ -249,7 +249,7 @@ terminal String KW_ADD, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ARR
     KW_PLUGIN, KW_PLUGINS,
     KW_PROC, KW_PROPERTIES, KW_PROPERTY, KW_PERCENTILE, KW_PERCENTILE_UNION,
     KW_QUERY, KW_QUOTA,
-    KW_RANGE, KW_READ, KW_RECOVER, KW_REGEXP, KW_RELEASE, KW_RENAME,
+    KW_RANGE, KW_READ, KW_RECOVER, KW_REGEXP, KW_RELEASE,
     KW_REPEATABLE, KW_REPOSITORY, KW_REPOSITORIES, KW_REPLACE, KW_REPLACE_IF_NOT_NULL, KW_RESOURCE, KW_RESOURCES, KW_RESTORE, KW_RETURNS, KW_RESUME, KW_REVOKE,
     KW_RIGHT, KW_ROLE, KW_ROLES, KW_ROLLBACK, KW_ROLLUP, KW_ROUTINE, KW_ROW, KW_ROWS,
     KW_SCHEMA, KW_SECOND, KW_SERIALIZABLE, KW_SESSION, KW_SET, KW_SHOW,
@@ -278,9 +278,8 @@ terminal String UNMATCHED_STRING_LITERAL;
 
 // Statement that the result of this parser.
 nonterminal List<StatementBase> stmts;
-nonterminal StatementBase stmt, show_stmt, show_param, help_stmt, create_routine_load_stmt, pause_routine_load_stmt, resume_routine_load_stmt, stop_routine_load_stmt,
-    show_routine_load_stmt, show_routine_load_task_stmt, alter_stmt,
-    drop_stmt, create_stmt, set_stmt, cancel_stmt, cancel_param, delete_stmt,
+nonterminal StatementBase stmt, show_stmt, show_param, help_stmt, alter_stmt,
+    drop_stmt, create_stmt, set_stmt, delete_stmt,
     unsupported_stmt,
     import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt;
 
@@ -291,7 +290,7 @@ nonterminal List<ImportColumnDesc> import_column_descs;
 nonterminal opt_with_consistent_snapshot, opt_work, opt_chain, opt_release;
 
 // No return.
-nonterminal from_or_in, opt_wild_where,
+nonterminal from_or_in,
             charset, equal, transaction_characteristics, isolation_level,
             transaction_access_mode, isolation_types;
 
@@ -314,7 +313,6 @@ nonterminal ArrayList<OrderByElement> order_by_elements, order_by_clause;
 nonterminal OrderByElement order_by_element;
 nonterminal Boolean opt_order_param;
 nonterminal Boolean opt_nulls_order_param;
-nonterminal LimitElement limit_clause;
 nonterminal TypeDef type_def;
 nonterminal Type type, array_def;
 nonterminal Expr cast_expr, case_else_clause, analytic_expr;
@@ -345,24 +343,11 @@ nonterminal Long opt_field_length;
 
 nonterminal List<String> string_list;
 
-nonterminal LabelName job_label;
-nonterminal ColumnSeparator column_separator;
-nonterminal RowDelimiter row_delimiter;
-
-// Routine load
-nonterminal ParseNode load_property;
-nonterminal List<ParseNode> opt_load_property_list;
-
-// Boolean
-nonterminal Boolean opt_read_only;
-
 nonterminal String keyword, ident, ident_or_text, variable_name,
         charset_name_or_default, old_or_new_charset_name_or_default, opt_collate,
         collation_name_or_default, type_func_name_keyword, type_function_name, time_unit;
 
 nonterminal String opt_db;
-
-nonterminal RoutineLoadDataSourceProperties opt_datasource_properties;
 
 precedence nonassoc COMMA;
 precedence nonassoc STRING_LITERAL;
@@ -471,19 +456,6 @@ stmt ::=
     {: RESULT = show; :}
     | help_stmt : stmt
     {: RESULT = stmt; :}
-    | create_routine_load_stmt : stmt
-    {: RESULT = stmt; :}
-    | pause_routine_load_stmt : stmt
-    {: RESULT = stmt; :}
-    | resume_routine_load_stmt : stmt
-    {: RESULT = stmt; :}
-    | stop_routine_load_stmt : stmt
-    {: RESULT = stmt; :}
-    | show_routine_load_stmt : stmt
-    {: RESULT = stmt; :}
-    | show_routine_load_task_stmt : stmt
-    {: RESULT = stmt; :}
-    | cancel_stmt : stmt
     {: RESULT = stmt; :}
     | delete_stmt : stmt
     {: RESULT = stmt; :}
@@ -514,55 +486,11 @@ uninstall_plugin_stmt ::=
     :}
     ;
 
-// Alter Statement
-alter_stmt ::=
-     KW_ALTER KW_ROUTINE KW_LOAD KW_FOR job_label:jobLabel
-      opt_load_property_list:loadPropertyList
-      opt_properties:jobProperties
-      opt_datasource_properties:datasourceProperties
-    {:
-        RESULT = new AlterRoutineLoadStmt(jobLabel, loadPropertyList, jobProperties, datasourceProperties);
-    :}
-    ;
-
-opt_datasource_properties ::=
-    // empty
-    {:
-        RESULT = new RoutineLoadDataSourceProperties();
-    :}
-    | KW_FROM ident:type LPAREN key_value_map:customProperties RPAREN
-    {:
-        RESULT = new RoutineLoadDataSourceProperties(type, customProperties);
-    :}
-    ;
-
 // Create Statement
 create_stmt ::=
-    KW_CREATE opt_read_only:isReadOnly KW_REPOSITORY ident:repoName KW_WITH KW_BROKER ident:brokerName
-      KW_ON KW_LOCATION STRING_LITERAL:location
-      opt_properties:properties
-    {:
-        RESULT = new CreateRepositoryStmt(isReadOnly, repoName, brokerName, location, properties);
-    :}
-    | KW_CREATE opt_read_only:isReadOnly KW_REPOSITORY ident:repoName KW_WITH KW_BROKER
-      KW_ON KW_LOCATION STRING_LITERAL:location
-      opt_properties:properties
-    {:
-        RESULT = new CreateRepositoryStmt(isReadOnly, repoName, null, location, properties);
-    :}
-    | KW_CREATE KW_FILE STRING_LITERAL:fileName opt_db:db KW_PROPERTIES LPAREN key_value_map:properties RPAREN
+    KW_CREATE KW_FILE STRING_LITERAL:fileName opt_db:db KW_PROPERTIES LPAREN key_value_map:properties RPAREN
     {:
         RESULT = new CreateFileStmt(fileName, db, properties);
-    :}
-    ;
-
-opt_read_only ::=
-    {:
-        RESULT = false;
-    :}
-    | KW_READ KW_ONLY
-    {:
-        RESULT = true;
     :}
     ;
 
@@ -571,127 +499,6 @@ help_stmt ::=
     KW_HELP ident_or_text:mark
     {:
         RESULT = new HelpStmt(mark);
-    :}
-    ;
-
-job_label ::=
-    ident:label
-    {:
-        RESULT = new LabelName("", label);
-    :}
-    | ident:db DOT ident:label
-    {:
-        RESULT = new LabelName(db, label);
-    :}
-    ;
-
-column_separator ::=
-    KW_COLUMNS KW_TERMINATED KW_BY STRING_LITERAL:sep
-    {:
-        RESULT = new ColumnSeparator(sep);
-    :}
-    ;
-
-row_delimiter::=
-    KW_ROWS KW_TERMINATED KW_BY STRING_LITERAL:delimiter
-    {:
-        RESULT = new RowDelimiter(delimiter);
-    :}
-    ;
-
-// Routine load statement
-create_routine_load_stmt ::=
-    KW_CREATE KW_ROUTINE KW_LOAD job_label:jobLabel KW_ON ident:tableName
-    opt_load_property_list:loadPropertyList
-    opt_properties:properties
-    KW_FROM ident:type LPAREN key_value_map:customProperties RPAREN
-    {:
-        RESULT = new CreateRoutineLoadStmt(jobLabel, tableName, loadPropertyList, properties, type, customProperties);
-    :}
-    ;
-
-opt_load_property_list ::=
-    {:
-        RESULT = null;
-    :}
-    | load_property:loadProperty
-    {:
-        RESULT = Lists.newArrayList(loadProperty);
-    :}
-    | opt_load_property_list:list COMMA load_property:loadProperty
-    {:
-        list.add(loadProperty);
-        RESULT = list;
-    :}
-    ;
-
-load_property ::=
-    column_separator:colSep
-    {:
-        RESULT = colSep;
-    :}
-    | row_delimiter:rowDelimiter
-    {:
-        RESULT = rowDelimiter;
-    :}
-    | import_columns_stmt:columnsInfo
-    {:
-        RESULT = columnsInfo;
-    :}
-    | import_where_stmt:wherePredicate
-    {:
-        RESULT = wherePredicate;
-    :}
-    | partition_names:partitionNames
-    {:
-        RESULT = partitionNames;
-    :}
-    ;
-
-pause_routine_load_stmt ::=
-    KW_PAUSE KW_ROUTINE KW_LOAD KW_FOR job_label:jobLabel
-    {:
-        RESULT = new PauseRoutineLoadStmt(jobLabel);
-    :}
-    ;
-
-resume_routine_load_stmt ::=
-    KW_RESUME KW_ROUTINE KW_LOAD KW_FOR job_label:jobLabel
-    {:
-        RESULT = new ResumeRoutineLoadStmt(jobLabel);
-    :}
-    ;
-
-stop_routine_load_stmt ::=
-    KW_STOP KW_ROUTINE KW_LOAD KW_FOR job_label:jobLabel
-    {:
-        RESULT = new StopRoutineLoadStmt(jobLabel);
-    :}
-    ;
-
-show_routine_load_stmt ::=
-    KW_SHOW KW_ROUTINE KW_LOAD KW_FOR job_label:jobLabel
-    {:
-        RESULT = new ShowRoutineLoadStmt(jobLabel, false);
-    :}
-    | KW_SHOW KW_ALL KW_ROUTINE KW_LOAD KW_FOR job_label:jobLabel
-    {:
-        RESULT = new ShowRoutineLoadStmt(jobLabel, true);
-    :}
-    | KW_SHOW KW_ROUTINE KW_LOAD opt_db:dbName opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
-    {:
-        RESULT = new ShowRoutineLoadStmt(new LabelName(dbName, null), false, parser.where, orderByClause, limitClause);
-    :}
-    | KW_SHOW KW_ALL KW_ROUTINE KW_LOAD opt_db:dbName opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
-    {:
-        RESULT = new ShowRoutineLoadStmt(new LabelName(dbName, null), true, parser.where, orderByClause, limitClause);
-    :}
-    ;
-
-show_routine_load_task_stmt ::=
-    KW_SHOW KW_ROUTINE KW_LOAD KW_TASK opt_db:dbName opt_wild_where
-    {:
-        RESULT = new ShowRoutineLoadTaskStmt(dbName, parser.where);
     :}
     ;
 
@@ -742,10 +549,6 @@ show_param ::=
     KW_FILE opt_db:dbName
     {:
         RESULT = new ShowSmallFilesStmt(dbName);
-    :}
-    | KW_TRANSACTION opt_db:dbName opt_wild_where
-    {:
-        RESULT = new ShowTransactionStmt(dbName, parser.where);
     :}
     ;
 
@@ -812,41 +615,6 @@ collation_name_or_default ::=
 from_or_in ::=
     KW_FROM
     | KW_IN
-    ;
-
-opt_wild_where ::=
-    /* empty */
-    | KW_LIKE STRING_LITERAL:wild
-    {:
-        parser.wild = wild;
-    :}
-    | KW_WHERE expr:where
-    {:
-        parser.where = where;
-    :}
-    ;
-
-// Cancel statement
-cancel_stmt ::=
-    KW_CANCEL cancel_param:stmt
-    {:
-        RESULT = stmt;
-    :}
-    ;
-
-cancel_param ::=
-    | KW_DECOMMISSION KW_BACKEND string_list:hostPorts
-    {:
-        RESULT = new CancelAlterSystemStmt(hostPorts);
-    :}
-    | KW_BACKUP opt_db:db
-    {:
-        RESULT = new CancelBackupStmt(db, false);
-    :}
-    | KW_RESTORE opt_db:db
-    {:
-        RESULT = new CancelBackupStmt(db, true);
-    :}
     ;
 
 // Delete stmt
@@ -1234,17 +1002,6 @@ opt_nulls_order_param ::=
   {: RESULT = false; :}
   | /* empty */
   {: RESULT = null; :}
-  ;
-
-limit_clause ::=
-  KW_LIMIT INTEGER_LITERAL:limit
-  {: RESULT = new LimitElement(limit.longValue()); :}
-  | /* empty */
-  {: RESULT = LimitElement.NO_LIMIT; :}
-  | KW_LIMIT INTEGER_LITERAL:offset COMMA INTEGER_LITERAL:limit
-  {: RESULT = new LimitElement(offset.longValue(), limit.longValue()); :}
-  | KW_LIMIT INTEGER_LITERAL:limit KW_OFFSET INTEGER_LITERAL:offset
-  {: RESULT = new LimitElement(offset.longValue(), limit.longValue()); :}
   ;
 
 type ::=

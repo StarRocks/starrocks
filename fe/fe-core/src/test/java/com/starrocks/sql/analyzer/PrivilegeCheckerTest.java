@@ -9,6 +9,8 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.Status;
+import com.starrocks.catalog.BrokerMgr;
+import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -1628,4 +1630,38 @@ public class PrivilegeCheckerTest {
                 "REVOKE GRANT ON RESOURCE spark0 FROM test", starRocksAssert.getCtx()));
     }
 
+
+    @Test
+    public void testCreateRepository() throws Exception {
+        new MockUp<BrokerMgr>() {
+            @Mock
+            public FsBroker getBroker(String name, String host) throws AnalysisException {
+                return new FsBroker("10.74.167.16", 8111);
+            }
+
+        };
+
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        TablePattern db1TablePattern = new TablePattern("*", "*");
+        db1TablePattern.analyze();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        String sql = "CREATE REPOSITORY `repo`\n" +
+                "WITH BROKER `broker`\n" +
+                "ON LOCATION \"bos://backup-cmy\"\n" +
+                "PROPERTIES\n" +
+                "(\n" +
+                "    \"username\" = \"root\",\n" +
+                "    \"password\" = \"root\"\n" +
+                ");";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+        Assert.assertTrue(statementBase.isSupportNewPlanner());
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
 }

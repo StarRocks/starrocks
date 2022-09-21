@@ -3,7 +3,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -11,6 +10,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackendClause;
+import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.ComputeNodeClause;
 import com.starrocks.sql.ast.FrontendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
@@ -99,7 +99,7 @@ public class AlterSystemStmtAnalyzer {
                     InetAddress.getByName(srcHost);
                 }
                 if (!destHostIsIP) {
-                    InetAddress.getByName(destHost);                    
+                    InetAddress.getByName(destHost);
                 }
             } catch (UnknownHostException e) {
                 throw new SemanticException("unknown host " + e.getMessage());

@@ -23,7 +23,6 @@ package com.starrocks.backup;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.LabelName;
@@ -48,6 +47,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.BackupRestoreAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.BackupStmt;
+import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;

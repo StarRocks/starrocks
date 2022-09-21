@@ -621,10 +621,8 @@ ColumnPtr JsonFunctions::json_length(FunctionContext* context, const Columns& co
     ColumnBuilder<TYPE_INT> result(rows);
     ColumnViewer<TYPE_JSON> json_column(columns[0]);
 
-    bool with_path = false;
     std::unique_ptr<ColumnViewer<TYPE_VARCHAR>> path_viewer;
     if (columns.size() >= 2) {
-        with_path = true;
         path_viewer = std::make_unique<ColumnViewer<TYPE_VARCHAR>>(columns[1]);
     }
 
@@ -634,26 +632,12 @@ ColumnPtr JsonFunctions::json_length(FunctionContext* context, const Columns& co
             result.append_null();
             continue;
         }
+
         JsonValue* json = json_column.value(row);
-        if (!with_path || path_viewer->value(row).empty()) {
-            switch (json->get_type()) {
-            case JSON_BOOL:
-            case JSON_NUMBER:
-            case JSON_STRING:
-            case JSON_NULL: {
-                result.append(1);
-                break;
-            }
-            case JSON_ARRAY:
-            case JSON_OBJECT: {
-                result.append(json->to_vslice().length());
-                break;
-            }
-            default: {
-                result.append(0);
-                break;
-            }
-            }
+        vpack::Slice target_slice;
+        vpack::Builder builder;
+        if (!path_viewer || path_viewer->value(row).empty()) {
+            target_slice = json->to_vslice();
         } else {
             Slice path_str = path_viewer->value(row);
             auto jsonpath = get_prepared_or_parse(context, path_str, &stored_path);
@@ -662,15 +646,15 @@ ColumnPtr JsonFunctions::json_length(FunctionContext* context, const Columns& co
                 continue;
             }
 
-            vpack::Builder builder;
-            vpack::Slice slice = JsonPath::extract(json, *jsonpath.value(), &builder);
-            if (slice.isObject() || slice.isArray()) {
-                result.append(slice.length());
-            } else if (slice.isNone()) {
-                result.append(0);
-            } else {
-                result.append(1);
-            }
+            target_slice = JsonPath::extract(json, *jsonpath.value(), &builder);
+        }
+
+        if (target_slice.isObject() || target_slice.isArray()) {
+            result.append(target_slice.length());
+        } else if (target_slice.isNone()) {
+            result.append(0);
+        } else {
+            result.append(1);
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -681,13 +665,34 @@ ColumnPtr JsonFunctions::json_keys(FunctionContext* context, const Columns& colu
     auto json_viewer = ColumnViewer<TYPE_JSON>(columns[0]);
     ColumnBuilder<TYPE_JSON> result(rows);
 
+    std::unique_ptr<ColumnViewer<TYPE_VARCHAR>> path_viewer;
+    JsonPath stored_path;
+    if (columns.size() >= 2) {
+        path_viewer = std::make_unique<ColumnViewer<TYPE_VARCHAR>>(columns[1]);
+    }
+
     for (size_t row = 0; row < rows; row++) {
         if (json_viewer.is_null(row) || json_viewer.value(row) == nullptr) {
             result.append_null();
             continue;
         }
+
         JsonValue* json_value = json_viewer.value(row);
-        vpack::Slice vslice = json_value->to_vslice();
+        vpack::Slice vslice;
+        vpack::Builder extract_builder;
+        if (!path_viewer || path_viewer->value(row).empty()) {
+            vslice = json_value->to_vslice();
+        } else {
+            Slice path_str = path_viewer->value(row);
+            auto jsonpath = get_prepared_or_parse(context, path_str, &stored_path);
+            if (UNLIKELY(!jsonpath.ok())) {
+                result.append_null();
+                continue;
+            }
+
+            vslice = JsonPath::extract(json_value, *jsonpath.value(), &extract_builder);
+        }
+
         if (!vslice.isObject()) {
             result.append_null();
         } else {

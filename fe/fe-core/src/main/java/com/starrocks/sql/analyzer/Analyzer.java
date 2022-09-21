@@ -1,6 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.AlterRoutineLoadStmt;
+import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.LimitElement;
@@ -10,6 +12,7 @@ import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.common.AnalysisException;
@@ -498,6 +501,11 @@ public class Analyzer {
             return null;
         }
 
+        public Void visitAlterRoutineLoadStatement(AlterRoutineLoadStmt statement, ConnectContext session) {
+            AlterRoutineLoadAnalyzer.analyze(statement, session);
+            return null;
+        }
+
         @Override
         public Void visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, ConnectContext session) {
             StopRoutineLoadAnalyzer.analyze(statement, session);
@@ -572,6 +580,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitShowTransactionStmt(ShowTransactionStmt statement, ConnectContext session) {
+            ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
         public Void visitLoadStmt(LoadStmt statement, ConnectContext context) {
             LoadStmtAnalyzer.analyze(statement, context);
             return null;
@@ -610,6 +624,12 @@ public class Analyzer {
         @Override
         public Void visitShowSnapshotStmt(ShowSnapshotStmt statement, ConnectContext context) {
             ShowSnapshotAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRepositoryStmt(CreateRepositoryStmt statement, ConnectContext context) {
+            CreateRepositoryAnalyzer.analyze(statement, context);
             return null;
         }
     }

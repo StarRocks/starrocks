@@ -4,8 +4,6 @@ package com.starrocks.execution;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
-import com.starrocks.sql.ast.CancelAlterSystemStmt;
-import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.analysis.CancelExportStmt;
 import com.starrocks.analysis.CreateFileStmt;
 import com.starrocks.analysis.CreateRepositoryStmt;
@@ -38,7 +36,9 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.BackupStmt;
+import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;

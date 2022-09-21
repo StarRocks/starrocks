@@ -322,6 +322,24 @@ public class AnalyzerUtils {
         return subQueryRelations;
     }
 
+    public static Map<TableName, Table> collectAllTableAndView(StatementBase statementBase) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        new AnalyzerUtils.TableAndViewCollector(tables).visit(statementBase);
+        return tables;
+    }
+
+    private static class TableAndViewCollector extends TableCollector {
+        public TableAndViewCollector(Map<TableName, Table> dbs) {
+            super(dbs);
+        }
+
+        public Void visitView(ViewRelation node, Void context) {
+            Table table = node.getView();
+            tables.put(node.getResolveTableName(), table);
+            return null;
+        }
+    }
+
     private static class TableCollectorWithAlias extends TableCollector {
         public TableCollectorWithAlias(Map<TableName, Table> dbs) {
             super(dbs);

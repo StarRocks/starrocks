@@ -489,8 +489,12 @@ public class ConnectProcessor {
                 // ShowResultSet is null means this is not ShowStmt, use remote packet(executor.getOutputPacket())
                 // or use local packet (getResultPacket())
                 if (resultSet == null) {
-                    packet = executor.getOutputPacket();
-                } else {
+                    if (executor.sendResultToChannel(ctx.getMysqlChannel())) {  // query statement result
+                        packet = getResultPacket();
+                    } else { // for lower version, in consideration of compatibility
+                        packet = executor.getOutputPacket();
+                    }
+                } else { // show statement result
                     executor.sendShowResult(resultSet);
                     packet = getResultPacket();
                     if (packet == null) {
@@ -635,8 +639,12 @@ public class ConnectProcessor {
         }
         result.setPacket(getResultPacket());
         result.setState(ctx.getState().getStateType().toString());
-        if (executor != null && executor.getProxyResultSet() != null) {
-            result.setResultSet(executor.getProxyResultSet().tothrift());
+        if (executor != null) {
+            if (executor.getProxyResultSet() != null) {  // show statement
+                result.setResultSet(executor.getProxyResultSet().tothrift());
+            } else if (executor.getProxyResultBuffer() != null) {  // query statement
+                result.setChannelBufferList(executor.getProxyResultBuffer());
+            }
         }
         return result;
     }

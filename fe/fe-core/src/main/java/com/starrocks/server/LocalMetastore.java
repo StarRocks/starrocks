@@ -2412,7 +2412,7 @@ public class LocalMetastore implements ConnectorMetadata {
             unlock();
         }
 
-        LOG.info("successfully create table{} with id {}", tableName, tableId);
+        LOG.info("successfully create table {} with id {}", tableName, tableId);
     }
 
     private void createHiveTable(Database db, CreateTableStmt stmt) throws DdlException {
@@ -3209,6 +3209,10 @@ public class LocalMetastore implements ConnectorMetadata {
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
+        if (distributionInfo.getBucketNum() == 0) {
+            int numBucket = calBucketNumAccordingToBackends();
+            distributionInfo.setBucketNum(numBucket);
+        }
         // create refresh scheme
         MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();

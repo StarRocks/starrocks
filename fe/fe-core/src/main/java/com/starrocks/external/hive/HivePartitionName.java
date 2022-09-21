@@ -7,13 +7,13 @@ import com.starrocks.catalog.Table.TableType;
 import java.util.List;
 import java.util.Objects;
 
-public class HivePartitionKey {
+public class HivePartitionName {
     private final String databaseName;
     private final String tableName;
     private final List<String> partitionValues;
     private final TableType tableType;
 
-    public HivePartitionKey(String databaseName, String tableName, TableType tableType, List<String> partitionValues) {
+    public HivePartitionName(String databaseName, String tableName, TableType tableType, List<String> partitionValues) {
         this.databaseName = databaseName;
         this.tableName = tableName;
         this.partitionValues = partitionValues;
@@ -49,7 +49,7 @@ public class HivePartitionKey {
             return false;
         }
 
-        HivePartitionKey other = (HivePartitionKey) o;
+        HivePartitionName other = (HivePartitionName) o;
         return Objects.equals(databaseName, other.databaseName) &&
                 Objects.equals(tableName, other.tableName) &&
                 Objects.equals(partitionValues, other.partitionValues) &&

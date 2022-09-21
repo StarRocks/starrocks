@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
@@ -14,6 +15,7 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DeleteStmt;
@@ -39,6 +41,7 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
@@ -142,6 +145,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowFrontendsStmt(ShowFrontendsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowTransactionStmt(ShowTransactionStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -289,6 +296,10 @@ public abstract class AstVisitor<R, C> {
     // ------------------------------------------- Routine Statement ---------------------------------------------------
 
     public R visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterRoutineLoadStatement(AlterRoutineLoadStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -557,6 +568,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCancelBackupStmt(CancelBackupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitCreateRepositoryStmt(CreateRepositoryStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 

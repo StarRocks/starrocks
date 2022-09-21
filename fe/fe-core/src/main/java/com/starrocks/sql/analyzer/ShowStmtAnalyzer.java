@@ -14,6 +14,7 @@ import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -228,6 +229,12 @@ public class ShowStmtAnalyzer {
             if (Strings.isNullOrEmpty(node.getTableName().getCatalog())) {
                 node.getTableName().setCatalog(context.getCurrentCatalog());
             }
+            return null;
+        }
+
+        @Override
+        public Void visitShowTransactionStmt(ShowTransactionStmt statement, ConnectContext context) {
+            ShowTransactionStmtAnalyzer.analyze(statement, context);
             return null;
         }
 

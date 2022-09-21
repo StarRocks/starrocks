@@ -284,6 +284,6 @@ Additionally, each task can be further split into one or more instances, which a
   
   You can use the following formula to calculate the number of instances in an individual task:
 
-  **Number of instances in an individual task = min(Amount of data to be loaded by an individual task/****`min_bytes_per_broker_scanner`****,** **`max_broker_concurrency`****,** **`load_parallel_instance_num`** **x Number of BEs)**
+  **Number of instances in an individual task = min(Amount of data to be loaded by an individual task/`min_bytes_per_broker_scanner`,`max_broker_concurrency`,`load_parallel_instance_num` x Number of BEs)**
 
 In most cases, only one `data_desc` is declared for each load job, each load job is split into only one task, and the task is split into the same number of instances as the number of BEs.

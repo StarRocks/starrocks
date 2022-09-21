@@ -3,6 +3,7 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
@@ -62,7 +63,7 @@ public class HiveMetadataTest {
         try {
             Assert.assertNull(metadata.listTableNames(db2));
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof DdlException);
+            Assert.assertTrue(e instanceof UncheckedExecutionException);
         }
     }
 
