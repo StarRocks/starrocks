@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "common/object_pool.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "fs/fs_hdfs.h"
@@ -261,6 +262,7 @@ protected:
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanStats _stats;
+    ObjectPool _pool;
     // predicate collections.
     std::vector<ExprContext*> _conjunct_ctxs;
     // columns we want to fetch.
