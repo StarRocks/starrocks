@@ -267,9 +267,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
                 Catalog.getCurrentCatalog().getEditLog().logModifyTableColumn(log);
             }
-
-            ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
-            Catalog.getCurrentCatalog().getEditLog().logModifyTableColumn(log);
         } finally {
             db.writeUnlock();
         }

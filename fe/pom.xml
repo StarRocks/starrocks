@@ -47,7 +47,7 @@ under the License.
         <spark.version>2.4.6</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.10.1</parquet.version>
-        <hadoop.version>3.3.0</hadoop.version>
+        <hadoop.version>3.3.4</hadoop.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>0.10.0</hudi.version>
         <sonar.organization>starrocks</sonar.organization>

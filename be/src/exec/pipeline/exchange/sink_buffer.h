@@ -159,6 +159,11 @@ private:
     int64_t _pending_timestamp = -1;
     mutable std::atomic<int64_t> _last_full_timestamp = -1;
     mutable std::atomic<int64_t> _full_time = 0;
+
+    // These two fields are used to calculate the overthroughput
+    // Non-atomic type is enough because the concurrency inconsistency is acceptable
+    int64_t _first_send_time = -1;
+    int64_t _last_receive_time = -1;
 }; // namespace starrocks::pipeline
 
 } // namespace starrocks::pipeline
