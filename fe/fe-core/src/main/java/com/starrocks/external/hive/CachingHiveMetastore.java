@@ -62,6 +62,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
                                    long refreshIntervalSec, long maxSize, boolean enableListNamesCache) {
         this.metastore = metastore;
 
+        // The list names interface of hive metastore latency is very low, so we default to pull the latest every time.
         if (enableListNamesCache) {
             databaseNamesCache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                     .build(asyncReloading(CacheLoader.from(this::loadAllDatabaseNames), executor));
@@ -115,7 +116,6 @@ public class CachingHiveMetastore implements IHiveMetastore {
                     }
                 }, executor));
     }
-
 
     private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec, long maximumSize) {
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
