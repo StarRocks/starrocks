@@ -40,6 +40,7 @@ public:
     virtual Status visit(vectorized::Decimal128Column* column);
     virtual Status visit(vectorized::HyperLogLogColumn* column);
     virtual Status visit(vectorized::BitmapColumn* column);
+    virtual Status visit(vectorized::Ipv4Column * column);
     virtual Status visit(vectorized::PercentileColumn* column);
     virtual Status visit(vectorized::JsonColumn* column);
     virtual Status visit(vectorized::FixedLengthColumn<int96_t>* column);
@@ -65,6 +66,7 @@ public:
     virtual Status visit(vectorized::FixedLengthColumnBase<int96_t>* column);
     virtual Status visit(vectorized::FixedLengthColumnBase<uint24_t>* column);
     virtual Status visit(vectorized::FixedLengthColumnBase<decimal12_t>* column);
+    virtual Status visit(vectorized::FixedLengthColumnBase<vectorized::Ipv4Value>* column);
     virtual Status visit(vectorized::ObjectColumn<JsonValue>* column);
 };
 

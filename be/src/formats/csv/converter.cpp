@@ -14,6 +14,7 @@
 #include "formats/csv/nullable_converter.h"
 #include "formats/csv/numeric_converter.h"
 #include "runtime/types.h"
+#include "ipv4_converter.h"
 
 namespace starrocks::vectorized::csv {
 
@@ -44,6 +45,8 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
         return std::make_unique<DateConverter>();
     case TYPE_DATETIME:
         return std::make_unique<DatetimeConverter>();
+    case TYPE_IPV4:
+        return std::make_unique<Ipv4Converter>();
     case TYPE_ARRAY:
         return std::make_unique<ArrayConverter>(get_converter(t.children[0], true));
     case TYPE_DECIMAL32:

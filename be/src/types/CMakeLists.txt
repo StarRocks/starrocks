@@ -8,4 +8,5 @@ add_library(Types STATIC
     date_value.cpp
     hll.cpp
     timestamp_value.cpp
+    ipv4_value.cpp
 )

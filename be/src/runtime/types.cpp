@@ -311,6 +311,7 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_DOUBLE:
     case TYPE_TIME:
     case TYPE_DECIMAL64:
+    case TYPE_IPV4:
         return 8;
 
     case TYPE_DATE:

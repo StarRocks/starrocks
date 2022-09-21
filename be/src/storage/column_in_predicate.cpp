@@ -407,6 +407,11 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
         SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_TIMESTAMP>(strs);
         return new ColumnInPredicate<OLAP_FIELD_TYPE_TIMESTAMP, SetType>(type_info, id, std::move(values));
     }
+    case OLAP_FIELD_TYPE_IPV4: {
+        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_IPV4>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_IPV4>(strs);
+        return new ColumnInPredicate<OLAP_FIELD_TYPE_IPV4, SetType>(type_info, id, std::move(values));
+    }
     case OLAP_FIELD_TYPE_FLOAT: {
         using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_FLOAT>::CppType, (Args)...>;
         SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_FLOAT>(strs);

@@ -173,6 +173,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
             case TYPE_DOUBLE:
             case TYPE_FLOAT:
             case TYPE_JSON:
+            case TYPE_IPV4:
             case TYPE_FUNCTION:
                 break;
             }
@@ -397,6 +398,14 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
         TimestampValue value{};
         if (value.from_string(data, len))
             append_value_to_column<TYPE_DATETIME>(data_column, value);
+        else
+            parse_success = false;
+        break;
+    }
+    case TYPE_IPV4: {
+        Ipv4Value value{};
+        if (value.from_string(data, len))
+            append_value_to_column<TYPE_IPV4>(data_column, value);
         else
             parse_success = false;
         break;

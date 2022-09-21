@@ -208,6 +208,12 @@ struct RunTimeTypeTraits<TYPE_DATETIME> {
 };
 
 template <>
+struct RunTimeTypeTraits<TYPE_IPV4> {
+    using CppType = Ipv4Value;
+    using ColumnType = Ipv4Column;
+};
+
+template <>
 struct RunTimeTypeTraits<TYPE_TIME> {
     using CppType = double;
     using ColumnType = DoubleColumn;
@@ -310,6 +316,11 @@ struct ColumnTraits<TimestampValue> {
     using ColumnType = TimestampColumn;
 };
 
+template <>
+struct ColumnTraits<Ipv4Value> {
+    using ColumnType = Ipv4Column;
+};
+
 // Length of fixed-length type, 0 for dynamic-length type
 template <PrimitiveType ptype, typename = guard::Guard>
 struct RunTimeFixedTypeLength {
@@ -367,6 +378,14 @@ struct RunTimeTypeLimits<TYPE_DATETIME> {
 
     static value_type min_value() { return TimestampValue::MIN_TIMESTAMP_VALUE; }
     static value_type max_value() { return TimestampValue::MAX_TIMESTAMP_VALUE; }
+};
+
+template <>
+struct RunTimeTypeLimits<TYPE_IPV4> {
+    using value_type = RunTimeCppType<TYPE_IPV4>;
+
+    static value_type min_value() { return Ipv4Value::MIN_IPV4_VALUE; }
+    static value_type max_value() { return Ipv4Value::MAX_IPV4_VALUE; }
 };
 
 template <>

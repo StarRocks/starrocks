@@ -11,6 +11,7 @@ add_library(Formats STATIC
         csv/converter.cpp
         csv/csv_reader.cpp
         csv/date_converter.cpp
+        csv/ipv4_converter.cpp
         csv/datetime_converter.cpp
         csv/decimalv2_converter.cpp
         csv/decimalv3_converter.cpp

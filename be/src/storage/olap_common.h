@@ -154,7 +154,7 @@ enum FieldType {
 
     // Added by StarRocks
     // Reserved some field for commutiy version
-
+    OLAP_FIELD_TYPE_IPV4 = 30,
     // decimal v3 type
     OLAP_FIELD_TYPE_DECIMAL32 = 47,
     OLAP_FIELD_TYPE_DECIMAL64 = 48,
@@ -241,6 +241,8 @@ inline const char* field_type_to_string(FieldType type) {
         return "JSON";
     case OLAP_FIELD_TYPE_MAX_VALUE:
         return "MAX VALUE";
+    case OLAP_FIELD_TYPE_IPV4:
+        return "IPV4";
     }
     return "";
 }

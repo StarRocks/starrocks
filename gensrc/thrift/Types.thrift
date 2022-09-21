@@ -84,6 +84,7 @@ enum TPrimitiveType {
   DECIMAL64,
   DECIMAL128,
   JSON,
+  IPV4,
   FUNCTION
 }
 

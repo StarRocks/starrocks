@@ -62,7 +62,7 @@ public abstract class Type implements Cloneable {
     private static final List<PrimitiveType> SKIP_COMPARE_TYPES = Arrays.asList(
             PrimitiveType.INVALID_TYPE, PrimitiveType.NULL_TYPE, PrimitiveType.DECIMALV2,
             PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128,
-            PrimitiveType.TIME, PrimitiveType.JSON, PrimitiveType.FUNCTION);
+            PrimitiveType.TIME, PrimitiveType.JSON, PrimitiveType.IPV4, PrimitiveType.FUNCTION);
 
     // Static constant types for scalar types that don't require additional information.
     public static final ScalarType INVALID = new ScalarType(PrimitiveType.INVALID_TYPE);
@@ -110,6 +110,7 @@ public abstract class Type implements Cloneable {
     public static final ScalarType BITMAP = new ScalarType(PrimitiveType.BITMAP);
     public static final ScalarType PERCENTILE = new ScalarType(PrimitiveType.PERCENTILE);
     public static final ScalarType JSON = new ScalarType(PrimitiveType.JSON);
+    public static final ScalarType IPV4 = new ScalarType(PrimitiveType.IPV4);
     public static final ScalarType UNKNOWN_TYPE = ScalarType.createUnknownType();
     public static final ScalarType FUNCTION = new ScalarType(PrimitiveType.FUNCTION);
 
@@ -160,6 +161,7 @@ public abstract class Type implements Cloneable {
                     .add(DECIMAL64)
                     .add(DECIMAL128)
                     .add(JSON)
+                    .add(IPV4)
                     .add(FUNCTION)
                     .add(UNKNOWN_TYPE)
                     .build();
@@ -650,6 +652,8 @@ public abstract class Type implements Cloneable {
                 return Type.DECIMAL128;
             case JSON:
                 return Type.JSON;
+            case IPV4:
+                return Type.IPV4;
             case FUNCTION:
                 return Type.FUNCTION;
             default:

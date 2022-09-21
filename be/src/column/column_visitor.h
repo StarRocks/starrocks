@@ -34,6 +34,7 @@ public:
     virtual Status visit(const vectorized::FloatColumn& column);
     virtual Status visit(const vectorized::DateColumn& column);
     virtual Status visit(const vectorized::TimestampColumn& column);
+    virtual Status visit(const vectorized::Ipv4Column& column);
     virtual Status visit(const vectorized::DecimalColumn& column);
     virtual Status visit(const vectorized::Decimal32Column& column);
     virtual Status visit(const vectorized::Decimal64Column& column);
@@ -62,6 +63,7 @@ public:
     virtual Status visit(const vectorized::FixedLengthColumnBase<vectorized::DateValue>& column);
     virtual Status visit(const vectorized::FixedLengthColumnBase<DecimalV2Value>& column);
     virtual Status visit(const vectorized::FixedLengthColumnBase<vectorized::TimestampValue>& column);
+    virtual Status visit(const vectorized::FixedLengthColumnBase<vectorized::Ipv4Value>& column);
     virtual Status visit(const vectorized::FixedLengthColumnBase<int96_t>& column);
     virtual Status visit(const vectorized::FixedLengthColumnBase<uint24_t>& column);
     virtual Status visit(const vectorized::FixedLengthColumnBase<decimal12_t>& column);

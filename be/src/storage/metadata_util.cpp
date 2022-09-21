@@ -126,6 +126,8 @@ static FieldType t_primitive_type_to_field_type(TPrimitiveType::type primitive_t
         return OLAP_FIELD_TYPE_PERCENTILE;
     case TPrimitiveType::JSON:
         return OLAP_FIELD_TYPE_JSON;
+    case TPrimitiveType::IPV4:
+        return OLAP_FIELD_TYPE_IPV4;
     case TPrimitiveType::FUNCTION:
         return OLAP_FIELD_TYPE_UNKNOWN;
     }

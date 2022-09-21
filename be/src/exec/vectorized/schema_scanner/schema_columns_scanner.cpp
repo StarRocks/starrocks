@@ -160,6 +160,8 @@ std::string SchemaColumnsScanner::type_to_string(TColumnDesc& desc) {
         return "date";
     case TPrimitiveType::DATETIME:
         return "datetime";
+    case TPrimitiveType::IPV4:
+        return "ipv4";
     case TPrimitiveType::DECIMALV2:
     case TPrimitiveType::DECIMAL: {
         std::stringstream stream;

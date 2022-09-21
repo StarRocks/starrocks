@@ -11,6 +11,7 @@
 #include "runtime/decimalv2_value.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
+#include "types/ipv4_value.h"
 #include "util/raw_container.h"
 #include "util/value_generator.h"
 
@@ -30,6 +31,11 @@ template <typename T>
 constexpr bool IsTimestamp = false;
 template <>
 inline constexpr bool IsTimestamp<TimestampValue> = true;
+
+template <typename T>
+constexpr bool IsIpv4 = false;
+template <>
+inline constexpr bool IsIpv4<Ipv4Value> = true;
 
 template <typename T>
 class FixedLengthColumnBase : public ColumnFactory<Column, FixedLengthColumnBase<T>> {

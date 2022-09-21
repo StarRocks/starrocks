@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <vector>
+#include "types/ipv4_value.h"
 
 #pragma once
 
@@ -66,6 +67,7 @@ using FloatColumn = FixedLengthColumn<float>;
 using DateColumn = FixedLengthColumn<DateValue>;
 using DecimalColumn = FixedLengthColumn<DecimalV2Value>;
 using TimestampColumn = FixedLengthColumn<TimestampValue>;
+using Ipv4Column = FixedLengthColumn<Ipv4Value>;
 using Decimal32Column = DecimalV3Column<int32_t>;
 using Decimal64Column = DecimalV3Column<int64_t>;
 using Decimal128Column = DecimalV3Column<int128_t>;

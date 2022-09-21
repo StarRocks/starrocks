@@ -1314,6 +1314,7 @@ literalExpression
     | booleanValue                                                                        #booleanLiteral
     | number                                                                              #numericLiteral
     | (DATE | DATETIME) string                                                            #dateLiteral
+    | (IPV4) string                                                                       #ipv4Literal
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
     ;
@@ -1588,6 +1589,7 @@ baseType
     | HLL
     | PERCENTILE
     | JSON
+    | IPV4
     ;
 
 decimalType
@@ -1644,7 +1646,7 @@ nonReserved
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
     | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
-    | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC
+    | DATA | DATE | DATETIME | IPV4 | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FILE | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS

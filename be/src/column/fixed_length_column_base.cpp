@@ -324,5 +324,6 @@ template class FixedLengthColumnBase<decimal12_t>;
 template class FixedLengthColumnBase<DateValue>;
 template class FixedLengthColumnBase<DecimalV2Value>;
 template class FixedLengthColumnBase<TimestampValue>;
+template class FixedLengthColumnBase<Ipv4Value>;
 
 } // namespace starrocks::vectorized

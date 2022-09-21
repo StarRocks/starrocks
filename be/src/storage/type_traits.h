@@ -150,6 +150,11 @@ struct CppTypeTraits<OLAP_FIELD_TYPE_TIMESTAMP> {
     using UnsignedCppType = uint64_t;
 };
 template <>
+struct CppTypeTraits<OLAP_FIELD_TYPE_IPV4> {
+    using CppType = int64_t;
+    using UnsignedCppType = uint64_t;
+};
+template <>
 struct CppTypeTraits<OLAP_FIELD_TYPE_CHAR> {
     using CppType = Slice;
 };

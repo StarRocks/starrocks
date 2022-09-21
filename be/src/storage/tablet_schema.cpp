@@ -124,6 +124,8 @@ std::string TabletColumn::get_string_by_field_type(FieldType type) {
         return "DATETIME";
     case OLAP_FIELD_TYPE_TIMESTAMP:
         return "TIMESTAMP";
+    case OLAP_FIELD_TYPE_IPV4:
+        return "IPV4";
     case OLAP_FIELD_TYPE_DECIMAL:
         return "DECIMAL";
     case OLAP_FIELD_TYPE_DECIMAL_V2:
@@ -221,6 +223,7 @@ uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_
     case OLAP_FIELD_TYPE_DATETIME:
     case OLAP_FIELD_TYPE_TIMESTAMP:
     case OLAP_FIELD_TYPE_DECIMAL64:
+    case OLAP_FIELD_TYPE_IPV4:
         return 8;
     case OLAP_FIELD_TYPE_DECIMAL:
         return 12;

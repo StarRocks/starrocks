@@ -149,6 +149,12 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
         DCHECK(st.ok());
         return new Predicate<OLAP_FIELD_TYPE_TIMESTAMP>(type_info, id, value);
     }
+    case OLAP_FIELD_TYPE_IPV4: {
+        int64_t value = 0;
+        auto st = type_info->from_string(&value, operand.to_string());
+        DCHECK(st.ok());
+        return new Predicate<OLAP_FIELD_TYPE_IPV4>(type_info, id, value);
+    }
     case OLAP_FIELD_TYPE_CHAR:
         return new BinaryPredicate<OLAP_FIELD_TYPE_CHAR>(type_info, id, operand);
     case OLAP_FIELD_TYPE_VARCHAR:

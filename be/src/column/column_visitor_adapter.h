@@ -53,6 +53,8 @@ public:
 
     Status visit(const vectorized::TimestampColumn& column) override { return _impl->do_visit(column); }
 
+    Status visit(const vectorized::Ipv4Column & column) override { return _impl->do_visit(column); }
+
     Status visit(const vectorized::DecimalColumn& column) override { return _impl->do_visit(column); }
 
     Status visit(const vectorized::Decimal32Column& column) override { return _impl->do_visit(column); }
@@ -121,6 +123,8 @@ public:
     Status visit(vectorized::DateColumn* column) override { return _impl->do_visit(column); }
 
     Status visit(vectorized::TimestampColumn* column) override { return _impl->do_visit(column); }
+
+    Status visit(vectorized::Ipv4Column* column) override { return _impl->do_visit(column); }
 
     Status visit(vectorized::DecimalColumn* column) override { return _impl->do_visit(column); }
 

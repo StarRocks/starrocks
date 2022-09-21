@@ -32,6 +32,7 @@ namespace starrocks {
     M(TYPE_DATETIME)                 \
     M(TYPE_TIME)                     \
     M(TYPE_JSON)                     \
+    M(TYPE_IPV4)                     \
     M(TYPE_BOOLEAN)
 
 #define APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(M) \
@@ -67,7 +68,8 @@ namespace starrocks {
     M(DECIMAL64)                        \
     M(DECIMAL128)                       \
     M(FUNCTION)                         \
-    M(JSON)
+    M(JSON)                             \
+    M(IPV4)
 
 #define _TYPE_DISPATCH_CASE(type) \
     case type:                    \

@@ -9,6 +9,7 @@
 #include "storage/uint24.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
+#include "types/ipv4_value.h"
 #include "util/int96.h"
 #include "util/slice.h"
 
@@ -61,6 +62,7 @@ public:
     const BitmapValue* get_bitmap() const { return get<BitmapValue*>(); }
     const PercentileValue* get_percentile() const { return get<PercentileValue*>(); }
     const JsonValue* get_json() const { return get<JsonValue*>(); }
+    const Ipv4Value* get_ipv4() const { return get<Ipv4Value*>(); }
 
     void set_int8(int8_t v) { set<decltype(v)>(v); }
     void set_uint8(uint8_t v) { set<decltype(v)>(v); }
@@ -85,6 +87,7 @@ public:
     void set_bitmap(BitmapValue* v) { set<decltype(v)>(v); }
     void set_percentile(PercentileValue* v) { set<decltype(v)>(v); }
     void set_json(JsonValue* v) { set<decltype(v)>(v); }
+    void set_ipv4(Ipv4Value* v) { set<decltype(v)>(v); }
 
     template <typename T>
     const T& get() const {
@@ -93,6 +96,9 @@ public:
             return reinterpret_cast<const T&>(std::get<int32_t>(_value));
         } else if constexpr (std::is_same_v<TimestampValue, T>) {
             static_assert(sizeof(TimestampValue) == sizeof(int64_t));
+            return reinterpret_cast<const T&>(std::get<int64_t>(_value));
+        } else if constexpr (std::is_same_v<Ipv4Value, T>) {
+            static_assert(sizeof(Ipv4Value) == sizeof(int64_t));
             return reinterpret_cast<const T&>(std::get<int64_t>(_value));
         } else if constexpr (std::is_same_v<bool, T>) {
             return reinterpret_cast<const T&>(std::get<int8_t>(_value));
@@ -109,7 +115,9 @@ public:
             _value = value.julian();
         } else if constexpr (std::is_same_v<TimestampValue, T>) {
             _value = value.timestamp();
-        } else if constexpr (std::is_same_v<bool, T>) {
+        } else if constexpr (std::is_same_v<Ipv4Value, T>) {
+            _value = value.ip();
+        }else if constexpr (std::is_same_v<bool, T>) {
             _value = (int8_t)value;
         } else if constexpr (std::is_unsigned_v<T>) {
             _value = (std::make_signed_t<T>)value;
@@ -130,7 +138,7 @@ public:
 private:
     using Variant = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t,
                                  int64_t, uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float,
-                                 double, DatumArray, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*>;
+                                 double, DatumArray, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*, Ipv4Value*>;
     Variant _value;
 };
 

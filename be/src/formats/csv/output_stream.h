@@ -7,6 +7,7 @@
 #include "runtime/decimalv2_value.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
+#include "types/ipv4_value.h"
 
 namespace starrocks::vectorized::csv {
 
@@ -61,6 +62,15 @@ public:
         date.to_date(&y, &m, &d);
         date::to_string(y, m, d, _pos);
         _pos += 10;
+        return Status::OK();
+    }
+
+    Status write(Ipv4Value ip) {
+        RETURN_IF_ERROR(_reserve(Ipv4Value::max_string_length()));
+//        todo length real
+//        int len = ip.to_string();
+//        DCHECK_GT(len, 0);
+        _pos += 15;
         return Status::OK();
     }
 

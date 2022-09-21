@@ -499,7 +499,7 @@ struct ColumnRangeBuilder {
     template <PrimitiveType ptype>
     std::nullptr_t operator()(OlapScanConjunctsManager* cm, const SlotDescriptor* slot,
                               std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
-        if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype>) {
+        if constexpr (ptype == TYPE_TIME || ptype == TYPE_IPV4 || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype>) {
             return nullptr;
         } else {
             // Treat tinyint and boolean as int

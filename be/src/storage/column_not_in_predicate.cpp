@@ -313,6 +313,8 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
         return new ColumnNotInPredicate<OLAP_FIELD_TYPE_DATETIME>(type_info, id, strs);
     case OLAP_FIELD_TYPE_TIMESTAMP:
         return new ColumnNotInPredicate<OLAP_FIELD_TYPE_TIMESTAMP>(type_info, id, strs);
+    case OLAP_FIELD_TYPE_IPV4:
+        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_IPV4>(type_info, id, strs);
     case OLAP_FIELD_TYPE_FLOAT:
         return new ColumnNotInPredicate<OLAP_FIELD_TYPE_FLOAT>(type_info, id, strs);
     case OLAP_FIELD_TYPE_DOUBLE:

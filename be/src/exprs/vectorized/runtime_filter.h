@@ -275,6 +275,9 @@ public:
         } else if constexpr (IsTimestamp<CppType>) {
             _min = TimestampValue::MAX_TIMESTAMP_VALUE;
             _max = TimestampValue::MIN_TIMESTAMP_VALUE;
+        } else if constexpr (IsIpv4<CppType>) {
+            _min = Ipv4Value::MIN_IPV4_VALUE;
+            _max = Ipv4Value::MAX_IPV4_VALUE;
         } else if constexpr (IsDecimal<CppType>) {
             _min = DecimalV2Value::get_max_decimal();
             _max = DecimalV2Value::get_min_decimal();

@@ -105,6 +105,7 @@ public:
             case OLAP_FIELD_TYPE_PERCENTILE:
             case OLAP_FIELD_TYPE_JSON:
             case OLAP_FIELD_TYPE_MAX_VALUE:
+            case OLAP_FIELD_TYPE_IPV4:
                 return type;
                 // no default by intention.
             }
@@ -148,6 +149,7 @@ public:
             case OLAP_FIELD_TYPE_JSON:
             case OLAP_FIELD_TYPE_MAX_VALUE:
             case OLAP_FIELD_TYPE_OBJECT:
+            case OLAP_FIELD_TYPE_IPV4:
                 return type;
                 // no default by intention.
             }
