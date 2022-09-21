@@ -8,7 +8,6 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
@@ -116,7 +115,7 @@ public class FrontendOptionsTest {
         Assert.assertTrue(useFqdn);
         useFqdn = false;
         FrontendOptions.init(new String[] {});
-        Assert.assertTrue(useFqdn);
+        Assert.assertTrue(!useFqdn);
     }
 
 
@@ -185,94 +184,6 @@ public class FrontendOptionsTest {
         dir = new File(metaPath);
         deleteDir(dir);
     }
-
-    private void testInitAddrUseFqdnCommonMock() {
-        new MockUp<System>() {
-            @Mock
-            public void exit(int status) throws IllegalAccessException {
-                throw new IllegalAccessException();
-            }
-        };
-        new MockUp<NetUtils>() {
-            @Mock
-            public List<InetAddress> getHosts() {
-                List<InetAddress> hosts = new ArrayList<>();
-                hosts.add(addr);
-                return hosts;
-            }
-        };
-    }
-
-    @Test(expected = IllegalAccessException.class)
-    public void testInitAddrUseFqdnNullAddr() throws UnknownHostException {
-        testInitAddrUseFqdnCommonMock();
-        new MockUp<InetAddress>() {
-            @Mock
-            public InetAddress getLocalHost() throws UnknownHostException {
-                return null;
-            }
-        };
-        List<InetAddress> hosts = NetUtils.getHosts();
-        // InetAddress uncheckedLocalAddr = InetAddress.getLocalHost(); uncheckedLocalAddr will be null,
-        // so this case will trigger the IllegalAccessException
-        // which has mocked in testInitAddrUseFqdnCommonMock [System.exit()]
-        FrontendOptions.initAddrUseFqdn(hosts);
-    }
-
-    @Test(expected = IllegalAccessException.class)
-    public void testInitAddrUseFqdnNullCanonicalHostName() throws UnknownHostException {
-        testInitAddrUseFqdnCommonMock();
-        new MockUp<InetAddress>() {
-            @Mock
-            public InetAddress getLocalHost() throws UnknownHostException {
-                return addr;
-            }
-            @Mock
-            public String getHostAddress() {
-                return "127.0.0.10";
-            }
-            @Mock
-            public String getCanonicalHostName() {
-                return null;
-            }
-        };
-        List<InetAddress> hosts = NetUtils.getHosts();
-        // String uncheckedFqdn = uncheckedLocalAddr.getCanonicalHostName(); uncheckedFqdn will be null,
-        // so this case will trigger the IllegalAccessException 
-        // which has mocked in testInitAddrUseFqdnCommonMock [System.exit()]
-        FrontendOptions.initAddrUseFqdn(hosts);
-    }
-
-    @Test
-    public void testInitAddrUseFqdn() throws UnknownHostException, NoSuchFieldException, SecurityException,
-            IllegalArgumentException, IllegalAccessException {
-        testInitAddrUseFqdnCommonMock();
-        new MockUp<InetAddress>() {
-            @Mock
-            public InetAddress getLocalHost() throws UnknownHostException {
-                return addr;
-            }
-            @Mock
-            public String getHostAddress() {
-                return "127.0.0.10";
-            }
-            @Mock
-            public String getCanonicalHostName() {
-                return "sandbox";
-            }
-            @Mock
-            public InetAddress getByName(String host) throws UnknownHostException {
-                return addr;
-            }
-        };
-        List<InetAddress> hosts = NetUtils.getHosts();
-        FrontendOptions.initAddrUseFqdn(hosts);
-        Field field = FrontendOptions.class.getDeclaredField("localAddr");
-        field.setAccessible(true);
-        InetAddress addr1 = (InetAddress) field.get(FrontendOptions.class);
-        Assert.assertTrue(addr1.equals(addr));
-    }
-
 
     @Test
     public void testSaveStartType() throws FileNotFoundException, IOException {
