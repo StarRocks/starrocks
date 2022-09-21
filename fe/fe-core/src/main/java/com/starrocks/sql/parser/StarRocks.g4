@@ -81,6 +81,7 @@ statement
 
     //Routine Statement
     | createRoutineLoadStatement
+    | alterRoutineLoadStatement
     | stopRoutineLoadStatement
     | resumeRoutineLoadStatement
     | pauseRoutineLoadStatement
@@ -719,6 +720,17 @@ createRoutineLoadStatement
         dataSourceProperties?
     ;
 
+alterRoutineLoadStatement
+    : ALTER ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+        (loadProperties (',' loadProperties)*)?
+        jobProperties?
+        dataSource?
+    ;
+
+dataSource
+    : FROM source=identifier dataSourceProperties
+    ;
+
 loadProperties
     : (colSeparatorProperty)
     | (rowDelimiterProperty)
@@ -737,7 +749,7 @@ rowDelimiterProperty
 
 columnProperties
     : '('
-        (qualifiedName | assignmentList) (',' (qualifiedName | assignmentList))*
+        (qualifiedName | assignment) (',' (qualifiedName | assignment))*
       ')'
     ;
 
