@@ -87,6 +87,7 @@ http://fe_host:http_port/api/{db}/{table}/_stream_load
 
 **jsonpaths:**
 
+参数值应为 JSON 格式。
 导入 json 方式分为：简单模式和精准模式。
 简单模式：没有设置 jsonpaths 参数即为简单模式，这种模式下要求 json 数据是对象类型，例如：
 {"k1": 1, "k2": 2, "k3": "hello"}，其中 k1，k2，k3 是列名字。
