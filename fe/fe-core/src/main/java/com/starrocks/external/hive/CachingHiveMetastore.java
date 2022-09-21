@@ -46,6 +46,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
     protected LoadingCache<String, Database> databaseCache;
     protected LoadingCache<HiveTableName, Table> tableCache;
 
+    // eg: "year=2022/month=10" -> Partition
     protected LoadingCache<NewHivePartitionName, Partition> partitionCache;
     protected LoadingCache<HiveTableName, HivePartitionStatistics> tableStatsCache;
     protected LoadingCache<NewHivePartitionName, HivePartitionStatistics> partitionStatsCache;

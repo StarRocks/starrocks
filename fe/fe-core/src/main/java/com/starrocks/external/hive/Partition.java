@@ -9,7 +9,7 @@ import java.util.Objects;
 
 /**
  * Partition stores some necessary information used in the planner stage
- * such as in the cbo and build scan range stage. The purpose of caching partition instance
+ * such as in the cbo and building scan range stage. The purpose of caching partition instance
  * is to reduce repeated calls to the hive metastore rpc interface at each stage.
  */
 public class Partition {
