@@ -590,6 +590,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 defaultValueDef = ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
             } else if (defaultDescContext.CURRENT_TIMESTAMP() != null) {
                 defaultValueDef = ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
+            } else if (defaultDescContext.qualifiedName() != null) {
+                String functionName = defaultDescContext.qualifiedName().getText().toLowerCase();
+                defaultValueDef = new ColumnDef.DefaultValueDef(true,
+                        new FunctionCallExpr(functionName, new ArrayList<>()));
             }
         }
         String comment = context.comment() == null ? "" :
@@ -3962,6 +3966,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCast(StarRocksParser.CastContext context) {
+        return new CastExpr(new TypeDef(getType(context.type())), (Expr) visit(context.expression()));
+    }
+
+    @Override
+    public ParseNode visitConvert(StarRocksParser.ConvertContext context) {
         return new CastExpr(new TypeDef(getType(context.type())), (Expr) visit(context.expression()));
     }
 

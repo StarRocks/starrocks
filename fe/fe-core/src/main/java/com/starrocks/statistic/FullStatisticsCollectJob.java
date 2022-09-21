@@ -110,7 +110,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("maxFunction", "''");
             context.put("minFunction", "''");
         } else {
-            context.put("countDistinctFunction", "IFNULL(hll_union(hll_hash(`" + columnNames + "`)), hll_empty())");
+            context.put("countDistinctFunction", "IFNULL(hll_raw(`" + columnNames + "`), hll_empty())");
             context.put("countNullFunction", "COUNT(1) - COUNT(`" + columnNames + "`)");
             context.put("maxFunction", "IFNULL(MAX(`" + columnNames + "`), '')");
             context.put("minFunction", "IFNULL(MIN(`" + columnNames + "`), '')");

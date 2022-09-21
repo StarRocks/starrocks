@@ -8,6 +8,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.external.Utils;
 import com.starrocks.external.hive.text.TextFileFormatDesc;
 import mockit.Expectations;
 import mockit.Mock;

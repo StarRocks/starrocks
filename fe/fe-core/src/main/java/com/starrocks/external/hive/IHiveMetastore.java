@@ -14,11 +14,11 @@ public interface IHiveMetastore {
 
     List<String> getAllTableNames(String dbName);
 
-    List<String> getPartitionKeys(String dbName, String tableName);
-
     Database getDb(String dbName);
 
     Table getTable(String dbName, String tableName);
+
+    List<String> getPartitionKeys(String dbName, String tableName);
 
     Partition getPartition(String dbName, String tblName, List<String> partitionValues);
 
