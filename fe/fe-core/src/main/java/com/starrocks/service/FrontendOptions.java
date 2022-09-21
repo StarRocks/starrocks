@@ -158,7 +158,7 @@ public class FrontendOptions {
             System.exit(-1);
         }
 
-        if (fqdnString == null) {
+        if (null == fqdnString) {
             LOG.error("Got a null when try to read FQDN");
             System.exit(-1);
         }
@@ -187,6 +187,7 @@ public class FrontendOptions {
         
         // Check the InetAddress obtained via FQDN 
         boolean hasInetAddr = false;
+        LOG.debug("fqdnString is {}", fqdnString);
         for (InetAddress addr : hosts) {
             LOG.debug("Try to match addr, ip: {}, FQDN: {}", 
                     addr.getHostAddress(), addr.getCanonicalHostName());
