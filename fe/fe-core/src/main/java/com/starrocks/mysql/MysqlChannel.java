@@ -205,7 +205,6 @@ public class MysqlChannel {
                 throw new IOException("Bad packet sequence.");
             }
             int packetLen = packetLen();
-            LOG.info("packetLen is {}", packetLen);
             if ((result.capacity() - result.position()) < packetLen) {
                 // byte buffer is not enough, new one packet
                 ByteBuffer tmp;

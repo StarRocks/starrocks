@@ -110,19 +110,14 @@ public class MysqlProto {
 
         if (authPacket.isSSLConnRequest()) {
             // change to ssl session
-            try {
-                LOG.info("start to enable ssl connection");
-                if (!context.enableSSL()) {
-                    LOG.warn("enable ssl connection failed");
-                    ErrorReport.report(ErrorCode.ERR_CHANGE_TO_SSL_CONNECTION_FAILED);
-                    sendResponsePacket(context);
-                    return false;
-                } else {
-                    LOG.info("enable ssl connection successfully");
-                }
-            } catch (IOException e) {
-                LOG.warn("enable ssl connection failed", e);
-                throw e;
+            LOG.info("start to enable ssl connection");
+            if (!context.enableSSL()) {
+                LOG.warn("enable ssl connection failed");
+                ErrorReport.report(ErrorCode.ERR_CHANGE_TO_SSL_CONNECTION_FAILED);
+                sendResponsePacket(context);
+                return false;
+            } else {
+                LOG.info("enable ssl connection successfully");
             }
 
             // read the authenticate package again from client
