@@ -33,9 +33,11 @@ import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -135,29 +137,68 @@ public class FrontendOptions {
     }
 
     @VisibleForTesting
-    static void initAddrUseFqdn(List<InetAddress> hosts) throws UnknownHostException {
+    static void initAddrUseFqdn(List<InetAddress> hosts) {
         useFqdn = true;
-        InetAddress uncheckedLocalAddr = InetAddress.getLocalHost();
-        if (null == uncheckedLocalAddr) {
-            LOG.error("get a null localhost when start fe use fqdn");
+
+        // Try to get FQDN from host
+        Process hostname = null;
+        try {
+            hostname = Runtime.getRuntime().exec("hostname -f");
+        } catch (IOException e) {
+            LOG.error("Got a IOException when try to get FQDN, message:{}", e.getMessage());
             System.exit(-1);
         }
-        String uncheckedFqdn = uncheckedLocalAddr.getCanonicalHostName();
-        if (null == uncheckedFqdn) {
-            LOG.error("get a null canonicalHostName when start fe use fqdn");
+        BufferedReader stdInput = new BufferedReader(new InputStreamReader(hostname.getInputStream()));
+        String fqdnString = null;
+        try {
+            fqdnString = stdInput.readLine();
+        } catch (IOException e) {
+            LOG.error("Got a IOException when try to read FQDN, message:{}", e.getMessage());
             System.exit(-1);
         }
-        String uncheckeddIp = InetAddress.getByName(uncheckedFqdn).getHostAddress();
+
+        if (fqdnString == null) {
+            LOG.error("Got a null when try to read FQDN");
+            System.exit(-1);
+        }
+
+        // Try to parse FQDN to get InetAddress
+        InetAddress uncheckedInetAddress = null;
+        try {
+            uncheckedInetAddress = InetAddress.getByName(fqdnString);
+        } catch (UnknownHostException e) {
+            LOG.error("Got a UnknownHostException when try to parse FQDN, " 
+                    + "FQDN: {}, message: {}", fqdnString, e.getMessage());
+            System.exit(-1);
+        }
+
+        if (null == uncheckedInetAddress) {
+            LOG.error("uncheckedInetAddress is null");
+            System.exit(-1);
+        }
+
+        if (!uncheckedInetAddress.getCanonicalHostName().equals(fqdnString)) {
+            LOG.error("The FQDN of the parsed address [{}] is not the same as " + 
+                    "the FQDN obtained from the host [{}]", 
+                    uncheckedInetAddress.getCanonicalHostName(), fqdnString);
+            System.exit(-1);
+        }
+        
+        // Check the InetAddress obtained via FQDN 
         boolean hasInetAddr = false;
         for (InetAddress addr : hosts) {
-            if (uncheckeddIp.equals(addr.getHostAddress())) {
+            LOG.debug("Try to match addr, ip: {}, FQDN: {}", 
+                    addr.getHostAddress(), addr.getCanonicalHostName());
+            if (addr.getCanonicalHostName().equals(uncheckedInetAddress.getCanonicalHostName())) {
                 hasInetAddr = true;
+                break;
             }
         }
+
         if (hasInetAddr) {
-            localAddr = uncheckedLocalAddr;
+            localAddr = uncheckedInetAddress;
         } else {
-            LOG.error("fail to find right localhost when start fe use fqdn");
+            LOG.error("Fail to find right localhost when start fe use fqdn");
             System.exit(-1);
         }
     }
