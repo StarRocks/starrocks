@@ -4,6 +4,8 @@
 
 #include <encode/streamvbyte.h>
 #include <fmt/format.h>
+#include <lz4/lz4.h>
+#include <lz4/lz4frame.h>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
@@ -86,8 +88,9 @@ uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int enc
     if (encode_level == 0) {
         throw std::runtime_error("string encode level does not work.");
     }
-    uint32_t encode_size = LZ4_compress_default(reinterpret_cast<const uint32_t*>(data), buff + sizeof(uint32_t), size,
-                                                LZ4_compressBound(size));
+    uint32_t encode_size =
+            LZ4_compress_default(reinterpret_cast<const char*>(data), reinterpret_cast<char*>(buff + sizeof(uint32_t)),
+                                 size, LZ4_compressBound(size));
     if (encode_size <= 0) {
         throw std::runtime_error("lz4 compress error.");
     }
@@ -102,7 +105,8 @@ uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int enc
 const uint8_t* decode_string_lz4(const uint8_t* buff, void* target, size_t size) {
     uint32_t encode_size = 0;
     buff = read_little_endian_32(buff, &encode_size);
-    uint32_t encode_size1 = LZ4_decompress_safe(buff, target, encode_size, size);
+    uint32_t encode_size1 = LZ4_decompress_safe(reinterpret_cast<const char*>(buff), reinterpret_cast<char*>(target),
+                                                encode_size, size);
     if (encode_size1 <= 0) {
         throw std::runtime_error("lz4 decompress error.");
     }
@@ -168,7 +172,7 @@ public:
             res += offsets_size;
         }
         if ((encode_level & 2) && bytes.size() >= ENCODE_SIZE_LIMIT) {
-            res += LZ4_compressBound(bytes.size());
+            res += sizeof(uint32_t) + LZ4_compressBound(bytes.size());
         } else {
             res += bytes.size();
         }
@@ -187,7 +191,11 @@ public:
         } else {
             buff = write_little_endian_64(bytes_size, buff);
         }
-        buff = write_raw(bytes.data(), bytes_size, buff);
+        if ((encode_level & 2) && bytes_size >= ENCODE_SIZE_LIMIT) {
+            buff = encode_string_lz4(bytes.data(), bytes_size, buff, encode_level);
+        } else {
+            buff = write_raw(bytes.data(), bytes_size, buff);
+        }
 
         //TODO: if T is uint32_t, `offsets_size` may be overflow
         T offsets_size = offsets.size() * sizeof(typename vectorized::BinaryColumnBase<T>::Offset);
@@ -214,7 +222,11 @@ public:
             buff = read_little_endian_64(buff, &bytes_size);
         }
         column->get_bytes().resize(bytes_size);
-        buff = read_raw(buff, column->get_bytes().data(), bytes_size);
+        if ((encode_level & 2) && bytes_size >= ENCODE_SIZE_LIMIT) {
+            buff = decode_string_lz4(buff, column->get_bytes().data(), bytes_size);
+        } else {
+            buff = read_raw(buff, column->get_bytes().data(), bytes_size);
+        }
 
         T offsets_size = 0;
         if constexpr (std::is_same_v<T, uint32_t>) {
