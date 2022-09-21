@@ -112,7 +112,7 @@ ColumnPtr BinaryColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
     auto& dest_offsets = dest->get_offset();
     auto& dest_bytes = dest->get_bytes();
     auto src_size = offsets.size() - 1; // this->size() may be large than offsets->size() -1
-    size_t total_size = 0; // total size to copy
+    size_t total_size = 0;              // total size to copy
     for (auto i = 0; i < src_size; ++i) {
         auto bytes_size = _offsets[i + 1] - _offsets[i];
         total_size += bytes_size * (offsets[i + 1] - offsets[i]);
