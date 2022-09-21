@@ -48,8 +48,8 @@
   + [Java UDFs](./using_starrocks/JAVA_UDF.md)
   + [Bitmap indexing](./table_design/Bitmap_index.md)
   + [Bloomfilter indexing](./table_design/Bloomfilter_index.md)
-  + [Precise de-duplication with bitmap](./using_starrocks/Using_bitmap.md)
-  + [Approximate de-duplication with HLL](./using_starrocks/Using_HLL.md)
+  + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
+  + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
   + [Configure a time zone](./using_starrocks/timezone.md)
   + [File manager](./using_starrocks/filemanager.md)
 + Administration
@@ -66,7 +66,6 @@
     + [Configuration](./administration/Configuration.md)
     + [Monitor and alert](./administration/Monitor_and_Alert.md)
     + [Manage a cluster](./administration/Cluster_administration.md)
-    + [Enable FQDN access](./administration/enable_fqdn.md)
     + Resource Management
       + [Resource group](./administration/resource_group.md)
       + [Query management](./administration/Query_management.md)

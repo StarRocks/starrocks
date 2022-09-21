@@ -38,6 +38,7 @@
 #include "http/http_request.h"
 #include "http/http_response.h"
 #include "http/http_status.h"
+#include "storage/page_cache.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
@@ -51,6 +52,10 @@ void UpdateConfigAction::handle(HttpRequest* req) {
         _config_callback.emplace("scanner_thread_pool_thread_num", [&]() {
             LOG(INFO) << "set scanner_thread_pool_thread_num:" << config::scanner_thread_pool_thread_num;
             _exec_env->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
+        });
+        _config_callback.emplace("storage_page_cache_limit", [&]() {
+            int64_t cache_limit = _exec_env->get_storage_page_cache_size();
+            StoragePageCache::instance()->set_capacity(cache_limit);
         });
     });
 
@@ -66,11 +71,9 @@ void UpdateConfigAction::handle(HttpRequest* req) {
         s = config::set_config(config, new_value);
         if (s.ok()) {
             LOG(INFO) << "set_config " << config << "=" << new_value << " success";
-
             if (_config_callback.count(config)) {
                 _config_callback[config]();
             }
-
         } else {
             LOG(WARNING) << "set_config " << config << "=" << new_value << " failed";
             msg = strings::Substitute("set $0=$1 failed, reason: $2", config, new_value, s.to_string());

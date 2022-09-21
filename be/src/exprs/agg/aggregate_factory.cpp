@@ -121,6 +121,9 @@ public:
     template <PrimitiveType T>
     static AggregateFunctionPtr MakeHllNdvAggregateFunction();
 
+    template <PrimitiveType T>
+    static AggregateFunctionPtr MakeHllRawAggregateFunction();
+
     static AggregateFunctionPtr MakePercentileApproxAggregateFunction();
 
     static AggregateFunctionPtr MakePercentileUnionAggregateFunction();
@@ -300,7 +303,12 @@ AggregateFunctionPtr AggregateFactory::MakeHllUnionCountAggregateFunction() {
 
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeHllNdvAggregateFunction() {
-    return std::make_shared<HllNdvAggregateFunction<PT>>();
+    return std::make_shared<HllNdvAggregateFunction<PT, false>>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeHllRawAggregateFunction() {
+    return std::make_shared<HllNdvAggregateFunction<PT, true>>();
 }
 
 AggregateFunctionPtr AggregateFactory::MakePercentileApproxAggregateFunction() {
@@ -468,6 +476,9 @@ public:
             } else if (name == "percentile_union") {
                 auto percentile = AggregateFactory::MakePercentileUnionAggregateFunction();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<PercentileValue, IsWindowFunc>(percentile);
+            } else if (name == "hll_raw") {
+                auto hll_raw = AggregateFactory::MakeHllRawAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<HyperLogLog, IsWindowFunc>(hll_raw);
             }
         } else {
             if (name == "hll_raw_agg" || name == "hll_union") {
@@ -486,6 +497,8 @@ public:
                 return AggregateFactory::MakeHllNdvAggregateFunction<ArgPT>();
             } else if (name == "percentile_union") {
                 return AggregateFactory::MakePercentileUnionAggregateFunction();
+            } else if (name == "hll_raw") {
+                return AggregateFactory::MakeHllRawAggregateFunction<ArgPT>();
             }
         }
 
@@ -1117,6 +1130,23 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_object_mapping<TYPE_DECIMAL32, TYPE_BIGINT>("approx_count_distinct");
     add_object_mapping<TYPE_DECIMAL64, TYPE_BIGINT>("approx_count_distinct");
     add_object_mapping<TYPE_DECIMAL128, TYPE_BIGINT>("approx_count_distinct");
+
+    add_object_mapping<TYPE_BOOLEAN, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_TINYINT, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_SMALLINT, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_INT, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_BIGINT, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_LARGEINT, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_FLOAT, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_DOUBLE, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_CHAR, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_VARCHAR, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_DECIMALV2, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_DATETIME, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_DATE, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_DECIMAL32, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_DECIMAL64, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_DECIMAL128, TYPE_HLL>("hll_raw");
 
     add_object_mapping<TYPE_BIGINT, TYPE_DOUBLE>("percentile_approx");
     add_object_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_approx");

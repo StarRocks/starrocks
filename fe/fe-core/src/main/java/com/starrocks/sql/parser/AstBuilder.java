@@ -3270,6 +3270,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitConvert(StarRocksParser.ConvertContext context) {
+        return new CastExpr(new TypeDef(getType(context.type())), (Expr) visit(context.expression()));
+    }
+
+    @Override
     public ParseNode visitInformationFunctionExpression(StarRocksParser.InformationFunctionExpressionContext context) {
         if (context.name.getText().equalsIgnoreCase("database")
                 || context.name.getText().equalsIgnoreCase("schema")

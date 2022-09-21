@@ -179,6 +179,9 @@ public:
     virtual size_t get_memory_usage() = 0;
     virtual void get_cache_status(rapidjson::Document* document) = 0;
 
+    virtual void set_capacity(size_t capacity) = 0;
+    virtual size_t get_capacity() = 0;
+
 private:
     Cache(const Cache&) = delete;
     const Cache& operator=(const Cache&) = delete;
@@ -256,7 +259,7 @@ public:
     ~LRUCache();
 
     // Separate from constructor so caller can easily make an array of LRUCache
-    void set_capacity(size_t capacity) { _capacity = capacity; }
+    void set_capacity(size_t capacity);
 
     // Like Cache methods, but with an extra "hash" parameter.
     Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t charge,
@@ -267,10 +270,10 @@ public:
     void erase(const CacheKey& key, uint32_t hash);
     int prune();
 
-    uint64_t get_lookup_count() const { return _lookup_count; }
-    uint64_t get_hit_count() const { return _hit_count; }
-    size_t get_usage() const { return _usage; }
-    size_t get_capacity() const { return _capacity; }
+    uint64_t get_lookup_count();
+    uint64_t get_hit_count();
+    size_t get_usage();
+    size_t get_capacity();
 
 private:
     void _lru_remove(LRUHandle* e);
@@ -280,7 +283,7 @@ private:
     void _evict_one_entry(LRUHandle* e);
 
     // Initialized before use.
-    size_t _capacity;
+    size_t _capacity{0};
 
     // _mutex protects the following state.
     std::mutex _mutex;
@@ -316,14 +319,17 @@ public:
     void prune() override;
     size_t get_memory_usage() override;
     void get_cache_status(rapidjson::Document* document) override;
+    void set_capacity(size_t capacity) override;
+    size_t get_capacity() override;
 
 private:
     static uint32_t _hash_slice(const CacheKey& s);
     static uint32_t _shard(uint32_t hash);
 
     LRUCache _shards[kNumShards];
-    std::mutex _id_mutex;
+    std::mutex _mutex;
     uint64_t _last_id;
+    size_t _capacity;
 };
 
 } // namespace starrocks
