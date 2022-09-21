@@ -604,24 +604,24 @@ public class SystemInfoService {
         return idToBackendRef.values().asList();
     }
 
-    public List<Long> seqChooseBackendIdsByStorageMedium(int backendNum, boolean needAlive, boolean isCreate,
+    public List<Long> seqChooseBackendIdsByStorageMedium(int backendNum, boolean needAvailable, boolean isCreate,
                                                          TStorageMedium storageMedium) {
         final List<Backend> backends =
                 getBackends().stream().filter(v -> !v.diskExceedLimitByStorageMedium(storageMedium))
                         .collect(Collectors.toList());
-        return seqChooseBackendIds(backendNum, needAlive, isCreate, backends);
+        return seqChooseBackendIds(backendNum, needAvailable, isCreate, backends);
     }
 
-    public List<Long> seqChooseBackendIds(int backendNum, boolean needAlive, boolean isCreate) {
+    public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate) {
         final List<Backend> backends =
                 getBackends().stream().filter(v -> !v.diskExceedLimit()).collect(Collectors.toList());
-        return seqChooseBackendIds(backendNum, needAlive, isCreate, backends);
+        return seqChooseBackendIds(backendNum, needAvailable, isCreate, backends);
     }
 
     // choose backends by round-robin
     // return null if not enough backend
     // use synchronized to run serially
-    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAlive, boolean isCreate,
+    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
                                                        final List<Backend> srcBackends) {
         long lastBackendId;
 
@@ -634,6 +634,10 @@ public class SystemInfoService {
         // host -> BE list
         Map<String, List<Backend>> backendMaps = Maps.newHashMap();
         for (Backend backend : srcBackends) {
+            // If needAvailable is true, unavailable backend won't go into the pick list
+            if (needAvailable && !backend.isAvailable()) {
+                continue;
+            }
             if (backendMaps.containsKey(backend.getHost())) {
                 backendMaps.get(backend.getHost()).add(backend);
             } else {
@@ -676,12 +680,6 @@ public class SystemInfoService {
             if (index > maxIndex) {
                 failed = true;
                 break;
-            }
-
-            if (needAlive) {
-                if (!backend.isAlive() || backend.isDecommissioned()) {
-                    continue;
-                }
             }
 
             long backendId = backend.getId();

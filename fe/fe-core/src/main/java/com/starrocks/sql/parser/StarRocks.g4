@@ -1076,6 +1076,7 @@ primaryExpression
     | EXISTS '(' queryBody ')'                                                            #exists
     | subquery                                                                            #subqueryExpression
     | CAST '(' expression AS type ')'                                                     #cast
+    | CONVERT '(' expression ',' type ')'                                                 #convert
     | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
     | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
@@ -1342,6 +1343,9 @@ baseType
     | TINYINT typeParameter?
     | SMALLINT typeParameter?
     | SIGNED INT?
+    | SIGNED INTEGER?
+    | UNSIGNED INT?
+    | UNSIGNED INTEGER?
     | INT typeParameter?
     | INTEGER typeParameter?
     | BIGINT typeParameter?

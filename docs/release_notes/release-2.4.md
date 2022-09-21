@@ -1,8 +1,8 @@
 # StarRocks version 2.4
 
-## 2.4.0 RC01
+## 2.4.0 RC
 
-Release date: September 9th, 2022
+Release date: September 17th, 2022
 
 ### New Features
 
@@ -22,8 +22,6 @@ Release date: September 9th, 2022
 
 - Supports granting a specific role or IMPERSONATE permission to a user via the GRANT statement and revoking them via the REVOKE statement, and supports executing an SQL statement with IMPERSONATE permission via the EXECUTE AS statement. For more information, see [GRANT](../sql-reference/sql-statements/account-management/GRANT.md), [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md), and [EXECUTE AS](../sql-reference/sql-statements/account-management/EXECUTE%20AS.md).
 
-- Supports FDQN access: now you can use domain name or the combination of hostname and port as the unique identification of a BE or an FE node. This prevents access failures caused by changing IP addresses. For more information, see [Enable FQDN Access](../administration/enable_fqdn.md).
-
 - flink-connector-starrocks supports Primary Key model partial update. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
 
 - Provides the following new functions:
@@ -33,9 +31,7 @@ Release date: September 9th, 2022
 
 ### Improvements
 
-- The Primary Key model supports flushing VARCHAR-type primary key indexes to disks.
-
-  From version 2.4.0, the Primary Key model supports the same data types for primary key indexes regardless of whether persistent primary key index is turned on or not.
+- The Primary Key model supports flushing VARCHAR-type primary key indexes to disks. From version 2.4.0, the Primary Key model supports the same data types for primary key indexes regardless of whether persistent primary key index is turned on or not.
 
 - Optimized the query performance on external tables.
 
@@ -49,6 +45,10 @@ Release date: September 9th, 2022
 - Histograms are added to CBO statistics. Full statistics collection is further optimized. For more information, see [Gather CBO statistics](../using_starrocks/Cost_based_optimizer.md).
 
 - Adaptive multi-threading is enabled for tablet scanning to reduce the dependency of scanning performance on the tablet number. As a result, you can set the number of buckets more easily. For more information, see [Determine the number of buckets](../table_design/Data_distribution.md#how-to-determine-the-number-of-buckets).
+
+- Supports querying compressed TXT files in Apache Hive.
+
+- Adjusted the mechanisms of default PageCache size calculation and memory consistency check to avoid OOM issues during multi-instance deployments.
 
 - Functions:
 
@@ -74,6 +74,12 @@ The following bugs are fixed:
 
   - Queries on Parquet-format in Hive external tables fail. [#7413](https://github.com/StarRocks/starrocks/pull/7413) [#7482](https://github.com/StarRocks/starrocks/pull/7482) [#7624](https://github.com/StarRocks/starrocks/pull/7624)
   - Incorrect results are returned to queries with `limit` clause on Elasticsearch external table. [#9226](https://github.com/StarRocks/starrocks/pull/9226)
+
+- An unknown error is raised during queries on an Apache Iceberg table with a complex data type. [#11298](https://github.com/StarRocks/starrocks/pull/11298)
+
+- Metadata can be inconsistent between the Leader FE and Follower FE nodes. [#11215](https://github.com/StarRocks/starrocks/pull/11215)
+
+- BE crashes when BITMAP type data size is larger than 2GB. [#11178](https://github.com/StarRocks/starrocks/pull/11178)
 
 ### Behavior Change
 
