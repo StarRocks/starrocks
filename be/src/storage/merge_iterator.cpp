@@ -140,6 +140,9 @@ public:
 protected:
     Status init();
     void close_child(size_t child);
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override {
+        return Status::NotSupported("merge iterator get chunk with sources not supported");
+    }
 
     virtual Status fill(size_t child) = 0;
 
@@ -197,6 +200,7 @@ private:
 };
 
 inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
+    LOG(WARNING) << "do get next in heap merge iterator";
     if (!_inited) {
         RETURN_IF_ERROR(init());
     }
@@ -300,6 +304,7 @@ inline Status HeapMergeIterator::fill(size_t child) {
 ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children) {
     DCHECK(!children.empty());
     if (children.size() == 1) {
+        LOG(WARNING) << "segment iterator num is 1";
         return children[0];
     }
 
@@ -308,6 +313,7 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
     const static size_t kMaxChildrenSize = std::numeric_limits<uint16_t>::max();
 
     if (children.size() <= kMaxChildrenSize) {
+        LOG(WARNING) << "return heap merge iterator";
         return std::make_shared<HeapMergeIterator>(children);
     }
     std::vector<ChunkIteratorPtr> sub_merge_iterators;
@@ -330,7 +336,7 @@ public:
     }
 
 protected:
-    Status do_get_next(Chunk* chunk) override { return Status::NotSupported("get chunk not supported"); }
+    Status do_get_next(Chunk* chunk) override { return do_get_next(chunk, nullptr); }
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
     Status fill(size_t child) override;
 
@@ -367,7 +373,9 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
             if (rows == 0) {
                 chunk->swap_chunk(*min_chunk._chunk);
                 for (int i = 0; i < min_chunk_num_rows; ++i) {
-                    source_masks->emplace_back(_mask_buffer->current());
+                    if (source_masks) {
+                        source_masks->emplace_back(_mask_buffer->current());
+                    }
                     _mask_buffer->advance();
                 }
                 return fill(child);
@@ -390,7 +398,9 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
         min_chunk.advance(append_row_num);
         rows += append_row_num;
         for (size_t i = 0; i < append_row_num; ++i) {
-            source_masks->emplace_back(_mask_buffer->current());
+            if (source_masks) {
+                source_masks->emplace_back(_mask_buffer->current());
+            }
             _mask_buffer->advance();
         }
 
@@ -446,6 +456,9 @@ inline Status MaskMergeIterator::fill(size_t child) {
 
 ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
                                          RowSourceMaskBuffer* mask_buffer) {
+    if (children.size() == 1) {
+        return children[0];
+    }
     DCHECK(children.size() > 1 && children.size() <= RowSourceMask::MAX_SOURCES);
     return std::make_shared<MaskMergeIterator>(std::move(children), mask_buffer);
 }
