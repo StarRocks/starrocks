@@ -1764,10 +1764,4 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static String ssl_key_password = "";
-
-    @ConfField
-    public static String ssl_truststore_location = "";
-
-    @ConfField
-    public static String ssl_truststore_password = "";
 }

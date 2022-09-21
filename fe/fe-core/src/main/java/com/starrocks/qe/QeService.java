@@ -36,7 +36,6 @@ import java.security.KeyStore;
 import java.security.SecureRandom;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManagerFactory;
 
 public class QeService {
     private static final Logger LOG = LogManager.getLogger(QeService.class);
@@ -45,7 +44,7 @@ public class QeService {
 
     public QeService(int port, boolean nioEnabled, ConnectScheduler scheduler) throws Exception {
         SSLContext sslContext = null;
-        if (!Strings.isNullOrEmpty(Config.ssl_truststore_location)
+        if (!Strings.isNullOrEmpty(Config.ssl_keystore_location)
                 && SSLChannelImpClassLoader.loadSSLChannelImpClazz() != null) {
             sslContext = createSSLContext();
         }
@@ -80,15 +79,8 @@ public class QeService {
         KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
         kmf.init(keyStore, Config.ssl_key_password.toCharArray());
 
-        KeyStore trustStore = KeyStore.getInstance("JKS");
-        try (InputStream trustStoreIS = new FileInputStream(Config.ssl_truststore_location)) {
-            trustStore.load(trustStoreIS, Config.ssl_truststore_password.toCharArray());
-        }
-        TrustManagerFactory trustFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        trustFactory.init(trustStore);
-
         SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
-        sslContext.init(kmf.getKeyManagers(), trustFactory.getTrustManagers(), new SecureRandom());
+        sslContext.init(kmf.getKeyManagers(), null, new SecureRandom());
         return sslContext;
     }
 }
