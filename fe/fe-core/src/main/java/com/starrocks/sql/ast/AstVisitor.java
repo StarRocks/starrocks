@@ -2,6 +2,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.AddSqlBlackListStmt;
+import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
@@ -362,6 +363,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterRoutineLoadStatement(AlterRoutineLoadStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
