@@ -396,7 +396,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |num_threads_per_core|3|每个 CPU core 启动的线程数|
 |compress_rowbatches|TRUE|BE 之间 rpc 通信是否压缩 RowBatch，用于查询层之间的数据传输|
 |serialize_batch|FALSE|BE 之间 rpc 通信是否序列化 RowBatch，用于查询层之间的数据传输|
-|memory_limitation_per_thread_for_schema_change|2|单个 schema change 任务允许占用的最大内存|
 |max_unpacked_row_block_size|104857600|单个 block 最大的字节数，100MB|
 |file_descriptor_cache_clean_interval|3600|文件句柄缓存清理的间隔，用于清理长期不用的文件句柄|
 |storage_root_path|${STARROCKS_HOME}/storage|存储数据的目录，多块盘配置使用分隔符 `;` 间隔，例如：/data1/starrocks;/data2/starrocks。如果为 SSD 磁盘，需在路径后添加 `.SSD`，如果为 HDD 磁盘，需在路径后添加 `.HDD`。|
