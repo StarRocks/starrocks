@@ -22,11 +22,18 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.SemanticException;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.ShowTableStmt;
+>>>>>>> 46e3aa7ac ([BugFix] Add predicate on database for `SHOW TABLES WHERE` (#11411))
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.postgresql.core.BaseStatement;
 
 public class ShowTableStmtTest {
 
@@ -65,6 +72,17 @@ public class ShowTableStmtTest {
         Assert.assertEquals(2, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
         Assert.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());
+<<<<<<< HEAD
+=======
+        Assert.assertEquals("bcd", stmt.getPattern());
+
+        String sql = "show full tables where table_type !='VIEW'";
+        stmt = (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        QueryStatement queryStatement = stmt.toSelectStmt();
+        String expect = "SELECT TABLE_NAME AS Tables_in_testDb, TABLE_TYPE AS Table_type FROM information_schema.tables"
+                + " WHERE (TABLE_SCHEMA = 'testDb') AND (TABLE_TYPE != 'VIEW')";
+        Assert.assertEquals(expect, AST2SQL.toString(queryStatement));
+>>>>>>> 46e3aa7ac ([BugFix] Add predicate on database for `SHOW TABLES WHERE` (#11411))
     }
 
     @Test(expected = SemanticException.class)
