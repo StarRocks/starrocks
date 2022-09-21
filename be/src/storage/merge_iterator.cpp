@@ -140,9 +140,6 @@ public:
 protected:
     Status init();
     void close_child(size_t child);
-    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override {
-        return Status::NotSupported("merge iterator get chunk with sources not supported");
-    }
 
     virtual Status fill(size_t child) = 0;
 
@@ -200,7 +197,6 @@ private:
 };
 
 inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
-    LOG(WARNING) << "do get next in heap merge iterator";
     if (!_inited) {
         RETURN_IF_ERROR(init());
     }
@@ -304,7 +300,6 @@ inline Status HeapMergeIterator::fill(size_t child) {
 ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children) {
     DCHECK(!children.empty());
     if (children.size() == 1) {
-        LOG(WARNING) << "segment iterator num is 1";
         return children[0];
     }
 
@@ -313,7 +308,6 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
     const static size_t kMaxChildrenSize = std::numeric_limits<uint16_t>::max();
 
     if (children.size() <= kMaxChildrenSize) {
-        LOG(WARNING) << "return heap merge iterator";
         return std::make_shared<HeapMergeIterator>(children);
     }
     std::vector<ChunkIteratorPtr> sub_merge_iterators;
