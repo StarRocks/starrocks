@@ -97,9 +97,9 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
         for (auto id : slot_ids) {
             DCHECK(id > 0);
             auto captured = chunk->get_column_by_slot_id(id);
-            if (captured->size() != input_array->size()) {
-                throw std::runtime_error(fmt::format(
-                        "The size of the captured column {} does not equal to array's size.", captured->get_name()));
+            if (captured->size() < input_array->size()) {
+                throw std::runtime_error(fmt::format("The size of the captured column {} is less than array's size.",
+                                                     captured->get_name()));
             }
             cur_chunk->append_column(captured->replicate(input_array->offsets_column()->get_data()), id);
         }

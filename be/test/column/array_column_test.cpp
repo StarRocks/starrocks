@@ -1106,13 +1106,13 @@ PARALLEL_TEST(ArrayColumnTest, test_replicate) {
 
     auto res = column->replicate(off);
 
-    ASSERT_EQ("[1, 2, 3]", column->debug_item(0));
-    ASSERT_EQ("[1, 2, 3]", column->debug_item(1));
-    ASSERT_EQ("[1, 2, 3]", column->debug_item(2));
-    ASSERT_EQ("[4, 5, 6]", column->debug_item(3));
-    ASSERT_EQ("[4, 5, 6]", column->debug_item(4));
-    ASSERT_EQ("[]", column->debug_item(5));
-    ASSERT_EQ("[]", column->debug_item(6));
+    ASSERT_EQ("[1, 2, 3]", res->debug_item(0));
+    ASSERT_EQ("[1, 2, 3]", res->debug_item(1));
+    ASSERT_EQ("[1, 2, 3]", res->debug_item(2));
+    ASSERT_EQ("[4, 5, 6]", res->debug_item(3));
+    ASSERT_EQ("[4, 5, 6]", res->debug_item(4));
+    ASSERT_EQ("[]", res->debug_item(5));
+    ASSERT_EQ("[]", res->debug_item(6));
 }
 
 } // namespace starrocks::vectorized
