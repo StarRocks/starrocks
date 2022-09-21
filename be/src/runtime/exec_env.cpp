@@ -382,7 +382,8 @@ Status ExecEnv::init_mem_tracker() {
     return Status::OK();
 }
 
-Status ExecEnv::_init_storage_page_cache() {
+int64_t ExecEnv::get_storage_page_cache_size() {
+    std::lock_guard<std::mutex>(*config::get_mstring_conf_lock());
     int64_t mem_limit = MemInfo::physical_mem();
     if (_mem_tracker->has_limit()) {
         mem_limit = _mem_tracker->limit();
@@ -394,13 +395,16 @@ Status ExecEnv::_init_storage_page_cache() {
     }
     if (!config::disable_storage_page_cache) {
         if (storage_cache_limit < kcacheMinSize) {
-            LOG(WARNING) << "Storage cache limit is too small, give up using page cache.";
-            config::disable_storage_page_cache = true;
-            storage_cache_limit = 0;
-        } else {
-            LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
+            LOG(WARNING) << "Storage cache limit is too small, use default size.";
+            storage_cache_limit = kcacheMinSize;
         }
+        LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
     }
+    return storage_cache_limit;
+}
+
+Status ExecEnv::_init_storage_page_cache() {
+    int64_t storage_cache_limit = get_storage_page_cache_size();
     StoragePageCache::create_global_cache(_page_cache_mem_tracker, storage_cache_limit);
 
     // TODO(zc): The current memory usage configuration is a bit confusing,
