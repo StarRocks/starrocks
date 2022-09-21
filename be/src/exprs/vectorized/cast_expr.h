@@ -9,13 +9,23 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/expr.h"
 #include "exprs/vectorized/column_ref.h"
+#include "runtime/types.h"
 
 namespace starrocks {
 namespace vectorized {
 
 class VectorizedCastExprFactory {
 public:
+<<<<<<< HEAD
     static Expr* from_thrift(const TExprNode& node);
+=======
+    static Expr* from_thrift(const TExprNode& node, bool exception_if_failed = false) {
+        return from_thrift(nullptr, node, exception_if_failed);
+    }
+
+    // The pool is used for intermediate expression, but not the returned expression
+    static Expr* from_thrift(ObjectPool* pool, const TExprNode& node, bool exception_if_failed = false);
+>>>>>>> 43e294421 ([Feature] support cast string and json to array type (#11307))
 
     static Expr* from_type(const TypeDescriptor& from, const TypeDescriptor& to, Expr* child, ObjectPool* pool);
 };
@@ -32,55 +42,43 @@ public:
 
     ~VectorizedCastArrayExpr() override = default;
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        ColumnPtr column = _children[0]->evaluate(context, ptr);
-        if (ColumnHelper::count_nulls(column) == column->size()) {
-            return ColumnHelper::create_const_null_column(column->size());
-        }
-        ColumnPtr cast_column = column->clone_shared();
-        ArrayColumn::Ptr array_col = nullptr;
-        NullableColumn::Ptr nullable_col = nullptr;
-        ColumnPtr src_col = cast_column;
-
-        if (src_col->is_nullable()) {
-            nullable_col = (ColumnHelper::as_column<NullableColumn>(src_col));
-            src_col = nullable_col->data_column();
-        }
-        while (src_col->is_array()) {
-            array_col = (ColumnHelper::as_column<ArrayColumn>(src_col));
-            src_col = array_col->elements_column();
-            if (src_col->is_nullable()) {
-                nullable_col = (ColumnHelper::as_column<NullableColumn>(src_col));
-                src_col = nullable_col->data_column();
-            } else {
-                nullable_col = nullptr;
-            }
-        }
-
-        if (nullable_col != nullptr) {
-            src_col = nullable_col;
-        }
-        ChunkPtr chunk = std::make_shared<Chunk>();
-        auto column_ref = _cast_element_expr->get_child(0);
-        SlotId slot_id = (reinterpret_cast<ColumnRef*>(column_ref))->slot_id();
-        chunk->append_column(src_col, slot_id);
-        ColumnPtr dest_col = _cast_element_expr->evaluate(nullptr, chunk.get());
-        dest_col = ColumnHelper::unfold_const_column(column_ref->type(), chunk->num_rows(), dest_col);
-
-        if (src_col->is_nullable() && !dest_col->is_nullable()) {
-            // if the original column is nullable
-            auto nullable_col = (ColumnHelper::as_column<NullableColumn>(src_col))->null_column();
-            array_col->elements_column() = NullableColumn::create(dest_col, nullable_col);
-        } else {
-            array_col->elements_column() = dest_col;
-        }
-        return cast_column;
-    };
+    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedCastArrayExpr(*this)); }
 
 private:
     Expr* _cast_element_expr;
+};
+
+// Cast string to array<ANY>
+class CastStringToArray final : public Expr {
+public:
+    CastStringToArray(const TExprNode& node, Expr* cast_element, const TypeDescriptor& type_desc)
+            : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(type_desc) {}
+    ~CastStringToArray() override = default;
+    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* input_chunk) override;
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }
+
+private:
+    Slice _unquote(Slice slice);
+
+    Expr* _cast_elements_expr;
+    TypeDescriptor _cast_to_type_desc;
+};
+
+// Cast JsonArray to array<ANY>
+class CastJsonToArray final : public Expr {
+public:
+    CastJsonToArray(const TExprNode& node, Expr* cast_element, const TypeDescriptor& type_desc)
+            : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(type_desc) {}
+    ~CastJsonToArray() override = default;
+
+    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* input_chunk) override;
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastJsonToArray(*this)); }
+
+private:
+    Expr* _cast_elements_expr;
+    TypeDescriptor _cast_to_type_desc;
 };
 
 } // namespace vectorized
