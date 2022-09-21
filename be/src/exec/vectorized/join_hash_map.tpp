@@ -1399,11 +1399,38 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join_wi
     for (; i < probe_row_count; i++) {
         size_t build_index = _probe_state->next[i];
         if (build_index == 0) {
-            _probe_state->probe_index[match_count] = i;
-            _probe_state->build_index[match_count] = 0;
-            match_count++;
-
-            RETURN_IF_CHUNK_FULL()
+            if (_table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
+                if (_probe_state->null_array != nullptr && (*_probe_state->null_array)[i] == 1) {
+                    // when probe value is null needs match all rows in right table
+                    for (size_t j = 1; j < _table_items->row_count + 1; j++) {
+                        _probe_state->probe_index[match_count] = i;
+                        _probe_state->build_index[match_count] = j;
+                        _probe_state->probe_match_index[i]++;
+                        match_count++;
+                        _probe_state->cur_row_match_count++;
+                        RETURN_IF_CHUNK_FULL()
+                    }
+                } else {
+                    // match all null value rows in right table
+                    auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
+                    auto& null_array = nullable_column->null_column()->get_data();
+                    for (size_t j = 1; j < _table_items->row_count + 1; j++) {
+                        if (null_array[j] == 1) {
+                            _probe_state->probe_index[match_count] = i;
+                            _probe_state->build_index[match_count] = j;
+                            _probe_state->probe_match_index[i]++;
+                            match_count++;
+                            _probe_state->cur_row_match_count++;
+                            RETURN_IF_CHUNK_FULL()
+                        }
+                    }
+                }
+            } else {
+                _probe_state->probe_index[match_count] = i;
+                _probe_state->build_index[match_count] = 0;
+                match_count++;
+                RETURN_IF_CHUNK_FULL()
+            }
             continue;
         }
 
@@ -1419,6 +1446,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join_wi
             }
             build_index = _table_items->next[build_index];
         }
+
         if (_probe_state->cur_row_match_count <= 0) {
             _probe_state->probe_index[match_count] = i;
             _probe_state->build_index[match_count] = 0;
