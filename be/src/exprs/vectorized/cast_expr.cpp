@@ -852,6 +852,48 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DATETIME, cast_from_string_to_datetime_fn);
 
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+static ColumnPtr cast_from_string_to_ipv4_fn(ColumnPtr& column) {
+    ColumnViewer<TYPE_VARCHAR> viewer(column);
+    ColumnBuilder<TYPE_IPV4> builder(viewer.size());
+
+    if (!column->has_null()) {
+        for (int row = 0; row < viewer.size(); ++row) {
+            auto value = viewer.value(row);
+            Ipv4Value v;
+
+            bool right = v.from_string(value.data, value.size);
+            if constexpr (AllowThrowException) {
+                if (!right) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_IPV4, value.to_string());
+                }
+            }
+            builder.append(v, !right);
+        }
+    } else {
+        for (int row = 0; row < viewer.size(); ++row) {
+            if (viewer.is_null(row)) {
+                builder.append_null();
+                continue;
+            }
+
+            auto value = viewer.value(row);
+            Ipv4Value v;
+
+            bool right = v.from_string(value.data, value.size);
+            if constexpr (AllowThrowException) {
+                if (!right) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_IPV4, value.to_string());
+                }
+            }
+            builder.append(v, !right);
+        }
+    }
+
+    return builder.build(column->is_constant());
+}
+CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_IPV4, cast_from_string_to_ipv4_fn);
+
 // time
 DEFINE_UNARY_FN_WITH_IMPL(DatetimeToTime, value) {
     Timestamp timestamp = timestamp::to_time(value.timestamp());
@@ -1499,6 +1541,11 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node, bool allow_t
             CASE_TO_TYPE(TYPE_TIME, allow_throw_exception);
             CASE_TO_TYPE(TYPE_DATE, allow_throw_exception);
             CASE_TO_TYPE(TYPE_DATETIME, allow_throw_exception);
+//            CASE_TO_TYPE(TYPE_IPV4, allow_throw_exception);
+            case TYPE_IPV4: {
+                return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_IPV4, true>(node);
+                break;
+            }
             CASE_TO_TYPE(TYPE_DECIMAL32, allow_throw_exception);
             CASE_TO_TYPE(TYPE_DECIMAL64, allow_throw_exception);
             CASE_TO_TYPE(TYPE_DECIMAL128, allow_throw_exception);
