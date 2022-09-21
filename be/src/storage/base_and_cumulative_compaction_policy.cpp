@@ -56,17 +56,16 @@ bool BaseAndCumulativeCompactionPolicy::_is_rowset_creation_time_ordered(
 void BaseAndCumulativeCompactionPolicy::_pick_cumulative_rowsets(bool* has_delete_version,
                                                                  size_t* rowsets_compaction_score,
                                                                  std::vector<RowsetSharedPtr>* rowsets) {
-    int64_t now = UnixSeconds();
     if (_compaction_context->rowset_levels[0].size() == 0) {
         return;
     }
-    bool is_creation_time_ordered = _is_rowset_creation_time_ordered(_compaction_context->rowset_levels[0]);
     int index = 0;
     for (auto rowset : _compaction_context->rowset_levels[0]) {
         if (_compaction_context->tablet->version_for_delete_predicate(rowset->version())) {
             *has_delete_version = true;
             break;
         }
+<<<<<<< HEAD
         // For level-0, should consider the rowset creation time.
         // newly-created rowsets should be skipped.
         if ((is_creation_time_ordered || (!is_creation_time_ordered && index != 0)) &&
@@ -80,6 +79,9 @@ void BaseAndCumulativeCompactionPolicy::_pick_cumulative_rowsets(bool* has_delet
             break;
         }
         rowsets->emplace_back(std::move(rowset->shared_from_this()));
+=======
+        rowsets->emplace_back(rowset->shared_from_this());
+>>>>>>> 22af10574 ([Refactor] Remove useless config cumulative_compaction_skip_window_seconds (#11490))
         *rowsets_compaction_score += rowset->rowset_meta()->get_compaction_score();
         if (*rowsets_compaction_score >= config::max_cumulative_compaction_num_singleton_deltas) {
             LOG(INFO) << "cumulative compaction rowsets_compaction_score:" << *rowsets_compaction_score
