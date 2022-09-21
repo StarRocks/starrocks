@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "exprs/vectorized/olap_runtime_ranger.h"
 #include "runtime/global_dict/types.h"
 #include "storage/olap_common.h"
 #include "storage/seek_range.h"
@@ -13,7 +14,7 @@
 namespace starrocks {
 class Conditions;
 class KVStore;
-class OlapReaderStatistics;
+struct OlapReaderStatistics;
 class RuntimeProfile;
 class RowCursor;
 class RuntimeState;
@@ -63,6 +64,8 @@ public:
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
+
+    vectorized::RuntimeRangerContext runtime_ranger_ctx;
 };
 
 } // namespace starrocks

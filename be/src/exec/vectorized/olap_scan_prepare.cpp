@@ -8,6 +8,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/dictmapping_expr.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
+#include "exprs/vectorized/olap_runtime_ranger.hpp"
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
@@ -378,10 +379,16 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
         using ValueType = typename vectorized::RunTimeTypeTraits<SlotType>::CppType;
         SlotId slot_id;
 
-        // runtime filter existed and does not have null.
-        if (rf == nullptr || rf->has_null()) continue;
         // probe expr is slot ref and slot id matches.
         if (!desc->is_probe_slot_ref(&slot_id) || slot_id != slot.id()) continue;
+
+        // runtime filter existed and does not have null.
+        if (rf == nullptr) {
+            rt_ranger_params.add_unreached_rf(desc, &slot);
+            continue;
+        }
+
+        if (rf->has_null()) continue;
 
         const RuntimeBloomFilter<SlotType>* filter = down_cast<const RuntimeBloomFilter<SlotType>*>(rf);
         // If this column doesn't have other filter, we use join runtime filter

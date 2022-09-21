@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
+#pragma once
+
 #include <string>
 
 namespace starrocks {
@@ -19,6 +21,8 @@ public:
     explicit PredicateParser(const TabletSchema& schema) : _schema(schema) {}
 
     bool can_pushdown(const ColumnPredicate* predicate) const;
+
+    bool can_pushdown(const SlotDescriptor* slot_desc) const;
 
     // Parse |condition| into a predicate that can be pushed down.
     // return nullptr if parse failed.
