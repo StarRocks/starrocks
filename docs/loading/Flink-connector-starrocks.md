@@ -52,10 +52,6 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
             )
         );
 
-
-
-
-
         // -------- sink with stream transformation --------
         class RowData {
             public int score;
@@ -126,7 +122,8 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
                 "'sink.properties.column_separator' = '\\x01'," +
                 "'sink.properties.row_delimiter' = '\\x02'," +
                 "'sink.max-retries' = '3'" +
-                "'sink.properties.*' = 'xxx'" + // stream load properties like `'sink.properties.columns' = 'k1, v1'`
+                // stream load properties like `'sink.properties.columns' = 'k1, v1'`
+                "'sink.properties.*' = 'xxx'" + 
             ")"
         );
         ```
