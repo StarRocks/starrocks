@@ -339,7 +339,7 @@ PARALLEL_TEST(ConstColumnTest, test_replicate) {
     auto c2 = c1->replicate(offsets);
 
     ASSERT_EQ(7, c2->size());
-    ASSERT_EQ(1, c2->get(6));
+    ASSERT_EQ(1, c2->get(6).get_int32());
 }
 
 } // namespace starrocks::vectorized
