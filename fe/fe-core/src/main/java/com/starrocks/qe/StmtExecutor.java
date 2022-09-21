@@ -886,7 +886,7 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
-    private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
+    private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, OlapTable table) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
             statisticExecutor.collectStatistics(
