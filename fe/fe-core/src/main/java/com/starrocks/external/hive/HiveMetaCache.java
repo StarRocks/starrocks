@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.ObjectStorageUtils;
+import com.starrocks.external.Utils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.logging.log4j.LogManager;
@@ -289,7 +290,7 @@ public class HiveMetaCache {
         }
     }
 
-    private List<String> loadAllDatabaseNames() throws DdlException {
+    private List<String> loadAllDatabaseNames() {
         return client.getAllDatabaseNames();
     }
 

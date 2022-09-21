@@ -206,11 +206,17 @@ public class HiveColumnStatistics {
         return -1;
     }
 
-
     @Override
     public String toString() {
-        return String.format("ndv: %d, min: %.2f, max: %.2f, totalSizeBytes: %.2d, numNulls: %d, type: %s",
-                ndv, min, max, totalSizeBytes, numNulls, type);
+        final StringBuilder sb = new StringBuilder("HiveColumnStatistics{");
+        sb.append("totalSizeBytes=").append(totalSizeBytes);
+        sb.append(", ndv=").append(ndv);
+        sb.append(", min=").append(min);
+        sb.append(", max=").append(max);
+        sb.append(", numNulls=").append(numNulls);
+        sb.append(", type=").append(type);
+        sb.append('}');
+        return sb.toString();
     }
 
     public static Builder builder() {
