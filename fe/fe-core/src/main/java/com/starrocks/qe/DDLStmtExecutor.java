@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.execution;
+package com.starrocks.qe;
 
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.BackupStmt;
@@ -18,6 +18,7 @@ import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.LoadStmt;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
@@ -27,12 +28,12 @@ import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSet;
+import com.starrocks.load.EtlJobType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -81,10 +82,35 @@ import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public class DataDefinitionExecutorFactory {
+import java.io.IOException;
+import java.time.LocalDateTime;
+
+public class DDLStmtExecutor {
+
+    /**
+     * Execute various ddl statement
+     */
+    public static ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
+        try {
+            return stmt.accept(StmtExecutorVisitor.getInstance(), context);
+        } catch (RuntimeException re) {
+            if (re.getCause() instanceof DdlException) {
+                throw (DdlException) re.getCause();
+            } else if (re.getCause() instanceof IOException) {
+                throw (IOException) re.getCause();
+            } else if (re.getCause() != null) {
+                throw new DdlException(re.getCause().getMessage());
+            } else {
+                throw re;
+            }
+        }
+    }
 
     static class StmtExecutorVisitor extends AstVisitor<ShowResultSet, ConnectContext> {
 
@@ -94,6 +120,11 @@ public class DataDefinitionExecutorFactory {
 
         public static StmtExecutorVisitor getInstance() {
             return INSTANCE;
+        }
+
+        @Override
+        public ShowResultSet visitNode(ParseNode node, ConnectContext context) {
+            throw new RuntimeException(new DdlException("unsupported statement: " + node.toSql()));
         }
 
         @Override
@@ -241,285 +272,470 @@ public class DataDefinitionExecutorFactory {
 
         @Override
         public ShowResultSet visitAlterTableStatement(AlterTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().alterTable(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitAlterViewStatement(AlterViewStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().alterView(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCancelAlterTableStatement(CancelAlterTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().cancelAlter(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitLoadStmt(LoadStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                EtlJobType jobType = stmt.getEtlJobType();
+                if (jobType == EtlJobType.UNKNOWN) {
+                    throw new DdlException("Unknown load job type");
+                }
+                if (jobType == EtlJobType.HADOOP && Config.disable_hadoop_load) {
+                    throw new DdlException("Load job by hadoop cluster is disabled."
+                            + " Try using broker load. See 'help broker load;'");
+                }
+
+                context.getGlobalStateMgr().getLoadManager().createLoadJobFromStmt(stmt, context);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCancelLoadStmt(CancelLoadStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getLoadManager().cancelLoadJob(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getRoutineLoadManager().createRoutineLoadJob(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitPauseRoutineLoadStatement(PauseRoutineLoadStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getRoutineLoadManager().pauseRoutineLoadJob(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getRoutineLoadManager().resumeRoutineLoadJob(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitStopRoutineLoadStatement(StopRoutineLoadStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getRoutineLoadManager().stopRoutineLoadJob(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitAlterRoutineLoadStmt(AlterRoutineLoadStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getRoutineLoadManager().alterRoutineLoadJob(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCreateUserStatement(CreateUserStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    context.getGlobalStateMgr().getAuthenticationManager().createUser(stmt);
+                } else {
+                    context.getGlobalStateMgr().getAuth().createUser(stmt);
+                }
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuth().alterUser(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitDropUserStatement(DropUserStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuth().dropUser(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitRevokeRoleStatement(RevokeRoleStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuth().revokeRole(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitGrantRoleStatement(GrantRoleStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuth().grantRole(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitGrantPrivilegeStatement(GrantPrivilegeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuth().grant(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitRevokePrivilegeStatement(RevokePrivilegeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuth().revoke(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuth().createRole(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitDropRoleStatement(DropRoleStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuth().dropRole(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitSetUserPropertyStmt(SetUserPropertyStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuth().updateUserProperty(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitAlterSystemStmt(AlterSystemStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().alterCluster(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCancelAlterSystemStmt(CancelAlterSystemStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().cancelAlterCluster(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitAlterDatabaseRename(AlterDatabaseRename stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().renameDatabase(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitRecoverDbStmt(RecoverDbStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().recoverDatabase(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitRecoverTableStatement(RecoverTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().recoverTable(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitRecoverPartitionStmt(RecoverPartitionStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().recoverPartition(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().createView(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitBackupStmt(BackupStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().backup(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitRestoreStmt(RestoreStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().restore(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCancelBackupStmt(CancelBackupStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().cancelBackup(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCreateRepositoryStmt(CreateRepositoryStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getBackupHandler().createRepository(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitSyncStmt(SyncStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitTruncateTableStatement(TruncateTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().truncateTable(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitAdminRepairTableStatement(AdminRepairTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getTabletChecker().repairTable(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getTabletChecker().cancelRepairTable(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitAdminSetConfigStatement(AdminSetConfigStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().setConfig(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCreateFileStatement(CreateFileStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getSmallFileMgr().createFile(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitDropFileStatement(DropFileStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getSmallFileMgr().dropFile(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitInstallPluginStatement(InstallPluginStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                try {
+                    context.getGlobalStateMgr().installPlugin(stmt);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitUninstallPluginStatement(UninstallPluginStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                try {
+                    context.getGlobalStateMgr().uninstallPlugin(stmt);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitAdminCheckTabletsStatement(AdminCheckTabletsStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().checkTablets(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().setReplicaStatus(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCreateResourceStatement(CreateResourceStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getResourceMgr().createResource(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitDropResourceStatement(DropResourceStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getResourceMgr().dropResource(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitAlterResourceStatement(AlterResourceStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getResourceMgr().alterResource(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCancelExportStatement(CancelExportStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getExportMgr().cancelExportJob(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                AnalyzeJob analyzeJob = new AnalyzeJob(stmt.getDbId(),
+                        stmt.getTableId(),
+                        stmt.getColumnNames(),
+                        stmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.SCHEDULE,
+                        stmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
+                        LocalDateTime.MIN);
+
+                context.getGlobalStateMgr().getAnalyzeManager().addAnalyzeJob(analyzeJob);
+
+                Thread thread = new Thread(() -> {
+                    StatisticExecutor statisticExecutor = new StatisticExecutor();
+                    analyzeJob.run(statisticExecutor);
+                });
+                thread.start();
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitRefreshTableStatement(RefreshTableStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().refreshExternalTable(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCreateResourceGroupStatement(CreateResourceGroupStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getResourceGroupMgr().createResourceGroup(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitDropResourceGroupStatement(DropResourceGroupStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getResourceGroupMgr().dropResourceGroup(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitAlterResourceGroupStatement(AlterResourceGroupStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getResourceGroupMgr().alterResourceGroup(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitCreateCatalogStatement(CreateCatalogStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getCatalogMgr().createCatalog(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitDropCatalogStatement(DropCatalogStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getCatalogMgr().dropCatalog(stmt);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitSubmitTaskStmt(SubmitTaskStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt(stmt);
+            });
             return null;
         }
 
     }
 
-    public static ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
-        try {
-            return stmt.accept(StmtExecutorVisitor.getInstance(), context);
-        } catch (RuntimeException re) {
-            if (re.getCause() instanceof DdlException) {
-                throw (DdlException) re.getCause();
-            } else {
-                throw new DdlException(re.getCause().getMessage());
-            }
-        }
-    }
 }

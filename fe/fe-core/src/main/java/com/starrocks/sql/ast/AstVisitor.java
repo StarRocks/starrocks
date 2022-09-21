@@ -28,7 +28,6 @@ import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropFileStmt;
-import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
