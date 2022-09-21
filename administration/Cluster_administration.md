@@ -166,6 +166,24 @@ sh bin/stop_cn.sh
 
 在完成数据正确性验证后，将新版本的 BE 和 FE 节点的安装包下载并分发至各自路径下。您也可以 [在 Docker 中编译](Build_in_docker.md) 对应 tag 的源码。建议您选择小版本号最高的版本。
 
+### 升级 BE 前的准备
+
+为了避免 BE 重启期间不必要的 Tablet 修复，进而影响升级后的集群性能，建议在升级前先在 FE Leader 上执行如下命令以禁用 Tablet 调度功能，
+
+```sql
+admin set frontend config ("max_scheduling_tablets"="0");
+admin set frontend config ("disable_balance"="true");
+admin set frontend config ("disable_colocate_balance"="true");
+```
+
+在**所有** BE 重启升级完成后，通过 `show backends` 命令确认所有 BE 的 `Alive` 状态为 `true` 后，启用 Tablet 调度功能，
+
+```sql
+admin set frontend config ("max_scheduling_tablets"="2000");
+admin set frontend config ("disable_balance"="false");
+admin set frontend config ("disable_colocate_balance"="false");
+```
+
 ### 测试 BE 升级的正确性
 
 1. 选择任意一个 BE 节点，替换新版本 **/lib/starrocks_be** 文件。
@@ -365,6 +383,24 @@ sh bin/start_fe.sh --daemon
 
 ```shell
 ps aux | grep StarRocksFE
+```
+
+### 回滚 BE 节点前的准备
+
+为了避免 BE 重启期间不必要的 Tablet 修复，进而影响回滚后的集群性能，建议在回滚前先在 FE Leader 上执行如下命令以禁用 Tablet 调度功能，
+
+```sql
+admin set frontend config ("max_scheduling_tablets"="0");
+admin set frontend config ("disable_balance"="true");
+admin set frontend config ("disable_colocate_balance"="true");
+```
+
+在**所有** BE 重启回滚完成后，通过 `show backends` 命令确认所有 BE 的 `Alive` 状态为 `true` 后，启用 Tablet 调度功能，
+
+```sql
+admin set frontend config ("max_scheduling_tablets"="2000");
+admin set frontend config ("disable_balance"="false");
+admin set frontend config ("disable_colocate_balance"="false");
 ```
 
 ### 回滚 BE 节点
