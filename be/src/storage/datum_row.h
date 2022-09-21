@@ -11,8 +11,7 @@ class DatumRow final : public Row {
 
 public:
 
-    explicit DatumRow(size_t num_columns): _datums(num_columns) {
-    }
+    explicit DatumRow(size_t num_columns): _datums(num_columns) {}
 
     size_t size() const override {
         return _datums.size();

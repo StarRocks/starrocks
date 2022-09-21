@@ -82,6 +82,7 @@ TEST_F(DatumRowTest, test_get_and_set_type) {
     datum_row.set_decimal(16, DecimalV2Value("120.8374"));
     ASSERT_EQ(DecimalV2Value("120.8374"
                              ""), datum_row.get_decimal(16));
+    // TODO test complicated types
 }
 
 TEST_F(DatumRowTest, test_get_and_set_datum) {
@@ -93,6 +94,7 @@ TEST_F(DatumRowTest, test_get_and_set_datum) {
 
     datum_row.set_datum(1, vectorized::Datum(0.384f));
     ASSERT_EQ(0.384f, datum_row.get_datum(1).get_float());
+    // TODO test complicated types
 }
 
 } // namespace starrocks
