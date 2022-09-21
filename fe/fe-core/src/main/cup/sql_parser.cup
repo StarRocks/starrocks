@@ -1003,10 +1003,6 @@ show_param ::=
     {:
         RESULT = new ShowSmallFilesStmt(dbName);
     :}
-    | KW_TRANSACTION opt_db:dbName opt_wild_where
-    {:
-        RESULT = new ShowTransactionStmt(dbName, parser.where);
-    :}
     ;
 
 opt_db ::=

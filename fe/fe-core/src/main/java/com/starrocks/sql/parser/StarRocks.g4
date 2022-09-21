@@ -155,6 +155,7 @@ statement
     | showProcesslistStatement
     | showStatusStatement
     | showTabletStatement
+    | showTransactionStatement
     | showTriggersStatement
     | showUserStatement
     | showUserPropertyStatement
@@ -1000,6 +1001,10 @@ showProcedureStatement
 
 showProcStatement
     : SHOW PROC path=string
+    ;
+
+showTransactionStatement
+    : SHOW TRANSACTION ((FROM | IN) db=qualifiedName)? (WHERE expression)?
     ;
 
 showTriggersStatement

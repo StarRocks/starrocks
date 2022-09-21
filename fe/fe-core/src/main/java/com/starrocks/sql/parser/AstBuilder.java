@@ -85,6 +85,7 @@ import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.ShowSnapshotStmt;
 import com.starrocks.analysis.ShowSqlBlackListStmt;
+import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.ShowWhiteListStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
@@ -3219,6 +3220,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSyncStatement(StarRocksParser.SyncStatementContext context) {
         return new SyncStmt();
+    }
+
+    @Override
+    public ParseNode visitShowTransactionStatement(StarRocksParser.ShowTransactionStatementContext context) {
+
+        String database = null;
+        if (context.qualifiedName() != null) {
+            database = getQualifiedName(context.qualifiedName()).toString();
+        }
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        return new ShowTransactionStmt(database, where);
     }
 
     @Override
