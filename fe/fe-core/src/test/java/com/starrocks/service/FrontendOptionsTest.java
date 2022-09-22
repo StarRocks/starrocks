@@ -118,6 +118,168 @@ public class FrontendOptionsTest {
         Assert.assertTrue(!useFqdn);
     }
 
+    private void testInitAddrUseFqdnCommonMock() {
+        new MockUp<System>() {
+            @Mock
+            public void exit(int status) throws IllegalAccessException {
+                throw new IllegalAccessException();
+            }
+        };
+        new MockUp<NetUtils>() {
+            @Mock
+            public List<InetAddress> getHosts() {
+                List<InetAddress> hosts = new ArrayList<>();
+                hosts.add(addr);
+                return hosts;
+            }
+        };
+    }
+
+    @Test(expected = IllegalAccessException.class)
+    public void testGetStartWithFQDNThrowUnknownHostException() {
+        testInitAddrUseFqdnCommonMock();
+        List<InetAddress> hosts = NetUtils.getHosts();
+        new MockUp<InetAddress>() {
+            @Mock
+            public InetAddress getLocalHost() throws UnknownHostException {
+                throw new UnknownHostException();
+            }
+        };
+        FrontendOptions.initAddrUseFqdn(hosts);
+    }
+
+    @Test(expected = IllegalAccessException.class)
+    public void testGetStartWithFQDNGetNullCanonicalHostName() {
+        testInitAddrUseFqdnCommonMock();
+        List<InetAddress> hosts = NetUtils.getHosts();
+        new MockUp<InetAddress>() {
+            @Mock
+            public InetAddress getLocalHost() throws UnknownHostException {
+                return addr;
+            }
+            @Mock
+            public String getHostAddress() {
+                return "127.0.0.10";
+            }
+            @Mock
+            public String getCanonicalHostName() {
+                return null;
+            }
+        };
+        FrontendOptions.initAddrUseFqdn(hosts);
+    }
+
+    @Test(expected = IllegalAccessException.class)
+    public void testGetStartWithFQDNGetNameThrowUnknownHostException() {
+        testInitAddrUseFqdnCommonMock();
+        List<InetAddress> hosts = NetUtils.getHosts();
+        new MockUp<InetAddress>() {
+            @Mock
+            public InetAddress getLocalHost() throws UnknownHostException {
+                return addr;
+            }
+            @Mock
+            public String getHostAddress() {
+                return "127.0.0.10";
+            }
+            @Mock
+            public String getCanonicalHostName() {
+                return "sandbox";
+            }
+            @Mock
+            public InetAddress getByName(String host) throws UnknownHostException {
+                throw new UnknownHostException();
+            }
+        };
+        FrontendOptions.initAddrUseFqdn(hosts);
+    }
+
+    @Test(expected = IllegalAccessException.class)
+    public void testGetStartWithFQDNGetNameGetNull() {
+        testInitAddrUseFqdnCommonMock();
+        List<InetAddress> hosts = NetUtils.getHosts();
+        new MockUp<InetAddress>() {
+            @Mock
+            public InetAddress getLocalHost() throws UnknownHostException {
+                return addr;
+            }
+            @Mock
+            public String getHostAddress() {
+                return "127.0.0.10";
+            }
+            @Mock
+            public String getCanonicalHostName() {
+                return "sandbox";
+            }
+            @Mock
+            public InetAddress getByName(String host) throws UnknownHostException {
+                return null;
+            }
+        };
+        FrontendOptions.initAddrUseFqdn(hosts);
+    }
+
+    @Test
+    public void testGetStartWithFQDN() {
+        testInitAddrUseFqdnCommonMock();
+        List<InetAddress> hosts = NetUtils.getHosts();
+        new MockUp<InetAddress>() {
+            @Mock
+            public InetAddress getLocalHost() throws UnknownHostException {
+                return addr;
+            }
+            @Mock
+            public String getHostAddress() {
+                return "127.0.0.10";
+            }
+            @Mock
+            public String getCanonicalHostName() {
+                return "sandbox";
+            }
+            @Mock
+            public InetAddress getByName(String host) throws UnknownHostException {
+                return addr;
+            }
+        };
+        FrontendOptions.initAddrUseFqdn(hosts);
+    }
+
+    @Test(expected = IllegalAccessException.class)
+    public void testGetStartWithFQDNNotFindAddr() {
+        new MockUp<System>() {
+            @Mock
+            public void exit(int status) throws IllegalAccessException {
+                throw new IllegalAccessException();
+            }
+        };
+        new MockUp<NetUtils>() {
+            @Mock
+            public List<InetAddress> getHosts() {
+                List<InetAddress> hosts = new ArrayList<>();
+                return hosts;
+            }
+        };
+        List<InetAddress> hosts = NetUtils.getHosts();
+        new MockUp<InetAddress>() {
+            @Mock
+            public InetAddress getLocalHost() throws UnknownHostException {
+                return addr;
+            }
+            @Mock
+            public String getHostAddress() {
+                return "127.0.0.10";
+            }
+            @Mock
+            public String getCanonicalHostName() {
+                return "sandbox";
+            }
+            @Mock
+            public InetAddress getByName(String host) throws UnknownHostException {
+                return addr;
+            }
+        };
+        FrontendOptions.initAddrUseFqdn(hosts);
+    }
 
     private void mkdir(boolean hasFqdn, String metaPath) {
         File dir = new File(metaPath);
