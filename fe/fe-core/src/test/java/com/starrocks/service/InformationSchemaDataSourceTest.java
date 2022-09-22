@@ -154,7 +154,7 @@ public class InformationSchemaDataSourceTest {
                 Assert.assertTrue(info.getTable_catalog().equals("def"));
                 Assert.assertTrue(info.getTable_schema().equals("test_db"));
                 Assert.assertTrue(info.getTable_name().equals("test_table_pk"));
-                Assert.assertTrue(info.getTable_type().equals("OLAP"));
+                Assert.assertTrue(info.getTable_type().equals("BASE TABLE"));
                 Assert.assertTrue(info.getEngine().equals("StarRocks"));
                 Assert.assertTrue(info.getVersion() == -1L);
                 Assert.assertTrue(info.getRow_format().equals("NULL"));
@@ -174,6 +174,7 @@ public class InformationSchemaDataSourceTest {
                 Assert.assertTrue(info.getTable_comment().equals("test_comment"));
             } 
             if (info.getTable_name().equals("test_view")) {
+                Assert.assertTrue(info.getTable_type().equals("VIEW"));
                 Assert.assertTrue(info.getTable_rows() == -1L);
                 Assert.assertTrue(info.getAvg_row_length() == -1L);
                 Assert.assertTrue(info.getData_length() == -1L);
