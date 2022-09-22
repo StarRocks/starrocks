@@ -913,10 +913,6 @@ drop_stmt ::=
     {:
         RESULT = new DropUserStmt(userId);
     :}
-    | KW_DROP KW_REPOSITORY ident:repoName
-    {:
-        RESULT = new DropRepositoryStmt(repoName);
-    :}
     | KW_DROP KW_ROLE ident_or_text:role
     {:
         RESULT = new DropRoleStmt(role);
@@ -1002,10 +998,6 @@ show_param ::=
     | KW_FILE opt_db:dbName
     {:
         RESULT = new ShowSmallFilesStmt(dbName);
-    :}
-    | KW_TRANSACTION opt_db:dbName opt_wild_where
-    {:
-        RESULT = new ShowTransactionStmt(dbName, parser.where);
     :}
     ;
 

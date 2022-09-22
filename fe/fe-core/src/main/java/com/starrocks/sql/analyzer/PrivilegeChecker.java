@@ -9,6 +9,7 @@ import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
@@ -135,6 +136,9 @@ import java.util.TreeSet;
 
 public class PrivilegeChecker {
     public static void check(StatementBase statement, ConnectContext session) {
+        if (session.getGlobalStateMgr().isUsingNewPrivilege()) {
+            return;
+        }
         new PrivilegeCheckerVisitor().check(statement, session);
     }
 
@@ -1265,6 +1269,14 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitCreateRepositoryStmt(CreateRepositoryStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropRepositoryStmt(DropRepositoryStmt statement, ConnectContext context) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }

@@ -29,6 +29,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 import java.util.Map;
@@ -60,7 +61,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             .add(LoadStmt.TIMEZONE)
             .build();
 
-    private final LabelName labelName;
+    private LabelName labelName;
     private final List<ParseNode> loadPropertyList;
     private RoutineLoadDesc routineLoadDesc;
     private final Map<String, String> jobProperties;
@@ -87,6 +88,14 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         return labelName.getLabelName();
     }
 
+    public void setLabelName(LabelName labelName) {
+        this.labelName = labelName;
+    }
+
+    public LabelName getLabelName() {
+        return this.labelName;
+    }
+
     public Map<String, String> getAnalyzedJobProperties() {
         return analyzedJobProperties;
     }
@@ -103,10 +112,15 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         return routineLoadDesc;
     }
 
+    public void setRoutineLoadDesc(RoutineLoadDesc routineLoadDesc) {
+        this.routineLoadDesc = routineLoadDesc;
+    }
+
     public List<ParseNode> getLoadPropertyList() {
         return loadPropertyList;
     }
 
+    @Deprecated
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
@@ -125,7 +139,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         }
     }
 
-    private void checkJobProperties() throws UserException {
+    public void checkJobProperties() throws UserException {
         Optional<String> optional = jobProperties.keySet().stream().filter(
                 entity -> !CONFIGURABLE_PROPERTIES_SET.contains(entity)).findFirst();
         if (optional.isPresent()) {
@@ -194,7 +208,18 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         }
     }
 
-    private void checkDataSourceProperties() throws AnalysisException {
+    public void checkDataSourceProperties() throws AnalysisException {
         dataSourceProperties.analyze();
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAlterRoutineLoadStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+
 }

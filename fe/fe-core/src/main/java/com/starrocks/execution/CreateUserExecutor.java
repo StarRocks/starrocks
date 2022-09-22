@@ -11,7 +11,11 @@ import com.starrocks.qe.ShowResultSet;
 public class CreateUserExecutor implements DataDefinitionExecutor {
 
     public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws DdlException {
-        context.getGlobalStateMgr().getAuth().createUser((CreateUserStmt) stmt);
+        if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+            context.getGlobalStateMgr().getAuthenticationManager().createUser((CreateUserStmt) stmt);
+        } else {
+            context.getGlobalStateMgr().getAuth().createUser((CreateUserStmt) stmt);
+        }
         return null;
     }
 }

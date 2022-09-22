@@ -182,6 +182,7 @@ std::string type_to_string(PrimitiveType t);
 std::string type_to_odbc_string(PrimitiveType t);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name);
+TTypeDesc gen_array_type_desc(const TPrimitiveType::type field_type);
 
 PrimitiveType scalar_field_type_to_primitive_type(FieldType field_type);
 

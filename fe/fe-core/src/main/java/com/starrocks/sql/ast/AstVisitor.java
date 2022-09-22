@@ -2,6 +2,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.AddSqlBlackListStmt;
+import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
@@ -21,6 +22,7 @@ import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
@@ -50,6 +52,7 @@ import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.ShowSnapshotStmt;
 import com.starrocks.analysis.ShowSqlBlackListStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.ShowWhiteListStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
@@ -146,6 +149,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowFrontendsStmt(ShowFrontendsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowTransactionStmt(ShowTransactionStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -360,6 +367,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitAlterRoutineLoadStatement(AlterRoutineLoadStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -450,6 +461,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateRepositoryStmt(CreateRepositoryStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitDropRepositoryStmt(DropRepositoryStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 

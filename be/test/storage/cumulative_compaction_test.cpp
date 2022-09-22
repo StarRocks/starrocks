@@ -168,8 +168,6 @@ public:
                 Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
         tablet->init();
 
-        config::cumulative_compaction_skip_window_seconds = -2;
-
         CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
 
         ASSERT_TRUE(cumulative_compaction.compact().ok());

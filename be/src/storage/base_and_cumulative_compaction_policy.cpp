@@ -57,27 +57,13 @@ bool BaseAndCumulativeCompactionPolicy::_is_rowset_creation_time_ordered(
 void BaseAndCumulativeCompactionPolicy::_pick_cumulative_rowsets(bool* has_delete_version,
                                                                  size_t* rowsets_compaction_score,
                                                                  std::vector<RowsetSharedPtr>* rowsets) {
-    int64_t now = UnixSeconds();
     if (_compaction_context->rowset_levels[0].size() == 0) {
         return;
     }
-    bool is_creation_time_ordered = _is_rowset_creation_time_ordered(_compaction_context->rowset_levels[0]);
     int index = 0;
     for (auto rowset : _compaction_context->rowset_levels[0]) {
         if (_compaction_context->tablet->version_for_delete_predicate(rowset->version())) {
             *has_delete_version = true;
-            break;
-        }
-        // For level-0, should consider the rowset creation time.
-        // newly-created rowsets should be skipped.
-        if ((is_creation_time_ordered || (!is_creation_time_ordered && index != 0)) &&
-            rowset->creation_time() + config::cumulative_compaction_skip_window_seconds > now) {
-            // rowset in rowset_levels is ordered
-            VLOG(2) << "rowset:" << rowset->rowset_id() << ", version:" << rowset->version()
-                    << " is newly created. creation time:" << rowset->creation_time()
-                    << ", threshold:" << config::cumulative_compaction_skip_window_seconds
-                    << ", rowset overlapping:" << rowset->rowset_meta()->segments_overlap() << ", index:" << index
-                    << ", is_creation_time_ordered:" << is_creation_time_ordered;
             break;
         }
         rowsets->emplace_back(rowset->shared_from_this());
