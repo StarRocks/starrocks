@@ -62,24 +62,24 @@ The following bugs are fixed:
 
 - DECIMAL data types returned by DESC are different from those specified in the CREATE TABLE statement. [#7309](https://github.com/StarRocks/starrocks/pull/7309)
 
-- FE metadata management issues that affect the stability of FE. [#6685](https://github.com/StarRocks/starrocks/pull/6685) [#9445](https://github.com/StarRocks/starrocks/pull/9445) [#7974](https://github.com/StarRocks/starrocks/pull/7974) [#7455](https://github.com/StarRocks/starrocks/pull/7455)
+- FE metadata management issues that affect the stability of FEs. [#6685](https://github.com/StarRocks/starrocks/pull/6685) [#9445](https://github.com/StarRocks/starrocks/pull/9445) [#7974](https://github.com/StarRocks/starrocks/pull/7974) [#7455](https://github.com/StarRocks/starrocks/pull/7455)
 
 - Data load-related issues:
 
-  - Broke Load fails when ARRAY-type column is set. [#9158](https://github.com/StarRocks/starrocks/pull/9158)
+  - Broke Load fails when ARRAY columns are specified. [#9158](https://github.com/StarRocks/starrocks/pull/9158)
   - Replicas are inconsistent after data is loaded to a non-Duplicate Key table via Broker Load. [#8714](https://github.com/StarRocks/starrocks/pull/8714)
   - Executing ALTER ROUTINE LOAD raises NPE. [#7804](https://github.com/StarRocks/starrocks/pull/7804)
 
-- Data Lake analytic-related issues:
+- Data Lake analytics-related issues:
 
-  - Queries on Parquet-format in Hive external tables fail. [#7413](https://github.com/StarRocks/starrocks/pull/7413) [#7482](https://github.com/StarRocks/starrocks/pull/7482) [#7624](https://github.com/StarRocks/starrocks/pull/7624)
-  - Incorrect results are returned to queries with `limit` clause on Elasticsearch external table. [#9226](https://github.com/StarRocks/starrocks/pull/9226)
+  - Queries on Parquet data in Hive external tables fail. [#7413](https://github.com/StarRocks/starrocks/pull/7413) [#7482](https://github.com/StarRocks/starrocks/pull/7482) [#7624](https://github.com/StarRocks/starrocks/pull/7624)
+  - Incorrect results are returned for queries with the `limit` clause on Elasticsearch external tables. [#9226](https://github.com/StarRocks/starrocks/pull/9226)
 
-- An unknown error is raised during queries on an Apache Iceberg table with a complex data type. [#11298](https://github.com/StarRocks/starrocks/pull/11298)
+- An unknown error occurs during queries on an Apache Iceberg table with a complex data type. [#11298](https://github.com/StarRocks/starrocks/pull/11298)
 
-- Metadata can be inconsistent between the Leader FE and Follower FE nodes. [#11215](https://github.com/StarRocks/starrocks/pull/11215)
+- Metadata is inconsistent between the Leader FE and Follower FE nodes. [#11215](https://github.com/StarRocks/starrocks/pull/11215)
 
-- BE crashes when BITMAP type data size is larger than 2GB. [#11178](https://github.com/StarRocks/starrocks/pull/11178)
+- BE crashes when the size of BITMAP data exceeds 2 GB. [#11178](https://github.com/StarRocks/starrocks/pull/11178)
 
 ### Behavior Change
 
@@ -87,5 +87,5 @@ Page Cache is enabled by default. The default cache size is 20% of the system me
 
 ### Others
 
-- Announcing the general availability of the Resource Group.
+- Announcing the general availability of Resource Group.
 - Announcing the general availability of the JSON data type and its related functions.
