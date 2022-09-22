@@ -178,14 +178,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitGrantPrivilegeStatement(GrantPrivilegeStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitRevokePrivilegeStatement(RevokePrivilegeStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     public R visitCreateTableLikeStatement(CreateTableLikeStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -382,10 +374,6 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitAlterRoutineLoadStmt(AlterRoutineLoadStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     public R visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -426,10 +414,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitSyncStatement(SyncStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     public R visitCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -439,14 +423,6 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitRecoverPartitionStmt(RecoverPartitionStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitRevokeRoleStatement(RevokeRoleStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitGrantRoleStatement(GrantRoleStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

@@ -50,6 +50,8 @@ import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
+import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
+import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -353,7 +355,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitAlterRoutineLoadStmt(AlterRoutineLoadStmt stmt, ConnectContext context) {
+        public ShowResultSet visitAlterRoutineLoadStatement(AlterRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getRoutineLoadManager().alterRoutineLoadJob(stmt);
             });
@@ -387,33 +389,25 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitRevokeRoleStatement(RevokeRoleStmt stmt, ConnectContext context) {
+        public ShowResultSet visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuth().revokeRole(stmt);
+                if (stmt instanceof GrantRoleStmt) {
+                    context.getGlobalStateMgr().getAuth().grantRole((GrantRoleStmt) stmt);
+                } else {
+                    context.getGlobalStateMgr().getAuth().revokeRole((RevokeRoleStmt) stmt);
+                }
             });
             return null;
         }
 
         @Override
-        public ShowResultSet visitGrantRoleStatement(GrantRoleStmt stmt, ConnectContext context) {
+        public ShowResultSet visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuth().grantRole(stmt);
-            });
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitGrantPrivilegeStatement(GrantPrivilegeStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuth().grant(stmt);
-            });
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitRevokePrivilegeStatement(RevokePrivilegeStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuth().revoke(stmt);
+                if (stmt instanceof GrantPrivilegeStmt) {
+                    context.getGlobalStateMgr().getAuth().grant((GrantPrivilegeStmt) stmt);
+                } else {
+                    context.getGlobalStateMgr().getAuth().revoke((RevokePrivilegeStmt) stmt);
+                }
             });
             return null;
         }
