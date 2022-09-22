@@ -26,10 +26,10 @@ import java.util.Map;
 import static com.starrocks.external.ColumnTypeConverter.convertToArrayType;
 import static com.starrocks.external.ColumnTypeConverter.convertToMapType;
 import static com.starrocks.external.ColumnTypeConverter.getPrecisionAndScale;
-import static com.starrocks.external.ColumnTypeConverter.getSuffixName;
 import static com.starrocks.external.Utils.createPartitionKey;
 import static com.starrocks.external.Utils.getPartitionValues;
 import static com.starrocks.external.Utils.getRowCount;
+import static com.starrocks.external.Utils.getSuffixName;
 import static com.starrocks.external.Utils.getTotalSize;
 
 public class UtilsTest {
