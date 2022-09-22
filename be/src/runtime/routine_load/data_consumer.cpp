@@ -542,14 +542,14 @@ const std::string& PulsarDataConsumer::get_partition() {
 
 Status PulsarDataConsumer::get_partition_backlog(int64_t* backlog) {
     _last_visit_time = time(nullptr);
-    pulsar::BrokerConsumerStats brokerConsumerStats;
-    pulsar::Result result = _p_consumer.getBrokerConsumerStats(brokerConsumerStats);
+    pulsar::BrokerConsumerStats broker_consumer_stats;
+    pulsar::Result result = _p_consumer.getBrokerConsumerStats(broker_consumer_stats);
     if (result != pulsar::ResultOk) {
         LOG(WARNING) << "Failed to get broker consumer stats: "
                      << ", err: " << result;
         return Status::InternalError("Failed to get broker consumer stats: " + result);
     }
-    *backlog = brokerConsumerStats.getMsgBacklog();
+    *backlog = broker_consumer_stats.getMsgBacklog();
 
     return Status::OK();
 }

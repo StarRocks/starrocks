@@ -191,10 +191,10 @@ LIBRDKAFKA_SOURCE=librdkafka-1.9.2
 LIBRDKAFKA_MD5SUM="fe9624e905abbf8324b0f6be520d9c24"
 
 # pulsar
-PULSAR_DOWNLOAD="https://github.com/apache/pulsar/archive/refs/tags/v2.10.0.tar.gz"
-PULSAR_NAME=pulsar-2.10.0.tar.gz
-PULSAR_SOURCE=pulsar-2.10.0
-PULSAR_MD5SUM="4de945ca80ab5fd5706f323458e5402a"
+PULSAR_DOWNLOAD="https://github.com/apache/pulsar/archive/refs/tags/v2.10.1.tar.gz"
+PULSAR_NAME=pulsar-2.10.1.tar.gz
+PULSAR_SOURCE=pulsar-2.10.1
+PULSAR_MD5SUM="3c387e7a8be4545a39e00611ed051918"
 
 # zstd
 ZSTD_DOWNLOAD="https://github.com/facebook/zstd/archive/v1.5.0.tar.gz"
