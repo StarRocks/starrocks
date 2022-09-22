@@ -26,6 +26,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -416,15 +417,21 @@ public class Text implements Writable {
         return length;
     }
 
+    private static void readAndCheckEof(CheckedInputStream in, byte[] bytes, int expectLength) throws IOException {
+        int readRet = in.read(bytes, 0, expectLength);
+        if (readRet != expectLength) {
+            throw new EOFException(String.format("reach EOF: read expect %d actual %d!", expectLength, readRet));
+        }
+    }
     /**
      * Same as readString(), but to a CheckedInputStream
      */
     public static String readStringWithChecksum(CheckedInputStream in) throws IOException {
         byte[] bytes = new byte[4];
-        in.read(bytes, 0, bytes.length);
+        readAndCheckEof(in, bytes, 4);
         int length = ByteBuffer.wrap(bytes).getInt();
         bytes = new byte[length];
-        in.read(bytes, 0, length);
+        readAndCheckEof(in, bytes, length);
         return decode(bytes);
     }
 

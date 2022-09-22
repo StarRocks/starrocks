@@ -12,6 +12,7 @@ import org.junit.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Type;
@@ -310,5 +311,34 @@ public class SRMetaBlockTest {
         } finally {
             dis.close();
         }
+    }
+
+    @Test
+    public void emptyFile() throws Exception {
+        String name = "empty";
+        DataOutputStream dos = openOutput(name);
+        // only 1 block
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, name, 1);
+        writer.writeJson("Muchos años después");
+        writer.close();
+        dos.close();
+
+        DataInputStream dis = openInput(name);
+        // first block, everything's fine
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, name);
+        reader.readJson(String.class);
+        reader.close();
+        // second block, get EOF
+
+        reader = new SRMetaBlockReader(dis, "xxx");
+        try {
+            reader.readJson(String.class);
+            Assert.fail();
+        } catch (EOFException exception) {
+            Assert.assertTrue(true);
+        } finally {
+            reader.close();
+        }
+        dis.close();
     }
 }
