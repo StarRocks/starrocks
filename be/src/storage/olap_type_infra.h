@@ -56,6 +56,7 @@ namespace starrocks {
 #define APPLY_FOR_BASIC_OLAP_FIELD_TYPE(M) \
     APPLY_FOR_BITMAP_INDEX_TYPE(M)         \
     M(OLAP_FIELD_TYPE_JSON)                \
+    M(OLAP_FIELD_TYPE_IPV4)                \
     M(OLAP_FIELD_TYPE_DECIMAL32)           \
     M(OLAP_FIELD_TYPE_DECIMAL64)           \
     M(OLAP_FIELD_TYPE_DECIMAL128)

@@ -106,6 +106,8 @@ std::string SchemaColumnsScanner::to_mysql_data_type_string(TColumnDesc& desc) {
         return "date";
     case TPrimitiveType::DATETIME:
         return "datetime";
+    case TPrimitiveType::IPV4:
+        return "ipv4";
     case TPrimitiveType::DECIMAL32:
     case TPrimitiveType::DECIMAL64:
     case TPrimitiveType::DECIMAL128:

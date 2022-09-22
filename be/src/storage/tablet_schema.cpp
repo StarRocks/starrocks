@@ -52,6 +52,7 @@ FieldType TabletColumn::get_field_type_by_string(const std::string& type_str) {
     if (upper_type_str == "DATE_V2") return OLAP_FIELD_TYPE_DATE_V2;
     if (upper_type_str == "DATE") return OLAP_FIELD_TYPE_DATE;
     if (upper_type_str == "DATETIME") return OLAP_FIELD_TYPE_DATETIME;
+    if (upper_type_str == "IPV4") return OLAP_FIELD_TYPE_IPV4;
     if (upper_type_str == "TIMESTAMP") return OLAP_FIELD_TYPE_TIMESTAMP;
     if (upper_type_str == "DECIMAL_V2") return OLAP_FIELD_TYPE_DECIMAL_V2;
     if (upper_type_str == "DECIMAL") return OLAP_FIELD_TYPE_DECIMAL;
