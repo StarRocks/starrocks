@@ -46,7 +46,6 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.io.Text;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DropComputeNodeLog;
@@ -396,14 +395,8 @@ public class SystemInfoService {
             // remove worker
             if (Config.integrate_starmgr) {
                 long starletPort = droppedBackend.getStarletPort();
-                // only need remove worker when this be get dead after it became alive
-                // if it is dead all the time, not need to remove worker
-                boolean gotStarletPort = Deencapsulation.getField(droppedBackend, "gotStarletPort");
-                if (starletPort == 0) {
-                    if (gotStarletPort) {
-                        throw new DdlException("starletPort has not been updated by heartbeat from this backend");
-                    }
-                } else {
+                // only need to remove worker after be reported its staretPort
+                if (starletPort != 0) {
                     String workerAddr = droppedBackend.getHost() + ":" + starletPort;
                     GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
                 }
