@@ -170,45 +170,91 @@ public class AuthenticationManager {
     }
 
     /**
+     * Use new image format by SRMetaBlockWriter/SRMetaBlockReader
      *
+     * +------------------+
+     * |     header       |
+     * +------------------+
+     * |                  |
+     * |  Authentication  |
+     * |     Manager      |
+     * |                  |
+     * +------------------+
+     * |     numUser      |
+     * +------------------+
+     * | User Identify 1  |
+     * +------------------+
+     * |      User        |
+     * |  Authentication  |
+     * |     Info 1       |
+     * +------------------+
+     * | User Identify 2  |
+     * +------------------+
+     * |      User        |
+     * |  Authentication  |
+     * |     Info 2       |
+     * +------------------+
+     * |       ...        |
+     * +------------------+
+     * |      footer      |
+     * +------------------+
      */
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, AuthenticationManager.class.getName(), cnt);
-        writer.writeJson(this);
-        writer.writeJson(userToAuthenticationInfo.size());
-        Iterator<Map.Entry<UserIdentity, UserAuthenticationInfo>> iterator =
-                userToAuthenticationInfo.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<UserIdentity, UserAuthenticationInfo> entry = iterator.next();
-            writer.writeJson(entry.getKey());
-            writer.writeJson(entry.getValue());
+    public void save(DataOutputStream dos) throws IOException {
+        try {
+            // 1 json for myself,1 json for number of users, 2 json for each user(kv)
+            int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, AuthenticationManager.class.getName(), cnt);
+            // 1 json for myself
+            writer.writeJson(this);
+            // 1 json for num user
+            writer.writeJson(userToAuthenticationInfo.size());
+            Iterator<Map.Entry<UserIdentity, UserAuthenticationInfo>> iterator =
+                    userToAuthenticationInfo.entrySet().iterator();
+            while (iterator.hasNext()) {
+                // 2 json for each user(kv)
+                Map.Entry<UserIdentity, UserAuthenticationInfo> entry = iterator.next();
+                writer.writeJson(entry.getKey());
+                writer.writeJson(entry.getValue());
+            }
+            writer.close();
+        } catch (SRMetaBlockException e) {
+            IOException exception = new IOException("failed to save AuthenticationManager!");
+            exception.initCause(e);
+            throw exception;
         }
-        writer.close();
     }
 
-    public static AuthenticationManager load(DataInputStream dis)
-            throws IOException, SRMetaBlockException, AuthenticationException {
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, AuthenticationManager.class.getName());
-        AuthenticationManager ret = null;
+    public static AuthenticationManager load(DataInputStream dis) throws IOException, DdlException {
         try {
-            ret = (AuthenticationManager) reader.readJson(AuthenticationManager.class);
-            ret.userToAuthenticationInfo = new HashMap<>();
-            int numUser = (int) reader.readJson(int.class);
-            LOG.info("loading {} users", numUser);
-            for (int i = 0; i != numUser; ++ i) {
-                UserIdentity userIdentity = (UserIdentity) reader.readJson(UserIdentity.class);
-                UserAuthenticationInfo userAuthenticationInfo =
-                        (UserAuthenticationInfo) reader.readJson(UserAuthenticationInfo.class);
-                userAuthenticationInfo.analyse();
-                ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
+            SRMetaBlockReader reader = new SRMetaBlockReader(dis, AuthenticationManager.class.getName());
+            AuthenticationManager ret = null;
+            try {
+                // 1 json for myself
+                ret = (AuthenticationManager) reader.readJson(AuthenticationManager.class);
+                ret.userToAuthenticationInfo = new HashMap<>();
+                // 1 json for num user
+                int numUser = (int) reader.readJson(int.class);
+                LOG.info("loading {} users", numUser);
+                for (int i = 0; i != numUser; ++i) {
+                    // 2 json for each user(kv)
+                    UserIdentity userIdentity = (UserIdentity) reader.readJson(UserIdentity.class);
+                    UserAuthenticationInfo userAuthenticationInfo =
+                            (UserAuthenticationInfo) reader.readJson(UserAuthenticationInfo.class);
+                    userAuthenticationInfo.analyse();
+                    ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
+                }
+            } catch (SRMetaBlockEOFException eofException) {
+                LOG.warn("got EOF exception, ignore, ", eofException);
+            } finally {
+                reader.close();
             }
-        } catch (SRMetaBlockEOFException eofException) {
-            LOG.warn("got EOF exception, ignore, ", eofException);
-        } finally {
-            reader.close();
+            assert ret != null; // can't be NULL
+            LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
+            return ret;
+        } catch (SRMetaBlockException | AuthenticationException e) {
+            DdlException exception = new DdlException("failed to save AuthenticationManager!");
+            exception.initCause(e);
+            throw exception;
         }
-        LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
-        return ret;
     }
 }

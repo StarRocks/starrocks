@@ -425,8 +425,7 @@ public class Text implements Writable {
         int length = ByteBuffer.wrap(bytes).getInt();
         bytes = new byte[length];
         in.read(bytes, 0, length);
-        String res = decode(bytes);
-        return res;
+        return decode(bytes);
     }
 
     /**

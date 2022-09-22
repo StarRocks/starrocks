@@ -13,6 +13,25 @@ import java.lang.reflect.Type;
 import java.util.zip.CRC32;
 import java.util.zip.CheckedInputStream;
 
+/**
+ * Load object from input stream as the following format.
+ *
+ * +------------------+
+ * |     header       | {"numJson": 10, "name": "AuthenticationManager"}
+ * +------------------+
+ * |     Json 1       |
+ * +------------------+
+ * |     Json 2       |
+ * +------------------+
+ * |      ...         |
+ * +------------------+
+ * |     Json 10      |
+ * +------------------+
+ * |      footer      | {"checksum": xxx}
+ * +------------------+
+ *
+ * Usage see com.starrocks.persist.metablock.SRMetaBlockTest#testSimple()
+ */
 public class SRMetaBlockReader {
     private static final Logger LOG = LogManager.getLogger(SRMetaBlockReader.class);
     private CheckedInputStream checkedInputStream;

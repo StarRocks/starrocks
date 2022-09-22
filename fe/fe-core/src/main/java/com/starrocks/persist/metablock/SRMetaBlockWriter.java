@@ -10,6 +10,25 @@ import java.io.IOException;
 import java.util.zip.CRC32;
 import java.util.zip.CheckedOutputStream;
 
+/**
+ * Save object to output stream as the following format.
+ *
+ * +------------------+
+ * |     header       | {"numJson": 10, "name": "AuthenticationManager"}
+ * +------------------+
+ * |     Json 1       |
+ * +------------------+
+ * |     Json 2       |
+ * +------------------+
+ * |      ...         |
+ * +------------------+
+ * |     Json 10      |
+ * +------------------+
+ * |      footer      | {"checksum": xxx}
+ * +------------------+
+ *
+ * Usage see com.starrocks.persist.metablock.SRMetaBlockTest#testSimple()
+ */
 public class SRMetaBlockWriter {
     private CheckedOutputStream checkedOutputStream;
     private SRMetaBlockHeader header;
