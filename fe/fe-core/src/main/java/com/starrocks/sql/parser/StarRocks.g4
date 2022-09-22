@@ -600,13 +600,16 @@ pauseRoutineLoadStatement
 
 showRoutineLoadStatement
     : SHOW ALL? ROUTINE LOAD (FOR (db=qualifiedName '.')? name=identifier)?
+        (FROM db=qualifiedName)?
         (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
-    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')?
+        (WITH (SYNC | ASYNC) MODE)?
+        properties?
     ;
 
 dropStatsStatement
@@ -615,7 +618,9 @@ dropStatsStatement
 
 analyzeHistogramStatement
     : ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON identifier (',' identifier)*
-        (WITH bucket=INTEGER_VALUE BUCKETS)? properties?
+        (WITH (SYNC | ASYNC) MODE)?
+        (WITH bucket=INTEGER_VALUE BUCKETS)?
+        properties?
     ;
 
 dropHistogramStatement
@@ -1426,7 +1431,7 @@ nonReserved
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
-    | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODIFY | MONTH | MERGE
+    | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
     | OBSERVER | OFFSET | ONLY | OPEN | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
