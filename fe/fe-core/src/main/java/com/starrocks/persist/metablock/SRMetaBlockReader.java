@@ -54,7 +54,7 @@ public class SRMetaBlockReader {
     }
 
     public void close() throws IOException, SRMetaBlockException {
-       if (numJsonReaded < header.getNumJson()) {
+        if (numJsonReaded < header.getNumJson()) {
             // discard the rest of data for compatibility
             // normally it's because this FE has just rollbacked from a higher version that would produce more metadata
             int rest = header.getNumJson() - numJsonReaded;

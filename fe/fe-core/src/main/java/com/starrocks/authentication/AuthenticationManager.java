@@ -3,13 +3,22 @@
 package com.starrocks.authentication;
 
 
+import com.google.gson.annotations.Expose;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.persist.metablock.SRMetaBlockEOFException;
+import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -24,8 +33,10 @@ public class AuthenticationManager {
 
     // core data struction
     // user identity -> all the authentication infomation
+    @Expose(serialize = false)
     private Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo = new HashMap<>();
     // For legacy reason, user property are set by username instead of full user identity.
+    @SerializedName(value = "m")
     private Map<String, UserProperty> userNameToProperty = new HashMap<>();
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
@@ -156,5 +167,48 @@ public class AuthenticationManager {
             }
         }
         userToAuthenticationInfo.put(userIdentity, info);
+    }
+
+    /**
+     *
+     */
+    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
+        int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, AuthenticationManager.class.getName(), cnt);
+        writer.writeJson(this);
+        writer.writeJson(userToAuthenticationInfo.size());
+        Iterator<Map.Entry<UserIdentity, UserAuthenticationInfo>> iterator =
+                userToAuthenticationInfo.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<UserIdentity, UserAuthenticationInfo> entry = iterator.next();
+            writer.writeJson(entry.getKey());
+            writer.writeJson(entry.getValue());
+        }
+        writer.close();
+    }
+
+    public static AuthenticationManager load(DataInputStream dis)
+            throws IOException, SRMetaBlockException, AuthenticationException {
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, AuthenticationManager.class.getName());
+        AuthenticationManager ret = null;
+        try {
+            ret = (AuthenticationManager) reader.readJson(AuthenticationManager.class);
+            ret.userToAuthenticationInfo = new HashMap<>();
+            int numUser = (int) reader.readJson(int.class);
+            LOG.info("loading {} users", numUser);
+            for (int i = 0; i != numUser; ++ i) {
+                UserIdentity userIdentity = (UserIdentity) reader.readJson(UserIdentity.class);
+                UserAuthenticationInfo userAuthenticationInfo =
+                        (UserAuthenticationInfo) reader.readJson(UserAuthenticationInfo.class);
+                userAuthenticationInfo.analyse();
+                ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
+            }
+        } catch (SRMetaBlockEOFException eofException) {
+            LOG.warn("got EOF exception, ignore, ", eofException);
+        } finally {
+            reader.close();
+        }
+        LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
+        return ret;
     }
 }
