@@ -62,7 +62,6 @@ public class AnalyzeStmtTest {
     public void testAllColumns() {
         String sql = "analyze table db.tbl";
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
-
         Assert.assertNull(analyzeStmt.getColumnNames());
     }
 
@@ -97,6 +96,18 @@ public class AnalyzeStmtTest {
     public void testProperties() {
         String sql = "analyze full table db.tbl properties('expire_sec' = '30')";
         analyzeFail(sql, "Property 'expire_sec' is not valid");
+
+        sql = "analyze full table db.tbl";
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertFalse(analyzeStmt.isAsync());
+
+        sql = "analyze full table db.tbl with sync mode";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertFalse(analyzeStmt.isAsync());
+
+        sql = "analyze full table db.tbl with async mode";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertTrue(analyzeStmt.isAsync());
     }
 
     @Test
