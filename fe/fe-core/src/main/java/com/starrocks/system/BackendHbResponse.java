@@ -47,6 +47,8 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     private String version = "";
     @SerializedName(value = "cpuCores")
     private int cpuCores;
+    @SerializedName(value = "rebootTime")
+    private long rebootTime = -1L;   
 
     public BackendHbResponse() {
         super(HeartbeatResponse.Type.BACKEND);
@@ -71,6 +73,14 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         this.status = HbStatus.BAD;
         this.beId = beId;
         this.msg = errMsg;
+    }
+
+    public long getRebootTime() {
+        return rebootTime;
+    }
+
+    public void setRebootTime(long rebootTime) {
+        this.rebootTime = rebootTime * 1000;
     }
 
     public long getBeId() {
