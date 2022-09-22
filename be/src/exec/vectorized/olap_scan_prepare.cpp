@@ -8,11 +8,11 @@
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/dictmapping_expr.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
-#include "exprs/vectorized/olap_runtime_ranger.hpp"
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
+#include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_parser.h"
 #include "storage/vectorized_column_predicate.h"
 #include "types/date_value.hpp"
@@ -384,7 +384,7 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
 
         // runtime filter existed and does not have null.
         if (rf == nullptr) {
-            rt_ranger_params.add_unreached_rf(desc, &slot);
+            rt_ranger_params.add_unarrived_rf(desc, &slot);
             continue;
         }
 

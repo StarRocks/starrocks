@@ -6,7 +6,7 @@
 #include "exec/olap_common.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/vectorized/olap_runtime_ranger.h"
+#include "storage/olap_runtime_range_pruner.h"
 
 namespace starrocks {
 class RuntimeState;
@@ -37,7 +37,7 @@ private:
     std::map<int, std::vector<ExprContext*>> slot_index_to_expr_ctxs; // from conjunct_ctxs
 
     // unreached runtime filter and they can push down to storage engine
-    RuntimeRangerParams rt_ranger_params;
+    UnarrivedRuntimeFilterList rt_ranger_params;
 
 public:
     static Status eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status);
@@ -51,7 +51,7 @@ public:
     Status parse_conjuncts(bool scan_keys_unlimited, int32_t max_scan_key_num,
                            bool enable_column_expr_predicate = false);
 
-    const RuntimeRangerParams& runtime_ranger_params() { return rt_ranger_params; }
+    const UnarrivedRuntimeFilterList& unarrived_runtime_filters() { return rt_ranger_params; }
 
 private:
     friend struct ColumnRangeBuilder;

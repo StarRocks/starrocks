@@ -7,7 +7,6 @@
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/workgroup/work_group.h"
-#include "exprs/vectorized/olap_runtime_ranger.hpp"
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -15,6 +14,7 @@
 #include "runtime/primitive_type.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
@@ -146,7 +146,8 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = !config::disable_storage_page_cache;
-    _params.runtime_ranger_ctx = RuntimeRangerContext(_scan_ctx->conjuncts_manager().runtime_ranger_params(), parser);
+    _params.runtime_ranger_ctx =
+            OlapRuntimeScanRangePruner(parser, _scan_ctx->conjuncts_manager().unarrived_runtime_filters());
     _morsel->init_tablet_reader_params(&_params);
     _decide_chunk_size();
     std::vector<PredicatePtr> preds;

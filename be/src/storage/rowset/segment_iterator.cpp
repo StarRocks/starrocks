@@ -13,7 +13,6 @@
 #include "column/datum_tuple.h"
 #include "common/config.h"
 #include "common/status.h"
-#include "exprs/vectorized/olap_runtime_ranger.hpp"
 #include "fs/fs.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
@@ -26,6 +25,7 @@
 #include "storage/column_or_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
+#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
 #include "storage/roaring2range.h"
@@ -184,7 +184,7 @@ private:
     };
 
     Status _init();
-    Status _try_to_update_ranges();
+    Status _try_to_update_ranges_by_runtime_filter();
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
     template <bool check_global_dict>
@@ -369,8 +369,8 @@ Status SegmentIterator::_init() {
     return Status::OK();
 }
 
-Status SegmentIterator::_try_to_update_ranges() {
-    return _opts.runtime_ranger_ctx.update_range_if_arrived([this](auto cid, const PredicateList& predicates) {
+Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
+    return _opts.runtime_range_pruner.update_range_if_arrived([this](auto cid, const PredicateList& predicates) {
         const ColumnPredicate* del_pred;
         auto iter = _del_predicates.find(cid);
         del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
@@ -790,7 +790,7 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
         _inited = true;
     }
 
-    RETURN_IF_ERROR(_try_to_update_ranges());
+    RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
 
     DCHECK_EQ(0, chunk->num_rows());
 
@@ -807,7 +807,7 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
         _inited = true;
     }
 
-    RETURN_IF_ERROR(_try_to_update_ranges());
+    RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
 
     DCHECK_EQ(0, chunk->num_rows());
 

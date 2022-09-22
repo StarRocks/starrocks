@@ -6,10 +6,10 @@
 #include <unordered_map>
 #include <vector>
 
-#include "exprs/vectorized/olap_runtime_ranger.h"
 #include "runtime/global_dict/types.h"
 #include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
+#include "storage/olap_runtime_range_pruner.h"
 #include "storage/tuple.h"
 
 namespace starrocks {
@@ -64,7 +64,7 @@ struct TabletReaderParams {
     RowidRangeOptionPtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
-    RuntimeRangerContext runtime_ranger_ctx;
+    OlapRuntimeScanRangePruner runtime_ranger_ctx;
 
 public:
     std::string to_string() const;

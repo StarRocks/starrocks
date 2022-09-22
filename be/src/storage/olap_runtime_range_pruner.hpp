@@ -5,13 +5,13 @@
 #include <memory>
 
 #include "exec/olap_common.h"
-#include "exprs/vectorized/olap_runtime_ranger.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_parser.h"
 #include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
-namespace ranger::detail {
+namespace detail {
 struct RuntimeColumnPredicateBuilder {
     template <PrimitiveType ptype>
     StatusOr<std::vector<std::unique_ptr<ColumnPredicate>>> operator()(PredicateParser* parser,
@@ -68,42 +68,42 @@ struct RuntimeColumnPredicateBuilder {
         }
     }
 };
-} // namespace ranger::detail
+} // namespace detail
 
 template <class Updater>
-Status RuntimeRangerContext::_update(Updater&& updater) {
+Status OlapRuntimeScanRangePruner::_update(Updater&& updater) {
     size_t cnt = 0;
-    for (size_t i = 0; i < _arrived_runtime_filters.size(); ++i) {
-        if (_arrived_runtime_filters[i] == 0 && _unreached_runtime_filters[i]->runtime_filter()) {
+    for (size_t i = 0; i < _arrived_runtime_filters_masks.size(); ++i) {
+        if (_arrived_runtime_filters_masks[i] == 0 && _unarrived_runtime_filters[i]->runtime_filter()) {
             ASSIGN_OR_RETURN(auto predicates, _get_predicates(i));
             auto raw_predicates = _as_raw_predicates(predicates);
             if (!raw_predicates.empty()) {
                 RETURN_IF_ERROR(updater(raw_predicates.front()->column_id(), raw_predicates));
             }
-            _arrived_runtime_filters[i] = true;
+            _arrived_runtime_filters_masks[i] = true;
         }
-        cnt += _arrived_runtime_filters[i];
+        cnt += _arrived_runtime_filters_masks[i];
     }
 
     // all filters arrived
-    if (cnt == _arrived_runtime_filters.size()) {
-        _arrived_runtime_filters.clear();
+    if (cnt == _arrived_runtime_filters_masks.size()) {
+        _arrived_runtime_filters_masks.clear();
     }
     return Status::OK();
 }
 
-inline auto RuntimeRangerContext::_get_predicates(size_t idx) -> StatusOr<PredicatesPtrs> {
-    auto rf = _unreached_runtime_filters[idx]->runtime_filter();
+inline auto OlapRuntimeScanRangePruner::_get_predicates(size_t idx) -> StatusOr<PredicatesPtrs> {
+    auto rf = _unarrived_runtime_filters[idx]->runtime_filter();
     if (rf->has_null()) return PredicatesPtrs{};
     // convert to olap filter
     auto slot_desc = _slot_descs[idx];
     return type_dispatch_predicate<StatusOr<PredicatesPtrs>>(slot_desc->type().type, false,
-                                                             ranger::detail::RuntimeColumnPredicateBuilder(), _parser,
-                                                             _unreached_runtime_filters[idx], slot_desc);
+                                                             detail::RuntimeColumnPredicateBuilder(), _parser,
+                                                             _unarrived_runtime_filters[idx], slot_desc);
 }
 
-inline auto RuntimeRangerContext::_as_raw_predicates(const std::vector<std::unique_ptr<ColumnPredicate>>& predicates)
-        -> PredicatesRawPtrs {
+inline auto OlapRuntimeScanRangePruner::_as_raw_predicates(
+        const std::vector<std::unique_ptr<ColumnPredicate>>& predicates) -> PredicatesRawPtrs {
     PredicatesRawPtrs res;
     for (auto& predicate : predicates) {
         res.push_back(predicate.get());
@@ -111,12 +111,12 @@ inline auto RuntimeRangerContext::_as_raw_predicates(const std::vector<std::uniq
     return res;
 }
 
-inline void RuntimeRangerContext::_init(const RuntimeRangerParams& params) {
+inline void OlapRuntimeScanRangePruner::_init(const UnarrivedRuntimeFilterList& params) {
     for (size_t i = 0; i < params.slot_descs.size(); ++i) {
         if (_parser->can_pushdown(params.slot_descs[i])) {
-            _unreached_runtime_filters.emplace_back(params.unreached_runtime_filters[i]);
+            _unarrived_runtime_filters.emplace_back(params.unarrived_runtime_filters[i]);
             _slot_descs.emplace_back(params.slot_descs[i]);
-            _arrived_runtime_filters.emplace_back();
+            _arrived_runtime_filters_masks.emplace_back();
         }
     }
 }

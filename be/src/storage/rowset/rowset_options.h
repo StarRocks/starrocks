@@ -6,9 +6,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "exprs/vectorized/olap_runtime_ranger.h"
 #include "runtime/global_dict/types.h"
 #include "storage/olap_common.h"
+#include "storage/olap_runtime_range_pruner.h"
 #include "storage/seek_range.h"
 
 namespace starrocks {
@@ -65,7 +65,7 @@ public:
     RowidRangeOptionPtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
-    vectorized::RuntimeRangerContext runtime_ranger_ctx;
+    vectorized::OlapRuntimeScanRangePruner runtime_range_pruner;
 };
 
 } // namespace starrocks

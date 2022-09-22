@@ -6,10 +6,10 @@
 #include <vector>
 
 #include "column/datum.h"
-#include "exprs/vectorized/olap_runtime_ranger.h"
 #include "fs/fs.h"
 #include "runtime/global_dict/types.h"
 #include "storage/disjunctive_predicates.h"
+#include "storage/olap_runtime_range_pruner.h"
 #include "storage/seek_range.h"
 
 namespace starrocks {
@@ -66,7 +66,7 @@ public:
     RowidRangeOptionPtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
-    RuntimeRangerContext runtime_ranger_ctx;
+    OlapRuntimeScanRangePruner runtime_range_pruner;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<FieldType>& new_types, ObjectPool* obj_pool) const;
