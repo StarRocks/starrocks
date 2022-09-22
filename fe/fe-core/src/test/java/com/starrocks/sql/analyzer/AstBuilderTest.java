@@ -133,4 +133,17 @@ public class AstBuilderTest {
         Assert.assertEquals("db_test", stmt.getDbFullName());
         Assert.assertEquals("rl_teet", stmt.getName());
     }
+
+    @Test
+    public void testAlterRoutineLoad() throws SecurityException, IllegalArgumentException {
+        String sql = "ALTER ROUTINE LOAD FOR `db_test`.`rl_test` PROPERTIES (\"desired_concurrent_number\" = \"10\") FROM kafka ( \"kafka_partitions\" = \"0, 1, 2\", \"kafka_offsets\" = \"100, 200, 100\", \"property.group.id\" = \"new_group\" )";
+        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        StarRocksParser parser = new StarRocksParser(tokenStream);
+        StarRocksParser.sqlMode = 32;
+        StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) new AstBuilder(32).visit(sqlStatements.singleStatement(0));
+        Assert.assertEquals("db_test", stmt.getDbName());
+        Assert.assertEquals("rl_teet", stmt.getLabelName().getLabelName());
+    }
 }
