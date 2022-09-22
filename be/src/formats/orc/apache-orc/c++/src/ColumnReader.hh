@@ -28,9 +28,9 @@
 #include "Compression.hh"
 #include "Timezone.hh"
 #include "io/InputStream.hh"
+#include "orc/LoadType.h"
 #include "orc/Vector.hh"
 #include "wrap/orc-proto-wrapper.hh"
-#include "orc/LoadType.h"
 
 namespace orc {
 
@@ -165,9 +165,7 @@ public:
     uint64_t getColumnId() { return columnId; }
 
     // Functions for lazy load fields.
-    virtual void lazyLoadSkip(uint64_t numValues) {
-        skip(numValues);
-    }
+    virtual void lazyLoadSkip(uint64_t numValues) { skip(numValues); }
 
     virtual void lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
         next(rowBatch, numValues, notNull);
@@ -178,10 +176,7 @@ public:
         lazyLoadNext(rowBatch, numValues, notNull);
     }
 
-    virtual void lazyLoadSeekToRowGroup(PositionProviderMap* providers) {
-        seekToRowGroup(providers);
-    }
-
+    virtual void lazyLoadSeekToRowGroup(PositionProviderMap* providers) { seekToRowGroup(providers); }
 };
 
 /**

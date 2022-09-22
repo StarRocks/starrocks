@@ -180,7 +180,7 @@ void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns, std::vec
     selectedColumns[0] = true; // column 0 is selected by default
 
     // Set lazyLoadColumns by boolLazyLoadColumns
-    for(size_t i = 0; i < boolLazyLoadColumns.size(); i++) {
+    for (size_t i = 0; i < boolLazyLoadColumns.size(); i++) {
         if (boolLazyLoadColumns[i]) {
             lazyLoadColumns[i] = LoadType::LAZY_LOAD;
         }

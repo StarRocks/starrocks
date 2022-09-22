@@ -1084,7 +1084,8 @@ void StructColumnReader::nextInternal(const std::vector<std::unique_ptr<ColumnRe
         uint64_t fi = fieldIndex[i];
         if (lazyLoad) {
             if (encoded) {
-                (*iter)->lazyLoadNextEncoded(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
+                (*iter)->lazyLoadNextEncoded(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues,
+                                             notNull);
             } else {
                 (*iter)->lazyLoadNext(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
             }
