@@ -23,7 +23,6 @@ import com.starrocks.analysis.CreateFileStmt;
 import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
-import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
@@ -432,14 +431,6 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitCreateUserStatement(CreateUserStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitAlterUserStatement(AlterUserStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

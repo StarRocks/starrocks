@@ -49,6 +49,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -360,21 +361,19 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitCreateUserStatement(CreateUserStmt stmt, ConnectContext context) {
+        public ShowResultSet visitCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
-                    context.getGlobalStateMgr().getAuthenticationManager().createUser(stmt);
+                if (stmt instanceof CreateUserStmt) {
+                    if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                        context.getGlobalStateMgr().getAuthenticationManager().createUser((CreateUserStmt) stmt);
+                    } else {
+                        context.getGlobalStateMgr().getAuth().createUser((CreateUserStmt) stmt);
+                    }
+                } else if (stmt instanceof AlterUserStmt) {
+                    context.getGlobalStateMgr().getAuth().alterUser((AlterUserStmt) stmt);
                 } else {
-                    context.getGlobalStateMgr().getAuth().createUser(stmt);
+                    throw new DdlException("unsupported user stmt: " + stmt.toSql());
                 }
-            });
-            return null;
-        }
-
-        @Override
-        public ShowResultSet visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuth().alterUser(stmt);
             });
             return null;
         }
