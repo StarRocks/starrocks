@@ -2,7 +2,6 @@
 
 #include <gtest/gtest.h>
 #include <orc/Writer.hh>
-#include <orc/LoadType.h>
 #include "orc_test_util/MemoryOutputStream.hh"
 #include "orc_test_util/MemoryInputStream.hh"
 
