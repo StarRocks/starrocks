@@ -1806,7 +1806,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitStopRoutineLoadStatement(StarRocksParser.StopRoutineLoadStatementContext context) {
         String database = null;
         if (context.db != null) {
-            database = context.db.getText();
+            database = getQualifiedName(context.db).toString();
         }
         String name = null;
         if (context.name != null) {
@@ -1819,7 +1819,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitResumeRoutineLoadStatement(StarRocksParser.ResumeRoutineLoadStatementContext context) {
         String database = null;
         if (context.db != null) {
-            database = context.db.getText();
+            database = getQualifiedName(context.db).toString();
         }
         String name = null;
         if (context.name != null) {
@@ -1832,7 +1832,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitPauseRoutineLoadStatement(StarRocksParser.PauseRoutineLoadStatementContext context) {
         String database = null;
         if (context.db != null) {
-            database = context.db.getText();
+            database = getQualifiedName(context.db).toString();
         }
         String name = null;
         if (context.name != null) {
@@ -1846,7 +1846,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean isVerbose = context.ALL() != null;
         String database = null;
         if (context.db != null) {
-            database = context.db.getText();
+            database = getQualifiedName(context.db).toString();
         }
         String name = null;
         if (context.name != null) {

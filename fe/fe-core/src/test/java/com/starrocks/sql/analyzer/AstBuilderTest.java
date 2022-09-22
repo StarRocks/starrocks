@@ -3,6 +3,7 @@
 package com.starrocks.sql.analyzer;
 
 
+import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -80,5 +81,19 @@ public class AstBuilderTest {
         List<AlterClause> alterClauses = aStmt.getOps();
         TruncatePartitionClause c = (TruncatePartitionClause) alterClauses.get(0);
         Assert.assertTrue(c.getPartitionNames().getPartitionNames().get(0).equals("p1"));
+    }
+
+    @Test
+    public void testShowRoutineLoad() throws NoSuchFieldException, SecurityException,
+            IllegalArgumentException, IllegalAccessException {
+        String sql = "SHOW ROUTINE LOAD FROM `db_test`.`rl_test`";
+        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        StarRocksParser parser = new StarRocksParser(tokenStream);
+        StarRocksParser.sqlMode = 32;
+        StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
+        ShowRoutineLoadStmt stmt = (ShowRoutineLoadStmt) new AstBuilder(32).visit(sqlStatements.singleStatement(0));
+        Assert.assertEquals("db_test", stmt.getDbFullName());
+        Assert.assertEquals("rl_teet", stmt.getName());
     }
 }
