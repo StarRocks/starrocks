@@ -30,6 +30,7 @@
 #include "io/InputStream.hh"
 #include "orc/Vector.hh"
 #include "wrap/orc-proto-wrapper.hh"
+#include "orc/LoadType.h"
 
 namespace orc {
 
@@ -43,7 +44,7 @@ public:
      *    each columnId is selected.
      */
     virtual const std::vector<bool>& getSelectedColumns() const = 0;
-    virtual const std::vector<bool>& getLazyLoadColumns() const = 0;
+    virtual const std::vector<LoadType>& getLazyLoadColumns() const = 0;
 
     /**
      * Get the encoding for the given column for this stripe.
@@ -155,22 +156,32 @@ public:
         next(rowBatch, numValues, notNull);
     }
 
-    // Functions for lazy load fields.
-    virtual void lazyLoadSkip(uint64_t numValues);
-    virtual void lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
-    virtual void lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-        rowBatch.isEncoded = false;
-        lazyLoadNext(rowBatch, numValues, notNull);
-    }
-
     /**
      * Seek to beginning of a row group in the current stripe
      * @param positions a list of PositionProviders storing the positions
      */
     virtual void seekToRowGroup(PositionProviderMap* providers);
-    virtual void lazyLoadSeekToRowGroup(PositionProviderMap* providers);
 
     uint64_t getColumnId() { return columnId; }
+
+    // Functions for lazy load fields.
+    virtual void lazyLoadSkip(uint64_t numValues) {
+        skip(numValues);
+    }
+
+    virtual void lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+        next(rowBatch, numValues, notNull);
+    }
+
+    virtual void lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+        rowBatch.isEncoded = false;
+        lazyLoadNext(rowBatch, numValues, notNull);
+    }
+
+    virtual void lazyLoadSeekToRowGroup(PositionProviderMap* providers) {
+        seekToRowGroup(providers);
+    }
+
 };
 
 /**

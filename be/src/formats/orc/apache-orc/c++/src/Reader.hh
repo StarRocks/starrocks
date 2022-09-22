@@ -108,7 +108,7 @@ public:
     ColumnSelector(const FileContents* contents);
 
     // Select the columns from the RowReaderoptions object
-    void updateSelected(std::vector<bool>& selectedColumns, std::vector<bool>& lazyLoadColumns,
+    void updateSelected(std::vector<bool>& selectedColumns, std::vector<LoadType>& lazyLoadColumns,
                         const RowReaderOptions& options);
 };
 
@@ -123,7 +123,7 @@ private:
 
     // inputs
     std::vector<bool> selectedColumns;
-    std::vector<bool> lazyLoadColumns;
+    std::vector<LoadType> lazyLoadColumns;
 
     // footer
     proto::Footer* footer;
@@ -211,7 +211,8 @@ public:
 
     // Select the columns from the options object
     const std::vector<bool>& getSelectedColumns() const override;
-    const std::vector<bool>& getLazyLoadColumns() const override;
+    const std::vector<LoadType>& getLazyLoadColumns() const override;
+    void setLazyLoadColumns(std::vector<LoadType>& lazyLoadCols) override;
 
     const Type& getSelectedType() const override;
 

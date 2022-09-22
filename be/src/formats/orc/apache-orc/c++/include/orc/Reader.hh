@@ -30,6 +30,7 @@
 #include "orc/sargs/SearchArgument.hh"
 #include "orc/Type.hh"
 #include "orc/Vector.hh"
+#include "orc/LoadType.h"
 #include <atomic>
 #include <map>
 #include <memory>
@@ -589,7 +590,10 @@ public:
      * Get the selected columns of the file.
      */
     virtual const std::vector<bool>& getSelectedColumns() const = 0;
-    virtual const std::vector<bool>& getLazyLoadColumns() const = 0;
+    virtual const std::vector<LoadType>& getLazyLoadColumns() const = 0;
+    // Use to set lazy load columns directly.
+    // Only used for struct sub field lazy load now!
+    virtual void setLazyLoadColumns(std::vector<orc::LoadType>& lazyLoadCols) = 0;
 
     /**
      * Create a row batch for reading the selected columns of this file.
