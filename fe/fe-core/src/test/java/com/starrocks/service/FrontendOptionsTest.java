@@ -35,7 +35,7 @@ public class FrontendOptionsTest {
     @Test
     public void cidrTest() {
 
-        List<String> priorityCidrs = FrontendOptions.PRIORITY_CIDRS;
+        List<String> priorityCidrs = FrontendOptions.priorityCidrs;
         priorityCidrs.add("192.168.5.136/32");
 
         FrontendOptions frontendOptions = new FrontendOptions();
