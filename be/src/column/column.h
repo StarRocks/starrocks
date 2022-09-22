@@ -153,9 +153,9 @@ public:
     virtual void append(const Column& src) { append(src, 0, src.size()); }
 
     // replicate a column to align with an array's offset, used for captured columns in lambda functions
-    // for example: column(1,2)->replicate({0,2,3}) = column(1,1,2,2,2)
+    // for example: column(1,2)->replicate({0,2,5}) = column(1,1,2,2,2)
     // FixedLengthColumn, BinaryColumn and ConstColumn override this function for better performance.
-    // TODO(fzh): optimize replicate() for specific columns, such as ArrayColumn, ObjectColumn.
+    // TODO(fzh): optimize replicate() for ArrayColumn, ObjectColumn and others.
     virtual ColumnPtr replicate(const std::vector<uint32_t>& offsets) {
         auto dest = this->clone_empty();
         auto dest_size = offsets.size() - 1;
