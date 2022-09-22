@@ -1019,6 +1019,10 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalValues(OptExpression optExpr, ExecPlan context) {
             PhysicalValuesOperator valuesOperator = (PhysicalValuesOperator) optExpr.getOp();
+            PlanFragment inputFragment = null;
+            if (optExpr.arity() > 0) {
+                inputFragment = visit(optExpr.inputAt(0), context);
+            }
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             for (ColumnRefOperator columnRefOperator : valuesOperator.getColumnRefSet()) {
@@ -1063,10 +1067,24 @@ public class PlanFragmentBuilder {
                  */
                 consts.forEach(unionNode::addConstExprList);
 
-                PlanFragment fragment = new PlanFragment(context.getNextFragmentId(), unionNode,
-                        DataPartition.UNPARTITIONED);
-                context.getFragments().add(fragment);
-                return fragment;
+                if (inputFragment == null) {
+                    PlanFragment fragment = new PlanFragment(context.getNextFragmentId(), unionNode,
+                            DataPartition.UNPARTITIONED);
+                    context.getFragments().add(fragment);
+                    return fragment;
+                } else {
+                    // TODO: hack for stream plan, in which ValuesNode would has a OlapScanNode as child
+                    List<Expr> materializedExpressions = Lists.newArrayList();
+                    for (int columnId : optExpr.inputAt(0).getLogicalProperty().getOutputColumns().getColumnIds()) {
+                        SlotDescriptor slotDescriptor = context.getDescTbl().getSlotDesc(new SlotId(columnId));
+                        materializedExpressions.add(new SlotRef(slotDescriptor));
+                    }
+
+                    unionNode.addChild(inputFragment.getPlanRoot(), materializedExpressions);
+                    unionNode.addMaterializedResultExprList(materializedExpressions);
+                    inputFragment.setPlanRoot(unionNode);
+                    return inputFragment;
+                }
             }
         }
 
