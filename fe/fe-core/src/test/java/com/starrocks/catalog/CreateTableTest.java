@@ -62,11 +62,6 @@ public class CreateTableTest {
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
     }
 
-    private static void alterTable(String sql) throws Exception {
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
-    }
-
     private static void alterTableWithNewParser(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
