@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <sstream>
+
 namespace starrocks::vectorized {
 
 inline std::string to_bitmap_string(const uint8_t* bitmap, size_t n) {
@@ -122,6 +124,62 @@ TEST(SparseRangeIteratorTest, covered_ranges) {
     }
     for (int i = 31; i <= 55; i++) {
         EXPECT_EQ(2u, iter.covered_ranges(i)) << "i=" << i;
+    }
+}
+
+std::string dump_range_iter(const SparseRangeIterator& iter) {
+    std::stringstream ss;
+    if (!iter.has_more()) {
+        ss << "[]";
+        return ss.str();
+    }
+    bool fst = true;
+    for (size_t i = iter._index; i < iter._range->_ranges.size(); ++i) {
+        if (!fst) {
+            ss << ",";
+        }
+        ss << "[";
+        if (fst) {
+            ss << iter._next_rowid;
+        } else {
+            ss << iter._range->_ranges[i].begin();
+        }
+        ss << ",";
+        ss << iter._range->_ranges[i].end();
+        ss << "]";
+        fst = false;
+    }
+    return ss.str();
+}
+
+TEST(SparseRangeIteratorTest, intersect_test) {
+    // test intersection
+    {
+        SparseRange r1(0, 4096);
+        SparseRangeIterator iter = r1.new_iterator();
+        iter.skip(1000);
+        SparseRange r2({{0, 10}, {20, 40}, {50, 70}});
+        SparseRange r3;
+        auto iter2 = iter.intersection(r2, &r3);
+        EXPECT_STREQ(dump_range_iter(iter2).data(), "[]");
+    }
+    {
+        SparseRange r1(0, 4096);
+        SparseRangeIterator iter = r1.new_iterator();
+        iter.skip(30);
+        SparseRange r2({{0, 10}, {20, 40}, {50, 7000}});
+        SparseRange r3;
+        auto iter2 = iter.intersection(r2, &r3);
+        EXPECT_STREQ(dump_range_iter(iter2).data(), "[30,40],[50,4096]");
+    }
+    {
+        SparseRange r1(0, 4096);
+        SparseRangeIterator iter = r1.new_iterator();
+        iter.skip(30);
+        SparseRange r2({{1000, 1500}, {2000, 25000}, {3000, 7000}});
+        SparseRange r3;
+        auto iter2 = iter.intersection(r2, &r3);
+        EXPECT_STREQ(dump_range_iter(iter2).data(), "[1000,1500],[2000,4096]");
     }
 }
 

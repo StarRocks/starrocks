@@ -340,8 +340,8 @@ inline SparseRangeIterator SparseRangeIterator::intersection(const SparseRange& 
     if (res.has_more()) {
         for (size_t i = 0; i < res._range->size(); ++i) {
             // set idx and next rowid
-            if (_next_rowid < res._range[i].end()) {
-                res._next_rowid = res._range[i].begin();
+            if (_next_rowid < res._range->_ranges[i].end()) {
+                res._next_rowid = std::max(res._range->_ranges[i].begin(), _next_rowid);
                 res._index = i;
                 break;
             }
