@@ -115,6 +115,10 @@ public abstract class SetOperationNode extends PlanNode {
         resultExprLists_.add(resultExprs);
     }
 
+    public void addMaterializedResultExprList(List<Expr> resultExprList) {
+        this.materializedResultExprLists_.add(resultExprList);
+    }
+
     public void setMaterializedResultExprLists_(List<List<Expr>> materializedResultExprLists_) {
         this.materializedResultExprLists_ = materializedResultExprLists_;
     }

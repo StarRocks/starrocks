@@ -178,7 +178,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      */
     private void setParallelExecNumIfExists() {
         if (ConnectContext.get() != null) {
-            if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+            if (ConnectContext.get().getSessionVariable().isStreamPlanner()) {
+                // TODO: remove it
+                this.pipelineDop = 1;
+                this.parallelExecNum = 1;
+            } else if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
                 this.parallelExecNum = 1;
                 this.pipelineDop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
             } else {
@@ -316,6 +320,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     /**
      * Create thrift fragment with the unique fields, including
      * - output_sink (only for MultiCastDataStreamSink and ExportSink).
+     *
      * @return The thrift fragment with the unique fields.
      */
     public TPlanFragment toThriftForUniqueFields() {
@@ -360,7 +365,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
         }
 
-        str.append(outputBuilder.toString());
+        str.append(outputBuilder);
         str.append("\n");
         str.append("  PARTITION: ").append(dataPartition.getExplainString(explainLevel)).append("\n");
         if (sink != null) {
@@ -381,7 +386,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             outputBuilder.append(outputExprs.stream().map(Expr::toSql)
                     .collect(Collectors.joining(" | ")));
         }
-        str.append(outputBuilder.toString());
+        str.append(outputBuilder);
         str.append("\n");
         str.append("  Input Partition: ").append(dataPartition.getExplainString(TExplainLevel.NORMAL));
         if (sink != null) {
@@ -402,7 +407,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             outputBuilder.append(outputExprs.stream().map(Expr::toSql)
                     .collect(Collectors.joining(" | ")));
         }
-        str.append(outputBuilder.toString());
+        str.append(outputBuilder);
         str.append("\n");
         str.append("  Input Partition: ").append(dataPartition.getExplainString(TExplainLevel.NORMAL));
         if (sink != null) {

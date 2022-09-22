@@ -147,15 +147,15 @@ public class InsertPlanner {
                     }
                     values.add(valuesRow);
                 }
-                OptExpression res = OptExpression.create(new PhysicalValuesOperator(valuesOutputColumns, values, 0, null,
-                        optExpr.getOp().getProjection()));
+                OptExpression res = OptExpression.create(new PhysicalValuesOperator(valuesOutputColumns, values, -1, null,
+                        optExpr.getOp().getProjection()), optExpr);
                 // Avoid set statistic and cost here
                 res.setStatistics(optExpr.getStatistics());
                 res.setCost(optExpr.getCost());
                 res.setPlanCount(optExpr.getPlanCount());
                 res.setLogicalProperty(optExpr.getLogicalProperty());
                 if (optExpr.getOp().getPredicate() != null) {
-                    res = OptExpression.create(new PhysicalFilterOperator(optExpr.getOp().getPredicate(), 0, null), res);
+                    res = OptExpression.create(new PhysicalFilterOperator(optExpr.getOp().getPredicate(), -1, null), res);
                     // Avoid set statistic and cost here
                     res.setStatistics(optExpr.getStatistics());
                     res.setCost(optExpr.getCost());
@@ -201,24 +201,29 @@ public class InsertPlanner {
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
         Optimizer optimizer = new Optimizer();
         PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
-        session.getSessionVariable().enableStreamPlanner(true);
-        OptExpression optimizedPlan = optimizer.optimize(
-                session,
-                logicalPlan.getRoot(),
-                requiredPropertySet,
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
-        session.getSessionVariable().enableStreamPlanner(false);
+        ExecPlan execPlan;
+        try {
+            session.getSessionVariable().enableStreamPlanner(true);
+            OptExpression optimizedPlan = optimizer.optimize(
+                    session,
+                    logicalPlan.getRoot(),
+                    requiredPropertySet,
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
 
-        // Rewrite OlapScan to Values
-        optimizedPlan = rewriteScanToValues(insertStmt, optimizedPlan, optimizer.getContext());
+            // Rewrite OlapScan to Values
+            optimizedPlan = rewriteScanToValues(insertStmt, optimizedPlan, optimizer.getContext());
 
-        // Build plan fragment
-        boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
-                || insertStmt.getTargetTable() instanceof MysqlTable);
-        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
-                optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+            // Build plan fragment
+            boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
+                    || insertStmt.getTargetTable() instanceof MysqlTable);
+            execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                    queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+        } finally {
+            session.getSessionVariable().enableStreamPlanner(false);
+        }
+
         DescriptorTable descriptorTable = execPlan.getDescTbl();
 
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
