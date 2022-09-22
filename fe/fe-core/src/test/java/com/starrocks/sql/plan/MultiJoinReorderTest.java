@@ -57,15 +57,16 @@ public class MultiJoinReorderTest extends PlanTestBase {
         connectContext.getSessionVariable().disableDPJoinReorder();
         String sql = "select * from t1 join t3 on t1.v4 = t3.v10 join t0 join t2";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("1:OlapScanNode\n" +
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("3:OlapScanNode\n" +
                 "     TABLE: t0"));
-        Assert.assertTrue(planFragment.contains(" |----2:EXCHANGE\n" +
+        Assert.assertTrue(planFragment.contains(" |----8:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t3"));
         Assert.assertTrue(planFragment.contains("|----6:EXCHANGE\n" +
                 "  |    \n" +
-                "  4:OlapScanNode\n" +
+                "  1:OlapScanNode\n" +
                 "     TABLE: t2"));
         Assert.assertTrue(planFragment.contains(" 9:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
@@ -180,11 +181,11 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |----22:EXCHANGE"));
 
         // Right sub join tree (a)
-        assertContains(planFragment, " 15:NESTLOOP JOIN\n" +
+        assertContains(planFragment, " 19:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
-                "  |----14:EXCHANGE\n" +
+                "  |----18:EXCHANGE\n" +
                 "  |    \n" +
                 "  1:OlapScanNode\n" +
                 "     TABLE: t2");
