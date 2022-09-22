@@ -19,6 +19,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
@@ -236,6 +237,7 @@ public class InsertPlanner {
         List<Long> partitionIds = view.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
         DataSink dataSink = new OlapTableSink(view, olapTuple, partitionIds);
         execPlan.getFragments().get(0).setSink(dataSink);
+        execPlan.getFragments().get(0).setDataPartition(DataPartition.RANDOM);
 
         return execPlan;
     }
