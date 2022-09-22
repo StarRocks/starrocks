@@ -402,3 +402,27 @@ struct TDescriptorTable {
   3: optional list<TTableDescriptor> tableDescriptors;
   4: optional bool is_cached;
 }
+
+
+// Describe route info of a Olap Table, which could be used to locate a data-row
+struct TOlapTableRouteInfo {
+  1: optional TOlapTableSchemaParam schema
+  2: optional TOlapTablePartitionParam partition
+  3: optional TOlapTableLocationParam location
+  5: optional i32 num_replicas
+  6: optional string db_name
+  7: optional string table_name
+  8: optional TNodesInfo nodes_info
+  9: optional Types.TKeysType keys_type
+}
+
+enum TIMTType {
+  OLAP_TABLE,
+  ROWSTORE_TABLE, // Not implemented
+}
+
+struct TIMTDescriptor {
+  1: optional TIMTType imt_type
+  2: optional TOlapTableRouteInfo olap_table
+  3: optional bool need_maintain // Not implemented
+}

@@ -912,6 +912,10 @@ struct TStreamJoinNode {
   // equi-join predicate
   3: optional list<Exprs.TExpr> other_join_conjuncts
   4: optional bool is_push_down
+  
+  // IMT info
+  10: optional Descriptors.TIMTDescriptor lhs_imt
+  11: optional Descriptors.TIMTDescriptor rhs_imt
 
   // for profiling
   21: optional string sql_join_predicates
@@ -940,6 +944,10 @@ struct TStreamAggregationNode {
   // rows have been aggregated, and this node is not an intermediate node.
   5: required bool need_finalize
   6: optional bool use_streaming_preaggregation
+
+  // IMT info
+  10: optional Descriptors.TIMTDescriptor detail_imt
+  11: optional Descriptors.TIMTDescriptor agg_result_imt
 
   // For vector query engine
   20: optional bool has_outer_join_child
