@@ -24,6 +24,8 @@ package com.starrocks.persist;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
@@ -882,6 +884,12 @@ public class EditLog {
                     StarMgrServer.getCurrentState().getStarMgr().replay(j.getJournal());
                     break;
                 }
+                case OperationType.OP_CREATE_USER_V2: {
+                    CreateUserInfo info = (CreateUserInfo) journal.getData();
+                    globalStateMgr.getAuthenticationManager().replayCreateUser(
+                            info.getUserIdentity(), info.getAuthenticationInfo(), info.getUserProperty());
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1504,4 +1512,11 @@ public class EditLog {
         logEdit(OperationType.OP_STARMGR, journal);
     }
 
+    public void logCreateUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo, UserProperty userProperty) {
+        CreateUserInfo info = new CreateUserInfo();
+        info.setUserIdentity(userIdentity);
+        info.setAuthenticationInfo(authenticationInfo);
+        info.setUserProperty(userProperty);
+        logEdit(OperationType.OP_CREATE_USER_V2, info);
+    }
 }
