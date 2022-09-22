@@ -204,9 +204,6 @@ INTO TABLE <table_name>
 | fs.s3a.access.key | 访问 Google CGS 存储空间的 Access Key。      |
 | fs.s3a.secret.key | 访问 Google CGS 存储空间的 Secret Key。 |
 | fs.s3a.endpoint   | 访问 Google CGS 存储空间的连接地址。                         |
-|                   |                                                              |
-|                   |                                                              |
-|                   |                                                              |
 
 创建访问 Google CGS 存储空间的密钥对的操作步骤如下：
 
