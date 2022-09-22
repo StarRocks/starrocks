@@ -256,6 +256,7 @@ private:
     void update_hdfs_counter(HdfsScanProfile* profile);
 
 protected:
+    Status open_random_access_file();
     std::atomic_bool _pending_token = false;
 
     HdfsScannerContext _scanner_ctx;

@@ -78,7 +78,7 @@ THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uin
 }
 
 HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfsScanRange* range,
-                                                  TupleDescriptor* tuple_desc) {
+                                                  const TupleDescriptor* tuple_desc) {
     auto* param = _pool.add(new HdfsScannerParams());
     param->fs = FileSystem::Default();
     param->path = file;
