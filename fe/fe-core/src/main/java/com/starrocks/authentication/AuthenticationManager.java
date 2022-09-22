@@ -202,7 +202,7 @@ public class AuthenticationManager {
     public void save(DataOutputStream dos) throws IOException {
         try {
             // 1 json for myself,1 json for number of users, 2 json for each user(kv)
-            int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
+            final int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
             SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, AuthenticationManager.class.getName(), cnt);
             // 1 json for myself
             writer.writeJson(this);
