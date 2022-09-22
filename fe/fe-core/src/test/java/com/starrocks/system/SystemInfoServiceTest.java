@@ -5,8 +5,6 @@ package com.starrocks.system;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -124,13 +122,7 @@ public class SystemInfoServiceTest {
                 result = new Cluster("cluster", 1);
             }
         };
-        Deencapsulation.setField(be, "gotStarletPort", true);
-
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "starletPort has not been updated by heartbeat from this backend",
-                () -> service.dropBackend("newHost", 1000, false));
-
-
+        
         service.addBackend(be);
         be.setStarletPort(1001);
         service.dropBackend("newHost", 1000, false);
