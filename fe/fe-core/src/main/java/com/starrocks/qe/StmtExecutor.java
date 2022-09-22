@@ -1304,7 +1304,6 @@ public class StmtExecutor {
                 OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
                 dataSink.init(context.getExecutionId(), transactionId, database.getId(),
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS());
-                dataSink.complete();
             }
 
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
