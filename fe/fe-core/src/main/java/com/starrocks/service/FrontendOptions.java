@@ -232,7 +232,7 @@ public class FrontendOptions {
         if (localAddr == null) {
             localAddr = loopBack;
         }
-        LOG.info("Use IP init local addr, IP: {}", localAddr.getHostAddress());
+        LOG.info("Use IP init local addr, IP: {}", localAddr);
     }
 
     public static void saveStartType() {
