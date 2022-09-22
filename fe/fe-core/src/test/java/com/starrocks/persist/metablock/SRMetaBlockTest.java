@@ -256,10 +256,10 @@ public class SRMetaBlockTest {
     public void testWriteBadBlockMoreJson() throws Exception {
         String name = "badWriterMoreJson";
         DataOutputStream dos = openOutput(name);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, name, 1);
+        writer.writeJson("xxx");
         // write more json than declared
         try {
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, name, 1);
-            writer.writeJson("xxx");
             writer.writeJson("won't write!");
             Assert.fail();
         } catch (SRMetaBlockException e) {
@@ -271,10 +271,10 @@ public class SRMetaBlockTest {
     public void testWriteBadBlockLessJson() throws Exception {
         String name = "badWriterLessJson";
         DataOutputStream dos = openOutput(name);
+        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, name, 2);
+        writer.writeJson("xxx");
         // write less json than declared
         try {
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, name, 2);
-            writer.writeJson("xxx");
             writer.close();
             Assert.fail();
         } catch (SRMetaBlockException e) {
@@ -296,9 +296,9 @@ public class SRMetaBlockTest {
         String name = "badReaderBadName";
         write2String(name);
         DataInputStream dis = openInput(name);
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, "xxx");
+        Assert.assertTrue(true);
         try {
-            SRMetaBlockReader reader = new SRMetaBlockReader(dis, "xxx");
-            Assert.assertTrue(true);
             reader.readJson(String.class);
             Assert.fail();
         } catch (SRMetaBlockException e) {
@@ -314,11 +314,10 @@ public class SRMetaBlockTest {
         write2String(name);
         // read more than expect
         DataInputStream dis = openInput(name);
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis, name);
+        reader.readJson(String.class);
+        reader.readJson(String.class);
         try {
-            SRMetaBlockReader reader = new SRMetaBlockReader(dis, name);
-            reader.readJson(String.class);
-            reader.readJson(String.class);
-            Assert.assertTrue(true);
             reader.readJson(String.class);
             Assert.fail();
         } catch (SRMetaBlockEOFException e) {
