@@ -190,6 +190,7 @@ statement
 
     //  Repository Satement
     | createRepositoryStatement
+    | dropRepositoryStatement
 
     // Sql BlackList And WhiteList Statement
     | addSqlBlackListStatement
@@ -1395,6 +1396,10 @@ createRepositoryStatement
     WITH BROKER identifier?
     ON LOCATION string
     PROPERTIES propertyList
+    ;
+
+dropRepositoryStatement
+    : DROP REPOSITORY identifier
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------

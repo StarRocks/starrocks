@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
@@ -59,5 +60,15 @@ public class DropRepositoryStmt extends DdlStmt {
         sb.append("DROP ");
         sb.append("REPOSITORY `").append(repoName).append("`");
         return sb.toString();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropRepositoryStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

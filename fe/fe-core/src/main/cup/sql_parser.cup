@@ -913,10 +913,6 @@ drop_stmt ::=
     {:
         RESULT = new DropUserStmt(userId);
     :}
-    | KW_DROP KW_REPOSITORY ident:repoName
-    {:
-        RESULT = new DropRepositoryStmt(repoName);
-    :}
     | KW_DROP KW_ROLE ident_or_text:role
     {:
         RESULT = new DropRoleStmt(role);
