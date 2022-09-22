@@ -84,8 +84,7 @@ public class AstBuilderTest {
     }
 
     @Test
-    public void testShowRoutineLoad() throws NoSuchFieldException, SecurityException,
-            IllegalArgumentException, IllegalAccessException {
+    public void testShowRoutineLoad() throws SecurityException, IllegalArgumentException{
         String sql = "SHOW ROUTINE LOAD FOR `rl_test`FROM `db_test` WHERE state == 'RUNNING' ORDER BY `CreateTime` desc";
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
@@ -98,9 +97,21 @@ public class AstBuilderTest {
     }
 
     @Test
-    public void testStopRoutineLoad() throws NoSuchFieldException, SecurityException,
-            IllegalArgumentException, IllegalAccessException {
+    public void testStopRoutineLoad() throws SecurityException, IllegalArgumentException {
         String sql = "STOP ROUTINE LOAD FOR `db_test`.`rl_test`";
+        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        StarRocksParser parser = new StarRocksParser(tokenStream);
+        StarRocksParser.sqlMode = 32;
+        StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
+        ShowRoutineLoadStmt stmt = (ShowRoutineLoadStmt) new AstBuilder(32).visit(sqlStatements.singleStatement(0));
+        Assert.assertEquals("db_test", stmt.getDbFullName());
+        Assert.assertEquals("rl_teet", stmt.getName());
+    }
+
+    @Test
+    public void testResumeRoutineLoad() throws SecurityException, IllegalArgumentException {
+        String sql = "RESUME ROUTINE LOAD FOR `db_test`.`rl_test`";
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
