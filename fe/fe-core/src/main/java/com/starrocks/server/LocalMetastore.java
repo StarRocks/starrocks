@@ -1611,6 +1611,7 @@ public class LocalMetastore implements ConnectorMetadata {
             TabletMeta tabletMeta =
                     new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),
                             storageMedium, table.isLakeTable());
+
             if (table.isLakeTable()) {
                 createLakeTablets((LakeTable) table, partitionId, index, distributionInfo, replicationNum, tabletMeta,
                         tabletIdSet);
@@ -1992,6 +1993,10 @@ public class LocalMetastore implements ConnectorMetadata {
             olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
         } else if (stmt.isLakeEngine()) {
+            if (distributionInfo.getBucketNum() == 0) {
+                int bucketNum = calBucketNumAccordingToBackends();
+                distributionInfo.setBucketNum(bucketNum);
+            }
             olapTable = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
 
             // storage cache property
