@@ -2,7 +2,7 @@
 
 ## 功能
 
-将一个 BIMTAP 中的所有值组合成一个 bigint 数组。
+将 BITMAP 中的所有值组合成 BIGINT 类型的数组。
 
 ## 语法
 
@@ -16,19 +16,19 @@
 
 ## 返回值说明
 
-返回值的数据类型为 ARRAY。
+返回值的数据类型为 BIGINT 类型的数组。
 
 ## 示例
 
 ```Plain text
-mysql> select bitmap_to_array(bitmap_from_string("1, 7"));
+select bitmap_to_array(bitmap_from_string("1, 7"));
 +----------------------------------------------+
 | bitmap_to_array(bitmap_from_string('1, 7'))  |
 +----------------------------------------------+
 | [1,7]                                        |
 +----------------------------------------------+
 
-mysql> select bitmap_to_array(NULL);
+select bitmap_to_array(NULL);
 +-----------------------+
 | bitmap_to_array(NULL) |
 +-----------------------+
