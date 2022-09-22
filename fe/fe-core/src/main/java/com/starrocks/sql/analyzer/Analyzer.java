@@ -428,13 +428,13 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitDropFunction(DropFunctionStmt statement, ConnectContext context) {
+        public Void visitDropFunctionStmt(DropFunctionStmt statement, ConnectContext context) {
             DropStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
-        public Void visitCreateFunction(CreateFunctionStmt statement, ConnectContext context) {
+        public Void visitCreateFunctionStmt(CreateFunctionStmt statement, ConnectContext context) {
             try {
                 statement.analyze(context);
             } catch (AnalysisException e) {

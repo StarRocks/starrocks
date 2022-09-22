@@ -90,7 +90,7 @@ public class DropStmtAnalyzer {
         }
 
         @Override
-        public Void visitDropFunction(DropFunctionStmt statement, ConnectContext context) {
+        public Void visitDropFunctionStmt(DropFunctionStmt statement, ConnectContext context) {
             try {
                 // analyze function name
                 FunctionName functionName = statement.getFunctionName();
