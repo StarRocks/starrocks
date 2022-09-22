@@ -5,9 +5,9 @@
 #include <boost/algorithm/string.hpp>
 
 #include "column/column_helper.h"
+#include "exec/decompressor.h"
 #include "exec/exec_node.h"
 #include "io/compressed_input_stream.h"
-#include "util/compression/stream_compression.h"
 
 namespace starrocks::vectorized {
 
@@ -201,9 +201,9 @@ Status HdfsScanner::open_random_access_file() {
     if (_compression_type == CompressionTypePB::NO_COMPRESSION) {
         _file = std::make_unique<RandomAccessFile>(stream, _raw_file->filename());
     } else {
-        using DecompressorPtr = std::shared_ptr<StreamCompression>;
-        std::unique_ptr<StreamCompression> dec;
-        RETURN_IF_ERROR(StreamCompression::create_decompressor(_compression_type, &dec));
+        using DecompressorPtr = std::shared_ptr<Decompressor>;
+        std::unique_ptr<Decompressor> dec;
+        RETURN_IF_ERROR(Decompressor::create_decompressor(_compression_type, &dec));
         auto compressed_input_stream =
                 std::make_shared<io::CompressedInputStream>(stream, DecompressorPtr(dec.release()));
         auto compressed_seekable_input_stream =

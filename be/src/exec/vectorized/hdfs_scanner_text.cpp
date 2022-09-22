@@ -5,8 +5,7 @@
 #include "exec/exec_node.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gutil/strings/substitute.h"
-#include "util/compression/compression_utils.h"
-#include "util/compression/stream_compression.h"
+#include "util/compression_utils.h"
 #include "util/utf8_check.h"
 
 namespace starrocks::vectorized {
@@ -116,20 +115,6 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
     _field_delimiter = text_file_desc.field_delim;
     // we should cast string to char now since csv reader only support record delimiter by char
     _record_delimiter = text_file_desc.line_delim.front();
-
-    // In Hive, users can specify collection delimiter and mapkey delimiter as string type,
-    // but in fact, only the first character of the delimiter will take effect.
-    // So here, we only use the first character of collection_delim and mapkey_delim.
-    if (text_file_desc.collection_delim.empty() || text_file_desc.mapkey_delim.empty()) {
-        // During the StarRocks upgrade process, collection_delim and mapkey_delim may be empty,
-        // in order to prevent crash, we set _collection_delimiter
-        // and _mapkey_delimiter a default value here.
-        _collection_delimiter = '\002';
-        _mapkey_delimiter = '\003';
-    } else {
-        _collection_delimiter = text_file_desc.collection_delim.front();
-        _mapkey_delimiter = text_file_desc.mapkey_delim.front();
-    }
 
     // by default it's unknown compression. we will synthesise informaiton from FE and BE(file extension)
     // parse compression type from FE first.
