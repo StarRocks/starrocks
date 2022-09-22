@@ -150,12 +150,10 @@ void ColumnSelector::buildTypeNameIdMap(const Type* type) {
     }
 }
 
-void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns, std::vector<LoadType>& lazyLoadColumns,
+void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns, std::vector<bool>& lazyLoadColumns,
                                     const RowReaderOptions& options) {
     selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
-    std::vector<bool> boolLazyLoadColumns;
-    boolLazyLoadColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
-    lazyLoadColumns.assign(static_cast<size_t>(contents->footer->types_size()), LoadType::NO_LAZY_LOAD);
+    lazyLoadColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
 
     if (contents->schema->getKind() == STRUCT && options.getIndexesSet()) {
         for (unsigned long field : options.getInclude()) {
@@ -166,7 +164,7 @@ void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns, std::vec
             updateSelectedByName(selectedColumns, field);
         }
         for (const auto& field : options.getLazyLoadColumnNames()) {
-            updateSelectedByName(boolLazyLoadColumns, field);
+            updateSelectedByName(lazyLoadColumns, field);
         }
     } else if (options.getTypeIdsSet()) {
         for (unsigned long typeId : options.getInclude()) {
@@ -178,13 +176,6 @@ void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns, std::vec
     }
     selectParents(selectedColumns, *contents->schema);
     selectedColumns[0] = true; // column 0 is selected by default
-
-    // Set lazyLoadColumns by boolLazyLoadColumns
-    for (size_t i = 0; i < boolLazyLoadColumns.size(); i++) {
-        if (boolLazyLoadColumns[i]) {
-            lazyLoadColumns[i] = LoadType::LAZY_LOAD;
-        }
-    }
 }
 
 void ColumnSelector::updateSelectedByFieldId(std::vector<bool>& selectedColumns, uint64_t fieldId) {
@@ -333,11 +324,11 @@ const std::vector<bool>& RowReaderImpl::getSelectedColumns() const {
     return selectedColumns;
 }
 
-const std::vector<LoadType>& RowReaderImpl::getLazyLoadColumns() const {
+const std::vector<bool>& RowReaderImpl::getLazyLoadColumns() const {
     return lazyLoadColumns;
 }
 
-void RowReaderImpl::setLazyLoadColumns(std::vector<LoadType>& lazyLoadCols) {
+void RowReaderImpl::setLazyLoadColumns(std::vector<bool>& lazyLoadCols) {
     lazyLoadColumns.assign(lazyLoadCols.begin(), lazyLoadCols.end());
 }
 
@@ -1003,7 +994,7 @@ void RowReaderImpl::buildIORanges(std::vector<InputStream::IORange>* io_ranges) 
     for (const proto::Stream& stream : currentStripeFooter.streams()) {
         uint32_t columnId = stream.column();
         uint64_t length = stream.length();
-        if (selectedColumns[columnId] || lazyLoadColumns[columnId] == LoadType::LAZY_LOAD) {
+        if (selectedColumns[columnId] || lazyLoadColumns[columnId]) {
             io_ranges->emplace_back(InputStream::IORange{.offset = offset, .size = length});
         }
         offset += length;

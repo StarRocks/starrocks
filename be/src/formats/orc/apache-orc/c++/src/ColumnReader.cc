@@ -32,7 +32,6 @@
 #include "RLE.hh"
 #include "orc/Exceptions.hh"
 #include "orc/Int128.hh"
-#include "orc/LoadType.h"
 
 namespace orc {
 
@@ -1016,7 +1015,7 @@ private:
 StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
     // count the number of selected sub-columns
     const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
-    const std::vector<LoadType> lazyLoadColumns = stripe.getLazyLoadColumns();
+    const std::vector<bool> lazyLoadColumns = stripe.getLazyLoadColumns();
     switch (static_cast<int64_t>(stripe.getEncoding(columnId).kind())) {
     case proto::ColumnEncoding_Kind_DIRECT: {
         uint64_t fi = 0;
@@ -1024,24 +1023,18 @@ StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe) 
             const Type& child = *type.getSubtype(i);
             uint64_t columnId = static_cast<uint64_t>(child.getColumnId());
             if (selectedColumns[columnId]) {
-                switch (lazyLoadColumns[columnId]) {
-                case LoadType::NO_LAZY_LOAD:
-                    children.push_back(buildReader(child, stripe));
-                    fieldIndex.push_back(fi);
-                    break;
-                case LoadType::LAZY_LOAD:
+                if (lazyLoadColumns[columnId]) {
                     lazyLoadChildren.push_back(buildReader(child, stripe));
                     lazyLoadFieldIndex.push_back(fi);
-                    break;
-                case LoadType::COMPOUND_LOAD:
-                    // COMPOUND_LOAD need build reader for both no lazy load & lazy load children.
+                } else {
                     children.push_back(buildReader(child, stripe));
                     fieldIndex.push_back(fi);
-                    lazyLoadChildren.push_back(buildReader(child, stripe));
-                    lazyLoadFieldIndex.push_back(fi);
-                    break;
-                default:
-                    throw ParseError("Unknown load type for StructColumnReader");
+                    if (child.getKind() == TypeKind::STRUCT) {
+                        // If current child is a struct type, considering it's subfields may need
+                        // lazy load, we should add it to lazyLoadChildren too.
+                        lazyLoadChildren.push_back(buildReader(child, stripe));
+                        lazyLoadFieldIndex.push_back(fi);
+                    }
                 }
                 fi++;
             }

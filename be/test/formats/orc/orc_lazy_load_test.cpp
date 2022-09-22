@@ -143,14 +143,12 @@ TEST(OrcLazyLoadTest, TestStructSubField) {
         options.include(columns);
         ORC_UNIQUE_PTR<orc::RowReader> rr = reader->createRowReader(options);
         // lazy load c0 and c12 col
-        std::vector<orc::LoadType> lazyLoadColumns;
-        lazyLoadColumns.assign(5, orc::LoadType::NO_LAZY_LOAD);
+        std::vector<bool> lazyLoadColumns;
+        lazyLoadColumns.assign(5, false);
         // c0
-        lazyLoadColumns[1] = orc::LoadType::LAZY_LOAD;
-        // c1
-        lazyLoadColumns[2] = orc::LoadType::COMPOUND_LOAD;
+        lazyLoadColumns[1] = true;
         // c12
-        lazyLoadColumns[4] = orc::LoadType::LAZY_LOAD;
+        lazyLoadColumns[4] = true;
         rr->setLazyLoadColumns(lazyLoadColumns);
 
         ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = rr->createRowBatch(batchSize);

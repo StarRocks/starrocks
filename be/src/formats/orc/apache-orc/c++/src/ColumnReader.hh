@@ -28,7 +28,6 @@
 #include "Compression.hh"
 #include "Timezone.hh"
 #include "io/InputStream.hh"
-#include "orc/LoadType.h"
 #include "orc/Vector.hh"
 #include "wrap/orc-proto-wrapper.hh"
 
@@ -44,7 +43,7 @@ public:
      *    each columnId is selected.
      */
     virtual const std::vector<bool>& getSelectedColumns() const = 0;
-    virtual const std::vector<LoadType>& getLazyLoadColumns() const = 0;
+    virtual const std::vector<bool>& getLazyLoadColumns() const = 0;
 
     /**
      * Get the encoding for the given column for this stripe.

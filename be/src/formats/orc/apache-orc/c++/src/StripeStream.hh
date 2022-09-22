@@ -55,7 +55,7 @@ public:
     ~StripeStreamsImpl() override;
 
     const std::vector<bool>& getSelectedColumns() const override;
-    const std::vector<LoadType>& getLazyLoadColumns() const override;
+    const std::vector<bool>& getLazyLoadColumns() const override;
 
     proto::ColumnEncoding getEncoding(uint64_t columnId) const override;
 
