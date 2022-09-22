@@ -370,6 +370,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 }
 
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
+    RETURN_IF_ERROR(open_random_access_file());
     auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _scanner_params.scan_ranges[0]->file_length);
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     std::unique_ptr<orc::Reader> reader;
