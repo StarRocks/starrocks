@@ -239,8 +239,8 @@ CONF_mInt32(inc_rowset_expired_sec, "1800");
 // inc_rowset snapshot rs sweep time interval
 CONF_mInt32(tablet_rowset_stale_sweep_time_sec, "1800");
 // garbage sweep policy
-CONF_Int32(max_garbage_sweep_interval, "3600");
-CONF_Int32(min_garbage_sweep_interval, "180");
+CONF_mInt32(max_garbage_sweep_interval, "3600");
+CONF_mInt32(min_garbage_sweep_interval, "180");
 CONF_mInt32(snapshot_expire_time_sec, "172800");
 CONF_mInt32(trash_file_expire_time_sec, "259200");
 // check row nums for BE/CE and schema change. true is open, false is closed.
@@ -284,7 +284,7 @@ CONF_mInt32(cumulative_compaction_skip_window_seconds, "30");
 
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_Int32(update_compaction_num_threads_per_disk, "1");
-CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
+CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 
@@ -309,7 +309,7 @@ CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
 CONF_Bool(enable_event_based_compaction_framework, "false");
 
-CONF_Bool(enable_check_string_lengths, "true");
+CONF_mBool(enable_check_string_lengths, "true");
 // 5GB
 CONF_mInt64(min_cumulative_compaction_size, "5368709120");
 // 20GB
@@ -318,7 +318,7 @@ CONF_mInt64(min_base_compaction_size, "21474836480");
 // Max row source mask memory bytes, default is 200M.
 // Should be smaller than compaction_mem_limit.
 // When the row source mask buffer exceeds this, it will be persisted to a temporary file on the disk.
-CONF_Int64(max_row_source_mask_memory_bytes, "209715200");
+CONF_mInt64(max_row_source_mask_memory_bytes, "209715200");
 
 // Port to start debug webserver on
 CONF_Int32(webserver_port, "8040");
@@ -328,7 +328,7 @@ CONF_Int32(webserver_num_workers, "48");
 CONF_mInt32(periodic_counter_update_period_ms, "500");
 
 // Used for mini Load. mini load data file will be removed after this time.
-CONF_Int64(load_data_reserve_hours, "4");
+CONF_mInt64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
 CONF_mInt64(load_error_log_reserve_hours, "48");
 CONF_Int32(number_tablet_writer_threads, "16");
@@ -356,9 +356,9 @@ CONF_mInt64(streaming_load_max_batch_size_mb, "100");
 CONF_Int32(streaming_load_rpc_max_alive_time_sec, "1200");
 // The timeout of a rpc to open the tablet writer in remote BE.
 // short operation time, can set a short timeout
-CONF_Int32(tablet_writer_open_rpc_timeout_sec, "60");
+CONF_mInt32(tablet_writer_open_rpc_timeout_sec, "60");
 // make_snapshot rpc timeout
-CONF_Int32(make_snapshot_rpc_timeout_ms, "20000");
+CONF_mInt32(make_snapshot_rpc_timeout_ms, "20000");
 // Deprecated, use query_timeout instread
 // the timeout of a rpc to process one batch in tablet writer.
 // you may need to increase this timeout if using larger 'streaming_load_max_mb',
@@ -507,7 +507,7 @@ CONF_mInt32(max_consumer_num_per_group, "3");
 CONF_Int32(routine_load_thread_pool_size, "10");
 
 // kafka reqeust timeout
-CONF_Int32(routine_load_kafka_timeout_second, "10");
+CONF_mInt32(routine_load_kafka_timeout_second, "10");
 
 // Is set to true, index loading failure will not causing BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.
@@ -542,7 +542,7 @@ CONF_Int32(max_client_cache_size_per_host, "10");
 CONF_String(small_file_dir, "${STARROCKS_HOME}/lib/small_file/");
 // path gc
 CONF_Bool(path_gc_check, "true");
-CONF_Int32(path_gc_check_interval_second, "86400");
+CONF_mInt32(path_gc_check_interval_second, "86400");
 CONF_mInt32(path_gc_check_step, "1000");
 CONF_mInt32(path_gc_check_step_interval_ms, "10");
 CONF_mInt32(path_scan_interval_second, "86400");
