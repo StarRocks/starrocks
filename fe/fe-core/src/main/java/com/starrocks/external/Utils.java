@@ -119,6 +119,17 @@ public class Utils {
         return values;
     }
 
+    public static String getSuffixName(String dirPath, String filePath) {
+        Preconditions.checkArgument(filePath.startsWith(dirPath),
+                "dirPath " + dirPath + " should be prefix of filePath " + filePath);
+
+        String name = filePath.replaceFirst(dirPath, "");
+        if (name.startsWith("/")) {
+            name = name.substring(1);
+        }
+        return name;
+    }
+
     /**
      * Returns the value of the ROW_COUNT constant, or -1 if not found.
      */
