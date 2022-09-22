@@ -240,29 +240,40 @@ public class SRMetaBlockTest {
     }
 
     @Test
-    public void testWriteBadBlock() throws Exception {
-        DataOutputStream dos = openOutput("badWriter");
+    public void testWriteBadBlock0Json() throws Exception {
+        String name = "badWriter0Json";
+        DataOutputStream dos = openOutput(name);
         // write 0 json
         try {
-            new SRMetaBlockWriter(dos, "0 json", 0);
+            new SRMetaBlockWriter(dos, name, 0);
             Assert.fail();
         } catch (SRMetaBlockException e) {
             Assert.assertTrue(e.getMessage().contains("invalid numJson: 0"));
         }
+    }
 
+    @Test
+    public void testWriteBadBlockMoreJson() throws Exception {
+        String name = "badWriterMoreJson";
+        DataOutputStream dos = openOutput(name);
         // write more json than declared
         try {
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, "more json", 1);
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, name, 1);
             writer.writeJson("xxx");
             writer.writeJson("won't write!");
             Assert.fail();
         } catch (SRMetaBlockException e) {
             Assert.assertTrue(e.getMessage().contains("About to write json more than expect: 1 >= 1"));
         }
+    }
 
+    @Test
+    public void testWriteBadBlockLessJson() throws Exception {
+        String name = "badWriterLessJson";
+        DataOutputStream dos = openOutput(name);
         // write less json than declared
         try {
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, "less json", 2);
+            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, name, 2);
             writer.writeJson("xxx");
             writer.close();
             Assert.fail();
@@ -271,20 +282,19 @@ public class SRMetaBlockTest {
         }
     }
 
-    @Test
-    public void testReadBadBlock() throws Exception {
-        String name = "badReader";
-
-        // 1. write 4 strings
+    private void write2String(String name) throws Exception {
         DataOutputStream dos = openOutput(name);
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, name, 2);
         writer.writeJson("Muchos años después");
         writer.writeJson("frente al pelotón de fusilamiento");
         writer.close();
         dos.close();
+    }
 
-
-        // name mismatch
+    @Test
+    public void testReadBadBlockBadName() throws Exception {
+        String name = "badReaderBadName";
+        write2String(name);
         DataInputStream dis = openInput(name);
         try {
             SRMetaBlockReader reader = new SRMetaBlockReader(dis, "xxx");
@@ -292,13 +302,18 @@ public class SRMetaBlockTest {
             reader.readJson(String.class);
             Assert.fail();
         } catch (SRMetaBlockException e) {
-            Assert.assertTrue(e.getMessage().contains("Invalid meta block header, expect badReader actual xxx"));
+            Assert.assertTrue(e.getMessage().contains("Invalid meta block header, expect badReaderBadName actual xxx"));
         } finally {
             dis.close();
         }
+    }
 
+    @Test
+    public void testReadBadBlockMoreJson() throws Exception {
+        String name = "badReaderMoreJson";
+        write2String(name);
         // read more than expect
-        dis = openInput(name);
+        DataInputStream dis = openInput(name);
         try {
             SRMetaBlockReader reader = new SRMetaBlockReader(dis, name);
             reader.readJson(String.class);
