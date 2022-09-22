@@ -54,6 +54,9 @@ public class AdminSetReplicaStatusStmtAnalyzer {
             if (tabletId == -1 || backendId == -1 || status == null) {
                 throw new SemanticException("Should add following properties: TABLET_ID, BACKEND_ID and STATUS");
             }
+            adminSetReplicaStatusStmt.setTabletId(tabletId);
+            adminSetReplicaStatusStmt.setBackendId(backendId);
+            adminSetReplicaStatusStmt.setStatus(status);
             return null;
         }
     }
