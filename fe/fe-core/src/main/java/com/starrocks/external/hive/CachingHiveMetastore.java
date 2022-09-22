@@ -205,7 +205,6 @@ public class CachingHiveMetastore implements IHiveMetastore {
                 Streams.stream(partitionNames).map(partitionName -> partitionName.getPartitionNames().get())
                         .collect(Collectors.toList()));
 
-
         ImmutableMap.Builder<NewHivePartitionName, Partition> partitions = ImmutableMap.builder();
         for (NewHivePartitionName partitionName : partitionNames) {
             partitions.put(partitionName, partitionsByNames.get(partitionName.getPartitionNames().get()));

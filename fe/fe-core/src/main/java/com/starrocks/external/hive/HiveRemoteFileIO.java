@@ -76,7 +76,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
                         ImmutableList.copyOf(fileBlockDescs), ImmutableList.of()));
             }
         } catch (Exception e) {
-            throw new StarRocksConnectorException("Failed to get remote file's metadata on path: %s", pathKey);
+            throw new StarRocksConnectorException("Failed to get hive remote file's metadata on path: %s", pathKey);
         }
 
         return resultPartitions.put(pathKey, fileDescs).build();
