@@ -1,11 +1,20 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+>>>>>>> f017b31f8 ([BugFix] Fix refresh mv with partition by not first column bug (#11533))
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.io.DeepCopy;
@@ -358,6 +367,22 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
         // currently, mv only supports one expression
         Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
+        // for Partition slot ref, the SlotDescriptor is not serialized, so should recover it here.
+        // the SlotDescriptor is used by toThrift, which influences the execution process.
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        partitionExpr.collect(SlotRef.class, slotRefs);
+        Preconditions.checkState(slotRefs.size() == 1);
+        if (slotRefs.get(0).getSlotDescriptorWithoutCheck() == null) {
+            for (int i = 0; i < fullSchema.size(); i++) {
+                Column column = fullSchema.get(i);
+                if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
+                    SlotDescriptor slotDescriptor =
+                            new SlotDescriptor(new SlotId(i), column.getName(), column.getType(), column.isAllowNull());
+                    slotRefs.get(0).setDesc(slotDescriptor);
+                }
+            }
+        }
+
         ExpressionAnalyzer.analyzeExpression(partitionExpr, new AnalyzeState(),
                 new Scope(RelationId.anonymous(),
                         new RelationFields(this.getBaseSchema().stream()

@@ -12,7 +12,12 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.IntLiteral;
+<<<<<<< HEAD
 import com.starrocks.analysis.SelectListItem;
+=======
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
+>>>>>>> f017b31f8 ([BugFix] Fix refresh mv with partition by not first column bug (#11533))
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
@@ -230,11 +235,16 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Materialized view partition exp: "
                         + slotRef.toSql() + " must related to column");
             }
+            int columnId = 0;
             for (Column column : columns) {
                 if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
                     statement.setPartitionColumn(column);
+                    SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(columnId), slotRef.getColumnName(),
+                            column.getType(), column.isAllowNull());
+                    slotRef.setDesc(slotDescriptor);
                     break;
                 }
+                columnId++;
             }
             if (statement.getPartitionColumn() == null) {
                 throw new SemanticException("Materialized view partition exp column:"

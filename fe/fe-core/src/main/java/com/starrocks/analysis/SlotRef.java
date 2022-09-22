@@ -130,6 +130,13 @@ public class SlotRef extends Expr {
         this.desc = desc;
     }
 
+<<<<<<< HEAD
+=======
+    public SlotDescriptor getSlotDescriptorWithoutCheck() {
+        return desc;
+    }
+
+>>>>>>> f017b31f8 ([BugFix] Fix refresh mv with partition by not first column bug (#11533))
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
