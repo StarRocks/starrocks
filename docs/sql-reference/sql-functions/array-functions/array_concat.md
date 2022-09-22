@@ -4,7 +4,7 @@
 
 Concatenates multiple arrays into one array that contains all the elements in the arrays.
 
-We recommend that elements in the arrays to concatenate are of the same type. StarRocks also supports concatenating two arrays of different types. However, we did not fully test all the combinations of data types.
+Elements in the arrays to concatenate can be of the same type or different types. However, we recommend that the elements be of the same type.
 
 Nulls are processed as normal values.
 
@@ -20,7 +20,7 @@ array_concat(input0, input1, ...)
 
 ## Return value
 
-Returns an array that contains all the elements held in the arrays that are specified by the `input` parameter. The elements of the returned array are of the same data type as the elements of the specified arrays. Additionally, the elements of the returned array follow the order of the specified arrays and their elements.
+Returns an array that contains all the elements held in the arrays that are specified by the `input` parameter. The elements of the returned array are of the same data type as the elements of the input arrays. Additionally, the elements of the returned array follow the order of the input arrays and their elements.
 
 ## Examples
 
