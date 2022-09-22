@@ -1586,7 +1586,8 @@ public class PrivilegeCheckerTest {
                 () -> PrivilegeChecker.check(grantSelectOnAllDB, ctx));
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(grantSelectOnOneDB, ctx));
-        PrivilegeChecker.check(grantSelectOnOneTable, ctx);;
+        PrivilegeChecker.check(grantSelectOnOneTable, ctx);
+        ;
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(grantUsageOnAllResource, ctx));
         Assert.assertThrows(SemanticException.class,
@@ -1629,7 +1630,6 @@ public class PrivilegeCheckerTest {
                 "REVOKE GRANT ON RESOURCE spark0 FROM test", starRocksAssert.getCtx()));
     }
 
-
     @Test
     public void testCreateRepository() throws Exception {
         new MockUp<BrokerMgr>() {
@@ -1656,6 +1656,50 @@ public class PrivilegeCheckerTest {
                 "    \"username\" = \"root\",\n" +
                 "    \"password\" = \"root\"\n" +
                 ");";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+        Assert.assertTrue(statementBase.isSupportNewPlanner());
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
+    public void testDropRepository() throws Exception {
+        new MockUp<BrokerMgr>() {
+            @Mock
+            public FsBroker getBroker(String name, String host) throws AnalysisException {
+                return new FsBroker("10.74.167.16", 8111);
+            }
+
+        };
+        new MockUp<Repository>() {
+            @Mock
+            public Status initRepository() {
+                return Status.OK;
+            }
+        };
+
+        Collection<Pair<String, Integer>> addresses = new ArrayList<>();
+        Pair<String, Integer> pair = new Pair<>("127.0.0.1", 8082);
+        addresses.add(pair);
+        starRocksAssert.getCtx().getGlobalStateMgr().getCurrentState().getBrokerMgr().addBrokers("broker", addresses);
+
+        BlobStorage storage = new BlobStorage("broker", Maps.newHashMap());
+        Repository repo = new Repository(10000, "repo", false, "bos://backup-cmy", storage);
+        repo.initRepository();
+        starRocksAssert.getCtx().getGlobalStateMgr().getCurrentState().getBackupHandler().getRepoMgr()
+                .addAndInitRepoIfNotExist(repo, false);
+
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        TablePattern db1TablePattern = new TablePattern("*", "*");
+        db1TablePattern.analyze();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        String sql = "DROP REPOSITORY `repo`;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
         Assert.assertTrue(statementBase.isSupportNewPlanner());

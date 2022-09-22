@@ -2,13 +2,18 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterTest;
+import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.backup.Status;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import mockit.Mock;
 import mockit.MockUp;
@@ -16,6 +21,8 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
@@ -140,5 +147,23 @@ public class AnalyzeRepositoryTest {
                 "    \"username\" = \"root\",\n" +
                 "    \"password\" = \"root\"\n" +
                 ");");
+    }
+
+    @Test
+    public void testDropRepository() throws DdlException {
+        Collection<Pair<String, Integer>> addresses = new ArrayList<>();
+        Pair<String, Integer> pair = new Pair<>("127.0.0.1", 8080);
+        addresses.add(pair);
+        GlobalStateMgr.getCurrentState().getBrokerMgr().addBrokers("broker", addresses);
+
+        BlobStorage storage = new BlobStorage("broker", Maps.newHashMap());
+        Repository repo = new Repository(10000, "repo", false, "bos://backup-cmy", storage);
+        repo.initRepository();
+        GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repo, false);
+
+        analyzeSuccess("DROP REPOSITORY `repo`;");
+        analyzeFail("DROP REPOSITORY ``;");
+        analyzeFail("DROP REPOSITORY `repo1`;");
+        analyzeFail("DROP REPOSITORY `1repo`;");
     }
 }

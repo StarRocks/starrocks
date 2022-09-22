@@ -22,6 +22,7 @@ import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
@@ -460,6 +461,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateRepositoryStmt(CreateRepositoryStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitDropRepositoryStmt(DropRepositoryStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
