@@ -20,7 +20,6 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
@@ -46,6 +45,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TOlapTableLocationParam;
@@ -125,7 +125,6 @@ public class OlapTableSinkTest {
 
         OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L));
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
-        sink.complete();
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
     }
@@ -161,11 +160,9 @@ public class OlapTableSinkTest {
         }};
 
         OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(p1.getId()));
-        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         try {
-            sink.complete();
-        } catch (UserException e) {
-
+            sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        } catch (UserException ignored) {
         }
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
@@ -185,7 +182,6 @@ public class OlapTableSinkTest {
 
         OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(unknownPartId));
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
-        sink.complete();
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
     }
