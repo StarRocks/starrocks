@@ -393,6 +393,27 @@ public class CreateTableTest {
     }
 
     @Test
+    public void testCreateTableDefaultCurrentTimestamp() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql = "CREATE TABLE `test_create_default_current_timestamp` (\n" +
+                "    k1 int,\n" +
+                "    ts datetime NOT NULL DEFAULT CURRENT_TIMESTAMP\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ");";
+        starRocksAssert.withTable(sql);
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                .getTable("test_create_default_current_timestamp");
+        Assert.assertEquals(2, table.getColumns().size());
+    }
+    @Test
     public void testCreateTableDefaultUUID() throws Exception {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.useDatabase("test");
