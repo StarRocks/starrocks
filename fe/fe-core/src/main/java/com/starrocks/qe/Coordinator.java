@@ -1983,7 +1983,9 @@ public class Coordinator {
      * @return Whether using the strategy of assigning scanRanges to each driver sequence.
      */
     private <T> boolean enableAssignScanRangesPerDriverSeq(List<T> scanRanges, int pipelineDop) {
-        return scanRanges.size() > pipelineDop / 2;
+        boolean enableTabletInternalParallel =
+                connectContext != null && connectContext.getSessionVariable().isEnableTabletInternalParallel();
+        return !enableTabletInternalParallel || scanRanges.size() > pipelineDop / 2;
     }
 
     public void computeColocatedJoinInstanceParam(Map<Integer, TNetworkAddress> bucketSeqToAddress,
