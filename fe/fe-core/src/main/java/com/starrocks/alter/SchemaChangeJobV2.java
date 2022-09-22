@@ -754,8 +754,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             db.writeUnlock();
         }
 
+        // to make sure that this job will run runPendingJob() again to create the shadow index replicas
+        this.jobState = JobState.PENDING;
         this.watershedTxnId = replayedJob.watershedTxnId;
-        jobState = JobState.WAITING_TXN;
         LOG.info("replay pending schema change job: {}", jobId);
     }
 
