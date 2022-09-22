@@ -7,6 +7,11 @@ import com.starrocks.external.hive.text.TextFileFormatDesc;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Partition stores some necessary information used in the planner stage
+ * such as in the cbo and building scan range stage. The purpose of caching partition instance
+ * is to reduce repeated calls to the hive metastore rpc interface at each stage.
+ */
 public class Partition {
     private final Map<String, String> parameters;
     private final RemoteFileInputFormat inputFormat;

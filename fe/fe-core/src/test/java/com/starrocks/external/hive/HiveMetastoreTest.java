@@ -159,7 +159,7 @@ public class HiveMetastoreTest {
         Assert.assertEquals(5, columnStatistics2.getNdv());
     }
 
-    private static class MockedHiveMetaClient extends HiveMetaClient {
+    public static class MockedHiveMetaClient extends HiveMetaClient {
 
         public MockedHiveMetaClient() {
             super(new HiveConf());
