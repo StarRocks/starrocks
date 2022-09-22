@@ -33,11 +33,9 @@ import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -142,22 +140,16 @@ public class FrontendOptions {
         useFqdn = true;
 
         // Try to get FQDN from host
-        Process hostname = null;
-        try {
-            hostname = Runtime.getRuntime().exec("hostname -f");
-        } catch (IOException e) {
-            LOG.error("Got a IOException when try to get FQDN, message:{}", e.getMessage());
-            System.exit(-1);
-        }
-        BufferedReader stdInput = new BufferedReader(new InputStreamReader(hostname.getInputStream()));
         String fqdnString = null;
         try {
-            fqdnString = stdInput.readLine();
-        } catch (IOException e) {
-            LOG.error("Got a IOException when try to read FQDN, message:{}", e.getMessage());
+            fqdnString = InetAddress.getLocalHost().getCanonicalHostName();
+            String ip = InetAddress.getLocalHost().getHostAddress();
+            LOG.debug("ip is {}", ip);
+        } catch (UnknownHostException e) {
+            LOG.error("Got a UnknownHostException when try to get FQDN");
             System.exit(-1);
         }
-
+        
         if (null == fqdnString) {
             LOG.error("Got a null when try to read FQDN");
             System.exit(-1);
@@ -203,6 +195,8 @@ public class FrontendOptions {
             LOG.error("Fail to find right address to start fe by using fqdn");
             System.exit(-1);
         }
+        LOG.info("Use FQDN init local addr, FQDN: {}, IP: {}", 
+                localAddr.getCanonicalHostName(), localAddr.getHostAddress());
     }
 
     @VisibleForTesting
@@ -238,7 +232,7 @@ public class FrontendOptions {
         if (localAddr == null) {
             localAddr = loopBack;
         }
-        LOG.info("local address: {}.", localAddr);
+        LOG.info("Use IP init local addr, IP: {}", localAddr.getHostAddress());
     }
 
     public static void saveStartType() {
