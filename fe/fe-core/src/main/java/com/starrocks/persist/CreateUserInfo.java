@@ -9,6 +9,7 @@ import com.starrocks.authentication.UserProperty;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.privilege.UserPrivilegeCollection;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -22,30 +23,35 @@ public class CreateUserInfo  implements Writable {
     @SerializedName(value = "p")
     UserProperty userProperty;
 
-    public UserIdentity getUserIdentity() {
-        return userIdentity;
+    @SerializedName(value = "c")
+    UserPrivilegeCollection userPrivilegeCollection;
+
+    public CreateUserInfo(
+            UserIdentity userIdentity,
+            UserAuthenticationInfo authenticationInfo,
+            UserProperty userProperty,
+            UserPrivilegeCollection privilegeCollection) {
+        this.userIdentity = userIdentity;
+        this.authenticationInfo = authenticationInfo;
+        this.userProperty = userProperty;
+        this.userPrivilegeCollection = privilegeCollection;
     }
 
-    public void setUserIdentity(UserIdentity userIdentity) {
-        this.userIdentity = userIdentity;
+    public UserIdentity getUserIdentity() {
+        return userIdentity;
     }
 
     public UserAuthenticationInfo getAuthenticationInfo() {
         return authenticationInfo;
     }
 
-    public void setAuthenticationInfo(UserAuthenticationInfo authenticationInfo) {
-        this.authenticationInfo = authenticationInfo;
-    }
-
     public UserProperty getUserProperty() {
         return userProperty;
     }
 
-    public void setUserProperty(UserProperty userProperty) {
-        this.userProperty = userProperty;
+    public UserPrivilegeCollection getUserPrivilegeCollection() {
+        return userPrivilegeCollection;
     }
-
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));

@@ -62,6 +62,7 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.plugin.PluginInfo;
+import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
@@ -887,7 +888,16 @@ public class EditLog {
                 case OperationType.OP_CREATE_USER_V2: {
                     CreateUserInfo info = (CreateUserInfo) journal.getData();
                     globalStateMgr.getAuthenticationManager().replayCreateUser(
-                            info.getUserIdentity(), info.getAuthenticationInfo(), info.getUserProperty());
+                            info.getUserIdentity(),
+                            info.getAuthenticationInfo(),
+                            info.getUserProperty(),
+                            info.getUserPrivilegeCollection());
+                    break;
+                }
+                case OperationType.OP_UPDATE_USER_PRIVILEGE_V2: {
+                    UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo) journal.getData();
+                    globalStateMgr.getPrivilegeManager().replayUpdateUserPrivilegeCollection(
+                            info.getUserIdentity(), info.getPrivilegeCollection());
                     break;
                 }
                 default: {
@@ -1512,11 +1522,17 @@ public class EditLog {
         logEdit(OperationType.OP_STARMGR, journal);
     }
 
-    public void logCreateUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo, UserProperty userProperty) {
-        CreateUserInfo info = new CreateUserInfo();
-        info.setUserIdentity(userIdentity);
-        info.setAuthenticationInfo(authenticationInfo);
-        info.setUserProperty(userProperty);
+    public void logCreateUser(
+            UserIdentity userIdentity,
+            UserAuthenticationInfo authenticationInfo,
+            UserProperty userProperty,
+            UserPrivilegeCollection privilegeCollection) {
+        CreateUserInfo info = new CreateUserInfo(userIdentity, authenticationInfo, userProperty, privilegeCollection);
         logEdit(OperationType.OP_CREATE_USER_V2, info);
+    }
+
+    public void logUpdateUserPrivilege(UserIdentity userIdentity, UserPrivilegeCollection privilegeCollection) {
+        UserPrivilegeCollectionInfo info = new UserPrivilegeCollectionInfo(userIdentity, privilegeCollection);
+        logEdit(OperationType.OP_UPDATE_USER_PRIVILEGE_V2, info);
     }
 }

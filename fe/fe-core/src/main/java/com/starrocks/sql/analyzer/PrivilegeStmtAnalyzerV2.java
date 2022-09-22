@@ -1,4 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.StatementBase;
@@ -11,6 +12,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
+import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 
 public class PrivilegeStmtAnalyzerV2 {
     private PrivilegeStmtAnalyzerV2() {}
@@ -64,6 +66,18 @@ public class PrivilegeStmtAnalyzerV2 {
 
             if (stmt.hasRole()) {
                 throw new SemanticException("role not supported!");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+            // validate user/role
+            if (stmt.getUserIdentity() != null) {
+                analyseUser(stmt.getUserIdentity(), true);
+            } else {
+                // TODO
+                throw new SemanticException("not supported");
             }
             return null;
         }

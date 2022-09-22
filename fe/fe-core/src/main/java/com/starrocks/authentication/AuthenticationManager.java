@@ -6,6 +6,7 @@ package com.starrocks.authentication;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -118,7 +119,9 @@ public class AuthenticationManager {
                     userProperty = new UserProperty();
                     userNameToProperty.put(userIdentity.getQualifiedUser(), userProperty);
                 }
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateUser(userIdentity, info, userProperty);
+                GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+                UserPrivilegeCollection collection = globalStateMgr.getPrivilegeManager().onCreateUser(userIdentity);
+                globalStateMgr.getEditLog().logCreateUser(userIdentity, info, userProperty, collection);
             } finally {
                 writeUnlock();
             }
@@ -130,7 +133,10 @@ public class AuthenticationManager {
     }
 
     public void replayCreateUser(
-            UserIdentity userIdentity, UserAuthenticationInfo info, UserProperty userProperty)
+            UserIdentity userIdentity,
+            UserAuthenticationInfo info,
+            UserProperty userProperty,
+            UserPrivilegeCollection privilegeCollection)
             throws AuthenticationException {
         writeLock();
         try {
@@ -139,6 +145,9 @@ public class AuthenticationManager {
             if (userProperty != null) {
                 userNameToProperty.put(userIdentity.getQualifiedUser(), userProperty);
             }
+
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            globalStateMgr.getPrivilegeManager().replayUpdateUserPrivilegeCollection(userIdentity, privilegeCollection);
         } finally {
             writeUnlock();
         }
