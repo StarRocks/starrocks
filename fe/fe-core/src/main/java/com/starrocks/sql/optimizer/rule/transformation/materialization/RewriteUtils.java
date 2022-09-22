@@ -1,8 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.sql.optimizer.rule.transformation.materialize;
+package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -17,6 +19,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+import java.util.Set;
 
 import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType;
 
@@ -48,6 +51,23 @@ public class RewriteUtils {
     }
 
     // get all ref tables within and below root
+    public static List<LogicalScanOperator> getAllScanOperator(OptExpression root) {
+        List<LogicalScanOperator> scanOperators = Lists.newArrayList();
+        getAllScanOperator(root, scanOperators);
+        return scanOperators;
+    }
+
+    private static void getAllScanOperator(OptExpression root, List<LogicalScanOperator> scanOperators) {
+        if (root.getOp() instanceof LogicalScanOperator) {
+            scanOperators.add((LogicalScanOperator) root.getOp());
+        } else {
+            for (OptExpression child : root.getInputs()) {
+                getAllScanOperator(child, scanOperators);
+            }
+        }
+    }
+
+    // get all ref tables within and below root
     public static List<Table> getAllTables(OptExpression root) {
         List<Table> tables = Lists.newArrayList();
         getAllTables(root, tables);
@@ -73,8 +93,15 @@ public class RewriteUtils {
     }
 
     private static void getAllPredicates(OptExpression root, List<ScalarOperator> predicates) {
-        if (root.getOp().getPredicate() != null) {
+        Operator operator = root.getOp();
+        if (operator.getPredicate() != null) {
             predicates.add(root.getOp().getPredicate());
+        }
+        if (operator instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+            if (joinOperator.getOnPredicate() != null) {
+                predicates.add(joinOperator.getOnPredicate());
+            }
         }
         for (OptExpression child : root.getInputs()) {
             getAllPredicates(child, predicates);
@@ -104,5 +131,43 @@ public class RewriteUtils {
         return Pair.create(
                 Utils.compoundAnd(columnEqualityPredicates),
                 Utils.compoundAnd(residualPredicates));
+    }
+
+    // may merge with isLogicalSPJG
+    // for one table, returns true
+    public static boolean isAllEqualInnerJoin(OptExpression root) {
+        Operator operator = root.getOp();
+        if (!(operator instanceof LogicalOperator)) {
+            return false;
+        }
+        if (operator instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+            boolean isEqualPredicate = isEqualPredicate(joinOperator.getOnPredicate());
+            if (joinOperator.getJoinType() == JoinOperator.INNER_JOIN && isEqualPredicate) {
+                return true;
+            }
+            return false;
+        }
+        for (OptExpression child : root.getInputs()) {
+            if (!isAllEqualInnerJoin(child)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static boolean isEqualPredicate(ScalarOperator predicate) {
+        if (predicate == null) {
+            return false;
+        }
+        if (predicate instanceof BinaryPredicateOperator) {
+            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
+            if (binaryPredicate.getBinaryType() == BinaryType.EQ
+                    && binaryPredicate.getChild(0).isColumnRef()
+                    && binaryPredicate.getChild(1).isColumnRef()) {
+                return true;
+            }
+        }
+        return false;
     }
 }

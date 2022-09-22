@@ -33,7 +33,7 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.sql.optimizer.rule.transformation.materialize.MaterializationContext;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializationContext;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.commons.lang3.StringUtils;

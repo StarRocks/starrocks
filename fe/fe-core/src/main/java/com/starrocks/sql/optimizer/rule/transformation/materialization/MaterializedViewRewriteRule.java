@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.sql.optimizer.rule.transformation.materialize;
+package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -13,12 +13,8 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -26,9 +22,7 @@ import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 
 import java.util.Collections;
 import java.util.List;
-
-import static com.starrocks.common.Pair.create;
-import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.EQ;
+import java.util.Set;
 
 /*
  * SPJG materialized view rewrite rule, based on
@@ -74,7 +68,7 @@ public class MaterializedViewRewriteRule extends TransformationRule {
         List<ScalarOperator> queryConjuncts = RewriteUtils.getAllPredicates(filter);
         ScalarOperator queryPredicate = Utils.compoundAnd(queryConjuncts);
         // column equality predicates and residual predicates
-        Pair<ScalarOperator, ScalarOperator> splitedPredicatePair = RewriteUtils.splitPredicate(queryPredicate);
+        final Pair<ScalarOperator, ScalarOperator> splitedPredicatePair = RewriteUtils.splitPredicate(queryPredicate);
         EquivalenceClasses queryEc = new EquivalenceClasses();
         for (ScalarOperator equalPredicate : Utils.extractConjuncts(splitedPredicatePair.first)) {
             Preconditions.checkState(equalPredicate.isColumnRef());
@@ -90,14 +84,14 @@ public class MaterializedViewRewriteRule extends TransformationRule {
 
         OptExpression rewrittenExpression = null;
         for (MaterializationContext mvContext : context.getCandidateMvs()) {
-            List<Table> mvRefTables = null;
+            List<Table> mvRefTables = RewriteUtils.getAllTables(mvContext.getMvExpression());
             // if the ref table set between query and mv do not intersect, skip
             if (Collections.disjoint(queryRefTables, mvRefTables)) {
                 continue;
             }
 
             MaterializedViewRewriter rewriter = new MaterializedViewRewriter(splitedPredicatePair, queryEc,
-                    null, filter, mvContext.getMv(), context);
+                    null, filter, queryRefTables, mvRefTables, mvContext, context);
             OptExpression rewritten = rewriter.rewriteQuery();
             if (rewritten != null) {
                 // TODO(hkp): compare the cost and decide whether to use rewritten

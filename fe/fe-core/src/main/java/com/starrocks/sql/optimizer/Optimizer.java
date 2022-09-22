@@ -45,8 +45,8 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggT
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialize.MaterializationContext;
-import com.starrocks.sql.optimizer.rule.transformation.materialize.RewriteUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializationContext;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.RewriteUtils;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
@@ -466,8 +466,8 @@ public class Optimizer {
             TableRelation tableRelation = new TableRelation(tableName);
             LogicalPlan mvQueryPlan =
                     new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(tableRelation);
-            materializationContext = new MaterializationContext(mv,
-                    mvQueryPlan.getRoot().getOp(), optimizedPlan);
+            materializationContext = new MaterializationContext(mv, mvQueryPlan.getRoot().getOp(), optimizedPlan);
+            // TODO(hkp): it is not a good idea to set back to mv
             mv.setMaterializationContext(materializationContext);
             context.addCandidateMvs(materializationContext);
         }
