@@ -596,11 +596,6 @@ bool Tablet::_check_versions_completeness() {
     return capture_consistent_versions(test_version, nullptr).ok();
 }
 
-bool Tablet::can_do_compaction() {
-    std::shared_lock rdlock(_meta_lock);
-    return _check_versions_completeness();
-}
-
 const uint32_t Tablet::calc_cumulative_compaction_score() const {
     uint32_t score = 0;
     bool base_rowset_exist = false;
@@ -614,7 +609,10 @@ const uint32_t Tablet::calc_cumulative_compaction_score() const {
             continue;
         }
 
-        score += rs_meta->get_compaction_score();
+        // non singleton delta means already compacted
+        if (rs_meta->is_singleton_delta()) {
+            score += rs_meta->get_compaction_score();
+        }
     }
 
     // If base doesn't exist, tablet may be altering, skip it, set score to 0

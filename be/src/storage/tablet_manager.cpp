@@ -502,21 +502,42 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
             }
 
             if (tablet_ptr->data_dir()->path_hash() != data_dir->path_hash() || !tablet_ptr->is_used() ||
-                !tablet_ptr->init_succeeded() || !tablet_ptr->can_do_compaction()) {
+                !tablet_ptr->init_succeeded()) {
                 continue;
             }
 
-            int64_t last_failure_ts = tablet_ptr->last_cumu_compaction_failure_time();
-            if (compaction_type == CompactionType::BASE_COMPACTION) {
+            int64_t last_failure_ts = 0;
+            if (compaction_type == CompactionType::CUMULATIVE_COMPACTION) {
+                if (tablet_ptr->last_cumu_compaction_failure_status() == TStatusCode::NOT_FOUND) {
+                    if (now_ms - last_failure_ts <= 5 * config::cumulative_compaction_check_interval_seconds * 1000) {
+                        VLOG(1) << "Too often to schedule no suitable compaction, skip it."
+                                << "compaction_type=" << compaction_type_str
+                                << ", last_failure_timestamp=" << last_failure_ts / 1000
+                                << ", tablet_id=" << tablet_ptr->tablet_id();
+                        continue;
+                    }
+                } else {
+                    last_failure_ts = tablet_ptr->last_cumu_compaction_failure_time();
+                    if (now_ms - last_failure_ts <= config::min_cmumulative_compaction_failure_interval_sec * 1000) {
+                        VLOG(1) << "Too often to schedule failure compaction, skip it."
+                                << "compaction_type=" << compaction_type_str
+                                << ", min_cmumulative_compaction_failure_interval_sec="
+                                << config::min_cmumulative_compaction_failure_interval_sec
+                                << ", last_failure_timestamp=" << last_failure_ts / 1000
+                                << ", tablet_id=" << tablet_ptr->tablet_id();
+                        continue;
+                    }
+                }
+            } else if (compaction_type == CompactionType::BASE_COMPACTION) {
                 last_failure_ts = tablet_ptr->last_base_compaction_failure_time();
-            }
-            if (now_ms - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
-                VLOG(1) << "Too often to schedule failure compaction, skip it."
-                        << "compaction_type=" << compaction_type_str
-                        << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
-                        << ", last_failure_timestamp=" << last_failure_ts / 1000
-                        << ", tablet_id=" << tablet_ptr->tablet_id();
-                continue;
+                if (now_ms - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
+                    VLOG(1) << "Too often to schedule failure compaction, skip it."
+                            << "compaction_type=" << compaction_type_str
+                            << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
+                            << ", last_failure_timestamp=" << last_failure_ts / 1000
+                            << ", tablet_id=" << tablet_ptr->tablet_id();
+                    continue;
+                }
             }
 
             if (compaction_type == CompactionType::BASE_COMPACTION) {
