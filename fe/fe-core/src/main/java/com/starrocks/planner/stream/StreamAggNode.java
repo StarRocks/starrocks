@@ -6,6 +6,7 @@ import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -37,6 +38,31 @@ public class StreamAggNode extends PlanNode {
     }
 
     @Override
+    protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
+        StringBuilder output = new StringBuilder();
+
+        if (CollectionUtils.isNotEmpty(aggInfo.getMaterializedAggregateExprs())) {
+            output.append(detailPrefix).append("output: ").append(
+                    getExplainString(aggInfo.getAggregateExprs())).append("\n");
+        }
+        output.append(detailPrefix).append("group_by: ").append(
+                getExplainString(aggInfo.getGroupingExprs())).append("\n");
+        if (!conjuncts.isEmpty()) {
+            output.append(detailPrefix).append("having: ").append(getExplainString(conjuncts)).append("\n");
+        }
+
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            if (detailImt != null) {
+                output.append(detailPrefix).append("detail_imt: " + detailImt.toString());
+            }
+            if (aggImt != null) {
+                output.append(detailPrefix).append("agg_imt: " + aggImt.toString());
+            }
+        }
+        return output.toString();
+    }
+
+    @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.STREAM_AGG_NODE;
 
@@ -64,23 +90,6 @@ public class StreamAggNode extends PlanNode {
         // TODO: add more functionalities
 
         msg.stream_agg_node.setAgg_func_set_version(3);
-    }
-
-    @Override
-    protected String getNodeVerboseExplain(String detailPrefix) {
-        StringBuilder output = new StringBuilder();
-        if (aggInfo.getAggregateExprs() != null && aggInfo.getMaterializedAggregateExprs().size() > 0) {
-            output.append(detailPrefix).append("aggregate: ").append(
-                    getVerboseExplain(aggInfo.getAggregateExprs())).append("\n");
-        }
-        if (aggInfo.getGroupingExprs() != null && aggInfo.getGroupingExprs().size() > 0) {
-            output.append(detailPrefix).append("group by: ").append(
-                    getVerboseExplain(aggInfo.getGroupingExprs())).append("\n");
-        }
-        if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts)).append("\n");
-        }
-        return output.toString();
     }
 
     @Override
