@@ -841,7 +841,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext session) {
+        public Void visitAlterDatabaseQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext session) {
             String dbName = statement.getDbName();
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {

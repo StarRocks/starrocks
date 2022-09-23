@@ -101,7 +101,7 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, C context) {
+    public R visitAlterDatabaseQuotaStmt(AlterDatabaseQuotaStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

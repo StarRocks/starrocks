@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -448,6 +449,14 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCancelAlterSystemStmt(CancelAlterSystemStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().cancelAlterCluster(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterDatabaseQuotaStmt(AlterDatabaseQuotaStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().alterDatabaseQuota(stmt);
             });
             return null;
         }
