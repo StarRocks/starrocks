@@ -1448,7 +1448,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testGroupingSetWithSameDistributeJoin() throws Exception {
         String sql = "select v2, v3, max(x1) " +
-                " from (select v3, v2, v1 as x1 from t0 right outer join t1 on v3 = v6 and v2 = v5) x " +
+                " from (select v3, v2, v1 as x1 from t0 right outer join[shuffle] t1 on v3 = v6 and v2 = v5) x " +
                 " group by grouping sets((v3, v2), (v2));";
 
         String plan = getFragmentPlan(sql);
