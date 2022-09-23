@@ -859,7 +859,7 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testWindowFunnelWithConstantMultipleStage() throws Exception {
         FeConstants.runningUnitTest = true;
-        String sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'auto',new_planner_agg_stage='3')*/ " 
+        String sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'auto',new_planner_agg_stage='3')*/ "
                 + "1,2,(window_funnel(900,lo_orderdate,0,[(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) "
                 + "= 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'A', "
                 + "(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate  "
@@ -901,9 +901,9 @@ public class AggregateTest extends PlanTestBase {
                 "when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'C'])) as __col_4, " +
                 "(count(distinct lo_orderdate)) as __col_18 from lineorder_flat_for_mv group " +
                 "by date_trunc('year',lo_orderdate)," +
-                "left(c_name,1) ) t;";        
+                "left(c_name,1) ) t;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "window_funnel(43: window_funnel, 900, 0)"); 
+        assertContains(plan, "window_funnel(43: window_funnel, 900, 0)");
         FeConstants.runningUnitTest = false;
     }
 
