@@ -25,7 +25,6 @@ import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlServer;
 import com.starrocks.mysql.nio.NMysqlServer;
-import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,8 +43,7 @@ public class QeService {
 
     public QeService(int port, boolean nioEnabled, ConnectScheduler scheduler) throws Exception {
         SSLContext sslContext = null;
-        if (!Strings.isNullOrEmpty(Config.ssl_keystore_location)
-                && SSLChannelImpClassLoader.loadSSLChannelImpClazz() != null) {
+        if (!Strings.isNullOrEmpty(Config.ssl_keystore_location)) {
             sslContext = createSSLContext();
         }
         if (nioEnabled) {

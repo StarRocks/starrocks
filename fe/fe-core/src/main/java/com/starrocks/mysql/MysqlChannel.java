@@ -22,7 +22,7 @@
 package com.starrocks.mysql;
 
 import com.starrocks.mysql.ssl.SSLChannel;
-import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
+import com.starrocks.mysql.ssl.SSLChannelImp;
 import com.starrocks.mysql.ssl.Transport;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -144,17 +144,18 @@ public class MysqlChannel {
                 close();
             }
         };
-        Class<? extends SSLChannel> clazz = SSLChannelImpClassLoader.loadSSLChannelImpClazz();
-        if (clazz == null) {
-            LOG.warn("load SSLChannelImp class failed");
-            throw new IOException("load SSLChannelImp class failed");
-        }
-        try {
-            sslChannel = (SSLChannel) clazz.getConstructors()[0].newInstance(sslContext.createSSLEngine(), transport);
-        } catch (Exception e) {
-            LOG.warn("construct SSLChannelImp class failed");
-            throw new IOException("construct SSLChannelImp class failed");
-        }
+        //      Class<? extends SSLChannel> clazz = SSLChannelImpClassLoader.loadSSLChannelImpClazz();
+        //      if (clazz == null) {
+        //          LOG.warn("load SSLChannelImp class failed");
+        //          throw new IOException("load SSLChannelImp class failed");
+        //      }
+        //      try {
+        //          sslChannel = (SSLChannel) clazz.getConstructors()[0].newInstance(sslContext.createSSLEngine(), transport);
+        //      } catch (Exception e) {
+        //          LOG.warn("construct SSLChannelImp class failed");
+        //          throw new IOException("construct SSLChannelImp class failed");
+        //      }
+        sslChannel = new SSLChannelImp(sslContext.createSSLEngine(), transport);
         return sslChannel.init();
     }
 
