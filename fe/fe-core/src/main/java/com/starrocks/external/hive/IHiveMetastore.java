@@ -26,5 +26,5 @@ public interface IHiveMetastore {
 
     HivePartitionStatistics getTableStatistics(String dbName, String tblName);
 
-    Map<String, HivePartitionStatistics> getPartitionsStatistics(Table table, List<String> partitions);
+    Map<String, HivePartitionStatistics> getPartitionStatistics(Table table, List<String> partitions);
 }

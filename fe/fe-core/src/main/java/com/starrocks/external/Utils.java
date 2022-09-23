@@ -19,6 +19,8 @@ import org.apache.hadoop.hive.common.StatsSetupConst;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.FutureTask;
 
 import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
@@ -157,5 +159,13 @@ public class Utils {
             // ignore
         }
         return -1;
+    }
+
+    public static <T> void executeInNewThread(String threadName, Callable<T> callable) {
+        FutureTask<T> task = new FutureTask<>(callable);
+        Thread thread = new Thread(task);
+        thread.setName(threadName);
+        thread.setDaemon(true);
+        thread.start();
     }
 }
