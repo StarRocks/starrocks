@@ -4,10 +4,8 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
-import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
@@ -84,33 +82,6 @@ public class AstBuilderTest {
         List<AlterClause> alterClauses = aStmt.getOps();
         TruncatePartitionClause c = (TruncatePartitionClause) alterClauses.get(0);
         Assert.assertTrue(c.getPartitionNames().getPartitionNames().get(0).equals("p1"));
-    }
-
-
-    @Test
-    public void testStopRoutineLoad() throws SecurityException, IllegalArgumentException {
-        String sql = "STOP ROUTINE LOAD FOR `db_test`.`rl_test`";
-        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
-        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-        StarRocksParser parser = new StarRocksParser(tokenStream);
-        StarRocksParser.sqlMode = 32;
-        StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-        StopRoutineLoadStmt stmt = (StopRoutineLoadStmt) new AstBuilder(32).visit(sqlStatements.singleStatement(0));
-        Assert.assertEquals("db_test", stmt.getDbFullName());
-        Assert.assertEquals("rl_test", stmt.getName());
-    }
-
-    @Test
-    public void testResumeRoutineLoad() throws SecurityException, IllegalArgumentException {
-        String sql = "RESUME ROUTINE LOAD FOR `db_test`.`rl_test`";
-        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
-        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-        StarRocksParser parser = new StarRocksParser(tokenStream);
-        StarRocksParser.sqlMode = 32;
-        StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-        ResumeRoutineLoadStmt stmt = (ResumeRoutineLoadStmt) new AstBuilder(32).visit(sqlStatements.singleStatement(0));
-        Assert.assertEquals("db_test", stmt.getDbFullName());
-        Assert.assertEquals("rl_test", stmt.getName());
     }
 
     @Test
