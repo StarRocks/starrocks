@@ -985,7 +985,7 @@ StatusOr<size_t> TabletMetaManager::delete_del_vector_before_version(KVStore* me
         bool del = false;
         bool added = false;
         for (size_t i = 0; i < versions.size(); i++) {
-            if (del == true) {
+            if (del) {
                 std::string key = encode_del_vector_key(tablet_id, segment.first, versions[i]);
                 rocksdb::Status st = batch.Delete(cf_handle, key);
                 if (!st.ok()) {
