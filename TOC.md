@@ -359,6 +359,8 @@
         + [json_each](/sql-reference/sql-functions/json-functions/json-processing-functions/json_each.md)
         + [json_exists](/sql-reference/sql-functions/json-functions/json-processing-functions/json_exist.md)
         + [json_query](/sql-reference/sql-functions/json-functions/json-processing-functions/json_query.md)
+        + [json_length](/sql-reference/sql-functions/json-functions/json-processing-functions/json_length.md)
+        + [json_keys](/sql-reference/sql-functions/json-functions/json-processing-functions/json_keys.md)
     + 模糊/正则匹配函数
       + [like](/sql-reference/sql-functions/like_predicate-functions/like.md)
       + [regexp](/sql-reference/sql-functions/like_predicate-functions/regexp.md)

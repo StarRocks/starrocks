@@ -2,7 +2,7 @@
 
 ## 功能
 
-将一个 bitmap 转化成一个逗号分隔的字符串, 字符串中包含所有设置的 BIT 位, 输入是 null 的话会返回 null。
+将一个 bitmap 转化成一个逗号分隔的字符串。字符串中包含 bitmap 中所有 bit 位。输入是 null 的话会返回 null。
 
 ## 语法
 
@@ -21,28 +21,28 @@ BITMAP_TO_STRING(input)
 ## 示例
 
 ```Plain Text
-MySQL > select bitmap_to_string(null);
+select bitmap_to_string(null);
 +------------------------+
 | bitmap_to_string(NULL) |
 +------------------------+
 | NULL                   |
 +------------------------+
 
-MySQL > select bitmap_to_string(bitmap_empty());
+select bitmap_to_string(bitmap_empty());
 +----------------------------------+
 | bitmap_to_string(bitmap_empty()) |
 +----------------------------------+
 |                                  |
 +----------------------------------+
 
-MySQL > select bitmap_to_string(to_bitmap(1));
+select bitmap_to_string(to_bitmap(1));
 +--------------------------------+
 | bitmap_to_string(to_bitmap(1)) |
 +--------------------------------+
 | 1                              |
 +--------------------------------+
 
-MySQL > select bitmap_to_string(bitmap_or(to_bitmap(1), to_bitmap(2)));
+select bitmap_to_string(bitmap_or(to_bitmap(1), to_bitmap(2)));
 +---------------------------------------------------------+
 | bitmap_to_string(bitmap_or(to_bitmap(1), to_bitmap(2))) |
 +---------------------------------------------------------+
