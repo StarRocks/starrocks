@@ -418,8 +418,8 @@ Status VersionGraph::capture_consistent_versions(const Version& spec_version,
     }
 
     if (!visited[end_vertex_index]) {
-        LOG(WARNING) << "fail to find path in version_graph. "
-                     << "spec_version: " << spec_version.first << "-" << spec_version.second;
+        //LOG(WARNING) << "fail to find path in version_graph. "
+        //             << "spec_version: " << spec_version.first << "-" << spec_version.second;
         return Status::NotFound("Version not found");
     }
 

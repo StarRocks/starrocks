@@ -465,8 +465,8 @@ Status Tablet::capture_consistent_versions(const Version& spec_version, std::vec
         } else {
             auto msg = fmt::format("version not found. tablet_id: {}, version: {}", _tablet_meta->tablet_id(),
                                    spec_version.second);
-            LOG(WARNING) << msg;
-            _print_missed_versions(missed_versions);
+            //LOG(WARNING) << msg;
+            //_print_missed_versions(missed_versions);
             return Status::NotFound(msg);
         }
     }
