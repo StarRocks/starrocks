@@ -1224,7 +1224,7 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadCompactionManager(dis, checksum);
             remoteChecksum = dis.readLong();
-            loadNewPrivilege(dis);
+            loadRBACPrivilege(dis);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1310,7 +1310,7 @@ public class GlobalStateMgr {
     }
 
     // TODO put this at the end of the image before 3.0 release
-    public void loadNewPrivilege(DataInputStream dis) throws IOException, DdlException {
+    public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
         if (usingNewPrivilege) {
             this.authenticationManager = AuthenticationManager.load(dis);
         }
@@ -1476,7 +1476,7 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = compactionManager.saveCompactionManager(dos, checksum);
             dos.writeLong(checksum);
-            saveNewPrivilege(dos);
+            saveRBACPrivilege(dos);
         }
 
         if (usingNewPrivilege) {
@@ -1520,7 +1520,7 @@ public class GlobalStateMgr {
     }
 
     // TODO put this at the end of the image before 3.0 release
-    public void saveNewPrivilege(DataOutputStream dos) throws IOException {
+    public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
         if (usingNewPrivilege) {
             this.authenticationManager.save(dos);
         }

@@ -145,7 +145,7 @@ public class AuthenticationManager {
             throws AuthenticationException {
         writeLock();
         try {
-            info.analyse();
+            info.analyze();
             updateUserNoLock(userIdentity, info, false);
             if (userProperty != null) {
                 userNameToProperty.put(userIdentity.getQualifiedUser(), userProperty);
@@ -240,7 +240,7 @@ public class AuthenticationManager {
                     UserIdentity userIdentity = (UserIdentity) reader.readJson(UserIdentity.class);
                     UserAuthenticationInfo userAuthenticationInfo =
                             (UserAuthenticationInfo) reader.readJson(UserAuthenticationInfo.class);
-                    userAuthenticationInfo.analyse();
+                    userAuthenticationInfo.analyze();
                     ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
                 }
             } catch (SRMetaBlockEOFException eofException) {
