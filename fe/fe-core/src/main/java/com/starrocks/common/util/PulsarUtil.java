@@ -142,6 +142,10 @@ public class PulsarUtil {
                 } else {
                     return result;
                 }
+            } catch (InterruptedException ie) {
+                LOG.warn("got interrupted exception when sending proxy request to " + address);
+                Thread.currentThread().interrupt();
+                throw new LoadException("got interrupted exception when sending proxy request to " + address);
             } catch (Exception e) {
                 LOG.warn("failed to send proxy request to " + address + " err " + e.getMessage());
                 throw new LoadException("failed to send proxy request to " + address + " err " + e.getMessage());
