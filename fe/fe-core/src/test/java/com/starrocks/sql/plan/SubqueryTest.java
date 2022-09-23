@@ -15,6 +15,14 @@ public class SubqueryTest extends PlanTestBase {
     public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
+    public void test() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
+        String sql = "select v1 from t0 left join t1 on (v1 = v4)   left join t2 on (v2 = v8)";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
+
+    @Test
     public void testCorrelatedSubqueryWithEqualsExpressions() throws Exception {
         String sql = "select t0.v1 from t0 where (t0.v2 in (select t1.v4 from t1 where t0.v3 + t1.v5 = 1)) is NULL";
         String plan = getFragmentPlan(sql);

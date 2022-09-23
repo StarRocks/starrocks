@@ -1468,6 +1468,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
     for (; i < probe_row_count; i++) {
         size_t build_index = _probe_state->next[i];
         if (build_index == 0) {
+            _probe_state->probe_index[match_count] = i;
+            _probe_state->build_index[match_count] = 0;
             if (_probe_state->null_array != nullptr && (*_probe_state->null_array)[i] == 1) {
                 // when left table col value is null needs match all rows in right table
                 for (size_t j = 1; j < _table_items->row_count + 1; j++) {
@@ -1485,6 +1487,11 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
                     }
                 }
             }
+
+            if (match_count == 0) {
+                match_count++;
+            }
+
             continue;
         } else {
             // left table col value hits in hash table, we also need match null values firstly then match hit rows.
