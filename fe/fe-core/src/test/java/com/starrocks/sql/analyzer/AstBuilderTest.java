@@ -2,8 +2,12 @@
 
 package com.starrocks.sql.analyzer;
 
-
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.AlterRoutineLoadStmt;
+import com.starrocks.analysis.PauseRoutineLoadStmt;
+import com.starrocks.analysis.ResumeRoutineLoadStmt;
+import com.starrocks.analysis.ShowRoutineLoadStmt;
+import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
@@ -83,7 +87,7 @@ public class AstBuilderTest {
     }
 
     @Test
-    public void testShowRoutineLoad() throws SecurityException, IllegalArgumentException{
+    public void testShowRoutineLoad() throws SecurityException, IllegalArgumentException {
         String sql = "SHOW ROUTINE LOAD FOR `rl_test`FROM `db_test` WHERE state == 'RUNNING' ORDER BY `CreateTime` desc";
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
@@ -136,7 +140,9 @@ public class AstBuilderTest {
 
     @Test
     public void testAlterRoutineLoad() throws SecurityException, IllegalArgumentException {
-        String sql = "ALTER ROUTINE LOAD FOR `db_test`.`rl_test` PROPERTIES (\"desired_concurrent_number\" = \"10\") FROM kafka ( \"kafka_partitions\" = \"0, 1, 2\", \"kafka_offsets\" = \"100, 200, 100\", \"property.group.id\" = \"new_group\" )";
+        String sql = "ALTER ROUTINE LOAD FOR `db_test`.`rl_test` PROPERTIES (\"desired_concurrent_number\" = \"10\")" +
+                            "FROM kafka ( \"kafka_partitions\" = \"0, 1, 2\", \"kafka_offsets\" = \"100, 200, 100\"," +  
+                            "\"property.group.id\" = \"new_group\" )";
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
