@@ -170,6 +170,7 @@ public abstract class Type implements Cloneable {
                     .put("DECIMAL", Type.DEFAULT_DECIMALV2) // generic name for decimal
                     .put("STRING", Type.DEFAULT_STRING)
                     .put("INTEGER", Type.INT)
+                    .put("UNSIGNED", Type.INT)
                     .putAll(SUPPORT_SCALAR_TYPE_LIST.stream()
                             .collect(Collectors.toMap(x -> x.getPrimitiveType().toString(), x -> (ScalarType) x)))
                     .build();
@@ -948,6 +949,18 @@ public abstract class Type implements Cloneable {
         }
     }
 
+    public static boolean canCastToAsFunctionParameter(Type from, Type to) {
+        if (from.isNull()) {
+            return true;
+        } else if (from.isScalarType() && to.isScalarType()) {
+            return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
+        } else if (from.isArrayType() && to.isArrayType()) {
+            return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
+        } else {
+            return false;
+        }
+    }
+
     public static boolean canCastTo(Type from, Type to) {
         if (from.isNull()) {
             return true;
@@ -955,6 +968,8 @@ public abstract class Type implements Cloneable {
             return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
         } else if (from.isArrayType() && to.isArrayType()) {
             return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
+        } else if ((from.isStringType() || from.isJsonType()) && to.isArrayType()) {
+            return true;
         } else {
             return false;
         }

@@ -46,6 +46,11 @@ public class LogicalSchemaScanOperator extends LogicalScanOperator {
         return visitor.visitLogicalSchemaScan(this, context);
     }
 
+    @Override
+    public boolean canUsePipeLine() {
+        return false;
+    }
+
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalSchemaScanOperator, LogicalSchemaScanOperator.Builder> {
         @Override

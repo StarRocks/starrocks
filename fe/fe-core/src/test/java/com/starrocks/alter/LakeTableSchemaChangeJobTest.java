@@ -749,7 +749,7 @@ public class LakeTableSchemaChangeJobTest {
         // Add table back to database
         db.createTable(table);
 
-        // We've mocked Utils.publishVersion to throw RpcException, should this runFinishedRewritingJob will fail but
+        // We've mocked ColumnTypeConverter.publishVersion to throw RpcException, should this runFinishedRewritingJob will fail but
         // should not throw any exception.
         schemaChangeJob.runFinishedRewritingJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());

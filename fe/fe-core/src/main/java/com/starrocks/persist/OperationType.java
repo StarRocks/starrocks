@@ -261,6 +261,9 @@ public class OperationType {
     // only used in lake table currently
     public static final short OP_ADD_PARTITIONS_V2 = 10242;
 
+    // new privilege, all endswith V2
+    public static final short OP_CREATE_USER_V2 = 10261;
+
     // integrate with starmgr
     public static final short OP_STARMGR = 11000;
 }

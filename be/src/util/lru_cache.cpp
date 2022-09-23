@@ -129,7 +129,6 @@ bool HandleTable::_resize() {
 
         while (h != nullptr) {
             LRUHandle* next = h->next_hash;
-            CacheKey key = h->key();
             uint32_t hash = h->hash;
             LRUHandle** ptr = &new_list[hash & (new_length - 1)];
             h->next_hash = *ptr;
@@ -179,6 +178,39 @@ void LRUCache::_lru_append(LRUHandle* list, LRUHandle* e) {
     e->prev = list->prev;
     e->prev->next = e;
     e->next->prev = e;
+}
+
+void LRUCache::set_capacity(size_t capacity) {
+    std::vector<LRUHandle*> last_ref_list;
+    {
+        std::lock_guard l(_mutex);
+        _capacity = capacity;
+        _evict_from_lru(0, &last_ref_list);
+    }
+
+    for (auto entry : last_ref_list) {
+        entry->free();
+    }
+}
+
+uint64_t LRUCache::get_lookup_count() {
+    std::lock_guard l(_mutex);
+    return _lookup_count;
+}
+
+uint64_t LRUCache::get_hit_count() {
+    std::lock_guard l(_mutex);
+    return _hit_count;
+}
+
+size_t LRUCache::get_usage() {
+    std::lock_guard l(_mutex);
+    return _usage;
+}
+
+size_t LRUCache::get_capacity() {
+    std::lock_guard l(_mutex);
+    return _capacity;
 }
 
 Cache::Handle* LRUCache::lookup(const CacheKey& key, uint32_t hash) {
@@ -363,12 +395,21 @@ uint32_t ShardedLRUCache::_shard(uint32_t hash) {
     return hash >> (32 - kNumShardBits);
 }
 
-ShardedLRUCache::ShardedLRUCache(size_t capacity) : _last_id(0) {
-    const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
-
+ShardedLRUCache::ShardedLRUCache(size_t capacity) : _last_id(0), _capacity(capacity) {
+    const size_t per_shard = (_capacity + (kNumShards - 1)) / kNumShards;
     for (auto& _shard : _shards) {
         _shard.set_capacity(per_shard);
     }
+}
+
+void ShardedLRUCache::set_capacity(size_t capacity) {
+    // Maybe multi client try to set capactity, we protect it using mutex.
+    std::lock_guard l(_mutex);
+    const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
+    for (auto& _shard : _shards) {
+        _shard.set_capacity(per_shard);
+    }
+    _capacity = capacity;
 }
 
 Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t charge,
@@ -402,8 +443,13 @@ Slice ShardedLRUCache::value_slice(Handle* handle) {
 }
 
 uint64_t ShardedLRUCache::new_id() {
-    std::lock_guard l(_id_mutex);
+    std::lock_guard l(_mutex);
     return ++(_last_id);
+}
+
+size_t ShardedLRUCache::get_capacity() {
+    std::lock_guard l(_mutex);
+    return _capacity;
 }
 
 void ShardedLRUCache::prune() {
@@ -416,7 +462,7 @@ void ShardedLRUCache::prune() {
 
 size_t ShardedLRUCache::get_memory_usage() {
     size_t total_usage = 0;
-    for (const auto& _shard : _shards) {
+    for (auto& _shard : _shards) {
         total_usage += _shard.get_usage();
     }
     return total_usage;

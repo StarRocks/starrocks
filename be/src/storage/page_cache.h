@@ -36,8 +36,8 @@ namespace starrocks {
 class PageCacheHandle;
 class MemTracker;
 
-// Page cache min size is 512MB
-static constexpr int64_t kcacheMinSize = 536870912;
+// Page cache min size is 256MB
+static constexpr int64_t kcacheMinSize = 268435456;
 
 // Warpper around Cache, and used for cache page of column datas
 // in Segment.
@@ -92,6 +92,10 @@ public:
     void insert(const CacheKey& key, const Slice& data, PageCacheHandle* handle, bool in_memory = false);
 
     size_t memory_usage() const { return _cache->get_memory_usage(); }
+
+    void set_capacity(size_t capacity);
+
+    size_t get_capacity();
 
 private:
     static StoragePageCache* _s_instance;

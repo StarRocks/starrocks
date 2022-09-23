@@ -40,6 +40,8 @@ import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UninstallPluginStmt;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
@@ -354,6 +356,14 @@ public class GlobalStateMgr {
 
     private Auth auth;
 
+    // We're developing a new privilege & authentication framework
+    // This is used to turned on in hard code.
+    public static final boolean USING_NEW_PRIVILEGE = false;
+    // change to true in UT
+    private boolean usingNewPrivilege = USING_NEW_PRIVILEGE;
+
+    private AuthenticationManager authenticationManager;
+
     private DomainResolver domainResolver;
 
     private TabletSchedulerStat stat;
@@ -523,8 +533,11 @@ public class GlobalStateMgr {
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
 
-        this.auth = new Auth();
-        this.domainResolver = new DomainResolver(auth);
+        if (!usingNewPrivilege) {
+            this.auth = new Auth();
+            this.domainResolver = new DomainResolver(auth);
+            this.authenticationManager = null;
+        }
 
         this.resourceGroupMgr = new ResourceGroupMgr(this);
 
@@ -651,6 +664,10 @@ public class GlobalStateMgr {
 
     public Auth getAuth() {
         return auth;
+    }
+
+    public AuthenticationManager getAuthenticationManager() {
+        return authenticationManager;
     }
 
     public ResourceGroupMgr getResourceGroupMgr() {
@@ -844,6 +861,7 @@ public class GlobalStateMgr {
 
         // 2. get cluster id and role (Observer or Follower)
         nodeMgr.getClusterIdAndRoleOnStartup();
+        initAuth(usingNewPrivilege);
 
         // 3. Load image first and replay edits
         initJournal();
@@ -863,6 +881,21 @@ public class GlobalStateMgr {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
+    }
+
+    // set usingNewPrivilege = true in UT
+    public void initAuth(boolean usingNewPrivilege) throws AuthenticationException {
+        if (usingNewPrivilege) {
+            this.usingNewPrivilege = true;
+            this.authenticationManager = new AuthenticationManager();
+            this.authenticationManager.init();
+            this.auth = null;
+            this.domainResolver = null;
+        }
+    }
+
+    public boolean isUsingNewPrivilege() {
+        return usingNewPrivilege;
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -1073,8 +1106,10 @@ public class GlobalStateMgr {
             metastoreEventsProcessor.init();
             metastoreEventsProcessor.start();
         }
-        // domain resolver
-        domainResolver.start();
+        if (! usingNewPrivilege) {
+            // domain resolver
+            domainResolver.start();
+        }
         if (Config.use_staros) {
             compactionManager.start();
         }
@@ -1132,6 +1167,9 @@ public class GlobalStateMgr {
                 GlobalStateMgr.isCheckpointThread());
         long loadImageStartTime = System.currentTimeMillis();
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
+        if (usingNewPrivilege) {
+            auth = new Auth();
+        }
 
         long checksum = 0;
         long remoteChecksum = -1;  // in case of empty image file checksum match
@@ -1189,6 +1227,10 @@ public class GlobalStateMgr {
         }
 
         Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
+
+        if (usingNewPrivilege) {
+            auth = null;
+        }
 
         long loadImageEndTime = System.currentTimeMillis();
         this.imageJournalId = storage.getImageJournalId();
@@ -1376,6 +1418,10 @@ public class GlobalStateMgr {
         // save image does not need any lock. because only checkpoint thread will call this method.
         LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), GlobalStateMgr.isCheckpointThread());
 
+        if (usingNewPrivilege) {
+            auth = new Auth();
+        }
+
         long checksum = 0;
         long saveImageStartTime = System.currentTimeMillis();
         try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(curFile))) {
@@ -1418,6 +1464,10 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = compactionManager.saveCompactionManager(dos, checksum);
             dos.writeLong(checksum);
+        }
+
+        if (usingNewPrivilege) {
+            auth = null;
         }
 
         long saveImageEndTime = System.currentTimeMillis();

@@ -36,8 +36,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -219,8 +219,7 @@ public class StarRocksAssert {
         Assert.assertTrue(statement.getClass().getSimpleName().contains("ResourceGroupStmt"));
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        DataDefinitionExecutorFactory.execute((DdlStmt) statement, connectCtx);
-
+        DDLStmtExecutor.execute((DdlStmt) statement, connectCtx);
     }
 
     public List<List<String>> executeResourceGroupShowSql(String sql) throws Exception {

@@ -95,12 +95,19 @@ public class OlapTableSink extends DataSink {
     // set after init called
     private TDataSink tDataSink;
 
+    private boolean enablePipelineLoad;
+
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds) {
+        this(dstTable, tupleDescriptor, partitionIds, true);
+    }
+
+    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds, boolean enablePipelineLoad) {
         this.dstTable = dstTable;
         this.tupleDescriptor = tupleDescriptor;
         Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
         this.partitionIds = partitionIds;
         this.clusterId = dstTable.getClusterId();
+        this.enablePipelineLoad = enablePipelineLoad;
     }
 
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS) throws AnalysisException {
@@ -370,7 +377,7 @@ public class OlapTableSink extends DataSink {
     }
 
     public boolean canUsePipeLine() {
-        return Config.enable_pipeline_load;
+        return Config.enable_pipeline_load && enablePipelineLoad;
     }
 }
 

@@ -81,6 +81,7 @@ statement
 
     //Routine Statement
     | createRoutineLoadStatement
+    | alterRoutineLoadStatement
     | stopRoutineLoadStatement
     | resumeRoutineLoadStatement
     | pauseRoutineLoadStatement
@@ -155,6 +156,7 @@ statement
     | showProcesslistStatement
     | showStatusStatement
     | showTabletStatement
+    | showTransactionStatement
     | showTriggersStatement
     | showUserStatement
     | showUserPropertyStatement
@@ -185,6 +187,10 @@ statement
 
     // Snapshot Satement
     | showSnapshotStatement
+
+    //  Repository Satement
+    | createRepositoryStatement
+    | dropRepositoryStatement
 
     // Sql BlackList And WhiteList Statement
     | addSqlBlackListStatement
@@ -272,7 +278,7 @@ charsetName
     ;
 
 defaultDesc
-    : DEFAULT (string| NULL | CURRENT_TIMESTAMP)
+    : DEFAULT (string | NULL | CURRENT_TIMESTAMP | '(' qualifiedName '(' ')' ')')
     ;
 
 indexDesc
@@ -715,6 +721,17 @@ createRoutineLoadStatement
         dataSourceProperties?
     ;
 
+alterRoutineLoadStatement
+    : ALTER ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+        (loadProperties (',' loadProperties)*)?
+        jobProperties?
+        dataSource?
+    ;
+
+dataSource
+    : FROM source=identifier dataSourceProperties
+    ;
+
 loadProperties
     : (colSeparatorProperty)
     | (rowDelimiterProperty)
@@ -733,7 +750,7 @@ rowDelimiterProperty
 
 columnProperties
     : '('
-        (qualifiedName | assignmentList) (',' (qualifiedName | assignmentList))*
+        (qualifiedName | assignment) (',' (qualifiedName | assignment))*
       ')'
     ;
 
@@ -771,7 +788,9 @@ showRoutineLoadTaskStatement
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
-    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')?
+        (WITH (SYNC | ASYNC) MODE)?
+        properties?
     ;
 
 dropStatsStatement
@@ -780,7 +799,9 @@ dropStatsStatement
 
 analyzeHistogramStatement
     : ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON identifier (',' identifier)*
-        (WITH bucket=INTEGER_VALUE BUCKETS)? properties?
+        (WITH (SYNC | ASYNC) MODE)?
+        (WITH bucket=INTEGER_VALUE BUCKETS)?
+        properties?
     ;
 
 dropHistogramStatement
@@ -993,6 +1014,10 @@ showProcedureStatement
 
 showProcStatement
     : SHOW PROC path=string
+    ;
+
+showTransactionStatement
+    : SHOW TRANSACTION ((FROM | IN) db=qualifiedName)? (WHERE expression)?
     ;
 
 showTriggersStatement
@@ -1365,6 +1390,18 @@ showSnapshotStatement
     (WHERE expression)?
     ;
 
+// ------------------------------------------ Repository Statement -----------------------------------------------------
+createRepositoryStatement
+    : CREATE (READ ONLY)? REPOSITORY identifier
+    WITH BROKER identifier?
+    ON LOCATION string
+    PROPERTIES propertyList
+    ;
+
+dropRepositoryStatement
+    : DROP REPOSITORY identifier
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -1450,6 +1487,7 @@ primaryExpression
     | EXISTS '(' queryBody ')'                                                            #exists
     | subquery                                                                            #subqueryExpression
     | CAST '(' expression AS type ')'                                                     #cast
+    | CONVERT '(' expression ',' type ')'                                                 #convert
     | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
     | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
@@ -1731,6 +1769,9 @@ baseType
     | TINYINT typeParameter?
     | SMALLINT typeParameter?
     | SIGNED INT?
+    | SIGNED INTEGER?
+    | UNSIGNED INT?
+    | UNSIGNED INTEGER?
     | INT typeParameter?
     | INTEGER typeParameter?
     | BIGINT typeParameter?
@@ -1811,7 +1852,7 @@ nonReserved
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
-    | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODIFY | MONTH | MERGE
+    | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
     | OBSERVER | OFFSET | ONLY | OPEN | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST

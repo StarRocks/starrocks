@@ -69,6 +69,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
+
 public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
@@ -101,57 +103,76 @@ public class InsertPlanner {
         //6. Optimize logical plan and build physical plan
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
-        Optimizer optimizer = new Optimizer();
-        PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
-        OptExpression optimizedPlan = optimizer.optimize(
-                session,
-                logicalPlan.getRoot(),
-                requiredPropertySet,
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
+        // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
+        boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
+        // Parallel pipeline loads are currently not supported, so disable the pipeline engine when users need parallel load
+        boolean canUsePipeline =
+                isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable()) &&
+                        logicalPlan.canUsePipeline() && session.getSessionVariable().getParallelExecInstanceNum() <= 1;
+        boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
+        try {
+            if (forceDisablePipeline) {
+                session.getSessionVariable().setEnablePipelineEngine(false);
+            }
 
-        //7. Build fragment exec plan
-        boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
-                || insertStmt.getTargetTable() instanceof MysqlTable);
-        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
-                optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+            Optimizer optimizer = new Optimizer();
+            PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
+            OptExpression optimizedPlan = optimizer.optimize(
+                    session,
+                    logicalPlan.getRoot(),
+                    requiredPropertySet,
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
 
-        DescriptorTable descriptorTable = execPlan.getDescTbl();
-        TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
+            //7. Build fragment exec plan
+            boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
+                    || insertStmt.getTargetTable() instanceof MysqlTable);
+            ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                    queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
 
-        List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-        long tableId = insertStmt.getTargetTable().getId();
-        for (Column column : insertStmt.getTargetTable().getFullSchema()) {
-            SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
-            slotDescriptor.setIsMaterialized(true);
-            slotDescriptor.setType(column.getType());
-            slotDescriptor.setColumn(column);
-            slotDescriptor.setIsNullable(column.isAllowNull());
-            if (column.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
-                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
-                dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
+            DescriptorTable descriptorTable = execPlan.getDescTbl();
+            TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
+
+            List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+            long tableId = insertStmt.getTargetTable().getId();
+            for (Column column : insertStmt.getTargetTable().getFullSchema()) {
+                SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(column.getType());
+                slotDescriptor.setColumn(column);
+                slotDescriptor.setIsNullable(column.isAllowNull());
+                if (column.getType().isVarchar() &&
+                        IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
+                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
+                    dict.ifPresent(
+                            columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
+                }
+            }
+            olapTuple.computeMemLayout();
+
+            DataSink dataSink;
+            if (insertStmt.getTargetTable() instanceof OlapTable) {
+                dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
+                        insertStmt.getTargetPartitionIds(), canUsePipeline);
+                // At present, we only support dop=1 for olap table sink.
+                // because tablet writing needs to know the number of senders in advance
+                // and guaranteed order of data writing
+                // It can be parallel only in some scenes, for easy use 1 dop now.
+                execPlan.getFragments().get(0).setPipelineDop(1);
+            } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
+                dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
+            } else {
+                throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
+            }
+            execPlan.getFragments().get(0).setSink(dataSink);
+            execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
+            return execPlan;
+        } finally {
+            if (forceDisablePipeline) {
+                session.getSessionVariable().setEnablePipelineEngine(true);
             }
         }
-        olapTuple.computeMemLayout();
-
-        DataSink dataSink;
-        if (insertStmt.getTargetTable() instanceof OlapTable) {
-            dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
-                    insertStmt.getTargetPartitionIds());
-            // At present, we only support dop=1 for olap table sink.
-            // because tablet writing needs to know the number of senders in advance
-            // and guaranteed order of data writing
-            // It can be parallel only in some scenes, for easy use 1 dop now.
-            execPlan.getFragments().get(0).setPipelineDop(1);
-        } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
-            dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
-        } else {
-            throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
-        }
-        execPlan.getFragments().get(0).setSink(dataSink);
-        execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
-        return execPlan;
     }
 
     private void castLiteralToTargetColumnsType(InsertStmt insertStatement) {
@@ -206,10 +227,14 @@ public class InsertPlanner {
                     } else if (defaultValueType == Column.DefaultValueType.CONST) {
                         scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        throw new SemanticException(
-                                "Column:" + targetColumn.getName() + " has unsupported default value:"
-                                        + targetColumn.getDefaultExpr().getExpr());
-
+                        if (SUPPORTED_DEFAULT_FNS.contains(targetColumn.getDefaultExpr().getExpr())) {
+                            scalarOperator = SqlToScalarOperatorTranslator.
+                                    translate(targetColumn.getDefaultExpr().obtainExpr());
+                        } else {
+                            throw new SemanticException(
+                                    "Column:" + targetColumn.getName() + " has unsupported default value:"
+                                            + targetColumn.getDefaultExpr().getExpr());
+                        }
                     } else {
                         throw new SemanticException("Unknown default value type:%s", defaultValueType.toString());
                     }

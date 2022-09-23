@@ -168,8 +168,8 @@ public class ReplayFromDumpTest {
         sessionVariable.setNewPlanerAggStage(2);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch17"), sessionVariable);
-        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update serialize)"));
-        Assert.assertTrue(replayPair.second.contains("3:AGGREGATE (merge finalize)"));
+        Assert.assertTrue(replayPair.second.contains("2:AGGREGATE (update serialize)"));
+        Assert.assertTrue(replayPair.second.contains("4:AGGREGATE (merge finalize)"));
     }
 
     @Test
@@ -371,6 +371,14 @@ public class ReplayFromDumpTest {
     }
 
     @Test
+    public void testTPCDS64() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/tpcds64"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains(" 83:SELECT\n" +
+                "  |  predicates: 521: d_year = 1999"));
+    }
+
+    @Test
     public void testCrossReorder() throws Exception {
         RuleSet mockRule = new RuleSet() {
             @Override
@@ -422,8 +430,10 @@ public class ReplayFromDumpTest {
     public void testJoinWithPipelineDop() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_pipeline_dop"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("25:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)"));
+        Assert.assertTrue(replayPair.second.contains("24:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 5: ss_customer_sk = 52: c_customer_sk"));
     }
 
     @Test
@@ -613,7 +623,7 @@ public class ReplayFromDumpTest {
     public void testHiveTPCH08UsingResource() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch08_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second.contains("33:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("30:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [33: o_orderkey, INT, true] = [17: l_orderkey, INT, true]\n" +
                 "  |  build runtime filters:\n" +
@@ -663,7 +673,7 @@ public class ReplayFromDumpTest {
     public void testParHiveTPCH08UsingCatalog() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch08_catalog"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second.contains("21:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("18:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [18: l_partkey, INT, true] = [1: p_partkey, INT, true]\n" +
                 "  |  build runtime filters:\n" +

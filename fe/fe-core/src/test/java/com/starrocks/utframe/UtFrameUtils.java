@@ -725,4 +725,16 @@ public class UtFrameUtils {
         }
     }
 
+    public static ConnectContext initCtxForNewPrivilege(UserIdentity userIdentity) throws Exception {
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setCurrentUserIdentity(userIdentity);
+        ctx.setQualifiedUser(userIdentity.getQualifiedUser());
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        globalStateMgr.initAuth(true);
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setThreadLocalInfo();
+        ctx.setDumpInfo(new MockDumpInfo());
+        return ctx;
+    }
+
 }

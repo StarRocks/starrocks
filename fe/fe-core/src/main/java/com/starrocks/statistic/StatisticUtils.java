@@ -106,7 +106,10 @@ public class StatisticUtils {
             if (table == null) {
                 return false;
             }
-
+            if (table.isLakeTable()) {
+                continue;
+            }
+            
             // check replicate miss
             for (Partition partition : table.getPartitions()) {
                 if (partition.getBaseIndex().getTablets().stream()
