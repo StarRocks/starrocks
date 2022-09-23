@@ -151,6 +151,10 @@ public class SystemInfoService {
         computeNode.setBackendState(BackendState.using);
     }
 
+    public boolean isSingleBackendAndComputeNode() {
+        return idToBackendRef.size() + idToComputeNodeRef.size() == 1;
+    }
+
     /**
      * @param hostPortPairs : backend's host and port
      * @throws DdlException

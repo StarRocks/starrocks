@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -222,6 +223,13 @@ public class CostModel {
                     }
                     break;
                 case SHUFFLE:
+                    boolean ignoreNetworkCost = sessionVariable.isEnableLocalShuffleAgg()
+                            && sessionVariable.isEnablePipelineEngine()
+                            && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+                    double networkCost = ignoreNetworkCost ? 0 : Math.max(statistics.getOutputSize(outputColumns), 1);
+
+                    result = CostEstimate.of(statistics.getOutputSize(outputColumns), 0, networkCost);
+                    break;
                 case GATHER:
                     result = CostEstimate.of(statistics.getOutputSize(outputColumns), 0,
                             Math.max(statistics.getOutputSize(outputColumns), 1));
