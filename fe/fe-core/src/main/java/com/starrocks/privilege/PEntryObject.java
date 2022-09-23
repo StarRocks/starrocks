@@ -2,9 +2,16 @@
 
 package com.starrocks.privilege;
 
-public interface PEntryObject {
-    /**
-     * if object is the same, this must be explicitly implemented
-     */
-    boolean isSame(PEntryObject pEntryObject);
+import com.google.gson.annotations.SerializedName;
+
+public class PEntryObject {
+    @SerializedName(value = "i")
+    protected long id;
+    public PEntryObject(long id) {
+        this.id = id;
+    }
+
+    boolean isSame(PEntryObject pEntryObject) {
+        return (pEntryObject instanceof PEntryObject) && (pEntryObject.id == this.id);
+    }
 }

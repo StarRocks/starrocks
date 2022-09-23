@@ -2,11 +2,14 @@
 
 package com.starrocks.privilege;
 
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -17,7 +20,9 @@ import mockit.Mocked;
 import org.junit.Test;
 import org.wildfly.common.Assert;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 public class PrivilegeManagerTest {
 
@@ -64,7 +69,7 @@ public class PrivilegeManagerTest {
         };
         new Expectations(editLog) {
             {
-                editLog.logUpdateUserPrivilege((UserIdentity) any, (UserPrivilegeCollection) any);
+                editLog.logUpdateUserPrivilege((UserIdentity) any, (UserPrivilegeCollection) any, anyShort, anyShort);
                 minTimes = 0;
             }
         };
@@ -101,5 +106,81 @@ public class PrivilegeManagerTest {
         Assert.assertFalse(manager.hasType(ctx, "TABLE"));
         Assert.assertFalse(manager.checkAnyObject(ctx, "TABLE", "SELECT"));
         Assert.assertFalse(manager.check(ctx, "TABLE", "SELECT", Arrays.asList("db", "tbl")));
+    }
+
+    private class FakeObject extends PEntryObject {
+        @SerializedName(value = "t")
+        private List<String> tokens;
+        public FakeObject(List<String> tokens) {
+            super(10);
+            this.tokens = new ArrayList<>(tokens);
+        }
+
+        @Override
+        public boolean isSame(PEntryObject pEntryObject) {
+            return pEntryObject instanceof FakeObject && ((FakeObject) pEntryObject).tokens.equals(tokens);
+        }
+    }
+
+    private class FakeProvider extends DefaultAuthorizationProvider {
+        public FakeProvider() {}
+        @Override
+        public PEntryObject generateObject(String type, List<String> objectTokens, GlobalStateMgr mgr)
+                throws PrivilegeException {
+            return new FakeObject(objectTokens);
+        }
+    }
+    @Test
+    public void testPersist() throws Exception {
+        UtFrameUtils.setUpForPersistTest();
+        GlobalStateMgr masterGlobalStateMgr = GlobalStateMgr.getCurrentState();
+        masterGlobalStateMgr.initAuth(true);
+        PrivilegeManager masterManager = masterGlobalStateMgr.getPrivilegeManager();
+        masterManager.provider = new FakeProvider();
+        ConnectContext rootCtx = UtFrameUtils.createDefaultCtx();
+        rootCtx.setCurrentUserIdentity(UserIdentity.ROOT);
+        UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
+        ConnectContext testCtx = UtFrameUtils.createDefaultCtx();
+        testCtx.setCurrentUserIdentity(testUser);
+
+        // create user test_user
+        String sql = "create user test_user";
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, rootCtx);
+        masterGlobalStateMgr.getAuthenticationManager().createUser(createUserStmt);
+        Assert.assertTrue(masterGlobalStateMgr.getAuthenticationManager().doesUserExist(testUser));
+        Assert.assertFalse(masterManager.check(
+                testCtx, "TABLE", "SELECT", Arrays.asList("db", "table")));
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+
+
+        sql = "grant select on db.tbl to test_user";
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, rootCtx);
+        masterManager.grant(grantStmt);
+        Assert.assertTrue(masterManager.check(
+                testCtx, "TABLE", "SELECT", Arrays.asList("db", "tbl")));
+
+        sql = "revoke select on db.tbl from test_user";
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, rootCtx);
+        masterManager.revoke(revokeStmt);
+        Assert.assertFalse(masterManager.check(
+                testCtx, "TABLE", "SELECT", Arrays.asList("db", "tbl")));
+
+
+        // start to replay
+        PrivilegeManager followerManager = new PrivilegeManager(masterGlobalStateMgr, new FakeProvider());
+
+        UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        followerManager.replayUpdateUserPrivilegeCollection(
+                info.getUserIdentity(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
+        Assert.assertTrue(followerManager.check(
+                testCtx, "TABLE", "SELECT", Arrays.asList("db", "tbl")));
+
+        info = (UserPrivilegeCollectionInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        followerManager.replayUpdateUserPrivilegeCollection(
+                info.getUserIdentity(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
+        Assert.assertFalse(followerManager.check(
+                testCtx, "TABLE", "SELECT", Arrays.asList("db", "tbl")));
+
+        UtFrameUtils.tearDownForPersisTest();
     }
 }

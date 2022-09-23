@@ -14,15 +14,26 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class UserPrivilegeCollectionInfo implements Writable  {
+
+    @SerializedName(value = "i")
+    public short pluginId;
+    @SerializedName(value = "v")
+    public short pluginVersion;
     @SerializedName(value = "u")
     private UserIdentity userIdentity;
 
     @SerializedName(value = "p")
     private UserPrivilegeCollection privilegeCollection;
 
-    public UserPrivilegeCollectionInfo(UserIdentity userIdentity, UserPrivilegeCollection userPrivilegeCollection) {
+    public UserPrivilegeCollectionInfo(
+            UserIdentity userIdentity,
+            UserPrivilegeCollection userPrivilegeCollection,
+            short pluginId,
+            short pluginVersion) {
         this.userIdentity = userIdentity;
         this.privilegeCollection = userPrivilegeCollection;
+        this.pluginId = pluginId;
+        this.pluginVersion = pluginVersion;
     }
 
     public UserIdentity getUserIdentity() {
@@ -31,6 +42,14 @@ public class UserPrivilegeCollectionInfo implements Writable  {
 
     public UserPrivilegeCollection getPrivilegeCollection() {
         return privilegeCollection;
+    }
+
+    public short getPluginId() {
+        return pluginId;
+    }
+
+    public short getPluginVersion() {
+        return pluginVersion;
     }
 
     @Override

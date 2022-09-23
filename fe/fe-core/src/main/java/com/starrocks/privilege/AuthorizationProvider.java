@@ -51,6 +51,6 @@ public interface AuthorizationProvider {
             PEntryObject object,
             PrivilegeCollection currentPrivilegeCollection);
 
-    boolean upgradePrivilegeCollection(
-            PrivilegeCollection info, short pluginId, short metaVersion);
+    void upgradePrivilegeCollection(
+            PrivilegeCollection info, short pluginId, short metaVersion) throws PrivilegeException;
 }

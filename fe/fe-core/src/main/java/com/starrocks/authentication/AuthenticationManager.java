@@ -6,6 +6,8 @@ package com.starrocks.authentication;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -120,8 +122,12 @@ public class AuthenticationManager {
                     userNameToProperty.put(userIdentity.getQualifiedUser(), userProperty);
                 }
                 GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-                UserPrivilegeCollection collection = globalStateMgr.getPrivilegeManager().onCreateUser(userIdentity);
-                globalStateMgr.getEditLog().logCreateUser(userIdentity, info, userProperty, collection);
+                PrivilegeManager privilegeManager = globalStateMgr.getPrivilegeManager();
+                UserPrivilegeCollection collection = privilegeManager.onCreateUser(userIdentity);
+                short pluginId = privilegeManager.getProviderPluginId();
+                short pluginVersion = privilegeManager.getProviderPluginVerson();
+                globalStateMgr.getEditLog().logCreateUser(
+                        userIdentity, info, userProperty, collection, pluginId, pluginVersion);
             } finally {
                 writeUnlock();
             }
@@ -136,8 +142,10 @@ public class AuthenticationManager {
             UserIdentity userIdentity,
             UserAuthenticationInfo info,
             UserProperty userProperty,
-            UserPrivilegeCollection privilegeCollection)
-            throws AuthenticationException {
+            UserPrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion)
+            throws AuthenticationException, PrivilegeException {
         writeLock();
         try {
             info.analyse();
@@ -147,7 +155,8 @@ public class AuthenticationManager {
             }
 
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            globalStateMgr.getPrivilegeManager().replayUpdateUserPrivilegeCollection(userIdentity, privilegeCollection);
+            globalStateMgr.getPrivilegeManager().replayUpdateUserPrivilegeCollection(
+                    userIdentity, privilegeCollection, pluginId, pluginVersion);
         } finally {
             writeUnlock();
         }

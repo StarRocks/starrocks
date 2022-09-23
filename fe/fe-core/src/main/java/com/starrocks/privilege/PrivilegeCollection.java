@@ -3,7 +3,6 @@
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,10 +29,6 @@ public class PrivilegeCollection {
             this.actionSet = actionSet;
             this.object = object;
             this.isGrant = isGrant;
-        }
-
-        public String toString() {
-            return GsonUtils.GSON.toJson(this);
         }
     }
 
@@ -76,9 +71,7 @@ public class PrivilegeCollection {
     }
 
     public void grant(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant) {
-        if (!typeToPrivilegeEntryList.containsKey(type)) {
-            typeToPrivilegeEntryList.put(type, new ArrayList<>());
-        }
+        typeToPrivilegeEntryList.computeIfAbsent(type, k -> new ArrayList<>());
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         for (PEntryObject object : objects) {
             PrivilegeEntry entry = findEntry(privilegeEntryList, object, isGrant);
@@ -98,7 +91,6 @@ public class PrivilegeCollection {
                     // intend to grant without grant option, and there's already an entry that grant with grant option
                     // we should check for each action, for those that's not in the existing entry
                     // we should create a new entry or added to the matching one
-                    List<Action> remainingActions = new ArrayList<>();
                     ActionSet remaining = oppositeEntry.actionSet.difference(actionSet);
                     if (! remaining.isEmpty()) {
                         addAction(privilegeEntryList, entry, remaining, object, isGrant);

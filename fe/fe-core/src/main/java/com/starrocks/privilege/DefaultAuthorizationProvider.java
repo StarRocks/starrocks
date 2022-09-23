@@ -77,7 +77,12 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public boolean upgradePrivilegeCollection(PrivilegeCollection info, short pluginId, short metaVersion) {
-        return false;
+    public void upgradePrivilegeCollection(PrivilegeCollection info, short pluginId, short metaVersion)
+            throws PrivilegeException {
+        if (pluginId != PLUGIN_ID && metaVersion != PLUGIN_VERSION) {
+            throw new PrivilegeException(String.format(
+                    "unexpected privilege collection %s; plugin id expect %d actual %d; version expect %d actual %d",
+                    info.toString(), PLUGIN_ID, pluginId, PLUGIN_VERSION, metaVersion));
+        }
     }
 }

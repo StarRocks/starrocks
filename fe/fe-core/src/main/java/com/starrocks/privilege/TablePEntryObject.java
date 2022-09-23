@@ -9,11 +9,9 @@ import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
 
-public class TablePEntryObject implements PEntryObject {
+public class TablePEntryObject extends PEntryObject {
     @SerializedName(value = "d")
     private long databaseId;
-    @SerializedName(value = "t")
-    private long tableId;
 
     public static TablePEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 2) {
@@ -31,8 +29,8 @@ public class TablePEntryObject implements PEntryObject {
     }
 
     public TablePEntryObject(long databaseId, long tableId) {
+        super(tableId);
         this.databaseId = databaseId;
-        this.tableId = tableId;
     }
 
     @Override
@@ -41,6 +39,6 @@ public class TablePEntryObject implements PEntryObject {
             return false;
         }
         TablePEntryObject other = (TablePEntryObject) pEntryObject;
-        return other.databaseId == databaseId && other.tableId == tableId;
+        return other.databaseId == databaseId && other.id == id;
     }
 }

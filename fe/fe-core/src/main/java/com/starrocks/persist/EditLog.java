@@ -891,13 +891,18 @@ public class EditLog {
                             info.getUserIdentity(),
                             info.getAuthenticationInfo(),
                             info.getUserProperty(),
-                            info.getUserPrivilegeCollection());
+                            info.getUserPrivilegeCollection(),
+                            info.getPluginId(),
+                            info.getPluginVersion());
                     break;
                 }
                 case OperationType.OP_UPDATE_USER_PRIVILEGE_V2: {
                     UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo) journal.getData();
                     globalStateMgr.getPrivilegeManager().replayUpdateUserPrivilegeCollection(
-                            info.getUserIdentity(), info.getPrivilegeCollection());
+                            info.getUserIdentity(),
+                            info.getPrivilegeCollection(),
+                            info.getPluginId(),
+                            info.getPluginVersion());
                     break;
                 }
                 default: {
@@ -1526,13 +1531,21 @@ public class EditLog {
             UserIdentity userIdentity,
             UserAuthenticationInfo authenticationInfo,
             UserProperty userProperty,
-            UserPrivilegeCollection privilegeCollection) {
-        CreateUserInfo info = new CreateUserInfo(userIdentity, authenticationInfo, userProperty, privilegeCollection);
+            UserPrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        CreateUserInfo info = new CreateUserInfo(
+                userIdentity, authenticationInfo, userProperty, privilegeCollection, pluginId, pluginVersion);
         logEdit(OperationType.OP_CREATE_USER_V2, info);
     }
 
-    public void logUpdateUserPrivilege(UserIdentity userIdentity, UserPrivilegeCollection privilegeCollection) {
-        UserPrivilegeCollectionInfo info = new UserPrivilegeCollectionInfo(userIdentity, privilegeCollection);
+    public void logUpdateUserPrivilege(
+            UserIdentity userIdentity,
+            UserPrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        UserPrivilegeCollectionInfo info = new UserPrivilegeCollectionInfo(
+                userIdentity, privilegeCollection, pluginId, pluginVersion);
         logEdit(OperationType.OP_UPDATE_USER_PRIVILEGE_V2, info);
     }
 }

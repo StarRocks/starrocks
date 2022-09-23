@@ -27,7 +27,7 @@ public class PrivilegeManager {
     private Map<Short, Map<String, Action>> typeToActionMap = new HashMap<>();
 
     @Expose(serialize = false)
-    private AuthorizationProvider provider;
+    protected AuthorizationProvider provider;
 
     @Expose(serialize = false)
     private GlobalStateMgr globalStateMgr;
@@ -48,14 +48,14 @@ public class PrivilegeManager {
         // init typeStringToId  && typeToActionMap
         Map<String, List<String>> map = this.provider.getValidPrivilegeTypeToActions();
         short typeId = 0;
-        for (String typeName : map.keySet()) {
-            typeStringToId.put(typeName, typeId);
+        for (Map.Entry<String, List<String>> entry : map.entrySet()) {
+            typeStringToId.put(entry.getKey(), typeId);
             Map<String, Action> actionMap = new HashMap<>();
             typeToActionMap.put(typeId, actionMap);
             typeId++;
 
             short actionId = 0;
-            for (String actionName : map.get(typeName)) {
+            for (String actionName : map.get(entry.getKey())) {
                 actionMap.put(actionName, new Action(actionId, actionName));
                 actionId++;
             }
@@ -104,12 +104,10 @@ public class PrivilegeManager {
             UserIdentity userIdentity) throws PrivilegeException {
         userWriteLock();
         try {
-            if (!userToPrivilegeCollection.containsKey(userIdentity)) {
-                throw new PrivilegeException("cannot find " + userIdentity.toString());
-            }
-            UserPrivilegeCollection collection = userToPrivilegeCollection.get(userIdentity);
+            UserPrivilegeCollection collection = getUserPrivilegeCollection(userIdentity);
             collection.grant(type, actionSet, objects, isGrant);
-            globalStateMgr.getEditLog().logUpdateUserPrivilege(userIdentity, collection);
+            globalStateMgr.getEditLog().logUpdateUserPrivilege(
+                    userIdentity, collection, provider.getPluginId(), provider.getPluginVersion());
         } finally {
             userWriteUnlock();
         }
@@ -141,12 +139,10 @@ public class PrivilegeManager {
             UserIdentity userIdentity) throws PrivilegeException {
         userWriteLock();
         try {
-            if (!userToPrivilegeCollection.containsKey(userIdentity)) {
-                throw new PrivilegeException("cannot find " + userIdentity.toString());
-            }
-            UserPrivilegeCollection collection = userToPrivilegeCollection.get(userIdentity);
+            UserPrivilegeCollection collection = getUserPrivilegeCollection(userIdentity);
             collection.revoke(type, actionSet, objects, isGrant);
-            globalStateMgr.getEditLog().logUpdateUserPrivilege(userIdentity, collection);
+            globalStateMgr.getEditLog().logUpdateUserPrivilege(
+                    userIdentity, collection, provider.getPluginId(), provider.getPluginVersion());
         } finally {
             userWriteUnlock();
         }
@@ -154,13 +150,12 @@ public class PrivilegeManager {
 
     public boolean check(ConnectContext context, String typeName, String actionName, List<String> objectToken)
             throws PrivilegeException {
-        UserIdentity userIdentity = context.getCurrentUserIdentity();
         userReadLock();
+        PEntryObject object = provider.generateObject(
+                typeName, objectToken, globalStateMgr);
         try {
             short typeId = typeStringToId.get(typeName);
             Action want = typeToActionMap.get(typeId).get(actionName);
-            PEntryObject object = provider.generateObject(
-                    typeName, objectToken, globalStateMgr);
             return provider.check(typeId, want, object, mergePrivilegeCollection(context));
         } finally {
             userReadUnlock();
@@ -202,9 +197,14 @@ public class PrivilegeManager {
         }
     }
 
-    public void replayUpdateUserPrivilegeCollection(UserIdentity user, UserPrivilegeCollection privilegeCollection) {
+    public void replayUpdateUserPrivilegeCollection(
+            UserIdentity user,
+            UserPrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) throws PrivilegeException {
         userWriteLock();
         try {
+            provider.upgradePrivilegeCollection(privilegeCollection, pluginId, pluginVersion);
             userToPrivilegeCollection.put(user, privilegeCollection);
         } finally {
             userWriteUnlock();
@@ -221,7 +221,14 @@ public class PrivilegeManager {
         } finally {
             userWriteUnlock();
         }
+    }
 
+    public short getProviderPluginId() {
+        return provider.getPluginId();
+    }
+
+    public short getProviderPluginVerson() {
+        return provider.getPluginVersion();
     }
 
     private PrivilegeCollection mergePrivilegeCollection(ConnectContext context) throws PrivilegeException {
@@ -230,6 +237,13 @@ public class PrivilegeManager {
             throw new PrivilegeException("cannot find " + userIdentity.toString());
         }
         // TODO merge role privilege
+        return userToPrivilegeCollection.get(userIdentity);
+    }
+
+    private UserPrivilegeCollection getUserPrivilegeCollection(UserIdentity userIdentity) throws PrivilegeException {
+        if (!userToPrivilegeCollection.containsKey(userIdentity)) {
+            throw new PrivilegeException("cannot find " + userIdentity.toString());
+        }
         return userToPrivilegeCollection.get(userIdentity);
     }
 

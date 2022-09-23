@@ -22,19 +22,28 @@ public class CreateUserInfo  implements Writable {
     UserAuthenticationInfo authenticationInfo;
     @SerializedName(value = "p")
     UserProperty userProperty;
-
     @SerializedName(value = "c")
     UserPrivilegeCollection userPrivilegeCollection;
+
+    @SerializedName(value = "i")
+    short pluginId;
+
+    @SerializedName(value = "v")
+    short pluginVersion;
 
     public CreateUserInfo(
             UserIdentity userIdentity,
             UserAuthenticationInfo authenticationInfo,
             UserProperty userProperty,
-            UserPrivilegeCollection privilegeCollection) {
+            UserPrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
         this.userIdentity = userIdentity;
         this.authenticationInfo = authenticationInfo;
         this.userProperty = userProperty;
         this.userPrivilegeCollection = privilegeCollection;
+        this.pluginId = pluginId;
+        this.pluginVersion = pluginVersion;
     }
 
     public UserIdentity getUserIdentity() {
@@ -52,6 +61,15 @@ public class CreateUserInfo  implements Writable {
     public UserPrivilegeCollection getUserPrivilegeCollection() {
         return userPrivilegeCollection;
     }
+
+    public short getPluginId() {
+        return pluginId;
+    }
+
+    public short getPluginVersion() {
+        return pluginVersion;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));

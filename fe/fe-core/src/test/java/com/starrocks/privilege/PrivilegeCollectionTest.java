@@ -9,26 +9,14 @@ import java.util.Arrays;
 
 public class PrivilegeCollectionTest {
 
-    static class FakeObject implements PEntryObject {
-        private int id;
-        public FakeObject(int id) {
-            this.id = id;
-        }
-
-        @Override
-        public boolean isSame(PEntryObject pEntryObject) {
-            return (pEntryObject instanceof FakeObject) && ((FakeObject) pEntryObject).id == id;
-        }
-    }
-
     @Test
-    public void test() throws Exception {
+    public void testBasic() throws Exception {
         PrivilegeCollection collection = new PrivilegeCollection();
         short table = 1;
         Action select = new Action((short) 1, "SELECT");
         Action insert = new Action((short) 2, "INSERT");
         Action delete = new Action((short) 3, "DELETE");
-        FakeObject table1 = new FakeObject(1);
+        PEntryObject table1 = new PEntryObject(1);
 
         Assert.assertFalse(collection.check(table, insert, table1));
         Assert.assertFalse(collection.check(table, delete, table1));
@@ -80,6 +68,68 @@ public class PrivilegeCollectionTest {
         Assert.assertFalse(collection.check(table, delete, table1));
         Assert.assertFalse(collection.allowGrant(table, delete, table1));
         Assert.assertFalse(collection.checkAnyObject(table, delete));
+
+        // nothing left
+        Assert.assertFalse(collection.hasType(table));
+        collection.revoke(table, new ActionSet(Arrays.asList(insert, delete)), Arrays.asList(table1), false);
+    }
+
+    @Test
+    public void testGrantOptionComplicated() throws Exception {
+        PrivilegeCollection collection = new PrivilegeCollection();
+        short table = 1;
+        Action select = new Action((short) 1, "SELECT");
+        Action insert = new Action((short) 2, "INSERT");
+        Action delete = new Action((short) 3, "DELETE");
+        PEntryObject table1 = new PEntryObject(1);
+
+        // grant select on table1 with grant option
+        collection.grant(table, new ActionSet(Arrays.asList(select)), Arrays.asList(table1), true);
+        // grant insert on table1 without grant option
+        collection.grant(table, new ActionSet(Arrays.asList(insert)), Arrays.asList(table1), false);
+        Assert.assertTrue(collection.check(table, select, table1));
+        Assert.assertTrue(collection.allowGrant(table, select, table1));
+        Assert.assertTrue(collection.check(table, insert, table1));
+        Assert.assertFalse(collection.allowGrant(table, insert, table1));
+        Assert.assertFalse(collection.check(table, delete, table1));
+        Assert.assertFalse(collection.allowGrant(table, delete, table1));
+
+        // grant delete on table1, without grant option
+        collection.grant(table, new ActionSet(Arrays.asList(delete)), Arrays.asList(table1), false);
+        Assert.assertTrue(collection.check(table, select, table1));
+        Assert.assertTrue(collection.allowGrant(table, select, table1));
+        Assert.assertTrue(collection.check(table, insert, table1));
+        Assert.assertFalse(collection.allowGrant(table, insert, table1));
+        Assert.assertTrue(collection.check(table, delete, table1));
+        Assert.assertFalse(collection.allowGrant(table, delete, table1));
+
+
+        // grant insert on table1 with grant option
+        collection.grant(table, new ActionSet(Arrays.asList(insert)), Arrays.asList(table1), true);
+        Assert.assertTrue(collection.check(table, select, table1));
+        Assert.assertTrue(collection.allowGrant(table, select, table1));
+        Assert.assertTrue(collection.check(table, insert, table1));
+        Assert.assertTrue(collection.allowGrant(table, insert, table1));
+        Assert.assertTrue(collection.check(table, delete, table1));
+        Assert.assertFalse(collection.allowGrant(table, delete, table1));
+
+        // revoke insert on table1 without grant option
+        collection.revoke(table, new ActionSet(Arrays.asList(insert)), Arrays.asList(table1), false);
+        Assert.assertTrue(collection.check(table, select, table1));
+        Assert.assertTrue(collection.allowGrant(table, select, table1));
+        Assert.assertFalse(collection.check(table, insert, table1));
+        Assert.assertFalse(collection.allowGrant(table, insert, table1));
+        Assert.assertTrue(collection.check(table, delete, table1));
+        Assert.assertFalse(collection.allowGrant(table, delete, table1));
+
+        // revoke select,delete with grant option
+        collection.revoke(table, new ActionSet(Arrays.asList(select, delete)), Arrays.asList(table1), true);
+        Assert.assertFalse(collection.check(table, select, table1));
+        Assert.assertFalse(collection.allowGrant(table, select, table1));
+        Assert.assertFalse(collection.check(table, insert, table1));
+        Assert.assertFalse(collection.allowGrant(table, insert, table1));
+        Assert.assertFalse(collection.check(table, delete, table1));
+        Assert.assertFalse(collection.allowGrant(table, delete, table1));
 
         // nothing left
         Assert.assertFalse(collection.hasType(table));
