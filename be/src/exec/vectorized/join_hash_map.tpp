@@ -1493,8 +1493,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
                 _probe_state->probe_index[match_count] = i;
                 _probe_state->build_index[match_count] = 0;
                 match_count++;
+                RETURN_IF_CHUNK_FULL()
             }
-            RETURN_IF_CHUNK_FULL()
             continue;
         } else {
             // left table col value hits in hash table, we also need match null values firstly then match hit rows.
