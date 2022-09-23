@@ -12,6 +12,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.external.hive.HiveMetaClient;
 import org.apache.hadoop.hive.common.StatsSetupConst;
@@ -122,8 +123,10 @@ public class Utils {
     }
 
     public static String getSuffixName(String dirPath, String filePath) {
-        Preconditions.checkArgument(filePath.startsWith(dirPath),
-                "dirPath " + dirPath + " should be prefix of filePath " + filePath);
+        if (!FeConstants.runningUnitTest) {
+            Preconditions.checkArgument(filePath.startsWith(dirPath),
+                    "dirPath " + dirPath + " should be prefix of filePath " + filePath);
+        }
 
         String name = filePath.replaceFirst(dirPath, "");
         if (name.startsWith("/")) {

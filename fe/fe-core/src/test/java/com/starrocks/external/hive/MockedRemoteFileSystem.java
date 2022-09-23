@@ -22,7 +22,7 @@ import java.util.List;
 public class MockedRemoteFileSystem extends FileSystem {
     private final List<LocatedFileStatus> files;
 
-    public static final String TEST_PATH_1_STR = "hdfs://fake:9000/db_name/table_name/000000_0";
+    public static final String TEST_PATH_1_STR = "hdfs://127.0.0.1:10000/hive.db/hive_tbl/000000_0";
     public static final Path TEST_PATH_1 = new Path(TEST_PATH_1_STR);
     public static final List<LocatedFileStatus> TEST_FILES = ImmutableList.of(locatedFileStatus(TEST_PATH_1));
 

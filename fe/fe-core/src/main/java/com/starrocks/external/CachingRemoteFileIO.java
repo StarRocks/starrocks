@@ -52,12 +52,12 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         }
     }
 
-    public Map<RemotePathKey, List<RemoteFileDesc>> getPresentRemoteFiles(List<RemotePathKey> paths) {
-        return cache.getAllPresent(paths);
-    }
-
     private List<RemoteFileDesc> loadRemoteFiles(RemotePathKey pathKey) {
         return fileIO.getRemoteFiles(pathKey).get(pathKey);
+    }
+
+    public Map<RemotePathKey, List<RemoteFileDesc>> getPresentRemoteFiles(List<RemotePathKey> paths) {
+        return cache.getAllPresent(paths);
     }
 
     private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec, long maximumSize) {
