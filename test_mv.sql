@@ -66,6 +66,14 @@ join t1 on t0_c0 = t1_c0;
 
 drop materialized view mv4;
 
+-- step 5
+-- support aggregation
+create materialized view mv5
+refresh realtime 
+as 
+select t0_c0, count(*) as cnt
+from t0
+group by t0_c0;
 
 
 -- cleanup

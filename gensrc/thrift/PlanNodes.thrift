@@ -942,8 +942,8 @@ struct TStreamAggregationNode {
 
   // Set to true if this aggregation function requires finalization to complete after all
   // rows have been aggregated, and this node is not an intermediate node.
-  5: required bool need_finalize
-  6: optional bool use_streaming_preaggregation
+  // 5: required bool need_finalize
+  // 6: optional bool use_streaming_preaggregation
 
   // IMT info
   10: optional Descriptors.TIMTDescriptor detail_imt

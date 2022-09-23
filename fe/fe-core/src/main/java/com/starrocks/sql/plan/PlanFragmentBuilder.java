@@ -31,7 +31,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
-import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.AssertNumRowsNode;
 import com.starrocks.planner.DataPartition;
@@ -40,6 +39,7 @@ import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.EsScanNode;
 import com.starrocks.planner.ExceptNode;
 import com.starrocks.planner.ExchangeNode;
+import com.starrocks.planner.HashAggregationNode;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
@@ -65,6 +65,7 @@ import com.starrocks.planner.SortNode;
 import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.planner.stream.IMTInfo;
+import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.planner.stream.StreamJoinNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -113,6 +114,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
@@ -1160,7 +1162,7 @@ public class PlanFragmentBuilder {
 
             outputTupleDesc.computeMemLayout();
 
-            AggregationNode aggregationNode;
+            HashAggregationNode aggregationNode;
             if (node.getType().isLocal()) {
                 AggregateInfo aggInfo = AggregateInfo.create(
                         groupingExpressions,
@@ -1168,7 +1170,7 @@ public class PlanFragmentBuilder {
                         outputTupleDesc, outputTupleDesc,
                         AggregateInfo.AggPhase.FIRST);
                 aggregationNode =
-                        new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
+                        new HashAggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
                 aggregationNode.unsetNeedsFinalize();
                 aggregationNode.setIsPreagg(node.isUseStreamingPreAgg());
                 aggregationNode.setIntermediateTuple();
@@ -1192,7 +1194,7 @@ public class PlanFragmentBuilder {
                             outputTupleDesc, outputTupleDesc,
                             AggregateInfo.AggPhase.SECOND);
                     aggregationNode =
-                            new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
+                            new HashAggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
                 } else if (!node.isSplit()) {
                     rewriteAggDistinctFirstStageFunction(aggregateExprList);
@@ -1202,7 +1204,7 @@ public class PlanFragmentBuilder {
                             outputTupleDesc, outputTupleDesc,
                             AggregateInfo.AggPhase.FIRST);
                     aggregationNode =
-                            new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
+                            new HashAggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
                 } else {
                     aggregateExprList.forEach(FunctionCallExpr::setMergeAggFn);
@@ -1212,7 +1214,7 @@ public class PlanFragmentBuilder {
                             outputTupleDesc, outputTupleDesc,
                             AggregateInfo.AggPhase.SECOND_MERGE);
                     aggregationNode =
-                            new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
+                            new HashAggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
                 }
                 // set aggregate node can use local aggregate
@@ -1238,7 +1240,7 @@ public class PlanFragmentBuilder {
                         outputTupleDesc, outputTupleDesc,
                         AggregateInfo.AggPhase.FIRST_MERGE);
                 aggregationNode =
-                        new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
+                        new HashAggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
                 aggregationNode.unsetNeedsFinalize();
                 aggregationNode.setIntermediateTuple();
             } else if (node.getType().isDistinctLocal()) {
@@ -1256,7 +1258,7 @@ public class PlanFragmentBuilder {
                         outputTupleDesc, outputTupleDesc,
                         AggregateInfo.AggPhase.SECOND);
                 aggregationNode =
-                        new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
+                        new HashAggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
                 aggregationNode.unsetNeedsFinalize();
                 aggregationNode.setIsPreagg(node.isUseStreamingPreAgg());
                 aggregationNode.setIntermediateTuple();
@@ -2414,8 +2416,55 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalStreamAgg(OptExpression optExpr, ExecPlan context) {
-            Preconditions.checkState(false, "TODO");
-            return null;
+            PhysicalStreamAggOperator node = (PhysicalStreamAggOperator) optExpr.getOp();
+            PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
+            TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
+
+            ArrayList<Expr> groupingExpressions = Lists.newArrayList();
+            for (ColumnRefOperator grouping : node.getGroupBys()) {
+                Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+
+                groupingExpressions.add(groupingExpr);
+
+                SlotDescriptor slotDesc =
+                        context.getDescTbl().addSlotDescriptor(outputTupleDesc, new SlotId(grouping.getId()));
+                slotDesc.setType(groupingExpr.getType());
+                slotDesc.setIsNullable(groupingExpr.isNullable());
+                slotDesc.setIsMaterialized(true);
+                context.getColRefToExpr().put(grouping, new SlotRef(grouping.toString(), slotDesc));
+            }
+
+            ArrayList<FunctionCallExpr> aggregateExprList = Lists.newArrayList();
+            for (Map.Entry<ColumnRefOperator, CallOperator> aggregation : node.getAggregations().entrySet()) {
+                FunctionCallExpr aggExpr = (FunctionCallExpr) ScalarOperatorToExpr.buildExecExpression(
+                        aggregation.getValue(), new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+
+                aggregateExprList.add(aggExpr);
+
+                SlotDescriptor slotDesc = context.getDescTbl()
+                        .addSlotDescriptor(outputTupleDesc, new SlotId(aggregation.getKey().getId()));
+                slotDesc.setType(aggregation.getValue().getType());
+                slotDesc.setIsNullable(aggExpr.isNullable());
+                slotDesc.setIsMaterialized(true);
+                context.getColRefToExpr()
+                        .put(aggregation.getKey(), new SlotRef(aggregation.getKey().toString(), slotDesc));
+            }
+
+            outputTupleDesc.computeMemLayout();
+
+            AggregateInfo aggInfo = AggregateInfo.create(
+                    groupingExpressions,
+                    aggregateExprList,
+                    outputTupleDesc, outputTupleDesc,
+                    AggregateInfo.AggPhase.FIRST);
+            StreamAggNode aggregationNode =
+                    new StreamAggNode(context.getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
+            aggregationNode.setHasNullableGenerateChild();
+            aggregationNode.computeStatistics(optExpr.getStatistics());
+
+            inputFragment.setPlanRoot(aggregationNode);
+            return inputFragment;
         }
 
         @Override

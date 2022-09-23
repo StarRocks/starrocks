@@ -40,7 +40,7 @@ import com.starrocks.thrift.TStreamingPreaggregationMode;
 import java.util.List;
 import java.util.Optional;
 
-public class AggregationNode extends PlanNode {
+public class HashAggregationNode extends PlanNode {
     private final AggregateInfo aggInfo;
 
     // Set to true if this aggregation node needs to run the Finalize step. This
@@ -56,7 +56,7 @@ public class AggregationNode extends PlanNode {
      * Create an agg node that is not an intermediate node.
      * isIntermediate is true if it is a slave node in a 2-part agg plan.
      */
-    public AggregationNode(PlanNodeId id, PlanNode input, AggregateInfo aggInfo) {
+    public HashAggregationNode(PlanNodeId id, PlanNode input, AggregateInfo aggInfo) {
         super(id, aggInfo.getOutputTupleId().asList(), "AGGREGATE");
         this.aggInfo = aggInfo;
         this.children.add(input);
