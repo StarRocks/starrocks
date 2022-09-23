@@ -28,7 +28,7 @@ public class PauseRoutineLoadStmtTest {
     @Test
     public void testBackquote() throws SecurityException, IllegalArgumentException {
         String sql = "PAUSE ROUTINE LOAD FOR `db_test`.`rl_test`";
-         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
 
         PauseRoutineLoadStmt stmt = (PauseRoutineLoadStmt) stmts.get(0);
         Assert.assertEquals("db_test", stmt.getDbFullName());
