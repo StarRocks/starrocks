@@ -3,17 +3,13 @@ package com.starrocks.sql.parser;
 
 import com.clearspring.analytics.util.Lists;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SqlScanner;
-import com.starrocks.analysis.StatementBase;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.StatementBase;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 
-import java.io.StringReader;
 import java.util.List;
 
 public class SqlParser {
@@ -36,26 +32,10 @@ public class SqlParser {
         StarRocksParser parser = new StarRocksParser(tokenStream);
         setParserProperty(parser, sessionVariable);
         StatementBase statement;
-        try {
-            StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-            statement = (StatementBase) new AstBuilder(sessionVariable.getSqlMode())
-                    .visitSingleStatement(sqlStatements.singleStatement(0));
-            return statement;
-        } catch (OperationNotAllowedException e) {
-            // sql forbidden to execute, so no need to parse again by the old parser.
-            throw e;
-        } catch (ParsingException parsingException) {
-            try {
-                statement = parseWithOldParser(sql, sessionVariable.getSqlMode(), 0);
-            } catch (Exception e) {
-                // both new and old parser failed. We return new parser error info to client.
-                throw parsingException;
-            }
-            if (StatementPlanner.supportedByNewPlanner(statement)) {
-                throw parsingException;
-            }
-            return statement;
-        }
+        StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
+        statement = (StatementBase) new AstBuilder(sessionVariable.getSqlMode())
+                .visitSingleStatement(sqlStatements.singleStatement(0));
+        return statement;
     }
 
     public static void setParserProperty(StarRocksParser parser, SessionVariable sessionVariable) {
@@ -92,36 +72,23 @@ public class SqlParser {
         StarRocksParser.sqlMode = sqlMode;
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
-        StarRocksParser.ExpressionContext expressionContext = parser.expression();
-        return ((Expr) new AstBuilder(sqlMode).visit(expressionContext));
+        StarRocksParser.ExpressionSingletonContext expressionSingleton = parser.expressionSingleton();
+        return ((Expr) new AstBuilder(sqlMode).visit(expressionSingleton.expression()));
+    }
+
+    public static ImportColumnsStmt parseImportColumns(String expressionSql, long sqlMode) {
+        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(expressionSql)));
+        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        StarRocksParser parser = new StarRocksParser(tokenStream);
+        StarRocksParser.sqlMode = sqlMode;
+        parser.removeErrorListeners();
+        parser.addErrorListener(new ErrorHandler());
+        StarRocksParser.ImportColumnsContext importColumnsContext = parser.importColumns();
+        return (ImportColumnsStmt) new AstBuilder(sqlMode).visit(importColumnsContext);
     }
 
     public static StatementBase parseFirstStatement(String originSql, long sqlMode) {
         return parse(originSql, sqlMode).get(0);
-    }
-
-    public static StatementBase parseWithOldParser(String originStmt, long sqlMode, int idx) {
-        SqlScanner input = new SqlScanner(new StringReader(originStmt), sqlMode);
-        com.starrocks.analysis.SqlParser parser = new com.starrocks.analysis.SqlParser(input);
-        try {
-            return SqlParserUtils.getStmt(parser, idx);
-        } catch (Error e) {
-            throw new ParsingException("Please check your sql, we meet an error when parsing.");
-        } catch (AnalysisException e) {
-            String errorMessage = parser.getErrorMsg(originStmt);
-            if (errorMessage == null) {
-                throw new ParsingException(e.getMessage());
-            } else {
-                throw new ParsingException(errorMessage);
-            }
-        } catch (Exception e) {
-            String errorMessage = e.getMessage();
-            if (errorMessage == null) {
-                throw new ParsingException("Internal Error");
-            } else {
-                throw new ParsingException("Internal Error: " + errorMessage);
-            }
-        }
     }
 
     private static List<String> splitSQL(String sql) {

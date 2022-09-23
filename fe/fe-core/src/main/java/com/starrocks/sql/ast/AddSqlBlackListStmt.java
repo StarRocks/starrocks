@@ -3,7 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.regex.Pattern;
@@ -43,7 +42,6 @@ public class AddSqlBlackListStmt extends StatementBase {
         return visitor.visitAddSqlBlackListStatement(this, context);
     }
 
-    @Override
     public boolean isSupportNewPlanner() {
         return true;
     }

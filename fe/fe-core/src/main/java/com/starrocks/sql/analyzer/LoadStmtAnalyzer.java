@@ -4,7 +4,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.LabelName;
-import com.starrocks.analysis.LoadStmt;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -16,6 +15,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ResourceDesc;
 import org.apache.commons.collections.CollectionUtils;
 
@@ -40,7 +40,7 @@ public class LoadStmtAnalyzer {
         }
 
         @Override
-        public Void visitLoadStmt(LoadStmt statement, ConnectContext context) {
+        public Void visitLoadStatement(LoadStmt statement, ConnectContext context) {
             analyzeLabel(statement, context);
             analyzeDataDescriptions(statement);
             analyzeProperties(statement);

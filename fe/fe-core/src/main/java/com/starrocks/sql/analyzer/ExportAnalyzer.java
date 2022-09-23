@@ -3,9 +3,9 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CancelExportStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.StatementBase;
 
 public class ExportAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {

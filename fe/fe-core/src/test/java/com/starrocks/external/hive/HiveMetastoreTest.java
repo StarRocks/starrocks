@@ -137,7 +137,7 @@ public class HiveMetastoreTest {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
         com.starrocks.catalog.Table hiveTable = metastore.getTable("db1", "table1");
-        Map<String, HivePartitionStatistics> statistics = metastore.getPartitionsStatistics(
+        Map<String, HivePartitionStatistics> statistics = metastore.getPartitionStatistics(
                 hiveTable, Lists.newArrayList("col1=1", "col1=2"));
 
         HivePartitionStatistics stats1 = statistics.get("col1=1");
@@ -159,7 +159,7 @@ public class HiveMetastoreTest {
         Assert.assertEquals(5, columnStatistics2.getNdv());
     }
 
-    private static class MockedHiveMetaClient extends HiveMetaClient {
+    public static class MockedHiveMetaClient extends HiveMetaClient {
 
         public MockedHiveMetaClient() {
             super(new HiveConf());
@@ -192,7 +192,7 @@ public class HiveMetastoreTest {
             StorageDescriptor sd = new StorageDescriptor();
             sd.setCols(unPartKeys);
             sd.setLocation(hdfsPath);
-            sd.setInputFormat("org.apache.hadoop.hive.ql.io.HiveInputFormat");
+            sd.setInputFormat("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat");
             SerDeInfo serDeInfo = new SerDeInfo();
             serDeInfo.setParameters(ImmutableMap.of());
             sd.setSerdeInfo(serDeInfo);
@@ -214,7 +214,7 @@ public class HiveMetastoreTest {
             StorageDescriptor sd = new StorageDescriptor();
             String hdfsPath = "hdfs://127.0.0.1:10000/hive";
             sd.setLocation(hdfsPath);
-            sd.setInputFormat("org.apache.hadoop.hive.ql.io.HiveInputFormat");
+            sd.setInputFormat("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat");
             SerDeInfo serDeInfo = new SerDeInfo();
             serDeInfo.setParameters(ImmutableMap.of());
             sd.setSerdeInfo(serDeInfo);
@@ -229,7 +229,7 @@ public class HiveMetastoreTest {
             List<Partition> res = Lists.newArrayList();
             for (String partitionName : partitionNames) {
                 StorageDescriptor sd = new StorageDescriptor();
-                sd.setInputFormat("org.apache.hadoop.hive.ql.io.HiveInputFormat");
+                sd.setInputFormat("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat");
                 SerDeInfo serDeInfo = new SerDeInfo();
                 serDeInfo.setParameters(ImmutableMap.of());
                 sd.setSerdeInfo(serDeInfo);

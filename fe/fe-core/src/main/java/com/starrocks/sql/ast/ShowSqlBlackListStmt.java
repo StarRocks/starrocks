@@ -2,11 +2,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.sql.ast.AstVisitor;
 
 
 // used to show sql's blacklist
@@ -28,7 +26,6 @@ public class ShowSqlBlackListStmt extends ShowStmt {
                     .addColumn(new Column("Forbidden SQL", ScalarType.createVarchar(100)))
                     .build();
 
-    @Override
     public boolean isSupportNewPlanner() {
         return true;
     }

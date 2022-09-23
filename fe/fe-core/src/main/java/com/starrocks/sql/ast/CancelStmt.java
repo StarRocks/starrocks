@@ -2,8 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
-
 public class CancelStmt extends DdlStmt {
 
 }

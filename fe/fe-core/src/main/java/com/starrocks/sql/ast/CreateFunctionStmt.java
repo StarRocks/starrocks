@@ -7,7 +7,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.HdfsURI;
 import com.starrocks.analysis.RedirectStatus;
@@ -478,11 +477,6 @@ public class CreateFunctionStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateFunction(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
+        return visitor.visitCreateFunctionStatement(this, context);
     }
 }

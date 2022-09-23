@@ -2,10 +2,10 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Mock;
@@ -105,8 +105,8 @@ public class PipelineParallelismTest extends PlanTestBase {
             plan = getExecPlan("insert into t0 select * from t0");
             fragment0 = plan.getFragments().get(0);
             assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "OLAP TABLE SINK");
-            // enable pipeline_load by Config, so ParallelExecNum of fragment is set to 1.
-            Assert.assertEquals(1, fragment0.getParallelExecNum());
+            // ParallelExecNum of fragment not 1. still can not use pipeline
+            Assert.assertEquals(parallelExecInstanceNum, fragment0.getParallelExecNum());
             Assert.assertEquals(1, fragment0.getPipelineDop());
         } finally {
             Config.enable_pipeline_load = prevEnablePipelineLoad;

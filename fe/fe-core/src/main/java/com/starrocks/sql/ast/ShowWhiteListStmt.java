@@ -2,11 +2,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.sql.ast.AstVisitor;
 
 //SHOW WHITELIST;
 public class ShowWhiteListStmt extends ShowStmt {
@@ -21,7 +19,6 @@ public class ShowWhiteListStmt extends ShowStmt {
         return visitor.visitShowWhiteListStatement(this, context);
     }
 
-    @Override
     public boolean isSupportNewPlanner() {
         return true;
     }

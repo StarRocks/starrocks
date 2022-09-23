@@ -29,8 +29,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -187,6 +189,21 @@ public class CreateMaterializedViewTest {
                         "    k1 date,\n" +
                         "    k2 int,\n" +
                         "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2021-02-01'),\n" +
+                        "    PARTITION p2 values less than('2021-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl5\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    k3 int,\n" +
+                        "    v1 int,\n" +
+                        "    v2 int\n" +
                         ")\n" +
                         "PARTITION BY RANGE(k1)\n" +
                         "(\n" +
@@ -1872,6 +1889,28 @@ public class CreateMaterializedViewTest {
         } catch (Exception e) {
             Assert.assertEquals("Incorrect table name '" + longLongName + "'", e.getMessage());
         }
+    }
+
+    @Test
+    public void testPartitionByNotFirstColumn() throws Exception {
+        starRocksAssert.withNewMaterializedView("create materialized view mv_with_partition_by_not_first_column" +
+                " partition by k1" +
+                " distributed by hash(k3) buckets 10" +
+                " as select k3, k1, sum(v1) as total from tbl5 group by k3, k1");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
+        Table table = db.getTable("mv_with_partition_by_not_first_column");
+        Assert.assertTrue(table instanceof MaterializedView);
+        MaterializedView mv = (MaterializedView) table;
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        Assert.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        List<Expr> partitionExpr = expressionRangePartitionInfo.getPartitionExprs();
+        Assert.assertEquals(1, partitionExpr.size());
+        Assert.assertTrue(partitionExpr.get(0) instanceof SlotRef);
+        SlotRef slotRef = (SlotRef) partitionExpr.get(0);
+        Assert.assertNotNull(slotRef.getSlotDescriptorWithoutCheck());
+        SlotDescriptor slotDescriptor = slotRef.getSlotDescriptorWithoutCheck();
+        Assert.assertEquals(1, slotDescriptor.getId().asInt());
     }
 }
 

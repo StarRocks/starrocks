@@ -22,8 +22,6 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.common.AnalysisException;
@@ -34,6 +32,8 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.SetVar;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;

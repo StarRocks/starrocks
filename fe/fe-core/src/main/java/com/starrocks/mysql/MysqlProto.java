@@ -56,6 +56,20 @@ public class MysqlProto {
 
         String remoteIp = context.getMysqlChannel().getRemoteIp();
 
+        if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+            if (Config.enable_auth_check) {
+                UserIdentity currentUser = context.getGlobalStateMgr().getAuthenticationManager().checkPassword(
+                        user, remoteIp, scramble, randomString);
+                if (currentUser == null) {
+                    ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
+                    return false;
+                }
+                context.setAuthDataSalt(randomString);
+                context.setCurrentUserIdentity(currentUser);
+                context.setQualifiedUser(user);
+            }
+            return true;
+        }
         List<UserIdentity> currentUserIdentity = Lists.newArrayList();
         if (!GlobalStateMgr.getCurrentState().getAuth().checkPassword(user, remoteIp,
                 scramble, randomString, currentUserIdentity)) {

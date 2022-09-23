@@ -22,7 +22,7 @@ import java.util.Map;
  * t1.col1 : t1.col1
  * t1.col3 : t1.col3
  * abs(t1.col2) : columnRef1
- *
+ * <p>
  * then and rewrite the predicate like:
  * t1.col1 + t2.col1 = columnRef1 + t2.col1 + concat(t1.col3, t2.col1) + columnRef1
  */
@@ -109,6 +109,7 @@ public class CorrelatedPredicateRewriter extends BaseScalarOperatorShuttle {
     /**
      * if exprToColumnRefMap doesn't contain operator means should create a new columnRef to replace this operator,
      * otherwise replace this operator with exist columnRef.
+     *
      * @param operator
      * @return
      */
@@ -121,6 +122,7 @@ public class CorrelatedPredicateRewriter extends BaseScalarOperatorShuttle {
             return exprToColumnRefMap.get(operator);
         }
     }
+
     private ColumnRefOperator createColumnRefOperator(ScalarOperator operator) {
         return optimizerContext.getColumnRefFactory().create(operator, operator.getType(), operator.isNullable());
     }

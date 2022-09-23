@@ -17,6 +17,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.SetType;
 import org.junit.Assert;
 import org.junit.Test;
 

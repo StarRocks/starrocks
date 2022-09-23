@@ -190,6 +190,7 @@ statement
 
     //  Repository Satement
     | createRepositoryStatement
+    | dropRepositoryStatement
 
     // Sql BlackList And WhiteList Statement
     | addSqlBlackListStatement
@@ -202,11 +203,21 @@ statement
     | cancelExportStatement
     | showExportStatement
 
+    //Plugin Statement
+    | installPluginStatement
+    | uninstallPluginStatement
+
+    //File Statement
+    | createFileStatement
+    | dropFileStatement
+    | showFileStatement
+
     // Other statement
     | killStatement
     | setUserPropertyStatement
     | setStatement
     | syncStatement
+    | helpStatement
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -745,11 +756,11 @@ dataSource
     ;
 
 loadProperties
-    : (colSeparatorProperty)
-    | (rowDelimiterProperty)
-    | (COLUMNS columnProperties)
-    | (WHERE expression)
-    | (partitionNames)
+    : colSeparatorProperty
+    | rowDelimiterProperty
+    | importColumns
+    | WHERE expression
+    | partitionNames
     ;
 
 colSeparatorProperty
@@ -758,6 +769,10 @@ colSeparatorProperty
 
 rowDelimiterProperty
     : ROWS TERMINATED BY string
+    ;
+
+importColumns
+    : COLUMNS columnProperties
     ;
 
 columnProperties
@@ -1192,6 +1207,10 @@ createRepositoryStatement
     PROPERTIES propertyList
     ;
 
+dropRepositoryStatement
+    : DROP REPOSITORY identifier
+    ;
+
 // ------------------------------------ Sql BlackList And WhiteList Statement ------------------------------------------
 
 addSqlBlackListStatement
@@ -1226,6 +1245,30 @@ showExportStatement
         ((LIKE pattern=string) | (WHERE expression))?
         (ORDER BY sortItem (',' sortItem)*)?
         (limitElement)?
+    ;
+
+// ------------------------------------------- Plugin Statement --------------------------------------------------------
+
+installPluginStatement
+    : INSTALL PLUGIN FROM identifierOrString properties?
+    ;
+
+uninstallPluginStatement
+    : UNINSTALL PLUGIN FROM identifierOrString
+    ;
+
+// ------------------------------------------- File Statement ----------------------------------------------------------
+
+createFileStatement
+    : CREATE FILE string ((FROM | IN) catalog=qualifiedName)? properties
+    ;
+
+dropFileStatement
+    : DROP FILE string ((FROM | IN) catalog=qualifiedName)? properties
+    ;
+
+showFileStatement
+    : SHOW FILE ((FROM | IN) catalog=qualifiedName)?
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
@@ -1268,6 +1311,30 @@ setVar
     | varType? identifier '=' setExprOrDefault                                                  #setVariable
     | userVariable '=' expression                                                               #setVariable
     | systemVariable '=' setExprOrDefault                                                       #setVariable
+    | TRANSACTION transaction_characteristics                                                   #setTransaction
+    ;
+
+transaction_characteristics
+    : transaction_access_mode
+    | isolation_level
+    | transaction_access_mode ',' isolation_level
+    | isolation_level ',' transaction_access_mode
+    ;
+
+transaction_access_mode
+    : READ ONLY
+    | READ WRITE
+    ;
+
+isolation_level
+    : ISOLATION LEVEL isolation_types
+    ;
+
+isolation_types
+    : READ UNCOMMITTED
+    | READ COMMITTED
+    | REPEATABLE READ
+    | SERIALIZABLE
     ;
 
 setExprOrDefault
@@ -1279,6 +1346,10 @@ setExprOrDefault
 
 syncStatement
     : SYNC
+    ;
+
+helpStatement
+    : HELP identifierOrString
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -1465,6 +1536,10 @@ expressionOrDefault
     : expression | DEFAULT
     ;
 
+expressionSingleton
+    : expression EOF
+    ;
+
 expression
     : booleanExpression                                                                   #expressionDefault
     | NOT expression                                                                      #logicalNot
@@ -1538,12 +1613,7 @@ literalExpression
     | (DATE | DATETIME) string                                                            #dateLiteral
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
-
     ;
-
-    unitBoundary
-         : START | END
-         ;
 
 functionCall
     : EXTRACT '(' identifier FROM valueExpression ')'                                     #extract

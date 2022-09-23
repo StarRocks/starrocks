@@ -84,7 +84,6 @@ public class ColumnRefFactory {
     }
 
 
-
     public void updateColumnRefToColumns(ColumnRefOperator columnRef, Column column, Table table) {
         columnRefToColumns.put(columnRef, column);
     }

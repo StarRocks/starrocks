@@ -4,7 +4,6 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Repository;
@@ -27,6 +26,7 @@ import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowRestoreStmt;
+import com.starrocks.sql.ast.StatementBase;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -56,7 +56,7 @@ public class BackupRestoreAnalyzer {
         }
 
         @Override
-        public Void visitBackupStmt(BackupStmt backupStmt, ConnectContext context) {
+        public Void visitBackupStatement(BackupStmt backupStmt, ConnectContext context) {
             String dbName = getDbName(backupStmt.getDbName(), context);
             Database database = getDatabase(dbName, context);
             analyzeLabelAndRepo(backupStmt.getLabel(), backupStmt.getRepoName());
@@ -111,14 +111,14 @@ public class BackupRestoreAnalyzer {
         }
 
         @Override
-        public Void visitCancelBackupStmt(CancelBackupStmt cancelBackupStmt, ConnectContext context) {
+        public Void visitCancelBackupStatement(CancelBackupStmt cancelBackupStmt, ConnectContext context) {
             String dbName = getDbName(cancelBackupStmt.getDbName(), context);
             cancelBackupStmt.setDbName(dbName);
             return null;
         }
 
         @Override
-        public Void visitShowBackupStmt(ShowBackupStmt showBackupStmt, ConnectContext context) {
+        public Void visitShowBackupStatement(ShowBackupStmt showBackupStmt, ConnectContext context) {
             String dbName = getDbName(showBackupStmt.getDbName(), context);
             showBackupStmt.setDbName(dbName);
             getDatabase(dbName, context);
@@ -126,7 +126,7 @@ public class BackupRestoreAnalyzer {
         }
 
         @Override
-        public Void visitRestoreStmt(RestoreStmt restoreStmt, ConnectContext context) {
+        public Void visitRestoreStatement(RestoreStmt restoreStmt, ConnectContext context) {
             String dbName = getDbName(restoreStmt.getDbName(), context);
             Database db = getDatabase(dbName, context);
             List<TableRef> tableRefs = restoreStmt.getTableRefs();
@@ -223,7 +223,7 @@ public class BackupRestoreAnalyzer {
         }
 
         @Override
-        public Void visitShowRestoreStmt(ShowRestoreStmt showRestoreStmt, ConnectContext context) {
+        public Void visitShowRestoreStatement(ShowRestoreStmt showRestoreStmt, ConnectContext context) {
             String dbName = getDbName(showRestoreStmt.getDbName(), context);
             showRestoreStmt.setDbName(dbName);
             getDatabase(dbName, context);

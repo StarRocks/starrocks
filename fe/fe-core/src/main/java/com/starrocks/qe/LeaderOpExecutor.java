@@ -22,8 +22,6 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.SetStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
@@ -31,6 +29,8 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;

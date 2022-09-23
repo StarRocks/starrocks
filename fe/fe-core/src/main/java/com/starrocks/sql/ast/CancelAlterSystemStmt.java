@@ -29,8 +29,4 @@ public class CancelAlterSystemStmt extends CancelStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCancelAlterSystemStatement(this, context);
     }
-
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
 }

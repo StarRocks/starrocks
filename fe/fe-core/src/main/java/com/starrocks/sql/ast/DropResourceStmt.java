@@ -2,8 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
-
 // DROP RESOURCE resource_name
 public class DropResourceStmt extends DdlStmt {
     private final String resourceName;
@@ -16,7 +14,6 @@ public class DropResourceStmt extends DdlStmt {
         return resourceName;
     }
 
-    @Override
     public boolean isSupportNewPlanner() {
         return true;
     }

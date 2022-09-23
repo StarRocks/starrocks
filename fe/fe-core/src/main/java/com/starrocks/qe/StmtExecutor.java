@@ -26,18 +26,10 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.DdlStmt;
-import com.starrocks.analysis.DeleteStmt;
-import com.starrocks.analysis.DmlStmt;
 import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.SetStmt;
-import com.starrocks.analysis.SetVar;
-import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.UnsupportedStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
@@ -62,7 +54,6 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobManager;
@@ -96,7 +87,10 @@ import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
+import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
@@ -105,6 +99,10 @@ import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
@@ -341,45 +339,39 @@ public class StmtExecutor {
             ExecPlan execPlan = null;
             boolean execPlanBuildByNewPlanner = false;
 
-            // Entrance to the new planner
-            if (StatementPlanner.supportedByNewPlanner(parsedStmt)) {
-                try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
-                    redirectStatus = parsedStmt.getRedirectStatus();
-                    if (!isForwardToLeader()) {
-                        context.getDumpInfo().reset();
-                        context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
-                        if (parsedStmt instanceof ShowStmt) {
-                            com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
-                            PrivilegeChecker.check(parsedStmt, context);
+            try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
+                redirectStatus = parsedStmt.getRedirectStatus();
+                if (!isForwardToLeader()) {
+                    context.getDumpInfo().reset();
+                    context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
+                    if (parsedStmt instanceof ShowStmt) {
+                        com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
+                        PrivilegeChecker.check(parsedStmt, context);
 
-                            QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
-                            if (selectStmt != null) {
-                                parsedStmt = selectStmt;
-                                execPlan = StatementPlanner.plan(parsedStmt, context);
-                            }
-                        } else {
+                        QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
+                        if (selectStmt != null) {
+                            parsedStmt = selectStmt;
                             execPlan = StatementPlanner.plan(parsedStmt, context);
                         }
-                        execPlanBuildByNewPlanner = true;
-                    }
-                } catch (SemanticException e) {
-                    dumpException(e);
-                    throw new AnalysisException(e.getMessage());
-                } catch (StarRocksPlannerException e) {
-                    dumpException(e);
-                    if (e.getType().equals(ErrorType.USER_ERROR)) {
-                        throw e;
-                    } else if (e.getType().equals(ErrorType.UNSUPPORTED) && e.getMessage().contains("UDF function")) {
-                        LOG.warn("New planner not implement : " + originStmt.originStmt, e);
-                        analyze(context.getSessionVariable().toThrift());
                     } else {
-                        LOG.warn("New planner error: " + originStmt.originStmt, e);
-                        throw e;
+                        execPlan = StatementPlanner.plan(parsedStmt, context);
                     }
+                    execPlanBuildByNewPlanner = true;
                 }
-            } else {
-                // analyze this query
-                analyze(context.getSessionVariable().toThrift());
+            } catch (SemanticException e) {
+                dumpException(e);
+                throw new AnalysisException(e.getMessage());
+            } catch (StarRocksPlannerException e) {
+                dumpException(e);
+                if (e.getType().equals(ErrorType.USER_ERROR)) {
+                    throw e;
+                } else if (e.getType().equals(ErrorType.UNSUPPORTED) && e.getMessage().contains("UDF function")) {
+                    LOG.warn("New planner not implement : " + originStmt.originStmt, e);
+                    analyze(context.getSessionVariable().toThrift());
+                } else {
+                    LOG.warn("New planner error: " + originStmt.originStmt, e);
+                    throw e;
+                }
             }
 
             if (context.isQueryDump()) {
@@ -477,8 +469,6 @@ public class StmtExecutor {
                 handleKill();
             } else if (parsedStmt instanceof ExportStmt) {
                 handleExportStmt(context.getQueryId());
-            } else if (parsedStmt instanceof UnsupportedStmt) {
-                handleUnsupportedStmt();
             } else if (parsedStmt instanceof AnalyzeStmt) {
                 handleAnalyzeStmt();
             } else if (parsedStmt instanceof DropHistogramStmt) {
@@ -569,10 +559,6 @@ public class StmtExecutor {
                 parsedStmt.setOrigStmt(originStmt);
             } catch (ParsingException parsingException) {
                 throw new AnalysisException(parsingException.getMessage());
-            } catch (Exception e) {
-                parsedStmt = com.starrocks.sql.parser.SqlParser.parseWithOldParser(originStmt.originStmt,
-                        context.getSessionVariable().getSqlMode(), originStmt.idx);
-                parsedStmt.setOrigStmt(originStmt);
             }
         }
     }
@@ -1075,7 +1061,7 @@ public class StmtExecutor {
 
     private void handleDdlStmt() {
         try {
-            ShowResultSet resultSet = DataDefinitionExecutorFactory.execute(parsedStmt, context);
+            ShowResultSet resultSet = DDLStmtExecutor.execute(parsedStmt, context);
             if (resultSet == null) {
                 context.getState().setOk();
             } else {
@@ -1095,7 +1081,7 @@ public class StmtExecutor {
             LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
             // Return message to info client what happened.
             context.getState().setError(e.getMessage());
-        } catch (Exception e) {
+        } catch (Throwable e) {
             // Maybe our bug
             LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
             context.getState().setError("Unexpected exception: " + e.getMessage());

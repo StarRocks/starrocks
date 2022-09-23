@@ -25,11 +25,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.SetVar;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
@@ -45,7 +40,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.meta.MetaContext;
@@ -64,6 +58,8 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.OperatorStrings;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -93,7 +89,6 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.io.StringReader;
 import java.net.ServerSocket;
 import java.nio.channels.FileLock;
 import java.nio.file.Files;
@@ -186,52 +181,6 @@ public class UtFrameUtils {
         }
 
         return statementBase;
-    }
-
-    // Parse an origin stmt and analyze it. Return a StatementBase instance.
-    public static StatementBase parseAndAnalyzeStmt(String originStmt, ConnectContext ctx)
-            throws Exception {
-        SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        Analyzer analyzer = new Analyzer(ctx.getGlobalStateMgr(), ctx);
-        StatementBase statementBase = null;
-        try {
-            statementBase = SqlParserUtils.getFirstStmt(parser);
-        } catch (AnalysisException e) {
-            String errorMessage = parser.getErrorMsg(originStmt);
-            System.err.println("parse failed: " + errorMessage);
-            if (errorMessage == null) {
-                throw e;
-            } else {
-                throw new AnalysisException(errorMessage, e);
-            }
-        }
-        statementBase.analyze(analyzer);
-        return statementBase;
-    }
-
-    // for analyzing multi statements
-    public static List<StatementBase> parseAndAnalyzeStmts(String originStmt, ConnectContext ctx) throws Exception {
-        System.out.println("begin to parse stmts: " + originStmt);
-        SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        Analyzer analyzer = new Analyzer(ctx.getGlobalStateMgr(), ctx);
-        List<StatementBase> statementBases = null;
-        try {
-            statementBases = SqlParserUtils.getMultiStmts(parser);
-        } catch (AnalysisException e) {
-            String errorMessage = parser.getErrorMsg(originStmt);
-            System.err.println("parse failed: " + errorMessage);
-            if (errorMessage == null) {
-                throw e;
-            } else {
-                throw new AnalysisException(errorMessage, e);
-            }
-        }
-        for (StatementBase stmt : statementBases) {
-            stmt.analyze(analyzer);
-        }
-        return statementBases;
     }
 
     private static void startFEServer(String runningDir, boolean startBDB) throws Exception {
@@ -723,6 +672,18 @@ public class UtFrameUtils {
                 fakeJournalWriter = null;
             }
         }
+    }
+
+    public static ConnectContext initCtxForNewPrivilege(UserIdentity userIdentity) throws Exception {
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setCurrentUserIdentity(userIdentity);
+        ctx.setQualifiedUser(userIdentity.getQualifiedUser());
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        globalStateMgr.initAuth(true);
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setThreadLocalInfo();
+        ctx.setDumpInfo(new MockDumpInfo());
+        return ctx;
     }
 
 }

@@ -2,8 +2,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.backup.BlobStorage;
@@ -27,6 +25,8 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
+import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -95,7 +95,6 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setCurrentUserIdentity(rootUser);
         String sql = "CREATE USER 'test2'";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         starRocksAssert.getCtx().setQualifiedUser("test");
@@ -111,7 +110,6 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setCurrentUserIdentity(rootUser);
         String sql = "CREATE ROLE role_test";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         starRocksAssert.getCtx().setQualifiedUser("test");
@@ -188,7 +186,6 @@ public class PrivilegeCheckerTest {
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         String sql = "show create database db1";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
@@ -211,7 +208,6 @@ public class PrivilegeCheckerTest {
         auth.grantPrivs(testUser, globalPattern, PrivPredicate.ADMIN.getPrivs(), true);
         String sql = "alter database db1 set data quota 1000K";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, globalPattern, PrivPredicate.ADMIN.getPrivs(), true);
@@ -242,7 +238,6 @@ public class PrivilegeCheckerTest {
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
         String sql = "create database if not exists db1 ";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
@@ -265,7 +260,6 @@ public class PrivilegeCheckerTest {
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.DROP_PRIV), true);
         String sql = "drop database if exists db1 force";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.DROP_PRIV), true);
@@ -288,7 +282,6 @@ public class PrivilegeCheckerTest {
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ALTER_PRIV), true);
         String sql = "alter database db1 rename db01";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ALTER_PRIV), true);
@@ -311,7 +304,6 @@ public class PrivilegeCheckerTest {
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
         String sql = "recover database db1";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
@@ -331,7 +323,6 @@ public class PrivilegeCheckerTest {
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         String sql = "recover table db1.test";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
@@ -1182,7 +1173,6 @@ public class PrivilegeCheckerTest {
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         String sql = "SHOW TABLET FROM db1.tbl1";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
@@ -1242,7 +1232,6 @@ public class PrivilegeCheckerTest {
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.LOAD_PRIV), true);
         String sql = "TRUNCATE TABLE db1.test";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.LOAD_PRIV), true);
@@ -1319,7 +1308,6 @@ public class PrivilegeCheckerTest {
         auth.grantPrivs(testUser, globalPattern, PrivPredicate.ADMIN.getPrivs(), true);
         String sql = "show broker";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, globalPattern, PrivPredicate.ADMIN.getPrivs(), true);
@@ -1367,7 +1355,6 @@ public class PrivilegeCheckerTest {
         String sql = "BACKUP SNAPSHOT db1.snapshot_label2 TO `repo` ON ( tbl1 );";
 
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.LOAD_PRIV), true);
@@ -1427,7 +1414,6 @@ public class PrivilegeCheckerTest {
                 "RESTORE SNAPSHOT db1.`snapshot_2` FROM `repo` ON ( `tbl1` ) " +
                         "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\" ) ;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.LOAD_PRIV), true);
@@ -1630,7 +1616,6 @@ public class PrivilegeCheckerTest {
                 "REVOKE GRANT ON RESOURCE spark0 FROM test", starRocksAssert.getCtx()));
     }
 
-
     @Test
     public void testCreateRepository() throws Exception {
         new MockUp<BrokerMgr>() {
@@ -1659,7 +1644,49 @@ public class PrivilegeCheckerTest {
                 ");";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
-        Assert.assertTrue(statementBase.isSupportNewPlanner());
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
+    public void testDropRepository() throws Exception {
+        new MockUp<BrokerMgr>() {
+            @Mock
+            public FsBroker getBroker(String name, String host) throws AnalysisException {
+                return new FsBroker("10.74.167.16", 8111);
+            }
+
+        };
+        new MockUp<Repository>() {
+            @Mock
+            public Status initRepository() {
+                return Status.OK;
+            }
+        };
+
+        Collection<Pair<String, Integer>> addresses = new ArrayList<>();
+        Pair<String, Integer> pair = new Pair<>("127.0.0.1", 8082);
+        addresses.add(pair);
+        starRocksAssert.getCtx().getGlobalStateMgr().getCurrentState().getBrokerMgr().addBrokers("broker", addresses);
+
+        BlobStorage storage = new BlobStorage("broker", Maps.newHashMap());
+        Repository repo = new Repository(10000, "repo", false, "bos://backup-cmy", storage);
+        repo.initRepository();
+        starRocksAssert.getCtx().getGlobalStateMgr().getCurrentState().getBackupHandler().getRepoMgr()
+                .addAndInitRepoIfNotExist(repo, false);
+
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        TablePattern db1TablePattern = new TablePattern("*", "*");
+        db1TablePattern.analyze();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        String sql = "DROP REPOSITORY `repo`;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));

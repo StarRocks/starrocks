@@ -180,7 +180,7 @@ public class Group {
     public void replaceBestExpression(GroupExpression oldGroupExpression, GroupExpression newGroupExpression) {
         Map<PhysicalPropertySet, Pair<Double, GroupExpression>> needReplaceBestExpressions = Maps.newHashMap();
         for (Iterator<Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>>> iterator =
-                lowestCostExpressions.entrySet().iterator(); iterator.hasNext(); ) {
+             lowestCostExpressions.entrySet().iterator(); iterator.hasNext(); ) {
             Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry = iterator.next();
             Pair<Double, GroupExpression> pair = entry.getValue();
             if (pair.second.equals(oldGroupExpression)) {
@@ -193,7 +193,7 @@ public class Group {
 
     public void deleteBestExpression(GroupExpression groupExpression) {
         for (Iterator<Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>>> iterator =
-                lowestCostExpressions.entrySet().iterator(); iterator.hasNext(); ) {
+             lowestCostExpressions.entrySet().iterator(); iterator.hasNext(); ) {
             Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry = iterator.next();
             Pair<Double, GroupExpression> pair = entry.getValue();
             GroupExpression bestExpression = pair.second;
@@ -204,7 +204,7 @@ public class Group {
 
         // we need to delete the enforcer whose input property is satisfied by the deleted group expression.
         for (Iterator<Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>>> iterator =
-                lowestCostExpressions.entrySet().iterator(); iterator.hasNext(); ) {
+             lowestCostExpressions.entrySet().iterator(); iterator.hasNext(); ) {
             Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry = iterator.next();
             PhysicalPropertySet requiredProperty = entry.getKey();
             Pair<Double, GroupExpression> pair = entry.getValue();

@@ -3,7 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.ScalarType;
@@ -30,7 +29,6 @@ public class ShowResourcesStmt extends ShowStmt {
         }
     }
 
-    @Override
     public boolean isSupportNewPlanner() {
         return true;
     }

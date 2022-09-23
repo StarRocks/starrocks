@@ -38,7 +38,7 @@ public class GrantRevokePrivilegeStmtTest {
                 "create user if not exists " + existUser.getQualifiedUser(), ctx));
         CreateRoleStmt createRoleStmt = new CreateRoleStmt(existRole);
         if (! auth.doesRoleExist(existRole)) {
-            auth.createRole((CreateRoleStmt) UtFrameUtils.parseAndAnalyzeStmt(
+            auth.createRole((CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                     "create role " + existRole, ctx));
         }
 

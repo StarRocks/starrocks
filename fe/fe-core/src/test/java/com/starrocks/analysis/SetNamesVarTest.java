@@ -19,6 +19,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SetNamesVar;
 import org.junit.Assert;
 import org.junit.Test;
 

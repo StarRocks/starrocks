@@ -21,7 +21,7 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.StatementBase;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.meta.BlackListSql;

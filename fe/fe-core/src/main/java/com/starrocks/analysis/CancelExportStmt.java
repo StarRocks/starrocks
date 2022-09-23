@@ -7,6 +7,7 @@ import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DdlStmt;
 
 import java.util.UUID;
 
@@ -85,10 +86,5 @@ public class CancelExportStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCancelExportStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

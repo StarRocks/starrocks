@@ -19,6 +19,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.ast.SetUserPropertyVar;
 import org.junit.Assert;
 import org.junit.Test;
 

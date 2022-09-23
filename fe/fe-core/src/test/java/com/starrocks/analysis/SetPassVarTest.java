@@ -27,6 +27,9 @@ import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SetPassVar;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetVar;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -76,7 +79,7 @@ public class SetPassVarTest {
     @Test
     public void testCreateTablePartitionNormal() throws Exception {
         String setSql = "set sql_mode = concat(@@sql_mode,',STRICT_TRANS_TABLES');";
-        SetStmt stmt = (SetStmt) UtFrameUtils.parseAndAnalyzeStmt(setSql, ctx);
+        SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(setSql, ctx);
         ctx.getSessionVariable().setSqlMode(SqlModeHelper.MODE_STRICT_TRANS_TABLES);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         SetVar setVars = stmt.getSetVars().get(0);

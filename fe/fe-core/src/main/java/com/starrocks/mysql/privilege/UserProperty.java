@@ -25,7 +25,6 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
@@ -35,6 +34,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.DppConfig;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.SetUserPropertyVar;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

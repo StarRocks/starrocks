@@ -3,8 +3,8 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.ast.StatementBase;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;

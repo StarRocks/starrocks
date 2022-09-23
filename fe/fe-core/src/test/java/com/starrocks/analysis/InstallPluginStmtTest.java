@@ -22,6 +22,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.InstallPluginStmt;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;

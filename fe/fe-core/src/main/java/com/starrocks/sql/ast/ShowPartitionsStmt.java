@@ -6,7 +6,6 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -127,12 +126,7 @@ public class ShowPartitionsStmt extends ShowStmt {
     }
 
     @Override
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowPartitionsStmt(this, context);
+        return visitor.visitShowPartitionsStatement(this, context);
     }
 }

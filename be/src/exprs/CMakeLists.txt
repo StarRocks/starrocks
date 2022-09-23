@@ -41,6 +41,7 @@ set(EXPR_FILES
   vectorized/bitmap_functions.cpp
   vectorized/case_expr.cpp
   vectorized/cast_expr.cpp
+  vectorized/cast_expr_array.cpp
   vectorized/column_ref.cpp
   vectorized/placeholder_ref.cpp
   vectorized/dictmapping_expr.cpp

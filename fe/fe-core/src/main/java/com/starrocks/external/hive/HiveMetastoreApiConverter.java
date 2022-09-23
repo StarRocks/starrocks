@@ -66,7 +66,6 @@ public class HiveMetastoreApiConverter {
         return tableBuilder.build();
     }
 
-
     public static Partition toPartition(StorageDescriptor sd, Map<String, String> params) {
         requireNonNull(sd, "StorageDescriptor is null");
         Partition.Builder partitionBuilder = Partition.builder()

@@ -58,11 +58,6 @@ public class CancelAlterTableStmt extends CancelStmt {
     }
 
     @Override
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
-    @Override
     public String toString() {
         return toSql();
     }

@@ -26,7 +26,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.ImportColumnDesc;
+import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
@@ -45,6 +45,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExplainLevel;
@@ -228,7 +229,7 @@ public class StreamLoadScanNodeTest {
         scanNode.toThrift(planNode);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = ParsingException.class)
     public void testBadColumns() throws UserException, UserException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
@@ -593,7 +594,7 @@ public class StreamLoadScanNodeTest {
         scanNode.toThrift(planNode);
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = ParsingException.class)
     public void testWhereBad() throws UserException, UserException {
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();

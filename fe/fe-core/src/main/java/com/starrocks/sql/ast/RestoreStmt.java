@@ -42,12 +42,7 @@ public class RestoreStmt extends AbstractBackupStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRestoreStmt(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
+        return visitor.visitRestoreStatement(this, context);
     }
 
     public void setTimeoutMs(long timeoutMs) {

@@ -26,11 +26,6 @@ public class CancelBackupStmt extends CancelStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCancelBackupStmt(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
+        return visitor.visitCancelBackupStatement(this, context);
     }
 }

@@ -2,8 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
-
 import java.util.Map;
 
 public class AlterResourceStmt extends DdlStmt {
@@ -23,7 +21,6 @@ public class AlterResourceStmt extends DdlStmt {
         return properties;
     }
 
-    @Override
     public boolean isSupportNewPlanner() {
         return true;
     }

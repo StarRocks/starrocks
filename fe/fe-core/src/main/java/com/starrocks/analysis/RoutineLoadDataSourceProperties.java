@@ -28,6 +28,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.load.routineload.LoadDataSourceType;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 
 import java.util.List;
 import java.util.Map;

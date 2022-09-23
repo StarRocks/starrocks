@@ -33,6 +33,7 @@ import com.starrocks.common.proc.ExportProcNode;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.ShowStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

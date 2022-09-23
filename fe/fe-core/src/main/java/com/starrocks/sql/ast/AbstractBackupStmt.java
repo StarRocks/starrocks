@@ -4,7 +4,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
 

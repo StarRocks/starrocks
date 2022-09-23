@@ -35,8 +35,6 @@ import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
-import com.starrocks.analysis.SetVar;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
@@ -175,9 +173,11 @@ import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.Utils;
@@ -949,7 +949,7 @@ public class LocalMetastore implements ConnectorMetadata {
             bucketNum = (int) 1.5 * backendNum;
         } else if (backendNum <= 12) {
             bucketNum = 12;
-        }  else {
+        } else {
             bucketNum = Math.min(backendNum, 48);
         }
         return bucketNum;
@@ -1611,6 +1611,7 @@ public class LocalMetastore implements ConnectorMetadata {
             TabletMeta tabletMeta =
                     new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),
                             storageMedium, table.isLakeTable());
+
             if (table.isLakeTable()) {
                 createLakeTablets((LakeTable) table, partitionId, index, distributionInfo, replicationNum, tabletMeta,
                         tabletIdSet);
@@ -1991,48 +1992,52 @@ public class LocalMetastore implements ConnectorMetadata {
         if (stmt.isExternal()) {
             olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
-        } else if (stmt.isLakeEngine()) {
-            olapTable = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-
-            // storage cache property
-            boolean enableStorageCache =
-                    PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
-            long storageCacheTtlS = 0;
-            try {
-                storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
-            } catch (AnalysisException e) {
-                throw new DdlException(e.getMessage());
-            }
-            if (storageCacheTtlS < -1) {
-                throw new DdlException("Storage cache ttl should not be less than -1");
-            }
-            if (!enableStorageCache && storageCacheTtlS != 0) {
-                throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
-            }
-            if (enableStorageCache && storageCacheTtlS == 0) {
-                storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
-            }
-
-            // set to false if absent
-            boolean allowAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
-                    properties, PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, false);
-
-            if (!enableStorageCache && allowAsyncWriteBack) {
-                throw new DdlException("storage allow_async_write_back can't be enabled when cache is disabled");
-            }
-
-            // get service shard storage info from StarMgr
-            ShardStorageInfo shardStorageInfo = stateMgr.getStarOSAgent().getServiceShardStorageInfo();
-
-            ((LakeTable) olapTable).setStorageInfo(shardStorageInfo, enableStorageCache, storageCacheTtlS, allowAsyncWriteBack);
         } else {
             if (distributionInfo.getBucketNum() == 0) {
                 int bucketNum = calBucketNumAccordingToBackends();
                 distributionInfo.setBucketNum(bucketNum);
             }
 
-            Preconditions.checkState(stmt.isOlapEngine());
-            olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
+            if (stmt.isLakeEngine()) {
+                olapTable = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
+
+                // storage cache property
+                boolean enableStorageCache =
+                        PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
+                long storageCacheTtlS = 0;
+                try {
+                    storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(properties,
+                            PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+                if (storageCacheTtlS < -1) {
+                    throw new DdlException("Storage cache ttl should not be less than -1");
+                }
+                if (!enableStorageCache && storageCacheTtlS != 0) {
+                    throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
+                }
+                if (enableStorageCache && storageCacheTtlS == 0) {
+                    storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
+                }
+
+                // set to false if absent
+                boolean allowAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
+                        properties, PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, false);
+
+                if (!enableStorageCache && allowAsyncWriteBack) {
+                    throw new DdlException("storage allow_async_write_back can't be enabled when cache is disabled");
+                }
+
+                // get service shard storage info from StarMgr
+                ShardStorageInfo shardStorageInfo = stateMgr.getStarOSAgent().getServiceShardStorageInfo();
+                ((LakeTable) olapTable).setStorageInfo(shardStorageInfo, enableStorageCache,
+                        storageCacheTtlS, allowAsyncWriteBack);
+
+            } else {
+                Preconditions.checkState(stmt.isOlapEngine());
+                olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
+            }
         }
 
         olapTable.setComment(stmt.getComment());
