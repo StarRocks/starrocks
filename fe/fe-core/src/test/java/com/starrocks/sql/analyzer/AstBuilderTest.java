@@ -88,7 +88,7 @@ public class AstBuilderTest {
 
     @Test
     public void testShowRoutineLoad() throws SecurityException, IllegalArgumentException {
-        String sql = "SHOW ROUTINE LOAD FOR `rl_test`FROM `db_test` WHERE state == 'RUNNING' ORDER BY `CreateTime` desc";
+        String sql = "SHOW ROUTINE LOAD FOR `rl_test` FROM `db_test` WHERE state == 'RUNNING' ORDER BY `CreateTime` desc";
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
@@ -96,7 +96,7 @@ public class AstBuilderTest {
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
         ShowRoutineLoadStmt stmt = (ShowRoutineLoadStmt) new AstBuilder(32).visit(sqlStatements.singleStatement(0));
         Assert.assertEquals("db_test", stmt.getDbFullName());
-        Assert.assertEquals("rl_teet", stmt.getName());
+        Assert.assertEquals("rl_test", stmt.getName());
     }
 
     @Test
@@ -109,7 +109,7 @@ public class AstBuilderTest {
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
         StopRoutineLoadStmt stmt = (StopRoutineLoadStmt) new AstBuilder(32).visit(sqlStatements.singleStatement(0));
         Assert.assertEquals("db_test", stmt.getDbFullName());
-        Assert.assertEquals("rl_teet", stmt.getName());
+        Assert.assertEquals("rl_test", stmt.getName());
     }
 
     @Test
@@ -122,7 +122,7 @@ public class AstBuilderTest {
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
         ResumeRoutineLoadStmt stmt = (ResumeRoutineLoadStmt) new AstBuilder(32).visit(sqlStatements.singleStatement(0));
         Assert.assertEquals("db_test", stmt.getDbFullName());
-        Assert.assertEquals("rl_teet", stmt.getName());
+        Assert.assertEquals("rl_test", stmt.getName());
     }
 
     @Test
@@ -135,7 +135,7 @@ public class AstBuilderTest {
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
         PauseRoutineLoadStmt stmt = (PauseRoutineLoadStmt) new AstBuilder(32).visit(sqlStatements.singleStatement(0));
         Assert.assertEquals("db_test", stmt.getDbFullName());
-        Assert.assertEquals("rl_teet", stmt.getName());
+        Assert.assertEquals("rl_test", stmt.getName());
     }
 
     @Test
@@ -150,6 +150,6 @@ public class AstBuilderTest {
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) new AstBuilder(32).visit(sqlStatements.singleStatement(0));
         Assert.assertEquals("db_test", stmt.getDbName());
-        Assert.assertEquals("rl_teet", stmt.getLabelName().getLabelName());
+        Assert.assertEquals("rl_test", stmt.getLabelName().getLabelName());
     }
 }
