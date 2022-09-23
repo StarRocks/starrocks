@@ -1381,7 +1381,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p20140103"));
 
         String dropSQL = "drop table test_partition_0day";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
 
     }
@@ -1564,7 +1564,7 @@ public class AlterTest {
         Assert.assertEquals(2, ((OlapTable) table).getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists3";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
     }
 

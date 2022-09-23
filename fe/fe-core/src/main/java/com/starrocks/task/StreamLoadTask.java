@@ -28,18 +28,17 @@ import com.starrocks.analysis.ImportColumnDesc;
 import com.starrocks.analysis.ImportColumnsStmt;
 import com.starrocks.analysis.ImportWhereStmt;
 import com.starrocks.analysis.RowDelimiter;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
@@ -48,7 +47,6 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.StringReader;
 import java.util.List;
 
 public class StreamLoadTask {
@@ -312,23 +310,13 @@ public class StreamLoadTask {
 
     // used for stream load
     private void setColumnToColumnExpr(String columns) throws UserException {
-        String columnsSQL = new String("COLUMNS (" + columns + ")");
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(columnsSQL)));
+        String columnsSQL = "COLUMNS (" + columns + ")";
         ImportColumnsStmt columnsStmt;
         try {
-            columnsStmt = (ImportColumnsStmt) SqlParserUtils.getFirstStmt(parser);
-        } catch (Error e) {
-            LOG.warn("error happens when parsing columns, sql={}", columnsSQL, e);
-            throw new AnalysisException("failed to parsing columns' header, maybe contain unsupported character");
-        } catch (AnalysisException e) {
-            LOG.warn("analyze columns' statement failed, sql={}, error={}",
-                    columnsSQL, parser.getErrorMsg(columnsSQL), e);
-            String errorMessage = parser.getErrorMsg(columnsSQL);
-            if (errorMessage == null) {
-                throw e;
-            } else {
-                throw new AnalysisException(errorMessage, e);
-            }
+            columnsStmt = com.starrocks.sql.parser.SqlParser.parseImportColumns(columnsSQL, SqlModeHelper.MODE_DEFAULT);
+        } catch (ParsingException e) {
+            LOG.warn("parse columns' statement failed, sql={}, error={}", columnsSQL, e.getMessage(), e);
+            throw e;
         } catch (Exception e) {
             LOG.warn("failed to parse columns header, sql={}", columnsSQL, e);
             throw new UserException("parse columns header failed", e);
@@ -340,25 +328,15 @@ public class StreamLoadTask {
     }
 
     private void setWhereExpr(String whereString) throws UserException {
-        String whereSQL = new String("WHERE " + whereString);
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(whereSQL)));
         ImportWhereStmt whereStmt;
         try {
-            whereStmt = (ImportWhereStmt) SqlParserUtils.getFirstStmt(parser);
-        } catch (Error e) {
-            LOG.warn("error happens when parsing where header, sql={}", whereSQL, e);
-            throw new AnalysisException("failed to parsing where header, maybe contain unsupported character");
-        } catch (AnalysisException e) {
-            LOG.warn("analyze where statement failed, sql={}, error={}",
-                    whereSQL, parser.getErrorMsg(whereSQL), e);
-            String errorMessage = parser.getErrorMsg(whereSQL);
-            if (errorMessage == null) {
-                throw e;
-            } else {
-                throw new AnalysisException(errorMessage, e);
-            }
+            whereStmt = new ImportWhereStmt(com.starrocks.sql.parser.SqlParser.parseSqlToExpr(whereString,
+                    SqlModeHelper.MODE_DEFAULT));
+        } catch (ParsingException e) {
+            LOG.warn("analyze where statement failed, sql={}, error={}", whereString, e.getMessage(), e);
+            throw e;
         } catch (Exception e) {
-            LOG.warn("failed to parse where header, sql={}", whereSQL, e);
+            LOG.warn("failed to parse where header, sql={}", whereString, e);
             throw new UserException("parse columns header failed", e);
         }
         whereExpr = whereStmt.getExpr();

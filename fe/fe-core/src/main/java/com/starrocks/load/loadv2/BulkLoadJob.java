@@ -27,8 +27,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -39,7 +37,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo;
 import com.starrocks.load.FailMsg;
@@ -57,7 +54,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -262,11 +258,10 @@ public abstract class BulkLoadJob extends LoadJob {
         }
         // Reset dataSourceInfo, it will be re-created in analyze
         fileGroupAggInfo = new BrokerFileGroupAggInfo();
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(originStmt.originStmt),
-                Long.valueOf(sessionVariables.get(SessionVariable.SQL_MODE))));
         LoadStmt stmt = null;
         try {
-            stmt = (LoadStmt) SqlParserUtils.getStmt(parser, originStmt.idx);
+            stmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parseFirstStatement(originStmt.originStmt,
+                    Long.parseLong(sessionVariables.get(SessionVariable.SQL_MODE)));
             for (DataDescription dataDescription : stmt.getDataDescriptions()) {
                 dataDescription.analyzeWithoutCheckPriv();
             }

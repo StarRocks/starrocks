@@ -350,7 +350,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return visit(context.statement());
     }
 
-
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
     @Override
@@ -1772,7 +1771,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<ParseNode> loadPropertyList = getLoadPropertyList(loadPropertiesContexts);
         String typeName = context.source.getText();
         Map<String, String> jobProperties = getJobProperties(context.jobProperties());
-        Map<String, String> dataSourceProperties =  getDataSourceProperties(context.dataSourceProperties());
+        Map<String, String> dataSourceProperties = getDataSourceProperties(context.dataSourceProperties());
 
         return new CreateRoutineLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
                 tableName == null ? null : tableName.toString(), loadPropertyList, jobProperties, typeName, dataSourceProperties);
@@ -1792,7 +1791,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         if (context.dataSource() != null) {
             String typeName = context.dataSource().source.getText();
-            Map<String, String> dataSourceProperties =  getDataSourceProperties(context.dataSource().dataSourceProperties());
+            Map<String, String> dataSourceProperties = getDataSourceProperties(context.dataSource().dataSourceProperties());
             RoutineLoadDataSourceProperties dataSource = new RoutineLoadDataSourceProperties(typeName, dataSourceProperties);
             return new AlterRoutineLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
                     loadPropertyList, jobProperties, dataSource);
@@ -4813,22 +4812,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 loadPropertyList.add(new RowDelimiter(literal));
             }
 
-            if (loadPropertiesContext.columnProperties() != null) {
-                List<ImportColumnDesc> columns = new ArrayList<>();
-                for (StarRocksParser.QualifiedNameContext qualifiedNameContext :
-                        loadPropertiesContext.columnProperties().qualifiedName()) {
-                    String column = ((Identifier) (visit(qualifiedNameContext))).getValue();
-                    ImportColumnDesc columnDesc = new ImportColumnDesc(column);
-                    columns.add(columnDesc);
-                }
-                for (StarRocksParser.AssignmentContext assignmentContext :
-                        loadPropertiesContext.columnProperties().assignment()) {
-                    ColumnAssignment columnAssignment = (ColumnAssignment) (visit(assignmentContext));
-                    Expr expr = columnAssignment.getExpr();
-                    ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
-                    columns.add(columnDesc);
-                }
-                loadPropertyList.add(new ImportColumnsStmt(columns));
+            if (loadPropertiesContext.importColumns() != null) {
+                ImportColumnsStmt importColumnsStmt = (ImportColumnsStmt) visit(loadPropertiesContext.importColumns());
+                loadPropertyList.add(importColumnsStmt);
             }
 
             if (loadPropertiesContext.expression() != null) {
@@ -4841,6 +4827,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         return loadPropertyList;
+    }
+
+    @Override
+    public ParseNode visitImportColumns(StarRocksParser.ImportColumnsContext importColumnsContext) {
+        List<ImportColumnDesc> columns = new ArrayList<>();
+        for (StarRocksParser.QualifiedNameContext qualifiedNameContext :
+                importColumnsContext.columnProperties().qualifiedName()) {
+            String column = ((Identifier) (visit(qualifiedNameContext))).getValue();
+            ImportColumnDesc columnDesc = new ImportColumnDesc(column);
+            columns.add(columnDesc);
+        }
+        for (StarRocksParser.AssignmentContext assignmentContext :
+                importColumnsContext.columnProperties().assignment()) {
+            ColumnAssignment columnAssignment = (ColumnAssignment) (visit(assignmentContext));
+            Expr expr = columnAssignment.getExpr();
+            ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
+            columns.add(columnDesc);
+        }
+        return new ImportColumnsStmt(columns);
     }
 
     private Map<String, String> getJobProperties(StarRocksParser.JobPropertiesContext jobPropertiesContext) {

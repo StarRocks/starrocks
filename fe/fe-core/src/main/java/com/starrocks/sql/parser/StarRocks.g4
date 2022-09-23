@@ -733,11 +733,11 @@ dataSource
     ;
 
 loadProperties
-    : (colSeparatorProperty)
-    | (rowDelimiterProperty)
-    | (COLUMNS columnProperties)
-    | (WHERE expression)
-    | (partitionNames)
+    : colSeparatorProperty
+    | rowDelimiterProperty
+    | importColumns
+    | WHERE expression
+    | partitionNames
     ;
 
 colSeparatorProperty
@@ -746,6 +746,10 @@ colSeparatorProperty
 
 rowDelimiterProperty
     : ROWS TERMINATED BY string
+    ;
+
+importColumns
+    : COLUMNS columnProperties
     ;
 
 columnProperties
@@ -1429,6 +1433,10 @@ expressionsWithDefault
 
 expressionOrDefault
     : expression | DEFAULT
+    ;
+
+expressionSingleton
+    : expression EOF
     ;
 
 expression
