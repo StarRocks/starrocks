@@ -597,6 +597,8 @@ CONF_Int16(bitmap_max_filter_ratio, "1");
 
 CONF_Bool(bitmap_filter_enable_not_equal, "false");
 
+CONF_Int64(update_compaction_max_version, "1000");
+
 // Only 1 and 2 is valid.
 // When storage_format_version is 1, use origin storage format for Date, Datetime and Decimal
 // type.

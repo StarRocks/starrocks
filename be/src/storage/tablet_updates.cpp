@@ -1674,7 +1674,8 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         total_rows_after_compaction = new_rows;
         total_bytes_after_compaction = new_bytes;
         if (total_bytes_after_compaction > compaction_result_bytes_threashold ||
-            total_rows_after_compaction > compaction_result_rows_threashold) {
+            total_rows_after_compaction > compaction_result_rows_threashold ||
+            info->inputs.size() >= config::update_compaction_max_version) {
             break;
         }
     }
