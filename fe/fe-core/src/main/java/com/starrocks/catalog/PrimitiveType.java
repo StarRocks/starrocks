@@ -65,7 +65,7 @@ public enum PrimitiveType {
     DECIMAL128("DECIMAL128", 16, TPrimitiveType.DECIMAL128),
 
     JSON("JSON", 16, TPrimitiveType.JSON),
-    IPV4("IPV4", 4, TPrimitiveType.IPV4),
+    IPV4("IPV4", 16, TPrimitiveType.IPV4),
     FUNCTION("FUNCTION", 8, TPrimitiveType.FUNCTION),
 
     // Unsupported scalar types.
@@ -153,6 +153,7 @@ public enum PrimitiveType {
         builder.putAll(DOUBLE, BASIC_TYPE_LIST);
         builder.putAll(DATE, BASIC_TYPE_LIST);
         builder.putAll(DATETIME, BASIC_TYPE_LIST);
+        builder.putAll(IPV4, BASIC_TYPE_LIST);
         builder.putAll(VARCHAR, BASIC_TYPE_LIST);
         builder.putAll(CHAR, BASIC_TYPE_LIST);
 
@@ -248,6 +249,8 @@ public enum PrimitiveType {
                 return DATE;
             case DATETIME:
                 return DATETIME;
+            case IPV4:
+                return IPV4;
             case TIME:
                 return TIME;
             case BINARY:
@@ -376,7 +379,6 @@ public enum PrimitiveType {
             case INT:
             case DECIMAL32:
             case DATE:
-            case IPV4:
                 typeSize = 4;
                 break;
             case BIGINT:
@@ -384,6 +386,7 @@ public enum PrimitiveType {
             case DOUBLE:
             case FLOAT:
             case TIME:
+            case IPV4:
             case DATETIME:
                 typeSize = 8;
                 break;
@@ -497,6 +500,7 @@ public enum PrimitiveType {
                 return MysqlColType.MYSQL_TYPE_TIME;
             case DATE:
                 return MysqlColType.MYSQL_TYPE_DATE;
+            case IPV4:
             case DATETIME: {
                 if (isTimeType) {
                     return MysqlColType.MYSQL_TYPE_TIME;
@@ -521,6 +525,7 @@ public enum PrimitiveType {
             case DATE:
                 return DATE_INDEX_LEN;
             case DATETIME:
+            case IPV4:
                 return DATETIME_INDEX_LEN;
             case VARCHAR:
                 return VARCHAR_INDEX_LEN;
