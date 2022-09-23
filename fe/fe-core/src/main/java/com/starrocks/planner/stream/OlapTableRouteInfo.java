@@ -8,7 +8,10 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -108,10 +111,19 @@ public class OlapTableRouteInfo {
         schemaParam.setTable_id(table.getId());
         schemaParam.setVersion(0);
 
-        // schemaParam.tuple_desc = tupleDescriptor.toThrift();
-        // for (SlotDescriptor slotDesc : tupleDescriptor.getSlots()) {
-        //     schemaParam.addToSlot_descs(slotDesc.toThrift());
-        // }
+        DescriptorTable descriptorTable = new DescriptorTable();
+        TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
+        for (Column column : table.getFullSchema()) {
+            SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
+            slotDescriptor.setIsMaterialized(true);
+            slotDescriptor.setType(column.getType());
+            slotDescriptor.setColumn(column);
+            slotDescriptor.setIsNullable(column.isAllowNull());
+        }
+        schemaParam.tuple_desc = olapTuple.toThrift();
+        for (SlotDescriptor slotDesc : olapTuple.getSlots()) {
+            schemaParam.addToSlot_descs(slotDesc.toThrift());
+        }
 
         for (Map.Entry<Long, MaterializedIndexMeta> pair : table.getIndexIdToMeta().entrySet()) {
             MaterializedIndexMeta indexMeta = pair.getValue();
@@ -296,5 +308,9 @@ public class OlapTableRouteInfo {
         }
         Preconditions.checkState(false, "table has no partition: " + table.getName());
         return 0;
+    }
+
+    public String getTableName() {
+        return this.tableName;
     }
 }

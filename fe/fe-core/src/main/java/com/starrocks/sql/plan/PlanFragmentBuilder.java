@@ -64,6 +64,7 @@ import com.starrocks.planner.SetOperationNode;
 import com.starrocks.planner.SortNode;
 import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.planner.UnionNode;
+import com.starrocks.planner.stream.IMTInfo;
 import com.starrocks.planner.stream.StreamJoinNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -2372,9 +2373,25 @@ public class PlanFragmentBuilder {
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
 
-            JoinNode joinNode =
+            StreamJoinNode joinNode =
                     new StreamJoinNode(context.getNextNodeId(), leftFragment.getPlanRoot(), rightFragment.getPlanRoot(), null,
                             eqJoinConjuncts, otherJoinConjuncts);
+
+            // TODO current we only support right table as the lookup table, need to bi-stream join later
+            // Attach IMT information
+            Operator rightOp = optExpr.inputAt(1).getOp();
+            if (!(rightOp instanceof PhysicalOlapScanOperator)) {
+                throw new StarRocksPlannerException("Only support right table as lookup-join table", INTERNAL_ERROR);
+            }
+            PhysicalOlapScanOperator rightTableScan = (PhysicalOlapScanOperator) rightOp;
+            OlapTable rightTable = (OlapTable) rightTableScan.getTable();
+
+            try {
+                // TODO: get dbId form table
+                joinNode.setRightIMT(IMTInfo.fromOlapTable(9527, rightTable, false));
+            } catch (UserException e) {
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
 
             // Connect parent and child fragment
             rightFragment.getPlanRoot().setFragment(leftFragment);

@@ -13,12 +13,16 @@ import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStreamJoinNode;
+import javax.ws.rs.NotSupportedException;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 public class StreamJoinNode extends JoinNode {
+
+    // TODO: support bi-stream join
+    private IMTInfo rightIMT;
 
     public StreamJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
                           List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
@@ -51,11 +55,35 @@ public class StreamJoinNode extends JoinNode {
             String sqlJoinPredicate = otherJoinConjuncts.stream().map(Expr::toSql).collect(Collectors.joining(","));
             msg.stream_join_node.setSql_join_predicates(sqlJoinPredicate);
         }
+        if (this.rightIMT != null) {
+            msg.stream_join_node.rhs_imt = rightIMT.toThrift();
+        }
+    }
 
+    // TODO support bi-stream join
+    public void setLeftIMT(IMTInfo imt) {
+        throw new NotSupportedException("TODO");
+    }
+
+    public void setRightIMT(IMTInfo imt) {
+        this.rightIMT = imt;
     }
 
     @Override
     public boolean canPushDownRuntimeFilter() {
         return false;
     }
+
+    @Override
+    protected String getNodeVerboseExplain(String detailPrefix) {
+        String joinStr = super.getNodeVerboseExplain(detailPrefix);
+        joinStr += detailPrefix + "rhs_imt: ";
+        if (rightIMT != null) {
+            joinStr += rightIMT + "\n";
+        } else {
+            joinStr += "empty\n";
+        }
+        return joinStr;
+    }
+
 }
