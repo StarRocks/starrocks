@@ -61,7 +61,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
                 true);
     }
 
-    protected CachingHiveMetastore(IHiveMetastore metastore, Executor executor, long expireAfterWriteSec,
+    public CachingHiveMetastore(IHiveMetastore metastore, Executor executor, long expireAfterWriteSec,
                                    long refreshIntervalSec, long maxSize, boolean enableListNamesCache) {
         this.metastore = metastore;
 
