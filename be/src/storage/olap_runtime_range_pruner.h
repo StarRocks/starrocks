@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -27,25 +28,24 @@ struct UnarrivedRuntimeFilterList {
 
 class OlapRuntimeScanRangePruner {
 public:
+    using PredicatesPtrs = std::vector<std::unique_ptr<ColumnPredicate>>;
+    using PredicatesRawPtrs = std::vector<const ColumnPredicate*>;
+    using RuntimeFilterArrivedCallBack = std::function<Status(int, const PredicatesRawPtrs&)>;
+
     OlapRuntimeScanRangePruner() = default;
     OlapRuntimeScanRangePruner(PredicateParser* parser, const UnarrivedRuntimeFilterList& params) {
         _parser = parser;
-        DCHECK_EQ(_unarrived_runtime_filters.size(), _slot_descs.size());
         _init(params);
     }
 
     void set_predicate_parser(PredicateParser* parser) { _parser = parser; }
 
-    template <class Updater>
-    Status update_range_if_arrived(Updater&& updater) {
+    Status update_range_if_arrived(RuntimeFilterArrivedCallBack&& updater) {
         if (_arrived_runtime_filters_masks.empty()) return Status::OK();
-        return _update<Updater>(std::move(updater));
+        return _update(std::move(updater));
     }
 
 private:
-    using PredicatesPtrs = std::vector<std::unique_ptr<ColumnPredicate>>;
-    using PredicatesRawPtrs = std::vector<const ColumnPredicate*>;
-
     std::vector<const RuntimeFilterProbeDescriptor*> _unarrived_runtime_filters;
     std::vector<const SlotDescriptor*> _slot_descs;
     std::vector<bool> _arrived_runtime_filters_masks;
@@ -56,8 +56,7 @@ private:
 
     PredicatesRawPtrs _as_raw_predicates(const std::vector<std::unique_ptr<ColumnPredicate>>& predicates);
 
-    template <class Updater>
-    Status _update(Updater&& updater);
+    Status _update(RuntimeFilterArrivedCallBack&& updater);
 
     void _init(const UnarrivedRuntimeFilterList& params);
 };

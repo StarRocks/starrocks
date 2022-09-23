@@ -64,7 +64,7 @@ struct TabletReaderParams {
     RowidRangeOptionPtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
-    OlapRuntimeScanRangePruner runtime_ranger_ctx;
+    OlapRuntimeScanRangePruner runtime_range_pruner;
 
 public:
     std::string to_string() const;

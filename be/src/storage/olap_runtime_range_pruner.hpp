@@ -70,8 +70,10 @@ struct RuntimeColumnPredicateBuilder {
 };
 } // namespace detail
 
-template <class Updater>
-Status OlapRuntimeScanRangePruner::_update(Updater&& updater) {
+inline Status OlapRuntimeScanRangePruner::_update(RuntimeFilterArrivedCallBack&& updater) {
+    if (_arrived_runtime_filters_masks.empty()) {
+        return Status::OK();
+    }
     size_t cnt = 0;
     for (size_t i = 0; i < _arrived_runtime_filters_masks.size(); ++i) {
         if (_arrived_runtime_filters_masks[i] == 0 && _unarrived_runtime_filters[i]->runtime_filter()) {
