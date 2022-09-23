@@ -23,7 +23,7 @@ public class HiveRemoteFileIOTest {
         HiveRemoteFileIO fileIO = new HiveRemoteFileIO(new Configuration());
         fileIO.setFileSystem(fs);
         FeConstants.runningUnitTest = true;
-        String tableLocation = "hdfs://fake:9000/db_name/table_name";
+        String tableLocation = "hdfs://127.0.0.1:10000/hive.db/hive_tbl";
         RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
         Map<RemotePathKey, List<RemoteFileDesc>> remoteFileInfos = fileIO.getRemoteFiles(pathKey);
         List<RemoteFileDesc> fileDescs = remoteFileInfos.get(pathKey);

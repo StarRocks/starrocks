@@ -21,6 +21,8 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.net.URI;
@@ -29,6 +31,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class HiveRemoteFileIO implements RemoteFileIO {
+    private static final Logger LOG = LogManager.getLogger(HiveRemoteFileIO.class);
+
     private final Configuration configuration;
 
     // only used for ut.
@@ -76,6 +80,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
                         ImmutableList.copyOf(fileBlockDescs), ImmutableList.of()));
             }
         } catch (Exception e) {
+            LOG.error("Failed to get hive remote file's metadata on path: {}", path, e);
             throw new StarRocksConnectorException("Failed to get hive remote file's metadata on path: %s", pathKey);
         }
 
