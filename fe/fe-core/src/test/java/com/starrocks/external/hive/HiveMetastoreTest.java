@@ -192,7 +192,7 @@ public class HiveMetastoreTest {
             StorageDescriptor sd = new StorageDescriptor();
             sd.setCols(unPartKeys);
             sd.setLocation(hdfsPath);
-            sd.setInputFormat("org.apache.hadoop.hive.ql.io.HiveInputFormat");
+            sd.setInputFormat("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat");
             SerDeInfo serDeInfo = new SerDeInfo();
             serDeInfo.setParameters(ImmutableMap.of());
             sd.setSerdeInfo(serDeInfo);
@@ -214,7 +214,7 @@ public class HiveMetastoreTest {
             StorageDescriptor sd = new StorageDescriptor();
             String hdfsPath = "hdfs://127.0.0.1:10000/hive";
             sd.setLocation(hdfsPath);
-            sd.setInputFormat("org.apache.hadoop.hive.ql.io.HiveInputFormat");
+            sd.setInputFormat("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat");
             SerDeInfo serDeInfo = new SerDeInfo();
             serDeInfo.setParameters(ImmutableMap.of());
             sd.setSerdeInfo(serDeInfo);
@@ -229,7 +229,7 @@ public class HiveMetastoreTest {
             List<Partition> res = Lists.newArrayList();
             for (String partitionName : partitionNames) {
                 StorageDescriptor sd = new StorageDescriptor();
-                sd.setInputFormat("org.apache.hadoop.hive.ql.io.HiveInputFormat");
+                sd.setInputFormat("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat");
                 SerDeInfo serDeInfo = new SerDeInfo();
                 serDeInfo.setParameters(ImmutableMap.of());
                 sd.setSerdeInfo(serDeInfo);
