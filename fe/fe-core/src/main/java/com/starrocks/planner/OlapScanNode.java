@@ -486,8 +486,7 @@ public class OlapScanNode extends ScanNode {
             output.append(prefix).append("PREAGGREGATION: OFF. Reason: ").append(reasonOfPreAggregation).append("\n");
         }
         if (!conjuncts.isEmpty()) {
-            output.append(prefix).append("PREDICATES: ").append(
-                    getExplainString(conjuncts)).append("\n");
+            output.append(prefix).append("PREDICATES: ").append(getExplainString(conjuncts)).append("\n");
         }
 
         output.append(prefix).append(String.format(

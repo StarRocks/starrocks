@@ -74,24 +74,34 @@ public class ProjectNode extends PlanNode {
 
         for (Pair<SlotId, Expr> kv : outputColumns) {
             output.append(prefix);
-            output.append("<slot ").
-                    append(kv.first).
-                    append("> : ").
-                    append(kv.second.toSql()).
-                    append("\n");
+            if (detailLevel == TExplainLevel.VERBOSE) {
+                output.append(kv.first).append(" <-> ")
+                        .append(kv.second.explain()).append("\n");
+            } else {
+                output.append("<slot ").
+                        append(kv.first).
+                        append("> : ").
+                        append(kv.second.toSql()).
+                        append("\n");
+            }
         }
         if (!commonSlotMap.isEmpty()) {
             output.append(prefix);
             output.append("common expressions:\n");
             for (Map.Entry<SlotId, Expr> kv : commonSlotMap.entrySet()) {
                 output.append(prefix);
-                output.append("<slot ").
-                        append(kv.getKey()).
-                        append("> : ").
-                        append(kv.getValue().toSql()).
-                        append("\n");
+                if (detailLevel == TExplainLevel.VERBOSE) {
+                    output.append(kv.getKey()).append(" <-> ").append(kv.getValue().explain()).append("\n");
+                } else {
+                    output.append("<slot ").
+                            append(kv.getKey()).
+                            append("> : ").
+                            append(kv.getValue().toSql()).
+                            append("\n");
+                }
             }
         }
+
         return output.toString();
     }
 

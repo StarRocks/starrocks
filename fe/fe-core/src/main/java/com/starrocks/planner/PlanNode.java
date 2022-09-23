@@ -638,7 +638,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return output.toString();
     }
 
-    private String getVerboseExplain(List<? extends Expr> exprs, TExplainLevel level) {
+    protected String getVerboseExplain(List<? extends Expr> exprs, TExplainLevel level) {
         if (exprs == null) {
             return "";
         }

@@ -193,13 +193,17 @@ public class AggregationNode extends PlanNode {
             output.append(detailPrefix).append(nameDetail).append("\n");
         }
         if (aggInfo.getAggregateExprs() != null && aggInfo.getMaterializedAggregateExprs().size() > 0) {
-            output.append(detailPrefix).append("output: ").append(
-                    getExplainString(aggInfo.getAggregateExprs())).append("\n");
+            if (detailLevel == TExplainLevel.VERBOSE) {
+                output.append(detailPrefix).append("aggregate: ");
+            } else {
+                output.append(detailPrefix).append("output: ");
+            }
+            output.append(getVerboseExplain(aggInfo.getAggregateExprs(), detailLevel)).append("\n");
         }
         output.append(detailPrefix).append("group by: ").append(
-                getExplainString(aggInfo.getGroupingExprs())).append("\n");
+                getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
         if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("having: ").append(getExplainString(conjuncts)).append("\n");
+            output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel)).append("\n");
         }
         return output.toString();
     }
