@@ -33,6 +33,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.UserException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
@@ -723,12 +724,12 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitSubmitTaskStmt(SubmitTaskStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt(stmt);
-            });
-            return null;
+            try {
+                return context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt(stmt);
+            } catch (UserException e) {
+                throw new RuntimeException(e);
+            }
         }
-
     }
 
 }
