@@ -4,7 +4,7 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.planner.AggregationNode;
+import com.starrocks.planner.HashAggregationNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.thrift.TExplainLevel;
@@ -800,8 +800,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "select tbl5.c2,sum(tbl5.c3) from db1.tbl5 join[broadcast] db1.tbl4 on tbl5.c2 = tbl4.c2 group by tbl5.c2;";
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         ExecPlan execPlan = pair.second;
-        Assert.assertTrue(execPlan.getFragments().get(1).getPlanRoot() instanceof AggregationNode);
-        AggregationNode aggregationNode = (AggregationNode) execPlan.getFragments().get(1).getPlanRoot();
+        Assert.assertTrue(execPlan.getFragments().get(1).getPlanRoot() instanceof HashAggregationNode);
+        HashAggregationNode aggregationNode = (HashAggregationNode) execPlan.getFragments().get(1).getPlanRoot();
         Assert.assertTrue(aggregationNode.isColocate());
     }
 

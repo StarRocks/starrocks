@@ -29,13 +29,9 @@ public class StreamAggregateImplementationRule extends StreamImplementationRule 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator logical = (LogicalAggregationOperator) input.getOp();
-        PhysicalStreamAggOperator physical = new PhysicalStreamAggOperator(logical.getType(),
+        PhysicalStreamAggOperator physical = new PhysicalStreamAggOperator(
                 logical.getGroupingKeys(),
-                logical.getPartitionByColumns(),
                 logical.getAggregations(),
-                logical.getSingleDistinctFunctionPos(),
-                logical.isSplit(),
-                logical.getLimit(),
                 logical.getPredicate(),
                 logical.getProjection());
         OptExpression result = OptExpression.create(physical, input.getInputs());
