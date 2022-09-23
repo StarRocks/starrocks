@@ -233,7 +233,7 @@ public class InformationSchemaDataSource {
                         info.setTable_catalog(DEF);
                         info.setTable_schema(dbName);
                         info.setTable_name(table.getName());
-                        info.setTable_type(table.getType().toString());
+                        info.setTable_type(transferTableTypeToAdaptMysql(table.getType()));
                         info.setEngine(table.getEngine());
                         info.setVersion(DEF_NULL_NUM);
                         info.setRow_format(DEF_NULL);
@@ -277,6 +277,32 @@ public class InformationSchemaDataSource {
         });    
         response.setTables_infos(infos);
         return response;
+    }
+
+    private static String transferTableTypeToAdaptMysql(TableType tableType) {
+        // 'BASE TABLE','SYSTEM VERSIONED','PARTITIONED TABLE','VIEW','FOREIGN TABLE','MATERIALIZED VIEW','EXTERNAL TABLE'
+        switch (tableType) {
+            case MYSQL:
+            case HIVE:
+            case ICEBERG:
+            case HUDI:
+            case LAKE:
+            case ELASTICSEARCH:
+            case JDBC:
+                return "EXTERNAL TABLE";
+            case OLAP:
+            case OLAP_EXTERNAL:
+                return "BASE TABLE";
+            case MATERIALIZED_VIEW:
+                return "MATERIALIZED VIEW";
+            case VIEW:
+                return "VIEW";
+            default:
+                // SCHEMA
+                // INLINE_VIEW
+                // BROKER
+                return "BASE TABLE";
+        }
     }
 
     private static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
