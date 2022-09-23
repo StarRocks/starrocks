@@ -1468,11 +1468,11 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
     for (; i < probe_row_count; i++) {
         size_t build_index = _probe_state->next[i];
         if (build_index == 0) {
-            _probe_state->probe_index[match_count] = i;
-            _probe_state->build_index[match_count] = 0;
+            bool change_flag = false;
             if (_probe_state->null_array != nullptr && (*_probe_state->null_array)[i] == 1) {
                 // when left table col value is null needs match all rows in right table
                 for (size_t j = 1; j < _table_items->row_count + 1; j++) {
+                    change_flag = true;
                     MATCH_RIGHT_TABLE_ROWS()
                     RETURN_IF_CHUNK_FULL()
                 }
@@ -1482,16 +1482,19 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
                 auto& null_array = nullable_column->null_column()->get_data();
                 for (size_t j = 1; j < _table_items->row_count + 1; j++) {
                     if (null_array[j] == 1) {
+                        change_flag = true;
                         MATCH_RIGHT_TABLE_ROWS()
                         RETURN_IF_CHUNK_FULL()
                     }
                 }
             }
 
-            if (match_count == 0) {
+            if (change_flag) {
+                _probe_state->probe_index[match_count] = i;
+                _probe_state->build_index[match_count] = 0;
                 match_count++;
             }
-
+            RETURN_IF_CHUNK_FULL()
             continue;
         } else {
             // left table col value hits in hash table, we also need match null values firstly then match hit rows.
