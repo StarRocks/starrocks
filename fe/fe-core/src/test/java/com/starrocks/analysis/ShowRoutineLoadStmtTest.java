@@ -9,6 +9,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.List;
+
 public class ShowRoutineLoadStmtTest {
 
     private ConnectContext ctx;
@@ -38,5 +40,15 @@ public class ShowRoutineLoadStmtTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("SHOW ROUTINE LOAD FROM testDb", stmt.toString());
         Assert.assertEquals("testDb", stmt.getDbFullName());
+    }
+
+    @Test
+    public void testBackquote() throws SecurityException, IllegalArgumentException {
+        String sql = "SHOW ROUTINE LOAD FOR `rl_test` FROM `db_test` WHERE state == 'RUNNING' ORDER BY `CreateTime` desc";
+        List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+
+        ShowRoutineLoadStmt stmt = (ShowRoutineLoadStmt) stmts.get(0);
+        Assert.assertEquals("db_test", stmt.getDbFullName());
+        Assert.assertEquals("rl_test", stmt.getName());
     }
 }
