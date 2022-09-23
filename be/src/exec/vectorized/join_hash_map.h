@@ -621,8 +621,9 @@ private:
 
     // for null aware anti join with other join conjunct
     template <bool first_probe>
-    void _probe_from_ht_for_null_aware_anti_join_with_other_conjunct(RuntimeState* state, const Buffer<CppType>& build_data,
-                                                               const Buffer<CppType>& probe_data);
+    void _probe_from_ht_for_null_aware_anti_join_with_other_conjunct(RuntimeState* state,
+                                                                     const Buffer<CppType>& build_data,
+                                                                     const Buffer<CppType>& probe_data);
 
     // for one key right outer join with other conjunct
     template <bool first_probe>
