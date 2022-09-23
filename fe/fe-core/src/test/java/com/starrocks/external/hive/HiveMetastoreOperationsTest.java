@@ -113,7 +113,7 @@ public class HiveMetastoreOperationsTest {
         PartitionKey hivePartitionKey1 = Utils.createPartitionKey(Lists.newArrayList("1"), hiveTable.getPartitionColumns());
         PartitionKey hivePartitionKey2 = Utils.createPartitionKey(Lists.newArrayList("2"), hiveTable.getPartitionColumns());
         Map<String, Partition> partitions =
-                hmsOps.getPartitionsByNames(hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+                hmsOps.getPartitionByNames(hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
 
         com.starrocks.external.hive.Partition partition1 = partitions.get("col1=1");
         Assert.assertEquals(PARQUET, partition1.getInputFormat());
@@ -163,7 +163,7 @@ public class HiveMetastoreOperationsTest {
         Assert.assertEquals(100, commonStats2.getTotalFileBytes());
         HiveColumnStatistics columnStatistics2 = stats2.getColumnStats().get("col2");
         Assert.assertEquals(0, columnStatistics2.getTotalSizeBytes());
-        Assert.assertEquals(1, columnStatistics2.getNumNulls());
+        Assert.assertEquals(2, columnStatistics2.getNumNulls());
         Assert.assertEquals(5, columnStatistics2.getNdv());
     }
 }

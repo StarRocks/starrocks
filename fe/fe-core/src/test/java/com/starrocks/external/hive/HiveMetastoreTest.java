@@ -155,7 +155,7 @@ public class HiveMetastoreTest {
         Assert.assertEquals(100, commonStats2.getTotalFileBytes());
         HiveColumnStatistics columnStatistics2 = stats2.getColumnStats().get("col2");
         Assert.assertEquals(0, columnStatistics2.getTotalSizeBytes());
-        Assert.assertEquals(1, columnStatistics2.getNumNulls());
+        Assert.assertEquals(2, columnStatistics2.getNumNulls());
         Assert.assertEquals(5, columnStatistics2.getNdv());
     }
 
@@ -266,7 +266,7 @@ public class HiveMetastoreTest {
             ColumnStatisticsObj stats1 = new ColumnStatisticsObj();
             ColumnStatisticsData data1 = new ColumnStatisticsData();
             LongColumnStatsData longColumnStatsData1 = new LongColumnStatsData();
-            longColumnStatsData1.setLowValue(111);
+            longColumnStatsData1.setLowValue(0);
             longColumnStatsData1.setHighValue(222222222);
             longColumnStatsData1.setNumDVs(3);
             longColumnStatsData1.setNumNulls(1);
@@ -281,7 +281,7 @@ public class HiveMetastoreTest {
             longColumnStatsData2.setLowValue(1);
             longColumnStatsData2.setHighValue(222222222);
             longColumnStatsData2.setNumDVs(6);
-            longColumnStatsData2.setNumNulls(1);
+            longColumnStatsData2.setNumNulls(2);
             data2.setLongStats(longColumnStatsData2);
             stats2.setStatsData(data2);
             stats2.setColName("col2");

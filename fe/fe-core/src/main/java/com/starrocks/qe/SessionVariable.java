@@ -246,6 +246,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ALLOW_DEFAULT_PARTITION = "allow_default_partition";
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
+    public static final String HIVE_PARTITION_STATS_SAMPLE_SIZE = "3000";
 
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
@@ -612,6 +613,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
 
+    @VariableMgr.VarAttr(name = HIVE_PARTITION_STATS_SAMPLE_SIZE)
+    private int hivePartitionStatsSampleSize = 3000;
+
     @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE_V2, alias = JOIN_IMPLEMENTATION_MODE)
     private String joinImplementationMode = "auto"; // auto, merge, hash, nestloop
 
@@ -679,6 +683,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean enableHiveColumnStats() {
         return enableHiveColumnStats;
+    }
+
+    public int getHivePartitionStatsSampleSize() {
+        return hivePartitionStatsSampleSize;
     }
 
     public long getMaxExecMemByte() {
