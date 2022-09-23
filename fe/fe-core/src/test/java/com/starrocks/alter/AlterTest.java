@@ -53,6 +53,7 @@ import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -61,6 +62,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
@@ -2169,6 +2171,17 @@ public class AlterTest {
         Assert.assertEquals("[k1, k2]", clause.getColumnsByPos().toString());
     }
 
+    @Test
+    public void testAlterDatabaseQuota() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void alterDatabaseQuota(AlterDatabaseQuotaStmt stmt) throws DdlException {
+            }
+        };
+        String sql = "alter database test set data quota 1KB;";
+        AlterDatabaseQuotaStmt stmt = (AlterDatabaseQuotaStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+    }
 
     @Test(expected = DdlException.class)
     public void testFindTruncatePartitionEntrance() throws Exception {

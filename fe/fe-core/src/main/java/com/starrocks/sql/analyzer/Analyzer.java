@@ -450,7 +450,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext context) {
+        public Void visitAlterDatabaseQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext context) {
             AlterDbQuotaAnalyzer.analyze(statement, context);
             return null;
         }

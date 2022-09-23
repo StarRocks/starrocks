@@ -48,7 +48,7 @@ public class AlterDatabaseQuotaStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterDbQuotaStmt(this, context);
+        return visitor.visitAlterDatabaseQuotaStmt(this, context);
     }
 
     @Override
