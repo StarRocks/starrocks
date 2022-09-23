@@ -38,43 +38,60 @@ public class DeletePlanner {
         List<String> colNames = query.getColumnOutputNames();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
-        Optimizer optimizer = new Optimizer();
-        OptExpression optimizedPlan = optimizer.optimize(
-                session,
-                logicalPlan.getRoot(),
-                new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
-        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
-        DescriptorTable descriptorTable = execPlan.getDescTbl();
-        TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
-        OlapTable table = (OlapTable) deleteStatement.getTable();
-        for (Column column : table.getBaseSchema()) {
-            if (column.isKey()) {
-                SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
-                slotDescriptor.setIsMaterialized(true);
-                slotDescriptor.setType(column.getType());
-                slotDescriptor.setColumn(column);
-                slotDescriptor.setIsNullable(column.isAllowNull());
-            } else {
-                continue;
+        // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
+        boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
+        boolean canUsePipeline =
+                isEnablePipeline && DataSink.canTableSinkUsePipeline(deleteStatement.getTable()) &&
+                        logicalPlan.canUsePipeline();
+        boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
+        try {
+            if (forceDisablePipeline) {
+                session.getSessionVariable().setEnablePipelineEngine(false);
+            }
+
+            Optimizer optimizer = new Optimizer();
+            OptExpression optimizedPlan = optimizer.optimize(
+                    session,
+                    logicalPlan.getRoot(),
+                    new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
+            ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
+                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+            DescriptorTable descriptorTable = execPlan.getDescTbl();
+            TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
+
+            OlapTable table = (OlapTable) deleteStatement.getTable();
+            for (Column column : table.getBaseSchema()) {
+                if (column.isKey()) {
+                    SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
+                    slotDescriptor.setIsMaterialized(true);
+                    slotDescriptor.setType(column.getType());
+                    slotDescriptor.setColumn(column);
+                    slotDescriptor.setIsNullable(column.isAllowNull());
+                } else {
+                    continue;
+                }
+            }
+            SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
+            slotDescriptor.setIsMaterialized(true);
+            slotDescriptor.setType(Type.TINYINT);
+            slotDescriptor.setColumn(new Column(Load.LOAD_OP_COLUMN, Type.TINYINT));
+            slotDescriptor.setIsNullable(false);
+            olapTuple.computeMemLayout();
+
+            List<Long> partitionIds = Lists.newArrayList();
+            for (Partition partition : table.getPartitions()) {
+                partitionIds.add(partition.getId());
+            }
+            DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds);
+            execPlan.getFragments().get(0).setSink(dataSink);
+            return execPlan;
+        } finally {
+            if (forceDisablePipeline) {
+                session.getSessionVariable().setEnablePipelineEngine(true);
             }
         }
-        SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
-        slotDescriptor.setIsMaterialized(true);
-        slotDescriptor.setType(Type.TINYINT);
-        slotDescriptor.setColumn(new Column(Load.LOAD_OP_COLUMN, Type.TINYINT));
-        slotDescriptor.setIsNullable(false);
-        olapTuple.computeMemLayout();
-
-        List<Long> partitionIds = Lists.newArrayList();
-        for (Partition partition : table.getPartitions()) {
-            partitionIds.add(partition.getId());
-        }
-        DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds);
-        execPlan.getFragments().get(0).setSink(dataSink);
-        return execPlan;
     }
 }

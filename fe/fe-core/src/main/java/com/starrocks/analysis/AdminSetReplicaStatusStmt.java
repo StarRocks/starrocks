@@ -115,6 +115,18 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
         return status;
     }
 
+    public void setTabletId(long tabletId) {
+        this.tabletId = tabletId;
+    }
+
+    public void setBackendId(long backendId) {
+        this.backendId = backendId;
+    }
+
+    public void setStatus(ReplicaStatus status) {
+        this.status = status;
+    }
+
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;

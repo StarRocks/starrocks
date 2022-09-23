@@ -35,43 +35,60 @@ public class UpdatePlanner {
         List<String> colNames = query.getColumnOutputNames();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
-        Optimizer optimizer = new Optimizer();
-        OptExpression optimizedPlan = optimizer.optimize(
-                session,
-                logicalPlan.getRoot(),
-                new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
-        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
-        DescriptorTable descriptorTable = execPlan.getDescTbl();
-        TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
-        List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-        OlapTable table = (OlapTable) updateStmt.getTable();
-        long tableId = table.getId();
-        for (Column column : table.getFullSchema()) {
-            SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
-            slotDescriptor.setIsMaterialized(true);
-            slotDescriptor.setType(column.getType());
-            slotDescriptor.setColumn(column);
-            slotDescriptor.setIsNullable(column.isAllowNull());
-            if (column.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
-                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
-                if (dict != null && dict.isPresent()) {
-                    globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), dict.get()));
+        // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
+        boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
+        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(updateStmt.getTable()) &&
+                logicalPlan.canUsePipeline();
+        boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
+        try {
+            if (forceDisablePipeline) {
+                session.getSessionVariable().setEnablePipelineEngine(false);
+            }
+
+            Optimizer optimizer = new Optimizer();
+            OptExpression optimizedPlan = optimizer.optimize(
+                    session,
+                    logicalPlan.getRoot(),
+                    new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
+            ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
+                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+            DescriptorTable descriptorTable = execPlan.getDescTbl();
+            TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
+
+            List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+            OlapTable table = (OlapTable) updateStmt.getTable();
+            long tableId = table.getId();
+            for (Column column : table.getFullSchema()) {
+                SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(column.getType());
+                slotDescriptor.setColumn(column);
+                slotDescriptor.setIsNullable(column.isAllowNull());
+                if (column.getType().isVarchar() &&
+                        IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
+                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
+                    if (dict != null && dict.isPresent()) {
+                        globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), dict.get()));
+                    }
                 }
             }
-        }
-        olapTuple.computeMemLayout();
+            olapTuple.computeMemLayout();
 
-        List<Long> partitionIds = Lists.newArrayList();
-        for (Partition partition : table.getPartitions()) {
-            partitionIds.add(partition.getId());
+            List<Long> partitionIds = Lists.newArrayList();
+            for (Partition partition : table.getPartitions()) {
+                partitionIds.add(partition.getId());
+            }
+            DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds);
+            execPlan.getFragments().get(0).setSink(dataSink);
+            execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
+            return execPlan;
+        } finally {
+            if (forceDisablePipeline) {
+                session.getSessionVariable().setEnablePipelineEngine(true);
+            }
         }
-        DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds);
-        execPlan.getFragments().get(0).setSink(dataSink);
-        execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
-        return execPlan;
     }
 }

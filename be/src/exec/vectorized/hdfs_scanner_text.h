@@ -32,5 +32,6 @@ private:
     std::shared_ptr<CSVReader> _reader = nullptr;
     size_t _current_range_index = 0;
     std::unordered_map<std::string, int> _columns_index;
+    bool _no_data = false;
 };
 } // namespace starrocks::vectorized

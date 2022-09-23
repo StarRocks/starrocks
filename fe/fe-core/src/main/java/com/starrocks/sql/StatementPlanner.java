@@ -65,6 +65,7 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
 import java.util.Map;
@@ -84,11 +85,14 @@ public class StatementPlanner {
 
         if (stmt instanceof QueryStatement) {
             Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
+            QueryStatement queryStmt = (QueryStatement) stmt;
             try {
                 lock(dbs);
                 session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
-                ExecPlan plan = createQueryPlan(((QueryStatement) stmt).getQueryRelation(), session);
-                setOutfileSink((QueryStatement) stmt, plan);
+                TResultSinkType resultSinkType =
+                        queryStmt.hasOutFileClause() ? TResultSinkType.FILE : TResultSinkType.MYSQL_PROTOCAL;
+                ExecPlan plan = createQueryPlan(queryStmt.getQueryRelation(), session, resultSinkType);
+                setOutfileSink(queryStmt, plan);
 
                 return plan;
             } finally {
@@ -112,7 +116,7 @@ public class StatementPlanner {
         return null;
     }
 
-    private ExecPlan createQueryPlan(Relation relation, ConnectContext session) {
+    private ExecPlan createQueryPlan(Relation relation, ConnectContext session, TResultSinkType resultSinkType) {
         QueryRelation query = (QueryRelation) relation;
         List<String> colNames = query.getColumnOutputNames();
 
@@ -120,27 +124,42 @@ public class StatementPlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
 
-        //2. Optimize logical plan and build physical plan
-        Optimizer optimizer = new Optimizer();
-        OptExpression optimizedPlan = optimizer.optimize(
-                session,
-                logicalPlan.getRoot(),
-                new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
+        // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
+        boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
+        boolean canUsePipeline =
+                isEnablePipeline && ResultSink.canUsePipeLine(resultSinkType) && logicalPlan.canUsePipeline();
+        boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
+        try {
+            if (forceDisablePipeline) {
+                session.getSessionVariable().setEnablePipelineEngine(false);
+            }
 
-        //3. Build fragment exec plan
-        /*
-         * SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
-         * currently only used in Spark/Flink Connector
-         * Because the connector sends only simple queries, it only needs to remove the output fragment
-         */
-        if (session.getSessionVariable().isSingleNodeExecPlan()) {
-            return new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
-        } else {
-            return new PlanFragmentBuilder().createPhysicalPlan(
-                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+            //2. Optimize logical plan and build physical plan
+            Optimizer optimizer = new Optimizer();
+            OptExpression optimizedPlan = optimizer.optimize(
+                    session,
+                    logicalPlan.getRoot(),
+                    new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
+
+            //3. Build fragment exec plan
+            /*
+             * SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
+             * currently only used in Spark/Flink Connector
+             * Because the connector sends only simple queries, it only needs to remove the output fragment
+             */
+            if (session.getSessionVariable().isSingleNodeExecPlan()) {
+                return new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
+                        optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+            } else {
+                return new PlanFragmentBuilder().createPhysicalPlan(
+                        optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+            }
+        } finally {
+            if (forceDisablePipeline) {
+                session.getSessionVariable().setEnablePipelineEngine(true);
+            }
         }
     }
 

@@ -9,8 +9,8 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPartItem>
 
 - [Introduction](../introduction/what_is_starrocks.md)
-- [Concepts](../quick_start/Concepts.md)
-- [Architecture](../quick_start/Architecture.md)
+- [Architecture](../introduction/Architecture.md)
+- [Features](../introduction/Features.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -19,6 +19,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPartItem>
 
 - [Deploy StarRocks](../quick_start/Deploy.md)
+- [Create a table](../quick_start/create_table.md)
 - [Ingest and query data](../quick_start/Import_and_query.md)
 
 </NavBoxPartItem>
@@ -29,23 +30,25 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPart title="Table design ​">
 <NavBoxPartItem>
 
-- [Overview of table design](../table_design/StarRocks_table_design.md)
+- [Understand table design](../table_design/StarRocks_table_design.md)
 - [Data models](../table_design/Data_model.md)
 - [Data distribution](../table_design/Data_distribution.md)
-- [Sort key and prefix index](../table_design/Sort_key.md)
+- [Sort keys and prefix indexes](../table_design/Sort_key.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
 
-<NavBoxPart title="Ingestion​">
+<NavBoxPart title="Data loading">
 <NavBoxPartItem>
 
-- [Overview of ingestion](../loading/Loading_intro.md)
-- [Ingestion via HTTP](../loading/StreamLoad.md)
-- [Batch ingestion from HDFS or cloud object storage](../loading/BrokerLoad.md)
-- [Continuous ingestion from Apache Kafka®](../loading/RoutineLoad.md)
-- [Bulk ingestion and data transformation using Apache Spark™](../loading/SparkLoad.md)
-- [Real-time synchronization from MySQL](../loading/Flink_cdc_load.md)
+- [Overview of data loading](../loading/Loading_intro.md)
+- [Load data from a local file system or a streaming data source using HTTP push](../loading/StreamLoad.md)
+- [Load data from HDFS or cloud storage](../loading/BrokerLoad.md)
+- [Continuously load data from Apache Kafka®](../loading/RoutineLoad.md)
+- [Bulk load using Apache Spark™](../loading/SparkLoad.md)
+- [Load data using INSERT](../loading/InsertInto.md)
+- [Realtime synchronization from MySQL](../loading/Flink_cdc_load.md)
+- [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -71,9 +74,9 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPart>
 <NavBoxPartItem title="Query external data sources​">
 
-- [Apache Hive™](../using_starrocks/External_table#hive-external-table.md)
-- [Apache Hudi](../using_starrocks/External_table#hudi-external-table.md)
-- [Apache Iceberg](../using_starrocks/External_table#apache-iceberg-external-table.md)
+- [Apache Hive™](../using_starrocks/catalog/hive_catalog.md)
+- [Apache Hudi](../using_starrocks/catalog/hudi_catalog.md)
+- [Apache Iceberg](../using_starrocks/catalog/iceberg_catalog.md)
 - [MySQL](../using_starrocks/External_table#mysql-external-table.md)
 - [Elasticsearch](../using_starrocks/External_table#elasticsearch-external-table.md)
 - [JDBC-compatible database](../using_starrocks/External_table#external-table-for-a-jdbc-compatible-database.md)
