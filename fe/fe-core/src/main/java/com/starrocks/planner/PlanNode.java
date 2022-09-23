@@ -468,7 +468,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return "";
     }
 
-    protected String getNodeVerboseExplain(String prefix) {
+    private String getNodeVerboseExplain(String prefix) {
         return getNodeExplainString(prefix, TExplainLevel.VERBOSE);
     }
 

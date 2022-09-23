@@ -380,45 +380,22 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             output.append(detailPrefix + "other predicates: ").append(
                     getExplainString(conjuncts) + "\n");
         }
-        return output.toString();
-    }
 
-    @Override
-    protected String getNodeVerboseExplain(String detailPrefix) {
-        String distrModeStr =
-                (distrMode != DistributionMode.NONE) ? (" (" + distrMode.toString() + ")") : "";
-        StringBuilder output = new StringBuilder().append(detailPrefix)
-                .append("join op: ").append(joinOp.toString()).append(distrModeStr).append("\n");
+        if (detailLevel == TExplainLevel.VERBOSE) {
 
-        if (isColocate) {
-            output.append(detailPrefix).append("colocate: ").append(isColocate).append("\n");
-        }
+            if (!buildRuntimeFilters.isEmpty()) {
+                output.append(detailPrefix).append("build runtime filters:\n");
+                for (RuntimeFilterDescription rf : buildRuntimeFilters) {
+                    output.append(detailPrefix).append("- ").append(rf.toExplainString(-1)).append("\n");
+                }
+            }
 
-        for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
-            output.append(detailPrefix).append("equal join conjunct: ").
-                    append(eqJoinPredicate.explain()).append("\n");
-        }
-        if (!otherJoinConjuncts.isEmpty()) {
-            output.append(detailPrefix).append("other join predicates: ").
-                    append(getVerboseExplain(otherJoinConjuncts)).append("\n");
-        }
-        if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("other predicates: ").
-                    append(getVerboseExplain(conjuncts)).append("\n");
-        }
-        if (!buildRuntimeFilters.isEmpty()) {
-            output.append(detailPrefix).append("build runtime filters:\n");
-            for (RuntimeFilterDescription rf : buildRuntimeFilters) {
-                output.append(detailPrefix).append("- ").append(rf.toExplainString(-1)).append("\n");
+            if (outputSlots != null) {
+                output.append(detailPrefix).append("output columns: ");
+                output.append(outputSlots.stream().map(Object::toString).collect(Collectors.joining(", ")));
+                output.append("\n");
             }
         }
-
-        if (outputSlots != null) {
-            output.append(detailPrefix).append("output columns: ");
-            output.append(outputSlots.stream().map(Object::toString).collect(Collectors.joining(", ")));
-            output.append("\n");
-        }
-
         return output.toString();
     }
 

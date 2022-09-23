@@ -205,27 +205,6 @@ public class AggregationNode extends PlanNode {
     }
 
     @Override
-    protected String getNodeVerboseExplain(String detailPrefix) {
-        StringBuilder output = new StringBuilder();
-        String nameDetail = getDisplayLabelDetail();
-        if (nameDetail != null) {
-            output.append(detailPrefix).append(nameDetail).append("\n");
-        }
-        if (aggInfo.getAggregateExprs() != null && aggInfo.getMaterializedAggregateExprs().size() > 0) {
-            output.append(detailPrefix).append("aggregate: ").append(
-                    getVerboseExplain(aggInfo.getAggregateExprs())).append("\n");
-        }
-        if (aggInfo.getGroupingExprs() != null && aggInfo.getGroupingExprs().size() > 0) {
-            output.append(detailPrefix).append("group by: ").append(
-                    getVerboseExplain(aggInfo.getGroupingExprs())).append("\n");
-        }
-        if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts)).append("\n");
-        }
-        return output.toString();
-    }
-
-    @Override
     public int getNumInstances() {
         return children.get(0).getNumInstances();
     }

@@ -10,7 +10,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.common.Id;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TExplainLevel;
@@ -18,7 +17,11 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TProjectNode;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class ProjectNode extends PlanNode {
@@ -58,6 +61,11 @@ public class ProjectNode extends PlanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            output.append(prefix);
+            output.append("output columns:\n");
+        }
+
         List<Pair<SlotId, Expr>> outputColumns = new ArrayList<>();
         for (Map.Entry<SlotId, Expr> kv : slotMap.entrySet()) {
             outputColumns.add(new Pair<>(kv.getKey(), kv.getValue()));
@@ -82,34 +90,6 @@ public class ProjectNode extends PlanNode {
                         append("> : ").
                         append(kv.getValue().toSql()).
                         append("\n");
-            }
-        }
-        return output.toString();
-    }
-
-    @Override
-    protected String getNodeVerboseExplain(String prefix) {
-        StringBuilder output = new StringBuilder();
-        output.append(prefix);
-        output.append("output columns:\n");
-
-        List<Pair<SlotId, Expr>> outputColumns = new ArrayList<>();
-        for (Map.Entry<SlotId, Expr> kv : slotMap.entrySet()) {
-            outputColumns.add(new Pair<>(kv.getKey(), kv.getValue()));
-        }
-        outputColumns.sort(Comparator.comparingInt(o -> o.first.asInt()));
-
-        for (Pair<SlotId, Expr> kv : outputColumns) {
-            output.append(prefix);
-            output.append(kv.first).append(" <-> ")
-                    .append(kv.second.explain()).append("\n");
-        }
-        if (!commonSlotMap.isEmpty()) {
-            output.append(prefix);
-            output.append("common expressions:\n");
-            for (Map.Entry<SlotId, Expr> kv : commonSlotMap.entrySet()) {
-                output.append(prefix);
-                output.append(kv.getKey()).append(" <-> ").append(kv.getValue().explain()).append("\n");
             }
         }
         return output.toString();
