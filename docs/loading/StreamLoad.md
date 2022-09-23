@@ -1,4 +1,4 @@
-# Load data from a local file system or a streaming data source using HTTP push
+# Load data from a local file system or a streaming data source using HTTP PUT
 
 StarRocks provides the loading method HTTP-based Stream Load to help you load data from a local file system or a streaming data source.
 
