@@ -5,8 +5,8 @@ package com.starrocks.analysis;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -15,10 +15,8 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.utframe.StarRocksAssert;
-
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
@@ -40,7 +38,7 @@ public class ShowCatalogsStmtTest {
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         CreateCatalogStmt statement = (CreateCatalogStmt) stmt;
-        DataDefinitionExecutorFactory.execute(statement, connectCtx);
+        DDLStmtExecutor.execute(statement, connectCtx);
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1").useDatabase("tbl1");
 

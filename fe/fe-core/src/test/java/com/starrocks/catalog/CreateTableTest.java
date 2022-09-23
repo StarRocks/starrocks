@@ -62,11 +62,6 @@ public class CreateTableTest {
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
     }
 
-    private static void alterTable(String sql) throws Exception {
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
-    }
-
     private static void alterTableWithNewParser(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
@@ -392,6 +387,27 @@ public class CreateTableTest {
                 table.getColumn("oh_my_gosh_this_is_a_long_column_name_look_at_it_it_has_more_than_64_chars"));
     }
 
+    @Test
+    public void testCreateTableDefaultCurrentTimestamp() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql = "CREATE TABLE `test_create_default_current_timestamp` (\n" +
+                "    k1 int,\n" +
+                "    ts datetime NOT NULL DEFAULT CURRENT_TIMESTAMP\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ");";
+        starRocksAssert.withTable(sql);
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                .getTable("test_create_default_current_timestamp");
+        Assert.assertEquals(2, table.getColumns().size());
+    }
     @Test
     public void testCreateTableDefaultUUID() throws Exception {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);

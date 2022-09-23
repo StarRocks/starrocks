@@ -107,7 +107,7 @@ public class HiveMetastore implements IHiveMetastore {
         return new HivePartitionStatistics(commonStats, columnStatistics);
     }
 
-    public Map<String, HivePartitionStatistics> getPartitionsStatistics(Table table, List<String> partitionNames) {
+    public Map<String, HivePartitionStatistics> getPartitionStatistics(Table table, List<String> partitionNames) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         String dbName = hmsTbl.getDbName();
         String tblName = hmsTbl.getTableName();

@@ -80,6 +80,22 @@ public class ErrorReport {
         throw new DdlException(reportCommon(pattern, errorCode, objs));
     }
 
+    public static void reportRuntimeDdlException(ErrorCode errorCode, Object... objs) {
+        throw new RuntimeException(new DdlException(reportCommon(null, errorCode, objs)));
+    }
+
+    public interface DdlExecutor {
+        void apply() throws UserException;
+    }
+
+    public static void wrapWithRuntimeException(DdlExecutor fun) {
+        try {
+            fun.apply();
+        } catch (UserException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public static void report(String pattern, Object... objs) {
         report(pattern, ErrorCode.ERR_UNKNOWN_ERROR, objs);
     }
