@@ -102,9 +102,10 @@ public class InsertPlanner {
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
+        // Parallel pipeline loads are currently not supported, so disable the pipeline engine when users need parallel load
         boolean canUsePipeline =
                 isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable()) &&
-                        logicalPlan.canUsePipeline();
+                        logicalPlan.canUsePipeline() && session.getSessionVariable().getParallelExecInstanceNum() <= 1;
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         try {
             if (forceDisablePipeline) {
@@ -150,7 +151,7 @@ public class InsertPlanner {
             DataSink dataSink;
             if (insertStmt.getTargetTable() instanceof OlapTable) {
                 dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
-                        insertStmt.getTargetPartitionIds());
+                        insertStmt.getTargetPartitionIds(), canUsePipeline);
                 // At present, we only support dop=1 for olap table sink.
                 // because tablet writing needs to know the number of senders in advance
                 // and guaranteed order of data writing
