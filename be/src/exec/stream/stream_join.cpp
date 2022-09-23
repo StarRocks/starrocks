@@ -3,6 +3,8 @@
 #include "exec/stream/stream_join.h"
 
 #include "exec/exec_node.h"
+#include "exec/stream/imt_olap_table.h"
+#include "gen_cpp/Descriptors_types.h"
 #include "runtime/primitive_type.h"
 #include "storage/chunk_helper.h"
 
@@ -25,6 +27,19 @@ Status StreamJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _probe_expr_ctxs.push_back(left);
         RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.right, &right));
         _build_expr_ctxs.push_back(right);
+    }
+    if (tnode.stream_join_node.__isset.rhs_imt) {
+        auto& rhs_imt = tnode.stream_join_node.rhs_imt;
+        if (rhs_imt.imt_type != TIMTType::OLAP_TABLE) {
+            return Status::NotSupported("only OLAP_TABLE imt is supported");
+        }
+
+        // TODO: use RouteInfo to lookup table
+        OlapTableRouteInfo rhs_table;
+        RETURN_IF_ERROR(rhs_table.init(rhs_imt));
+
+        VLOG(2) << "Right side of stream_join: " << rhs_table.debug_string();
+        VLOG(2) << "Detailed rhs_imt: " << rhs_imt;
     }
 
     RETURN_IF_ERROR(

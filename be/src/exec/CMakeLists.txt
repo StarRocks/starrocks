@@ -201,6 +201,7 @@ set(EXEC_FILES
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
     stream/stream_join.cpp
+    stream/imt_olap_table.cpp
 )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
