@@ -225,6 +225,8 @@ public class Coordinator {
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
 
+    private final boolean usePipeline;
+
     // Resource group
     ResourceGroup resourceGroup = null;
 
@@ -269,6 +271,8 @@ public class Coordinator {
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
         this.forceScheduleLocal = context.getSessionVariable().isForceScheduleLocal();
+
+        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
 
     // Used for broker load task/export task coordinator
@@ -301,6 +305,8 @@ public class Coordinator {
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
+
+        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
 
     public long getJobId() {
@@ -596,19 +602,14 @@ public class Coordinator {
     }
 
     private void deliverExecFragments() throws Exception {
-        // Disable pipeline engine for `INSERT INTO`.
-        // TODO: remove this when load supports pipeline engine.
-        boolean enablePipelineEngine = connectContext != null &&
-                connectContext.getSessionVariable().isEnablePipelineEngine() &&
-                fragments.stream().allMatch(PlanFragment::canUsePipeline);
         // Only pipeline uses deliver_batch_fragments.
-        boolean enableDeliverBatchFragments = enablePipelineEngine
-                && connectContext.getSessionVariable().isEnableDeliverBatchFragments();
+        boolean enableDeliverBatchFragments =
+                usePipeline && connectContext.getSessionVariable().isEnableDeliverBatchFragments();
 
         if (enableDeliverBatchFragments) {
-            deliverExecBatchFragmentsRequests(enablePipelineEngine);
+            deliverExecBatchFragmentsRequests(usePipeline);
         } else {
-            deliverExecFragmentRequests(enablePipelineEngine);
+            deliverExecFragmentRequests(usePipeline);
         }
     }
 
@@ -1076,8 +1077,6 @@ public class Coordinator {
 
     private void setGlobalRuntimeFilterParams(FragmentExecParams topParams, TNetworkAddress mergeHost)
             throws Exception {
-        boolean enablePipelineEngine = connectContext != null &&
-                connectContext.getSessionVariable().isEnablePipelineEngine();
 
         Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
         List<RuntimeFilterDescription> broadcastGRFList = Lists.newArrayList();
@@ -1086,7 +1085,6 @@ public class Coordinator {
         for (PlanFragment fragment : fragments) {
             fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
             fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
-            boolean usePipeline = enablePipelineEngine && fragment.canUsePipeline();
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {
                 List<TRuntimeFilterProberParams> probeParamList = Lists.newArrayList();
@@ -1588,10 +1586,7 @@ public class Coordinator {
             PlanFragment fragment = fragments.get(i);
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
 
-            boolean enablePipeline = connectContext != null &&
-                    connectContext.getSessionVariable().isEnablePipelineEngine() &&
-                    fragment.getPlanRoot().canUsePipeLine();
-            boolean dopAdaptionEnabled = enablePipeline &&
+            boolean dopAdaptionEnabled = usePipeline &&
                     connectContext.getSessionVariable().isPipelineDopAdaptionEnabled();
 
             // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
@@ -1740,10 +1735,10 @@ public class Coordinator {
             if (hasColocate || hasBucketShuffle) {
                 computeColocatedJoinInstanceParam(fragmentIdToSeqToAddressMap.get(fragment.getFragmentId()),
                         fragmentIdBucketSeqToScanRangeMap.get(fragment.getFragmentId()),
-                        parallelExecInstanceNum, pipelineDop, enablePipeline, params);
+                        parallelExecInstanceNum, pipelineDop, usePipeline, params);
                 computeBucketSeq2InstanceOrdinal(params, fragmentIdToBucketNumMap.get(fragment.getFragmentId()));
             } else {
-                boolean assignScanRangesPerDriverSeq = enablePipeline && fragment.isAssignScanRangesPerDriverSeq();
+                boolean assignScanRangesPerDriverSeq = usePipeline && fragment.isAssignScanRangesPerDriverSeq();
                 for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> tNetworkAddressMapEntry :
                         fragmentExecParamsMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
                     TNetworkAddress key = tNetworkAddressMapEntry.getKey();
@@ -1988,7 +1983,9 @@ public class Coordinator {
      * @return Whether using the strategy of assigning scanRanges to each driver sequence.
      */
     private <T> boolean enableAssignScanRangesPerDriverSeq(List<T> scanRanges, int pipelineDop) {
-        return scanRanges.size() > pipelineDop / 2;
+        boolean enableTabletInternalParallel =
+                connectContext != null && connectContext.getSessionVariable().isEnableTabletInternalParallel();
+        return !enableTabletInternalParallel || scanRanges.size() > pipelineDop / 2;
     }
 
     public void computeColocatedJoinInstanceParam(Map<Integer, TNetworkAddress> bucketSeqToAddress,
@@ -2260,7 +2257,7 @@ public class Coordinator {
             return;
         }
 
-        if (!sessionVariable.isEnablePipelineEngine()) {
+        if (!usePipeline) {
             return;
         }
 
@@ -2289,6 +2286,16 @@ public class Coordinator {
             List<RuntimeProfile> instanceProfiles = fragmentProfile.getChildList().stream()
                     .map(pair -> pair.first)
                     .collect(Collectors.toList());
+
+            // Setup backend address infos
+            Set<String> backendAddresses = Sets.newHashSet();
+            instanceProfiles.forEach(instanceProfile -> {
+                backendAddresses.add(instanceProfile.getInfoString("Address"));
+                instanceProfile.removeInfoString("Address");
+            });
+            fragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
+
+            // Setup number of instance
             Counter counter = fragmentProfile.addCounter("InstanceNum", TUnit.UNIT);
             counter.setValue(instanceProfiles.size());
 
@@ -2327,32 +2334,40 @@ public class Coordinator {
             backendNum.setValue(networkAddresses.size());
         }
 
-        // Calculate Fe time and Be time
-        boolean found = false;
-        for (int i = 0; !found && i < fragments.size(); i++) {
-            PlanFragment fragment = fragments.get(i);
-            DataSink sink = fragment.getSink();
-            if (!(sink instanceof ResultSink)) {
-                continue;
-            }
-            RuntimeProfile profile = fragmentProfiles.get(i);
+        // Calculate ExecutionTotalTime, which comprising all operator's sync time and async time
+        // We can get Operator's sync time from OperatorTotalTime, and for async time, only ScanOperator and
+        // ExchangeOperator have async operations, we can get async time from ScanTime(for ScanOperator) and
+        // NetworkTime(for ExchangeOperator)
+        long executionTime = 0;
+        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+            for (Pair<RuntimeProfile, Boolean> pipelineProfilePair : fragmentProfile.getChildList()) {
+                RuntimeProfile pipelineProfile = pipelineProfilePair.first;
+                for (Pair<RuntimeProfile, Boolean> operatorProfilePair : pipelineProfile.getChildList()) {
+                    RuntimeProfile operatorProfile = operatorProfilePair.first;
+                    RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
+                    RuntimeProfile uniqueMetrics = operatorProfile.getChild("UniqueMetrics");
+                    if (commonMetrics == null || uniqueMetrics == null) {
+                        continue;
+                    }
+                    Counter operatorTotalTime = commonMetrics.getMaxCounter("OperatorTotalTime");
+                    Preconditions.checkNotNull(operatorTotalTime);
+                    executionTime += operatorTotalTime.getValue();
 
-            for (int j = 0; !found && j < profile.getChildList().size(); j++) {
-                RuntimeProfile pipelineProfile = profile.getChildList().get(j).first;
-                if (pipelineProfile.getChildList().isEmpty()) {
-                    LOG.warn("pipeline's profile miss children, profileName={}", pipelineProfile.getName());
-                    continue;
-                }
-                RuntimeProfile operatorProfile = pipelineProfile.getChildList().get(0).first;
-                if (operatorProfile.getName().contains("RESULT_SINK")) {
-                    long beTotalTime = pipelineProfile.getCounter("DriverTotalTime").getValue();
-                    Counter executionTotalTime = queryProfile.addCounter("ExecutionTotalTime", TUnit.TIME_NS);
-                    queryProfile.getCounterTotalTime().setValue(0);
-                    executionTotalTime.setValue(beTotalTime);
-                    found = true;
+                    Counter scanTime = uniqueMetrics.getMaxCounter("ScanTime");
+                    if (scanTime != null) {
+                        executionTime += scanTime.getValue();
+                    }
+
+                    Counter networkTime = uniqueMetrics.getMaxCounter("NetworkTime");
+                    if (networkTime != null) {
+                        executionTime += networkTime.getValue();
+                    }
                 }
             }
         }
+        Counter executionTotalTime = queryProfile.addCounter("ExecutionTotalTime", TUnit.TIME_NS);
+        queryProfile.getCounterTotalTime().setValue(0);
+        executionTotalTime.setValue(executionTime);
     }
 
     /**
@@ -2563,6 +2578,7 @@ public class Coordinator {
                     "Instance " + DebugUtil.printId(uniqueRpcParams.params.fragment_instance_id) + " (host=" + address +
                             ")";
             this.profile = new RuntimeProfile(name);
+            this.profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
             this.hasCanceled = false;
             this.lastMissingHeartbeatTime = backend.getLastMissingHeartbeatTime();
         }
@@ -3447,5 +3463,18 @@ public class Coordinator {
             scanRangeParams.scan_range = scanRangeLocations.scan_range;
             scanRangeParamsList.add(scanRangeParams);
         }
+    }
+
+    /**
+     * Whether it can use pipeline engine.
+     * @param connectContext It is null for broker broker export.
+     * @param fragments All the fragments need to execute.
+     * @return true if enabling pipeline in the session variable and all the fragments can use pipeline,
+     * otherwise false.
+     */
+    private boolean canUsePipeline(ConnectContext connectContext, List<PlanFragment> fragments) {
+        return connectContext != null &&
+                connectContext.getSessionVariable().isEnablePipelineEngine() &&
+                fragments.stream().allMatch(PlanFragment::canUsePipeline);
     }
 }

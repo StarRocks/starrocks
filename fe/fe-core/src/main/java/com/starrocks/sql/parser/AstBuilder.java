@@ -1565,7 +1565,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new AnalyzeStmt(tableName, columnNames, properties, context.SAMPLE() != null, new AnalyzeBasicDesc());
+        return new AnalyzeStmt(tableName, columnNames, properties,
+                context.SAMPLE() != null,
+                context.ASYNC() != null,
+                new AnalyzeBasicDesc());
     }
 
     @Override
@@ -1671,7 +1674,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             bucket = Config.histogram_buckets_size;
         }
 
-        return new AnalyzeStmt(tableName, columnNames, properties, true, new AnalyzeHistogramDesc(bucket));
+        return new AnalyzeStmt(tableName, columnNames, properties, true,
+                context.ASYNC() != null, new AnalyzeHistogramDesc(bucket));
     }
 
     @Override
@@ -3266,6 +3270,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCast(StarRocksParser.CastContext context) {
+        return new CastExpr(new TypeDef(getType(context.type())), (Expr) visit(context.expression()));
+    }
+
+    @Override
+    public ParseNode visitConvert(StarRocksParser.ConvertContext context) {
         return new CastExpr(new TypeDef(getType(context.type())), (Expr) visit(context.expression()));
     }
 

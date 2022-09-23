@@ -367,4 +367,30 @@ public class ScanTest extends PlanTestBase {
         Assert.assertTrue(((SchemaScanNode) plan.getScanNodes().get(0)).getSchemaDb().equals("information_schema"));
         Assert.assertTrue(((SchemaScanNode) plan.getScanNodes().get(0)).getSchemaTable().equals("columns"));
     }
+
+    @Test
+    public void testSchemaScanWithWhereConstantFunction() throws Exception {
+        String sql = "SELECT TABLE_SCHEMA TABLE_CAT, NULL TABLE_SCHEM, TABLE_NAME, " +
+                "IF(TABLE_TYPE='BASE TABLE' or TABLE_TYPE='SYSTEM VERSIONED', 'TABLE', TABLE_TYPE) as TABLE_TYPE, " +
+                "TABLE_COMMENT REMARKS, NULL TYPE_CAT, NULL TYPE_SCHEM, NULL TYPE_NAME, NULL SELF_REFERENCING_COL_NAME, " +
+                "NULL REF_GENERATION FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = database() AND  " +
+                "TABLE_TYPE IN ('BASE TABLE','SYSTEM VERSIONED','PARTITIONED TABLE','VIEW','FOREIGN TABLE'," +
+                "'MATERIALIZED VIEW','EXTERNAL TABLE') ORDER BY TABLE_TYPE, TABLE_SCHEMA, TABLE_NAME";
+        getExecPlan(sql);
+    }
+
+    @Test
+    public void testPushDownExternalTableMissNot() throws Exception {
+        String sql = "select * from ods_order where order_no not like \"%hehe%\"";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: NOT (order_no LIKE '%hehe%')");
+
+        sql = "select * from ods_order where order_no in (1,2,3)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "FROM `ods_order` WHERE (order_no IN ('1', '2', '3'))");
+
+        sql = "select * from ods_order where order_no not in (1,2,3)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "FROM `ods_order` WHERE (order_no NOT IN ('1', '2', '3'))");
+    }
 }

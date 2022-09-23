@@ -945,6 +945,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePipelineEngine = enablePipelineEngine;
     }
 
+    public boolean isEnableTabletInternalParallel() {
+        return enableTabletInternalParallel;
+    }
+
     public boolean isEnableResourceGroup() {
         return enableResourceGroup;
     }

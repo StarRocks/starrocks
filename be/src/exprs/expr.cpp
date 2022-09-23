@@ -270,7 +270,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     }
     case TExprNodeType::CAST_EXPR: {
         if (texpr_node.__isset.child_type || texpr_node.__isset.child_type_desc) {
-            *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(texpr_node));
+            *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(pool, texpr_node));
             break;
         } else {
             // @TODO: will call FunctionExpr, implement later
@@ -427,7 +427,7 @@ void Expr::close(RuntimeState* state, ExprContext* context, FunctionContext::Fun
 #endif
 }
 
-Status Expr::clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeState* state,
+Status Expr::clone_if_not_exists(RuntimeState* state, ObjectPool* pool, const std::vector<ExprContext*>& ctxs,
                                  std::vector<ExprContext*>* new_ctxs) {
     DCHECK(new_ctxs != nullptr);
     if (!new_ctxs->empty()) {
@@ -441,7 +441,7 @@ Status Expr::clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeS
 
     new_ctxs->resize(ctxs.size());
     for (int i = 0; i < ctxs.size(); ++i) {
-        RETURN_IF_ERROR(ctxs[i]->clone(state, &(*new_ctxs)[i]));
+        RETURN_IF_ERROR(ctxs[i]->clone(state, pool, &(*new_ctxs)[i]));
     }
     return Status::OK();
 }
