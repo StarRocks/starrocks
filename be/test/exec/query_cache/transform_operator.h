@@ -38,7 +38,7 @@ public:
     bool need_input() const override;
     Status set_finished(starrocks::RuntimeState* state) override;
     Status set_finishing(starrocks::RuntimeState* state) override;
-    Status reset_state(std::vector<ChunkPtr>&& chunks) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) override;
 
 private:
     MapFunc _map_func;
@@ -116,7 +116,7 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(starrocks::RuntimeState* state) override {
         return Status::NotSupported("Not implement");
     }
-    Status reset_state(std::vector<ChunkPtr>&& chunks) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) override;
     Status set_finishing(starrocks::RuntimeState* state) override;
 
 private:
@@ -143,7 +143,7 @@ public:
         return Status::NotSupported("Not implement");
     }
     StatusOr<vectorized::ChunkPtr> pull_chunk(starrocks::RuntimeState* state) override;
-    Status reset_state(std::vector<ChunkPtr>&& chunks) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) override;
     Status set_finishing(starrocks::RuntimeState* state) override;
     Status set_finished(starrocks::RuntimeState* state) override;
 

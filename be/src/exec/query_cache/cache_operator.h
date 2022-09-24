@@ -34,8 +34,9 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     bool probe_cache(int64_t tablet_id, int64_t version);
-    Status reset_lane(LaneOwnerType lane_owner);
+    Status reset_lane(RuntimeState* state, LaneOwnerType lane_owner);
     void populate_cache(int64_t tablet_id);
+    int64_t cached_version(int64_t tablet_id);
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     bool has_output() const override;

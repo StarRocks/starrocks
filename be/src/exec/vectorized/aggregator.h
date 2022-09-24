@@ -172,7 +172,6 @@ public:
     int64_t num_pass_through_rows() { return _num_pass_through_rows; }
     void set_aggr_phase(AggrPhase aggr_phase) { _aggr_phase = aggr_phase; }
     AggrPhase get_aggr_phase() { return _aggr_phase; }
-    Status reset_state(std::vector<vectorized::ChunkPtr>&& chunks);
 
     TStreamingPreaggregationMode::type streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
     const vectorized::AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
@@ -227,6 +226,7 @@ public:
     Status check_has_error();
 
     void set_aggr_mode(AggrMode aggr_mode) { _aggr_mode = aggr_mode; }
+    Status reset_state(RuntimeState* state, const std::vector<vectorized::ChunkPtr>& chunks, pipeline::Operator* op);
 
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
@@ -329,6 +329,7 @@ private:
     AggrPhase _aggr_phase = AggrPhase1;
     AggrMode _aggr_mode = AM_DEFAULT;
     bool _is_passthrough = false;
+    bool _is_pending_reset_state = false;
     std::vector<uint8_t> _streaming_selection;
 
     bool _has_udaf = false;
@@ -538,12 +539,20 @@ private:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
 
     bool _use_intermediate_as_input() {
-        return ((_aggr_mode == AM_BLOCKING_POST_CACHE) || (_aggr_mode == AM_STREAMING_POST_CACHE)) && !_is_passthrough;
+        if (is_pending_reset_state()) {
+            DCHECK(_aggr_mode == AM_BLOCKING_PRE_CACHE || _aggr_mode == AM_STREAMING_PRE_CACHE);
+            return true;
+        } else {
+            return ((_aggr_mode == AM_BLOCKING_POST_CACHE) || (_aggr_mode == AM_STREAMING_POST_CACHE)) &&
+                   !_is_passthrough;
+        }
     }
 
     bool _use_intermediate_as_output() {
         return _aggr_mode == AM_STREAMING_PRE_CACHE || _aggr_mode == AM_BLOCKING_PRE_CACHE || !_needs_finalize;
     }
+
+    Status _reset_state(RuntimeState* state);
 
     // initial const columns for i'th FunctionContext.
     Status _evaluate_const_columns(int i);
@@ -559,6 +568,10 @@ private:
 
     void _set_passthrough(bool flag) { _is_passthrough = flag; }
     bool is_passthrough() const { return _is_passthrough; }
+
+    void begin_pending_reset_state() { _is_pending_reset_state = true; }
+    void end_pending_reset_state() { _is_pending_reset_state = false; }
+    bool is_pending_reset_state() { return _is_pending_reset_state; }
 
     void _reset_exprs();
     Status _evaluate_exprs(vectorized::Chunk* chunk);

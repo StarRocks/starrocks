@@ -27,7 +27,7 @@ Status MapOperator::set_finished(starrocks::RuntimeState* state) {
     return Status::OK();
 }
 
-Status MapOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+Status MapOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) {
     _is_finished = false;
     _cur_chunk = nullptr;
     return Status::OK();
@@ -115,7 +115,7 @@ Status ReduceSinkOperator::set_finishing(starrocks::RuntimeState* state) {
     return Status::OK();
 }
 
-Status ReduceSinkOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+Status ReduceSinkOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) {
     _result = _reducer->init_value();
     return _reducer->reset_state();
 }
@@ -152,7 +152,7 @@ Status ReduceSourceOperator::set_finished(starrocks::RuntimeState* state) {
     return Status::OK();
 }
 
-Status ReduceSourceOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+Status ReduceSourceOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) {
     _current_output_num_rows = 0;
     return Status::OK();
 }

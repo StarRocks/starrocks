@@ -63,8 +63,12 @@ public:
         return std::tuple<int64_t, int64_t>{0L, 0L};
     }
 
+    void set_from_version(int64_t from_version) { _from_version = from_version; }
+    int64_t from_version() { return _from_version; }
+
 private:
     int32_t _plan_node_id;
+    int64_t _from_version = 0;
 };
 
 class ScanMorsel : public Morsel {

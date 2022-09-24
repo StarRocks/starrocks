@@ -61,7 +61,7 @@ Status DictDecodeOperator::push_chunk(RuntimeState* state, const vectorized::Chu
     return Status::OK();
 }
 
-Status DictDecodeOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+Status DictDecodeOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) {
     _cur_chunk = nullptr;
     _is_finished = false;
     return Status::OK();
