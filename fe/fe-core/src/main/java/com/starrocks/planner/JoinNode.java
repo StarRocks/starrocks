@@ -366,19 +366,32 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         StringBuilder output = new StringBuilder().append(
                 detailPrefix + "join op: " + joinOp.toString() + distrModeStr + "\n");
 
-        output.append(detailPrefix).append("colocate: ").append(isColocate)
-                .append(isColocate ? "" : ", reason: " + colocateReason).append("\n");
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            if (isColocate) {
+                output.append(detailPrefix).append("colocate: ").append(isColocate).append("\n");
+            }
+        } else {
+            output.append(detailPrefix).append("colocate: ").append(isColocate)
+                    .append(isColocate ? "" : ", reason: " + colocateReason).append("\n");
+        }
 
         for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
-            output.append(detailPrefix).append("equal join conjunct: ").append(eqJoinPredicate.toSql() + "\n");
+            output.append(detailPrefix).append("equal join conjunct: ");
+            if (detailLevel.equals(TExplainLevel.VERBOSE)) {
+                output.append(eqJoinPredicate.explain());
+            } else {
+                output.append(eqJoinPredicate.toSql());
+            }
+            output.append("\n");
         }
         if (!otherJoinConjuncts.isEmpty()) {
             output.append(detailPrefix + "other join predicates: ").append(
-                    getExplainString(otherJoinConjuncts) + "\n");
+                    getVerboseExplain(otherJoinConjuncts, detailLevel) + "\n");
         }
         if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix + "other predicates: ").append(
-                    getExplainString(conjuncts) + "\n");
+            output.append(detailPrefix).append("other predicates: ")
+                    .append(getVerboseExplain(conjuncts, detailLevel))
+                    .append("\n");
         }
 
         if (detailLevel == TExplainLevel.VERBOSE) {

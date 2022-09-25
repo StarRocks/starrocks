@@ -475,49 +475,38 @@ public class OlapScanNode extends ScanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
-        output.append(prefix).append("TABLE: ").append(olapTable.getName()).append("\n");
+        // TODO: unify them
+        if (detailLevel != TExplainLevel.VERBOSE) {
+            output.append(prefix).append("TABLE: ").append(olapTable.getName()).append("\n");
+        } else {
+            output.append(prefix).append("table: ").append(olapTable.getName())
+                    .append(", ").append("rollup: ")
+                    .append(olapTable.getIndexNameById(selectedIndexId)).append("\n");
+        }
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
-        if (isPreAggregation) {
-            output.append(prefix).append("PREAGGREGATION: ON").append("\n");
+
+        if (detailLevel != TExplainLevel.VERBOSE) {
+            if (isPreAggregation) {
+                output.append(prefix).append("PREAGGREGATION: ON").append("\n");
+            } else {
+                output.append(prefix).append("PREAGGREGATION: OFF. Reason: ").append(reasonOfPreAggregation).append("\n");
+            }
+            if (!conjuncts.isEmpty()) {
+                output.append(prefix).append("PREDICATES: ").append(
+                        getExplainString(conjuncts)).append("\n");
+            }
         } else {
-            output.append(prefix).append("PREAGGREGATION: OFF. Reason: ").append(reasonOfPreAggregation).append("\n");
-        }
-        if (!conjuncts.isEmpty()) {
-            output.append(prefix).append("PREDICATES: ").append(getExplainString(conjuncts)).append("\n");
-        }
-
-        output.append(prefix).append(String.format(
-                "partitions=%s/%s",
-                selectedPartitionNum,
-                olapTable.getPartitions().size()));
-
-        String indexName = olapTable.getIndexNameById(selectedIndexId);
-        output.append("\n").append(prefix).append(String.format("rollup: %s", indexName));
-
-        output.append("\n");
-
-        output.append(prefix).append(String.format(
-                "tabletRatio=%s/%s", selectedTabletsNum, totalTabletsNum));
-        output.append("\n");
-
-        // We print up to 10 tablet, and we print "..." if the number is more than 10
-        if (scanTabletIds.size() > 10) {
-            List<Long> firstTenTabletIds = scanTabletIds.subList(0, 10);
-            output.append(prefix).append(String.format("tabletList=%s ...", Joiner.on(",").join(firstTenTabletIds)));
-        } else {
-            output.append(prefix).append(String.format("tabletList=%s", Joiner.on(",").join(scanTabletIds)));
-        }
-
-        output.append("\n");
-
-        output.append(prefix).append(String.format("cardinality=%s\n", cardinality));
-        output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
-        output.append(prefix).append(String.format("numNodes=%s\n", numNodes));
-
-        if (detailLevel == TExplainLevel.VERBOSE) {
+            if (isPreAggregation) {
+                output.append(prefix).append("preAggregation: on").append("\n");
+            } else {
+                output.append(prefix).append("preAggregation: off. Reason: ").append(reasonOfPreAggregation).append("\n");
+            }
+            if (!conjuncts.isEmpty()) {
+                output.append(prefix).append("Predicates: ").append(getVerboseExplain(conjuncts)).append("\n");
+            }
             if (!dictStringIdToIntIds.isEmpty()) {
                 List<String> flatDictList = dictStringIdToIntIds.entrySet().stream().limit(5)
                         .map((entry) -> "(" + entry.getKey() + "," + entry.getValue() + ")").collect(Collectors.toList());
@@ -528,6 +517,7 @@ public class OlapScanNode extends ScanNode {
                 output.append(prefix).append(String.format(format_template, Joiner.on(",").join(flatDictList)));
                 output.append("\n");
             }
+
             if (!appliedDictStringColumns.isEmpty()) {
                 int maxSize = Math.min(appliedDictStringColumns.size(), 5);
                 List<String> printList = appliedDictStringColumns.subList(0, maxSize);
@@ -540,6 +530,46 @@ public class OlapScanNode extends ScanNode {
             }
         }
 
+        if (detailLevel != TExplainLevel.VERBOSE) {
+            output.append(prefix).append(String.format("partitions=%s/%s\n", selectedPartitionNum,
+                    olapTable.getPartitions().size()));
+
+            String indexName = olapTable.getIndexNameById(selectedIndexId);
+            output.append(prefix).append(String.format("rollup: %s\n", indexName));
+
+            output.append(prefix).append(String.format("tabletRatio=%s/%s\n", selectedTabletsNum, totalTabletsNum));
+
+            // We print up to 10 tablet, and we print "..." if the number is more than 10
+            if (scanTabletIds.size() > 10) {
+                List<Long> firstTenTabletIds = scanTabletIds.subList(0, 10);
+                output.append(prefix).append(String.format("tabletList=%s ...", Joiner.on(",").join(firstTenTabletIds)));
+            } else {
+                output.append(prefix).append(String.format("tabletList=%s", Joiner.on(",").join(scanTabletIds)));
+            }
+
+            output.append("\n");
+            output.append(prefix).append(String.format("cardinality=%s\n", cardinality));
+            output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
+            output.append(prefix).append(String.format("numNodes=%s\n", numNodes));
+        } else {
+            output.append(prefix).append(String.format(
+                            "partitionsRatio=%s/%s",
+                            selectedPartitionNum,
+                            olapTable.getPartitions().size())).append(", ")
+                    .append(String.format("tabletsRatio=%s/%s", selectedTabletsNum, totalTabletsNum)).append("\n");
+
+            if (scanTabletIds.size() > 10) {
+                List<Long> firstTenTabletIds = scanTabletIds.subList(0, 10);
+                output.append(prefix).append(String.format("tabletList=%s ...", Joiner.on(",").join(firstTenTabletIds)));
+            } else {
+                output.append(prefix).append(String.format("tabletList=%s", Joiner.on(",").join(scanTabletIds)));
+            }
+            output.append("\n");
+
+            output.append(prefix).append(String.format("actualRows=%s", actualRows))
+                    .append(", ").append(String.format("avgRowSize=%s\n", avgRowSize));
+            return output.toString();
+        }
 
         return output.toString();
     }

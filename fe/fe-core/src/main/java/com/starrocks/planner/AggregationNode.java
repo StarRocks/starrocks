@@ -36,6 +36,7 @@ import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStreamingPreaggregationMode;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -200,8 +201,11 @@ public class AggregationNode extends PlanNode {
             }
             output.append(getVerboseExplain(aggInfo.getAggregateExprs(), detailLevel)).append("\n");
         }
-        output.append(detailPrefix).append("group by: ").append(
-                getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
+        if (CollectionUtils.isNotEmpty(aggInfo.getGroupingExprs())) {
+            output.append(detailPrefix).append("group by: ").append(
+                    getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
+        }
+
         if (!conjuncts.isEmpty()) {
             output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel)).append("\n");
         }

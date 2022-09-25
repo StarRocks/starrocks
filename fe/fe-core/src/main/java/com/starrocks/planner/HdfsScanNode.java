@@ -18,6 +18,8 @@ import com.starrocks.thrift.TScanRangeLocations;
 
 import java.util.List;
 
+import static com.starrocks.thrift.TExplainLevel.VERBOSE;
+
 /**
  * Scan node for HDFS files, like hive table.
  * <p>
@@ -98,8 +100,11 @@ public class HdfsScanNode extends ScanNode {
                         scanNodePredicates.getIdToPartitionKey().size()));
         output.append("\n");
 
-        output.append(prefix).append(String.format("cardinality=%s", cardinality));
-        output.append("\n");
+        // TODO: support it in verbose
+        if (detailLevel != VERBOSE) {
+            output.append(prefix).append(String.format("cardinality=%s", cardinality));
+            output.append("\n");
+        }
 
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
