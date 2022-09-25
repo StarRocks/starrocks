@@ -2401,9 +2401,9 @@ TEST_F(JoinHashMapTest, NullAwareAntiJoinTest) {
     table_items.first.resize(build_row_count + 1, 0);
     table_items.next.resize(build_row_count + 1);
     table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
-    auto build_col_nulls = create_bools(build_row_count, 3);
+    auto build_col_nulls = create_bools(build_row_count + 1, 3);
     auto column_1 = create_nullable_column(TYPE_INT);
-    column_1->append(*create_nullable_column(TYPE_INT, build_col_nulls, 0, build_row_count));
+    column_1->append(*create_nullable_column(TYPE_INT, build_col_nulls, 0, build_row_count + 1));
     table_items.key_columns.emplace_back(column_1);
     table_items.join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
     table_items.row_count = build_row_count;
