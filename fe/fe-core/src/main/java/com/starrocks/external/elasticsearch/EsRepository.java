@@ -68,11 +68,9 @@ public class EsRepository extends LeaderDaemon {
     }
 
     public void deRegisterTable(long tableId) {
-        // We should edit esClients first, otherwise will occur thread safety issues.
-        // In runAfterCatalogReady(), we read esTables first,  If the client in esClients has
-        // not been added at this time, it will result NullPointerException.
-        esClients.remove(tableId);
+        // When do doRegister, remove esTables first.
         esTables.remove(tableId);
+        esClients.remove(tableId);
         LOG.info(String.format("Thread %s: deregister table [%s] from sync list",
                 Thread.currentThread().getName(), tableId));
     }
