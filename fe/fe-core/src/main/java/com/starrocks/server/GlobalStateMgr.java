@@ -1015,7 +1015,7 @@ public class GlobalStateMgr {
 
             isReady.set(true);
 
-            String msg = "leaer finished to replay journal, can write now.";
+            String msg = "leader finished to replay journal, can write now.";
             Util.stdoutWithTime(msg);
             LOG.info(msg);
             // for leader, there are some new thread pools need to register metric
@@ -1084,7 +1084,7 @@ public class GlobalStateMgr {
         routineLoadTaskScheduler.start();
         // start dynamic partition task
         dynamicPartitionScheduler.start();
-        // start daemon thread to update db used data quota for db txn manager periodly
+        // start daemon thread to update db used data quota for db txn manager periodically
         updateDbUsedDataQuotaDaemon.start();
         statisticsMetaManager.start();
         statisticAutoCollector.start();
@@ -1672,7 +1672,7 @@ public class GlobalStateMgr {
     /**
      * Replay journal from replayedJournalId + 1 to toJournalId
      * used by checkpointer/replay after state change
-     * toJournalId is a definite number and cannot set to -1/JournalCursor.CUROSR_END_KEY
+     * toJournalId is a definite number and cannot set to -1/JournalCursor.CURSOR_END_KEY
      */
     public void replayJournal(long toJournalId) throws JournalException {
         if (toJournalId <= replayedJournalId.get()) {
@@ -1787,7 +1787,7 @@ public class GlobalStateMgr {
         try {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
                 if (!StringUtils.isEmpty(idStr) && Long.valueOf(idStr) == replayedJournalId.get() + 1) {
-                    LOG.info("skip bad replayed journal id {} because configed {}",
+                    LOG.info("skip bad replayed journal id {} because configured {}",
                             idStr, Config.metadata_journal_skip_bad_journal_ids);
                     return true;
                 }
@@ -2039,7 +2039,7 @@ public class GlobalStateMgr {
                 sb.append(",\n");
             }
             // There MUST BE 2 space in front of each column description line
-            // sqlalchemy requires this to parse SHOW CREATE TAEBL stmt.
+            // sqlalchemy requires this to parse SHOW CREATE TABLE stmt.
             if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
@@ -2149,19 +2149,19 @@ public class GlobalStateMgr {
 
             // enable storage cache && cache ttl
             if (table.isLakeTable()) {
-                Map<String, String> storageProperities = ((LakeTable) olapTable).getProperties();
+                Map<String, String> storageProperties = ((LakeTable) olapTable).getProperties();
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)
                         .append("\" = \"");
-                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)
                         .append("\" = \"");
-                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
                         .append("\" = \"");
-                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
             }
 
             // storage type
@@ -2820,7 +2820,7 @@ public class GlobalStateMgr {
     }
 
     /*
-     * used for handling CacnelAlterStmt (for client is the CANCEL ALTER
+     * used for handling CancelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler
      */
     public void cancelAlter(CancelAlterTableStmt stmt) throws DdlException {
@@ -3151,7 +3151,7 @@ public class GlobalStateMgr {
             unlock();
         }
 
-        LOG.info("finished dumpping image to {}", dumpFilePath);
+        LOG.info("finished dumping image to {}", dumpFilePath);
         return dumpFilePath;
     }
 
