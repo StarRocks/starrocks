@@ -46,7 +46,7 @@ public class HiveMetastoreOperations {
         return metastore.getPartition(dbName, tableName, partitionValues);
     }
 
-    public Map<String, Partition> getPartitionsByNames(Table table, List<PartitionKey> partitionKeys) {
+    public Map<String, Partition> getPartitionByNames(Table table, List<PartitionKey> partitionKeys) {
         String dbName = ((HiveMetaStoreTable) table).getDbName();
         String tblName = ((HiveMetaStoreTable) table).getTableName();
         List<String> partitionColumnNames = ((HiveMetaStoreTable) table).getPartitionColumnNames();

@@ -247,6 +247,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
+    // In most cases, the partition statistics obtained from the hive metastore are empty.
+    // Because we get partition statistics asynchronously for the first query of a table or partition,
+    // if the gc of any service is caused, you can set the value to 100 for testing.
+    public static final String HIVE_PARTITION_STATS_SAMPLE_SIZE = "3000";
+
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
     public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER = "enable_multicolumn_global_runtime_filter";
@@ -612,6 +617,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
 
+    @VariableMgr.VarAttr(name = HIVE_PARTITION_STATS_SAMPLE_SIZE)
+    private int hivePartitionStatsSampleSize = 3000;
+
     @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE_V2, alias = JOIN_IMPLEMENTATION_MODE)
     private String joinImplementationMode = "auto"; // auto, merge, hash, nestloop
 
@@ -679,6 +687,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean enableHiveColumnStats() {
         return enableHiveColumnStats;
+    }
+
+    public int getHivePartitionStatsSampleSize() {
+        return hivePartitionStatsSampleSize;
     }
 
     public long getMaxExecMemByte() {
