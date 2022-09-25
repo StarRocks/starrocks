@@ -19,7 +19,7 @@ public:
               _chunk_size(chunk_size),
               _next_row_index_in_current_chunk(0) {}
 
-    StatusOr<RowPtr> get_next() override;
+    StatusOr<RowSharedPtr> get_next() override;
 
     void close() override {
         _chunk_iterator->close();
@@ -28,7 +28,7 @@ public:
 private:
 
     Status get_next_chunk();
-    RowPtr get_next_row();
+    RowSharedPtr get_next_row();
 
     const Status _status_ok;
     std::shared_ptr<vectorized::ChunkIterator> _chunk_iterator;

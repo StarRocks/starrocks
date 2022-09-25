@@ -29,6 +29,7 @@ public:
 
     [[nodiscard]] virtual size_t size() const = 0;
 
+    [[nodiscard]] virtual const vectorized::Datum& get_datum(size_t ordinal) const = 0;
     [[nodiscard]] virtual int8_t get_int8(size_t ordinal) const = 0;
     [[nodiscard]] virtual uint8_t get_uint8(size_t ordinal) const = 0;
     [[nodiscard]] virtual int16_t get_int16(size_t ordinal) const = 0;
@@ -53,6 +54,7 @@ public:
     [[nodiscard]] virtual const PercentileValue* get_percentile(size_t ordinal) const = 0;
     [[nodiscard]] virtual const JsonValue* get_json(size_t ordinal) const = 0;
 
+    virtual void set_datum(size_t ordinal, const vectorized::Datum& datum) = 0;
     virtual void set_int8(size_t ordinal, int8_t v) = 0;
     virtual void set_uint8(size_t ordinal, uint8_t v) = 0;
     virtual void set_int16(size_t ordinal, int16_t v) = 0;
@@ -77,5 +79,7 @@ public:
     virtual void set_percentile(size_t ordinal, PercentileValue* v) = 0;
     virtual void set_json(size_t ordinal, JsonValue* v) = 0;
 };
+
+using RowSharedPtr = std::shared_ptr<Row>;
 
 } // namespace starrocks

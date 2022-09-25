@@ -73,7 +73,7 @@ TEST_F(DatumRowIteratorTest, test_basic) {
     for (size_t i = 0; i < c1.size(); i++) {
         auto status_or_row = row_iterator->get_next();
         ASSERT_TRUE(status_or_row.ok());
-        RowPtr row = status_or_row.value();
+        RowSharedPtr row = status_or_row.value();
         ASSERT_TRUE(row != nullptr);
         ASSERT_EQ(c1[i], row->get_int32(0));
         ASSERT_EQ(c2[i], row->get_slice(1));

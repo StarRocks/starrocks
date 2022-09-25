@@ -22,7 +22,7 @@ Status DatumRowIterator::get_next_chunk() {
     return status;
 }
 
-RowPtr DatumRowIterator::get_next_row() {
+RowSharedPtr DatumRowIterator::get_next_row() {
     std::shared_ptr<DatumRow> row = std::make_shared<DatumRow>(_current_chunk->num_columns());
     size_t row_index = _next_row_index_in_current_chunk;
     for (int i = 0; i < _current_chunk->num_columns(); i++) {
@@ -32,7 +32,7 @@ RowPtr DatumRowIterator::get_next_row() {
     return row;
 }
 
-StatusOr<RowPtr> DatumRowIterator::get_next() {
+StatusOr<RowSharedPtr> DatumRowIterator::get_next() {
     auto status = get_next_chunk();
     if (!status.ok()) {
         return status;

@@ -6,15 +6,15 @@
 
 namespace starrocks {
 
-using RowPtr = std::shared_ptr<Row>;
-
 class RowIterator {
 
 public:
 
-    virtual StatusOr<RowPtr> get_next() = 0;
+    virtual StatusOr<RowSharedPtr> get_next() = 0;
 
     virtual void close() = 0;
 };
+
+using RowIteratorSharedPtr = std::shared_ptr<RowIterator>;
 
 } // namespace starrocks

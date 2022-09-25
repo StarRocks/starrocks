@@ -1,13 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "storage/lake/tablet_reader.h"
+#include "storage/tablet_reader.h"
 
 #include <gtest/gtest.h>
 
 #include <chrono>
 #include <memory>
-#include <string>
-#include <thread>
 
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
@@ -16,7 +14,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/kv_store.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
@@ -27,14 +24,10 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
-#include "storage/tablet_meta_manager.h"
-#include "storage/tablet_reader.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "storage/wrapper_field.h"
 #include "testutil/assert.h"
-#include "util/defer_op.h"
-#include "util/path_util.h"
 
 namespace starrocks {
 
@@ -91,7 +84,6 @@ public:
         return *writer->build();
     }
 
-
     TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
@@ -142,7 +134,7 @@ public:
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
-    void SetUp() override { _compaction_mem_tracker = std::make_unique<MemTracker>(-1); }
+    void SetUp() override {}
 
     void TearDown() override {
         if (_tablet) {
@@ -153,7 +145,6 @@ public:
 
 protected:
 
-    std::unique_ptr<MemTracker> _compaction_mem_tracker;
     TabletSharedPtr _tablet;
 };
 

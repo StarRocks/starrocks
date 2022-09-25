@@ -17,7 +17,7 @@ public:
         return _datums.size();
     }
 
-    const vectorized::Datum& get_datum(size_t ordinal) {
+    const vectorized::Datum& get_datum(size_t ordinal) const {
         return safe_get_datum(ordinal);
     }
 
