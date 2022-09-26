@@ -63,10 +63,11 @@ public class IcebergUtilTest {
 
     @Test
     public void testArray() {
-        Type stringType = new ArrayType(ScalarType.createType(PrimitiveType.INT));
-        org.apache.iceberg.types.Type icebergType = Types.ListType.ofRequired(136, Types.IntegerType.get());
-        Type resType = convertColumnType(icebergType);
-        Assert.assertEquals(resType, stringType);
+        Assert.assertEquals(convertColumnType(Types.ListType.ofRequired(136, Types.IntegerType.get())),
+                new ArrayType(ScalarType.createType(PrimitiveType.INT)));
+        Assert.assertEquals(convertColumnType(Types.ListType.ofRequired(136,
+                        Types.ListType.ofRequired(136, Types.IntegerType.get()))),
+                new ArrayType(new ArrayType(ScalarType.createType(PrimitiveType.INT))));
     }
 
     @Test
