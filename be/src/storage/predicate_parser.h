@@ -20,6 +20,7 @@ class PredicateParser {
 public:
     explicit PredicateParser(const TabletSchema& schema) : _schema(schema) {}
 
+    // check if an expression can be pushed down to the storage level
     bool can_pushdown(const ColumnPredicate* predicate) const;
 
     bool can_pushdown(const SlotDescriptor* slot_desc) const;

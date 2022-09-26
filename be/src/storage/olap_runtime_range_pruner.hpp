@@ -17,6 +17,7 @@ struct RuntimeColumnPredicateBuilder {
     StatusOr<std::vector<std::unique_ptr<ColumnPredicate>>> operator()(PredicateParser* parser,
                                                                        const RuntimeFilterProbeDescriptor* desc,
                                                                        const SlotDescriptor* slot) {
+        // keep consistent with ColumnRangeBuilder
         if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype>) {
             CHECK(false) << "unreachable path";
             return Status::NotSupported("unreachable path");

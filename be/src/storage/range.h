@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <initializer_list>
 #include <sstream>
 #include <string>
@@ -110,6 +111,7 @@ public:
     // Return the next discontiguous range contains at most |size| rows
     void next_range(size_t size, SparseRange* range);
 
+    // rhs should be a ordered sparse range
     SparseRangeIterator intersection(const SparseRange& rhs, SparseRange* result) const;
 
     void set_range(SparseRange* range) { _range = range; }
@@ -328,9 +330,14 @@ inline void SparseRangeIterator::next_range(size_t size, SparseRange* range) {
 }
 
 inline SparseRangeIterator SparseRangeIterator::intersection(const SparseRange& rhs, SparseRange* result) const {
+    DCHECK(std::is_sorted(rhs._ranges.begin(), rhs._ranges.end(),
+                          [](const auto& l, const auto& r) { return l.begin() < r.begin(); }));
     for (size_t i = _index; i < _range->_ranges.size(); ++i) {
         const auto& r1 = _range->_ranges[i];
         for (const auto& r2 : rhs._ranges) {
+            if (r1.end() < r2.begin()) {
+                break;
+            }
             if (r1.has_intersection(r2)) {
                 result->_add_uncheck(r1.intersection(r2));
             }
