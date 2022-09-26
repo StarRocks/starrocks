@@ -2,6 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AddSqlBlackListStmt;
+import com.starrocks.analysis.AlterLoadStmt;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CreateRepositoryStmt;
@@ -504,6 +505,12 @@ public class Analyzer {
 
         public Void visitAlterRoutineLoadStatement(AlterRoutineLoadStmt statement, ConnectContext session) {
             AlterRoutineLoadAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterLoadStatement(AlterLoadStmt statement, ConnectContext session) {
+            AlterLoadAnalyzer.analyze(statement, session);
             return null;
         }
 
