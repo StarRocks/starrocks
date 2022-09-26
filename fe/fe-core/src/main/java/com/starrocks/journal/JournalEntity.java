@@ -52,6 +52,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
+import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
@@ -596,6 +597,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
                 data = AlterRoutineLoadJobOperationLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ALTER_LOAD_JOB: {
+                data = AlterLoadJobOperationLog.read(in);
                 isRead = true;
                 break;
             }

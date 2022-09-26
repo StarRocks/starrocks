@@ -18,7 +18,7 @@
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
   + [Overview of data loading](./loading/Loading_intro.md)
-  + [Load data from a local file system or a streaming data source using HTTP push](./loading/StreamLoad.md)
+  + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS or cloud storage](./loading/BrokerLoad.md)
   + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
   + [Bulk load using Apache Spark™](./loading/SparkLoad.md)
@@ -327,18 +327,20 @@
       + [Overview of JSON functions and operators](./sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md)
       + [JSON operators](./sql-reference/sql-functions/json-functions/json-operators.md)
       + JSON constructor functions
-        + [JSON_ARRAY](./sql-reference/sql-functions/json-functions/json-constructor-functions/json_array.md)
-        + [JSON_OBJECT](./sql-reference/sql-functions/json-functions/json-constructor-functions/json_object.md)
-        + [PARSE_JSON](./sql-reference/sql-functions/json-functions/json-constructor-functions/parse_json.md)
+        + [json_array](./sql-reference/sql-functions/json-functions/json-constructor-functions/json_array.md)
+        + [json_object](./sql-reference/sql-functions/json-functions/json-constructor-functions/json_object.md)
+        + [parse_json](./sql-reference/sql-functions/json-functions/json-constructor-functions/parse_json.md)
       + JSON query and processing functions
         + [Arrow function](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/arrow-function.md)
-        + [CAST](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/cast.md)
+        + [cast](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/cast.md)
         + [get_json_double](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_double.md)
         + [get_json_int](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_int.md)
         + [get_json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)
-        + [JSON_EACH](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
-        + [JSON_QUERY](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
-        + [JSON_EXISTS](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
+        + [json_each](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
+        + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
+        + [json_exists](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
+        + [json_length](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_length.md)
+        + [json_keys](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
     + Bitmap Functions
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](./sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
@@ -379,6 +381,7 @@
       + [array_sort](./sql-reference/sql-functions/array-functions/array_sort.md)
       + [array_sum](./sql-reference/sql-functions/array-functions/array_sum.md)
       + [arrays_overlap](./sql-reference/sql-functions/array-functions/arrays_overlap.md)
+      + [array_cum_sum](./sql-reference/sql-functions/array-functions/array_cum_sum.md)
       + [array_to_bitmap](./sql-reference/sql-functions/array-functions/array_to_bitmap.md)
       + [reverse](./sql-reference/sql-functions/array-functions/reverse.md)
     + [cast function](./sql-reference/sql-functions/cast.md)
@@ -387,7 +390,7 @@
       + [md5](./sql-reference/sql-functions/crytographic-functions/md5.md)
       + [sha2](./sql-reference/sql-functions/crytographic-functions/sha2.md)
     + Math Functions
-      + [RAND](./sql-reference/sql-functions/math-functions/rand.md)
+      + [rand](./sql-reference/sql-functions/math-functions/rand.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
     + Utility Functions
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)

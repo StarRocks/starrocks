@@ -173,7 +173,7 @@ public class Memo {
         // will change, so we must reinsert the GroupExpression to groupExpressions map
         List<GroupExpression> needModifyExpressions = Lists.newArrayList();
         for (Iterator<Map.Entry<GroupExpression, GroupExpression>> iterator = groupExpressions.entrySet().iterator();
-             iterator.hasNext(); ) {
+                iterator.hasNext(); ) {
             GroupExpression groupExpr = iterator.next().getKey();
 
             // 1. find GroupExpression which refer to src group, and remove them from memo
@@ -271,7 +271,7 @@ public class Memo {
         groups.remove(group);
 
         for (Iterator<Map.Entry<GroupExpression, GroupExpression>>
-             iterator = groupExpressions.entrySet().iterator(); iterator.hasNext(); ) {
+                iterator = groupExpressions.entrySet().iterator(); iterator.hasNext(); ) {
             GroupExpression groupExpr = iterator.next().getKey();
             if (groupExpr.getGroup() == group) {
                 iterator.remove();

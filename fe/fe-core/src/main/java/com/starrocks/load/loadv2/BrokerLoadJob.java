@@ -30,11 +30,13 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.BrokerFileGroup;
@@ -44,10 +46,13 @@ import com.starrocks.load.FailMsg;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
+import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.AlterLoadStmt;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
@@ -71,6 +76,7 @@ public class BrokerLoadJob extends BulkLoadJob {
 
     private static final Logger LOG = LogManager.getLogger(BrokerLoadJob.class);
     private ConnectContext context;
+    private List<LoadLoadingTask> newLoadingTasks = Lists.newArrayList();
 
     // only for log replay
     public BrokerLoadJob() {
@@ -96,6 +102,37 @@ public class BrokerLoadJob extends BulkLoadJob {
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
                         timeoutSecond);
+    }
+
+    @Override
+    public void alterJob(AlterLoadStmt stmt) throws DdlException {
+        writeLock();
+
+        try {
+            if (stmt.getAnalyzedJobProperties().containsKey(LoadStmt.PRIORITY)) {
+                priority = LoadPriority.priorityByName(stmt.getAnalyzedJobProperties().get(LoadStmt.PRIORITY));
+                AlterLoadJobOperationLog log = new AlterLoadJobOperationLog(id,
+                        stmt.getAnalyzedJobProperties());
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterLoadJob(log);
+
+                for (LoadTask loadTask : newLoadingTasks) {
+                    GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler().updatePriority(
+                            loadTask.getSignature(),
+                            priority);
+                }
+            }
+
+        } finally {
+            writeUnlock();
+        }
+
+    }
+
+    @Override
+    public void replayAlterJob(AlterLoadJobOperationLog log) {
+        if (log.getJobProperties().containsKey(LoadStmt.PRIORITY)) {
+            priority = LoadPriority.priorityByName(log.getJobProperties().get(LoadStmt.PRIORITY));
+        }
     }
 
     @Override
@@ -173,7 +210,6 @@ public class BrokerLoadJob extends BulkLoadJob {
 
     private void createLoadingTask(Database db, BrokerPendingTaskAttachment attachment) throws UserException {
         // divide job into broker loading task by table
-        List<LoadLoadingTask> newLoadingTasks = Lists.newArrayList();
         db.readLock();
         try {
             for (Map.Entry<FileGroupAggKey, List<BrokerFileGroup>> entry : fileGroupAggInfo.getAggKeyToFileGroups()
@@ -196,7 +232,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 LoadLoadingTask task = new LoadLoadingTask(db, table, brokerDesc,
                         brokerFileGroups, getDeadlineMs(), loadMemLimit,
                         strictMode, transactionId, this, timezone, timeoutSecond, createTimestamp, partialUpdate,
-                        sessionVariables, context, TLoadJobType.Broker);
+                        sessionVariables, context, TLoadJobType.Broker, priority);
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
                 task.init(loadId, attachment.getFileStatusByTable(aggKey), attachment.getFileNumByTable(aggKey));
@@ -221,7 +257,7 @@ public class BrokerLoadJob extends BulkLoadJob {
 
         // Submit task outside the database lock, cause it may take a while if task queue is full.
         for (LoadTask loadTask : newLoadingTasks) {
-            submitTask(GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler(), loadTask);
+            GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler().submit(loadTask);
         }
     }
 
@@ -358,14 +394,14 @@ public class BrokerLoadJob extends BulkLoadJob {
     }
 
     @Override
-    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId, 
-            long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
+    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId,
+                              long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
         writeLock();
         try {
             super.updateProgess(beId, loadId, fragmentId, sinkRows, sinkBytes, sourceRows, sourceBytes, isDone);
             if (!loadingStatus.getLoadStatistic().getLoadFinish()) {
-                progress = (int) ((double) loadingStatus.getLoadStatistic().totalSourceLoadBytes() / 
-                loadingStatus.getLoadStatistic().totalFileSize() * 100);
+                progress = (int) ((double) loadingStatus.getLoadStatistic().totalSourceLoadBytes() /
+                        loadingStatus.getLoadStatistic().totalFileSize() * 100);
                 if (progress >= 100) {
                     progress = 99;
                 }

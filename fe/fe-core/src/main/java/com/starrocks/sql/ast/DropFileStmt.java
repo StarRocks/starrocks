@@ -11,7 +11,7 @@ public class DropFileStmt extends DdlStmt {
 
     private final String fileName;
     private String dbName;
-    private Map<String, String> properties;
+    private final Map<String, String> properties;
 
     private String catalogName;
 

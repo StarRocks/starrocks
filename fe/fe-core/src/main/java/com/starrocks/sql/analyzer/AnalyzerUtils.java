@@ -310,6 +310,13 @@ public class AnalyzerUtils {
         return tables;
     }
 
+    public static Map<TableName, Table> collectAllTableAndViewWithAlias(SelectRelation statementBase) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        new AnalyzerUtils.TableAndViewCollectorWithAlias(tables).visit(statementBase);
+        return tables;
+    }
+
+
     public static Map<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
         Map<String, TableRelation> tableRelations = Maps.newHashMap();
         new AnalyzerUtils.TableRelationCollector(tableRelations).visit(statementBase);

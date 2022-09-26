@@ -4,6 +4,10 @@ package com.starrocks.analysis;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -81,4 +85,15 @@ public class SubmitTaskStmtTest {
         Assert.assertEquals(submitTaskStmt4.getProperties().size(), 0);
     }
 
+    @Test
+    public void SubmitStmtShouldShow() throws Exception {
+        AnalyzeTestUtil.init();
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String submitSQL = "SUBMIT TASK test1 AS CREATE TABLE t1 AS SELECT SLEEP(5);";
+        StatementBase submitStmt = AnalyzeTestUtil.analyzeSuccess(submitSQL);
+        Assert.assertTrue(submitStmt instanceof SubmitTaskStmt);
+        SubmitTaskStmt statement = (SubmitTaskStmt) submitStmt;
+        ShowResultSet showResult = DDLStmtExecutor.execute(statement, ctx);
+        Assert.assertNotNull(showResult);
+    }
 }

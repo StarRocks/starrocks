@@ -51,7 +51,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
     protected LoadingCache<HiveTableName, HivePartitionStatistics> tableStatsCache;
     protected LoadingCache<NewHivePartitionName, HivePartitionStatistics> partitionStatsCache;
 
-    public static CachingHiveMetastore reuseMetastore(IHiveMetastore metastore, long perQueryCacheMaxSize) {
+    public static CachingHiveMetastore createQueryLevelInstance(IHiveMetastore metastore, long perQueryCacheMaxSize) {
         return new CachingHiveMetastore(
                 metastore,
                 newDirectExecutorService(),
@@ -59,6 +59,12 @@ public class CachingHiveMetastore implements IHiveMetastore {
                 NEVER_REFRESH,
                 perQueryCacheMaxSize,
                 true);
+    }
+
+    public static CachingHiveMetastore createCatalogLevelInstance(IHiveMetastore metastore, Executor executor,
+                                                            long expireAfterWrite, long refreshInterval,
+                                                            long maxSize, boolean enableListNamesCache) {
+        return new CachingHiveMetastore(metastore, executor, expireAfterWrite, refreshInterval, maxSize, enableListNamesCache);
     }
 
     protected CachingHiveMetastore(IHiveMetastore metastore, Executor executor, long expireAfterWriteSec,

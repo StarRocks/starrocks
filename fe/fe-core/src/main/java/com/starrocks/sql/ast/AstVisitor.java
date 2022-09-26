@@ -182,6 +182,10 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitDescTableStmt(DescribeStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     public R visitShowTabletStatement(ShowTabletStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -283,6 +287,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitAlterRoutineLoadStatement(AlterRoutineLoadStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterLoadStatement(AlterLoadStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -483,6 +491,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowVariablesStatement(ShowVariablesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowProcStmt(ShowProcStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -936,13 +948,5 @@ public abstract class AstVisitor<R, C> {
 
     public R visitGroupByClause(GroupByClause node, C context) {
         return null;
-    }
-
-    public R visitDescTableStmt(DescribeStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    public R visitShowProcStmt(ShowProcStmt statement, C context) {
-        return visitShowStatement(statement, context);
     }
 }

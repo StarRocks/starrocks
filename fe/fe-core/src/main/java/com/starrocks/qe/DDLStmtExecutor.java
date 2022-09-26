@@ -12,6 +12,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.UserException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
@@ -21,6 +22,7 @@ import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
@@ -364,6 +366,14 @@ public class DDLStmtExecutor {
         }
 
         @Override
+        public ShowResultSet visitAlterLoadStatement(AlterLoadStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getLoadManager().alterLoadJob(stmt);
+            });
+            return null;
+        }
+
+        @Override
         public ShowResultSet visitCreateAlterUserStatement(BaseCreateAlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt instanceof CreateUserStmt) {
@@ -534,7 +544,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitSyncStmt(SyncStmt stmt, ConnectContext context) {
+        public ShowResultSet visitSyncStatement(SyncStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
             });
             return null;
@@ -732,12 +742,12 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitSubmitTaskStatement(SubmitTaskStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt(stmt);
-            });
-            return null;
+            try {
+                return context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt(stmt);
+            } catch (UserException e) {
+                throw new RuntimeException(e);
+            }
         }
-
     }
 
 }

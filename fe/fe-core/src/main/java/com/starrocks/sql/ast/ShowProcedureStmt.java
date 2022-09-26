@@ -47,22 +47,4 @@ public class ShowProcedureStmt extends ShowStmt {
     public String getPattern() {
         return pattern;
     }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder("SHOW PROCEDURE STATUS");
-
-        if (pattern != null) {
-            sb.append(" LIKE '").append(pattern).append("'");
-        }
-        if (where != null) {
-            sb.append(" WHERE '").append(where).append("'");
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
-    }
 }

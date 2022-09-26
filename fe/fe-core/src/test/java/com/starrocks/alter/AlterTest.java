@@ -335,8 +335,8 @@ public class AlterTest {
                 getDb("test").getTable("mv2");
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
-        Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1` AS `k1`," +
-                " `test`.`testTable1`.`k2` AS `k2` FROM `test`.`testTable1`", task.getDefinition());
+        Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
+                "FROM `test`.`testTable1`", task.getDefinition());
         dropMaterializedView("drop materialized view test.mv2");
     }
 

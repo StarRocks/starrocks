@@ -1321,51 +1321,51 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 " from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
         String plan3 = getFragmentPlan(sql3);
         assertContains(plan3, "PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:1: LO_ORDERDATE | 2: LO_ORDERKEY | 41: sum | 42: count\n" +
-                "  PARTITION: UNPARTITIONED\n" +
-                "\n" +
-                "  RESULT SINK\n" +
-                "\n" +
-                "  2:EXCHANGE\n" +
-                "\n" +
-                "PLAN FRAGMENT 1\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: RANDOM\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    UNPARTITIONED\n" +
-                "\n" +
-                "  1:Project\n" +
-                "  |  <slot 1> : 1: LO_ORDERDATE\n" +
-                "  |  <slot 2> : 2: LO_ORDERKEY\n" +
-                "  |  <slot 41> : 13: LO_REVENUE\n" +
-                "  |  <slot 42> : ",
+                        " OUTPUT EXPRS:1: LO_ORDERDATE | 2: LO_ORDERKEY | 41: sum | 42: count\n" +
+                        "  PARTITION: UNPARTITIONED\n" +
+                        "\n" +
+                        "  RESULT SINK\n" +
+                        "\n" +
+                        "  2:EXCHANGE\n" +
+                        "\n" +
+                        "PLAN FRAGMENT 1\n" +
+                        " OUTPUT EXPRS:\n" +
+                        "  PARTITION: RANDOM\n" +
+                        "\n" +
+                        "  STREAM DATA SINK\n" +
+                        "    EXCHANGE ID: 02\n" +
+                        "    UNPARTITIONED\n" +
+                        "\n" +
+                        "  1:Project\n" +
+                        "  |  <slot 1> : 1: LO_ORDERDATE\n" +
+                        "  |  <slot 2> : 2: LO_ORDERKEY\n" +
+                        "  |  <slot 41> : 13: LO_REVENUE\n" +
+                        "  |  <slot 42> : ",
                 ": mv_count_c_name\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: lineorder_flat_for_mv\n" +
-                "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
-                "     partitions=7/7\n" +
-                "     rollup: agg_mv\n" +
-                "     tabletRatio=1050/1050");
+                        "  |  \n" +
+                        "  0:OlapScanNode\n" +
+                        "     TABLE: lineorder_flat_for_mv\n" +
+                        "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
+                        "     partitions=7/7\n" +
+                        "     rollup: agg_mv\n" +
+                        "     tabletRatio=1050/1050");
 
         String sql4 = "select LO_ORDERDATE, LO_ORDERKEY, sum(LO_REVENUE) + 1, count(C_NAME) * 3" +
                 " from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
         String plan4 = getFragmentPlan(sql4);
         assertContains(plan4, "1:Project\n" +
-                "  |  <slot 1> : 1: LO_ORDERDATE\n" +
-                "  |  <slot 2> : 2: LO_ORDERKEY\n" +
-                "  |  <slot 43> : 13: LO_REVENUE + 1\n" +
-                "  |  <slot 44> :",
+                        "  |  <slot 1> : 1: LO_ORDERDATE\n" +
+                        "  |  <slot 2> : 2: LO_ORDERKEY\n" +
+                        "  |  <slot 43> : 13: LO_REVENUE + 1\n" +
+                        "  |  <slot 44> :",
                 ": mv_count_c_name * 3\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: lineorder_flat_for_mv\n" +
-                "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
-                "     partitions=7/7\n" +
-                "     rollup: agg_mv\n" +
-                "     tabletRatio=1050/1050");
+                        "  |  \n" +
+                        "  0:OlapScanNode\n" +
+                        "     TABLE: lineorder_flat_for_mv\n" +
+                        "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
+                        "     partitions=7/7\n" +
+                        "     rollup: agg_mv\n" +
+                        "     tabletRatio=1050/1050");
     }
 
     @Test
@@ -1429,6 +1429,47 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  equal join conjunct: 1: v1 = 4: v7\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE");
-    
+    }
+
+    @Test
+    public void testGroupingSetWithSameDistributeAgg() throws Exception {
+        String sql = "select v2, v3, max(x1) " +
+                " from (select v3, v2, sum(v1) as x1 from t0 group by v3, v2 ) x " +
+                " group by grouping sets((v3, v2), (v2));";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  7:AGGREGATE (merge finalize)\n" +
+                "  |  output: max(5: max)\n" +
+                "  |  group by: 3: v3, 2: v2, 6: GROUPING_ID\n" +
+                "  |  \n" +
+                "  6:EXCHANGE");
+    }
+
+    @Test
+    public void testGroupingSetWithSameDistributeJoin() throws Exception {
+        String sql = "select v2, v3, max(x1) " +
+                " from (select v3, v2, v1 as x1 from t0 right outer join[shuffle] t1 on v3 = v6 and v2 = v5) x " +
+                " group by grouping sets((v3, v2), (v2));";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  9:AGGREGATE (merge finalize)\n" +
+                "  |  output: max(7: max)\n" +
+                "  |  group by: 3: v3, 2: v2, 8: GROUPING_ID\n" +
+                "  |  \n" +
+                "  8:EXCHANGE");
+    }
+
+    @Test
+    public void testGroupingSetWithSameDistributeWindow() throws Exception {
+        String sql = "select v2, v3, max(x1) " +
+                " from (select v3, v2, sum(v1) over (partition by v3, v2 order by v3) as x1 from t0) x " +
+                " group by grouping sets((v3, v2), (v2));";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  8:AGGREGATE (merge finalize)\n" +
+                "  |  output: max(5: max)\n" +
+                "  |  group by: 3: v3, 2: v2, 6: GROUPING_ID\n" +
+                "  |  \n" +
+                "  7:EXCHANGE");
     }
 }
