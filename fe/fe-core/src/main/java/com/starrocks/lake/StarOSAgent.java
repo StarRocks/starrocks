@@ -265,13 +265,13 @@ public class StarOSAgent {
             createShardGroupInfos.add(CreateShardGroupInfo.newBuilder().setGroupId(groupId).build());
             shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
             LOG.debug("Create shard group success. shard group infos: {}", shardGroupInfos);
+            Preconditions.checkState(shardGroupInfos.size() == 1);
         } catch (StarClientException e) {
             if (e.getCode() != StatusCode.ALREADY_EXIST) {
                 throw new DdlException("Failed to create shard group. error: " + e.getMessage());
             }
         }
 
-        Preconditions.checkState(shardGroupInfos.size() == 1);
         return shardGroupInfos.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toList());
     }
 
@@ -281,11 +281,7 @@ public class StarOSAgent {
         try {
             if (groupId != Constant.DEFAULT_ID) {
                 // create shardGroup
-                try {
-                    createShardGroup(groupId);
-                } catch (DdlException e) {
-                    throw e;
-                }
+                createShardGroup(groupId);
             }
 
             List<CreateShardInfo> createShardInfos = new ArrayList<>(numShards);
@@ -293,9 +289,7 @@ public class StarOSAgent {
                 CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
                 builder.setReplicaCount(1);
                 builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
-                if (groupId != Constant.DEFAULT_ID) {
-                    builder.setGroupId(groupId);
-                }
+                builder.setGroupId(groupId);
                 if (shardStorageInfo != null) {
                     builder.setShardStorageInfo(shardStorageInfo);
                 }
@@ -303,7 +297,7 @@ public class StarOSAgent {
             }
             shardInfos = client.createShard(serviceId, createShardInfos);
             LOG.debug("Create shards success. shard infos: {}", shardInfos);
-        } catch (StarClientException e) {
+        } catch (Exception e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
         }
 
