@@ -209,7 +209,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                         replica.getId(), replica.getVersion(), -1,
                         replica.getDataSize(), replica.getRowCount(),
                         replica.getLastFailedVersion(),
-                        replica.getLastSuccessVersion());
+                        replica.getLastSuccessVersion(),
+                        replica.getMinReadableVersion());
                 GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
             }
 

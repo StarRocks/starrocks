@@ -1070,7 +1070,13 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
             // so if the task corresponding to this change hangs, when the task timeout, FE will know
             // and perform state modification operations.
         }
+<<<<<<< HEAD
         tablet_info->__set_version(version.second);
+=======
+        tablet_info->__set_version(max_version);
+        // TODO: support getting minReadableVersion
+        tablet_info->__set_min_readable_version(_timestamped_version_tracker.get_min_readable_version());
+>>>>>>> a60003bc7 ([BugFix] Add min readable version report)
         tablet_info->__set_version_count(_tablet_meta->version_count());
         tablet_info->__set_row_count(_tablet_meta->num_rows());
         tablet_info->__set_data_size(_tablet_meta->tablet_footprint());

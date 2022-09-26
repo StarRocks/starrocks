@@ -48,7 +48,7 @@ public class CheckConsistencyTask extends AgentTask {
     }
 
     public TCheckConsistencyReq toThrift() {
-        TCheckConsistencyReq request = new TCheckConsistencyReq(tabletId, schemaHash, version, 0);
+        TCheckConsistencyReq request = new TCheckConsistencyReq(tabletId, schemaHash, version);
         return request;
     }
 }

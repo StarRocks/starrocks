@@ -76,7 +76,7 @@ public class BDBToolTest {
             }
 
             // write something
-            ReplicaPersistInfo info = ReplicaPersistInfo.createForAdd(1, 2, 3, 4, 5, 6, 7, 8, 0, 10, 11, 12, 14);
+            ReplicaPersistInfo info = ReplicaPersistInfo.createForAdd(1, 2, 3, 4, 5, 6, 7, 8, 0, 10, 11, 12, 14, 0);
             JournalEntity entity = new JournalEntity();
             entity.setOpCode(OperationType.OP_ADD_REPLICA);
             entity.setData(info);
