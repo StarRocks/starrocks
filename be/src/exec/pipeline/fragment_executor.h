@@ -45,6 +45,7 @@ public:
 
     // Access the common fields by this method.
     const TExecPlanFragmentParams& common() const { return _common_request; }
+    const TExecPlanFragmentParams& unique() const { return _unique_request; }
 
     // Access the unique fields by the following methods.
     int32_t backend_num() const { return _unique_request.backend_num; }

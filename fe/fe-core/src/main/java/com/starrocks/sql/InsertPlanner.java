@@ -164,6 +164,8 @@ public class InsertPlanner {
                 }
 
                 return res;
+            } else {
+                node.setIndexSeek(true);
             }
             return optExpr;
         }
