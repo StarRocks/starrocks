@@ -329,7 +329,7 @@ public class ShowExecutor {
                     continue;
                 }
                 List<String> resultRow = Lists.newArrayList(String.valueOf(mvTable.getId()), mvTable.getName(), dbName,
-                        GlobalStateMgr.getMaterializedViewDdlStmt(mvTable), String.valueOf(mvTable.getRowCount()));
+                        mvTable.getMaterializedViewDdlStmt(true), String.valueOf(mvTable.getRowCount()));
                 rowSets.add(resultRow);
             }
             for (Table table : db.getTables()) {

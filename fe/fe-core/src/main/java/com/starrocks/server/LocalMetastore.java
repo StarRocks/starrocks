@@ -946,10 +946,10 @@ public class LocalMetastore implements ConnectorMetadata {
         if (backendNum <= 3) {
             bucketNum = 2 * backendNum;
         } else if (backendNum <= 6) {
-            bucketNum = (int) 1.5 * backendNum;
+            bucketNum = backendNum;
         } else if (backendNum <= 12) {
             bucketNum = 12;
-        }  else {
+        } else {
             bucketNum = Math.min(backendNum, 48);
         }
         return bucketNum;
@@ -969,6 +969,7 @@ public class LocalMetastore implements ConnectorMetadata {
         for (Partition partition : partitions) {
             if (partition.getVisibleVersion() == 1) {
                 dataImported = false;
+                break;
             }
         }
 
@@ -3205,7 +3206,7 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionInfo partitionInfo;
         if (partitionDesc != null) {
             partitionInfo = partitionDesc.toPartitionInfo(
-                    Arrays.asList(stmt.getPartitionColumn()),
+                    Collections.singletonList(stmt.getPartitionColumn()),
                     Maps.newHashMap(), false);
         } else {
             partitionInfo = new SinglePartitionInfo();
@@ -3251,6 +3252,7 @@ public class LocalMetastore implements ConnectorMetadata {
         materializedView.setBaseTableInfos(stmt.getBaseTableInfos());
         // set viewDefineSql
         materializedView.setViewDefineSql(stmt.getInlineViewDef());
+        materializedView.setSimpleDefineSql(stmt.getSimpleViewDef());
         // set partitionRefTableExprs
         materializedView.setPartitionRefTableExprs(Lists.newArrayList(stmt.getPartitionRefTableExpr()));
         // set base index id
