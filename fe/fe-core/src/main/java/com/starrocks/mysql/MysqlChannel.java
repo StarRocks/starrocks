@@ -56,8 +56,10 @@ public class MysqlChannel {
     protected String remoteHostPortString;
     protected String remoteIp;
     protected boolean isSend;
+    protected boolean closed;
 
     protected MysqlChannel() {
+        this.closed = false;
         this.sequenceId = 0;
         this.isSend = false;
         this.remoteHostPortString = "";
@@ -115,11 +117,16 @@ public class MysqlChannel {
     }
 
     // Close channel
-    public void close() {
+    public synchronized void close() {
+        if (closed) {
+            return;
+        }
         try {
             channel.close();
         } catch (IOException e) {
             LOG.warn("Close channel exception, ignore.");
+        } finally {
+            closed = true;
         }
     }
 
