@@ -1629,6 +1629,16 @@ public class Coordinator {
         return new TNetworkAddress(computeNode.getHost(), computeNode.getBrpcPort());
     }
 
+    private boolean isNoChildPlanNode(PlanNode planNode) {
+        if (planNode instanceof ScanNode) {
+            return true;
+        }
+        if ((planNode instanceof UnionNode) && ((UnionNode) planNode).getIsSourceOperator()) {
+            return true;
+        }
+        return false;
+    }
+
     // For each fragment in fragments, computes hosts on which to run the instances
     // and stores result in fragmentExecParams.hosts.
     private void computeFragmentHosts() throws Exception {
@@ -1683,7 +1693,7 @@ public class Coordinator {
              *      if not, there should be exchange nodes to collect all data from child fragments(input fragments),
              *      so we should assign fragment instances corresponding to the child fragments' host
              */
-            if (!(leftMostNode instanceof ScanNode)) {
+            if (!isNoChildPlanNode(leftMostNode)) {
                 // (Case B)
                 // there is no leftmost scan; we assign the same hosts as those of our
                 //  input fragment which has a higher instance_number

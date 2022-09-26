@@ -29,6 +29,16 @@ import com.starrocks.thrift.TPlanNodeType;
 import java.util.List;
 
 public class UnionNode extends SetOperationNode {
+    private boolean isSourceOperator = false;
+
+    public boolean getIsSourceOperator() {
+        return isSourceOperator;
+    }
+
+    public void setIsSourceOperator(boolean isSourceOperator) {
+        this.isSourceOperator = isSourceOperator;
+    }
+
     public UnionNode(PlanNodeId id, TupleId tupleId) {
         super(id, tupleId, "UNION");
     }

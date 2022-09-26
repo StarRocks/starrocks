@@ -93,6 +93,7 @@ void IndexSeekOperator::_init_row_desc() {
     _left_column_count = 0;
     _right_column_count = 0;
     _col_types.clear();
+
     for (auto& tuple_desc : left_row_desc.tuple_descriptors()) {
         for (auto& slot : tuple_desc->slots()) {
             _col_types.emplace_back(slot);
@@ -300,7 +301,7 @@ vectorized::ChunkPtr IndexSeekOperator::_permute_output_chunk(RuntimeState* stat
         SlotDescriptor* slot = _col_types[i + _left_column_count];
         ColumnPtr& dst_col = output_chunk->get_column_by_slot_id(slot->id());
         ColumnPtr& src_col = _cur_chunk->get_column_by_slot_id(slot->id());
-        VLOG(1) << "src_col:" << src_col->debug_string() << ", slot->id:" << slot->id() << ", i:"<<i;
+        VLOG(1) << "src_col:" << src_col->debug_string() << ", slot->id:" << slot->id() << ", i:" << i;
         dst_col->append(*src_col);
     }
     for (size_t i = 0; i < output_chunk->num_rows(); i++) {
@@ -345,6 +346,10 @@ Status IndexSeekOperator::_seek_row(RuntimeState* state) {
         VLOG(1) << "_cur_chunk size:" << _cur_chunk->num_rows();
         if (_cur_chunk->is_empty()) {
             continue;
+        }
+        for (auto slot : _tuple_desc->slots()) {
+            size_t column_index = _cur_chunk->schema()->get_field_index_by_name(slot->col_name());
+            _cur_chunk->set_slot_id_to_index(slot->id(), column_index);
         }
 
         if (!(_reader_state->not_push_down_conjuncts).empty()) {
