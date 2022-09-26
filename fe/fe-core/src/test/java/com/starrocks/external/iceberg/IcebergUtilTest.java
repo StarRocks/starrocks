@@ -2,6 +2,7 @@
 
 package com.starrocks.external.iceberg;
 
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -58,6 +59,15 @@ public class IcebergUtilTest {
         org.apache.iceberg.types.Type icebergType = Types.StringType.get();
         Type resType = convertColumnType(icebergType);
         Assert.assertEquals(resType, stringType);
+    }
+
+    @Test
+    public void testArray() {
+        Assert.assertEquals(convertColumnType(Types.ListType.ofRequired(136, Types.IntegerType.get())),
+                new ArrayType(ScalarType.createType(PrimitiveType.INT)));
+        Assert.assertEquals(convertColumnType(Types.ListType.ofRequired(136,
+                        Types.ListType.ofRequired(136, Types.IntegerType.get()))),
+                new ArrayType(new ArrayType(ScalarType.createType(PrimitiveType.INT))));
     }
 
     @Test
