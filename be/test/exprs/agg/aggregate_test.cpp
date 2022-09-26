@@ -1444,4 +1444,42 @@ TEST_F(AggregateTest, test_any_value) {
     test_non_deterministic_agg_function<DateValue, DateValue>(ctx, func);
 }
 
+TEST_F(AggregateTest, test_exchange_bytes) {
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_BIGINT))};
+
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_BIGINT));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* exchange_bytes_function =
+            get_aggregate_function("exchange_bytes", TYPE_BIGINT, TYPE_BIGINT, false);
+    auto state = ManagedAggrState::create(ctx, exchange_bytes_function);
+
+    auto data_column = BinaryColumn::create();
+
+    data_column->append("abc");
+    data_column->append("bcd");
+    data_column->append("cde");
+
+    auto data_column_bigint = Int64Column::create();
+    data_column_bigint->append(21023);
+    data_column_bigint->append(410223);
+    data_column_bigint->append(710233);
+
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(2);
+    raw_columns[0] = data_column.get();
+    raw_columns[1] = data_column_bigint.get();
+
+    // test update
+    exchange_bytes_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                       state->state());
+
+    auto result_column = Int64Column::create();
+    exchange_bytes_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    ASSERT_EQ(data_column_bigint->byte_size() + data_column->byte_size(), result_column->get_data()[0]);
+}
+
 } // namespace starrocks::vectorized

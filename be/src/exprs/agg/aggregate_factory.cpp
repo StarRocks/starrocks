@@ -17,6 +17,7 @@
 #include "exprs/agg/bitmap_union_int.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/distinct.h"
+#include "exprs/agg/exchange_bytes.h"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/histogram.h"
 #include "exprs/agg/hll_ndv.h"
@@ -69,6 +70,8 @@ public:
     static AggregateFunctionPtr MakeCountDistinctAggregateFunction();
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeCountDistinctAggregateFunctionV2();
+
+    static AggregateFunctionPtr MakeExchangeBytesAggregateFunction();
 
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeGroupConcatAggregateFunction();
@@ -212,6 +215,10 @@ AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunction() {
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunctionV2() {
     return std::make_shared<DistinctAggregateFunctionV2<PT, AggDistinctType::COUNT>>();
+}
+
+AggregateFunctionPtr AggregateFactory::MakeExchangeBytesAggregateFunction() {
+    return std::make_shared<ExchangeBytesAggregateFunction>();
 }
 
 template <PrimitiveType PT>
@@ -720,6 +727,8 @@ public:
             return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
         } else if (name == "max_by") {
             return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
+        } else if(name == "exchange_bytes") {
+            return AggregateFactory::MakeExchangeBytesAggregateFunction();
         }
         return nullptr;
     }
@@ -1230,6 +1239,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_array_mapping<TYPE_BIGINT, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATETIME, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
+    add_array_mapping<TYPE_BIGINT, TYPE_BIGINT>("exchange_bytes");
 }
 
 #undef ADD_ALL_TYPE
