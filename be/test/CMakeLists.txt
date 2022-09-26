@@ -198,6 +198,10 @@ set(EXEC_FILES
         ./storage/tablet_meta_manager_test.cpp
         ./storage/table_schema_test.cpp
         ./storage/tablet_updates_test.cpp
+        ./storage/tablet_reader_test.cpp
+        ./storage/table_read_view_test.cpp
+        ./storage/datum_row_test.cpp
+        ./storage/datum_row_iterator_test.cpp
         ./storage/update_manager_test.cpp
         ./storage/compaction_utils_test.cpp
         ./storage/compaction_context_test.cpp

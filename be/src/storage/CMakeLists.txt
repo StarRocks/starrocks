@@ -116,6 +116,7 @@ add_library(Storage STATIC
     async_delta_writer.cpp
     chunk_helper.cpp
     chunk_iterator.cpp
+    datum_row_iterator.cpp
     column_predicate_cmp.cpp
     column_in_predicate.cpp
     column_not_in_predicate.cpp
@@ -134,6 +135,8 @@ add_library(Storage STATIC
     row_source_mask.cpp
     schema_change.cpp
     schema_change_utils.cpp
+    table.cpp
+    table_read_view_impl.cpp
     tablet_reader.cpp
     tablet_reader_params.cpp
     meta_reader.cpp
