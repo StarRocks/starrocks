@@ -48,6 +48,7 @@
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "util/defer_op.h"
+#include "util/ratelimit.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -502,8 +503,8 @@ Status Tablet::capture_consistent_versions(const Version& spec_version, std::vec
         } else {
             auto msg = fmt::format("version not found. tablet_id: {}, version: {}", _tablet_meta->tablet_id(),
                                    spec_version.second);
-            LOG(WARNING) << msg;
-            _print_missed_versions(missed_versions);
+            RATE_LIMIT_BY_TAG(tablet_id(), LOG(WARNING) << msg, 1000);
+            RATE_LIMIT_BY_TAG(tablet_id(), _print_missed_versions(missed_versions), 1000);
             return Status::NotFound(msg);
         }
     }

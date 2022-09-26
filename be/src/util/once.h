@@ -74,7 +74,7 @@ StatusOr<bool> success_once(OnceFlag& once, Callable&& f, Args&&... args) {
             } else {
                 once.flag.store(0, std::memory_order_release);
                 (void)bthread::futex_wake_private(&once.flag, 1);
-                return st;
+                return std::move(st);
             }
         }
         if (curr_flag == 1) {
