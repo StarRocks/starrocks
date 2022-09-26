@@ -1446,7 +1446,7 @@ public class PlanFragmentBuilder {
                 sortExprs.add(new SlotRef(slotDesc));
             }
 
-            ColumnRefSet columnRefSet = optExpr.getLogicalProperty().getOutputColumns();
+            ColumnRefSet columnRefSet = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
             for (int i = 0; i < columnRefSet.getColumnIds().length; ++i) {
                 /*
                  * Add column not be used in ordering
