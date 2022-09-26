@@ -24,7 +24,14 @@ StarRocks does not rely on any external systems. The simple architecture makes i
 
 ### Native vectorized SQL engine
 
-StarRocks adopts vectorization technology to make full use of the parallel computing power of CPU, achieving sub-second query returns in multidimensional analyses. Administrators only need to focus on the StarRocks system itself, without having to learn and manage other external systems.
+* [Overview of data loading](../loading/Loading_intro.md)
+* [Load data from a local file system or a streaming data source using HTTP PUT](../loading/StreamLoad.md)
+* [Load data from HDFS or cloud storage](../loading/BrokerLoad.md)
+* [Continuously load data from Apache Kafka®](../loading/RoutineLoad.md)
+* [Bulk load using Apache Spark™](../loading/SparkLoad.md)
+* [Load data using INSERT](../loading/InsertInto.md)
+* [Realtime synchronization from MySQL](../loading/Flink_cdc_load.md)
+* [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md)
 
 ### Query optimization
 
