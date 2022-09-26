@@ -242,6 +242,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             if (state.canQuery()) {
                 // replica.getSchemaHash() == -1 is for compatibility
                 if (replica.checkVersionCatchUp(visibleVersion, false)
+                        && replica.getMinReadableVersion() <= visibleVersion
                         && (replica.getSchemaHash() == -1 || replica.getSchemaHash() == schemaHash)) {
                     allQuerableReplicas.add(replica);
                     if (localBeId != -1 && replica.getBackendId() == localBeId) {
@@ -268,6 +269,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             if (state.canQuery()) {
                 // replica.getSchemaHash() == -1 is for compatibility
                 if (replica.checkVersionCatchUp(visibleVersion, false)
+                        && replica.getMinReadableVersion() <= visibleVersion
                         && (replica.getSchemaHash() == -1 || replica.getSchemaHash() == schemaHash)) {
                     size++;
                 }

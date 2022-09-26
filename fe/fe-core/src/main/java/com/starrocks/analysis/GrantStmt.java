@@ -41,6 +41,7 @@ import java.util.List;
 // GRANT STMT
 // GRANT privilege [, privilege] ON db.tbl TO user [ROLE 'role'];
 // GRANT privilege [, privilege] ON RESOURCE 'resource' TO user [ROLE 'role'];
+@Deprecated         // will remove after old analyzer died
 public class GrantStmt extends DdlStmt {
     private UserIdentity userIdent;
     private String role;

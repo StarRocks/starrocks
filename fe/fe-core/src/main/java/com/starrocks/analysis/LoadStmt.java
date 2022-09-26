@@ -21,17 +21,15 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Function;
-import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
-import com.starrocks.common.util.PrintableMap;
+import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.ResourceDesc;
 
 import java.util.List;
 import java.util.Map;
@@ -76,6 +74,7 @@ public class LoadStmt extends DdlStmt {
     public static final String STRICT_MODE = "strict_mode";
     public static final String TIMEZONE = "timezone";
     public static final String PARTIAL_UPDATE = "partial_update";
+    public static final String PRIORITY = "priority";
 
     // for load data from Baidu Object Store(BOS)
     public static final String BOS_ENDPOINT = "bos_endpoint";
@@ -112,6 +111,7 @@ public class LoadStmt extends DdlStmt {
             .add(VERSION)
             .add(TIMEZONE)
             .add(PARTIAL_UPDATE)
+            .add(PRIORITY)
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions,
@@ -248,11 +248,14 @@ public class LoadStmt extends DdlStmt {
             properties.put(TIMEZONE, TimeUtils.checkTimeZoneValidAndStandardize(
                     properties.getOrDefault(LoadStmt.TIMEZONE, TimeUtils.DEFAULT_TIME_ZONE)));
         }
-    }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        throw new UnsupportedOperationException();
+        // load priority
+        final String priorityProperty = properties.get(PRIORITY);
+        if (priorityProperty != null) {
+            if (LoadPriority.priorityByName(priorityProperty) == null) {
+                throw new DdlException(PRIORITY + " should in HIGHEST/HIGH/NORMAL/LOW/LOWEST");
+            }
+        }
     }
 
     @Override
@@ -275,40 +278,5 @@ public class LoadStmt extends DdlStmt {
     @Override
     public boolean isSupportNewPlanner() {
         return true;
-    }
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("LOAD LABEL ").append(label.toSql()).append("\n");
-        sb.append("(");
-        Joiner.on(",\n").appendTo(sb, Lists.transform(dataDescriptions, new Function<DataDescription, Object>() {
-            @Override
-            public Object apply(DataDescription dataDescription) {
-                return dataDescription.toSql();
-            }
-        })).append(")");
-        if (brokerDesc != null) {
-            sb.append("\n").append(brokerDesc.toSql());
-        }
-        if (cluster != null) {
-            sb.append("\nBY '");
-            sb.append(cluster);
-            sb.append("'");
-        }
-        if (resourceDesc != null) {
-            sb.append("\n").append(resourceDesc.toSql());
-        }
-
-        if (properties != null && !properties.isEmpty()) {
-            sb.append("\nPROPERTIES (");
-            sb.append(new PrintableMap<String, String>(properties, "=", true, false));
-            sb.append(")");
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 }

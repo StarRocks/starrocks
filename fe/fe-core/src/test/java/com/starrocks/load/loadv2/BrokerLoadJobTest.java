@@ -24,8 +24,8 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.AlterLoadStmt;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.catalog.Database;
@@ -42,6 +42,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.transaction.TransactionState;
@@ -52,6 +53,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -172,6 +174,78 @@ public class BrokerLoadJobTest {
 
     }
 
+    @Test
+    public void testAlterLoad(@Injectable LoadStmt loadStmt,
+            @Injectable AlterLoadStmt alterLoadStmt,
+            @Injectable DataDescription dataDescription,
+            @Injectable LabelName labelName,
+            @Injectable Database database,
+            @Injectable OlapTable olapTable,
+            @Mocked GlobalStateMgr globalStateMgr) {
+
+        String label = "label";
+        long dbId = 1;
+        String tableName = "table";
+        String databaseName = "database";
+        List<DataDescription> dataDescriptionList = Lists.newArrayList();
+        dataDescriptionList.add(dataDescription);
+        BrokerDesc brokerDesc = new BrokerDesc("broker0", Maps.newHashMap());
+        Map<String, String> properties = new HashMap<>();
+        properties.put(LoadStmt.PRIORITY, "HIGH");
+
+        new Expectations() {
+            {
+                loadStmt.getLabel();
+                minTimes = 0;
+                result = labelName;
+                labelName.getDbName();
+                minTimes = 0;
+                result = databaseName;
+                labelName.getLabelName();
+                minTimes = 0;
+                result = label;
+                globalStateMgr.getDb(databaseName);
+                minTimes = 0;
+                result = database;
+                loadStmt.getDataDescriptions();
+                minTimes = 0;
+                result = dataDescriptionList;
+                dataDescription.getTableName();
+                minTimes = 0;
+                result = tableName;
+                database.getTable(tableName);
+                minTimes = 0;
+                result = olapTable;
+                dataDescription.getPartitionNames();
+                minTimes = 0;
+                result = null;
+                database.getId();
+                minTimes = 0;
+                result = dbId;
+                loadStmt.getBrokerDesc();
+                minTimes = 0;
+                result = brokerDesc;
+                loadStmt.getEtlJobType();
+                minTimes = 0;
+                result = EtlJobType.BROKER;
+                alterLoadStmt.getAnalyzedJobProperties();
+                minTimes = 0;
+                result = properties;
+            }
+        };
+
+        try {
+            BrokerLoadJob brokerLoadJob = (BrokerLoadJob) BulkLoadJob.fromLoadStmt(loadStmt, null);
+            Assert.assertEquals(Long.valueOf(dbId), Deencapsulation.getField(brokerLoadJob, "dbId"));
+            Assert.assertEquals(label, Deencapsulation.getField(brokerLoadJob, "label"));
+            Assert.assertEquals(JobState.PENDING, Deencapsulation.getField(brokerLoadJob, "state"));
+            Assert.assertEquals(EtlJobType.BROKER, Deencapsulation.getField(brokerLoadJob, "jobType"));
+            brokerLoadJob.alterJob(alterLoadStmt);
+        } catch (DdlException e) {
+            Assert.fail(e.getMessage());
+        }
+
+    }
     @Test
     public void testGetTableNames(@Injectable BrokerFileGroupAggInfo fileGroupAggInfo,
                                   @Injectable BrokerFileGroup brokerFileGroup,

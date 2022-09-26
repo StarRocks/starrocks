@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.AlterLoadStmt;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
@@ -43,6 +44,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.TimeUtils;
@@ -54,12 +56,14 @@ import com.starrocks.load.Load;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.LeaderTaskExecutor;
+import com.starrocks.task.PriorityLeaderTask;
 import com.starrocks.thrift.TEtlState;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
@@ -105,6 +109,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected boolean strictMode = false; // default is false
     protected String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     protected boolean partialUpdate = false;
+    protected int priority = LoadPriority.NORMAL_VALUE;
     // reuse deleteFlag as partialUpdate
     // @Deprecated
     // protected boolean deleteFlag = false;
@@ -137,6 +142,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // only for persistence param. see readFields() for usage
     private boolean isJobTypeRead = false;
 
+    private boolean startLoad = false;
 
     // only for log replay
     public LoadJob() {
@@ -217,11 +223,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     public void initLoadProgress(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedBackendIds) {
         loadingStatus.getLoadStatistic().initLoad(loadId, fragmentIds, relatedBackendIds);
+        startLoad = true;
     }
 
     public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId, 
-            long scannedRows, boolean isDone, long scannedBytes) {
-        loadingStatus.getLoadStatistic().updateLoadProgress(beId, loadId, fragmentId, scannedRows, isDone, scannedBytes);
+            long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
+        loadingStatus.getLoadStatistic().updateLoadProgress(beId, loadId, fragmentId, sinkRows, 
+                sinkBytes, sourceRows, sourceBytes, isDone);
     }
 
     public void setLoadFileInfo(int fileNum, long fileSize) {
@@ -308,6 +316,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             } else if (ConnectContext.get() != null) {
                 // get timezone for session variable
                 timezone = ConnectContext.get().getSessionVariable().getTimeZone();
+            }
+
+            if (properties.containsKey(LoadStmt.PRIORITY)) {
+                priority = LoadPriority.priorityByName(properties.get(LoadStmt.PRIORITY));
             }
         }
     }
@@ -488,6 +500,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
     }
 
+    public void alterJob(AlterLoadStmt stmt) throws DdlException {
+    }
+
+    public void replayAlterJob(AlterLoadJobOperationLog log) {
+    }
+
     private void checkAuth(String command) throws DdlException {
         if (authorizationInfo == null) {
             // use the old method to check priv
@@ -554,7 +572,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
         // get load ids of all loading tasks, we will cancel their coordinator process later
         List<TUniqueId> loadIds = Lists.newArrayList();
-        for (LoadTask loadTask : idToTasks.values()) {
+        for (PriorityLeaderTask loadTask : idToTasks.values()) {
             if (loadTask instanceof LoadLoadingTask) {
                 loadIds.add(((LoadLoadingTask) loadTask).getLoadId());
             }
@@ -635,13 +653,25 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                         state, failMsg));
     }
 
-    public void unprotectReadEndOperation(LoadJobFinalOperation loadJobFinalOperation) {
+    public void unprotectReadEndOperation(LoadJobFinalOperation loadJobFinalOperation, boolean isReplay) {
         loadingStatus = loadJobFinalOperation.getLoadingStatus();
         progress = loadJobFinalOperation.getProgress();
         loadStartTimestamp = loadJobFinalOperation.getLoadStartTimestamp();
         finishTimestamp = loadJobFinalOperation.getFinishTimestamp();
-        state = loadJobFinalOperation.getJobState();
+        if (isReplay) {
+            state = loadJobFinalOperation.getJobState();
+        }
         failMsg = loadJobFinalOperation.getFailMsg();
+    }
+
+    public void unprotectUpdateLoadingStatus(TransactionState txnState) {
+        if (txnState.getTxnCommitAttachment() == null) {
+            // The txn attachment maybe null when broker load has been cancelled without attachment.
+            // The end log of broker load has been record but the callback id of txnState hasn't been removed
+            // So the callback of txn is executed when log of txn aborted is replayed.
+            return;
+        }
+        unprotectReadEndOperation((LoadJobFinalOperation) txnState.getTxnCommitAttachment(), false);
     }
 
     public List<Comparable> getShowInfo() throws DdlException {
@@ -655,8 +685,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             // label
             jobInfo.add(label);
             // state
-            jobInfo.add(state.name());
-
+            if (state == JobState.COMMITTED) {
+                jobInfo.add("PREPARED");
+            } else if (state == JobState.LOADING && !startLoad) {
+                jobInfo.add("QUEUEING");
+            } else {
+                jobInfo.add(state.name());
+            }
             // progress
             switch (state) {
                 case PENDING:
@@ -675,6 +710,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
             // type
             jobInfo.add(jobType);
+            // priority
+            jobInfo.add(LoadPriority.priorityToName(priority));
 
             // etl info
             if (loadingStatus.getCounters().size() == 0) {
@@ -771,11 +808,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     @Override
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
-        if (txnOperated) {
+        if (!txnOperated) {
             return;
         }
         writeLock();
         try {
+            unprotectUpdateLoadingStatus(txnState);
             isCommitting = false;
             state = JobState.COMMITTED;
         } finally {
@@ -788,6 +826,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         writeLock();
         try {
             replayTxnAttachment(txnState);
+            progress = 99;
             transactionId = txnState.getTransactionId();
             state = JobState.COMMITTED;
         } finally {
@@ -816,7 +855,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 return;
             }
             // record attachment in load job
-            replayTxnAttachment(txnState);
+            unprotectUpdateLoadingStatus(txnState);
             // cancel load job
             unprotectedExecuteCancel(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnStatusChangeReason), false);
         } finally {
@@ -855,7 +894,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         if (!txnOperated) {
             return;
         }
-        replayTxnAttachment(txnState);
+        unprotectUpdateLoadingStatus(txnState);
         updateState(JobState.FINISHED);
     }
 

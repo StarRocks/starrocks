@@ -154,6 +154,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
+                "    TABLE: test_all_type\n" +
                 "    TUPLE ID: 1\n" +
                 "    RANDOM\n" +
                 "\n" +
@@ -183,6 +184,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
+                "    TABLE: test_all_type\n" +
                 "    TUPLE ID: 1\n" +
                 "    RANDOM\n" +
                 "\n" +
@@ -201,6 +203,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
+                "    TABLE: test_all_type\n" +
                 "    TUPLE ID: 2\n" +
                 "    RANDOM\n" +
                 "\n" +
@@ -637,11 +640,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getCostExplain(sql);
 
         // eval predicate cardinality in scan node
-        assertContains(plan, "0:OlapScanNode\n" +
+        assertContains(plan, "  0:OlapScanNode\n" +
                 "     table: nation, rollup: nation\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: 23: N_NATIONKEY IN (2, 1)\n" +
-                "     partitionsRatio=1/1, tabletsRatio=1/1");
+                "     partitionsRatio=1/1, tabletsRatio=1/1\n");
         // eval predicate cardinality in join node
         assertContains(plan, "3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +

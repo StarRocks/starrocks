@@ -14,6 +14,7 @@
         <module>java-utils</module>
         <module>jni-connector</module>
         <module>hudi-reader</module>
+        <module>udf-examples</module>
     </modules>
     <name>starrocks-java-extensions</name>
 

@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <map>
+#include <type_traits>
 #include <variant>
 
 #include "runtime/decimalv2_value.h"
@@ -28,6 +30,17 @@ typedef unsigned __int128 uint128_t;
 
 class Datum;
 using DatumArray = std::vector<Datum>;
+
+using DatumKey = std::variant<int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t, uint64_t,
+                              int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double>;
+using DatumMap = std::map<DatumKey, Datum>;
+
+template <class... Ts>
+struct overloaded : Ts... {
+    using Ts::operator()...;
+};
+template <class... Ts>
+overloaded(Ts...) -> overloaded<Ts...>;
 
 class Datum {
 public:
@@ -127,13 +140,37 @@ public:
         vistor(_value);
     }
 
+    DatumKey convert2DatumKey() const {
+        return std::visit(
+                overloaded{[](const int8_t& arg) { return DatumKey(arg); },
+                           [](const uint8_t& arg) { return DatumKey(arg); },
+                           [](const int16_t& arg) { return DatumKey(arg); },
+                           [](const uint16_t& arg) { return DatumKey(arg); },
+                           [](const uint24_t& arg) { return DatumKey(arg); },
+                           [](const int32_t& arg) { return DatumKey(arg); },
+                           [](const uint32_t& arg) { return DatumKey(arg); },
+                           [](const int64_t& arg) { return DatumKey(arg); },
+                           [](const uint64_t& arg) { return DatumKey(arg); },
+                           [](const int96_t& arg) { return DatumKey(arg); },
+                           [](const int128_t& arg) { return DatumKey(arg); },
+                           [](const Slice& arg) { return DatumKey(arg); },
+                           [](const decimal12_t& arg) { return DatumKey(arg); },
+                           [](const DecimalV2Value& arg) { return DatumKey(arg); },
+                           [](const float& arg) { return DatumKey(arg); },
+                           [](const double& arg) { return DatumKey(arg); }, [](auto& arg) { return DatumKey(); }},
+                _value);
+    }
+
 private:
-    using Variant = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t,
-                                 int64_t, uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float,
-                                 double, DatumArray, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*>;
+    using Variant =
+            std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,
+                         uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double, DatumArray,
+                         DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*>;
     Variant _value;
 };
 
 static const Datum kNullDatum{};
+
+Datum convert2Datum(const DatumKey& key);
 
 } // namespace starrocks::vectorized

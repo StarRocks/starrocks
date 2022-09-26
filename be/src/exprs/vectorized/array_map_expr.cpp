@@ -2,6 +2,8 @@
 
 #include "exprs/vectorized/array_map_expr.h"
 
+#include <fmt/format.h>
+
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -13,6 +15,7 @@
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/lambda_function.h"
 #include "runtime/user_function_cache.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::vectorized {
 ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
@@ -27,7 +30,7 @@ inline bool offsets_equal(UInt32Column::Ptr array1, UInt32Column::Ptr array2) {
 }
 
 // The input array column maybe nullable, so first remove the wrap of nullable property.
-// The result of lambda expressions does not change the offsets of the current array and the null map.
+// The result of lambda expressions do not change the offsets of the current array and the null map.
 ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> inputs;
     NullColumnPtr input_null_map = nullptr;
@@ -71,43 +74,61 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
                 throw std::runtime_error("Input array element's size is not equal in array_map().");
             }
         }
-        if (cur_array->elements_column()->size() == 0) { // all elements are null
-            return child_col;
-        } else {
-            inputs.push_back(cur_array->elements_column());
+        inputs.push_back(cur_array->elements_column());
+    }
+
+    ColumnPtr column = nullptr;
+    if (input_array->elements_column()->size() == 0) { // arrays may be null or empty
+        column = input_array->elements_column();
+    } else {
+        // construct a new chunk to evaluate the lambda expression.
+        auto cur_chunk = std::make_shared<vectorized::Chunk>();
+        // put all arguments into the new chunk
+        vector<SlotId> arguments_ids;
+        auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
+        int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
+        DCHECK(argument_num == inputs.size());
+        for (int i = 0; i < argument_num; ++i) {
+            cur_chunk->append_column(inputs[i], arguments_ids[i]); // column ref
         }
-    }
+        // put captured columns into the new chunk aligning with the first array's offsets
+        vector<SlotId> slot_ids;
+        _children[0]->get_slot_ids(&slot_ids);
+        for (auto id : slot_ids) {
+            DCHECK(id > 0);
+            auto captured = chunk->get_column_by_slot_id(id);
+            if (captured->size() < input_array->size()) {
+                throw std::runtime_error(fmt::format("The size of the captured column {} is less than array's size.",
+                                                     captured->get_name()));
+            }
+            cur_chunk->append_column(captured->replicate(input_array->offsets_column()->get_data()), id);
+        }
+        if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
+            column = EVALUATE_NULL_IF_ERROR(context, _children[0], cur_chunk.get());
+        } else { // split large chunks into small ones to avoid too large or various batch_size
+            ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
+            accumulator.push(std::move(cur_chunk));
+            accumulator.finalize();
+            while (auto tmp_chunk = accumulator.pull()) {
+                auto tmp_col = EVALUATE_NULL_IF_ERROR(context, _children[0], tmp_chunk.get());
+                if (column == nullptr) {
+                    column = tmp_col;
+                } else {
+                    column->append(*tmp_col);
+                }
+            }
+        }
 
-    // construct a new chunk to evaluate the lambda expression.
-    auto cur_chunk = std::make_shared<vectorized::Chunk>();
-    // put all arguments into the new chunk
-    vector<SlotId> arguments_ids;
-    auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
-    int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
-    DCHECK(argument_num == inputs.size());
-    for (int i = 0; i < argument_num; ++i) {
-        cur_chunk->append_column(inputs[i], arguments_ids[i]); // column ref
-    }
-    // put captured columns into the new chunks aligning with the first array's offsets
-    vector<SlotId> slot_ids;
-    _children[0]->get_slot_ids(&slot_ids);
-    for (auto id : slot_ids) {
-        DCHECK(id > 0);
-        auto captured = chunk->get_column_by_slot_id(id);
-        auto aligned_col = captured->clone_empty();
-        cur_chunk->append_column(
-                ColumnHelper::duplicate_column(captured, std::move(aligned_col), input_array->offsets_column()), id);
-    }
-    auto column = EVALUATE_NULL_IF_ERROR(context, _children[0], cur_chunk.get());
+        // construct the result array
+        DCHECK(column != nullptr);
+        // the elements of the new array should be nullable and not const.
+        column = ColumnHelper::unpack_and_duplicate_const_column(column->size(), column);
 
-    // construct the result array
-    DCHECK(column != nullptr);
-    // the elements of the new array should be nullable and not const.
-    column = ColumnHelper::unpack_and_duplicate_const_column(column->size(), column);
-    if (auto nullable = std::dynamic_pointer_cast<NullableColumn>(column);
-        nullable == nullptr && !column->is_nullable()) {
-        NullColumnPtr null_col = NullColumn::create(column->size(), 0);
-        column = NullableColumn::create(std::move(column), null_col);
+        if (auto nullable = std::dynamic_pointer_cast<NullableColumn>(column);
+            nullable == nullptr && !column->is_nullable()) {
+            NullColumnPtr null_col = NullColumn::create(column->size(), 0);
+            column = NullableColumn::create(std::move(column), null_col);
+        }
     }
     auto array_col = std::make_shared<ArrayColumn>(column, input_array->offsets_column());
     if (input_null_map != nullptr) {

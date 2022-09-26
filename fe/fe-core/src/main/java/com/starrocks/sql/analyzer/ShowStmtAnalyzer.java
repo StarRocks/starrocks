@@ -11,10 +11,10 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
 import com.starrocks.sql.ast.ShowLoadWarningsStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
@@ -128,7 +129,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowFunctions(ShowFunctionsStmt node, ConnectContext context) {
+        public Void visitShowFunctionsStmt(ShowFunctionsStmt node, ConnectContext context) {
             String dbName = node.getDbName();
             if (Strings.isNullOrEmpty(dbName)) {
                 dbName = context.getDatabase();
@@ -228,6 +229,12 @@ public class ShowStmtAnalyzer {
             if (Strings.isNullOrEmpty(node.getTableName().getCatalog())) {
                 node.getTableName().setCatalog(context.getCurrentCatalog());
             }
+            return null;
+        }
+
+        @Override
+        public Void visitShowTransactionStmt(ShowTransactionStmt statement, ConnectContext context) {
+            ShowTransactionStmtAnalyzer.analyze(statement, context);
             return null;
         }
 

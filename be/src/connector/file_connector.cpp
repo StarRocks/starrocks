@@ -109,11 +109,8 @@ Status FileDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
         const TQueryOptions& query_options = state->query_options();
         if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::Broker) {
             size_t before_size = (*chunk)->bytes_usage();
-
-            state->update_num_rows_load_total(before_rows);
-            state->update_num_bytes_load_total(before_size);
-            StarRocksMetrics::instance()->load_rows_total.increment(before_rows);
-            StarRocksMetrics::instance()->load_bytes_total.increment(before_size);
+            state->update_num_rows_load_from_source(before_rows);
+            state->update_num_bytes_load_from_source(before_size);
         }
 
         _counter.filtered_rows_read += before_rows;

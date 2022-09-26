@@ -964,6 +964,10 @@ ColumnPtr ArrayFunctions::array_map([[maybe_unused]] FunctionContext* context, c
     return nullptr;
 }
 
+ColumnPtr ArrayFunctions::array_filter(FunctionContext* context, const Columns& columns) {
+    return ArrayFilter::process(context, columns);
+}
+
 class ArrayArithmeticImpl {
 public:
     using ArithmeticType = typename ArrayFunctions::ArithmeticType;

@@ -21,7 +21,6 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.cluster.ClusterNamespace;
@@ -29,6 +28,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
+import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -153,7 +154,9 @@ public class DbPrivEntry extends PrivEntry {
 
     @Override
     public String toGrantSQL() {
-        return new GrantStmt(getUserIdent(), new TablePattern(origDb, "*"), privSet).toSql();
+        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "TABLE", getUserIdent());
+        stmt.setAnalysedTable(privSet, new TablePattern(origDb, "*"));
+        return AST2SQL.toString(stmt);
     }
 
 }

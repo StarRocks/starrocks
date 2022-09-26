@@ -32,7 +32,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     _skip_aggregation = params.skip_aggregation;
     _need_agg_finalize = params.need_agg_finalize;
 
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(*params.conjunct_ctxs, runtime_state, &_conjunct_ctxs));
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(runtime_state, &_pool, *params.conjunct_ctxs, &_conjunct_ctxs));
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
     RETURN_IF_ERROR(_init_unused_output_columns(*params.unused_output_columns));
     RETURN_IF_ERROR(_init_return_columns());
@@ -284,11 +284,8 @@ void TabletScanner::_update_realtime_counter(Chunk* chunk) {
     const TQueryOptions& query_options = runtime_state()->query_options();
     if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::INSERT_QUERY) {
         size_t bytes_usage = chunk->bytes_usage();
-
-        runtime_state()->update_num_rows_load_total(num_rows);
-        runtime_state()->update_num_bytes_load_total(bytes_usage);
-        StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
-        StarRocksMetrics::instance()->load_bytes_total.increment(bytes_usage);
+        runtime_state()->update_num_rows_load_from_source(num_rows);
+        runtime_state()->update_num_bytes_load_from_source(bytes_usage);
     }
     COUNTER_UPDATE(_parent->_read_compressed_counter, _reader->stats().compressed_bytes_read);
     _compressed_bytes_read += _reader->stats().compressed_bytes_read;

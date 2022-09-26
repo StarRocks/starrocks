@@ -6,13 +6,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.SelectListItem;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
@@ -21,6 +19,9 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -36,17 +37,22 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
-import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.MetaUtils;
 
@@ -55,6 +61,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 
 public class MaterializedViewAnalyzer {
 
@@ -69,6 +77,11 @@ public class MaterializedViewAnalyzer {
             HOUR,
             MINUTE,
             SECOND
+        }
+
+        private boolean isSupportBasedOnTable(Table table) {
+            return table instanceof OlapTable || table instanceof HiveTable || table instanceof HudiTable ||
+                    table instanceof IcebergTable;
         }
 
         @Override
@@ -113,9 +126,10 @@ public class MaterializedViewAnalyzer {
             Analyzer.analyze(queryStatement, context);
             // convert queryStatement to sql and set
             statement.setInlineViewDef(ViewDefBuilder.build(queryStatement));
+            statement.setSimpleViewDef(ViewDefBuilder.buildSimple(queryStatement));
             // collect table from query statement
-            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
-            Set<Long> baseTableIds = Sets.newHashSet();
+            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTableAndView(queryStatement);
+            List<MaterializedView.BaseTableInfo> baseTableInfos = Lists.newArrayList();
             Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb());
@@ -123,26 +137,34 @@ public class MaterializedViewAnalyzer {
             if (tableNameTableMap.isEmpty()) {
                 throw new SemanticException("Can not find base table in query statement");
             }
-            tableNameTableMap.values().forEach(table -> {
-                if (db.getTable(table.getId()) == null) {
-                    throw new SemanticException(
-                            "Materialized view do not support table: " + table.getName() +
-                                    " do not exist in database: " + db.getOriginName());
+            tableNameTableMap.forEach((tableNameInfo, table) -> {
+                if (table == null) {
+                    throw new SemanticException("Materialized view do not support table: " + tableNameInfo.getTbl() +
+                            " do not exist in database: " + tableNameInfo.getCatalog() + ":" +
+                            tableNameInfo.getDb());
                 }
-                if (!(table instanceof OlapTable)) {
-                    throw new SemanticException(
-                            "Materialized view only supports olap table, but the type of table: " +
-                                    table.getName() + " is: " + table.getType().name());
+                if (!isSupportBasedOnTable(table)) {
+                    throw new SemanticException("Create materialized view do not support the table type : " +
+                            table.getType());
                 }
                 if (table instanceof MaterializedView) {
                     throw new SemanticException(
                             "Creating a materialized view from materialized view is not supported now. The type of table: " +
                                     table.getName() + " is: Materialized View");
                 }
-                baseTableIds.add(table.getId());
+                Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
+                        tableNameInfo.getDb());
+                if (isInternalCatalog(tableNameInfo.getCatalog())) {
+                    baseTableInfos.add(new MaterializedView.BaseTableInfo(database.getId(), table.getId()));
+                } else {
+                    baseTableInfos.add(new MaterializedView.BaseTableInfo(tableNameInfo.getCatalog(),
+                            tableNameInfo.getDb(), table.getTableIdentifier()));
+                }
             });
-            statement.setBaseTableIds(baseTableIds);
+            statement.setBaseTableInfos(baseTableInfos);
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
+            Map<TableName, Table> aliasTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
+
             // get outputExpressions and convert it to columns which in selectRelation
             // set the columns into createMaterializedViewStatement
             // record the relationship between columns and outputExpressions for next check
@@ -155,10 +177,10 @@ public class MaterializedViewAnalyzer {
                 // check whether partition expression functions are allowed if it exists
                 checkPartitionExpParams(statement);
                 // check partition column must be base table's partition column
-                checkPartitionColumnWithBaseTable(statement, tableNameTableMap);
+                checkPartitionColumnWithBaseTable(statement, aliasTableMap);
             }
             // check and analyze distribution
-            checkDistribution(statement, tableNameTableMap);
+            checkDistribution(statement, aliasTableMap);
             return null;
         }
 
@@ -230,11 +252,16 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Materialized view partition exp: "
                         + slotRef.toSql() + " must related to column");
             }
+            int columnId = 0;
             for (Column column : columns) {
                 if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
                     statement.setPartitionColumn(column);
+                    SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(columnId), slotRef.getColumnName(),
+                            column.getType(), column.isAllowNull());
+                    slotRef.setDesc(slotDescriptor);
                     break;
                 }
+                columnId++;
             }
             if (statement.getPartitionColumn() == null) {
                 throw new SemanticException("Materialized view partition exp column:"
@@ -403,7 +430,7 @@ public class MaterializedViewAnalyzer {
         }
 
         @Override
-        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement,
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement,
                                                         ConnectContext context) {
             statement.getMvName().normalization(context);
             final RefreshSchemeDesc refreshSchemeDesc = statement.getRefreshSchemeDesc();
@@ -463,7 +490,7 @@ public class MaterializedViewAnalyzer {
         }
 
         @Override
-        public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStatement statement,
+        public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt statement,
                                                                 ConnectContext context) {
             statement.getMvName().normalization(context);
             return null;

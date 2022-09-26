@@ -80,6 +80,8 @@ statement
     | deleteStatement
 
     //Routine Statement
+    | createRoutineLoadStatement
+    | alterRoutineLoadStatement
     | stopRoutineLoadStatement
     | resumeRoutineLoadStatement
     | pauseRoutineLoadStatement
@@ -134,6 +136,7 @@ statement
     | showLoadStatement
     | showLoadWarningsStatement
     | cancelLoadStatement
+    | alterLoadStatement
 
     //Show Statement
     | showAuthorStatement
@@ -154,6 +157,7 @@ statement
     | showProcesslistStatement
     | showStatusStatement
     | showTabletStatement
+    | showTransactionStatement
     | showTriggersStatement
     | showUserStatement
     | showUserPropertyStatement
@@ -162,27 +166,44 @@ statement
 
     // privilege
     | grantRoleStatement
-    | grantImpersonateStatement
     | revokeRoleStatement
-    | revokeImpersonateStatement
     | executeAsStatement
     | alterUserStatement
     | createUserStatement
     | dropUserStatement
     | showAuthenticationStatement
     | createRoleStatement
+    | grantPrivilegeStatement
+    | revokePrivilegeStatement
     | showRolesStatement
     | showGrantsStatement
     | dropRoleStatement
 
+
     // Backup Restore Satement
     | backupStatement
     | showBackupStatement
+    | restoreStatement
+    | showRestoreStatement
+
+    // Snapshot Satement
+    | showSnapshotStatement
+
+    //  Repository Satement
+    | createRepositoryStatement
+    | dropRepositoryStatement
+
+    // Sql BlackList And WhiteList Statement
+    | addSqlBlackListStatement
+    | delSqlBlackListStatement
+    | showSqlBlackListStatement
+    | showWhiteListStatement
 
     // Other statement
     | killStatement
     | setUserPropertyStatement
     | setStatement
+    | syncStatement
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -193,6 +214,11 @@ useDatabaseStatement
 
 useCatalogStatement
     : USE CATALOG identifierOrString
+    ;
+
+showDatabasesStatement
+    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 alterDbQuotaStmtatement
@@ -253,7 +279,7 @@ charsetName
     ;
 
 defaultDesc
-    : DEFAULT (string| NULL | CURRENT_TIMESTAMP)
+    : DEFAULT (string | NULL | CURRENT_TIMESTAMP | '(' qualifiedName '(' ')' ')')
     ;
 
 indexDesc
@@ -539,6 +565,7 @@ alterClause
     //Alter partition clause
     | addPartitionClause
     | dropPartitionClause
+    | distributionClause
     | truncatePartitionClause
     | modifyPartitionClause
     | replacePartitionClause
@@ -648,6 +675,7 @@ rollupRenameClause
 addPartitionClause
     : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties?
     ;
+
 dropPartitionClause
     : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
     ;
@@ -658,6 +686,7 @@ truncatePartitionClause
 
 modifyPartitionClause
     : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
+    | MODIFY PARTITION distributionDesc
     ;
 
 replacePartitionClause
@@ -685,6 +714,58 @@ deleteStatement
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
+createRoutineLoadStatement
+    : CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier ON table=qualifiedName
+        (loadProperties (',' loadProperties)*)?
+        jobProperties?
+        FROM source=identifier
+        dataSourceProperties?
+    ;
+
+alterRoutineLoadStatement
+    : ALTER ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+        (loadProperties (',' loadProperties)*)?
+        jobProperties?
+        dataSource?
+    ;
+
+dataSource
+    : FROM source=identifier dataSourceProperties
+    ;
+
+loadProperties
+    : colSeparatorProperty
+    | rowDelimiterProperty
+    | importColumns
+    | WHERE expression
+    | partitionNames
+    ;
+
+colSeparatorProperty
+    : COLUMNS TERMINATED BY string
+    ;
+
+rowDelimiterProperty
+    : ROWS TERMINATED BY string
+    ;
+
+importColumns
+    : COLUMNS columnProperties
+    ;
+
+columnProperties
+    : '('
+        (qualifiedName | assignment) (',' (qualifiedName | assignment))*
+      ')'
+    ;
+
+jobProperties
+    : properties
+    ;
+
+dataSourceProperties
+    : propertyList
+    ;
 
 stopRoutineLoadStatement
     : STOP ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
@@ -712,7 +793,9 @@ showRoutineLoadTaskStatement
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
-    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')?
+        (WITH (SYNC | ASYNC) MODE)?
+        properties?
     ;
 
 dropStatsStatement
@@ -721,7 +804,9 @@ dropStatsStatement
 
 analyzeHistogramStatement
     : ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON identifier (',' identifier)*
-        (WITH bucket=INTEGER_VALUE BUCKETS)? properties?
+        (WITH (SYNC | ASYNC) MODE)?
+        (WITH bucket=INTEGER_VALUE BUCKETS)?
+        properties?
     ;
 
 dropHistogramStatement
@@ -878,6 +963,11 @@ cancelLoadStatement
     : CANCEL LOAD (FROM identifier)? (WHERE expression)?
     ;
 
+alterLoadStatement
+    : ALTER LOAD FOR (db=qualifiedName '.')? name=identifier
+        jobProperties?
+    ;
+
 // ------------------------------------------- Show Statement ----------------------------------------------------------
 
 showAuthorStatement
@@ -936,6 +1026,10 @@ showProcStatement
     : SHOW PROC path=string
     ;
 
+showTransactionStatement
+    : SHOW TRANSACTION ((FROM | IN) db=qualifiedName)? (WHERE expression)?
+    ;
+
 showTriggersStatement
     : SHOW FULL? TRIGGERS ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
@@ -958,20 +1052,61 @@ showWarningStatement
 
 // ------------------------------------------- Privilege Statement -----------------------------------------------------
 
+
+privilegeObjectName
+    : identifierOrString
+    | tablePrivilegeObjectName
+    | user
+    ;
+
+tablePrivilegeObjectName
+    : identifierOrStringOrStar
+    | identifierOrStringOrStar '.' identifierOrStringOrStar
+    ;
+
+identifierOrStringOrStar
+    : ASTERISK_SYMBOL
+    | identifier
+    | string
+    ;
+
+privilegeActionReserved
+    : ADMIN
+    | ALTER
+    | CREATE
+    | DROP
+    | GRANT
+    | LOAD
+    | SELECT
+    ;
+
+privilegeActionList
+    :  privilegeAction (',' privilegeAction)*
+    ;
+
+privilegeAction
+    : privilegeActionReserved
+    | identifier
+    ;
+
+grantPrivilegeStatement
+    : GRANT IMPERSONATE ON user TO ( user | ROLE identifierOrString )                                       #grantImpersonateBrief
+    | GRANT privilegeActionList ON tablePrivilegeObjectName TO (user | ROLE identifierOrString)        #grantTablePrivBrief
+    | GRANT privilegeActionList ON identifier privilegeObjectName TO (user | ROLE identifierOrString)  #grantPrivWithType
+    ;
+
+revokePrivilegeStatement
+    : REVOKE IMPERSONATE ON user FROM ( user | ROLE identifierOrString )                                  #revokeImpersonateBrief
+    | REVOKE privilegeActionList ON tablePrivilegeObjectName FROM (user | ROLE identifierOrString)   #revokeTablePrivBrief
+    | REVOKE privilegeActionList ON identifier privilegeObjectName FROM (user | ROLE identifierOrString) #revokePrivWithType
+    ;
+
 grantRoleStatement
     : GRANT identifierOrString TO user
     ;
 
-grantImpersonateStatement
-    : GRANT IMPERSONATE ON user TO (user | ROLE identifierOrString)
-    ;
-
 revokeRoleStatement
     : REVOKE identifierOrString FROM user
-    ;
-
-revokeImpersonateStatement
-    : REVOKE IMPERSONATE ON user FROM  (user | ROLE identifierOrString)
     ;
 
 executeAsStatement
@@ -1011,12 +1146,20 @@ dropRoleStatement
     : DROP ROLE identifierOrString                                                          #dropRole
     ;
 
-// ------------------------------------------- Other Statement ---------------------------------------------------------
-
-showDatabasesStatement
-    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
-    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
+// ------------------------------------ Sql BlackList And WhiteList Statement ------------------------------------------
+addSqlBlackListStatement
+    : ADD SQLBLACKLIST string
     ;
+delSqlBlackListStatement
+    : DELETE SQLBLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+showSqlBlackListStatement
+    : SHOW SQLBLACKLIST
+    ;
+showWhiteListStatement
+    : SHOW WHITELIST
+    ;
+// ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showProcesslistStatement
     : SHOW FULL? PROCESSLIST
@@ -1067,6 +1210,10 @@ setExprOrDefault
     | ON
     | ALL
     | expression
+    ;
+
+syncStatement
+    : SYNC
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -1236,6 +1383,35 @@ showBackupStatement
     : SHOW BACKUP ((FROM | IN) identifier)?
     ;
 
+restoreStatement
+    : RESTORE SNAPSHOT qualifiedName
+    FROM identifier
+    ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
+    (PROPERTIES propertyList)?
+    ;
+
+showRestoreStatement
+    : SHOW RESTORE ((FROM | IN) identifier)? (WHERE where=expression)?
+    ;
+
+// ------------------------------------------- Snapshot Statement ------------------------------------------------------
+showSnapshotStatement
+    : SHOW SNAPSHOT ON identifier
+    (WHERE expression)?
+    ;
+
+// ------------------------------------------ Repository Statement -----------------------------------------------------
+createRepositoryStatement
+    : CREATE (READ ONLY)? REPOSITORY identifier
+    WITH BROKER identifier?
+    ON LOCATION string
+    PROPERTIES propertyList
+    ;
+
+dropRepositoryStatement
+    : DROP REPOSITORY identifier
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -1263,6 +1439,10 @@ expressionsWithDefault
 
 expressionOrDefault
     : expression | DEFAULT
+    ;
+
+expressionSingleton
+    : expression EOF
     ;
 
 expression
@@ -1321,6 +1501,7 @@ primaryExpression
     | EXISTS '(' queryBody ')'                                                            #exists
     | subquery                                                                            #subqueryExpression
     | CAST '(' expression AS type ')'                                                     #cast
+    | CONVERT '(' expression ',' type ')'                                                 #convert
     | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
     | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
@@ -1447,6 +1628,10 @@ tableDesc
     : qualifiedName partitionNames?
     ;
 
+restoreTableDesc
+    : qualifiedName partitionNames? (AS identifier)?
+    ;
+
 explainDesc
     : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
     ;
@@ -1500,13 +1685,18 @@ partitionValue
     : MAXVALUE | string
     ;
 
+distributionClause
+    : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+    | DISTRIBUTED BY HASH identifierList
+    ;
+
 distributionDesc
     : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
+    | DISTRIBUTED BY HASH identifierList
     ;
 
 refreshSchemeDesc
-    : REFRESH (SYNC
-    | ASYNC
+    : REFRESH (ASYNC
     | ASYNC (START '(' string ')')? EVERY '(' interval ')'
     | MANUAL)
     ;
@@ -1593,6 +1783,9 @@ baseType
     | TINYINT typeParameter?
     | SMALLINT typeParameter?
     | SIGNED INT?
+    | SIGNED INTEGER?
+    | UNSIGNED INT?
+    | UNSIGNED INTEGER?
     | INT typeParameter?
     | INTEGER typeParameter?
     | BIGINT typeParameter?
@@ -1673,7 +1866,7 @@ nonReserved
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
-    | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODIFY | MONTH | MERGE
+    | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
     | OBSERVER | OFFSET | ONLY | OPEN | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
@@ -1681,13 +1874,13 @@ nonReserved
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
-    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE
+    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP | STORAGE
     | STRING | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
     | VALUE | VARIABLES | VIEW | VERBOSE
-    | WARNINGS | WEEK | WORK | WRITE
+    | WARNINGS | WEEK | WHITELIST | WORK | WRITE
     | YEAR
     | DOTDOTDOT
     ;

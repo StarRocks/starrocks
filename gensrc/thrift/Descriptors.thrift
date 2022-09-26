@@ -70,6 +70,9 @@ struct TTextFileDesc {
 
     // property 'mapkey.delim'
     4: optional string mapkey_delim
+
+    // compression type.
+    5: optional Types.TCompressionType compression_type;
 }
 
 enum TSchemaTableType {

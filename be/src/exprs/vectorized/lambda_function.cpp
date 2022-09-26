@@ -2,7 +2,10 @@
 
 #include "exprs/vectorized/lambda_function.h"
 
+#include <fmt/format.h>
+
 #include <iostream>
+
 namespace starrocks::vectorized {
 LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false) {}
 
@@ -13,8 +16,10 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
     for (int i = 1; i < child_num; ++i) {
         get_child(i)->get_slot_ids(&_arguments_ids);
     }
-    DCHECK(child_num - 1 == _arguments_ids.size());
-
+    if (child_num - 1 != _arguments_ids.size()) {
+        return Status::InternalError(fmt::format("Lambda arguments get ids failed, just get {} ids from {} arguments.",
+                                                 _arguments_ids.size(), child_num - 1));
+    }
     // get slot ids from the lambda expression
     get_child(0)->get_slot_ids(&_captured_slot_ids);
 

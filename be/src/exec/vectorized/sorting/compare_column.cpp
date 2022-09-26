@@ -5,6 +5,7 @@
 #include "column/const_column.h"
 #include "column/datum.h"
 #include "column/json_column.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized/sorting/sort_helper.h"
@@ -90,12 +91,9 @@ public:
         int notnull_equal_count = 0;
 
         CompareVector cmp_vector(null_data.size());
-        // TODO: use IMD select_if
         auto merge_cmp_vector = [](CompareVector& a, CompareVector& b) {
             DCHECK_EQ(a.size(), b.size());
-            for (size_t i = 0; i < a.size(); ++i) {
-                a[i] = a[i] == 0 ? b[i] : a[i];
-            }
+            SIMD_selector<TYPE_TINYINT>::select_if((uint8_t*)a.data(), a, a, b);
         };
         if (_rhs_value.is_null()) {
             for (size_t i = 0; i < null_data.size(); i++) {
@@ -147,6 +145,17 @@ public:
         for (auto& x : datum_array) {
             rhs_column->append_datum(x);
         }
+        auto cmp = [&](int lhs_index) {
+            return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
+        };
+        _equal_count = compare_column_helper(_cmp_vector, cmp);
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::MapColumn& column) {
+        // Convert the datum to a array column
+        auto rhs_column = column.clone_empty();
+        rhs_column->append_datum(_rhs_value);
         auto cmp = [&](int lhs_index) {
             return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
         };
@@ -273,6 +282,7 @@ public:
 
     Status do_visit(const vectorized::ConstColumn& column) { return Status::NotSupported("not support"); }
     Status do_visit(const vectorized::ArrayColumn& column) { return Status::NotSupported("not support"); }
+    Status do_visit(const vectorized::MapColumn& column) { return Status::NotSupported("not support"); }
     template <typename T>
     Status do_visit(const vectorized::ObjectColumn<T>& column) {
         return Status::NotSupported("not support");

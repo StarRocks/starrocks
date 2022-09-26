@@ -24,9 +24,9 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
-import com.starrocks.analysis.SchemaTableType;
 import com.starrocks.common.SystemId;
 import com.starrocks.thrift.TSchemaTable;
+import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 
@@ -44,15 +44,9 @@ public class SchemaTable extends Table {
     private static final int NAME_CHAR_LEN = 2048;
     private static final int MAX_FIELD_VARCHARLENGTH = 65535;
     private static final int MY_CS_NAME_SIZE = 32;
-    private SchemaTableType schemaTableType;
 
     protected SchemaTable(long id, String name, TableType type, List<Column> baseSchema) {
         super(id, name, type, baseSchema);
-    }
-
-    protected SchemaTable(long id, String name, SchemaTableType type) {
-        super(TableType.SCHEMA);
-        schemaTableType = type;
     }
 
     @Override
@@ -474,7 +468,7 @@ public class SchemaTable extends Table {
                                             .column("DISTRIBUTE_BUCKET", ScalarType.INT)
                                             .column("SORT_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("PROPERTIES", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
-                                            .build()))    
+                                            .build()))
                     .build();
 
     public static class Builder {
@@ -507,5 +501,81 @@ public class SchemaTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    public enum SchemaTableType {
+        // defination
+        SCH_AUTHORS("AUTHORS", "AUTHORS", TSchemaTableType.SCH_AUTHORS),
+        SCH_CHARSETS("CHARSETS", "CHARACTER_SETS", TSchemaTableType.SCH_CHARSETS),
+        SCH_COLLATIONS("COLLATIONS", "COLLATIONS", TSchemaTableType.SCH_COLLATIONS),
+        SCH_COLLATION_CHARACTER_SET_APPLICABILITY("COLLATION_CHARACTER_SET_APPLICABILITY",
+                "COLLATION_CHARACTER_SET_APPLICABILITY",
+                TSchemaTableType.SCH_COLLATION_CHARACTER_SET_APPLICABILITY),
+        SCH_COLUMNS("COLUMNS", "COLUMNS", TSchemaTableType.SCH_COLUMNS),
+        SCH_COLUMN_PRIVILEGES("COLUMN_PRIVILEGES", "COLUMN_PRIVILEGES",
+                TSchemaTableType.SCH_COLUMN_PRIVILEGES),
+        SCH_ENGINES("ENGINES", "ENGINES", TSchemaTableType.SCH_ENGINES),
+        SCH_EVENTS("EVENTS", "EVENTS", TSchemaTableType.SCH_EVENTS),
+        SCH_FILES("FILES", "FILES", TSchemaTableType.SCH_FILES),
+        SCH_GLOBAL_STATUS("GLOBAL_STATUS", "GLOBAL_STATUS", TSchemaTableType.SCH_GLOBAL_STATUS),
+        SCH_GLOBAL_VARIABLES("GLOBAL_VARIABLES", "GLOBAL_VARIABLES",
+                TSchemaTableType.SCH_GLOBAL_VARIABLES),
+        SCH_KEY_COLUMN_USAGE("KEY_COLUMN_USAGE", "KEY_COLUMN_USAGE",
+                TSchemaTableType.SCH_KEY_COLUMN_USAGE),
+        SCH_MATERIALIZED_VIEWS("MATERIALIZED_VIEWS", "MATERIALIZED_VIEWS", TSchemaTableType.SCH_MATERIALIZED_VIEWS),
+        SCH_OPEN_TABLES("OPEN_TABLES", "OPEN_TABLES", TSchemaTableType.SCH_OPEN_TABLES),
+        SCH_PARTITIONS("PARTITIONS", "PARTITIONS", TSchemaTableType.SCH_PARTITIONS),
+        SCH_PLUGINS("PLUGINS", "PLUGINS", TSchemaTableType.SCH_PLUGINS),
+        SCH_PROCESSLIST("PROCESSLIST", "PROCESSLIST", TSchemaTableType.SCH_PROCESSLIST),
+        SCH_PROFILES("PROFILES", "PROFILES", TSchemaTableType.SCH_PROFILES),
+        SCH_REFERENTIAL_CONSTRAINTS("REFERENTIAL_CONSTRAINTS", "REFERENTIAL_CONSTRAINTS",
+                TSchemaTableType.SCH_REFERENTIAL_CONSTRAINTS),
+        SCH_PROCEDURES("ROUTINES", "ROUTINES", TSchemaTableType.SCH_PROCEDURES),
+        SCH_SCHEMATA("SCHEMATA", "SCHEMATA", TSchemaTableType.SCH_SCHEMATA),
+        SCH_SCHEMA_PRIVILEGES("SCHEMA_PRIVILEGES", "SCHEMA_PRIVILEGES",
+                TSchemaTableType.SCH_SCHEMA_PRIVILEGES),
+        SCH_SESSION_STATUS("SESSION_STATUS", "SESSION_STATUS", TSchemaTableType.SCH_SESSION_STATUS),
+        SCH_SESSION_VARIABLES("SESSION_VARIABLES", "SESSION_VARIABLES",
+                TSchemaTableType.SCH_SESSION_VARIABLES),
+        SCH_STATISTICS("STATISTICS", "STATISTICS", TSchemaTableType.SCH_STATISTICS),
+        SCH_STATUS("STATUS", "STATUS", TSchemaTableType.SCH_STATUS),
+        SCH_TABLES("TABLES", "TABLES", TSchemaTableType.SCH_TABLES),
+        SCH_TABLES_CONFIG("TABLES_CONFIG", "TABLES_CONFIG", TSchemaTableType.SCH_TABLES_CONFIG),
+        SCH_TABLE_CONSTRAINTS("TABLE_CONSTRAINTS", "TABLE_CONSTRAINTS",
+                TSchemaTableType.SCH_TABLE_CONSTRAINTS),
+        SCH_TABLE_NAMES("TABLE_NAMES", "TABLE_NAMES", TSchemaTableType.SCH_TABLE_NAMES),
+        SCH_TABLE_PRIVILEGES("TABLE_PRIVILEGES", "TABLE_PRIVILEGES",
+                TSchemaTableType.SCH_TABLE_PRIVILEGES),
+        SCH_TRIGGERS("TRIGGERS", "TRIGGERS", TSchemaTableType.SCH_TRIGGERS),
+        SCH_USER_PRIVILEGES("USER_PRIVILEGES", "USER_PRIVILEGES", TSchemaTableType.SCH_USER_PRIVILEGES),
+        SCH_VARIABLES("VARIABLES", "VARIABLES", TSchemaTableType.SCH_VARIABLES),
+        SCH_VIEWS("VIEWS", "VIEWS", TSchemaTableType.SCH_VIEWS),
+        SCH_CREATE_TABLE("CREATE_TABLE", "CREATE_TABLE", TSchemaTableType.SCH_CREATE_TABLE),
+        SCH_TASKS("TASKS", "TASKS", TSchemaTableType.SCH_TASKS),
+        SCH_TASK_RUNS("TASK_RUNS", "TASK_RUNS", TSchemaTableType.SCH_TASK_RUNS),
+        SCH_INVALID("NULL", "NULL", TSchemaTableType.SCH_INVALID);
+
+        private final String description;
+        private final String tableName;
+        private final TSchemaTableType tableType;
+
+        SchemaTableType(String description, String tableName, TSchemaTableType tableType) {
+            this.description = description;
+            this.tableName = tableName;
+            this.tableType = tableType;
+        }
+
+        public static TSchemaTableType getThriftType(String name) {
+            for (SchemaTableType type : SchemaTableType.values()) {
+                if (type.tableName.equalsIgnoreCase(name)) {
+                    return type.tableType;
+                }
+            }
+            return null;
+        }
+
+        public String toString() {
+            return description;
+        }
     }
 }

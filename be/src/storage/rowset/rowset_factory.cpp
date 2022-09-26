@@ -33,7 +33,7 @@ namespace starrocks {
 
 Status RowsetFactory::create_rowset(const TabletSchema* schema, const std::string& rowset_path,
                                     const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset) {
-    *rowset = Rowset::create(ExecEnv::GetInstance()->metadata_mem_tracker(), schema, rowset_path, rowset_meta);
+    *rowset = Rowset::create(schema, rowset_path, rowset_meta);
     RETURN_IF_ERROR((*rowset)->init());
     return Status::OK();
 }

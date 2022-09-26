@@ -7,7 +7,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.external.hive.HiveMetaCache;
-import com.starrocks.external.hive.HivePartitionKey;
+import com.starrocks.external.hive.HivePartitionName;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.Table;
 
@@ -25,14 +25,14 @@ public abstract class MetastoreTableEvent extends MetastoreEvent {
     protected Table hmsTbl;
 
     // HivePartitionKeys of each event to process. for unpartition table, the partition values are empty.
-    protected List<HivePartitionKey> hivePartitionKeys = Lists.newArrayList();
+    protected List<HivePartitionName> hivePartitionKeys = Lists.newArrayList();
 
     protected MetastoreTableEvent(NotificationEvent event, HiveMetaCache metaCache) {
         super(event, metaCache);
         Preconditions.checkNotNull(dbName, "Database name cannot be null");
         tblName = Preconditions.checkNotNull(event.getTableName());
 
-        HivePartitionKey hivePartitionKey = new HivePartitionKey(dbName, tblName, TableType.HIVE, Lists.newArrayList());
+        HivePartitionName hivePartitionKey = new HivePartitionName(dbName, tblName, TableType.HIVE, Lists.newArrayList());
         hivePartitionKeys.add(hivePartitionKey);
     }
 
@@ -62,14 +62,14 @@ public abstract class MetastoreTableEvent extends MetastoreEvent {
         }
     }
 
-    protected List<HivePartitionKey> getHivePartitionKeys() {
+    protected List<HivePartitionName> getHivePartitionKeys() {
         return hivePartitionKeys;
     }
 
     /**
-     * According to the current processing method, each event only needs to process one {@link HivePartitionKey}.
+     * According to the current processing method, each event only needs to process one {@link HivePartitionName}.
      */
-    protected HivePartitionKey getHivePartitionKey() {
+    protected HivePartitionName getHivePartitionKey() {
         return hivePartitionKeys.get(0);
     }
 

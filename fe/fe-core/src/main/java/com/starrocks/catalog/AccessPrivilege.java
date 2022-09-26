@@ -47,7 +47,7 @@ public enum AccessPrivilege {
     }
 
     public PrivBitSet toPrivilege() {
-        Preconditions.checkState(flag > 0 && flag < 13);
+        Preconditions.checkState(flag > 0 && flag < 14);
         switch (flag) {
             case 1:
                 return PrivBitSet.of(Privilege.SELECT_PRIV);

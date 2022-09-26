@@ -1031,11 +1031,11 @@ private:
     }
 };
 
-template <PrimitiveType PT>
 class ArrayFilter {
 public:
-    using CppType = RunTimeCppType<PT>;
-    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) { return _array_filter(columns); }
+    static ColumnPtr process([[maybe_unused]] FunctionContext* ctx, const Columns& columns) {
+        return _array_filter(columns);
+    }
 
 private:
     static ColumnPtr _array_filter(const Columns& columns) {

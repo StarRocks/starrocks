@@ -198,12 +198,10 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     @Test
     public void testDecimalBetweenPredicates() throws Exception {
         String sql = "select * from db1.decimal_table where col_decimal64p13s0 between -9.223372E+18 and 9.223372E+18";
-        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) " +
-                ">= -9223372000000000000, " +
-                "cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) " +
-                "<= 9223372000000000000";
-        Assert.assertTrue(plan.contains(snippet));
+        String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
+        String snippet =
+                "PREDICATES: CAST(3: col_decimal64p13s0 AS DECIMAL128(19,0)) >= -9223372000000000000, CAST(3: col_decimal64p13s0 AS DECIMAL128(19,0)) <= 9223372000000000000";
+        Assert.assertTrue(plan, plan.contains(snippet));
     }
 
     @Test
@@ -457,7 +455,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select 0.0 % col_decimal32p9s2 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String snippet = "6 <-> 0.0 % cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2))";
-        Assert.assertTrue(plan.contains(snippet));
+        Assert.assertTrue(plan, plan.contains(snippet));
     }
 
     @Test
@@ -649,7 +647,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "args: DECIMAL32; result: DECIMAL128(38,2)";
         String multiDistinctCountSnippet = "multi_distinct_count[([10: col_decimal32p9s2, DECIMAL32(9,2), false]);" +
                 " args: DECIMAL32; result: BIGINT";
-        Assert.assertTrue(plan.contains(multiDistinctSumSnippet) && plan.contains(multiDistinctCountSnippet));
+        Assert.assertTrue(plan, plan.contains(multiDistinctSumSnippet) && plan.contains(multiDistinctCountSnippet));
 
         sql = "select avg(distinct col_decimal64p13s0) from db1.decimal_table";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);

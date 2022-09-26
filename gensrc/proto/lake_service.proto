@@ -137,6 +137,22 @@ message Snapshot {
     optional string dest_path = 2;
 }
 
+message RestoreInfo {
+    optional int64 tablet_id = 1;
+    optional string snapshot_path = 2;
+}
+
+message RestoreSnapshotsRequest {
+    repeated RestoreInfo restore_infos = 1;
+    optional string broker = 2;
+    map<string, string> broker_properties = 3;
+}
+
+message RestoreSnapshotsResponse {
+    // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
+    optional int32 pad = 1;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc publish_log_version(PublishLogVersionRequest) returns (PublishLogVersionResponse);
@@ -149,5 +165,6 @@ service LakeService {
     rpc lock_tablet_metadata(LockTabletMetadataRequest) returns (LockTabletMetadataResponse);
     rpc unlock_tablet_metadata(UnlockTabletMetadataRequest) returns (UnlockTabletMetadataResponse);
     rpc upload_snapshots(UploadSnapshotsRequest) returns (UploadSnapshotsResponse);
+    rpc restore_snapshots(RestoreSnapshotsRequest) returns (RestoreSnapshotsResponse);
 }
 

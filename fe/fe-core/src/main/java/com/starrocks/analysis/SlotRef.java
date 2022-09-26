@@ -129,6 +129,11 @@ public class SlotRef extends Expr {
     public void setDesc(SlotDescriptor desc) {
         this.desc = desc;
     }
+
+    public SlotDescriptor getSlotDescriptorWithoutCheck() {
+        return desc;
+    }
+
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }

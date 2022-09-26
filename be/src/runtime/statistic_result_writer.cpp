@@ -39,8 +39,60 @@ void StatisticResultWriter::_init_profile() {
 
 Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
     SCOPED_TIMER(_total_timer);
+    auto process_status = _process_chunk(chunk);
+    if (!process_status.ok() || process_status.value() == nullptr) {
+        return process_status.status();
+    }
+    auto result = std::move(process_status.value());
+
+    size_t num_rows = result->result_batch.rows.size();
+    Status status = _sinker->add_batch(result);
+
+    if (status.ok()) {
+        _written_rows += num_rows;
+        return status;
+    }
+
+    LOG(WARNING) << "Append statistic result to sink failed.";
+    return status;
+}
+
+StatusOr<TFetchDataResultPtrs> StatisticResultWriter::process_chunk(vectorized::Chunk* chunk) {
+    SCOPED_TIMER(_total_timer);
+    TFetchDataResultPtrs results;
+    auto process_status = _process_chunk(chunk);
+    if (!process_status.ok()) {
+        return process_status.status();
+    }
+    if (process_status.value() != nullptr) {
+        results.push_back(std::move(process_status.value()));
+    }
+    return results;
+}
+
+StatusOr<bool> StatisticResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
+    size_t num_rows = 0;
+    for (auto& result : results) {
+        num_rows += result->result_batch.rows.size();
+    }
+
+    auto status = _sinker->try_add_batch(results);
+
+    if (status.ok()) {
+        if (status.value()) {
+            _written_rows += num_rows;
+            results.clear();
+        }
+    } else {
+        results.clear();
+        LOG(WARNING) << "Append statistic result to sink failed.";
+    }
+    return status;
+}
+
+StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(vectorized::Chunk* chunk) {
     if (nullptr == chunk || 0 == chunk->num_rows()) {
-        return Status::OK();
+        return nullptr;
     }
 
     // Step 1: compute expr
@@ -77,18 +129,7 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
         RETURN_IF_ERROR_WITH_WARN(_fill_statistic_histogram(version, result_columns, chunk, result.get()),
                                   "Fill histogram statistic data failed");
     }
-
-    // Step 4: send
-    size_t num_rows = result->result_batch.rows.size();
-    Status status = _sinker->add_batch(result);
-
-    if (status.ok()) {
-        _written_rows += num_rows;
-        return status;
-    }
-
-    LOG(WARNING) << "Append statistic result to sink failed.";
-    return status;
+    return result;
 }
 
 Status StatisticResultWriter::_fill_dict_statistic_data(int version, const vectorized::Columns& columns,

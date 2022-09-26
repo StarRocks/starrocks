@@ -8,7 +8,7 @@ Creates an external catalog. You can use external catalogs to query data in exte
 - Iceberg catalog: used for querying data in Apache Iceberg.
 - Hudi catalog: used for querying data in Apache Hudi.
 
-Before you create external catalogs, configure your StarRocks cluster to meet the requirements of the data storage system (such as Amazon S3), metadata service (such as Hive metastore), and authenticating service (such as Kerberos) of external data sources. For more information, see [Hive catalog](/docs/using_starrocks/catalog/hive_catalog.md#before-you-begin)、[Iceberg catalog](/docs/using_starrocks/catalog/iceberg_catalog.md#before-you-begin) and [Hudi catalog](/docs/using_starrocks/catalog/hudi_catalog.md#before-you-begin)。
+Before you create external catalogs, configure your StarRocks cluster to meet the requirements of the data storage system (such as Amazon S3), metadata service (such as Hive metastore), and authenticating service (such as Kerberos) of external data sources. For more information, see [Hive catalog](../../../using_starrocks/catalog/hive_catalog.md#before-you-begin)、[Iceberg catalog](../../../using_starrocks/catalog/iceberg_catalog.md#before-you-begin) and [Hudi catalog](../../../using_starrocks/catalog/hudi_catalog.md#before-you-begin)。
 
 ## Syntax
 
@@ -22,7 +22,7 @@ PROPERTIES ("key"="value", ...);
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
 | catalog_name  | Yes          | The name of the external catalog. The naming conventions are as follows:<ul><li>The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.</li><li>The name cannot exceed 64 characters in length.</li></ul> |
-| PROPERTIES    | Yes          | The properties of an external catalog. Configure properties based on the types of external catalogs. For more information, see [Hive catalog](/docs/using_starrocks/catalog/hive_catalog.md#create-a-hive-catalog)、[Iceberg catalog](/docs/using_starrocks/catalog/iceberg_catalog.md#create-an-iceberg-catalog) and [Hudi catalog](/docs/using_starrocks/catalog/hudi_catalog.md#create-a-hudi-catalog)。 |
+| PROPERTIES    | Yes          | The properties of an external catalog. Configure properties based on the types of external catalogs. For more information, see Hive catalog, Iceberg catalog and Hudi catalog. |
 
 ## Examples
 

@@ -17,7 +17,7 @@ struct ColumnReaderContext {
     size_t next_row = 0;
     size_t rows_to_skip = 0;
 
-    void advance(int num_rows) { next_row += num_rows; }
+    void advance(size_t num_rows) { next_row += num_rows; }
 };
 
 struct ColumnReaderOptions {

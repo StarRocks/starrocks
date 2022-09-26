@@ -798,8 +798,9 @@ Status TabletMetaManager::rowset_iterate(DataDir* store, TTabletId tablet_id, co
 
     return store->get_meta()->iterate(META_COLUMN_FAMILY_INDEX, prefix,
                                       [&](std::string_view key, std::string_view value) -> bool {
-                                          RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
-                                          CHECK(rowset_meta->init(value)) << "Corrupted rowset meta";
+                                          bool parse_ok = false;
+                                          auto rowset_meta = std::make_shared<RowsetMeta>(value, &parse_ok);
+                                          CHECK(parse_ok) << "Corrupted rowset meta";
                                           return func(std::move(rowset_meta));
                                       });
 }
@@ -953,6 +954,62 @@ StatusOr<DeleteVectorList> TabletMetaManager::list_del_vector(KVStore* meta, TTa
         return st;
     }
     return std::move(ret);
+}
+
+StatusOr<size_t> TabletMetaManager::delete_del_vector_before_version(KVStore* meta, TTabletId tablet_id,
+                                                                     int64_t version) {
+    DeleteVectorList ret;
+    std::string lower = encode_del_vector_key(tablet_id, 0, INT64_MAX);
+    std::string upper = encode_del_vector_key(tablet_id, UINT32_MAX, 0);
+    std::map<uint32_t, std::vector<int64_t>> segments;
+    auto st = meta->iterate_range(META_COLUMN_FAMILY_INDEX, lower, upper,
+                                  [&](std::string_view key, std::string_view value) -> bool {
+                                      TTabletId dummy;
+                                      uint32_t segment_id;
+                                      int64_t version;
+                                      decode_del_vector_key(key, &dummy, &segment_id, &version);
+                                      DCHECK_EQ(tablet_id, dummy);
+                                      segments[segment_id].push_back(version);
+                                      return true;
+                                  });
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to iterate rocksdb for delete_del_vector_before_version. tablet_id=" << tablet_id;
+        return st;
+    }
+    size_t num_delete = 0;
+    WriteBatch batch;
+    auto cf_handle = meta->handle(META_COLUMN_FAMILY_INDEX);
+    std::ostringstream vlog_delvec_maplist;
+    for (auto& segment : segments) {
+        auto& versions = segment.second;
+        bool del = false;
+        bool added = false;
+        for (size_t i = 0; i < versions.size(); i++) {
+            if (del) {
+                std::string key = encode_del_vector_key(tablet_id, segment.first, versions[i]);
+                rocksdb::Status st = batch.Delete(cf_handle, key);
+                if (!st.ok()) {
+                    return to_status(st);
+                }
+                num_delete++;
+                if (!added) {
+                    vlog_delvec_maplist << " " << segment.first << ":" << versions[i];
+                    added = true;
+                } else {
+                    vlog_delvec_maplist << "," << versions[i];
+                }
+            } else if (versions[i] <= version) {
+                // versions after this version can be deleted
+                del = true;
+            }
+        }
+    }
+    RETURN_IF_ERROR(meta->write_batch(&batch));
+    if (num_delete > 0) {
+        LOG(INFO) << "delete_del_vector_before_version version:" << version << " tablet:" << tablet_id
+                  << vlog_delvec_maplist.str();
+    }
+    return num_delete;
 }
 
 Status TabletMetaManager::delete_del_vector_range(KVStore* meta, TTabletId tablet_id, uint32_t segment_id,

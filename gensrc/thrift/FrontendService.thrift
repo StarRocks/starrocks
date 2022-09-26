@@ -440,7 +440,11 @@ struct TReportExecStatusParams {
 
   16: optional i64 backend_id
 
-  17: optional i64 loaded_bytes
+  17: optional i64 sink_load_bytes
+
+  18: optional i64 source_load_rows
+
+  19: optional i64 source_load_bytes
 }
 
 struct TFeResult {
@@ -499,8 +503,11 @@ struct TShowResultSet {
 struct TMasterOpResult {
     1: required i64 maxJournalId;
     2: required binary packet;
+    // for show statement
     3: optional TShowResultSet resultSet;
     4: optional string state;
+    // for query statement
+    5: optional list<binary> channelBufferList;
 }
 
 struct TIsMethodSupportedRequest {
@@ -966,8 +973,16 @@ struct TSetConfigResponse {
     1: required Status.TStatus status
 }
 
-struct TGetTablesConfigRequest {
+struct TAuthInfo {
+    // If not set, match every database
+    1: optional string pattern
+    2: optional string user   // deprecated
+    3: optional string user_ip    // deprecated
+    4: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
+}
 
+struct TGetTablesConfigRequest {
+    1: optional TAuthInfo auth_info
 }
 
 struct TGetTablesConfigResponse {
@@ -984,15 +999,6 @@ struct TTableConfigInfo {
     7: optional i32 distribute_bucket
     8: optional string sort_key
     9: optional string properties
-}
-
-
-struct TAuthInfo {
-    // If not set, match every database
-    1: optional string pattern
-    2: optional string user   // deprecated
-    3: optional string user_ip    // deprecated
-    4: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
 }
 
 struct TGetTablesInfoRequest {

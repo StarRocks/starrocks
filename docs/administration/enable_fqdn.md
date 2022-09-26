@@ -24,19 +24,11 @@ Each BE node identifies itself with `BE Address` defined in the FE metadata. For
 
 Therefore, to start the nodes via FQDNs, you DO NOT need to specify the property `priority_networks` in the FE and BE configuration files **fe.conf** and **be.conf**. You can start each node as demonstrated in [Deploy StarRocks](../quick_start/Deploy.md) after requirements in [Prerequisites](#prerequisites) are met.
 
-Alternatively, if you want to start the cluster with IP address access, you still have to specify the property `priority_networks` in the corresponding FE and BE configuration files before starting the nodes. Besides, because the IP address access is not adopted by default, you must start the nodes by running the following commands:
+Alternatively, if you want to start the cluster with IP address access, you still have to specify the property `priority_networks` in the corresponding FE and BE configuration files before starting the nodes. Besides, because the IP address access is not adopted by default, you must start the FE nodes by running the following commands:
 
-- Start an FE node with IP address access:
-
-  ```Shell
-  sh bin/start_fe.sh --host_type IP --daemon
-  ```
-
-- Start a BE node with IP address access:
-
-  ```Shell
-  sh bin/start_be.sh --host_type IP --daemon
-  ```
+```Shell
+sh bin/start_fe.sh --host_type IP --daemon
+```
 
 The property `--host_type` specifies the way of access that is used to start the node. The valid value includes `FQDN` and `IP`. You only need to specify this property ONCE when you start the node for the first time.
 

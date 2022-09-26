@@ -27,7 +27,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.LakeBackupJob;
+import com.starrocks.lake.backup.LakeBackupJob;
+import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
@@ -45,7 +46,7 @@ import java.util.Map;
 public abstract class AbstractJob implements Writable {
 
     public enum JobType {
-        BACKUP, RESTORE, LAKE_BACKUP
+        BACKUP, RESTORE, LAKE_BACKUP, LAKE_RESTORE
     }
 
     @SerializedName(value = "type")
@@ -179,6 +180,10 @@ public abstract class AbstractJob implements Writable {
             job = new RestoreJob();
         } else if (type == JobType.LAKE_BACKUP) {
             job = LakeBackupJob.read(in);
+            job.setTypeRead(true);
+            return job;
+        } else if (type == JobType.LAKE_RESTORE) {
+            job = LakeRestoreJob.read(in);
             job.setTypeRead(true);
             return job;
         } else {

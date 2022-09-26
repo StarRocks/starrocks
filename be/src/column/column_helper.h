@@ -132,18 +132,9 @@ public:
 
         return dst_column;
     }
-    static ColumnPtr duplicate_column(ColumnPtr src, MutableColumnPtr desc, UInt32Column::Ptr offsets) {
-        auto desc_size = offsets->size() - 1;
-        DCHECK(src->size() >= desc_size) << "The size of the source column is less when duplicating it.";
-        for (int i = 0; i < offsets->size() - 1; ++i) {
-            desc->append_value_multiple_times(*src, i, offsets->get_data()[i + 1] - offsets->get_data()[i]);
-        }
-        return desc;
-    }
 
     // Update column according to whether the dest column and source column are nullable or not.
-    static ColumnPtr update_column_nullable(const TypeDescriptor& dst_type_desc, bool dst_nullable,
-                                            const ColumnPtr& src_column, int num_rows) {
+    static ColumnPtr update_column_nullable(bool dst_nullable, const ColumnPtr& src_column, int num_rows) {
         if (src_column->is_nullable()) {
             if (dst_nullable) {
                 // 1. Src column and dest column are both nullable.
@@ -166,6 +157,14 @@ public:
         }
     }
 
+    // Cast to Nullable
+    static ColumnPtr cast_to_nullable_column(const ColumnPtr& src_column) {
+        if (src_column->is_nullable()) {
+            return src_column;
+        }
+        return NullableColumn::create(src_column, NullColumn::create(src_column->size(), 0));
+    }
+
     // Move the source column according to the specific dest type and nullable.
     static ColumnPtr move_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, const ColumnPtr& src_column,
                                  int num_rows) {
@@ -173,13 +172,13 @@ public:
             return copy_and_unfold_const_column(dst_type_desc, dst_nullable, src_column, num_rows);
         }
 
-        return update_column_nullable(dst_type_desc, dst_nullable, src_column, num_rows);
+        return update_column_nullable(dst_nullable, src_column, num_rows);
     }
 
     // Copy the source column according to the specific dest type and nullable.
     static ColumnPtr clone_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, const ColumnPtr& src_column,
                                   int num_rows) {
-        auto dst_column = update_column_nullable(dst_type_desc, dst_nullable, src_column, num_rows);
+        auto dst_column = update_column_nullable(dst_nullable, src_column, num_rows);
         return dst_column->clone_shared();
     }
 

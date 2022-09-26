@@ -184,7 +184,7 @@ PROPERTIES(
 
 You can use the CREATE ANALYZE statement to customize an automatic collection task.
 
-Before creating a custom automatic collection task, you need to disable automatic full collection (`enable_collect_full_statistic = false`). Otherwise, custom tasks cannot take effect.
+Before creating a custom automatic collection task, you must disable automatic full collection (`enable_collect_full_statistic = false`). Otherwise, custom tasks cannot take effect.
 
 ```SQL
 -- Automatically collect stats of all databases.
@@ -278,7 +278,7 @@ SHOW ANALYZE JOB
 SHOW ANALYZE JOB where `database` = 'test';
 ```
 
-#### Delete custom collection tasks
+#### Delete a custom collection task
 
 ```SQL
 DROP ANALYZE <ID>;
@@ -323,7 +323,7 @@ This statement returns the following columns.
 ### View metadata of basic statistics
 
 ```SQL
-SHOW STATS META [WHERE predicate];
+SHOW STATS META [WHERE];
 ```
 
 This statement returns the following columns.
@@ -341,7 +341,7 @@ This statement returns the following columns.
 ### View metadata of histograms
 
 ```SQL
-SHOW HISTOGRAM META [WHERE predicate];
+SHOW HISTOGRAM META [WHERE];
 ```
 
 This statement returns the following columns.
@@ -373,13 +373,13 @@ ANALYZE TABLE tbl_name DROP HISTOGRAM ON col_name [, col_name];
 
 ## Cancel a collection task
 
-You can use the KILL ANALYZE statement to cancel a **running** collection task.
-
-The task ID can be obtained from SHOW ANALYZE STATUS.
+You can use the KILL ANALYZE statement to cancel a **running** collection task, including manual and custom tasks.
 
 ```SQL
 KILL ANALYZE <ID>;
 ```
+
+The task ID for a manual collection task can be obtained from SHOW ANALYZE STATUS. The task ID for a custom collection task can be obtained from SHOW ANALYZE SHOW ANALYZE JOB.
 
 ## FE configuration items
 
@@ -391,7 +391,7 @@ KILL ANALYZE <ID>;
 | statistic_max_full_collect_data_size | LONG     | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_collect_interval_sec       | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_sample_collect_rows        | LONG     | 200000            | The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
-| statistic_collect_concurrency        | INT      | 3                 | The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. |
+| statistic_collect_concurrency        | INT      | 3                 | The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. If you modify the value of this parameter, you must restart the FE for the modification to take effect. |
 | histogram_buckets_size               | LONG     | 64                | The default bucket number for a histogram.                   |
 | histogram_mcv_size                   | LONG     | 100               | The number of most common values (MVC) for a histogram.      |
 | histogram_sample_ratio               | FLOAT    | 0.1               | The sampling ratio for a histogram.                          |

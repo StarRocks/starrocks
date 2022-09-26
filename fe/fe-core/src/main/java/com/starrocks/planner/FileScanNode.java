@@ -84,6 +84,8 @@ import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
+
 // Broker scan node
 public class FileScanNode extends LoadScanNode {
     private static final Logger LOG = LogManager.getLogger(FileScanNode.class);
@@ -326,8 +328,12 @@ public class FileScanNode extends LoadScanNode {
                     if (defaultValueType == Column.DefaultValueType.CONST) {
                         expr = new StringLiteral(column.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        throw new UserException("Column(" + column + ") has unsupported default value:"
-                                + column.getDefaultExpr().getExpr());
+                        if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
+                            expr = column.getDefaultExpr().obtainExpr();
+                        } else {
+                            throw new UserException("Column(" + column + ") has unsupported default value:"
+                                    + column.getDefaultExpr().getExpr());
+                        }
                     } else if (defaultValueType == Column.DefaultValueType.NULL) {
                         if (column.isAllowNull()) {
                             expr = NullLiteral.create(column.getType());

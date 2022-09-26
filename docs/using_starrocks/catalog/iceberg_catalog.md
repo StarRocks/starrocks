@@ -13,7 +13,7 @@ An Iceberg catalog is an external catalog, which enables you to query data from 
 - StarRocks supports querying compressed data files of Iceberg in the following formats: gzip, Zstd, LZ4, and Snappy.
 - StarRocks supports querying Iceberg data in the following types: BOOLEAN, INT, LONG, FLOAT, DOUBLE, DECIMAL(P, S), DATE, TIME, TIMESTAMP, STRING, UUID, LIST, FIXED(L), and BINARY. Note that an error occurs when you query Iceberg data in unsupported data types. The following data types are not supported: TIMESTAMPTZ, STRUCT, and MAP.
 - StarRocks supports querying Versions 1 tables (Analytic Data Tables). Versions 2 tables (Row-level Deletes) are not supported. For the differences between these two types of tables, see [Iceberg Table Spec](https://iceberg.apache.org/spec/).
-- You can use the [DESC](/docs/sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of an Iceberg table in StarRocks 2.4 and later versions.
+- You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of an Iceberg table in StarRocks 2.4 and later versions.
 
 ## Before you begin
 
@@ -76,6 +76,6 @@ After you complete the preceding configurations, you can use the Iceberg catalog
 
 ## References
 
-- To view examples of creating an external catalog, see [CREATE EXTERNAL CATALOG](/docs/sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md).
-- To view all catalogs in the current StarRocks cluster, see [SHOW CATALOGS](/docs/sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md).
-- To delete an external catalog, see [DROP CATALOG](/docs/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md).
+- To view examples of creating an external catalog, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md).
+- To view all catalogs in the current StarRocks cluster, see [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md).
+- To delete an external catalog, see [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md).

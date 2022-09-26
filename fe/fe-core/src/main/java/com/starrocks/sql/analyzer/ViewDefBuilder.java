@@ -4,26 +4,60 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Joiner;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static java.util.stream.Collectors.toList;
 
 public class ViewDefBuilder {
+
+    public static String buildSimple(StatementBase statement) {
+        Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(statement);
+        boolean sameDb = tables.keySet().stream().map(TableName::getDb).distinct().count() == 1;
+        return new ViewDefBuilderVisitor(sameDb).visit(statement);
+    }
+
     public static String build(StatementBase statement) {
-        return new ViewDefBuilderVisitor().visit(statement);
+        return new ViewDefBuilderVisitor(false).visit(statement);
     }
 
     private static class ViewDefBuilderVisitor extends AST2SQL.SQLBuilder {
+
+        private final boolean simple;
+
+        public ViewDefBuilderVisitor(boolean simple) {
+            this.simple = simple;
+        }
+
+        private String buildColumnName(TableName tableName, String fieldName, String columnName) {
+            String res = "";
+            if (tableName != null) {
+                if (!simple) {
+                    res = tableName.toSql();
+                } else {
+                    res = "`" + tableName.getTbl() + "`";
+                }
+                res += ".";
+            }
+            res += "`" + fieldName + "`";
+            if (!fieldName.equalsIgnoreCase(columnName)) {
+                res += " AS `" + columnName + "`";
+            }
+            return res;
+        }
+
         @Override
         public String visitNode(ParseNode node, Void context) {
             return "";
@@ -45,9 +79,10 @@ public class ViewDefBuilder {
 
                 if (expr instanceof FieldReference) {
                     Field field = stmt.getScope().getRelationFields().getFieldByIndex(i);
-                    selectListString.add(
-                            (field.getRelationAlias() == null ? "" : field.getRelationAlias().toSql() + ".")
-                                    + "`" + field.getName() + "`" + " AS `" + columnName + "`");
+                    selectListString.add(buildColumnName(field.getRelationAlias(), field.getName(), columnName));
+                } else if (expr instanceof SlotRef) {
+                    SlotRef slot = (SlotRef) expr;
+                    selectListString.add(buildColumnName(slot.getTblNameWithoutAnalyzed(), slot.getColumnName(), columnName));
                 } else {
                     selectListString.add(visit(expr) + " AS `" + columnName + "`");
                 }
@@ -57,22 +92,22 @@ public class ViewDefBuilder {
 
             String fromClause = visit(stmt.getRelation());
             if (fromClause != null) {
-                sqlBuilder.append(" FROM ");
+                sqlBuilder.append("\nFROM ");
                 sqlBuilder.append(fromClause);
             }
 
             if (stmt.hasWhereClause()) {
-                sqlBuilder.append(" WHERE ");
+                sqlBuilder.append("\nWHERE ");
                 sqlBuilder.append(visit(stmt.getWhereClause()));
             }
 
             if (stmt.hasGroupByClause()) {
-                sqlBuilder.append(" GROUP BY ");
+                sqlBuilder.append("\nGROUP BY ");
                 sqlBuilder.append(visit(stmt.getGroupByClause()));
             }
 
             if (stmt.hasHavingClause()) {
-                sqlBuilder.append(" HAVING ");
+                sqlBuilder.append("\nHAVING ");
                 sqlBuilder.append(visit(stmt.getHavingClause()));
             }
 
@@ -116,7 +151,11 @@ public class ViewDefBuilder {
         @Override
         public String visitTable(TableRelation node, Void outerScope) {
             StringBuilder sqlBuilder = new StringBuilder();
-            sqlBuilder.append(node.getName().toSql());
+            if (simple) {
+                sqlBuilder.append("`").append(node.getName().getTbl()).append("`");
+            } else {
+                sqlBuilder.append(node.getName().toSql());
+            }
             if (node.getPartitionNames() != null) {
                 List<String> partitionNames = node.getPartitionNames().getPartitionNames();
                 if (partitionNames != null && !partitionNames.isEmpty()) {
@@ -142,7 +181,7 @@ public class ViewDefBuilder {
 
         @Override
         public String visitSlot(SlotRef expr, Void context) {
-            return expr.toSql();
+            return buildColumnName(expr.getTblNameWithoutAnalyzed(), expr.getColumnName(), expr.getColumnName());
         }
     }
 }

@@ -521,8 +521,10 @@ vectorized_functions = [
     [110011, "json_array", "JSON", [], "JsonFunctions::json_array_empty", False],
     [110016, "json_length", "INT", ["JSON"], "JsonFunctions::json_length", False],
     [110017, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length", 
-    "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110018, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
+    [110018, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys", 
+      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # aes and base64 function
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt", False],
@@ -531,6 +533,7 @@ vectorized_functions = [
     [120130, "to_base64", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::to_base64", False],
     [120140, "md5", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::md5", False],
     [120150, "md5sum", "VARCHAR", ["VARCHAR", "..."], "EncryptionFunctions::md5sum", False],
+    [120151, "md5sum_numeric", "VARCHAR", ["VARCHAR", "..."], "EncryptionFunctions::md5sum_numeric", False],
     [120160, "sha2", "VARCHAR", ["VARCHAR", "INT"], "EncryptionFunctions::sha2", "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close", False],
 
       # geo function
@@ -752,18 +755,7 @@ vectorized_functions = [
     # reserve 150281
     [150282, 'array_contains_all', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
 
-    [150300, 'array_filter', 'ARRAY_DATE',      ['ARRAY_DATE', 'ARRAY_BOOLEAN'],      'ArrayFunctions::array_filter_date'],
-    [150301, 'array_filter', 'ARRAY_DATETIME',  ['ARRAY_DATETIME', 'ARRAY_BOOLEAN'],  'ArrayFunctions::array_filter_datetime'],
-    [150302, 'array_filter', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_filter_boolean'],
-    [150303, 'array_filter', 'ARRAY_TINYINT',   ['ARRAY_TINYINT', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_filter_tinyint'],
-    [150304, 'array_filter', 'ARRAY_SMALLINT',  ['ARRAY_SMALLINT', 'ARRAY_BOOLEAN'],  'ArrayFunctions::array_filter_smallint'],
-    [150305, 'array_filter', 'ARRAY_INT',       ['ARRAY_INT', 'ARRAY_BOOLEAN'],       'ArrayFunctions::array_filter_int'],
-    [150306, 'array_filter', 'ARRAY_BIGINT',    ['ARRAY_BIGINT', 'ARRAY_BOOLEAN'],    'ArrayFunctions::array_filter_bigint'],
-    [150307, 'array_filter', 'ARRAY_LARGEINT',  ['ARRAY_LARGEINT', 'ARRAY_BOOLEAN'],  'ArrayFunctions::array_filter_largeint'],
-    [150308, 'array_filter', 'ARRAY_FLOAT',     ['ARRAY_FLOAT', 'ARRAY_BOOLEAN'],     'ArrayFunctions::array_filter_float'],
-    [150309, 'array_filter', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE', 'ARRAY_BOOLEAN'],    'ArrayFunctions::array_filter_double'],
-    [150310, 'array_filter', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2', 'ARRAY_BOOLEAN'], 'ArrayFunctions::array_filter_decimalv2'],
-    [150311, 'array_filter', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_filter_varchar'],
+    [150300, 'array_filter', 'ANY_ARRAY',   ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_filter'],
 
     # high-order functions related to lambda functions.
     [160100, 'array_map','ANY_ARRAY',['FUNCTION','ANY_ARRAY', "..."],'ArrayFunctions::array_map'],

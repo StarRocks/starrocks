@@ -231,16 +231,14 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
 
     // init _rs_metas
     for (auto& it : tablet_meta_pb.rs_metas()) {
-        RowsetMetaSharedPtr rs_meta(new RowsetMeta());
-        rs_meta->init_from_pb(it);
+        auto rs_meta = std::make_shared<RowsetMeta>(it);
         if (rs_meta->has_delete_predicate()) {
             add_delete_predicate(rs_meta->delete_predicate(), rs_meta->version().first);
         }
         _rs_metas.push_back(std::move(rs_meta));
     }
     for (auto& it : tablet_meta_pb.inc_rs_metas()) {
-        RowsetMetaSharedPtr rs_meta(new RowsetMeta());
-        rs_meta->init_from_pb(it);
+        auto rs_meta = std::make_shared<RowsetMeta>(it);
         _inc_rs_metas.push_back(std::move(rs_meta));
     }
 

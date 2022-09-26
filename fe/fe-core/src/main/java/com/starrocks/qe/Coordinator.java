@@ -154,7 +154,8 @@ public class Coordinator {
     // status or to CANCELLED, if Cancel() is called.
     Status queryStatus = new Status();
     // save of related backends of this query
-    Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
+    private final Set<Long> usedBackendIDs = Sets.newConcurrentHashSet();
+    private final Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
     // backends which this query will use
     private ImmutableMap<Long, Backend> idToBackend = ImmutableMap.of();
     // compute node which this query will use
@@ -224,6 +225,8 @@ public class Coordinator {
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
 
+    private final boolean usePipeline;
+
     // Resource group
     ResourceGroup resourceGroup = null;
 
@@ -268,6 +271,8 @@ public class Coordinator {
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
         this.forceScheduleLocal = context.getSessionVariable().isForceScheduleLocal();
+
+        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
 
     // Used for broker export task coordinator
@@ -300,6 +305,8 @@ public class Coordinator {
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
+
+        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
 
     // Used for broker load task coordinator
@@ -336,6 +343,8 @@ public class Coordinator {
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
+
+        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
 
     public long getJobId() {
@@ -415,6 +424,10 @@ public class Coordinator {
 
     public List<TTabletCommitInfo> getCommitInfos() {
         return commitInfos;
+    }
+
+    public boolean isUsingBackend(Long backendID) {
+        return usedBackendIDs.contains(backendID);
     }
 
     // Initialize
@@ -639,19 +652,14 @@ public class Coordinator {
     }
 
     private void deliverExecFragments() throws Exception {
-        // Disable pipeline engine for `INSERT INTO`.
-        // TODO: remove this when load supports pipeline engine.
-        boolean enablePipelineEngine = connectContext != null &&
-                connectContext.getSessionVariable().isEnablePipelineEngine() &&
-                fragments.stream().allMatch(PlanFragment::canUsePipeline);
         // Only pipeline uses deliver_batch_fragments.
-        boolean enableDeliverBatchFragments = enablePipelineEngine
-                && connectContext.getSessionVariable().isEnableDeliverBatchFragments();
+        boolean enableDeliverBatchFragments =
+                usePipeline && connectContext.getSessionVariable().isEnableDeliverBatchFragments();
 
         if (enableDeliverBatchFragments) {
-            deliverExecBatchFragmentsRequests(enablePipelineEngine);
+            deliverExecBatchFragmentsRequests(usePipeline);
         } else {
-            deliverExecFragmentRequests(enablePipelineEngine);
+            deliverExecFragmentRequests(usePipeline);
         }
     }
 
@@ -1119,8 +1127,6 @@ public class Coordinator {
 
     private void setGlobalRuntimeFilterParams(FragmentExecParams topParams, TNetworkAddress mergeHost)
             throws Exception {
-        boolean enablePipelineEngine = connectContext != null &&
-                connectContext.getSessionVariable().isEnablePipelineEngine();
 
         Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
         List<RuntimeFilterDescription> broadcastGRFList = Lists.newArrayList();
@@ -1129,7 +1135,6 @@ public class Coordinator {
         for (PlanFragment fragment : fragments) {
             fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
             fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
-            boolean usePipeline = enablePipelineEngine && fragment.canUsePipeline();
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {
                 List<TRuntimeFilterProberParams> probeParamList = Lists.newArrayList();
@@ -1358,7 +1363,7 @@ public class Coordinator {
     // Cancel execution of query. This includes the execution of the local plan
     // fragment,
     // if any, as well as all plan fragments on remote nodes.
-    public void cancel() {
+    public void cancel(PPlanFragmentCancelReason cancelReason, String cancelledMessage) {
         lock();
         try {
             if (!queryStatus.ok()) {
@@ -1366,12 +1371,17 @@ public class Coordinator {
                 return;
             } else {
                 queryStatus.setStatus(Status.CANCELLED);
+                queryStatus.setErrorMsg(cancelledMessage);
             }
             LOG.warn("cancel execution of query, this is outside invoke");
-            cancelInternal(PPlanFragmentCancelReason.USER_CANCEL);
+            cancelInternal(cancelReason);
         } finally {
             unlock();
         }
+    }
+
+    public void cancel() {
+        cancel(PPlanFragmentCancelReason.USER_CANCEL, "");
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
@@ -1631,10 +1641,7 @@ public class Coordinator {
             PlanFragment fragment = fragments.get(i);
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
 
-            boolean enablePipeline = connectContext != null &&
-                    connectContext.getSessionVariable().isEnablePipelineEngine() &&
-                    fragment.getPlanRoot().canUsePipeLine();
-            boolean dopAdaptionEnabled = enablePipeline &&
+            boolean dopAdaptionEnabled = usePipeline &&
                     connectContext.getSessionVariable().isPipelineDopAdaptionEnabled();
 
             // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
@@ -1659,7 +1666,7 @@ public class Coordinator {
                     LOG.warn("DataPartition UNPARTITIONED, no scanNode Backend");
                     throw new UserException("Backend not found. Check if any backend is down or not");
                 }
-                this.addressToBackendID.put(execHostport, backendIdRef.getRef());
+                recordUsedBackend(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
                         0, params);
                 params.instanceExecParams.add(instanceParam);
@@ -1712,7 +1719,7 @@ public class Coordinator {
                         }
                         TNetworkAddress addr = new TNetworkAddress(computeNode.getHost(), computeNode.getBePort());
                         hostSet.add(addr);
-                        this.addressToBackendID.put(addr, computeNode.getId());
+                        this.recordUsedBackend(addr, computeNode.getId());
                     }
                     //make olapScan maxParallelism equals prefer compute node number
                     maxParallelism = hostSet.size() * fragment.getParallelExecNum();
@@ -1783,10 +1790,10 @@ public class Coordinator {
             if (hasColocate || hasBucketShuffle) {
                 computeColocatedJoinInstanceParam(fragmentIdToSeqToAddressMap.get(fragment.getFragmentId()),
                         fragmentIdBucketSeqToScanRangeMap.get(fragment.getFragmentId()),
-                        parallelExecInstanceNum, pipelineDop, enablePipeline, params);
+                        parallelExecInstanceNum, pipelineDop, usePipeline, params);
                 computeBucketSeq2InstanceOrdinal(params, fragmentIdToBucketNumMap.get(fragment.getFragmentId()));
             } else {
-                boolean assignScanRangesPerDriverSeq = enablePipeline && fragment.isAssignScanRangesPerDriverSeq();
+                boolean assignScanRangesPerDriverSeq = usePipeline && fragment.isAssignScanRangesPerDriverSeq();
                 for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> tNetworkAddressMapEntry :
                         fragmentExecParamsMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
                     TNetworkAddress key = tNetworkAddressMapEntry.getKey();
@@ -1855,7 +1862,7 @@ public class Coordinator {
                 if (execHostport == null) {
                     throw new UserException("Backend not found. Check if any backend is down or not");
                 }
-                this.addressToBackendID.put(execHostport, backendIdRef.getRef());
+                this.recordUsedBackend(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
                         0, params);
                 params.instanceExecParams.add(instanceParam);
@@ -2011,7 +2018,9 @@ public class Coordinator {
      * @return Whether using the strategy of assigning scanRanges to each driver sequence.
      */
     private <T> boolean enableAssignScanRangesPerDriverSeq(List<T> scanRanges, int pipelineDop) {
-        return scanRanges.size() > pipelineDop / 2;
+        boolean enableTabletInternalParallel =
+                connectContext != null && connectContext.getSessionVariable().isEnableTabletInternalParallel();
+        return !enableTabletInternalParallel || scanRanges.size() > pipelineDop / 2;
     }
 
     public void computeColocatedJoinInstanceParam(Map<Integer, TNetworkAddress> bucketSeqToAddress,
@@ -2125,7 +2134,7 @@ public class Coordinator {
             if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode) {
                 HDFSBackendSelector selector =
-                        new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID,
+                        new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                 getSelectorComputeNodes(hasComputeNode),
                                 forceScheduleLocal);
                 selector.computeScanRangeAssignment();
@@ -2207,11 +2216,11 @@ public class Coordinator {
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }
 
-        if (params.isSetLoaded_rows() && params.isSetLoaded_bytes()) {
-
+        if (params.isSetLoaded_rows() && params.isSetSink_load_bytes() && params.isSetSource_load_rows()
+                && params.isSetSource_load_bytes()) {
             GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
                     jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
-                    params.done, params.loaded_bytes);
+                    params.sink_load_bytes, params.source_load_rows, params.source_load_bytes, params.done);
         }
     }
 
@@ -2289,7 +2298,7 @@ public class Coordinator {
             return;
         }
 
-        if (!sessionVariable.isEnablePipelineEngine()) {
+        if (!usePipeline) {
             return;
         }
 
@@ -2318,6 +2327,16 @@ public class Coordinator {
             List<RuntimeProfile> instanceProfiles = fragmentProfile.getChildList().stream()
                     .map(pair -> pair.first)
                     .collect(Collectors.toList());
+
+            // Setup backend address infos
+            Set<String> backendAddresses = Sets.newHashSet();
+            instanceProfiles.forEach(instanceProfile -> {
+                backendAddresses.add(instanceProfile.getInfoString("Address"));
+                instanceProfile.removeInfoString("Address");
+            });
+            fragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
+
+            // Setup number of instance
             Counter counter = fragmentProfile.addCounter("InstanceNum", TUnit.UNIT);
             counter.setValue(instanceProfiles.size());
 
@@ -2356,32 +2375,40 @@ public class Coordinator {
             backendNum.setValue(networkAddresses.size());
         }
 
-        // Calculate Fe time and Be time
-        boolean found = false;
-        for (int i = 0; !found && i < fragments.size(); i++) {
-            PlanFragment fragment = fragments.get(i);
-            DataSink sink = fragment.getSink();
-            if (!(sink instanceof ResultSink)) {
-                continue;
-            }
-            RuntimeProfile profile = fragmentProfiles.get(i);
+        // Calculate ExecutionTotalTime, which comprising all operator's sync time and async time
+        // We can get Operator's sync time from OperatorTotalTime, and for async time, only ScanOperator and
+        // ExchangeOperator have async operations, we can get async time from ScanTime(for ScanOperator) and
+        // NetworkTime(for ExchangeOperator)
+        long executionTime = 0;
+        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+            for (Pair<RuntimeProfile, Boolean> pipelineProfilePair : fragmentProfile.getChildList()) {
+                RuntimeProfile pipelineProfile = pipelineProfilePair.first;
+                for (Pair<RuntimeProfile, Boolean> operatorProfilePair : pipelineProfile.getChildList()) {
+                    RuntimeProfile operatorProfile = operatorProfilePair.first;
+                    RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
+                    RuntimeProfile uniqueMetrics = operatorProfile.getChild("UniqueMetrics");
+                    if (commonMetrics == null || uniqueMetrics == null) {
+                        continue;
+                    }
+                    Counter operatorTotalTime = commonMetrics.getMaxCounter("OperatorTotalTime");
+                    Preconditions.checkNotNull(operatorTotalTime);
+                    executionTime += operatorTotalTime.getValue();
 
-            for (int j = 0; !found && j < profile.getChildList().size(); j++) {
-                RuntimeProfile pipelineProfile = profile.getChildList().get(j).first;
-                if (pipelineProfile.getChildList().isEmpty()) {
-                    LOG.warn("pipeline's profile miss children, profileName={}", pipelineProfile.getName());
-                    continue;
-                }
-                RuntimeProfile operatorProfile = pipelineProfile.getChildList().get(0).first;
-                if (operatorProfile.getName().contains("RESULT_SINK")) {
-                    long beTotalTime = pipelineProfile.getCounter("DriverTotalTime").getValue();
-                    Counter executionTotalTime = queryProfile.addCounter("ExecutionTotalTime", TUnit.TIME_NS);
-                    queryProfile.getCounterTotalTime().setValue(0);
-                    executionTotalTime.setValue(beTotalTime);
-                    found = true;
+                    Counter scanTime = uniqueMetrics.getMaxCounter("ScanTime");
+                    if (scanTime != null) {
+                        executionTime += scanTime.getValue();
+                    }
+
+                    Counter networkTime = uniqueMetrics.getMaxCounter("NetworkTime");
+                    if (networkTime != null) {
+                        executionTime += networkTime.getValue();
+                    }
                 }
             }
         }
+        Counter executionTotalTime = queryProfile.addCounter("ExecutionTotalTime", TUnit.TIME_NS);
+        queryProfile.getCounterTotalTime().setValue(0);
+        executionTotalTime.setValue(executionTime);
     }
 
     /**
@@ -2582,6 +2609,7 @@ public class Coordinator {
                     "Instance " + DebugUtil.printId(uniqueRpcParams.params.fragment_instance_id) + " (host=" + address +
                             ")";
             this.profile = new RuntimeProfile(name);
+            this.profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
             this.hasCanceled = false;
             this.lastMissingHeartbeatTime = backend.getLastMissingHeartbeatTime();
         }
@@ -3129,7 +3157,7 @@ public class Coordinator {
                 if (execHostPort == null) {
                     throw new UserException("Backend not found. Check if any backend is down or not");
                 }
-                addressToBackendID.put(execHostPort, backendIdRef.getRef());
+                recordUsedBackend(execHostPort, backendIdRef.getRef());
 
                 Map<Integer, List<TScanRangeParams>> scanRanges = BackendSelector.findOrInsert(
                         assignment, execHostPort, new HashMap<Integer, List<TScanRangeParams>>());
@@ -3226,8 +3254,7 @@ public class Coordinator {
                 //fill scanRangeParamsList
                 List<TScanRangeLocations> locations = scanNode.bucketSeq2locations.get(bucketSeq);
                 if (!bucketSeqToAddress.containsKey(bucketSeq)) {
-                    getExecHostPortForFragmentIDAndBucketSeq(locations.get(0), fragmentId, bucketSeq,
-                            idToBackend, addressToBackendID);
+                    getExecHostPortForFragmentIDAndBucketSeq(locations.get(0), fragmentId, bucketSeq, idToBackend);
                 }
 
                 for (TScanRangeLocations location : locations) {
@@ -3255,7 +3282,7 @@ public class Coordinator {
                         if (execHostport == null) {
                             throw new UserException("Backend not found. Check if any backend is down or not");
                         }
-                        addressToBackendID.put(execHostport, backendIdRef.getRef());
+                        recordUsedBackend(execHostport, backendIdRef.getRef());
                         bucketSeqToAddress.put(bucketSeq, execHostport);
                     }
                     if (!bucketSeqToScanRange.containsKey(bucketSeq)) {
@@ -3282,8 +3309,7 @@ public class Coordinator {
         // Make sure each host have average bucket to scan
         private void getExecHostPortForFragmentIDAndBucketSeq(TScanRangeLocations seqLocation,
                                                               PlanFragmentId fragmentId, Integer bucketSeq,
-                                                              ImmutableMap<Long, Backend> idToBackend,
-                                                              Map<TNetworkAddress, Long> addressToBackendID)
+                                                              ImmutableMap<Long, Backend> idToBackend)
                 throws Exception {
             Map<Long, Integer> buckendIdToBucketCountMap = fragmentIdToBackendIdBucketCountMap.get(fragmentId);
             int maxBucketNum = Integer.MAX_VALUE;
@@ -3309,8 +3335,26 @@ public class Coordinator {
                 throw new UserException("Backend not found. Check if any backend is down or not");
             }
 
-            addressToBackendID.put(execHostPort, backendIdRef.getRef());
+            recordUsedBackend(execHostPort, backendIdRef.getRef());
             fragmentIdToSeqToAddressMap.get(fragmentId).put(bucketSeq, execHostPort);
         }
+    }
+
+    private void recordUsedBackend(TNetworkAddress addr, Long backendID) {
+        usedBackendIDs.add(backendID);
+        addressToBackendID.put(addr, backendID);
+    }
+
+    /**
+     * Whether it can use pipeline engine.
+     * @param connectContext It is null for broker broker export.
+     * @param fragments All the fragments need to execute.
+     * @return true if enabling pipeline in the session variable and all the fragments can use pipeline,
+     * otherwise false.
+     */
+    private boolean canUsePipeline(ConnectContext connectContext, List<PlanFragment> fragments) {
+        return connectContext != null &&
+                connectContext.getSessionVariable().isEnablePipelineEngine() &&
+                fragments.stream().allMatch(PlanFragment::canUsePipeline);
     }
 }

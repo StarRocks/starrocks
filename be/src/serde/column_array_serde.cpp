@@ -11,6 +11,7 @@
 #include "column/decimalv3_column.h"
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
 #include "gutil/strings/substitute.h"
@@ -265,6 +266,29 @@ public:
     }
 };
 
+class MapColumnSerde {
+public:
+    static int64_t max_serialized_size(const vectorized::MapColumn& column) {
+        return serde::ColumnArraySerde::max_serialized_size(column.offsets()) +
+               serde::ColumnArraySerde::max_serialized_size(column.keys()) +
+               serde::ColumnArraySerde::max_serialized_size(column.values());
+    }
+
+    static uint8_t* serialize(const vectorized::MapColumn& column, uint8_t* buff) {
+        buff = serde::ColumnArraySerde::serialize(column.offsets(), buff);
+        buff = serde::ColumnArraySerde::serialize(column.keys(), buff);
+        buff = serde::ColumnArraySerde::serialize(column.values(), buff);
+        return buff;
+    }
+
+    static const uint8_t* deserialize(const uint8_t* buff, vectorized::MapColumn* column) {
+        buff = serde::ColumnArraySerde::deserialize(buff, column->offsets_column().get());
+        buff = serde::ColumnArraySerde::deserialize(buff, column->keys_column().get());
+        buff = serde::ColumnArraySerde::deserialize(buff, column->values_column().get());
+        return buff;
+    }
+};
+
 class ConstColumnSerde {
 public:
     static int64_t max_serialized_size(const vectorized::ConstColumn& column) {
@@ -302,6 +326,11 @@ public:
 
     Status do_visit(const vectorized::ArrayColumn& column) {
         _size += ArrayColumnSerde::max_serialized_size(column);
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::MapColumn& column) {
+        _size += MapColumnSerde::max_serialized_size(column);
         return Status::OK();
     }
 
@@ -350,6 +379,11 @@ public:
 
     Status do_visit(const vectorized::ArrayColumn& column) {
         _cur = ArrayColumnSerde::serialize(column, _cur);
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::MapColumn& column) {
+        _cur = MapColumnSerde::serialize(column, _cur);
         return Status::OK();
     }
 
@@ -402,6 +436,11 @@ public:
 
     Status do_visit(vectorized::ArrayColumn* column) {
         _cur = ArrayColumnSerde::deserialize(_cur, column);
+        return Status::OK();
+    }
+
+    Status do_visit(vectorized::MapColumn* column) {
+        _cur = MapColumnSerde::deserialize(_cur, column);
         return Status::OK();
     }
 

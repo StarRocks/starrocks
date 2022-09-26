@@ -107,7 +107,7 @@ static int64_t calc_max_compaction_memory(int64_t process_mem_limit) {
 }
 
 static int64_t calc_max_consistency_memory(int64_t process_mem_limit) {
-    int64_t limit = ParseUtil::parse_mem_spec(config::consistency_max_memory_limit);
+    int64_t limit = ParseUtil::parse_mem_spec(config::consistency_max_memory_limit, process_mem_limit);
     int64_t percent = config::consistency_max_memory_limit_percent;
 
     if (process_mem_limit < 0) {
@@ -320,7 +320,7 @@ Status ExecEnv::init_mem_tracker() {
     int64_t bytes_limit = 0;
     std::stringstream ss;
     // --mem_limit="" means no memory limit
-    bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit);
+    bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
     // use 90% of mem_limit as the soft mem limit of BE
     bytes_limit = bytes_limit * 0.9;
     if (bytes_limit <= 0) {
@@ -381,21 +381,29 @@ Status ExecEnv::init_mem_tracker() {
     return Status::OK();
 }
 
-Status ExecEnv::_init_storage_page_cache() {
-    int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit);
+int64_t ExecEnv::get_storage_page_cache_size() {
+    std::lock_guard<std::mutex>(*config::get_mstring_conf_lock());
+    int64_t mem_limit = MemInfo::physical_mem();
+    if (_mem_tracker->has_limit()) {
+        mem_limit = _mem_tracker->limit();
+    }
+    int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
                      << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
     }
     if (!config::disable_storage_page_cache) {
         if (storage_cache_limit < kcacheMinSize) {
-            LOG(WARNING) << "Storage cache limit is too small, give up using page cache.";
-            config::disable_storage_page_cache = true;
-            storage_cache_limit = 0;
-        } else {
-            LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
+            LOG(WARNING) << "Storage cache limit is too small, use default size.";
+            storage_cache_limit = kcacheMinSize;
         }
+        LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
     }
+    return storage_cache_limit;
+}
+
+Status ExecEnv::_init_storage_page_cache() {
+    int64_t storage_cache_limit = get_storage_page_cache_size();
     StoragePageCache::create_global_cache(_page_cache_mem_tracker, storage_cache_limit);
 
     // TODO(zc): The current memory usage configuration is a bit confusing,

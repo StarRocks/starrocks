@@ -25,7 +25,6 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -102,8 +101,6 @@ public class AbstractBackupStmt extends DdlStmt {
             } else {
                 throw new AnalysisException("Duplicated restore table: " + tblName);
             }
-
-            CatalogUtils.checkIsLakeTable(labelName.getDbName(), tblName);
         }
 
         // update table ref

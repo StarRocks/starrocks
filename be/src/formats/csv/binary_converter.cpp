@@ -88,7 +88,7 @@ bool BinaryConverter::read_quoted_string(Column* column, Slice s, const Options&
     if (options.type_desc != nullptr) {
         max_size = options.type_desc->len;
     }
-    int ext_size = new_size - old_size;
+    size_t ext_size = new_size - old_size;
     if (UNLIKELY((ext_size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && ext_size > max_size))) {
         bytes.resize(old_size);
         return false;

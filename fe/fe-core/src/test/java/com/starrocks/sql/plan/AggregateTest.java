@@ -49,7 +49,7 @@ public class AggregateTest extends PlanTestBase {
             String plan = getVerboseExplain(sql);
             assertContains(plan, "  7:AGGREGATE (update finalize)\n" +
                     "  |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; " +
-                    "result nullable: false], any_value[([11: expr, BOOLEAN, true]); args: BOOLEAN; " +
+                    "result nullable: false], any_value[([22: expr, BOOLEAN, true]); args: BOOLEAN; " +
                     "result: BOOLEAN; args nullable: true; result nullable: true]\n" +
                     "  |  group by: [1: t1a, VARCHAR, false]\n" +
                     "  |  having: [24: any_value, BOOLEAN, true]\n" +
@@ -58,7 +58,7 @@ public class AggregateTest extends PlanTestBase {
                     "  6:Project\n" +
                     "  |  output columns:\n" +
                     "  |  1 <-> [1: t1a, VARCHAR, false]\n" +
-                    "  |  11 <-> [1: t1a, VARCHAR, false] <= [12: t1a, VARCHAR, true]\n" +
+                    "  |  22 <-> [1: t1a, VARCHAR, false] <= [11: t1a, VARCHAR, true]\n" +
                     "  |  cardinality: 1");
         }
         {
@@ -190,25 +190,25 @@ public class AggregateTest extends PlanTestBase {
                 BackendCoreStat.setDefaultCoresOfBe(cpuCores);
                 Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
                 String explainString = plan.second.getExplainString(TExplainLevel.NORMAL);
-                Assert.assertTrue(explainString.contains("  2:Project\n"
+                assertContains(explainString, "  2:Project\n"
                         + "  |  <slot 4> : 4: avg\n"
                         + "  |  \n"
                         + "  1:AGGREGATE (update finalize)\n"
                         + "  |  output: avg(2: v2)\n"
                         + "  |  group by: 2: v2\n"
                         + "  |  \n"
-                        + "  0:OlapScanNode"));
+                        + "  0:OlapScanNode");
 
                 PlanFragment aggPlan = plan.second.getFragments().get(0);
                 String aggPlanStr = aggPlan.getExplainString(TExplainLevel.NORMAL);
-                Assert.assertTrue(aggPlanStr, aggPlanStr.contains("  2:Project\n"
+                assertContains(aggPlanStr, "  2:Project\n"
                         + "  |  <slot 4> : 4: avg\n"
                         + "  |  \n"
                         + "  1:AGGREGATE (update finalize)\n"
                         + "  |  output: avg(2: v2)\n"
                         + "  |  group by: 2: v2\n"
                         + "  |  \n"
-                        + "  0:OlapScanNode"));
+                        + "  0:OlapScanNode");
                 Assert.assertEquals(expectedTotalDop, aggPlan.getPipelineDop());
                 Assert.assertEquals(1, aggPlan.getParallelExecNum());
             }
@@ -277,7 +277,7 @@ public class AggregateTest extends PlanTestBase {
     public void testAggConstPredicate() throws Exception {
         String queryStr = "select MIN(v1) from t0 having abs(1) = 2";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  1:AGGREGATE (update finalize)\n"
+        Assert.assertTrue(explainString, explainString.contains("  1:AGGREGATE (update finalize)\n"
                 + "  |  output: min(1: v1)\n"
                 + "  |  group by: \n"
                 + "  |  having: abs(1) = 2\n"));
@@ -857,6 +857,57 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testWindowFunnelWithConstantMultipleStage() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'auto',new_planner_agg_stage='3')*/ "
+                + "1,2,(window_funnel(900,lo_orderdate,0,[(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) "
+                + "= 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'A', "
+                + "(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate  "
+                + "as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'B',(case when ((((cast(lo_orderdate as "
+                + "BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else "
+                + "'C' end) = 'C'])) as __col_4, (count(distinct lo_orderdate)) "
+                + "as __col_18 from lineorder_flat_for_mv group by 1,2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "window_funnel(43: window_funnel, 900, 0)");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testWindowFunnelWithOutMultipleStage() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'auto',new_planner_agg_stage='3')*/ "
+                + "1,2,(window_funnel(900,lo_orderdate,0,[(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) "
+                + "= 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'A', "
+                + "(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate  "
+                + "as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'B',(case when ((((cast(lo_orderdate as "
+                + "BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else "
+                + "'C' end) = 'C'])) as __col_4, (count(distinct lo_orderdate)) "
+                + "as __col_18 from lineorder_flat_for_mv";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "window_funnel(41: window_funnel, 900, 0)");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testWindowFunnelWithMultipleStage() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'auto',new_planner_agg_stage='3') */ " +
+                "year, k, __col_4,__col_18 from  (select  date_trunc('year',lo_orderdate) as year,left(c_name,1) as k," +
+                "(window_funnel(900,lo_orderdate,0,[(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' " +
+                "when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'A'," +
+                "(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' " +
+                "when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'B'," +
+                "(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' " +
+                "when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'C'])) as __col_4, " +
+                "(count(distinct lo_orderdate)) as __col_18 from lineorder_flat_for_mv group " +
+                "by date_trunc('year',lo_orderdate)," +
+                "left(c_name,1) ) t;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "window_funnel(43: window_funnel, 900, 0)");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
     public void testWindowFunnelWithNonDecimalWindow() throws Exception {
         FeConstants.runningUnitTest = true;
         expectedException.expect(SemanticException.class);
@@ -976,11 +1027,11 @@ public class AggregateTest extends PlanTestBase {
         System.out.println(plan);
 
         Assert.assertTrue(plan.contains("  7:AGGREGATE (update serialize)\n" +
-                "  |  output: sum(4: case)\n" +
+                "  |  output: sum(8: case)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  6:Project\n" +
-                "  |  <slot 4> : if(1: v4 = 5: v1, 1: v4, NULL)\n" +
+                "  |  <slot 8> : if(1: v4 = 4: v1, 1: v4, NULL)\n" +
                 "  |  \n" +
                 "  5:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +

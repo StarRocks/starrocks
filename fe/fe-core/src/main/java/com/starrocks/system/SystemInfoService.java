@@ -395,11 +395,11 @@ public class SystemInfoService {
             // remove worker
             if (Config.integrate_starmgr) {
                 long starletPort = droppedBackend.getStarletPort();
-                if (starletPort == 0) {
-                    throw new DdlException("starletPort has not been updated by heartbeat from this backend");
+                // only need to remove worker after be reported its staretPort
+                if (starletPort != 0) {
+                    String workerAddr = droppedBackend.getHost() + ":" + starletPort;
+                    GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
                 }
-                String workerAddr = droppedBackend.getHost() + ":" + starletPort;
-                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
             }
 
             cluster.removeBackend(droppedBackend.getId());

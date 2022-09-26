@@ -33,6 +33,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -52,6 +53,7 @@ public class InsertLoadJob extends LoadJob {
 
     private long tableId;
     private long estimateScanRow;
+    private TLoadJobType loadType;
 
     // only for log replay
     public InsertLoadJob() {
@@ -59,7 +61,7 @@ public class InsertLoadJob extends LoadJob {
         this.jobType = EtlJobType.INSERT;
     }
 
-    public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp, long estimateScanRow) 
+    public InsertLoadJob(String label, long dbId, long tableId, long createTimestamp, long estimateScanRow, TLoadJobType type) 
             throws MetaNotFoundException {
         super(dbId, label);
         this.tableId = tableId;
@@ -68,6 +70,7 @@ public class InsertLoadJob extends LoadJob {
         this.state = JobState.LOADING;
         this.jobType = EtlJobType.INSERT;
         this.estimateScanRow = estimateScanRow;
+        this.loadType = type;
     }
 
     // only used for test
@@ -90,6 +93,7 @@ public class InsertLoadJob extends LoadJob {
         this.timeoutSecond = Config.insert_load_default_timeout_second;
         this.authorizationInfo = gatherAuthInfo();
         this.loadingStatus.setTrackingUrl(trackingUrl);
+        this.loadType = TLoadJobType.INSERT_QUERY;
     }
 
     public void setLoadFinishOrCancel(String failMsg, String trackingUrl) throws UserException {
@@ -126,12 +130,19 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId, 
-            long scannedRows, boolean isDone, long scannedBytes) {
+            long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
         writeLock();
         try {
-            super.updateProgess(beId, loadId, fragmentId, scannedRows, isDone, scannedBytes);
+            super.updateProgess(beId, loadId, fragmentId, sinkRows, sinkBytes, sourceRows, sourceBytes, isDone);
             if (!loadingStatus.getLoadStatistic().getLoadFinish()) {
-                progress = (int) ((double) loadingStatus.getLoadStatistic().totalRows() / (estimateScanRow + 1) * 100);
+                if (this.loadType == TLoadJobType.INSERT_QUERY) {
+                    progress = (int) ((double) loadingStatus.getLoadStatistic().totalSourceLoadRows() 
+                        / (estimateScanRow + 1) * 100);
+                } else {
+                    progress = (int) ((double) loadingStatus.getLoadStatistic().totalSinkLoadRows() 
+                        / (estimateScanRow + 1) * 100);
+                }
+                
                 if (progress >= 100) {
                     progress = 99;
                 }

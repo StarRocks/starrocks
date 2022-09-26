@@ -2,6 +2,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -130,6 +131,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return resourceName;
     }
 
+    @Override
+    public String getCatalogName() {
+        return null;
+    }
+
     public HoodieTableType getTableType() {
         return HoodieTableType.valueOf(hudiProperties.get(HUDI_TABLE_TYPE));
     }
@@ -163,6 +169,20 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     public List<String> getDataColumnNames() {
         return dataColumnNames;
+    }
+
+    @Override
+    public boolean isUnPartitioned() {
+        return partColumnNames.size() == 0;
+    }
+
+    @Override
+    public String getTableIdentifier() {
+        return Joiner.on(":").join(table, createTime);
+    }
+
+    public static boolean isHudiTable(String inputFormat) {
+        return HudiTable.fromInputFormat(inputFormat) != HudiTable.HudiTableType.UNKNOWN;
     }
 
     public static HudiTableType fromInputFormat(String inputFormat) {
@@ -276,6 +296,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         org.apache.hadoop.hive.metastore.api.Table metastoreTable =
                 GlobalStateMgr.getCurrentState().getHiveRepository().getTable(resourceName, this.db, this.table);
         Schema tableSchema = HudiTable.loadHudiSchema(metastoreTable);
+        this.createTime = metastoreTable.getCreateTime();
 
         for (Column column : this.fullSchema) {
             if (!column.isAllowNull()) {

@@ -13,8 +13,10 @@
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
 #include "column/array_column.h"
+#include "column/map_column.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/literal.h"
+#include "fs/fs.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
@@ -935,6 +937,70 @@ static void fill_array_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& 
     }
 }
 
+static void fill_map_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
+                            const TypeDescriptor& type_desc, void* ctx) {
+    auto* orc_map = down_cast<orc::MapVectorBatch*>(cvb);
+    auto* col_map = down_cast<MapColumn*>(col.get());
+
+    UInt32Column* offsets = col_map->offsets_column().get();
+    copy_array_offset(orc_map->offsets, from, size + 1, offsets);
+
+    ColumnPtr& keys = col_map->keys_column();
+    const TypeDescriptor& key_type = type_desc.children[0];
+    const FillColumnFunction& fn_fill_keys = find_fill_func(key_type.type, true);
+    const int keys_from = implicit_cast<int>(orc_map->offsets[from]);
+    const int keys_size = implicit_cast<int>(orc_map->offsets[from + size] - keys_from);
+
+    fn_fill_keys(orc_map->keys.get(), keys, keys_from, keys_size, key_type, ctx);
+
+    ColumnPtr& values = col_map->values_column();
+    const TypeDescriptor& value_type = type_desc.children[1];
+    const FillColumnFunction& fn_fill_values = find_fill_func(value_type.type, true);
+
+    fn_fill_values(orc_map->elements.get(), values, keys_from, keys_size, value_type, ctx);
+}
+
+static void fill_map_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
+                                      const TypeDescriptor& type_desc, void* ctx) {
+    auto* orc_map = down_cast<orc::MapVectorBatch*>(cvb);
+    auto* col_nullable = down_cast<NullableColumn*>(col.get());
+    auto* col_map = down_cast<MapColumn*>(col_nullable->data_column().get());
+
+    if (!orc_map->hasNulls) {
+        fill_map_column(orc_map, col_nullable->data_column(), from, size, type_desc, ctx);
+        col_nullable->null_column()->resize(col_map->size());
+        return;
+    }
+    // else
+
+    const int end = from + size;
+
+    int i = from;
+    while (i < end) {
+        int j = i;
+        // Loop until NULL or end of batch.
+        while (j < end && orc_map->notNull[j]) {
+            j++;
+        }
+        if (j > i) {
+            fill_map_column(orc_map, col_nullable->data_column(), i, j - i, type_desc, ctx);
+            col_nullable->null_column()->resize(col_map->size());
+        }
+
+        if (j == end) {
+            break;
+        }
+        DCHECK(!orc_map->notNull[j]);
+        i = j++;
+        // Loop until not NULL or end of batch.
+        while (j < end && !orc_map->notNull[j]) {
+            j++;
+        }
+        col_nullable->append_nulls(j - i);
+        i = j;
+    }
+}
+
 class FunctionsMap {
 public:
     static FunctionsMap* instance() {
@@ -966,6 +1032,7 @@ private:
         _funcs[TYPE_DATE] = &fill_date_column;
         _funcs[TYPE_DATETIME] = &fill_timestamp_column;
         _funcs[TYPE_ARRAY] = &fill_array_column;
+        _funcs[TYPE_MAP] = &fill_map_column;
 
         _nullable_funcs[TYPE_BOOLEAN] = &fill_boolean_column_with_null;
         _nullable_funcs[TYPE_TINYINT] = &fill_int_column_with_null<TYPE_TINYINT>;
@@ -985,6 +1052,7 @@ private:
         _nullable_funcs[TYPE_DATE] = &fill_date_column_with_null;
         _nullable_funcs[TYPE_DATETIME] = &fill_timestamp_column_with_null;
         _nullable_funcs[TYPE_ARRAY] = &fill_array_column_with_null;
+        _nullable_funcs[TYPE_MAP] = &fill_map_column_with_null;
     }
 
     std::array<FillColumnFunction, 64> _funcs;
@@ -1218,6 +1286,15 @@ static Status _orc_type_to_type_descriptor(const orc::Type* orc_type, TypeDescri
         result->children.emplace_back();
         TypeDescriptor& element_type = result->children.back();
         RETURN_IF_ERROR(_orc_type_to_type_descriptor(orc_type->getSubtype(0), &element_type));
+    } else if (kind == orc::MAP) {
+        result->type = TYPE_MAP;
+        DCHECK_EQ(0, result->children.size());
+        result->children.emplace_back();
+        TypeDescriptor& key_type = result->children.back();
+        RETURN_IF_ERROR(_orc_type_to_type_descriptor(orc_type->getSubtype(0), &key_type));
+        result->children.emplace_back();
+        TypeDescriptor& value_type = result->children.back();
+        RETURN_IF_ERROR(_orc_type_to_type_descriptor(orc_type->getSubtype(1), &value_type));
     } else {
         auto precision = (int)orc_type->getPrecision();
         auto scale = (int)orc_type->getScale();
@@ -2203,6 +2280,93 @@ int OrcChunkReader::get_column_id_by_name(const std::string& name) const {
         return it->second;
     }
     return -1;
+}
+
+// ======================================================================================
+
+ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length)
+        : _file(std::move(file)), _length(length), _cache_buffer(0), _cache_offset(0), _buffer_stream(_file) {
+    SharedBufferedInputStream::CoalesceOptions options = {.max_dist_size = config::io_coalesce_read_max_distance_size,
+                                                          .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+    _buffer_stream.set_coalesce_options(options);
+}
+
+void ORCHdfsFileStream::prepareCache(orc::InputStream::PrepareCacheScope scope, uint64_t offset, uint64_t length) {
+    const size_t cache_max_size = config::orc_file_cache_max_size;
+    if (length > cache_max_size) return;
+    if (canUseCacheBuffer(offset, length)) return;
+
+    // If this stripe is small, probably other stripes are also small
+    // we combine those reads into one, and try to read several stripes in one shot.
+    if (scope == orc::InputStream::PrepareCacheScope::READ_FULL_STRIPE) {
+        length = std::min(_length - offset, cache_max_size);
+    }
+
+    _cache_buffer.resize(length);
+    _cache_offset = offset;
+    doRead(_cache_buffer.data(), length, offset, true);
+}
+
+bool ORCHdfsFileStream::canUseCacheBuffer(uint64_t offset, uint64_t length) {
+    if ((_cache_buffer.size() != 0) && (offset >= _cache_offset) &&
+        ((offset + length) <= (_cache_offset + _cache_buffer.size()))) {
+        return true;
+    }
+    return false;
+}
+
+void ORCHdfsFileStream::read(void* buf, uint64_t length, uint64_t offset) {
+    if (canUseCacheBuffer(offset, length)) {
+        size_t idx = offset - _cache_offset;
+        memcpy(buf, _cache_buffer.data() + idx, length);
+    } else {
+        doRead(buf, length, offset, false);
+    }
+}
+
+const std::string& ORCHdfsFileStream::getName() const {
+    return _file->filename();
+}
+
+void ORCHdfsFileStream::doRead(void* buf, uint64_t length, uint64_t offset, bool direct) {
+    if (buf == nullptr) {
+        throw orc::ParseError("Buffer is null");
+    }
+    Status status;
+    if (direct || !_buffer_stream_enabled) {
+        status = _file->read_at_fully(offset, buf, length);
+    } else {
+        const uint8_t* ptr = nullptr;
+        size_t nbytes = length;
+        status = _buffer_stream.get_bytes(&ptr, offset, &nbytes, false);
+        DCHECK_EQ(nbytes, length);
+        if (status.ok()) {
+            ::memcpy(buf, ptr, length);
+        }
+    }
+    if (!status.ok()) {
+        auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
+        throw orc::ParseError(msg);
+    }
+}
+
+void ORCHdfsFileStream::clearIORanges() {
+    _buffer_stream_enabled = false;
+    _buffer_stream.release();
+}
+
+void ORCHdfsFileStream::setIORanges(std::vector<orc::InputStream::IORange>& io_ranges) {
+    _buffer_stream_enabled = true;
+    std::vector<SharedBufferedInputStream::IORange> bs_io_ranges;
+    for (const auto& r : io_ranges) {
+        bs_io_ranges.emplace_back(SharedBufferedInputStream::IORange{.offset = static_cast<int64_t>(r.offset),
+                                                                     .size = static_cast<int64_t>(r.size)});
+    }
+    Status st = _buffer_stream.set_io_ranges(bs_io_ranges);
+    if (!st.ok()) {
+        auto msg = strings::Substitute("Failed to setIORanges $0: $1", _file->filename(), st.to_string());
+        throw orc::ParseError(msg);
+    }
 }
 
 } // namespace starrocks::vectorized

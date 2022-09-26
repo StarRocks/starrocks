@@ -15,7 +15,7 @@ This function has three variations:
 
 This function can be used with WHERE and GROUP BY.
 
-`COUNT(DISTINCT expr)` is used for exact count distinct. If you require higher count distinct performance, see [Use bitmap for exact count discount](/docs/using_starrocks/Using_bitmap.md).
+`COUNT(DISTINCT expr)` is used for exact count distinct. If you require higher count distinct performance, see [Use bitmap for exact count discount](../../../using_starrocks/Using_bitmap.md).
 
 From StarRocks 2.4 onwards, you can specify multiple fields for DISTINCT.
 

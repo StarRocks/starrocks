@@ -225,6 +225,7 @@ public:
         _has_null = true;
         return true;
     }
+    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
 
     size_t memory_usage() const override {
         return _data_column->memory_usage() + _null_column->memory_usage() + sizeof(bool);
@@ -269,7 +270,7 @@ public:
         DCHECK(_null_column->size() == _data_column->size());
         std::stringstream ss;
         ss << "[";
-        int size = _data_column->size();
+        size_t size = _data_column->size();
         for (int i = 0; i < size - 1; ++i) {
             ss << debug_item(i) << ", ";
         }

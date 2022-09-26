@@ -63,6 +63,13 @@ public class CostModel {
                 costEstimate.getNetworkCost() * networkCostWeight;
     }
 
+    public static int getParallelExecInstanceNum(int leftMostScanTabletsNum) {
+        if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+            return 1;
+        }
+        return Math.min(ConnectContext.get().getSessionVariable().getDegreeOfParallelism(), leftMostScanTabletsNum);
+    }
+
     private static class CostEstimator extends OperatorVisitor<CostEstimate, ExpressionContext> {
         @Override
         public CostEstimate visitOperator(Operator node, ExpressionContext context) {
@@ -194,7 +201,8 @@ public class CostModel {
                     result = CostEstimate.ofCpu(statistics.getOutputSize(outputColumns));
                     break;
                 case BROADCAST:
-                    int parallelExecInstanceNum = Math.max(1, getParallelExecInstanceNum(context));
+                    int parallelExecInstanceNum = getParallelExecInstanceNum(
+                            context.getRootProperty().getLeftMostScanTabletsNum());
                     // beNum is the number of right table should broadcast, now use alive backends
                     int aliveBackendNumber = ctx.getAliveBackendNumber();
                     int beNum = Math.max(1, aliveBackendNumber);
@@ -218,11 +226,6 @@ public class CostModel {
                             ErrorType.UNSUPPORTED);
             }
             return result;
-        }
-
-        private int getParallelExecInstanceNum(ExpressionContext context) {
-            return Math.min(ConnectContext.get().getSessionVariable().getDegreeOfParallelism(),
-                    context.getRootProperty().getLeftMostScanTabletsNum());
         }
 
         @Override

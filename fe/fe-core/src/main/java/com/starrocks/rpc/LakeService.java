@@ -19,6 +19,8 @@ import com.starrocks.lake.proto.PublishLogVersionRequest;
 import com.starrocks.lake.proto.PublishLogVersionResponse;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
+import com.starrocks.lake.proto.RestoreSnapshotsRequest;
+import com.starrocks.lake.proto.RestoreSnapshotsResponse;
 import com.starrocks.lake.proto.TabletStatRequest;
 import com.starrocks.lake.proto.TabletStatResponse;
 import com.starrocks.lake.proto.UnlockTabletMetadataRequest;
@@ -61,5 +63,8 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "upload_snapshots", onceTalkTimeout = 5000)
     Future<UploadSnapshotsResponse> uploadSnapshots(UploadSnapshotsRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "restore_snapshots", onceTalkTimeout = 5000)
+    Future<RestoreSnapshotsResponse> restoreSnapshots(RestoreSnapshotsRequest request);
 }
 
