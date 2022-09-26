@@ -350,6 +350,7 @@
       + [array_slice](./sql-reference/sql-functions/array-functions/array_slice.md)
       + [array_sort](./sql-reference/sql-functions/array-functions/array_sort.md)
       + [array_sum](./sql-reference/sql-functions/array-functions/array_sum.md)
+      + [array_cum_sum](./sql-reference/sql-functions/array-functions/array_cum_sum.md)
       + [arrays_overlap](./sql-reference/sql-functions/array-functions/arrays_overlap.md)
       + [array_to_bitmap](./sql-reference/sql-functions/array-functions/array_to_bitmap.md)
       + [reverse](./sql-reference/sql-functions/array-functions/reverse.md)
