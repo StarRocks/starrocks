@@ -515,7 +515,7 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
         if (col_name == "__op") {
             // special treatment for __op column, fill default value '0' rather than null
             if (column->is_binary()) {
-                column->append_strings(std::vector{Slice{"0"}});
+                std::ignore = column->append_strings(std::vector{Slice{"0"}});
             } else {
                 column->append_datum(Datum((uint8_t)0));
             }
@@ -542,7 +542,7 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
             if (strcmp(column_name, "__op") == 0) {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {
-                    column->append_strings(std::vector{Slice{"0"}});
+                    std::ignore = column->append_strings(std::vector{Slice{"0"}});
                 } else {
                     column->append_datum(Datum((uint8_t)0));
                 }
@@ -643,7 +643,7 @@ Status JsonReader::_read_and_parse_json() {
             break;
         } else {
             LOG(WARNING) << "illegal json started with [" << data[i] << "]";
-            return Status::EndOfFile("illegal json started with " + data[i]);
+            return Status::DataQualityError(fmt::format("illegal json started with {}", data[i]));
         }
     }
 
