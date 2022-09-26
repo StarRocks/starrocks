@@ -48,7 +48,6 @@ public:
 
     void submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks);
 
-    // TODO(lingbin): make the agent_result to be a pointer, because it will be modified.
     void make_snapshot(TAgentResult& agent_result, const TSnapshotRequest& snapshot_request);
 
     void release_snapshot(TAgentResult& agent_result, const std::string& snapshot_path);
