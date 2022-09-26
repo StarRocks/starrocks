@@ -258,7 +258,7 @@ public class StarOSAgent {
         }
     }
 
-    public List<Long> createShardGroup(long groupId) throws DdlException {
+    private List<Long> createShardGroup(long groupId) throws DdlException {
         List<ShardGroupInfo> shardGroupInfos = null;
         try {
             List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
