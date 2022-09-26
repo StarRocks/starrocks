@@ -28,7 +28,7 @@ import com.starrocks.system.SystemInfoService;
 
 public class FeNameFormat {
     private static final String LABEL_REGEX = "^[-_A-Za-z0-9]{1,128}$";
-    public static final String COMMON_NAME_REGEX = "^([a-zA-Z][a-zA-Z0-9_]{0,63})|(_[a-zA-Z0-9][a-zA-Z0-9_]{0,62})$";
+    public static final String COMMON_NAME_REGEX = "^[a-zA-Z][a-zA-Z0-9_]{0,63}$|^_[a-zA-Z0-9][a-zA-Z0-9_]{0,62}$";
     // Now we can not accept all characters because current design of delete save delete cond contains column name
     // so it can not distinguish whether it is an operator or a column name
     // the future new design will improve this problem and open this limitation
