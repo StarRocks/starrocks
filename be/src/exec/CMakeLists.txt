@@ -188,6 +188,10 @@ set(EXEC_FILES
     pipeline/hashjoin/hash_join_build_operator.cpp
     pipeline/hashjoin/hash_join_probe_operator.cpp
     pipeline/hashjoin/hash_joiner_factory.cpp
+    pipeline/lookupjoin/index_seek_operator.cpp
+    pipeline/lookupjoin/lookup_join_context.cpp
+    pipeline/lookupjoin/lookup_join_operator.cpp
+    pipeline/lookupjoin/lookup_join_probe_operator.cpp
     pipeline/set/except_context.cpp
     pipeline/set/except_build_sink_operator.cpp
     pipeline/set/except_probe_sink_operator.cpp

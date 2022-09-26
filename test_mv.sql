@@ -1,10 +1,14 @@
+drop materialized view mv1;
+drop table t0;
+drop table t1;
+
 CREATE TABLE `t0` (
   `t0_c0` int(11) NULL COMMENT "",
   `t0_c1` string
 ) ENGINE=OLAP
 DUPLICATE KEY(`t0_c0`)
 DISTRIBUTED BY HASH(`t0_c0`) BUCKETS 1
-PROPERTIES ( "replication_num" = "1");
+PROPERTIES ( "replication_num" = "1", "colocate_with" = "group1");
 
 CREATE TABLE `t1` (
   `t1_c0` int(11) NULL COMMENT "",
@@ -12,7 +16,10 @@ CREATE TABLE `t1` (
 ) ENGINE=OLAP
 DUPLICATE KEY(`t1_c0`)
 DISTRIBUTED BY HASH(`t1_c0`) BUCKETS 1
-PROPERTIES ( "replication_num" = "1");
+PROPERTIES ( "replication_num" = "1", "colocate_with" = "group1");
+
+insert into t0 values (1, 'star');
+insert into t1 values (1, 'star');
 
 -- step 1
 create materialized view mv1  
