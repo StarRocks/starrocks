@@ -609,7 +609,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "            )";
         String plan = getCostExplain(sql);
         // not eval char/varchar type predicate cardinality in scan node
-        assertContains(plan, "PREDICATES: 24: N_NAME IN ('IRAN', 'CANADA')");
+        assertContains(plan, "Predicates: 24: N_NAME IN ('IRAN', 'CANADA')");
         assertContains(plan, "cardinality: 25");
         // eval char/varchar type predicate cardinality in join node
         assertContains(plan, "  5:NESTLOOP JOIN\n" +
@@ -640,11 +640,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getCostExplain(sql);
 
         // eval predicate cardinality in scan node
-        assertContains(plan, "0:OlapScanNode\n" +
-                "     TABLE: nation\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 23: N_NATIONKEY IN (2, 1)\n" +
-                "     partitions=1/1\n");
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     table: nation, rollup: nation\n" +
+                "     preAggregation: on\n" +
+                "     Predicates: 23: N_NATIONKEY IN (2, 1)\n" +
+                "     partitionsRatio=1/1, tabletsRatio=1/1\n");
         // eval predicate cardinality in join node
         assertContains(plan, "3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +

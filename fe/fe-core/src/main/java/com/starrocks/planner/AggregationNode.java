@@ -201,10 +201,17 @@ public class AggregationNode extends PlanNode {
             }
             output.append(getVerboseExplain(aggInfo.getAggregateExprs(), detailLevel)).append("\n");
         }
-        if (CollectionUtils.isNotEmpty(aggInfo.getGroupingExprs())) {
+        // TODO: unify them
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            if (CollectionUtils.isNotEmpty(aggInfo.getGroupingExprs())) {
+                output.append(detailPrefix).append("group by: ").append(
+                        getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
+            }
+        } else {
             output.append(detailPrefix).append("group by: ").append(
                     getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
         }
+
 
         if (!conjuncts.isEmpty()) {
             output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel)).append("\n");

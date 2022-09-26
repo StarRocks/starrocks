@@ -198,7 +198,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     @Test
     public void testDecimalBetweenPredicates() throws Exception {
         String sql = "select * from db1.decimal_table where col_decimal64p13s0 between -9.223372E+18 and 9.223372E+18";
-        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
         String snippet =
                 "PREDICATES: CAST(3: col_decimal64p13s0 AS DECIMAL128(19,0)) >= -9223372000000000000, CAST(3: col_decimal64p13s0 AS DECIMAL128(19,0)) <= 9223372000000000000";
         Assert.assertTrue(plan, plan.contains(snippet));
