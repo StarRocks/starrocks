@@ -65,7 +65,8 @@ public class HiveStatisticsProviderTest {
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
         FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
         hiveRemoteFileIO.setFileSystem(fs);
-        cachingRemoteFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 10);
+        cachingRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
+                hiveRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 10);
         fileOps = new RemoteFileOperations(cachingRemoteFileIO, executorForPullFiles, false);
         statisticsProvider = new HiveStatisticsProvider(hmsOps, fileOps);
 
