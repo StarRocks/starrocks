@@ -339,6 +339,8 @@
         + [json_each](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_exists](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
+        + [json_length](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_length.md)
+        + [json_keys](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
     + Bitmap Functions
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](./sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
