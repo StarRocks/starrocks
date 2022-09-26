@@ -2,7 +2,7 @@
 
 ## 功能
 
-创建手动采集任务，进行 CBO 统计信息采集。**手动采集是异步命令，执行命令后，会立即返回命令的状态，但是统计信息采集任务会在后台运行，运行的状态可以使用 SHOW ANALYZE STATUS 查看。手动任务创建后仅会执行一次，无需手动删除。**
+创建手动采集任务，进行 CBO 统计信息采集。**手动采集默认为同步操作。您也可以将手动任务设置为异步，执行命令后，会立即返回命令的状态，但是统计信息采集任务会在后台运行，运行的状态可以使用 SHOW ANALYZE STATUS 查看。手动任务创建后仅会执行一次，无需手动删除。**
 
 ### 手动采集基础统计信息
 
@@ -12,6 +12,7 @@
 
 ```SQL
 ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
+[WITH SYNC | ASYNC MODE]
 PROPERTIES (property [,property]);
 ```
 
@@ -21,6 +22,8 @@ PROPERTIES (property [,property]);
   - FULL：全量采集。
   - SAMPLE：抽样采集。
   - 如果不指定采集类型，默认为全量采集。
+
+- `WITH SYNC | ASYNC MODE`: 如果不指定，默认为同步操作。
 
 - `col_name`: 要采集统计信息的列，多列使用逗号分隔。如果不指定，表示采集整张表的信息。
 
@@ -64,12 +67,17 @@ ANALYZE SAMPLE TABLE tbl_name (v1, v2, v3) PROPERTIES(
 #### 语法
 
 ```SQL
-ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name] [WITH N BUCKETS]PROPERTIES (property [,property]);
+ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
+[WITH SYNC | ASYNC MODE]
+[WITH N BUCKETS]
+PROPERTIES (property [,property]);
 ```
 
 #### 参数说明
 
 - `col_name`: 要采集统计信息的列，多列使用逗号分隔。该参数必填。
+
+- `WITH SYNC | ASYNC MODE`: 如果不指定，默认为同步采集。
 
 - `WITH ``N`` BUCKETS`: `N`为直方图的分桶数。如果不指定，则使用`fe.conf`中的默认值。
 
