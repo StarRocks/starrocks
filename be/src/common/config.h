@@ -239,8 +239,8 @@ CONF_mInt32(inc_rowset_expired_sec, "1800");
 // inc_rowset snapshot rs sweep time interval
 CONF_mInt32(tablet_rowset_stale_sweep_time_sec, "1800");
 // garbage sweep policy
-CONF_mInt32(max_garbage_sweep_interval, "3600");
-CONF_mInt32(min_garbage_sweep_interval, "180");
+CONF_Int32(max_garbage_sweep_interval, "3600");
+CONF_Int32(min_garbage_sweep_interval, "180");
 CONF_mInt32(snapshot_expire_time_sec, "172800");
 CONF_mInt32(trash_file_expire_time_sec, "259200");
 // check row nums for BE/CE and schema change. true is open, false is closed.
