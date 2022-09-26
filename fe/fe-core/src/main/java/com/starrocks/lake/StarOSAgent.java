@@ -264,7 +264,7 @@ public class StarOSAgent {
             List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
             createShardGroupInfos.add(CreateShardGroupInfo.newBuilder().setGroupId(groupId).build());
             shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
-            LOG.info("Create shard group success. shard group infos: {}", shardGroupInfos);
+            LOG.debug("Create shard group success. shard group infos: {}", shardGroupInfos);
         } catch (StarClientException e) {
             if (e.getCode() != StatusCode.ALREADY_EXIST) {
                 throw new DdlException("Failed to create shard group. error: " + e.getMessage());
@@ -302,7 +302,7 @@ public class StarOSAgent {
                 createShardInfos.add(builder.build());
             }
             shardInfos = client.createShard(serviceId, createShardInfos);
-            LOG.info("Create shards success. shard infos: {}", shardInfos);
+            LOG.debug("Create shards success. shard infos: {}", shardInfos);
         } catch (StarClientException e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
         }
