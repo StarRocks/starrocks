@@ -849,10 +849,10 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     vectorized::TabletReader reader2(_tablet, Version(0, 2), schema);
     vectorized::TabletReader reader3(_tablet, Version(0, 3), schema);
     vectorized::TabletReader reader4(_tablet, Version(0, 4), schema);
-    auto iter_v0 = create_tablet_iterator(reader1, schema);
-    auto iter_v1 = create_tablet_iterator(reader2, schema);
-    auto iter_v2 = create_tablet_iterator(reader3, schema);
-    auto iter_v3 = create_tablet_iterator(reader4, schema);
+    auto iter_v1 = create_tablet_iterator(reader1, schema);
+    auto iter_v2 = create_tablet_iterator(reader2, schema);
+    auto iter_v3 = create_tablet_iterator(reader3, schema);
+    auto iter_v4 = create_tablet_iterator(reader4, schema);
 
     // Remove all but the last version.
     _tablet->updates()->remove_expired_versions(time(NULL));
@@ -860,12 +860,12 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     ASSERT_EQ(4, _tablet->updates()->max_version());
 
     EXPECT_EQ(N, read_tablet(_tablet, 4));
-    EXPECT_EQ(N, read_until_eof(iter_v3));
-    EXPECT_EQ(N, read_until_eof(iter_v2)); // delete vector v2 still valid.
-    EXPECT_EQ(0, read_until_eof(iter_v0)); // iter_v0 is empty iterator
+    EXPECT_EQ(N, read_until_eof(iter_v4));
+    EXPECT_EQ(0, read_until_eof(iter_v1)); // iter_v1 is empty iterator
 
     // Read expired versions should fail.
-    EXPECT_EQ(-1, read_until_eof(iter_v1));
+    EXPECT_EQ(-1, read_until_eof(iter_v3));
+    EXPECT_EQ(-1, read_until_eof(iter_v2));
     EXPECT_EQ(-1, read_tablet(_tablet, 3));
     EXPECT_EQ(-1, read_tablet(_tablet, 2));
     EXPECT_EQ(-1, read_tablet(_tablet, 1));
