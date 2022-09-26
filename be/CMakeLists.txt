@@ -244,6 +244,9 @@ set_target_properties(zstd PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/
 add_library(streamvbyte STATIC IMPORTED)
 set_target_properties(streamvbyte PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libstreamvbyte.a)
 
+add_library(density STATIC IMPORTED)
+set_target_properties(density PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libdensity.a)
+
 add_library(arrow STATIC IMPORTED)
 set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libarrow.a)
 
@@ -612,6 +615,7 @@ set(STARROCKS_DEPENDENCIES
     brotlienc
     zstd
     streamvbyte
+    density
     arrow
     parquet
     orc

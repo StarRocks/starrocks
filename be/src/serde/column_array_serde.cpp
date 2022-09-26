@@ -2,10 +2,13 @@
 
 #include "serde/column_array_serde.h"
 
+#include <encode/density_api.h>
 #include <encode/streamvbyte.h>
 #include <fmt/format.h>
 #include <lz4/lz4.h>
 #include <lz4/lz4frame.h>
+#include <zstd/zstd.h>
+#include <zstd/zstd_errors.h>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
@@ -26,7 +29,7 @@
 
 namespace starrocks::serde {
 namespace {
-constexpr int ENCODE_SIZE_LIMIT = 4;
+constexpr int ENCODE_SIZE_LIMIT = 64;
 uint8_t* write_little_endian_32(uint32_t value, uint8_t* buff) {
     encode_fixed32_le(buff, value);
     return buff + sizeof(value);
@@ -65,7 +68,7 @@ uint8_t* encode_integers(const void* data, size_t size, uint8_t* buff, int encod
     uint32_t encode_size = streamvbyte_encode(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0,
                                               buff + sizeof(uint32_t));
     buff = write_little_endian_32(encode_size, buff);
-    if (encode_level == -1) {
+    if (encode_level < -1) {
         LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, integers compression ratio = {}\n", size,
                                     encode_size, encode_size * 1.0 / size);
     }
@@ -86,18 +89,18 @@ const uint8_t* decode_integers(const uint8_t* buff, void* target, size_t size) {
 
 uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int encode_level) {
     if (encode_level == 0) {
-        throw std::runtime_error("string encode level does not work.");
+        throw std::runtime_error("lz4 encode level does not work.");
     }
     uint32_t encode_size =
-            LZ4_compress_default(reinterpret_cast<const char*>(data), reinterpret_cast<char*>(buff + sizeof(uint32_t)),
-                                 size, LZ4_compressBound(size));
+            LZ4_compress_fast(reinterpret_cast<const char*>(data), reinterpret_cast<char*>(buff + sizeof(uint32_t)),
+                              size, LZ4_compressBound(size), std::max(1, std::abs(encode_level / 10000) % 100));
     if (encode_size <= 0) {
         throw std::runtime_error("lz4 compress error.");
     }
     buff = write_little_endian_32(encode_size, buff);
-    if (encode_level == -1) {
-        LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, string compression ratio = {}\n", size,
-                                    encode_size, encode_size * 1.0 / size);
+    if (encode_level < -1) {
+        LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, lz4 compression ratio = {}\n", size, encode_size,
+                                    encode_size * 1.0 / size);
     }
     return buff + encode_size;
 }
@@ -110,13 +113,84 @@ const uint8_t* decode_string_lz4(const uint8_t* buff, void* target, size_t size)
     if (encode_size1 <= 0) {
         throw std::runtime_error("lz4 decompress error.");
     }
-    if (encode_size != encode_size1) {
+    if (size != encode_size1) {
         throw std::runtime_error(
-                fmt::format("string encode size does not equal when decoding, encode size = {}, but decode get size = "
+                fmt::format("lz4 encode size does not equal when decoding, encode size = {}, but decode get size = "
                             "{}, raw size = {}.",
                             encode_size, encode_size1, size));
     }
-    return buff + encode_size1;
+    return buff + encode_size;
+}
+
+uint8_t* encode_string_zstd(const void* data, size_t size, uint8_t* buff, int encode_level) {
+    if (encode_level == 0) {
+        throw std::runtime_error("zstd encode level does not work.");
+    }
+    uint32_t encode_size = ZSTD_compress((void*)(buff + sizeof(uint32_t)), ZSTD_compressBound(size), data, size,
+                                         std::max(1, std::abs(encode_level / 1000000) % 100));
+
+    if (ZSTD_isError(encode_size)) {
+        throw std::runtime_error("zstd compress error.");
+    }
+    buff = write_little_endian_32(encode_size, buff);
+    if (encode_level < -1) {
+        LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, zstd compression ratio = {}\n", size,
+                                    encode_size, encode_size * 1.0 / size);
+    }
+    return buff + encode_size;
+}
+
+const uint8_t* decode_string_zstd(const uint8_t* buff, void* target, size_t size) {
+    uint32_t encode_size = 0;
+    buff = read_little_endian_32(buff, &encode_size);
+    uint32_t encode_size1 = ZSTD_decompress(target, size, (void*)buff, encode_size);
+    if (ZSTD_isError(encode_size)) {
+        throw std::runtime_error("zstd decompress error.");
+    }
+    if (size != encode_size1) {
+        throw std::runtime_error(
+                fmt::format("zstd encode size does not equal when decoding, encode size = {}, but decode get size = "
+                            "{}, raw size = {}.",
+                            encode_size, encode_size1, size));
+    }
+    return buff + encode_size;
+}
+
+uint8_t* encode_string_density(const void* data, size_t size, uint8_t* buff, int encode_level) {
+    if (encode_level == 0) {
+        throw std::runtime_error("density encode level does not work.");
+    }
+    density_processing_result result = density_compress(
+            (const uint8_t*)data, size, (uint8_t*)(buff + sizeof(uint64_t)), density_compress_safe_size(size),
+            (DENSITY_ALGORITHM)std::max(1, std::abs(encode_level / 1000) % 4));
+    if (result.state) {
+        throw std::runtime_error(fmt::format("density compress error, NO = {}.", result.state));
+    }
+
+    buff = write_little_endian_64(result.bytesWritten, buff);
+    if (encode_level < -1) {
+        LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, density compression ratio = {}\n", size,
+                                    result.bytesWritten, result.bytesWritten * 1.0 / size);
+    }
+    return buff + result.bytesWritten;
+}
+
+const uint8_t* decode_string_density(const uint8_t* buff, void* target, size_t size) {
+    uint64_t encode_size = 0;
+    buff = read_little_endian_64(buff, &encode_size);
+    density_processing_result result =
+            density_decompress((const uint8_t*)buff, encode_size, (uint8_t*)target, density_decompress_safe_size(size));
+
+    if (result.state) {
+        throw std::runtime_error(fmt::format("density decompress error, NO = {}.", result.state));
+    }
+    if (size != result.bytesWritten) {
+        throw std::runtime_error(
+                fmt::format("density encode size does not equal when decoding, encode size = {}, but decode get size = "
+                            "{}, raw size = {}.",
+                            encode_size, result.bytesWritten, size));
+    }
+    return buff + encode_size;
 }
 
 template <typename T>
@@ -173,6 +247,10 @@ public:
         }
         if ((encode_level & 2) && bytes.size() >= ENCODE_SIZE_LIMIT) {
             res += sizeof(uint32_t) + LZ4_compressBound(bytes.size());
+        } else if ((encode_level & 4) && bytes.size() >= ENCODE_SIZE_LIMIT) {
+            res += sizeof(uint32_t) + ZSTD_compressBound(bytes.size());
+        } else if ((encode_level & 8) && bytes.size() >= ENCODE_SIZE_LIMIT) {
+            res += sizeof(uint64_t) + density_compress_safe_size(bytes.size());
         } else {
             res += bytes.size();
         }
@@ -193,6 +271,10 @@ public:
         }
         if ((encode_level & 2) && bytes_size >= ENCODE_SIZE_LIMIT) {
             buff = encode_string_lz4(bytes.data(), bytes_size, buff, encode_level);
+        } else if ((encode_level & 4) && bytes_size >= ENCODE_SIZE_LIMIT) {
+            buff = encode_string_zstd(bytes.data(), bytes_size, buff, encode_level);
+        } else if ((encode_level & 8) && bytes_size >= ENCODE_SIZE_LIMIT) {
+            buff = encode_string_density(bytes.data(), bytes_size, buff, encode_level);
         } else {
             buff = write_raw(bytes.data(), bytes_size, buff);
         }
@@ -224,6 +306,10 @@ public:
         column->get_bytes().resize(bytes_size);
         if ((encode_level & 2) && bytes_size >= ENCODE_SIZE_LIMIT) {
             buff = decode_string_lz4(buff, column->get_bytes().data(), bytes_size);
+        } else if ((encode_level & 4) && bytes_size >= ENCODE_SIZE_LIMIT) {
+            buff = decode_string_zstd(buff, column->get_bytes().data(), bytes_size);
+        } else if ((encode_level & 8) && bytes_size >= ENCODE_SIZE_LIMIT) {
+            buff = decode_string_density(buff, column->get_bytes().data(), bytes_size);
         } else {
             buff = read_raw(buff, column->get_bytes().data(), bytes_size);
         }
@@ -452,7 +538,7 @@ public:
 
     template <typename T>
     Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
-        _size += BinaryColumnSerde::max_serialized_size(column);
+        _size += BinaryColumnSerde::max_serialized_size(column, _encode_level);
         return Status::OK();
     }
 
@@ -507,7 +593,7 @@ public:
 
     template <typename T>
     Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
-        _cur = BinaryColumnSerde::serialize(column, _cur);
+        _cur = BinaryColumnSerde::serialize(column, _cur, _encode_level);
         return Status::OK();
     }
 
@@ -565,7 +651,7 @@ public:
 
     template <typename T>
     Status do_visit(vectorized::BinaryColumnBase<T>* column) {
-        _cur = BinaryColumnSerde::deserialize(_cur, column);
+        _cur = BinaryColumnSerde::deserialize(_cur, column, _encode_level);
         return Status::OK();
     }
 
