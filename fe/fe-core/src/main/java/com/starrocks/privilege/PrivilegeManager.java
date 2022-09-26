@@ -92,9 +92,7 @@ public class PrivilegeManager {
             List<PEntryObject> objects = Arrays.asList(object); // only support one object for now TBD
             grantToUser(typeId, actionSet, objects, stmt.isWithGrantOption(), stmt.getUserIdentity());
         } catch (PrivilegeException e) {
-            DdlException exception = new DdlException("grant failed: " + stmt.getOrigStmt());
-            exception.initCause(e);
-            throw exception;
+            throw new DdlException("grant failed: " + stmt.getOrigStmt(), e);
         }
     }
 
@@ -127,9 +125,7 @@ public class PrivilegeManager {
             List<PEntryObject> objects = Arrays.asList(object); // only support one object for now TBD
             revokeFromUser(typeId, actionSet, objects, stmt.isWithGrantOption(), stmt.getUserIdentity());
         } catch (PrivilegeException e) {
-            DdlException exception = new DdlException("revoke failed: " + stmt.getOrigStmt());
-            exception.initCause(e);
-            throw exception;
+            throw new DdlException("revoke failed: " + stmt.getOrigStmt(), e);
         }
     }
 
