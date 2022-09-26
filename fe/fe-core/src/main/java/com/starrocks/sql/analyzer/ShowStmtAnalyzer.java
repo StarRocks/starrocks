@@ -129,7 +129,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowFunctions(ShowFunctionsStmt node, ConnectContext context) {
+        public Void visitShowFunctionsStmt(ShowFunctionsStmt node, ConnectContext context) {
             String dbName = node.getDbName();
             if (Strings.isNullOrEmpty(dbName)) {
                 dbName = context.getDatabase();

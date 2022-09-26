@@ -18,6 +18,6 @@ public class SyncStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSyncStatement(this, context);
+        return visitor.visitSyncStmt(this, context);
     }
 }

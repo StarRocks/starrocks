@@ -2,6 +2,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.AddSqlBlackListStmt;
+import com.starrocks.analysis.AlterLoadStmt;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -12,16 +13,21 @@ import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.CancelAlterSystemStmt;
+import com.starrocks.analysis.CancelBackupStmt;
+import com.starrocks.analysis.CancelExportStmt;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateFileStmt;
 import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropFileStmt;
 import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
@@ -32,6 +38,7 @@ import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
+import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
@@ -59,6 +66,7 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.analysis.VariableExpr;
 
 public abstract class AstVisitor<R, C> {
@@ -94,7 +102,7 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, C context) {
+    public R visitAlterDatabaseQuotaStmt(AlterDatabaseQuotaStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -211,6 +219,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitAlterSystemStmt(AlterSystemStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    public R visitCancelAlterSystemStmt(CancelAlterSystemStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     public R visitSubmitTaskStmt(SubmitTaskStmt statement, C context) {
@@ -371,6 +383,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitAlterLoadStatement(AlterLoadStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -403,10 +419,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitSyncStatement(SyncStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     public R visitCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -428,15 +440,15 @@ public abstract class AstVisitor<R, C> {
 
     }
 
-    public R visitShowFunctions(ShowFunctionsStmt statement, C context) {
+    public R visitShowFunctionsStmt(ShowFunctionsStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
-    public R visitDropFunction(DropFunctionStmt statement, C context) {
+    public R visitDropFunctionStmt(DropFunctionStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitCreateFunction(CreateFunctionStmt statement, C context) {
+    public R visitCreateFunctionStmt(CreateFunctionStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -445,6 +457,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitBackupStmt(BackupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitCancelBackupStmt(CancelBackupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -587,6 +603,26 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitCreateFileStatement(CreateFileStmt stmt, C context) {
+        return visitStatement(stmt, context);
+    }
+
+    public R visitDropFileStatement(DropFileStmt stmt, C context) {
+        return visitStatement(stmt, context);
+    }
+
+    public R visitInstallPluginStatement(InstallPluginStmt stmt, C context) {
+        return visitStatement(stmt, context);
+    }
+
+    public R visitUninstallPluginStatement(UninstallPluginStmt stmt, C context) {
+        return visitStatement(stmt, context);
+    }
+
+    public R visitCancelExportStatement(CancelExportStmt stmt, C context) {
+        return visitStatement(stmt, context);
+    }
+
     // ----------------- Catalog Clause -------------
 
     public R visitCreateCatalogStatement(CreateCatalogStmt statement, C context) {
@@ -598,6 +634,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowCatalogsStmt(ShowCatalogsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSyncStmt(SyncStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

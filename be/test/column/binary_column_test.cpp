@@ -620,4 +620,26 @@ PARALLEL_TEST(BinaryColumnTest, test_xor_checksum) {
     ASSERT_EQ(checksum, expected_checksum);
 }
 
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_replicate) {
+    auto c1 = BinaryColumn::create();
+    c1->append_datum("abc");
+    c1->append_datum("def");
+
+    Offsets offsets;
+    offsets.push_back(0);
+    offsets.push_back(3);
+    offsets.push_back(5);
+
+    auto c2 = c1->replicate(offsets);
+
+    auto slices = down_cast<BinaryColumn*>(c2.get())->get_data();
+    ASSERT_EQ(5, c2->size());
+    ASSERT_EQ("abc", slices[0]);
+    ASSERT_EQ("abc", slices[1]);
+    ASSERT_EQ("abc", slices[2]);
+    ASSERT_EQ("def", slices[3]);
+    ASSERT_EQ("def", slices[4]);
+}
+
 } // namespace starrocks::vectorized

@@ -4,12 +4,10 @@ package com.starrocks.sql.common;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
@@ -21,7 +19,6 @@ import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
 
@@ -113,18 +110,6 @@ public class MetaUtils {
                     originStmt, e);
         }
 
-        // compatibility old parser can work but new parser failed
-        com.starrocks.analysis.SqlParser parser = new com.starrocks.analysis.SqlParser(
-                new SqlScanner(new StringReader(originStmt.originStmt),
-                        SqlModeHelper.MODE_DEFAULT));
-        try {
-            stmt = (CreateMaterializedViewStmt) SqlParserUtils.getStmt(parser, originStmt.idx);
-            stmt.setIsReplay(true);
-            return stmt.parseDefineExprWithoutAnalyze(originStmt.originStmt);
-        } catch (Exception e) {
-            LOG.warn("error happens when parsing create materialized view stmt [{}] use old parser:",
-                    originStmt, e);
-        }
         // suggestion
         LOG.warn("The materialized view [{}] has encountered compatibility problems. " +
                         "It is best to delete the materialized view and rebuild it to maintain the best compatibility.",

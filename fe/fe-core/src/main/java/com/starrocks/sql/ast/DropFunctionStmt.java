@@ -43,7 +43,7 @@ public class DropFunctionStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropFunction(this, context);
+        return visitor.visitDropFunctionStmt(this, context);
     }
 
     @Override

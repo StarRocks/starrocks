@@ -68,7 +68,7 @@ public class ShowFunctionsStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowFunctions(this, context);
+        return visitor.visitShowFunctionsStmt(this, context);
     }
 
     @Override

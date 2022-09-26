@@ -842,7 +842,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext session) {
+        public Void visitAlterDatabaseQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext session) {
             String dbName = statement.getDbName();
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
@@ -863,7 +863,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitDropFunction(DropFunctionStmt statement, ConnectContext context) {
+        public Void visitDropFunctionStmt(DropFunctionStmt statement, ConnectContext context) {
             // check operation privilege
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
@@ -873,7 +873,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitCreateFunction(CreateFunctionStmt statement, ConnectContext context) {
+        public Void visitCreateFunctionStmt(CreateFunctionStmt statement, ConnectContext context) {
             // check operation privilege
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
@@ -942,7 +942,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowFunctions(ShowFunctionsStmt statement, ConnectContext context) {
+        public Void visitShowFunctionsStmt(ShowFunctionsStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.SHOW)) {

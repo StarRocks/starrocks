@@ -946,10 +946,10 @@ public class LocalMetastore implements ConnectorMetadata {
         if (backendNum <= 3) {
             bucketNum = 2 * backendNum;
         } else if (backendNum <= 6) {
-            bucketNum = (int) 1.5 * backendNum;
+            bucketNum = backendNum;
         } else if (backendNum <= 12) {
             bucketNum = 12;
-        }  else {
+        } else {
             bucketNum = Math.min(backendNum, 48);
         }
         return bucketNum;
@@ -969,6 +969,7 @@ public class LocalMetastore implements ConnectorMetadata {
         for (Partition partition : partitions) {
             if (partition.getVisibleVersion() == 1) {
                 dataImported = false;
+                break;
             }
         }
 
@@ -1611,6 +1612,7 @@ public class LocalMetastore implements ConnectorMetadata {
             TabletMeta tabletMeta =
                     new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),
                             storageMedium, table.isLakeTable());
+
             if (table.isLakeTable()) {
                 createLakeTablets((LakeTable) table, partitionId, index, distributionInfo, replicationNum, tabletMeta,
                         tabletIdSet);
@@ -1991,48 +1993,52 @@ public class LocalMetastore implements ConnectorMetadata {
         if (stmt.isExternal()) {
             olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
-        } else if (stmt.isLakeEngine()) {
-            olapTable = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
-
-            // storage cache property
-            boolean enableStorageCache =
-                    PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
-            long storageCacheTtlS = 0;
-            try {
-                storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
-            } catch (AnalysisException e) {
-                throw new DdlException(e.getMessage());
-            }
-            if (storageCacheTtlS < -1) {
-                throw new DdlException("Storage cache ttl should not be less than -1");
-            }
-            if (!enableStorageCache && storageCacheTtlS != 0) {
-                throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
-            }
-            if (enableStorageCache && storageCacheTtlS == 0) {
-                storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
-            }
-
-            // set to false if absent
-            boolean allowAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
-                    properties, PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, false);
-
-            if (!enableStorageCache && allowAsyncWriteBack) {
-                throw new DdlException("storage allow_async_write_back can't be enabled when cache is disabled");
-            }
-
-            // get service shard storage info from StarMgr
-            ShardStorageInfo shardStorageInfo = stateMgr.getStarOSAgent().getServiceShardStorageInfo();
-
-            ((LakeTable) olapTable).setStorageInfo(shardStorageInfo, enableStorageCache, storageCacheTtlS, allowAsyncWriteBack);
         } else {
             if (distributionInfo.getBucketNum() == 0) {
                 int bucketNum = calBucketNumAccordingToBackends();
                 distributionInfo.setBucketNum(bucketNum);
             }
 
-            Preconditions.checkState(stmt.isOlapEngine());
-            olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
+            if (stmt.isLakeEngine()) {
+                olapTable = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
+
+                // storage cache property
+                boolean enableStorageCache =
+                        PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
+                long storageCacheTtlS = 0;
+                try {
+                    storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(properties,
+                            PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+                if (storageCacheTtlS < -1) {
+                    throw new DdlException("Storage cache ttl should not be less than -1");
+                }
+                if (!enableStorageCache && storageCacheTtlS != 0) {
+                    throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
+                }
+                if (enableStorageCache && storageCacheTtlS == 0) {
+                    storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
+                }
+
+                // set to false if absent
+                boolean allowAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
+                        properties, PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, false);
+
+                if (!enableStorageCache && allowAsyncWriteBack) {
+                    throw new DdlException("storage allow_async_write_back can't be enabled when cache is disabled");
+                }
+
+                // get service shard storage info from StarMgr
+                ShardStorageInfo shardStorageInfo = stateMgr.getStarOSAgent().getServiceShardStorageInfo();
+                ((LakeTable) olapTable).setStorageInfo(shardStorageInfo, enableStorageCache,
+                        storageCacheTtlS, allowAsyncWriteBack);
+
+            } else {
+                Preconditions.checkState(stmt.isOlapEngine());
+                olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
+            }
         }
 
         olapTable.setComment(stmt.getComment());
@@ -3200,7 +3206,7 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionInfo partitionInfo;
         if (partitionDesc != null) {
             partitionInfo = partitionDesc.toPartitionInfo(
-                    Arrays.asList(stmt.getPartitionColumn()),
+                    Collections.singletonList(stmt.getPartitionColumn()),
                     Maps.newHashMap(), false);
         } else {
             partitionInfo = new SinglePartitionInfo();
@@ -3246,6 +3252,7 @@ public class LocalMetastore implements ConnectorMetadata {
         materializedView.setBaseTableInfos(stmt.getBaseTableInfos());
         // set viewDefineSql
         materializedView.setViewDefineSql(stmt.getInlineViewDef());
+        materializedView.setSimpleDefineSql(stmt.getSimpleViewDef());
         // set partitionRefTableExprs
         materializedView.setPartitionRefTableExprs(Lists.newArrayList(stmt.getPartitionRefTableExpr()));
         // set base index id
