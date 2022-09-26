@@ -359,6 +359,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_stream_load_executor);
     SAFE_DELETE(_brpc_stub_cache);
     SAFE_DELETE(_load_stream_mgr);
+    SAFE_DELETE(_load_channel_mgr);
     SAFE_DELETE(_broker_mgr);
     SAFE_DELETE(_bfd_parser);
     SAFE_DELETE(_load_path_mgr);
