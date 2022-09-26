@@ -3356,6 +3356,7 @@ public class LocalMetastore implements ConnectorMetadata {
             int imtSchemaHash = Util.schemaHash(imtSchemaVersion, createInfo.getColumns(), null, 0d);
             short imtShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(createInfo.getColumns(), null);
             TStorageType imtBaseIndexStorageType = TStorageType.COLUMN;
+            olap.setComment(createInfo.getComment());
             olap.setIndexMeta(imtBaseIndexId,
                     createInfo.getTableName(),
                     createInfo.getColumns(),
@@ -3476,6 +3477,17 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
         if (table instanceof MaterializedView) {
+            MaterializedView view = (MaterializedView) table;
+            Map<PhysicalOperator, IMTInfo> imtInfo = view.getIMTInfo();
+            if (imtInfo != null && !imtInfo.isEmpty()) {
+                // TODO: consider IMT sharing
+                for (IMTInfo imt : imtInfo.values()) {
+                    OlapTable olap = imt.toOlapTable();
+                    db.dropTable(olap.getName(), true, true);
+                    LOG.info("drop imt for view: " + imt);
+
+                }
+            }
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
             List<MaterializedView.BaseTableInfo> baseTableInfos = ((MaterializedView) table).getBaseTableInfos();
             if (baseTableInfos != null) {

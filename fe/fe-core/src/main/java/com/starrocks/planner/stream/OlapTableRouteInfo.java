@@ -313,4 +313,8 @@ public class OlapTableRouteInfo {
     public String getTableName() {
         return this.tableName;
     }
+
+    public OlapTable getOlapTable() {
+        return tableInfo;
+    }
 }

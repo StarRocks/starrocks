@@ -2,6 +2,7 @@
 
 package com.starrocks.planner.stream;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TIMTDescriptor;
@@ -30,6 +31,11 @@ public class IMTInfo {
         desc.setNeed_maintain(this.needMaintain);
         desc.setOlap_table(this.olapTable.toThrift());
         return desc;
+    }
+
+    public OlapTable toOlapTable() {
+        Preconditions.checkState(type == TIMTType.OLAP_TABLE);
+        return olapTable.getOlapTable();
     }
 
     @Override

@@ -53,10 +53,10 @@ public class StreamAggNode extends PlanNode {
 
         if (detailLevel == TExplainLevel.VERBOSE) {
             if (detailImt != null) {
-                output.append(detailPrefix).append("detail_imt: " + detailImt.toString());
+                output.append(detailPrefix).append("detail_imt: ").append(detailImt.toString()).append("\n");
             }
             if (aggImt != null) {
-                output.append(detailPrefix).append("agg_imt: " + aggImt.toString());
+                output.append(detailPrefix).append("agg_imt: ").append(aggImt.toString()).append("\n");
             }
         }
         return output.toString();
