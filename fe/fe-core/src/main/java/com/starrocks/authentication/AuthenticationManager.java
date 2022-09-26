@@ -3,7 +3,6 @@
 package com.starrocks.authentication;
 
 
-import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
@@ -33,7 +32,7 @@ public class AuthenticationManager {
 
     // core data struction
     // user identity -> all the authentication infomation
-    @Expose(serialize = false)
+    // will be manually serialized one by one
     private Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo = new HashMap<>();
     // For legacy reason, user property are set by username instead of full user identity.
     @SerializedName(value = "m")
@@ -134,9 +133,7 @@ public class AuthenticationManager {
                 writeUnlock();
             }
         } catch (AuthenticationException e) {
-            DdlException exception = new DdlException("failed to create user" + stmt.getUserIdent().toString());
-            exception.initCause(e);
-            throw exception;
+            throw new DdlException("failed to create user" + stmt.getUserIdent().toString(), e);
         }
     }
 
@@ -252,9 +249,7 @@ public class AuthenticationManager {
             LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
             return ret;
         } catch (SRMetaBlockException | AuthenticationException e) {
-            DdlException exception = new DdlException("failed to save AuthenticationManager!");
-            exception.initCause(e);
-            throw exception;
+            throw new DdlException("failed to save AuthenticationManager!", e);
         }
     }
 }
