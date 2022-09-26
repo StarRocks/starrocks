@@ -24,7 +24,7 @@ public class CachingRemoteFileIO implements RemoteFileIO {
     private final RemoteFileIO fileIO;
     private final LoadingCache<RemotePathKey, List<RemoteFileDesc>> cache;
 
-    public CachingRemoteFileIO(RemoteFileIO fileIO,
+    protected CachingRemoteFileIO(RemoteFileIO fileIO,
                                Executor executor,
                                long expireAfterWriteSec,
                                long refreshIntervalSec,
@@ -34,7 +34,13 @@ public class CachingRemoteFileIO implements RemoteFileIO {
                 .build(asyncReloading(CacheLoader.from(this::loadRemoteFiles), executor));
     }
 
-    public static CachingRemoteFileIO reuseRemoteFileIO(RemoteFileIO fileIO, long maxSize) {
+    public static CachingRemoteFileIO createCatalogLevelInstance(RemoteFileIO fileIO, Executor executor,
+                                                        long expireAfterWrite, long refreshInterval, long maxSize) {
+        return new CachingRemoteFileIO(fileIO, executor, expireAfterWrite, refreshInterval, maxSize);
+
+    }
+
+    public static CachingRemoteFileIO createQueryLevelInstance(RemoteFileIO fileIO, long maxSize) {
         return new CachingRemoteFileIO(
                 fileIO,
                 newDirectExecutorService(),

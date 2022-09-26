@@ -69,7 +69,7 @@ public class RemoteFileOperationsTest {
         Assert.assertEquals(20, blockDesc.getLength());
         Assert.assertEquals(2, blockDesc.getReplicaHostIds().length);
 
-        CachingRemoteFileIO queryLevelCache = CachingRemoteFileIO.reuseRemoteFileIO(cachingFileIO, 5);
+        CachingRemoteFileIO queryLevelCache = CachingRemoteFileIO.createQueryLevelInstance(cachingFileIO, 5);
         Assert.assertEquals(1, queryLevelCache.getRemoteFiles(pathKey).size());
 
         Map<RemotePathKey, List<RemoteFileDesc>> presentRemoteFileInfos =

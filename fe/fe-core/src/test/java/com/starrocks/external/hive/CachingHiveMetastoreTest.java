@@ -48,7 +48,7 @@ public class CachingHiveMetastoreTest {
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         List<String> databaseNames = cachingHiveMetastore.getAllDatabaseNames();
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
-        CachingHiveMetastore queryLevelCache = CachingHiveMetastore.reuseMetastore(cachingHiveMetastore, 100);
+        CachingHiveMetastore queryLevelCache = CachingHiveMetastore.createQueryLevelInstance(cachingHiveMetastore, 100);
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), queryLevelCache.getAllDatabaseNames());
     }
 
