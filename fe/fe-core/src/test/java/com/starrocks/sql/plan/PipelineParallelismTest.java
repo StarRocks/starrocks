@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.PlanFragment;
