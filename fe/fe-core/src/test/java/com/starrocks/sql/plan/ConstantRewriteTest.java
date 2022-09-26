@@ -87,13 +87,13 @@ public class ConstantRewriteTest extends PlanTestBase {
         String sql = "select v1, v2 from (select v1, v2 from t0 where v1 = 1) a inner join " +
                 "(select v4, v5 from t1) b on a.v1 = b.v4";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: 4: v4 = 1, 4: v4 IS NOT NULL");
+        assertContains(plan, "PREDICATES: 4: v4 IS NOT NULL, 4: v4 = 1");
 
         //Assert v4 = 4 push down to Join left child t0
         sql = "select v1, v2 from (select v1, v2 from t0) a inner join " +
                 "(select v4, v5 from t1 where v4 = 4) b on a.v1 = b.v4";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: 1: v1 = 4, 1: v1 IS NOT NULL");
+        assertContains(plan, "PREDICATES: 1: v1 IS NOT NULL, 1: v1 = 4");
 
         //Assert v4 = 4 can't push down to Join left child t0 where op is left outer
         sql = "select v1, v2 from (select v1, v2 from t0) a left outer join " +
@@ -141,23 +141,23 @@ public class ConstantRewriteTest extends PlanTestBase {
         sql = "select v1, v2 from (select v1, v2 from t0 where v1 = 1) a left semi join " +
                 "(select v4, v5 from t1) b on a.v1 = b.v4";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: 4: v4 = 1, 4: v4 IS NOT NULL");
+        assertContains(plan, "PREDICATES: 4: v4 IS NOT NULL, 4: v4 = 1");
 
         sql = "select v1, v2 from (select v1, v2 from t0) a left semi join " +
                 "(select v4, v5 from t1 where v4 = 4) b on a.v1 = b.v4";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: 1: v1 = 4, 1: v1 IS NOT NULL");
+        assertContains(plan, "PREDICATES: 1: v1 = 4");
 
         //Assert v4 = 4 push down to Join left child t0
         sql = "select v4, v5 from (select v1, v2 from t0) a right semi join " +
                 "(select v4, v5 from t1 where v4 = 4) b on a.v1 = b.v4";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: 1: v1 = 4, 1: v1 IS NOT NULL");
+        assertContains(plan, "PREDICATES: 1: v1 IS NOT NULL, 1: v1 = 4");
 
         sql = "select v4, v5 from (select v1, v2 from t0 where v1 = 1) a right semi join " +
                 "(select v4, v5 from t1) b on a.v1 = b.v4";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: 4: v4 = 1, 4: v4 IS NOT NULL");
+        assertContains(plan, "PREDICATES: 4: v4 = 1");
 
 
         //Assert v1 = 1 push down to right when op is left anti
@@ -199,5 +199,14 @@ public class ConstantRewriteTest extends PlanTestBase {
                 "     cardinality=1\n" +
                 "     avgRowSize=2.0\n" +
                 "     numNodes=0");
+    }
+
+    @Test
+    public void test() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(false);
+
+        String sql = "select v1, v2 in (select v5 + v4 from t1 where v4 = 1 and abs(v1 + v4) = v1 + v5 ) from t0";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
     }
 }

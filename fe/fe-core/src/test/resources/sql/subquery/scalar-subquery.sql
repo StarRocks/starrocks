@@ -604,8 +604,8 @@ select v1, (select max(v5 + 1) from t1 where t0.v2 = t1.v4 and t0.v2 + 1 = 1 and
 LEFT OUTER JOIN (join-predicate [2: v2 = 4: v4 AND 11: add = 10: add AND 2: v2 = 0] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{8: max=max(8: max)}] group by [[4: v4, 10: add]] having [null]
-            AGGREGATE ([LOCAL] aggregate [{8: max=max(7: expr)}] group by [[4: v4, 10: add]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{8: max=max(8: max)}] group by [[10: add]] having [null]
+            AGGREGATE ([LOCAL] aggregate [{8: max=max(7: expr)}] group by [[10: add]] having [null]
                 SCAN (columns[4: v4, 5: v5] predicate[4: v4 = 0 AND add(4: v4, 5: v5) = 1])
 [end]
 
@@ -846,8 +846,8 @@ select v1, (select v5 + 1 from t1 where t0.v2 = t1.v4 and t0.v2 + 1 = 1 and t0.v
 LEFT OUTER JOIN (join-predicate [2: v2 = 4: v4 AND 13: add = 9: add AND 2: v2 = 0] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{10: countRows=count(10: countRows), 11: anyValue=any_value(11: anyValue)}] group by [[4: v4, 9: add]] having [null]
-            AGGREGATE ([LOCAL] aggregate [{10: countRows=count(1), 11: anyValue=any_value(add(5: v5, 1))}] group by [[4: v4, 9: add]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{10: countRows=count(10: countRows), 11: anyValue=any_value(11: anyValue)}] group by [[9: add]] having [null]
+            AGGREGATE ([LOCAL] aggregate [{10: countRows=count(1), 11: anyValue=any_value(add(5: v5, 1))}] group by [[9: add]] having [null]
                 SCAN (columns[4: v4, 5: v5] predicate[4: v4 = 0 AND add(4: v4, 5: v5) = 1])
 [end]
 

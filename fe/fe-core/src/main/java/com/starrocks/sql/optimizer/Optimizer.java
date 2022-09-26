@@ -154,6 +154,7 @@ public class Optimizer {
         rootTaskContext.getRequiredColumns().union(cteContext.getAllRequiredColumns());
 
         tree = new BottomUp().rewrite(tree, context.getTaskContext());
+        deriveLogicalProperty(tree);
 
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node

@@ -2598,4 +2598,10 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "if(5: v5 = 0, '未知'");
     }
+
+    @Test
+    public void test() throws Exception {
+        String plan = getFragmentPlan("select v1 from t0 inner join t1 where v1 = v2 and v2 = 5");
+        System.out.println(plan);
+    }
 }
