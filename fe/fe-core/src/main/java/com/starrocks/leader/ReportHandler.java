@@ -525,6 +525,7 @@ public class ReportHandler extends Daemon {
                         if (replica.getState() == ReplicaState.NORMAL) {
                             long metaVersion = replica.getVersion();
                             long backendVersion = -1L;
+                            long backendMinReadableVersion = 0;
                             long rowCount = -1L;
                             long dataSize = -1L;
                             // schema change maybe successfully in fe, but not inform be, then be will
@@ -533,6 +534,7 @@ public class ReportHandler extends Daemon {
                             for (TTabletInfo tabletInfo : backendTablets.get(tabletId).getTablet_infos()) {
                                 if (tabletInfo.getSchema_hash() == schemaHash) {
                                     backendVersion = tabletInfo.getVersion();
+                                    backendMinReadableVersion = tabletInfo.getMin_readable_version();
                                     rowCount = tabletInfo.getRow_count();
                                     dataSize = tabletInfo.getData_size();
                                     break;
@@ -566,7 +568,7 @@ public class ReportHandler extends Daemon {
                                 // 1. PUSH finished in BE but failed or not yet report to FE
                                 // 2. repair for VERSION_INCOMPLETE finished in BE, but failed or not yet report
                                 // to FE
-                                replica.updateRowCount(backendVersion, dataSize, rowCount);
+                                replica.updateRowCount(backendVersion, backendMinReadableVersion, dataSize, rowCount);
 
                                 if (replica.getLastFailedVersion() < 0 && !isInitVersion) {
                                     // last failed version < 0 means this replica becomes health after sync,
@@ -577,7 +579,8 @@ public class ReportHandler extends Daemon {
                                             replica.getVersion(), schemaHash,
                                             dataSize, rowCount,
                                             replica.getLastFailedVersion(),
-                                            replica.getLastSuccessVersion());
+                                            replica.getLastSuccessVersion(),
+                                            replica.getMinReadableVersion());
                                     GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
                                     ++logSyncCounter;
                                 }
@@ -1160,6 +1163,7 @@ public class ReportHandler extends Daemon {
 
         int schemaHash = backendTabletInfo.getSchema_hash();
         long version = backendTabletInfo.getVersion();
+        long minReadableVersion = backendTabletInfo.getMin_readable_version();
         long dataSize = backendTabletInfo.getData_size();
         long rowCount = backendTabletInfo.getRow_count();
 
@@ -1262,7 +1266,7 @@ public class ReportHandler extends Daemon {
                 ReplicaPersistInfo info = ReplicaPersistInfo.createForAdd(dbId, tableId, partitionId, indexId,
                         tabletId, backendId, replicaId,
                         version, schemaHash, dataSize, rowCount,
-                        lastFailedVersion, version);
+                        lastFailedVersion, version, minReadableVersion);
 
                 GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info);
 
