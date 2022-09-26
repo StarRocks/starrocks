@@ -509,6 +509,7 @@ public class PlanFragmentBuilder {
             OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode");
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
+            scanNode.setIndexSeek(node.isIndexSeek());
 
             // set tablet
             try {
@@ -2359,8 +2360,29 @@ public class PlanFragmentBuilder {
             PhysicalJoinOperator node = (PhysicalJoinOperator) optExpr.getOp();
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+
             ColumnRefSet leftChildColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
             ColumnRefSet rightChildColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
+
+            // TODO current we only support right table as the lookup table, need to bi-stream join later
+            // Attach IMT information
+            Operator leftOp = optExpr.inputAt(0).getOp();
+            Operator rightOp = optExpr.inputAt(1).getOp();
+            if (!(rightOp instanceof PhysicalOlapScanOperator)) {
+                if (leftOp instanceof PhysicalOlapScanOperator) {
+                    Operator tmpOp = leftOp;
+                    leftOp = rightOp;
+                    rightOp = tmpOp;
+                    PlanFragment tmpFragment = leftFragment;
+                    leftFragment = rightFragment;
+                    rightFragment = tmpFragment;
+                    ColumnRefSet tmpColumns = leftChildColumns;
+                    leftChildColumns = rightChildColumns;
+                    rightChildColumns = tmpColumns;
+                } else {
+                    throw new StarRocksPlannerException("Only support right table as lookup-join table", INTERNAL_ERROR);
+                }
+            }
 
             List<ScalarOperator> onPredicates = Utils.extractConjuncts(node.getOnPredicate());
             List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
@@ -2379,13 +2401,9 @@ public class PlanFragmentBuilder {
                     new StreamJoinNode(context.getNextNodeId(), leftFragment.getPlanRoot(), rightFragment.getPlanRoot(), null,
                             eqJoinConjuncts, otherJoinConjuncts);
 
-            // TODO current we only support right table as the lookup table, need to bi-stream join later
-            // Attach IMT information
-            Operator rightOp = optExpr.inputAt(1).getOp();
-            if (!(rightOp instanceof PhysicalOlapScanOperator)) {
-                throw new StarRocksPlannerException("Only support right table as lookup-join table", INTERNAL_ERROR);
-            }
+
             PhysicalOlapScanOperator rightTableScan = (PhysicalOlapScanOperator) rightOp;
+            rightTableScan.setIndexSeek(true);
             OlapTable rightTable = (OlapTable) rightTableScan.getTable();
 
             try {

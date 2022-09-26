@@ -277,6 +277,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     const auto dop = _calc_dop(exec_env, request);
     const auto& query_options = request.common().query_options;
 
+    VLOG(1) << "FragmentExecutor _prepare_exec_plan, _common_request:" << apache::thrift::ThriftDebugString(request.common());
+    VLOG(1) << "FragmentExecutor _prepare_exec_plan, _unique:" << apache::thrift::ThriftDebugString(request.unique());
     bool enable_shared_scan = request.common().__isset.enable_shared_scan && request.common().enable_shared_scan;
     bool enable_tablet_internal_parallel =
             query_options.__isset.enable_tablet_internal_parallel && query_options.enable_tablet_internal_parallel;
@@ -310,6 +312,14 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(scan_node->id());
         const auto& scan_ranges_per_driver_seq = request.per_driver_seq_scan_ranges_of_node(scan_node->id());
 
+        // if it is index seek source operator, disable enable_tablet_internal_parallel/enable_shared_scan
+        if (auto* olap_scan = dynamic_cast<vectorized::OlapScanNode*>(scan_node)) {
+            bool is_index_seek = olap_scan->is_index_seek();
+            if (is_index_seek) {
+                enable_tablet_internal_parallel = false;
+                enable_shared_scan = false;
+            }
+        }
         ASSIGN_OR_RETURN(auto morsel_queue_factory,
                          scan_node->convert_scan_range_to_morsel_queue_factory(
                                  scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), dop,

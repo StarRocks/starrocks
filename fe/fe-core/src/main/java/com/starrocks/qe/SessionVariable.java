@@ -240,6 +240,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "global_runtime_filter_probe_min_selectivity";
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
+
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";

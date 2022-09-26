@@ -117,6 +117,8 @@ public class OlapScanNode extends ScanNode {
     private ArrayList<Long> scanTabletIds = Lists.newArrayList();
     private boolean isFinalized = false;
 
+    private boolean isIndexSeek = false;
+
     private final HashSet<Long> scanBackendIds = new HashSet<>();
 
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
@@ -192,6 +194,14 @@ public class OlapScanNode extends ScanNode {
                 unUsedOutputStringColumns.add(slot.getColumn().getName());
             }
         }
+    }
+
+    public boolean isIndexSeek() {
+        return isIndexSeek;
+    }
+
+    public void setIndexSeek(boolean indexSeek) {
+        isIndexSeek = indexSeek;
     }
 
     public OlapTable getOlapTable() {
@@ -542,6 +552,11 @@ public class OlapScanNode extends ScanNode {
         } else {
             output.append(prefix).append("preAggregation: off. Reason: ").append(reasonOfPreAggregation).append("\n");
         }
+
+        if (isIndexSeek()) {
+            output.append(prefix).append("isIndexSeek: on").append("\n");
+        }
+
         if (!conjuncts.isEmpty()) {
             output.append(prefix).append("Predicates: ").append(getVerboseExplain(conjuncts)).append("\n");
         }
@@ -647,6 +662,7 @@ public class OlapScanNode extends ScanNode {
             if (!olapTable.hasDelete()) {
                 msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
+            msg.olap_scan_node.setIs_index_seek(isIndexSeek);
         }
     }
 

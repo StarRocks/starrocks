@@ -9,6 +9,7 @@
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/lookupjoin/index_seek_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
@@ -45,6 +46,9 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     // init filtered_output_columns
     for (const auto& col_name : tnode.olap_scan_node.unused_output_column_name) {
         _unused_output_columns.emplace_back(col_name);
+    }
+    if (_olap_scan_node.__isset.is_index_seek) {
+        _is_index_seek = _olap_scan_node.is_index_seek;
     }
 
     _estimate_scan_and_output_row_bytes();
@@ -765,6 +769,16 @@ void OlapScanNode::_close_pending_scanners() {
 }
 
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    // Shortcuit: IndexSeek
+    if (_is_index_seek) {
+        auto index_seek_op = std::make_shared<pipeline::IndexSeekOperatorFactory>(context->next_operator_id(), id(),
+                                                                                  _olap_scan_node,
+                                                                                  _runtime_filter_collector);
+        OpFactories ops;
+        ops.emplace_back(std::move(index_seek_op));
+        return ops;
+    }
+
     // Set the dop according to requested parallelism and number of morsels
     auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(id());
     size_t dop = morsel_queue_factory->size();

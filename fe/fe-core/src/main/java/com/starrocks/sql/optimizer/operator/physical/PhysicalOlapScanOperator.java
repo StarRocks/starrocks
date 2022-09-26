@@ -35,6 +35,8 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private boolean isPreAggregation;
     private String turnOffReason;
 
+    private boolean isIndexSeek;
+
     private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
     // For the simple predicate k1 = "olap", could apply global dict optimization,
     // need to store the string column k1 and generate the string slot in plan fragment builder
@@ -118,6 +120,14 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public boolean canDoReplicatedJoin() {
         return Utils.canDoReplicatedJoin((OlapTable) table, selectedIndexId, selectedPartitionId, selectedTabletId);
+    }
+
+    public boolean isIndexSeek() {
+        return isIndexSeek;
+    }
+
+    public void setIndexSeek(boolean indexSeek) {
+        isIndexSeek = indexSeek;
     }
 
     @Override

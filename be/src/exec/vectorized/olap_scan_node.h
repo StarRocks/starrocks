@@ -79,6 +79,7 @@ public:
 
     static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
     static int compute_priority(int32_t num_submitted_tasks);
+    bool is_index_seek() { return _olap_scan_node.__isset.is_index_seek && _olap_scan_node.is_index_seek; }
 
 private:
     friend class TabletScanner;
@@ -151,6 +152,7 @@ private:
     DictOptimizeParser _dict_optimize_parser;
     const Schema* _chunk_schema = nullptr;
     ObjectPool _obj_pool;
+    bool _is_index_seek = false;
 
     int32_t _num_scanners = 0;
     int32_t _chunks_per_scanner = 10;
