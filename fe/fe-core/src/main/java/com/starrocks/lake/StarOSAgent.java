@@ -20,6 +20,7 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.ShardStorageInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerInfo;
+import com.staros.util.Constant;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -263,7 +264,7 @@ public class StarOSAgent {
             List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
             createShardGroupInfos.add(CreateShardGroupInfo.newBuilder().setGroupId(groupId).build());
             shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
-            LOG.info("Create shards success. shard group infos: {}", shardGroupInfos);
+            LOG.info("Create shard group success. shard group infos: {}", shardGroupInfos);
         } catch (StarClientException e) {
             if (e.getCode() != StatusCode.ALREADY_EXIST) {
                 throw new DdlException("Failed to create shard group. error: " + e.getMessage());
@@ -278,11 +279,13 @@ public class StarOSAgent {
         prepare();
         List<ShardInfo> shardInfos = null;
         try {
-            // create shardGroup
-            try {
-                createShardGroup(groupId);
-            } catch (DdlException e) {
-                throw e;
+            if (groupId != Constant.DEFAULT_ID) {
+                // create shardGroup
+                try {
+                    createShardGroup(groupId);
+                } catch (DdlException e) {
+                    throw e;
+                }
             }
 
             List<CreateShardInfo> createShardInfos = new ArrayList<>(numShards);
@@ -290,7 +293,9 @@ public class StarOSAgent {
                 CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
                 builder.setReplicaCount(1);
                 builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
-                builder.setGroupId(groupId);
+                if (groupId != Constant.DEFAULT_ID) {
+                    builder.setGroupId(groupId);
+                }
                 if (shardStorageInfo != null) {
                     builder.setShardStorageInfo(shardStorageInfo);
                 }

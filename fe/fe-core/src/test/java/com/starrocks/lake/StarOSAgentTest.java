@@ -248,7 +248,7 @@ public class StarOSAgentTest {
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, null));
+        Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, null, 0));
     }
 
     @Test
