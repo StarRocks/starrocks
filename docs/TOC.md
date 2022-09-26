@@ -18,7 +18,7 @@
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
   + [Overview of data loading](./loading/Loading_intro.md)
-  + [Load data from a local file system or a streaming data source using HTTP push](./loading/StreamLoad.md)
+  + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS or cloud storage](./loading/BrokerLoad.md)
   + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
   + [Bulk load using Apache Spark™](./loading/SparkLoad.md)
