@@ -15,7 +15,7 @@
   + [排序键和前缀索引](/table_design/Sort_key.md)
 + 数据导入
   + [导入总览](/loading/Loading_intro.md)
-  + [通过 HTTP Push 从本地文件系统或流式数据源导入](/loading/StreamLoad.md)
+  + [通过 HTTP PUT 从本地文件系统或流式数据源导入](/loading/StreamLoad.md)
   + [从 HDFS 或外部云存储系统导入](/loading/BrokerLoad.md)
   + [从 Apache Kafka® 持续导入](/loading/RoutineLoad.md)
   + [使用 Apache Spark™ 批量导入和数据转换](/loading/SparkLoad.md)
