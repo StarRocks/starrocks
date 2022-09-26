@@ -41,7 +41,7 @@
 <NavBoxPartItem>
 
 - [导入总览](/loading/Loading_intro)
-- [通过 HTTP Push 从本地文件系统或流式数据源导入](/loading/StreamLoad)
+- [通过 HTTP PUT 从本地文件系统或流式数据源导入](/loading/StreamLoad)
 - [从 HDFS 或外部云存储系统导入](/loading/BrokerLoad)
 - [从 Apache Kafka® 持续导入](/loading/RoutineLoad)
 - [使用 Apache Spark™ 导入](/loading/SparkLoad)
