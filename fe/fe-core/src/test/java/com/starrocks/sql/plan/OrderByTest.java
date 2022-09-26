@@ -127,7 +127,7 @@ public class OrderByTest extends PlanTestBase {
 
         sql = "select * from t0 order by null limit 10;";
         plan = getFragmentPlan(sql);
-        assertContains(plan,"  0:OlapScanNode\n" +
+        assertContains(plan, "  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1\n" +
