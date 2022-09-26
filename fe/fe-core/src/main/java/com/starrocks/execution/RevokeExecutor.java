@@ -11,7 +11,11 @@ import com.starrocks.sql.ast.RevokePrivilegeStmt;
 public class RevokeExecutor implements DataDefinitionExecutor {
 
     public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws DdlException {
-        context.getGlobalStateMgr().getAuth().revoke((RevokePrivilegeStmt) stmt);
+        if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+            context.getGlobalStateMgr().getPrivilegeManager().revoke((RevokePrivilegeStmt) stmt);
+        } else {
+            context.getGlobalStateMgr().getAuth().revoke((RevokePrivilegeStmt) stmt);
+        }
         return null;
     }
 }

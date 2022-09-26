@@ -137,6 +137,7 @@ import java.util.TreeSet;
 public class PrivilegeChecker {
     public static void check(StatementBase statement, ConnectContext session) {
         if (session.getGlobalStateMgr().isUsingNewPrivilege()) {
+            PrivilegeCheckerV2.check(statement, session);
             return;
         }
         new PrivilegeCheckerVisitor().check(statement, session);

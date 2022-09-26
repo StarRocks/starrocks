@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.List;
 
 public class PrivilegeManagerTest {
+    private static final List<String> DB_TBL_TOKENS = Arrays.asList("db", "tbl");
 
     @Test
     public void testTableSelectUser(@Mocked GlobalStateMgr mgr,
@@ -87,25 +88,46 @@ public class PrivilegeManagerTest {
         ctx.setCurrentUserIdentity(testUser);
         ctx.setGlobalStateMgr(mgr);
 
-        Assert.assertFalse(manager.hasType(ctx, "TABLE"));
-        Assert.assertFalse(manager.checkAnyObject(ctx, "TABLE", "SELECT"));
-        Assert.assertFalse(manager.check(ctx, "TABLE", "SELECT", Arrays.asList("db", "tbl")));
+        Assert.assertFalse(manager.hasType(ctx, PrivilegeTypes.TABLE.toString()));
+        Assert.assertFalse(manager.checkAnyObject(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString()));
+        Assert.assertFalse(manager.check(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
 
         String sql = "grant select on db.tbl to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantStmt);
 
-        Assert.assertTrue(manager.hasType(ctx, "TABLE"));
-        Assert.assertTrue(manager.checkAnyObject(ctx, "TABLE", "SELECT"));
-        Assert.assertTrue(manager.check(ctx, "TABLE", "SELECT", Arrays.asList("db", "tbl")));
+        Assert.assertTrue(manager.hasType(ctx, PrivilegeTypes.TABLE.toString()));
+        Assert.assertTrue(manager.checkAnyObject(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString()));
+        Assert.assertTrue(manager.check(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
 
         sql = "revoke select on db.tbl from test_user";
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.revoke(revokeStmt);
 
-        Assert.assertFalse(manager.hasType(ctx, "TABLE"));
-        Assert.assertFalse(manager.checkAnyObject(ctx, "TABLE", "SELECT"));
-        Assert.assertFalse(manager.check(ctx, "TABLE", "SELECT", Arrays.asList("db", "tbl")));
+        Assert.assertFalse(manager.hasType(ctx, PrivilegeTypes.TABLE.toString()));
+        Assert.assertFalse(manager.checkAnyObject(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString()));
+        Assert.assertFalse(manager.check(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
     }
 
     private class FakeObject extends PEntryObject {
@@ -149,7 +171,10 @@ public class PrivilegeManagerTest {
         masterGlobalStateMgr.getAuthenticationManager().createUser(createUserStmt);
         Assert.assertTrue(masterGlobalStateMgr.getAuthenticationManager().doesUserExist(testUser));
         Assert.assertFalse(masterManager.check(
-                testCtx, "TABLE", "SELECT", Arrays.asList("db", "table")));
+                testCtx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
 
 
@@ -157,13 +182,19 @@ public class PrivilegeManagerTest {
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, rootCtx);
         masterManager.grant(grantStmt);
         Assert.assertTrue(masterManager.check(
-                testCtx, "TABLE", "SELECT", Arrays.asList("db", "tbl")));
+                testCtx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
 
         sql = "revoke select on db.tbl from test_user";
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, rootCtx);
         masterManager.revoke(revokeStmt);
         Assert.assertFalse(masterManager.check(
-                testCtx, "TABLE", "SELECT", Arrays.asList("db", "tbl")));
+                testCtx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
 
 
         // start to replay
@@ -173,13 +204,19 @@ public class PrivilegeManagerTest {
         followerManager.replayUpdateUserPrivilegeCollection(
                 info.getUserIdentity(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
         Assert.assertTrue(followerManager.check(
-                testCtx, "TABLE", "SELECT", Arrays.asList("db", "tbl")));
+                testCtx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
 
         info = (UserPrivilegeCollectionInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
         followerManager.replayUpdateUserPrivilegeCollection(
                 info.getUserIdentity(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
         Assert.assertFalse(followerManager.check(
-                testCtx, "TABLE", "SELECT", Arrays.asList("db", "tbl")));
+                testCtx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
 
         UtFrameUtils.tearDownForPersisTest();
     }

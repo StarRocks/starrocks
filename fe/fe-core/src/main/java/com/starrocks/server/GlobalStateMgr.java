@@ -903,6 +903,7 @@ public class GlobalStateMgr {
             this.privilegeManager = new PrivilegeManager(this, null);
             this.auth = null;
             this.domainResolver = null;
+            LOG.info("using new privilege framework..");
         }
     }
 

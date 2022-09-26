@@ -4,7 +4,6 @@ package com.starrocks.privilege;
 
 import com.starrocks.server.GlobalStateMgr;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,12 +14,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
 
     private static final Map<String, List<String>> VALID_MAP = new HashMap<>();
 
-    private enum Type {
-        TABLE;
-    }
-
+    // support only all validate actions in table level for now
     static {
-        VALID_MAP.put(Type.TABLE.toString(), Arrays.asList("SELECT"));
+        VALID_MAP.put(PrivilegeTypes.TABLE.toString(), PrivilegeTypes.TABLE.getValidActions());
     }
 
     @Override
@@ -40,7 +36,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
 
     @Override
     public PEntryObject generateObject(String typeStr, List<String> objectTokens, GlobalStateMgr mgr) throws PrivilegeException {
-        Type type = Type.valueOf(typeStr);
+        PrivilegeTypes type = PrivilegeTypes.valueOf(typeStr);
         switch (type) {
             case TABLE:
                 return TablePEntryObject.generate(mgr, objectTokens);

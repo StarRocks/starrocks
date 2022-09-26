@@ -11,7 +11,11 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 public class GrantExecutor implements DataDefinitionExecutor {
 
     public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws DdlException {
-        context.getGlobalStateMgr().getAuth().grant((GrantPrivilegeStmt) stmt);
+        if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+            context.getGlobalStateMgr().getPrivilegeManager().grant((GrantPrivilegeStmt) stmt);
+        } else {
+            context.getGlobalStateMgr().getAuth().grant((GrantPrivilegeStmt) stmt);
+        }
         return null;
     }
 }

@@ -11,6 +11,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,6 +22,7 @@ import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class PrivilegeManager {
+    private static final Logger LOG = LogManager.getLogger(PrivilegeManager.class);
 
     @SerializedName(value = "t")
     private Map<String, Short> typeStringToId = new HashMap<>();
@@ -148,43 +151,51 @@ public class PrivilegeManager {
         }
     }
 
-    public boolean check(ConnectContext context, String typeName, String actionName, List<String> objectToken)
-            throws PrivilegeException {
+    public boolean check(ConnectContext context, String typeName, String actionName, List<String> objectToken) {
         userReadLock();
-        PEntryObject object = provider.generateObject(
-                typeName, objectToken, globalStateMgr);
         try {
+            PEntryObject object = provider.generateObject(
+                    typeName, objectToken, globalStateMgr);
             short typeId = typeStringToId.get(typeName);
             Action want = typeToActionMap.get(typeId).get(actionName);
             return provider.check(typeId, want, object, mergePrivilegeCollection(context));
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when check type[{}] action[{}] object[{}]",
+                    typeName, actionName, objectToken, e);
+            return false;
         } finally {
             userReadUnlock();
         }
     }
 
-    public boolean checkAnyObject(ConnectContext context, String typeName, String actionName) throws PrivilegeException {
+    public boolean checkAnyObject(ConnectContext context, String typeName, String actionName) {
         userReadLock();
         try {
             short typeId = typeStringToId.get(typeName);
             Action want = typeToActionMap.get(typeId).get(actionName);
             return provider.checkAnyObject(typeId, want, mergePrivilegeCollection(context));
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when checkAnyObject type[{}] action[{}]", typeName, actionName, e);
+            return false;
         } finally {
             userReadUnlock();
         }
     }
 
-    public boolean hasType(ConnectContext context, String typeName) throws PrivilegeException {
+    public boolean hasType(ConnectContext context, String typeName) {
         userReadLock();
         try {
             short typeId = typeStringToId.get(typeName);
             return provider.hasType(typeId, mergePrivilegeCollection(context));
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when hasType type[{}]", typeName, e);
+            return false;
         } finally {
             userReadUnlock();
         }
     }
 
-    public boolean allowGrant(ConnectContext context, String typeName, String actionName, List<String> objectToken)
-            throws PrivilegeException {
+    public boolean allowGrant(ConnectContext context, String typeName, String actionName, List<String> objectToken) {
         userReadLock();
         try {
             short typeId = typeStringToId.get(typeName);
@@ -192,6 +203,10 @@ public class PrivilegeManager {
             PEntryObject object = provider.generateObject(
                     typeName, objectToken, globalStateMgr);
             return provider.allowGrant(typeId, want, object, mergePrivilegeCollection(context));
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when allowGrant type[{}] action[{}] object[{}]",
+                    typeName, actionName, objectToken, e);
+            return false;
         } finally {
             userReadUnlock();
         }
@@ -211,6 +226,9 @@ public class PrivilegeManager {
         }
     }
 
+    /**
+     * init all default privilege when a user is created, called by AuthenticationManager
+     */
     public UserPrivilegeCollection onCreateUser(UserIdentity user) {
         userWriteLock();
         try {
