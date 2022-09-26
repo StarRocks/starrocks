@@ -759,25 +759,14 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(MAX,
                     Lists.newArrayList(t), t, t, true, true, false));
                     
-            // MAX_BY
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.TINYINT), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.SMALLINT), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.INT), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.LARGEINT), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.BIGINT), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.BOOLEAN), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.FLOAT), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.DOUBLE), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.DECIMAL32), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.DECIMAL64), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.DECIMAL128), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.DECIMALV2), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.VARCHAR), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.CHAR), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.DATETIME), t, Type.VARCHAR, true, true, false));
-            addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t, Type.DATE), t, Type.VARCHAR, true, true, false));
+            // max_by        
+            for (Type t1 : Type.getSupportedTypes()) {
+                if (t1.isFunctionType() || t1.isNull() || t1.isChar() || t1.isPseudoType()) {
+                    continue;
+                }
+                addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t1, t), t1, Type.VARCHAR, true, true, false));
+            }    
             
-
             // NDV
             // ndv return string
             addBuiltin(AggregateFunction.createBuiltin(NDV,

@@ -206,8 +206,8 @@ public class FunctionAnalyzer {
             
             fnParams.setIsDistinct(false);  // DISTINCT is meaningless here
 
-            Type maxByType = functionCallExpr.getChild(1).getType();
-            if (!maxByType.canApplyToNumeric()) {
+            Type sortKeyType = functionCallExpr.getChild(1).getType();
+            if (!sortKeyType.canApplyToNumeric()) {
                 throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
             }
             
