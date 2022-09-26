@@ -57,26 +57,52 @@ public class EsRepository extends MasterDaemon {
         if (Catalog.isCheckpointThread()) {
             return;
         }
-        esTables.put(esTable.getId(), esTable);
+        // We should edit esClients first, otherwise will occur thread safety issues.
+        // In runAfterCatalogReady(), we read esTables first,  If the client in esClients has
+        // not been added at this time, it will result NullPointerException.
         esClients.put(esTable.getId(),
+<<<<<<< HEAD
                 new EsRestClient(esTable.getSeeds(), esTable.getUserName(), esTable.getPasswd()));
         LOG.info("register a new table [{}] to sync list", esTable);
+=======
+                new EsRestClient(esTable.getSeeds(), esTable.getUserName(), esTable.getPasswd(), esTable.sslEnabled()));
+        esTables.put(esTable.getId(), esTable);
+        LOG.info(String.format("Thread %s: register a new table [%s] to sync list",
+                Thread.currentThread().getName(), esTable));
+>>>>>>> 433af4b84 ([BugFix] Fix ES concurreny bug. (#11612))
     }
 
     public void deRegisterTable(long tableId) {
+        // When do doRegister, remove esTables first.
         esTables.remove(tableId);
         esClients.remove(tableId);
-        LOG.info("deregister table [{}] from sync list", tableId);
+        LOG.info(String.format("Thread %s: deregister table [%s] from sync list",
+                Thread.currentThread().getName(), tableId));
     }
 
     @Override
     protected void runAfterCatalogReady() {
         for (EsTable esTable : esTables.values()) {
+            EsRestClient esClient = esClients.get(esTable.getId());
+            if (esClient == null) {
+                LOG.warn(String.format("EsTable[%s] existed, but EsClient not existed now, need retry.", esTable));
+                continue;
+            }
             try {
+<<<<<<< HEAD
                 esTable.syncTableMetaData(esClients.get(esTable.getId()));
             } catch (Throwable e) {
                 LOG.warn("Exception happens when fetch index [{}] meta data from remote es cluster", esTable.getName(),
                         e);
+=======
+                esTable.syncTableMetaData(esClient);
+                // After synchronize success, we should set LastMetaDataSyncException to null.
+                esTable.setLastMetaDataSyncException(null);
+            } catch (Exception e) {
+                LOG.warn(String.format("Thread %s: Exception happens when fetch index [%s] meta " +
+                                "data from remote es cluster. Table info: [%s]",
+                        Thread.currentThread().getName(), esTable.getName(), esTable), e);
+>>>>>>> 433af4b84 ([BugFix] Fix ES concurreny bug. (#11612))
                 esTable.setEsTablePartitions(null);
                 esTable.setLastMetaDataSyncException(e);
             }
