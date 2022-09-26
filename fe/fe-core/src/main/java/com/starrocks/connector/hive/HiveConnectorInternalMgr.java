@@ -4,6 +4,7 @@ package com.starrocks.connector.hive;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.Config;
+import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.external.CachingRemoteFileConf;
 import com.starrocks.external.CachingRemoteFileIO;
 import com.starrocks.external.RemoteFileIO;
@@ -32,8 +33,11 @@ public class HiveConnectorInternalMgr {
     private final boolean enableRemoteFileCache;
     private CachingRemoteFileConf remoteFileConf;
 
-    private ExecutorService hmsExecutorService;
-    private ExecutorService remoteFileExecutorService;
+    private ExecutorService refreshHiveMetastoreExecutor;
+    private ExecutorService refreshRemoteFileExecutor;
+    private ExecutorService pullRemoteFileExecutor;
+
+    private final boolean isRecursive;
 
     public HiveConnectorInternalMgr(String catalogName, Map<String, String> properties) {
         this.catalogName = catalogName;
@@ -47,15 +51,42 @@ public class HiveConnectorInternalMgr {
         if (enableRemoteFileCache) {
             remoteFileConf = new CachingRemoteFileConf(properties);
         }
+
+        isRecursive = Boolean.parseBoolean(properties.getOrDefault("hive_recursive_directories", "false"));
     }
 
     public void shutdown() {
-        if (enableMetastoreCache) {
-            hmsExecutorService.shutdown();
+        if (enableMetastoreCache && refreshHiveMetastoreExecutor != null) {
+            refreshHiveMetastoreExecutor.shutdown();
         }
-        if (enableRemoteFileCache) {
-            remoteFileExecutorService.shutdown();
+        if (enableRemoteFileCache && refreshRemoteFileExecutor != null) {
+            refreshRemoteFileExecutor.shutdown();
         }
+        if (pullRemoteFileExecutor != null) {
+            pullRemoteFileExecutor.shutdown();
+        }
+    }
+
+    public IHiveMetastore createHiveMetastore() {
+        // TODO(stephen): Abstract the creator class to construct hive meta client
+        HiveMetaClient metaClient = createHiveMetaClient();
+        IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName);
+        IHiveMetastore baseHiveMetastore;
+        if (!enableMetastoreCache) {
+            baseHiveMetastore = hiveMetastore;
+        } else {
+            refreshHiveMetastoreExecutor = Executors.newCachedThreadPool(
+                    new ThreadFactoryBuilder().setNameFormat("hive-metastore-refresh-%d").build());
+            baseHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
+                    hiveMetastore,
+                    new ReentrantExecutor(refreshHiveMetastoreExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
+                    hmsConf.getCacheTtlSec(),
+                    hmsConf.getCacheRefreshIntervalSec(),
+                    hmsConf.getCacheMaxNum(),
+                    hmsConf.enableListNamesCache());
+        }
+
+        return baseHiveMetastore;
     }
 
     public RemoteFileIO createRemoteFileIO() {
@@ -67,38 +98,17 @@ public class HiveConnectorInternalMgr {
         if (!enableRemoteFileCache) {
             baseRemoteFileIO = remoteFileIO;
         } else {
-            remoteFileExecutorService = Executors.newCachedThreadPool(
-                    new ThreadFactoryBuilder().setNameFormat("hive-remote-refresh-%d").build());
+            refreshRemoteFileExecutor = Executors.newCachedThreadPool(
+                    new ThreadFactoryBuilder().setNameFormat("hive-remote-files-refresh-%d").build());
             baseRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                     remoteFileIO,
-                    remoteFileExecutorService,
+                    new ReentrantExecutor(refreshRemoteFileExecutor, remoteFileConf.getPerQueryCacheMaxSize()),
                     remoteFileConf.getCacheTtlSec(),
                     remoteFileConf.getCacheRefreshIntervalSec(),
                     remoteFileConf.getCacheMaxSize());
         }
+
         return baseRemoteFileIO;
-    }
-
-    public IHiveMetastore createHiveMetastore() {
-        // TODO(stephen): Abstract the creator class to construct hive meta client
-        HiveMetaClient metaClient = createHiveMetaClient();
-        IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName);
-        IHiveMetastore baseHiveMetastore;
-        if (!enableMetastoreCache) {
-            baseHiveMetastore = hiveMetastore;
-        } else {
-            hmsExecutorService = Executors.newCachedThreadPool(
-                    new ThreadFactoryBuilder().setNameFormat("hive-metastore-refresh-%d").build());
-            baseHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
-                    hiveMetastore,
-                    hmsExecutorService,
-                    hmsConf.getCacheTtlSec(),
-                    hmsConf.getCacheRefreshIntervalSec(),
-                    hmsConf.getCacheMaxNum(),
-                    hmsConf.enableListNamesCache());
-        }
-
-        return baseHiveMetastore;
     }
 
     public HiveMetaClient createHiveMetaClient() {
@@ -107,5 +117,26 @@ public class HiveConnectorInternalMgr {
         conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
                 String.valueOf(Config.hive_meta_store_timeout_s));
         return new HiveMetaClient(conf);
+    }
+
+    public ExecutorService getPullRemoteFileExecutor() {
+        if (pullRemoteFileExecutor == null) {
+            pullRemoteFileExecutor = Executors.newFixedThreadPool(remoteFileConf.getLoadRemoteFileMetadataThreadNum(),
+                    new ThreadFactoryBuilder().setNameFormat("pull-remote-files-%d").build());
+        }
+
+        return pullRemoteFileExecutor;
+    }
+
+    public boolean isSearchRecursive() {
+        return isRecursive;
+    }
+
+    public CachingHiveMetastoreConf getHiveMetastoreConf() {
+        return hmsConf;
+    }
+
+    public CachingRemoteFileConf getRemoteFileConf() {
+        return remoteFileConf;
     }
 }

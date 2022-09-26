@@ -3,125 +3,236 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
-import com.google.common.util.concurrent.UncheckedExecutionException;
-import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.DdlException;
-import com.starrocks.external.hive.HiveMetaStoreThriftClient;
-import mockit.Expectations;
-import mockit.Mocked;
-import org.apache.hadoop.hive.metastore.api.FieldSchema;
-import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
-import org.apache.hadoop.hive.metastore.api.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
+import com.starrocks.external.CachingRemoteFileIO;
+import com.starrocks.external.RemoteFileBlockDesc;
+import com.starrocks.external.RemoteFileDesc;
+import com.starrocks.external.RemoteFileInfo;
+import com.starrocks.external.RemoteFileOperations;
+import com.starrocks.external.RemotePathKey;
+import com.starrocks.external.Utils;
+import com.starrocks.external.hive.CachingHiveMetastore;
+import com.starrocks.external.hive.HiveMetaClient;
+import com.starrocks.external.hive.HiveMetastore;
+import com.starrocks.external.hive.HiveMetastoreOperations;
+import com.starrocks.external.hive.HiveMetastoreTest;
+import com.starrocks.external.hive.HiveRemoteFileIO;
+import com.starrocks.external.hive.HiveStatisticsProvider;
+import com.starrocks.external.hive.MockedRemoteFileSystem;
+import com.starrocks.external.hive.Partition;
+import com.starrocks.external.hive.RemoteFileInputFormat;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.Memo;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.utframe.UtFrameUtils;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import static com.starrocks.external.hive.MockedRemoteFileSystem.TEST_FILES;
 
 public class HiveMetadataTest {
-    @Test
-    public void testListDatabaseNames(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws Exception {
-        new Expectations() {
-            {
-                metaStoreThriftClient.getAllDatabases();
-                result = Lists.newArrayList("db1", "db2");
-                minTimes = 0;
-            }
-        };
+    private HiveMetaClient client;
+    private HiveMetastore metastore;
+    private CachingHiveMetastore cachingHiveMetastore;
+    private HiveMetastoreOperations hmsOps;
+    private HiveRemoteFileIO hiveRemoteFileIO;
+    private CachingRemoteFileIO cachingRemoteFileIO;
+    private RemoteFileOperations fileOps;
+    private ExecutorService executorForHmsRefresh;
+    private ExecutorService executorForRemoteFileRefresh;
+    private ExecutorService executorForPullFiles;
+    private HiveStatisticsProvider statisticsProvider;
+    private HiveMetadata hiveMetadata;
 
-        String metastoreUris = "thrift://127.0.0.1:9083";
-        HiveMetadata metadata = new HiveMetadata(metastoreUris);
-        List<String> expectResult = Lists.newArrayList("db1", "db2");
-        Assert.assertEquals(expectResult, metadata.listDbNames());
+    private static ConnectContext connectContext;
+    private static OptimizerContext optimizerContext;
+    private static ColumnRefFactory columnRefFactory;
+
+    @Before
+    public void setUp() throws Exception {
+        executorForHmsRefresh = Executors.newFixedThreadPool(5);
+        executorForRemoteFileRefresh = Executors.newFixedThreadPool(5);
+        executorForPullFiles = Executors.newFixedThreadPool(5);
+
+        client = new HiveMetastoreTest.MockedHiveMetaClient();
+        metastore = new HiveMetastore(client, "hive_catalog");
+        cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
+                metastore, executorForHmsRefresh, 100, 10, 1000, false);
+        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore);
+
+        hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
+        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        hiveRemoteFileIO.setFileSystem(fs);
+        cachingRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
+                hiveRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 10);
+        fileOps = new RemoteFileOperations(cachingRemoteFileIO, executorForPullFiles, false);
+        statisticsProvider = new HiveStatisticsProvider(hmsOps, fileOps);
+
+        UtFrameUtils.createMinStarRocksCluster();
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+        columnRefFactory = new ColumnRefFactory();
+        optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
+        hiveMetadata = new HiveMetadata("hive_catalog", hmsOps, fileOps, statisticsProvider);
+    }
+
+    @After
+    public void tearDown() {
+        executorForHmsRefresh.shutdown();
+        executorForRemoteFileRefresh.shutdown();
+        executorForPullFiles.shutdown();
     }
 
     @Test
-    public void testListTableNames(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws Exception {
-        String db1 = "db1";
-        String db2 = "db2";
-
-        new Expectations() {
-            {
-                metaStoreThriftClient.getAllTables(db1);
-                result = Lists.newArrayList("tbl1", "tbl2");
-                minTimes = 0;
-            }
-        };
-
-        String metastoreUris = "thrift://127.0.0.1:9083";
-        HiveMetadata metadata = new HiveMetadata(metastoreUris);
-        List<String> expectResult = Lists.newArrayList("tbl1", "tbl2");
-        Assert.assertEquals(expectResult, metadata.listTableNames(db1));
+    public void testListDbNames() {
+        List<String> databaseNames = hiveMetadata.listDbNames();
+        Assert.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
+        CachingHiveMetastore queryLevelCache = CachingHiveMetastore.createQueryLevelInstance(cachingHiveMetastore, 100);
+        Assert.assertEquals(Lists.newArrayList("db1", "db2"), queryLevelCache.getAllDatabaseNames());
     }
 
     @Test
-    public void testListTableNamesOnNotExistDb() throws Exception {
-        String db2 = "db2";
-        String metastoreUris = "thrift://127.0.0.1:9083";
-        HiveMetadata metadata = new HiveMetadata(metastoreUris);
-        try {
-            Assert.assertNull(metadata.listTableNames(db2));
-        } catch (Exception e) {
-            Assert.assertTrue(e instanceof UncheckedExecutionException);
-        }
+    public void testListTableNames() {
+        List<String> databaseNames = hiveMetadata.listTableNames("db1");
+        Assert.assertEquals(Lists.newArrayList("table1", "table2"), databaseNames);
     }
 
     @Test
-    public void testGetTable(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws Exception {
-        String db = "db";
-        String tbl1 = "tbl1";
-        String tbl2 = "tbl2";
-        String resourceName = "thrift://127.0.0.1:9083";
-        List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "BIGINT", ""));
-        List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
-        String hdfsPath = "hdfs://127.0.0.1:10000/hive";
-        StorageDescriptor sd = new StorageDescriptor();
-        sd.setCols(unPartKeys);
-        sd.setLocation(hdfsPath);
-        sd.setInputFormat("org.apache.hadoop.hive.ql.io.HiveInputFormat");
-        Table msTable1 = new Table();
-        msTable1.setDbName(db);
-        msTable1.setTableName(tbl1);
-        msTable1.setPartitionKeys(partKeys);
-        msTable1.setSd(sd);
-        msTable1.setTableType("MANAGED_TABLE");
-
-        Table msTable2 = new Table();
-        msTable2.setDbName(db);
-        msTable2.setTableName(tbl2);
-        msTable2.setPartitionKeys(partKeys);
-        msTable2.setSd(sd);
-        msTable2.setTableType("VIRTUAL_VIEW");
-
-        new Expectations() {
-            {
-                metaStoreThriftClient.getTable(db, tbl1);
-                result = msTable1;
-
-                metaStoreThriftClient.getTable(db, tbl2);
-                result = msTable2;
-            }
-        };
-        HiveMetadata metadata = new HiveMetadata(resourceName);
-        HiveTable table1 = (HiveTable) metadata.getTable(db, tbl1);
-        Assert.assertEquals(tbl1, table1.getTableName());
-        Assert.assertEquals(db, table1.getDbName());
-        Assert.assertEquals(String.format("%s.%s", db, tbl1), table1.getHiveDbTable());
-        Assert.assertEquals(hdfsPath, table1.getHdfsPath());
-        Assert.assertEquals(Lists.newArrayList(new Column("col1", Type.BIGINT, true)), table1.getPartitionColumns());
-
-        HiveTable table1FromCache = (HiveTable) metadata.getTable(db, tbl1);
-        Assert.assertEquals(table1, table1FromCache);
-        // test "VIRTUAL_VIEW" type table
-        Assert.assertNull(metadata.getTable(db, tbl2));
+    public void testGetPartitionKeys() {
+        Assert.assertEquals(Lists.newArrayList("col1"), hiveMetadata.listPartitionNames("db1", "tbl1"));
     }
 
     @Test
-    public void testNotExistTable() throws DdlException {
-        String resourceName = "thrift://127.0.0.1:9083";
-        HiveMetadata metadata = new HiveMetadata(resourceName);
-        Assert.assertNull(metadata.getTable("db", "tbl"));
+    public void testGetDb() {
+        Database database = hiveMetadata.getDb("db1");
+        Assert.assertEquals("db1", database.getFullName());
+
+        Assert.assertNull(hiveMetadata.getDb("db2"));
     }
 
+    @Test
+    public void testGetTable() {
+        com.starrocks.catalog.Table table = hiveMetadata.getTable("db1", "tbl1");
+        HiveTable hiveTable = (HiveTable) table;
+        Assert.assertEquals("db1", hiveTable.getDbName());
+        Assert.assertEquals("tbl1", hiveTable.getTableName());
+        Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
+        Assert.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
+        Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getHdfsPath());
+        Assert.assertEquals(ScalarType.INT, hiveTable.getPartitionColumns().get(0).getType());
+        Assert.assertEquals(ScalarType.INT, hiveTable.getBaseSchema().get(0).getType());
+        Assert.assertEquals("hive_catalog", hiveTable.getCatalogName());
+    }
+
+    @Test
+    public void testGetHiveRemoteFiles() throws AnalysisException {
+        FeConstants.runningUnitTest = true;
+        String tableLocation = "hdfs://127.0.0.1:10000/hive.db/hive_tbl";
+        RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
+
+        HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
+        List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
+        Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
+
+        PartitionKey hivePartitionKey1 = Utils.createPartitionKey(Lists.newArrayList("1"), hiveTable.getPartitionColumns());
+        PartitionKey hivePartitionKey2 = Utils.createPartitionKey(Lists.newArrayList("2"), hiveTable.getPartitionColumns());
+
+        List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFileInfos(
+                hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+        Assert.assertEquals(2, remoteFileInfos.size());
+
+        RemoteFileInfo fileInfo = remoteFileInfos.get(0);
+        Assert.assertEquals(RemoteFileInputFormat.PARQUET, fileInfo.getFormat());
+        Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1=1", fileInfo.getFullPath());
+
+        List<RemoteFileDesc> fileDescs = remoteFileInfos.get(0).getFiles();
+        Assert.assertNotNull(fileDescs);
+        Assert.assertEquals(1, fileDescs.size());
+
+        RemoteFileDesc fileDesc = fileDescs.get(0);
+        Assert.assertNotNull(fileDesc);
+        Assert.assertNotNull(fileDesc.getTextFileFormatDesc());
+        Assert.assertEquals("", fileDesc.getCompression());
+        Assert.assertEquals(20, fileDesc.getLength());
+        Assert.assertTrue(fileDesc.isSplittable());
+
+        List<RemoteFileBlockDesc> blockDescs = fileDesc.getBlockDescs();
+        Assert.assertEquals(1, blockDescs.size());
+        RemoteFileBlockDesc blockDesc = blockDescs.get(0);
+        Assert.assertEquals(0, blockDesc.getOffset());
+        Assert.assertEquals(20, blockDesc.getLength());
+        Assert.assertEquals(2, blockDesc.getReplicaHostIds().length);
+    }
+
+    @Test
+    public void testGetTableStatisticsWithUnknown() throws AnalysisException {
+        optimizerContext.getSessionVariable().setEnableHiveColumnStats(false);
+        HiveTable hiveTable = (HiveTable) hmsOps.getTable("db1", "table1");
+        ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, Type.INT, "col1", true);
+        ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, Type.INT, "col2", true);
+        PartitionKey hivePartitionKey1 = Utils.createPartitionKey(Lists.newArrayList("1"), hiveTable.getPartitionColumns());
+        PartitionKey hivePartitionKey2 = Utils.createPartitionKey(Lists.newArrayList("2"), hiveTable.getPartitionColumns());
+
+        Statistics statistics = hiveMetadata.getTableStatistics(
+                optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+        Assert.assertEquals(1, statistics.getOutputRowCount(), 0.001);
+        Assert.assertEquals(2, statistics.getColumnStatistics().size());
+        Assert.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
+        Assert.assertTrue(statistics.getColumnStatistics().get(dataColumnRefOperator).isUnknown());
+    }
+
+    @Test
+    public void testGetTableStatisticsNormal() throws AnalysisException {
+        HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
+        ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, Type.INT, "col1", true);
+        ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, Type.INT, "col2", true);
+        PartitionKey hivePartitionKey1 = Utils.createPartitionKey(Lists.newArrayList("1"), hiveTable.getPartitionColumns());
+        PartitionKey hivePartitionKey2 = Utils.createPartitionKey(Lists.newArrayList("2"), hiveTable.getPartitionColumns());
+        Statistics statistics = hiveMetadata.getTableStatistics(
+                optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+        Assert.assertEquals(1,  statistics.getOutputRowCount(), 0.001);
+        Assert.assertEquals(2, statistics.getColumnStatistics().size());
+
+        cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
+        statistics = hiveMetadata.getTableStatistics(
+                optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
+        Assert.assertEquals(100, statistics.getOutputRowCount(), 0.001);
+        Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();
+        ColumnStatistic partitionColumnStats = columnStatistics.get(partColumnRefOperator);
+        Assert.assertEquals(1, partitionColumnStats.getMinValue(), 0.001);
+        Assert.assertEquals(2, partitionColumnStats.getMaxValue(), 0.001);
+        Assert.assertEquals(0, partitionColumnStats.getNullsFraction(), 0.001);
+        Assert.assertEquals(4, partitionColumnStats.getAverageRowSize(), 0.001);
+        Assert.assertEquals(2, partitionColumnStats.getDistinctValuesCount(), 0.001);
+
+        ColumnStatistic dataColumnStats = columnStatistics.get(dataColumnRefOperator);
+        Assert.assertEquals(0, dataColumnStats.getMinValue(), 0.001);
+        Assert.assertEquals(0.03, dataColumnStats.getNullsFraction(), 0.001);
+        Assert.assertEquals(4, dataColumnStats.getAverageRowSize(), 0.001);
+        Assert.assertEquals(5, dataColumnStats.getDistinctValuesCount(), 0.001);
+    }
 }
