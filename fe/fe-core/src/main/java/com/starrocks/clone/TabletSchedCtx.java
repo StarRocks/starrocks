@@ -970,6 +970,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         TTabletInfo reportedTablet = request.getFinish_tablet_infos().get(0);
         Preconditions.checkArgument(reportedTablet.isSetPath_hash());
         replica.setPathHash(reportedTablet.getPath_hash());
+        replica.updateVersion(reportedTablet.version);
     }
 
     private void unprotectedFinishClone(TFinishTaskRequest request, Database db, Partition partition,
@@ -1004,7 +1005,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     "replica does not exist. backend id: " + destBackendId);
         }
 
-        replica.updateRowCount(reportedTablet.getVersion(),
+        replica.updateRowCount(reportedTablet.getVersion(), reportedTablet.getMin_readable_version(),
                 reportedTablet.getData_size(), reportedTablet.getRow_count());
         if (reportedTablet.isSetPath_hash()) {
             replica.setPathHash(reportedTablet.getPath_hash());
@@ -1028,7 +1029,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 reportedTablet.getData_size(),
                 reportedTablet.getRow_count(),
                 replica.getLastFailedVersion(),
-                replica.getLastSuccessVersion());
+                replica.getLastSuccessVersion(),
+                reportedTablet.getMin_readable_version());
 
         if (replica.getState() == ReplicaState.CLONE) {
             replica.setState(ReplicaState.NORMAL);

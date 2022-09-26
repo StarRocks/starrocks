@@ -1980,6 +1980,7 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
 }
 
 void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
+    int64_t min_readable_version = 0;
     int64_t version = 0;
     bool has_pending = false;
     vector<uint32_t> rowsets;
@@ -1988,6 +1989,7 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
         if (_edit_version_infos.empty()) {
             LOG(WARNING) << "tablet delete when get_tablet_info_extra tablet:" << _tablet.tablet_id();
         } else {
+            min_readable_version = _edit_version_infos[0]->version.major();
             auto& last = _edit_version_infos.back();
             version = last->version.major();
             rowsets = last->rowsets;
@@ -2015,6 +2017,7 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
                                  << " rowset=" << err_rowsets;
     }
     info->__set_version(version);
+    info->__set_min_readable_version(min_readable_version);
     info->__set_version_miss(has_pending);
     info->__set_version_count(rowsets.size());
     info->__set_row_count(total_row);

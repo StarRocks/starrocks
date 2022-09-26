@@ -841,7 +841,7 @@ public class TransactionState implements Writable {
         List<TPartitionVersionInfo> partitionVersions = new ArrayList<>(partitionCommitInfos.size());
         for (PartitionCommitInfo commitInfo : partitionCommitInfos) {
             TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPartitionId(),
-                    commitInfo.getVersion(), 0);
+                    commitInfo.getVersion());
             partitionVersions.add(version);
         }
 
