@@ -35,7 +35,6 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTER
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.BottomUp;
-import com.starrocks.sql.optimizer.rule.tree.EquivalentConstantExpressionRewrite;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
@@ -154,6 +153,7 @@ public class Optimizer {
         rootTaskContext.getRequiredColumns().union(cteContext.getAllRequiredColumns());
 
         tree = new BottomUp().rewrite(tree, context.getTaskContext());
+        deriveLogicalProperty(tree);
 
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node
@@ -166,7 +166,9 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
 
+        //tree = new JoinEquivalentPredicatePushDown().rewrite(tree, context.getTaskContext());
         deriveLogicalProperty(tree);
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
@@ -227,8 +229,8 @@ public class Optimizer {
             CTEUtils.collectCteOperators(tree, context);
         }
 
-        tree = new EquivalentConstantExpressionRewrite().rewrite(tree, context.getTaskContext());
-        deriveLogicalProperty(tree);
+        //tree = new EquivalentConstantExpressionRewrite().rewrite(tree, context.getTaskContext());
+        //deriveLogicalProperty(tree);
 
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());

@@ -398,8 +398,8 @@ select v1, exists (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 =
 LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4 AND 1: v1 = 1 AND add(2: v2, 5: v5) = 6: v6] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE SHUFFLE[4]
-        AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: v4, 5: v5, 6: v6]] having [null]
-            AGGREGATE ([LOCAL] aggregate [{}] group by [[4: v4, 5: v5, 6: v6]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
+            AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
                 SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
 [end]
 
@@ -409,8 +409,8 @@ select v1, exists (select v5 + v4 from t1 where v4 = 1 and abs(v1 + v4) = v1 + v
 LEFT OUTER JOIN (join-predicate [abs(add(1: v1, 4: v4)) = cast(add(1: v1, 5: v5) as largeint(40)) AND add(2: v2, 5: v5) = 6: v6] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: v4, 5: v5, 6: v6]] having [null]
-            AGGREGATE ([LOCAL] aggregate [{}] group by [[4: v4, 5: v5, 6: v6]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
+            AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
                 SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
 [end]
 
@@ -467,8 +467,8 @@ select v1, not exists (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + 
 LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4 AND 1: v1 = 1 AND add(2: v2, 5: v5) = 6: v6] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE SHUFFLE[4]
-        AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: v4, 5: v5, 6: v6]] having [null]
-            AGGREGATE ([LOCAL] aggregate [{}] group by [[4: v4, 5: v5, 6: v6]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
+            AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
                 SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
 [end]
 
@@ -478,8 +478,8 @@ select v1, not exists (select v5 + v4 from t1 where v4 = 1 and abs(v1 + v4) = v1
 LEFT OUTER JOIN (join-predicate [abs(add(1: v1, 4: v4)) = cast(add(1: v1, 5: v5) as largeint(40)) AND add(2: v2, 5: v5) = 6: v6] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: v4, 5: v5, 6: v6]] having [null]
-            AGGREGATE ([LOCAL] aggregate [{}] group by [[4: v4, 5: v5, 6: v6]] having [null]
+        AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
+            AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
                 SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
 [end]
 

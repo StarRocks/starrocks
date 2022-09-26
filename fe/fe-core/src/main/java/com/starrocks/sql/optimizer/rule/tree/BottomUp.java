@@ -27,7 +27,17 @@ public class BottomUp implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         ColumnRefFactory columnRefFactory = taskContext.getOptimizerContext().getColumnRefFactory();
-        root.getOp().accept(new Visitor(columnRefFactory), root, new RewriteContext());
+        RewriteContext rewriteContext = new RewriteContext();
+        root.getOp().accept(new Visitor(columnRefFactory), root, rewriteContext);
+
+        //最终将所有filter下推
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : rewriteContext.columnRefToConstant.entrySet()) {
+            OptExpression o = OptExpression.create(
+                    new LogicalFilterOperator(
+                            new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, entry.getKey(), entry.getValue())),
+                    root.inputAt(0));
+            root.setChild(0, o);
+        }
         return root;
     }
 
@@ -71,6 +81,14 @@ public class BottomUp implements TreeRewriteRule {
                 while (iterator.hasNext()) {
                     Map.Entry<ColumnRefOperator, ScalarOperator> entry = iterator.next();
                     if (!optExpression.getOutputColumns().contains(entry.getKey())) {
+
+                        OptExpression o = OptExpression.create(new LogicalFilterOperator(
+                                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                                                entry.getKey(), entry.getValue())),
+                                optExpression.inputAt(0));
+                        optExpression.setChild(0, o);
+
+                        //删除这个谓词，并将此谓词留在此处
                         iterator.remove();
                     }
                 }
@@ -82,51 +100,285 @@ public class BottomUp implements TreeRewriteRule {
             start(optExpression, context);
             LogicalFilterOperator filterOperator = (LogicalFilterOperator) optExpression.getOp();
 
-            ScalarEquivalenceExtractor scalarEquivalenceExtractor = new ScalarEquivalenceExtractor();
             List<ScalarOperator> inputPredicates = Utils.extractConjuncts(filterOperator.getPredicate());
-            scalarEquivalenceExtractor.union(inputPredicates);
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.columnRefToConstant.entrySet()) {
-                scalarEquivalenceExtractor.union(Lists.newArrayList(
-                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, entry.getKey(), entry.getValue())));
+                inputPredicates.add(BinaryPredicateOperator.eq(entry.getKey(), entry.getValue()));
             }
 
-            ScalarOperator scalarOperator = filterOperator.getPredicate();
-            for (int columnId : optExpression.inputAt(0).getOutputColumns().getColumnIds()) {
-                ColumnRefOperator columnRefOperator = columnRefFactory.getColumnRef(columnId);
-                Set<ScalarOperator> equalPredicate = scalarEquivalenceExtractor.getEquivalentScalar(columnRefOperator);
-
-                scalarOperator = Utils.compoundAnd(scalarOperator, Utils.compoundAnd(new ArrayList<>(equalPredicate)));
-            }
-            filterOperator.setPredicate(scalarOperator);
+            filterOperator.setPredicate(Utils.compoundAnd(inputPredicates));
             end(optExpression, context);
             return null;
         }
 
         @Override
         public Void visitLogicalJoin(OptExpression optExpression, RewriteContext context) {
-            start(optExpression, context);
+            //start(optExpression, context);
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) optExpression.getOp();
 
+            //计算等值判断，On Predicate 左右互推
+            List<ScalarOperator> pushDownToLeft = new ArrayList<>();
+            List<ScalarOperator> pushDownToRight = new ArrayList<>();
+
+            if (joinOperator.getJoinType().isFullOuterJoin()) {
+                //full outer 不互推
+            }
+
+            RewriteContext rleft = new RewriteContext();
+            optExpression.inputAt(0).getOp().accept(this, optExpression.inputAt(0), rleft);
+            RewriteContext rright = new RewriteContext();
+            optExpression.inputAt(1).getOp().accept(this, optExpression.inputAt(1), rright);
+
+            List<ScalarOperator> predicates = new ArrayList<>();
+            predicates.add(joinOperator.getOnPredicate());
+
+            if (!joinOperator.getJoinType().isLeftOuterJoin() && !joinOperator.getJoinType().isLeftAntiJoin()) {
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : rright.columnRefToConstant.entrySet()) {
+                    predicates.add(BinaryPredicateOperator.eq(entry.getKey(), entry.getValue()));
+                }
+
+                /*
+                ScalarEquivalenceExtractor scalarEquivalenceExtractor = new ScalarEquivalenceExtractor();
+                List<ScalarOperator> inputPredicates = Utils.extractConjuncts(joinOperator.getOnPredicate());
+                scalarEquivalenceExtractor.union(inputPredicates);
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : rright.columnRefToConstant.entrySet()) {
+                    scalarEquivalenceExtractor.union(Lists.newArrayList(
+                            new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, entry.getKey(),
+                            entry.getValue())));
+                }
+
+                for (int columnId : optExpression.getInputs().get(0).getOutputColumns().getColumnIds()) {
+                    ColumnRefOperator columnRefOperator = columnRefFactory.getColumnRef(columnId);
+                    Set<ScalarOperator> equalPredicate = scalarEquivalenceExtractor.getEquivalentScalar(columnRefOperator);
+
+                    for (ScalarOperator scalarOperator : equalPredicate) {
+                        if (optExpression.getInputs().get(0).getOutputColumns().containsAll(scalarOperator.getUsedColumns())) {
+                            pushDownToLeft.add(scalarOperator);
+                        }
+                    }
+                }
+
+                 */
+            }
+
+
+            if (!joinOperator.getJoinType().isRightOuterJoin() && !joinOperator.getJoinType().isRightAntiJoin()) {
+                //getPredicatePushDownToLeft(context, optExpression, joinOperator, pushDownToLeft);
+
+
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : rleft.columnRefToConstant.entrySet()) {
+                    predicates.add(BinaryPredicateOperator.eq(entry.getKey(), entry.getValue()));
+                }
+
+
+                /*
+                ScalarEquivalenceExtractor scalarEquivalenceExtractor = new ScalarEquivalenceExtractor();
+                List<ScalarOperator> inputPredicates = Utils.extractConjuncts(joinOperator.getOnPredicate());
+                scalarEquivalenceExtractor.union(inputPredicates);
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : rleft.columnRefToConstant.entrySet()) {
+                    scalarEquivalenceExtractor.union(Lists.newArrayList(
+                            new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, entry.getKey(),
+                            entry.getValue())));
+                }
+
+                for (int columnId : optExpression.getInputs().get(1).getOutputColumns().getColumnIds()) {
+                    ColumnRefOperator columnRefOperator = columnRefFactory.getColumnRef(columnId);
+                    Set<ScalarOperator> equalPredicate = scalarEquivalenceExtractor.getEquivalentScalar(columnRefOperator);
+
+                    for (ScalarOperator scalarOperator : equalPredicate) {
+                        if (optExpression.getInputs().get(1).getOutputColumns().containsAll(scalarOperator.getUsedColumns())) {
+                            pushDownToRight.add(scalarOperator);
+                        }
+                    }
+                }
+                */
+
+            }
+
+            //ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+            ScalarOperator scalarOperator = Utils.compoundAnd(predicates);
+            //if (scalarOperator != null) {
+            //     scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            // }
+
+            joinOperator.setOnPredicate(scalarOperator);
+
+
+            // PushDownJoinPredicateBase.pushDownPredicate(optExpression, pushDownToLeft, pushDownToRight);
+
+            if (joinOperator.getJoinType().isLeftOuterJoin()) {
+                Iterator<Map.Entry<ColumnRefOperator, ScalarOperator>> iter = rright.columnRefToConstant.entrySet().iterator();
+                while (iter.hasNext()) {
+                    Map.Entry<ColumnRefOperator, ScalarOperator> entry = iter.next();
+
+                    //Left outer join 右孩子的常量等值不再向上传递
+                    if (optExpression.inputAt(1).getOutputColumns().contains(entry.getKey())) {
+                        rright.columnRefToConstant.remove(entry.getKey());
+
+                        OptExpression o = OptExpression.create(new LogicalFilterOperator(
+                                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                                                entry.getKey(), entry.getValue())),
+                                optExpression.inputAt(1));
+                        optExpression.setChild(1, o);
+                    }
+                }
+            }
+
+            if (joinOperator.getJoinType().isRightOuterJoin()) {
+                Iterator<Map.Entry<ColumnRefOperator, ScalarOperator>> iter = rleft.columnRefToConstant.entrySet().iterator();
+                while (iter.hasNext()) {
+                    Map.Entry<ColumnRefOperator, ScalarOperator> entry = iter.next();
+
+                    //Right outer join 左孩子的常量等值不再向上传递
+                    if (optExpression.inputAt(0).getOutputColumns().contains(entry.getKey())) {
+                        rleft.columnRefToConstant.remove(entry.getKey());
+                    }
+
+                    OptExpression o = OptExpression.create(new LogicalFilterOperator(
+                                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                                            entry.getKey(), entry.getValue())),
+                            optExpression.inputAt(0));
+                    optExpression.setChild(0, o);
+                }
+            }
+
+            /*
             if (joinOperator.getJoinType().isLeftOuterJoin()) {
                 Iterator<Map.Entry<ColumnRefOperator, ScalarOperator>> iter = context.columnRefToConstant.entrySet().iterator();
                 while (iter.hasNext()) {
                     Map.Entry<ColumnRefOperator, ScalarOperator> entry = iter.next();
+
+                    //Left outer join 右孩子的常量等值不再向上传递
                     if (optExpression.inputAt(1).getOutputColumns().contains(entry.getKey())) {
                         context.columnRefToConstant.remove(entry.getKey());
+
+                        OptExpression o = OptExpression.create(new LogicalFilterOperator(
+                                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                                                entry.getKey(), entry.getValue())),
+                                optExpression.inputAt(1));
+                        optExpression.setChild(1, o);
+
                     }
                 }
             } else if (joinOperator.getJoinType().isRightOuterJoin()) {
                 Iterator<Map.Entry<ColumnRefOperator, ScalarOperator>> iter = context.columnRefToConstant.entrySet().iterator();
                 while (iter.hasNext()) {
                     Map.Entry<ColumnRefOperator, ScalarOperator> entry = iter.next();
+
+                    //Right outer join 左孩子的常量等值不再向上传递
                     if (optExpression.inputAt(0).getOutputColumns().contains(entry.getKey())) {
                         context.columnRefToConstant.remove(entry.getKey());
                     }
+
+                    OptExpression o = OptExpression.create(new LogicalFilterOperator(
+                                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                                            entry.getKey(), entry.getValue())),
+                            optExpression.inputAt(0));
+                    optExpression.setChild(0, o);
+
                 }
             }
 
             end(optExpression, context);
+
+             */
             return null;
+        }
+
+        @Override
+        public Void visitLogicalUnion(OptExpression optExpression, RewriteContext context) {
+            for (int childIdx = 0; childIdx < optExpression.getInputs().size(); ++childIdx) {
+                OptExpression child = optExpression.inputAt(childIdx);
+
+                RewriteContext rewriteContext = new RewriteContext();
+                child.getOp().accept(this, child, rewriteContext);
+                end(child, rewriteContext);
+            }
+
+            return null;
+        }
+
+        @Override
+        public Void visitLogicalExcept(OptExpression optExpression, RewriteContext context) {
+            for (int childIdx = 0; childIdx < optExpression.getInputs().size(); ++childIdx) {
+                OptExpression child = optExpression.inputAt(childIdx);
+
+                RewriteContext rewriteContext = new RewriteContext();
+                child.getOp().accept(this, child, rewriteContext);
+                end(child, rewriteContext);
+            }
+
+            return null;
+        }
+
+        @Override
+        public Void visitLogicalIntersect(OptExpression optExpression, RewriteContext context) {
+            for (int childIdx = 0; childIdx < optExpression.getInputs().size(); ++childIdx) {
+                OptExpression child = optExpression.inputAt(childIdx);
+
+                RewriteContext rewriteContext = new RewriteContext();
+                child.getOp().accept(this, child, rewriteContext);
+                end(child, rewriteContext);
+            }
+
+            return null;
+        }
+
+        void getPredicatePushDownToRight(RewriteContext context,
+                                         OptExpression optExpression,
+                                         LogicalJoinOperator joinOperator,
+                                         List<ScalarOperator> pushDownToRight) {
+            //JoinEquivalentPredicatePushDown.RewriteContext rleft = new JoinEquivalentPredicatePushDown.RewriteContext();
+            //optExpression.inputAt(0).getOp().accept(this, optExpression.inputAt(0), rleft);
+
+            ScalarEquivalenceExtractor scalarEquivalenceExtractor = new ScalarEquivalenceExtractor();
+            List<ScalarOperator> inputPredicates = Utils.extractConjuncts(joinOperator.getOnPredicate());
+            scalarEquivalenceExtractor.union(inputPredicates);
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.columnRefToConstant.entrySet()) {
+                BinaryPredicateOperator binaryPredicateOperator =
+                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, entry.getKey(), entry.getValue());
+
+                scalarEquivalenceExtractor.union(Lists.newArrayList(binaryPredicateOperator));
+            }
+
+            for (int columnId : optExpression.getInputs().get(1).getOutputColumns().getColumnIds()) {
+                ColumnRefOperator columnRefOperator = columnRefFactory.getColumnRef(columnId);
+                Set<ScalarOperator> equalPredicate = scalarEquivalenceExtractor.getEquivalentScalar(columnRefOperator);
+
+                for (ScalarOperator scalarOperator : equalPredicate) {
+                    if (optExpression.getInputs().get(1).getOutputColumns().containsAll(scalarOperator.getUsedColumns())) {
+                        pushDownToRight.add(scalarOperator);
+                    }
+                }
+            }
+        }
+
+        void getPredicatePushDownToLeft(RewriteContext context,
+                                        OptExpression optExpression,
+                                        LogicalJoinOperator joinOperator,
+                                        List<ScalarOperator> pushDownToLeft) {
+            //JoinEquivalentPredicatePushDown.RewriteContext rright = new JoinEquivalentPredicatePushDown.RewriteContext();
+            //optExpression.inputAt(1).getOp().accept(this, optExpression.inputAt(1), rright);
+
+            ScalarEquivalenceExtractor scalarEquivalenceExtractor = new ScalarEquivalenceExtractor();
+            List<ScalarOperator> inputPredicates = Utils.extractConjuncts(joinOperator.getOnPredicate());
+            scalarEquivalenceExtractor.union(inputPredicates);
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.columnRefToConstant.entrySet()) {
+                BinaryPredicateOperator binaryPredicateOperator =
+                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, entry.getKey(), entry.getValue());
+
+                scalarEquivalenceExtractor.union(Lists.newArrayList(binaryPredicateOperator));
+            }
+
+            for (int columnId : optExpression.getInputs().get(0).getOutputColumns().getColumnIds()) {
+                ColumnRefOperator columnRefOperator = columnRefFactory.getColumnRef(columnId);
+                Set<ScalarOperator> equalPredicate = scalarEquivalenceExtractor.getEquivalentScalar(columnRefOperator);
+
+                for (ScalarOperator scalarOperator : equalPredicate) {
+                    if (optExpression.getInputs().get(0).getOutputColumns().containsAll(scalarOperator.getUsedColumns())) {
+                        pushDownToLeft.add(scalarOperator);
+                    }
+                }
+            }
         }
     }
 

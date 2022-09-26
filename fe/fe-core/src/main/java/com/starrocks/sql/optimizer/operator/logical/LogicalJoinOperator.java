@@ -19,7 +19,7 @@ import java.util.Objects;
 
 public class LogicalJoinOperator extends LogicalOperator {
     private final JoinOperator joinType;
-    private final ScalarOperator onPredicate;
+    private ScalarOperator onPredicate;
     private final String joinHint;
     // For mark the node has been push  down join on clause, avoid dead-loop
     private boolean hasPushDownJoinOnClause = false;
@@ -86,6 +86,10 @@ public class LogicalJoinOperator extends LogicalOperator {
 
     public ScalarOperator getOnPredicate() {
         return onPredicate;
+    }
+
+    public void setOnPredicate(ScalarOperator onPredicate) {
+        this.onPredicate = onPredicate;
     }
 
     public String getJoinHint() {
