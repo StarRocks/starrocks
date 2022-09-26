@@ -51,7 +51,7 @@ public class HiveMetastoreOperationsTest {
     public void testGetAllDatabaseNames() {
         List<String> databaseNames = hmsOps.getAllDatabaseNames();
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
-        CachingHiveMetastore queryLevelCache = CachingHiveMetastore.reuseMetastore(cachingHiveMetastore, 100);
+        CachingHiveMetastore queryLevelCache = CachingHiveMetastore.createQueryLevelInstance(cachingHiveMetastore, 100);
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), queryLevelCache.getAllDatabaseNames());
     }
 
