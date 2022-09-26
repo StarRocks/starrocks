@@ -4,11 +4,11 @@
 
 ## 配置 FE 参数
 
-部分 FE 节点配置项为动态参数，您可以通过命令在线修改。其他配置项为静态参数，需要通过修改 **fe.conf** 文件后重启 FE 服务使相关修改生效。
+部分 FE 节点配置项为动态参数，您可以通过命令在线修改。其他配置项为静态参数，需要通过修改 **fe.conf** 文件后**重启 FE 服务**使相关修改生效。
 
 ### 配置 FE 动态参数
 
-您可以通过一下命令在线修改 FE 节点动态参数。
+您可以通过以下命令在线修改 FE 节点动态参数。
 
 ~~~sql
 ADMIN SET FRONTEND CONFIG ("key" = "value");
@@ -58,11 +58,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |max_create_table_timeout_second|600|建表最大超时时间，单位为秒。|
 |max_running_rollup_job_num_per_table|1|每个 Table 执行 Rollup 任务的最大并发度。|
 |max_planner_scalar_rewrite_num|100000|优化器重写 ScalarOperator 允许的最大次数。|
-|statistics_manager_sleep_time_sec|60*10|自动创建统计信息表的周期，单位为秒。|
-|statistic_collect_interval_sec|120 \* 60|统计信息功能执行周期，单位为秒。|
-|statistic_update_interval_sec|24 \* 60 \* 60|统计信息 Job 的默认收集间隔时间，单位为秒。|
-|statistic_sample_collect_rows|200000|采样统计信息 Job 的默认采样行数。|
-|enable_statistic_collect|TRUE|统计信息收集功能开关。|
+|enable_statistic_collect|TRUE|是否采集统计信息，该开关默认打开。|
+|enable_collect_full_statistic|TRUE|是否开启自动全量统计信息采集，该开关默认打开。|
+|statistic_auto_collect_ratio|0.8|自动统计信息的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动采集。|
+|statistic_max_full_collect_data_size|100|自动统计信息采集的最大分区大小。单位：GB。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。|
+|statistic_collect_interval_sec|300|自动定期采集任务中，检测数据更新的间隔时间，默认为 5 分钟。单位：秒。|
+|statistic_sample_collect_rows|200000|最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。如果参数取值超过了实际的表行数，默认进行全量采集。|
+|histogram_buckets_size|64|直方图默认分桶数。|
+|histogram_mcv_size|100|直方图默认most common value的数量。|
+|histogram_sample_ratio|0.1|直方图默认采样比例。|
+|histogram_max_sample_row_count|10000000|直方图最大采样行数。|
+|statistics_manager_sleep_time_sec|60|统计信息相关元数据调度间隔周期。单位：秒。系统根据这个间隔周期，来执行如下操作：创建统计信息表；删除已经被删除的表的统计信息；删除过期的统计信息历史记录。|
+|statistic_update_interval_sec|24 \* 60 \* 60|统计信息内存Cache失效时间。单位：秒。|
+|statistic_analyze_status_keep_second|259200|统计信息采集任务的记录保留时间，默认为 3 天。单位：秒。|
 |enable_local_replica_selection|FALSE|优化器优先选择与这个 FE 相同 IP 的 BE 节点上的 tablet。|
 |max_distribution_pruner_recursion_depth|100|分区裁剪允许的最大递归深度。|
 
@@ -228,6 +236,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |enable_udf|FALSE|是否开启 UDF。|
 |publish_version_interval_ms|10|发送版本生效任务的时间间隔，单位为 ms。|
 |statistic_cache_columns|100000|缓存统计信息表的行数。|
+|statistic_collect_concurrency|3|手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。超出的任务处于 PENDING 状态，等待调度。|
 
 #### 导入和导出相关静态参数
 
