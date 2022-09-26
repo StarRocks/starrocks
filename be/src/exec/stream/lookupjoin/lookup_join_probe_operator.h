@@ -3,9 +3,9 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
-#include "exec/pipeline/lookupjoin/lookup_join_context.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
+#include "exec/stream/lookupjoin/lookup_join_context.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"

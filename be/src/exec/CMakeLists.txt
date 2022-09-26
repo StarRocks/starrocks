@@ -188,10 +188,6 @@ set(EXEC_FILES
     pipeline/hashjoin/hash_join_build_operator.cpp
     pipeline/hashjoin/hash_join_probe_operator.cpp
     pipeline/hashjoin/hash_joiner_factory.cpp
-    pipeline/lookupjoin/index_seek_operator.cpp
-    pipeline/lookupjoin/lookup_join_context.cpp
-    pipeline/lookupjoin/lookup_join_operator.cpp
-    pipeline/lookupjoin/lookup_join_probe_operator.cpp
     pipeline/set/except_context.cpp
     pipeline/set/except_build_sink_operator.cpp
     pipeline/set/except_probe_sink_operator.cpp
@@ -204,6 +200,12 @@ set(EXEC_FILES
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
+    stream/aggregate/streaming_aggregate_sink_operator.cpp
+    stream/aggregate/streaming_aggregate_source_operator.cpp
+    stream/lookupjoin/lookup_join_context.cpp
+    stream/lookupjoin/lookup_join_seek_operator.cpp
+    stream/lookupjoin/lookup_join_probe_operator.cpp
+    stream/stream_agg.cpp
     stream/stream_join.cpp
     stream/imt_olap_table.cpp
 )

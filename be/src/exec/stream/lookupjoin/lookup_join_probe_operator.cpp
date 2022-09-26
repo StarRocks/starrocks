@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/pipeline/lookupjoin/lookup_join_probe_operator.h"
+#include "exec/stream/lookupjoin/lookup_join_probe_operator.h"
 
 #include "column/chunk.h"
 #include "runtime/current_thread.h"

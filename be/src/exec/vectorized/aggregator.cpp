@@ -19,7 +19,7 @@ Status init_udaf_context(int64_t fid, const std::string& url, const std::string&
                          starrocks_udf::FunctionContext* context);
 
 } // namespace vectorized
-Aggregator::Aggregator(const TPlanNode& tnode) : _tnode(tnode) {}
+Aggregator::Aggregator(std::shared_ptr<AggregatorParams>&& params) : _params(std::move(params)) {}
 
 Status Aggregator::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_group_by_expr_ctxs, state));
@@ -92,32 +92,33 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     _runtime_profile = runtime_profile;
     _mem_tracker = mem_tracker;
 
-    _limit = _tnode.limit;
-    _needs_finalize = _tnode.agg_node.need_finalize;
-    _streaming_preaggregation_mode = _tnode.agg_node.streaming_preaggregation_mode;
-    _intermediate_tuple_id = _tnode.agg_node.intermediate_tuple_id;
-    _output_tuple_id = _tnode.agg_node.output_tuple_id;
+    _limit = _params->limit;
+    _needs_finalize = _params->needs_finalize;
+    _streaming_preaggregation_mode = _params->streaming_preaggregation_mode;
+    _intermediate_tuple_id = _params->intermediate_tuple_id;
+    _output_tuple_id = _params->output_tuple_id;
 
     _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _tnode.conjuncts, &_conjunct_ctxs));
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &_group_by_expr_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->conjuncts, &_conjunct_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _params->grouping_exprs, &_group_by_expr_ctxs));
     // add profile attributes
-    if (_tnode.agg_node.__isset.sql_grouping_keys) {
-        _runtime_profile->add_info_string("GroupingKeys", _tnode.agg_node.sql_grouping_keys);
+    if (!_params->sql_grouping_keys.empty()) {
+        _runtime_profile->add_info_string("GroupingKeys", _params->sql_grouping_keys);
     }
-    if (_tnode.agg_node.__isset.sql_aggregate_functions) {
-        _runtime_profile->add_info_string("AggregateFunctions", _tnode.agg_node.sql_aggregate_functions);
+    if (!_params->sql_aggregate_functions.empty()) {
+        _runtime_profile->add_info_string("AggregateFunctions", _params->sql_aggregate_functions);
     }
 
-    bool has_outer_join_child = _tnode.agg_node.__isset.has_outer_join_child && _tnode.agg_node.has_outer_join_child;
+    bool has_outer_join_child = _params->has_outer_join_child;
     VLOG_ROW << "has_outer_join_child " << has_outer_join_child;
 
+    auto& grouping_exprs = _params->grouping_exprs;
     size_t group_by_size = _group_by_expr_ctxs.size();
     _group_by_columns.resize(group_by_size);
     _group_by_types.resize(group_by_size);
     for (size_t i = 0; i < group_by_size; ++i) {
-        TExprNode expr = _tnode.agg_node.grouping_exprs[i].nodes[0];
+        TExprNode expr = grouping_exprs[i].nodes[0];
         _group_by_types[i].result_type = TypeDescriptor::from_thrift(expr.type);
         _group_by_types[i].is_nullable = expr.is_nullable || has_outer_join_child;
         _has_nullable_key = _has_nullable_key || _group_by_types[i].is_nullable;
@@ -128,7 +129,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 
     _tmp_agg_states.resize(_state->chunk_size());
 
-    size_t agg_size = _tnode.agg_node.aggregate_functions.size();
+    auto& aggregate_functions = _params->aggregate_functions;
+    size_t agg_size = aggregate_functions.size();
     _agg_fn_ctxs.resize(agg_size);
     _agg_functions.resize(agg_size);
     _agg_expr_ctxs.resize(agg_size);
@@ -139,9 +141,9 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     _is_merge_funcs.resize(agg_size);
 
     for (int i = 0; i < agg_size; ++i) {
-        const TExpr& desc = _tnode.agg_node.aggregate_functions[i];
+        const TExpr& desc = aggregate_functions[i];
         const TFunction& fn = desc.nodes[0].fn;
-        _is_merge_funcs[i] = _tnode.agg_node.aggregate_functions[i].nodes[0].agg_expr.is_merge_agg;
+        _is_merge_funcs[i] = aggregate_functions[i].nodes[0].agg_expr.is_merge_agg;
         VLOG_ROW << fn.name.function_name << " is arg nullable " << desc.nodes[0].has_nullable_child;
         VLOG_ROW << fn.name.function_name << " is result nullable " << desc.nodes[0].is_nullable;
         if (fn.name.function_name == "count") {
@@ -270,7 +272,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     // save TFunction object
     _fns.reserve(_agg_fn_ctxs.size());
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _fns.emplace_back(_tnode.agg_node.aggregate_functions[i].nodes[0].fn);
+        _fns.emplace_back(aggregate_functions[i].nodes[0].fn);
     }
 
     return Status::OK();

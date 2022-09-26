@@ -122,11 +122,67 @@ static const int STREAMING_HT_MIN_REDUCTION_SIZE =
 
 using AggregatorPtr = std::shared_ptr<Aggregator>;
 
+struct AggregatorParams {
+    bool needs_finalize;
+    bool has_outer_join_child;
+    int64_t limit;
+    TStreamingPreaggregationMode::type streaming_preaggregation_mode;
+    TupleId intermediate_tuple_id;
+    TupleId output_tuple_id;
+    std::string sql_grouping_keys;
+    std::string sql_aggregate_functions;
+    std::vector<TExpr> conjuncts;
+    std::vector<TExpr> grouping_exprs;
+    std::vector<TExpr> aggregate_functions;
+};
+
+static std::shared_ptr<AggregatorParams> convert_to_aggregator_params(const TPlanNode& tnode) {
+    auto params = std::make_shared<AggregatorParams>();
+    params->conjuncts = tnode.conjuncts;
+    params->limit = tnode.limit;
+
+    switch (tnode.node_type) {
+    case TPlanNodeType::AGGREGATION_NODE: {
+        params->needs_finalize = tnode.agg_node.need_finalize;
+        params->streaming_preaggregation_mode = tnode.agg_node.streaming_preaggregation_mode;
+        params->intermediate_tuple_id = tnode.agg_node.intermediate_tuple_id;
+        params->output_tuple_id = tnode.agg_node.output_tuple_id;
+        params->sql_grouping_keys = tnode.agg_node.__isset.sql_grouping_keys ? tnode.agg_node.sql_grouping_keys : "";
+        params->sql_aggregate_functions =
+                tnode.agg_node.__isset.sql_aggregate_functions ? tnode.agg_node.sql_grouping_keys : "";
+        params->has_outer_join_child =
+                tnode.agg_node.__isset.has_outer_join_child && tnode.agg_node.has_outer_join_child;
+        params->grouping_exprs = tnode.agg_node.grouping_exprs;
+        params->aggregate_functions = tnode.agg_node.aggregate_functions;
+        break;
+    }
+    case TPlanNodeType::STREAM_AGG_NODE: {
+        params->intermediate_tuple_id = tnode.stream_agg_node.intermediate_tuple_id;
+        params->output_tuple_id = tnode.stream_agg_node.output_tuple_id;
+        params->sql_grouping_keys =
+                tnode.stream_agg_node.__isset.sql_grouping_keys ? tnode.stream_agg_node.sql_grouping_keys : "";
+        params->sql_aggregate_functions = tnode.stream_agg_node.__isset.sql_aggregate_functions
+                                          ? tnode.stream_agg_node.sql_aggregate_functions
+                                          : "";
+        params->has_outer_join_child =
+                tnode.stream_agg_node.__isset.has_outer_join_child && tnode.stream_agg_node.has_outer_join_child;
+        params->grouping_exprs = tnode.stream_agg_node.grouping_exprs;
+        params->aggregate_functions = tnode.stream_agg_node.aggregate_functions;
+        break;
+    }
+    default:
+        VLOG(1) << "it's impossible type:" << tnode.node_type;
+        __builtin_unreachable();
+    }
+    return params;
+}
+
 // Component used to process aggregation including bloking aggregate and streaming aggregate
 // it contains common data struct and algorithm of aggregation
 class Aggregator final : public pipeline::ContextWithDependency {
 public:
-    Aggregator(const TPlanNode& tnode);
+//    Aggregator(const TPlanNode& tnode);
+    Aggregator(std::shared_ptr<AggregatorParams>&& params);
 
     ~Aggregator() {
         if (_state != nullptr) {
@@ -220,11 +276,10 @@ public:
     HashTableKeyAllocator _state_allocator;
 
 private:
+    std::shared_ptr<AggregatorParams> _params;
+
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
-
-    // TPlanNode is only valid in the PREPARE and INIT phase
-    const TPlanNode& _tnode;
 
     MemTracker* _mem_tracker = nullptr;
 
@@ -594,7 +649,8 @@ public:
         if (it != _aggregators.end()) {
             return it->second;
         }
-        auto aggregator = std::make_shared<Aggregator>(_tnode);
+        auto params = convert_to_aggregator_params(_tnode);
+        auto aggregator = std::make_shared<Aggregator>(std::move(params));
         _aggregators[id] = aggregator;
         return aggregator;
     }
