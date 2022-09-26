@@ -60,12 +60,11 @@ public:
     // when bueket or credential change but properties of Aws::Client::ClientConfiguration unchanged
     struct ClientConfiguration {
         Aws::Client::ClientConfiguration client_config;
-        std::string bucket;
         std::string access_key_id;
         std::string secret_access_key;
 
         bool operator==(const ClientConfiguration& rhs) {
-            return client_config == rhs.client_config && bucket == rhs.bucket && access_key_id == rhs.access_key_id &&
+            return client_config == rhs.client_config && access_key_id == rhs.access_key_id &&
                    secret_access_key == rhs.secret_access_key;
         }
     };
@@ -161,7 +160,6 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const FSOptions& opts) {
     S3ClientFactory::ClientConfiguration config = S3ClientFactory::getClientConfig();
-    config.bucket = uri.bucket();
 
     Aws::Client::ClientConfiguration& client_config = config.client_config;
 
