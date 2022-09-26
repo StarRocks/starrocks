@@ -1619,6 +1619,28 @@ public class Coordinator {
         return new TNetworkAddress(computeNode.getHost(), computeNode.getBrpcPort());
     }
 
+    private String backendInfosString(boolean chooseComputeNode) {
+        if (chooseComputeNode) {
+            String infoStr = "compute node: ";
+            for (Map.Entry<Long, ComputeNode> entry : this.idToComputeNode.entrySet()) {
+                Long backendID = entry.getKey();
+                ComputeNode backend = entry.getValue();
+                infoStr += String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(), 
+                                    backend.isAlive(), SimpleScheduler.isInBlacklist(backendID));
+            }
+            return infoStr;
+        } else {
+            String infoStr = "backend: ";
+            for (Map.Entry<Long, Backend> entry : this.idToBackend.entrySet()) {
+                Long backendID = entry.getKey();
+                Backend backend = entry.getValue();
+                infoStr += String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(), 
+                                    backend.isAlive(), SimpleScheduler.isInBlacklist(backendID));
+            }
+            return infoStr;
+        }
+    }
+
     // For each fragment in fragments, computes hosts on which to run the instances
     // and stores result in fragmentExecParams.hosts.
     private void computeFragmentHosts() throws Exception {
@@ -1657,7 +1679,8 @@ public class Coordinator {
                 }
                 if (execHostport == null) {
                     LOG.warn("DataPartition UNPARTITIONED, no scanNode Backend");
-                    throw new UserException("Backend not found. Check if any backend is down or not");
+                    throw new UserException("Backend not found. Check if any backend is down or not. " 
+                                            + backendInfosString(usedComputeNode));
                 }
                 this.addressToBackendID.put(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
@@ -1853,7 +1876,8 @@ public class Coordinator {
                     execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
                 }
                 if (execHostport == null) {
-                    throw new UserException("Backend not found. Check if any backend is down or not");
+                    throw new UserException("Backend not found. Check if any backend is down or not. " 
+                                            + backendInfosString(usedComputeNode));
                 }
                 this.addressToBackendID.put(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
@@ -3127,7 +3151,8 @@ public class Coordinator {
                         scanRangeLocations.getLocations(),
                         idToBackend, backendIdRef);
                 if (execHostPort == null) {
-                    throw new UserException("Backend not found. Check if any backend is down or not");
+                    throw new UserException("Backend not found. Check if any backend is down or not. " 
+                                            + backendInfosString(false));
                 }
                 addressToBackendID.put(execHostPort, backendIdRef.getRef());
 
@@ -3253,7 +3278,8 @@ public class Coordinator {
                         Reference<Long> backendIdRef = new Reference<>();
                         TNetworkAddress execHostport = SimpleScheduler.getBackendHost(idToBackend, backendIdRef);
                         if (execHostport == null) {
-                            throw new UserException("Backend not found. Check if any backend is down or not");
+                            throw new UserException("Backend not found. Check if any backend is down or not. " 
+                                                    + backendInfosString(false));
                         }
                         addressToBackendID.put(execHostport, backendIdRef.getRef());
                         bucketSeqToAddress.put(bucketSeq, execHostport);
@@ -3306,7 +3332,8 @@ public class Coordinator {
             TNetworkAddress execHostPort =
                     SimpleScheduler.getHost(buckendId, seqLocation.locations, idToBackend, backendIdRef);
             if (execHostPort == null) {
-                throw new UserException("Backend not found. Check if any backend is down or not");
+                throw new UserException("Backend not found. Check if any backend is down or not. " 
+                                        + backendInfosString(false));
             }
 
             addressToBackendID.put(execHostPort, backendIdRef.getRef());
