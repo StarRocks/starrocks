@@ -277,7 +277,7 @@ public class AggregateTest extends PlanTestBase {
     public void testAggConstPredicate() throws Exception {
         String queryStr = "select MIN(v1) from t0 having abs(1) = 2";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  1:AGGREGATE (update finalize)\n"
+        Assert.assertTrue(explainString, explainString.contains("  1:AGGREGATE (update finalize)\n"
                 + "  |  output: min(1: v1)\n"
                 + "  |  group by: \n"
                 + "  |  having: abs(1) = 2\n"));

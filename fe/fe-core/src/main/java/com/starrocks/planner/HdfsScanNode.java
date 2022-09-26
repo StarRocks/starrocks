@@ -18,6 +18,8 @@ import com.starrocks.thrift.TScanRangeLocations;
 
 import java.util.List;
 
+import static com.starrocks.thrift.TExplainLevel.VERBOSE;
+
 /**
  * Scan node for HDFS files, like hive table.
  * <p>
@@ -98,48 +100,11 @@ public class HdfsScanNode extends ScanNode {
                         scanNodePredicates.getIdToPartitionKey().size()));
         output.append("\n");
 
-        output.append(prefix).append(String.format("cardinality=%s", cardinality));
-        output.append("\n");
-
-        output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
-        output.append("\n");
-
-        output.append(prefix).append(String.format("numNodes=%s", numNodes));
-        output.append("\n");
-
-        return output.toString();
-    }
-
-    @Override
-    protected String getNodeVerboseExplain(String prefix) {
-        StringBuilder output = new StringBuilder();
-
-        output.append(prefix).append("TABLE: ").append(hiveTable.getName()).append("\n");
-
-        if (null != sortColumn) {
-            output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
+        // TODO: support it in verbose
+        if (detailLevel != VERBOSE) {
+            output.append(prefix).append(String.format("cardinality=%s", cardinality));
+            output.append("\n");
         }
-        if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
-            output.append(prefix).append("PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getPartitionConjuncts())).append("\n");
-        }
-        if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
-            output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
-        }
-        if (!scanNodePredicates.getNoEvalPartitionConjuncts().isEmpty()) {
-            output.append(prefix).append("NO EVAL-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
-        }
-        if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
-            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
-        }
-
-        output.append(prefix).append(
-                String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
-                        scanNodePredicates.getIdToPartitionKey().size()));
-        output.append("\n");
 
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
