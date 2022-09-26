@@ -4,8 +4,8 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.KeysType;
@@ -341,8 +341,8 @@ public class CreateMaterializedViewTest {
             Assert.assertNotNull(baseColumn);
             Assert.assertEquals("k1", baseColumn.getName());
             // test sql
-            Assert.assertEquals("SELECT `tb1`.`k1` AS `k1`, `tb1`.`k2` AS `s2` " +
-                    "FROM `test`.`tbl1` AS `tb1`", materializedView.getViewDefineSql());
+            Assert.assertEquals("SELECT `tb1`.`k1`, `tb1`.`k2` AS `s2`\nFROM `test`.`tbl1` AS `tb1`",
+                    materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
             Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue());
@@ -502,10 +502,9 @@ public class CreateMaterializedViewTest {
             Assert.assertNotNull(baseColumn);
             Assert.assertEquals("k1", baseColumn.getName());
             // test sql
-            Assert.assertEquals("SELECT date_trunc('month', `tb1`.`k1`) AS `s1`, `tb2`.`k2` AS `s2` " +
-                    "FROM `test`.`tbl1` AS `tb1` " +
-                    "INNER JOIN `test`.`tbl2` AS `tb2` " +
-                    "ON `tb1`.`k2` = `tb2`.`k2`", materializedView.getViewDefineSql());
+            Assert.assertEquals(
+                    "SELECT date_trunc('month', `tb1`.`k1`) AS `s1`, `tb2`.`k2` AS `s2`\nFROM `test`.`tbl1` AS `tb1` INNER JOIN `test`.`tbl2` AS `tb2` ON `tb1`.`k2` = `tb2`.`k2`",
+                    materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
             Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue(), 1);
@@ -555,8 +554,8 @@ public class CreateMaterializedViewTest {
             Table baseTable = testDb.getTable(baseTableInfos.iterator().next().getTableId());
             Assert.assertEquals(1, ((OlapTable) baseTable).getRelatedMaterializedViews().size());
             // test sql
-            Assert.assertEquals("SELECT `test`.`tbl1`.`k1` AS `k1`, `test`.`tbl1`.`k2` " +
-                    "AS `k2` FROM `test`.`tbl1`", materializedView.getViewDefineSql());
+            Assert.assertEquals("SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`\nFROM `test`.`tbl1`",
+                    materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
             Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue());
