@@ -181,6 +181,15 @@ TEST(SparseRangeIteratorTest, intersect_test) {
         auto iter2 = iter.intersection(r2, &r3);
         EXPECT_STREQ(dump_range_iter(iter2).data(), "[1000,1500],[2000,4096]");
     }
+    {
+        SparseRange r1(0, 100);
+        SparseRangeIterator iter = r1.new_iterator();
+        iter.skip(30);
+        SparseRange r2({{10, 200}, {2000, 25000}, {3000, 7000}});
+        SparseRange r3;
+        auto iter2 = iter.intersection(r2, &r3);
+        EXPECT_STREQ(dump_range_iter(iter2).data(), "[30,100]");
+    }
 }
 
 TEST(SparseRangeIteratorTest, convert_to_bitmap) {
