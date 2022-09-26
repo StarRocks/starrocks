@@ -478,4 +478,81 @@ TEST_F(DeleteVectorPerformanceTest, get_del_vector) {
 }
 */
 
+/*
+TEST(DeleteVectorTest, delete_del_vector) {
+    fs::path dir = fs::temp_directory_path() / "delete_del_vector";
+    fs::remove_all(dir);
+    CHECK(fs::create_directory(dir));
+    auto data_dir = std::make_unique<DataDir>(dir.string());
+    Status st = data_dir->init();
+    CHECK(st.ok()) << st.to_string();
+
+    bool use_del_range = false;
+    size_t tablet_size = 200;
+    size_t rssid_size = 10;
+    size_t delvec_size = 10000;
+    std::vector<uint32_t> dels;
+    dels.resize(delvec_size);
+    for (int i = 0; i < delvec_size; i++) {
+        dels[i] = (i == 0 ? 0 : dels[i - 1]) + rand() % 10 + 1;
+    }
+    {
+        DelVector empty_delvec;
+        auto t0 = std::chrono::steady_clock::now();
+        for (int tablet_id = 1; tablet_id <= tablet_size; tablet_id++) {
+            for (int rssid = 0; rssid < rssid_size; rssid++) {
+                DelVectorPtr delvec;
+                empty_delvec.add_dels_as_new_version(dels, 50, &delvec);
+                st = TabletMetaManager::set_del_vector(data_dir->get_meta(), tablet_id, rssid, *delvec);
+                CHECK(st.ok()) << st.to_string();
+                DelVectorPtr delvec2;
+                delvec->add_dels_as_new_version({dels.back() + 3}, 60, &delvec2);
+                st = TabletMetaManager::set_del_vector(data_dir->get_meta(), tablet_id, rssid, *delvec2);
+                CHECK(st.ok()) << st.to_string();
+            }
+        }
+        auto t1 = std::chrono::steady_clock::now();
+        auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
+        data_dir->get_meta()->flush();
+        LOG(INFO) << "creating " << rssid_size * tablet_size << " delvecs " << cost.count() << "ms";
+    }
+    {
+        size_t n_del_range = 0;
+        auto t0 = std::chrono::steady_clock::now();
+        for (int j = 0; j < 10; j++) {
+            for (int tablet_id = 1; tablet_id <= tablet_size; tablet_id++) {
+                if (use_del_range) {
+                    for (int rssid = 0; rssid < rssid_size; rssid++) {
+                        TabletMetaManager::delete_del_vector_range(data_dir->get_meta(), tablet_id, rssid, 0, 59);
+                        n_del_range++;
+                    }
+                } else {
+                    auto st = TabletMetaManager::delete_del_vector_before_version(data_dir->get_meta(), tablet_id, 60);
+                    CHECK(st.ok());
+                    n_del_range += st.value();
+                }
+            }
+        }
+        auto t1 = std::chrono::steady_clock::now();
+        auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
+        data_dir->get_meta()->flush();
+        LOG(INFO) << "perform " << n_del_range << " del_ranges " << cost.count() << "ms";
+    }
+    {
+        auto t0 = std::chrono::steady_clock::now();
+        for (int tablet_id = 1; tablet_id <= tablet_size; tablet_id++) {
+            for (int rssid = 0; rssid < rssid_size; rssid++) {
+                DelVector delvec;
+                int64_t latest_version;
+                TabletMetaManager::get_del_vector(data_dir->get_meta(), tablet_id, rssid, 99, &delvec, &latest_version);
+            }
+        }
+        auto t1 = std::chrono::steady_clock::now();
+        auto cost = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
+        LOG(INFO) << "perform " << rssid_size * tablet_size << " get_del_vector " << cost.count() << "ms";
+    }
+    fs::remove_all(dir);
+}
+*/
+
 } // namespace starrocks
