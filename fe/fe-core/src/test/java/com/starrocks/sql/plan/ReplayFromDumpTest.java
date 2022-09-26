@@ -371,6 +371,14 @@ public class ReplayFromDumpTest {
     }
 
     @Test
+    public void testTPCDS64() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/tpcds64"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains(" 83:SELECT\n" +
+                "  |  predicates: 521: d_year = 1999"));
+    }
+
+    @Test
     public void testCrossReorder() throws Exception {
         RuleSet mockRule = new RuleSet() {
             @Override

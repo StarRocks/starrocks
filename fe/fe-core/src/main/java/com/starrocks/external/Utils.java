@@ -12,6 +12,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.external.hive.HiveMetaClient;
 import org.apache.hadoop.hive.common.StatsSetupConst;
@@ -19,6 +20,8 @@ import org.apache.hadoop.hive.common.StatsSetupConst;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.FutureTask;
 
 import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
@@ -119,6 +122,19 @@ public class Utils {
         return values;
     }
 
+    public static String getSuffixName(String dirPath, String filePath) {
+        if (!FeConstants.runningUnitTest) {
+            Preconditions.checkArgument(filePath.startsWith(dirPath),
+                    "dirPath " + dirPath + " should be prefix of filePath " + filePath);
+        }
+
+        String name = filePath.replaceFirst(dirPath, "");
+        if (name.startsWith("/")) {
+            name = name.substring(1);
+        }
+        return name;
+    }
+
     /**
      * Returns the value of the ROW_COUNT constant, or -1 if not found.
      */
@@ -146,5 +162,13 @@ public class Utils {
             // ignore
         }
         return -1;
+    }
+
+    public static <T> void executeInNewThread(String threadName, Callable<T> callable) {
+        FutureTask<T> task = new FutureTask<>(callable);
+        Thread thread = new Thread(task);
+        thread.setName(threadName);
+        thread.setDaemon(true);
+        thread.start();
     }
 }

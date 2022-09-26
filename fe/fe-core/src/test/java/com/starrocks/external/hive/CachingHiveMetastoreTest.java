@@ -48,7 +48,7 @@ public class CachingHiveMetastoreTest {
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         List<String> databaseNames = cachingHiveMetastore.getAllDatabaseNames();
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), databaseNames);
-        CachingHiveMetastore queryLevelCache = CachingHiveMetastore.reuseMetastore(cachingHiveMetastore, 100);
+        CachingHiveMetastore queryLevelCache = CachingHiveMetastore.createQueryLevelInstance(cachingHiveMetastore, 100);
         Assert.assertEquals(Lists.newArrayList("db1", "db2"), queryLevelCache.getAllDatabaseNames());
     }
 
@@ -151,7 +151,7 @@ public class CachingHiveMetastoreTest {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         com.starrocks.catalog.Table hiveTable = cachingHiveMetastore.getTable("db1", "table1");
-        Map<String, HivePartitionStatistics> statistics = cachingHiveMetastore.getPartitionsStatistics(
+        Map<String, HivePartitionStatistics> statistics = cachingHiveMetastore.getPartitionStatistics(
                 hiveTable, Lists.newArrayList("col1=1", "col1=2"));
 
         HivePartitionStatistics stats1 = statistics.get("col1=1");
@@ -169,7 +169,7 @@ public class CachingHiveMetastoreTest {
         Assert.assertEquals(100, commonStats2.getTotalFileBytes());
         HiveColumnStatistics columnStatistics2 = stats2.getColumnStats().get("col2");
         Assert.assertEquals(0, columnStatistics2.getTotalSizeBytes());
-        Assert.assertEquals(1, columnStatistics2.getNumNulls());
+        Assert.assertEquals(2, columnStatistics2.getNumNulls());
         Assert.assertEquals(5, columnStatistics2.getNdv());
 
         List<NewHivePartitionName> partitionNames = Lists.newArrayList(

@@ -136,6 +136,7 @@ statement
     | showLoadStatement
     | showLoadWarningsStatement
     | cancelLoadStatement
+    | alterLoadStatement
 
     //Show Statement
     | showAuthorStatement
@@ -733,11 +734,11 @@ dataSource
     ;
 
 loadProperties
-    : (colSeparatorProperty)
-    | (rowDelimiterProperty)
-    | (COLUMNS columnProperties)
-    | (WHERE expression)
-    | (partitionNames)
+    : colSeparatorProperty
+    | rowDelimiterProperty
+    | importColumns
+    | WHERE expression
+    | partitionNames
     ;
 
 colSeparatorProperty
@@ -746,6 +747,10 @@ colSeparatorProperty
 
 rowDelimiterProperty
     : ROWS TERMINATED BY string
+    ;
+
+importColumns
+    : COLUMNS columnProperties
     ;
 
 columnProperties
@@ -956,6 +961,11 @@ showLoadWarningsStatement
 
 cancelLoadStatement
     : CANCEL LOAD (FROM identifier)? (WHERE expression)?
+    ;
+
+alterLoadStatement
+    : ALTER LOAD FOR (db=qualifiedName '.')? name=identifier
+        jobProperties?
     ;
 
 // ------------------------------------------- Show Statement ----------------------------------------------------------
@@ -1429,6 +1439,10 @@ expressionsWithDefault
 
 expressionOrDefault
     : expression | DEFAULT
+    ;
+
+expressionSingleton
+    : expression EOF
     ;
 
 expression

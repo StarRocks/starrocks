@@ -761,7 +761,7 @@ public class HiveMetaClient {
                 } else if (locatedFileStatus.isDirectory() && Config.recursive_dir_search_enabled) {
                     fileDescs.addAll(getHdfsFileDescs(locatedFileStatus.getPath().toString(), isSplittable, sd));
                 }
-                String fileName = ColumnTypeConverter.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
+                String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                 List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
                 fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),

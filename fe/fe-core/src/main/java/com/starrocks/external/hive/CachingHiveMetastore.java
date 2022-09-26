@@ -51,7 +51,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
     protected LoadingCache<HiveTableName, HivePartitionStatistics> tableStatsCache;
     protected LoadingCache<NewHivePartitionName, HivePartitionStatistics> partitionStatsCache;
 
-    public static CachingHiveMetastore reuseMetastore(IHiveMetastore metastore, long perQueryCacheMaxSize) {
+    public static CachingHiveMetastore createQueryLevelInstance(IHiveMetastore metastore, long perQueryCacheMaxSize) {
         return new CachingHiveMetastore(
                 metastore,
                 newDirectExecutorService(),
@@ -59,6 +59,12 @@ public class CachingHiveMetastore implements IHiveMetastore {
                 NEVER_REFRESH,
                 perQueryCacheMaxSize,
                 true);
+    }
+
+    public static CachingHiveMetastore createCatalogLevelInstance(IHiveMetastore metastore, Executor executor,
+                                                            long expireAfterWrite, long refreshInterval,
+                                                            long maxSize, boolean enableListNamesCache) {
+        return new CachingHiveMetastore(metastore, executor, expireAfterWrite, refreshInterval, maxSize, enableListNamesCache);
     }
 
     protected CachingHiveMetastore(IHiveMetastore metastore, Executor executor, long expireAfterWriteSec,
@@ -205,7 +211,6 @@ public class CachingHiveMetastore implements IHiveMetastore {
                 Streams.stream(partitionNames).map(partitionName -> partitionName.getPartitionNames().get())
                         .collect(Collectors.toList()));
 
-
         ImmutableMap.Builder<NewHivePartitionName, Partition> partitions = ImmutableMap.builder();
         for (NewHivePartitionName partitionName : partitionNames) {
             partitions.put(partitionName, partitionsByNames.get(partitionName.getPartitionNames().get()));
@@ -222,7 +227,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     @Override
-    public Map<String, HivePartitionStatistics> getPartitionsStatistics(Table table, List<String> partitionNames) {
+    public Map<String, HivePartitionStatistics> getPartitionStatistics(Table table, List<String> partitionNames) {
         String dbName = ((HiveMetaStoreTable) table).getDbName();
         String tblName = ((HiveMetaStoreTable) table).getTableName();
 
@@ -247,7 +252,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         Table table = getTable(hivePartitionName.getDatabaseName(), hivePartitionName.getTableName());
         Preconditions.checkState(hivePartitionName.getPartitionNames().isPresent(), "hive partition name is missing");
         Map<String, HivePartitionStatistics> partitionsStatistics = metastore
-                .getPartitionsStatistics(table, Lists.newArrayList(hivePartitionName.getPartitionNames().get()));
+                .getPartitionStatistics(table, Lists.newArrayList(hivePartitionName.getPartitionNames().get()));
 
         return partitionsStatistics.get(hivePartitionName.getPartitionNames().get());
     }
@@ -257,7 +262,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         NewHivePartitionName hivePartitionName = Iterables.get(partitionNames, 0);
         Table table = getTable(hivePartitionName.getDatabaseName(), hivePartitionName.getTableName());
 
-        Map<String, HivePartitionStatistics> partitionsStatistics =  metastore.getPartitionsStatistics(table,
+        Map<String, HivePartitionStatistics> partitionsStatistics =  metastore.getPartitionStatistics(table,
                 Streams.stream(partitionNames).map(partitionName -> partitionName.getPartitionNames().get())
                         .collect(Collectors.toList()));
 

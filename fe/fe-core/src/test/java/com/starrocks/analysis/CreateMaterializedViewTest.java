@@ -4,8 +4,8 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.KeysType;
@@ -195,6 +195,21 @@ public class CreateMaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl5\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    k3 int,\n" +
+                        "    v1 int,\n" +
+                        "    v2 int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2021-02-01'),\n" +
+                        "    PARTITION p2 values less than('2021-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
                 .withTable("CREATE TABLE test.tbl_for_count\n" +
                         "(\n" +
                         "   c_0_0 BIGINT NULL ,\n" +
@@ -326,8 +341,8 @@ public class CreateMaterializedViewTest {
             Assert.assertNotNull(baseColumn);
             Assert.assertEquals("k1", baseColumn.getName());
             // test sql
-            Assert.assertEquals("SELECT `tb1`.`k1` AS `k1`, `tb1`.`k2` AS `s2` " +
-                    "FROM `test`.`tbl1` AS `tb1`", materializedView.getViewDefineSql());
+            Assert.assertEquals("SELECT `tb1`.`k1`, `tb1`.`k2` AS `s2`\nFROM `test`.`tbl1` AS `tb1`",
+                    materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
             Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue());
@@ -487,10 +502,9 @@ public class CreateMaterializedViewTest {
             Assert.assertNotNull(baseColumn);
             Assert.assertEquals("k1", baseColumn.getName());
             // test sql
-            Assert.assertEquals("SELECT date_trunc('month', `tb1`.`k1`) AS `s1`, `tb2`.`k2` AS `s2` " +
-                    "FROM `test`.`tbl1` AS `tb1` " +
-                    "INNER JOIN `test`.`tbl2` AS `tb2` " +
-                    "ON `tb1`.`k2` = `tb2`.`k2`", materializedView.getViewDefineSql());
+            Assert.assertEquals(
+                    "SELECT date_trunc('month', `tb1`.`k1`) AS `s1`, `tb2`.`k2` AS `s2`\nFROM `test`.`tbl1` AS `tb1` INNER JOIN `test`.`tbl2` AS `tb2` ON `tb1`.`k2` = `tb2`.`k2`",
+                    materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
             Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue(), 1);
@@ -540,8 +554,8 @@ public class CreateMaterializedViewTest {
             Table baseTable = testDb.getTable(baseTableInfos.iterator().next().getTableId());
             Assert.assertEquals(1, ((OlapTable) baseTable).getRelatedMaterializedViews().size());
             // test sql
-            Assert.assertEquals("SELECT `test`.`tbl1`.`k1` AS `k1`, `test`.`tbl1`.`k2` " +
-                    "AS `k2` FROM `test`.`tbl1`", materializedView.getViewDefineSql());
+            Assert.assertEquals("SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`\nFROM `test`.`tbl1`",
+                    materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
             Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue());
@@ -1872,6 +1886,28 @@ public class CreateMaterializedViewTest {
         } catch (Exception e) {
             Assert.assertEquals("Incorrect table name '" + longLongName + "'", e.getMessage());
         }
+    }
+
+    @Test
+    public void testPartitionByNotFirstColumn() throws Exception {
+        starRocksAssert.withNewMaterializedView("create materialized view mv_with_partition_by_not_first_column" +
+                " partition by k1" +
+                " distributed by hash(k3) buckets 10" +
+                " as select k3, k1, sum(v1) as total from tbl5 group by k3, k1");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
+        Table table = db.getTable("mv_with_partition_by_not_first_column");
+        Assert.assertTrue(table instanceof MaterializedView);
+        MaterializedView mv = (MaterializedView) table;
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        Assert.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        List<Expr> partitionExpr = expressionRangePartitionInfo.getPartitionExprs();
+        Assert.assertEquals(1, partitionExpr.size());
+        Assert.assertTrue(partitionExpr.get(0) instanceof SlotRef);
+        SlotRef slotRef = (SlotRef) partitionExpr.get(0);
+        Assert.assertNotNull(slotRef.getSlotDescriptorWithoutCheck());
+        SlotDescriptor slotDescriptor = slotRef.getSlotDescriptorWithoutCheck();
+        Assert.assertEquals(1, slotDescriptor.getId().asInt());
     }
 }
 

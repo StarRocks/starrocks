@@ -36,7 +36,7 @@ import java.util.List;
 public class LoadProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("JobId").add("Label").add("State").add("Progress")
-            .add("Type").add("EtlInfo").add("TaskInfo").add("ErrorMsg").add("CreateTime")
+            .add("Type").add("Priority").add("EtlInfo").add("TaskInfo").add("ErrorMsg").add("CreateTime")
             .add("EtlStartTime").add("EtlFinishTime").add("LoadStartTime").add("LoadFinishTime")
             .add("URL").add("JobDetails")
             .build();

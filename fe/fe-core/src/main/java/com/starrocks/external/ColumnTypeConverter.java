@@ -2,7 +2,6 @@
 
 package com.starrocks.external;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
@@ -93,17 +92,6 @@ public class ColumnTypeConverter {
             int[] parts = getPrecisionAndScale(hiveType);
             return ScalarType.createUnifiedDecimalType(parts[0], parts[1]);
         }
-    }
-
-    public static String getSuffixName(String dirPath, String filePath) {
-        Preconditions.checkArgument(filePath.startsWith(dirPath),
-                "dirPath " + dirPath + " should be prefix of filePath " + filePath);
-
-        String name = filePath.replaceFirst(dirPath, "");
-        if (name.startsWith("/")) {
-            name = name.substring(1);
-        }
-        return name;
     }
 
     public static String getTypeKeyword(String type) {

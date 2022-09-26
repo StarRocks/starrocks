@@ -285,7 +285,7 @@ public class RoutineLoadJobTest {
                 "   \"strip_outer_array\" = \"" + stripOuterArray + "\"," +
                 "   \"json_root\" = \"" + jsonRoot + "\"" +
                 ")";
-        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseAndAnalyzeStmt(originStmt, connectContext);
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                 stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
         Assert.assertEquals(Integer.parseInt(desiredConcurrentNumber),
@@ -318,7 +318,7 @@ public class RoutineLoadJobTest {
                 "   \"property.kafka_default_offsets\" = \"" + defaultOffsets + "\"" +
                 ")";
         routineLoadJob.setOrigStmt(new OriginStatement(originStmt, 0));
-        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseAndAnalyzeStmt(originStmt, connectContext);
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                 stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
         routineLoadJob.convertCustomProperties(true);
@@ -341,10 +341,10 @@ public class RoutineLoadJobTest {
                 "PARTITION(p1, p2, p3)," +
                 "ROWS TERMINATED BY \"A\"";
         routineLoadJob.setOrigStmt(new OriginStatement(originStmt, 0));
-        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseAndAnalyzeStmt(originStmt, connectContext);
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                 stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
-        Assert.assertEquals("a,b,c,d=`a`", Joiner.on(",").join(routineLoadJob.getColumnDescs()));
+        Assert.assertEquals("a,b,c,d=a", Joiner.on(",").join(routineLoadJob.getColumnDescs()));
         Assert.assertEquals("`a` = 1", routineLoadJob.getWhereExpr().toSql());
         Assert.assertEquals("','", routineLoadJob.getColumnSeparator().toString());
         Assert.assertEquals("'A'", routineLoadJob.getRowDelimiter().toString());
