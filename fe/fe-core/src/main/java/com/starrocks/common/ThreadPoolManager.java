@@ -33,6 +33,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -119,6 +120,18 @@ public class ThreadPoolManager {
         return newDaemonThreadPool(numThread, numThread, KEEP_ALIVE_TIME, TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(queueSize),
                 new BlockedPolicy(poolName, 60), poolName, needRegisterMetric);
+    }
+
+    public static PriorityThreadPoolExecutor newDaemonFixedPriorityThreadPool(int numThread, int queueSize,
+            String poolName, boolean needRegisterMetric) {
+        ThreadFactory threadFactory = namedThreadFactory(poolName);
+        PriorityThreadPoolExecutor threadPool = new PriorityThreadPoolExecutor(numThread, numThread, KEEP_ALIVE_TIME,
+                TimeUnit.SECONDS, new PriorityBlockingQueue<>(queueSize), threadFactory,
+                new BlockedPolicy(poolName, 60));
+        if (needRegisterMetric) {
+            nameToThreadPoolMap.put(poolName, threadPool);
+        }
+        return threadPool;
     }
 
     public static ThreadPoolExecutor newDaemonThreadPool(int corePoolSize,

@@ -2,6 +2,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.analysis.AlterLoadStmt;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelAlterSystemStmt;
@@ -360,6 +361,14 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAlterRoutineLoadStatement(AlterRoutineLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getRoutineLoadManager().alterRoutineLoadJob(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterLoadStatement(AlterLoadStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getLoadManager().alterLoadJob(stmt);
             });
             return null;
         }

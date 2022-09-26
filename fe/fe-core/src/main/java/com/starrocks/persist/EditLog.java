@@ -773,6 +773,11 @@ public class EditLog {
                     globalStateMgr.getRoutineLoadManager().replayAlterRoutineLoadJob(log);
                     break;
                 }
+                case OperationType.OP_ALTER_LOAD_JOB: {
+                    AlterLoadJobOperationLog log = (AlterLoadJobOperationLog) journal.getData();
+                    globalStateMgr.getLoadManager().replayAlterLoadJob(log);
+                    break;
+                }
                 case OperationType.OP_GLOBAL_VARIABLE_V2: {
                     GlobalVarPersistInfo info = (GlobalVarPersistInfo) journal.getData();
                     globalStateMgr.replayGlobalVariableV2(info);
@@ -1430,6 +1435,10 @@ public class EditLog {
 
     public void logAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log) {
         logEdit(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, log);
+    }
+
+    public void logAlterLoadJob(AlterLoadJobOperationLog log) {
+        logEdit(OperationType.OP_ALTER_LOAD_JOB, log);
     }
 
     public void logGlobalVariableV2(GlobalVarPersistInfo info) {

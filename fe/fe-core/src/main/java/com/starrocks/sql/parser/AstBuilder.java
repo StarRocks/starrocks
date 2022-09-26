@@ -8,6 +8,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AddSqlBlackListStmt;
+import com.starrocks.analysis.AlterLoadStmt;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
@@ -1799,6 +1800,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         return new AlterRoutineLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
                 loadPropertyList, jobProperties, new RoutineLoadDataSourceProperties());
+    }
+
+    @Override
+    public ParseNode visitAlterLoadStatement(StarRocksParser.AlterLoadStatementContext context) {
+        QualifiedName dbName = null;
+        if (context.db != null) {
+            dbName = getQualifiedName(context.db);
+        }
+
+        String name = ((Identifier) visit(context.name)).getValue();
+        Map<String, String> jobProperties = getJobProperties(context.jobProperties());
+
+        return new AlterLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
+                jobProperties);
     }
 
     @Override
