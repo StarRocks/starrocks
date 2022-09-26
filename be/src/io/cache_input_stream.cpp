@@ -40,9 +40,11 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
         char* src = nullptr;
         {
             SCOPED_RAW_TIMER(&_stats.read_cache_ns);
-            _stats.read_cache_count += 1;
             res = cache->read_cache(_cache_key, off, load_size, _buffer.data());
-            src = _buffer.data();
+            if (res.ok()) {
+                src = _buffer.data();
+                _stats.read_cache_count += 1;
+            }
             // TODO: Replace the above with a safe zero copy interface
             //st = cache->read_cache_zero_copy(_cache_key, off, load_size, (const char**)&src);
         }
@@ -50,10 +52,13 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
             RETURN_IF_ERROR(_stream->read_at_fully(off, _buffer.data(), load_size));
             {
                 SCOPED_RAW_TIMER(&_stats.write_cache_ns);
-                _stats.write_cache_count += 1;
-                _stats.write_cache_bytes += load_size;
                 Status r = cache->write_cache(_cache_key, off, load_size, _buffer.data());
-                LOG_IF(WARNING, !r.ok()) << "write block cache failed, errmsg: " << r.get_error_msg();
+                if (r.ok()) {
+                    _stats.write_cache_count += 1;
+                    _stats.write_cache_bytes += load_size;
+                } else {
+                    LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
+                }
             }
             src = _buffer.data();
         } else if (!res.ok()) {

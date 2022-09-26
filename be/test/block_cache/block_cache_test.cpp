@@ -1,12 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "cache/block_cache.h"
+#include "block_cache/block_cache.h"
 
 #include <cstring>
 #include <gtest/gtest.h>
 
 #include "common/statusor.h"
 #include "common/logging.h"
+#include "fs/fs_util.h"
 
 namespace starrocks {
 
@@ -18,16 +19,15 @@ protected:
 
 TEST_F(BlockCacheTest, hybrid_cache) {
     BlockCache* cache = BlockCache::instance();
+    const size_t block_size = 4 * 1024;
 
     CacheOptions options;
     options.mem_space_size = 20 * 1024 * 1024;
     size_t quota = 500 * 1024 * 1024;
     options.disk_spaces.push_back({ .path = "./ut_dir/block_disk_cache", .size = quota });
+    options.block_size = block_size;
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
-
-    const size_t block_size = 4 * 1024;
-    cache->set_block_size(block_size);
 
     const size_t batch_size = 2 * block_size + 1234;
     const size_t rounds = 20;

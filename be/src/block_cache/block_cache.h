@@ -19,9 +19,6 @@ public:
     // Init the block cache instance
     Status init(const CacheOptions& options);
 
-    // Set block size as the cache unit
-    Status set_block_size(size_t block_size);
-
     // Write data to cache, the offset must be aligned by block size
     Status write_cache(const CacheKey& cache_key, off_t offset, size_t size, const char* buffer,
                        size_t ttl_seconds = 0);
