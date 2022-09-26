@@ -23,6 +23,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.stream.IMTInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -32,6 +33,7 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -325,6 +327,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "partitionRefTableExprs")
     private List<Expr> partitionRefTableExprs;
 
+    // TODO: serialize and persist it
+    private Map<PhysicalOperator, IMTInfo> imtInfo;
+
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
         this.tableProperty = null;
@@ -429,6 +434,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
         }
         return result;
+    }
+
+    public void setIMTInfo(Map<PhysicalOperator, IMTInfo> imtInfo) {
+        this.imtInfo = imtInfo;
+    }
+
+    public Map<PhysicalOperator, IMTInfo> getIMTInfo() {
+        return this.imtInfo;
     }
 
     @Override

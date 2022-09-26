@@ -2,24 +2,33 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.starrocks.planner.stream.IMTInfo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class PhysicalStreamAggOperator extends PhysicalOperator {
 
-
     private final List<ColumnRefOperator> groupBys;
     private final Map<ColumnRefOperator, CallOperator> aggregations;
+
+    // IMT information
+    private IMTInfo aggImt;
+
+    // TODO: support more IMT
+    private IMTInfo detailImt;
 
     public PhysicalStreamAggOperator(List<ColumnRefOperator> groupBys,
                                      Map<ColumnRefOperator, CallOperator> aggregations,
@@ -38,6 +47,14 @@ public class PhysicalStreamAggOperator extends PhysicalOperator {
         return aggregations;
     }
 
+    public IMTInfo getAggImt() {
+        return this.aggImt;
+    }
+
+    public void setAggImt(IMTInfo imt) {
+        this.aggImt = imt;
+    }
+
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitPhysicalStreamAgg(this, context);
@@ -50,8 +67,22 @@ public class PhysicalStreamAggOperator extends PhysicalOperator {
     }
 
     @Override
+    public ColumnRefSet getUsedColumns() {
+        ColumnRefSet columns = super.getUsedColumns();
+        groupBys.forEach(columns::union);
+        aggregations.values().forEach(d -> columns.union(d.getUsedColumns()));
+        return columns;
+    }
+
+    @Override
     public String toString() {
-        return "PhysicalStreamAgg";
+        StringBuilder sb = new StringBuilder();
+        sb.append(aggregations.values().stream().map(CallOperator::toString).collect(Collectors.joining(", ")));
+        if (CollectionUtils.isNotEmpty(groupBys)) {
+            sb.append(" group by ");
+            sb.append(groupBys.stream().map(ColumnRefOperator::getName).collect(Collectors.joining(", ")));
+        }
+        return "PhysicalStreamAgg " + sb.toString();
     }
 
     @Override

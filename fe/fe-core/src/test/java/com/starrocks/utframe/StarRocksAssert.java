@@ -191,7 +191,7 @@ public class StarRocksAssert {
     public StarRocksAssert withNewMaterializedView(String sql) throws Exception {
         CreateMaterializedViewStatement createMaterializedViewStatement =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement, ctx);
         return this;
     }
 

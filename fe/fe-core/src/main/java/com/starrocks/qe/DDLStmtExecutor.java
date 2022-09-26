@@ -231,7 +231,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateMaterializedViewStatement(CreateMaterializedViewStatement stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().createMaterializedView(stmt);
+                context.getGlobalStateMgr().createMaterializedView(stmt, context);
             });
             return null;
         }

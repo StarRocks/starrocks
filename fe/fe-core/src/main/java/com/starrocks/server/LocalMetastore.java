@@ -131,6 +131,8 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.planner.stream.IMTCreateInfo;
+import com.starrocks.planner.stream.IMTInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -181,6 +183,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -190,6 +193,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TIMTType;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
@@ -3173,7 +3177,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void createMaterializedView(CreateMaterializedViewStatement stmt)
+    public void createMaterializedView(CreateMaterializedViewStatement stmt, ConnectContext context)
             throws DdlException {
         // check mv exists,name must be different from view/mv/table which exists in metadata
         String mvName = stmt.getTableName().getTbl();
@@ -3244,6 +3248,10 @@ public class LocalMetastore implements ConnectorMetadata {
         // set base index id
         long baseIndexId = getNextId();
         materializedView.setBaseIndexId(baseIndexId);
+
+        // Analyze IMT information
+        Map<PhysicalOperator, IMTCreateInfo> imtCreate = IMTCreateInfo.analyzeFromMV(materializedView, context);
+
         // set base index meta
         int schemaVersion = 0;
         int schemaHash = Util.schemaHash(schemaVersion, baseSchema, null, 0d);
@@ -3285,8 +3293,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (properties != null) {
                 hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             }
-            dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                    DataProperty.DEFAULT_DATA_PROPERTY);
+            dataProperty = PropertyAnalyzer.analyzeDataProperty(properties, DataProperty.DEFAULT_DATA_PROPERTY);
             if (hasMedium && dataProperty.getStorageMedium() == TStorageMedium.SSD) {
                 materializedView.setStorageMedium(dataProperty.getStorageMedium());
                 // set storage cooldown time into table property,
@@ -3317,6 +3324,69 @@ public class LocalMetastore implements ConnectorMetadata {
             buildPartitions(db, materializedView, Collections.singletonList(partition));
             materializedView.addPartition(partition);
         }
+
+        // Create IMT
+        Map<PhysicalOperator, IMTInfo> imtInfo = new HashMap<>();
+        for (Map.Entry<PhysicalOperator, IMTCreateInfo> entry : imtCreate.entrySet()) {
+            long partitionId = GlobalStateMgr.getCurrentState().getNextId();
+            String partitionName = "imt_part";
+            PartitionInfo imtPartitionInfo = new SinglePartitionInfo();
+            imtPartitionInfo.setDataProperty(partitionId, dataProperty);
+            imtPartitionInfo.setReplicationNum(partitionId, replicationNum);
+            imtPartitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+            imtPartitionInfo.setIsInMemory(partitionId, false);
+
+            IMTCreateInfo createInfo = entry.getValue();
+            Preconditions.checkState(createInfo.getImtType() == TIMTType.OLAP_TABLE, "only support OLAP_TABLE IMT");
+
+            long tableId = GlobalStateMgr.getCurrentState().getNextId();
+            String tableName = mvName + "_imt_" + createInfo.getTableName();
+            OlapTable olap = new OlapTable(tableId,
+                    tableName,
+                    createInfo.getColumns(),
+                    createInfo.getKeyType(),
+                    imtPartitionInfo,
+                    createInfo.getDistributionInfo(),
+                    GlobalStateMgr.getCurrentState().getClusterId(),
+                    null,
+                    createInfo.getTableType()
+            );
+            long imtBaseIndexId = GlobalStateMgr.getCurrentState().getNextId();
+            int imtSchemaVersion = 0;
+            int imtSchemaHash = Util.schemaHash(imtSchemaVersion, createInfo.getColumns(), null, 0d);
+            short imtShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(createInfo.getColumns(), null);
+            TStorageType imtBaseIndexStorageType = TStorageType.COLUMN;
+            olap.setIndexMeta(imtBaseIndexId,
+                    createInfo.getTableName(),
+                    createInfo.getColumns(),
+                    imtSchemaVersion, imtSchemaHash,
+                    imtShortKeyColumnCount, imtBaseIndexStorageType, createInfo.getKeyType());
+            olap.setBaseIndexId(imtBaseIndexId);
+            olap.setStorageMedium(dataProperty.getStorageMedium());
+            olap.getTableProperty().getProperties()
+                    .put(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME, String.valueOf(dataProperty.getCooldownTimeMs()));
+
+            // Create table
+            db.createTableWithLock(olap, false);
+
+            // Create partition
+            Long version = Partition.PARTITION_INIT_VERSION;
+            Set<Long> imtPartitionTabletIdSet = new HashSet<>();
+            Partition imtPartition = createPartition(db, olap, partitionId, partitionName, version, imtPartitionTabletIdSet);
+            buildPartitions(db, olap, Collections.singletonList(imtPartition));
+            olap.addPartition(imtPartition);
+
+            IMTInfo imt = null;
+            try {
+                imt = IMTInfo.fromOlapTable(db.getId(), olap, false);
+            } catch (UserException e) {
+                throw new DdlException("create imt failed: " + e);
+            }
+            imtInfo.put(entry.getKey(), imt);
+            LOG.info(String.format("create imt for mv %s operator: %s", materializedView.getName(), entry.getKey()));
+        }
+        materializedView.setIMTInfo(imtInfo);
+
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");

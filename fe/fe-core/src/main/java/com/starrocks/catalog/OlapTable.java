@@ -371,15 +371,17 @@ public class OlapTable extends Table implements GsonPostProcessable {
     public void rebuildFullSchema() {
         fullSchema.clear();
         nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-        for (Column baseColumn : indexIdToMeta.get(baseIndexId).getSchema()) {
-            fullSchema.add(baseColumn);
-            nameToColumn.put(baseColumn.getName(), baseColumn);
-        }
-        for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
-            for (Column column : indexMeta.getSchema()) {
-                if (!nameToColumn.containsKey(column.getName())) {
-                    fullSchema.add(column);
-                    nameToColumn.put(column.getName(), column);
+        if (indexIdToMeta.get(baseIndexId) != null) {
+            for (Column baseColumn : indexIdToMeta.get(baseIndexId).getSchema()) {
+                fullSchema.add(baseColumn);
+                nameToColumn.put(baseColumn.getName(), baseColumn);
+            }
+            for (MaterializedIndexMeta indexMeta : indexIdToMeta.values()) {
+                for (Column column : indexMeta.getSchema()) {
+                    if (!nameToColumn.containsKey(column.getName())) {
+                        fullSchema.add(column);
+                        nameToColumn.put(column.getName(), column);
+                    }
                 }
             }
         }

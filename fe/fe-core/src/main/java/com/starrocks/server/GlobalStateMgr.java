@@ -2728,9 +2728,13 @@ public class GlobalStateMgr {
         localMetastore.createMaterializedView(stmt);
     }
 
-    public void createMaterializedView(CreateMaterializedViewStatement statement)
+    public void createMaterializedView(CreateMaterializedViewStatement statement) throws DdlException {
+        localMetastore.createMaterializedView(statement, null);
+    }
+
+    public void createMaterializedView(CreateMaterializedViewStatement statement, ConnectContext ctx)
             throws DdlException {
-        localMetastore.createMaterializedView(statement);
+        localMetastore.createMaterializedView(statement, ctx);
     }
 
     public void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {

@@ -12,6 +12,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.external.RemoteFileInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -149,7 +150,7 @@ public interface ConnectorMetadata {
             throws AnalysisException, DdlException {
     }
 
-    default void createMaterializedView(CreateMaterializedViewStatement statement) throws DdlException {
+    default void createMaterializedView(CreateMaterializedViewStatement statement, ConnectContext context) throws DdlException {
     }
 
     default void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
