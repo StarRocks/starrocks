@@ -149,6 +149,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
+    public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
+
     public static final String ENABLE_DELIVER_BATCH_FRAGMENTS = "enable_deliver_batch_fragments";
 
     // Use resource group. It will influence the CPU schedule, I/O scheduler, and
@@ -274,6 +276,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_LOCAL_SHUFFLE_AGG)
+    private boolean enableLocalShuffleAgg = true;
 
     @VariableMgr.VarAttr(name = USE_COMPUTE_NODES)
     private int useComputeNodes = -1;
@@ -943,6 +948,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePipelineEngine(boolean enablePipelineEngine) {
         this.enablePipelineEngine = enablePipelineEngine;
+    }
+
+    public void setEnableLocalShuffleAgg(boolean enableLocalShuffleAgg) {
+        this.enableLocalShuffleAgg = enableLocalShuffleAgg;
+    }
+
+    public boolean isEnableLocalShuffleAgg() {
+        return enableLocalShuffleAgg;
     }
 
     public boolean isEnableTabletInternalParallel() {

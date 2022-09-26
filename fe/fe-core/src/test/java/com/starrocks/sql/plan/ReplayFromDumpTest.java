@@ -18,6 +18,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -45,8 +46,14 @@ public class ReplayFromDumpTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setJoinImplementationMode("auto");
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
+    }
+
+    @AfterClass
+    public static void afterClass() throws Exception {
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
     }
 
     public String getModelContent(String filename, String model) {
@@ -133,6 +140,7 @@ public class ReplayFromDumpTest {
             queryDumpInfo.setSessionVariable(sessionVariable);
         }
         queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        queryDumpInfo.getSessionVariable().setEnableLocalShuffleAgg(false);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));
