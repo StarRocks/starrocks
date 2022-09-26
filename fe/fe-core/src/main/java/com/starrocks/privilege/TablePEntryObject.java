@@ -34,7 +34,7 @@ public class TablePEntryObject extends PEntryObject {
     }
 
     @Override
-    public boolean isSame(PEntryObject pEntryObject) {
+    public boolean keyMatch(PEntryObject pEntryObject) {
         if (!(pEntryObject instanceof TablePEntryObject)) {
             return false;
         }

@@ -4,14 +4,19 @@ package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
 
+/**
+ * interface is hard to serialized/deserialized using GSON
+ * to simplify the implementation, the base class PEntryObject contains one data field called `id`.
+ */
 public class PEntryObject {
     @SerializedName(value = "i")
     protected long id;
+
     public PEntryObject(long id) {
         this.id = id;
     }
 
-    boolean isSame(PEntryObject pEntryObject) {
+    public boolean keyMatch(PEntryObject pEntryObject) {
         return (pEntryObject instanceof PEntryObject) && (pEntryObject.id == this.id);
     }
 }
