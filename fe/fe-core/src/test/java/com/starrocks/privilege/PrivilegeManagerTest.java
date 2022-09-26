@@ -8,6 +8,7 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.qe.ConnectContext;
@@ -17,8 +18,8 @@ import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.Test;
-import org.wildfly.common.Assert;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -217,6 +218,45 @@ public class PrivilegeManagerTest {
                 PrivilegeTypes.TABLE.toString(),
                 PrivilegeTypes.TableActions.SELECT.toString(),
                 DB_TBL_TOKENS));
+
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
+    @Test
+    public void testIllegalStatement() throws Exception {
+        UtFrameUtils.setUpForPersistTest();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        globalStateMgr.initAuth(true);
+        PrivilegeManager privilegeManager = globalStateMgr.getPrivilegeManager();
+        privilegeManager.provider = new FakeProvider();
+        ConnectContext rootCtx = UtFrameUtils.createDefaultCtx();
+        rootCtx.setCurrentUserIdentity(UserIdentity.ROOT);
+
+        String sql = "create user test_user";
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, rootCtx);
+        globalStateMgr.getAuthenticationManager().createUser(createUserStmt);
+
+        sql = "grant xxx on db.tbl to test_user";
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, rootCtx);
+        try {
+            privilegeManager.grant(grantStmt);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("grant failed"));
+        }
+
+        sql = "revoke select on xxx xxx from test_user";
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, rootCtx);
+        try {
+            privilegeManager.revoke(revokeStmt);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("revoke failed"));
+        }
+
+        Assert.assertFalse(privilegeManager.check(rootCtx, "xxx", "xxx", Arrays.asList("aaa")));
+        Assert.assertFalse(privilegeManager.checkAnyObject(rootCtx, "xxx", "xxx"));
+        Assert.assertFalse(privilegeManager.hasType(rootCtx, "xxx"));
 
         UtFrameUtils.tearDownForPersisTest();
     }

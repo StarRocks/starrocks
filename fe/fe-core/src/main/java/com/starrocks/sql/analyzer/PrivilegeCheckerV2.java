@@ -24,6 +24,8 @@ import java.util.Arrays;
 
 public class PrivilegeCheckerV2 {
 
+    private PrivilegeCheckerV2() {}
+
     public static void check(StatementBase statement, ConnectContext session) {
         new PrivilegeCheckerVisitor().check(statement, session);
     }

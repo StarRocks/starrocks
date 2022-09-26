@@ -8,7 +8,6 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import org.apache.logging.log4j.LogManager;
@@ -86,14 +85,14 @@ public class PrivilegeManager {
             throw new DdlException("role not supported!");  // support it later
         }
         try {
-            short typeId = typeStringToId.get(stmt.getPrivType());
+            short typeId = checkType(stmt.getPrivType());
             ActionSet actionSet = checkActionSet(stmt.getPrivType(), typeId, stmt.getPrivList());
             PEntryObject object = provider.generateObject(
                     stmt.getPrivType(), stmt.getPrivilegeObjectNameTokenList(), globalStateMgr);
             List<PEntryObject> objects = Arrays.asList(object); // only support one object for now TBD
             grantToUser(typeId, actionSet, objects, stmt.isWithGrantOption(), stmt.getUserIdentity());
         } catch (PrivilegeException e) {
-            DdlException exception = new DdlException("failed to grant " + AST2SQL.toString(stmt));
+            DdlException exception = new DdlException("grant failed: " + stmt.getOrigStmt());
             exception.initCause(e);
             throw exception;
         }
@@ -121,14 +120,14 @@ public class PrivilegeManager {
             throw new DdlException("role not supported!");  // support it later
         }
         try {
-            short typeId = typeStringToId.get(stmt.getPrivType());
+            short typeId = checkType(stmt.getPrivType());
             ActionSet actionSet = checkActionSet(stmt.getPrivType(), typeId, stmt.getPrivList());
             PEntryObject object = provider.generateObject(
                     stmt.getPrivType(), stmt.getPrivilegeObjectNameTokenList(), globalStateMgr);
             List<PEntryObject> objects = Arrays.asList(object); // only support one object for now TBD
             revokeFromUser(typeId, actionSet, objects, stmt.isWithGrantOption(), stmt.getUserIdentity());
         } catch (PrivilegeException e) {
-            DdlException exception = new DdlException("failed to revoke " + AST2SQL.toString(stmt));
+            DdlException exception = new DdlException("revoke failed: " + stmt.getOrigStmt());
             exception.initCause(e);
             throw exception;
         }
@@ -156,7 +155,7 @@ public class PrivilegeManager {
         try {
             PEntryObject object = provider.generateObject(
                     typeName, objectToken, globalStateMgr);
-            short typeId = typeStringToId.get(typeName);
+            short typeId = checkType(typeName);
             Action want = typeToActionMap.get(typeId).get(actionName);
             return provider.check(typeId, want, object, mergePrivilegeCollection(context));
         } catch (PrivilegeException e) {
@@ -171,7 +170,7 @@ public class PrivilegeManager {
     public boolean checkAnyObject(ConnectContext context, String typeName, String actionName) {
         userReadLock();
         try {
-            short typeId = typeStringToId.get(typeName);
+            short typeId = checkType(typeName);
             Action want = typeToActionMap.get(typeId).get(actionName);
             return provider.checkAnyObject(typeId, want, mergePrivilegeCollection(context));
         } catch (PrivilegeException e) {
@@ -185,7 +184,7 @@ public class PrivilegeManager {
     public boolean hasType(ConnectContext context, String typeName) {
         userReadLock();
         try {
-            short typeId = typeStringToId.get(typeName);
+            short typeId = checkType(typeName);
             return provider.hasType(typeId, mergePrivilegeCollection(context));
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when hasType type[{}]", typeName, e);
@@ -198,7 +197,7 @@ public class PrivilegeManager {
     public boolean allowGrant(ConnectContext context, String typeName, String actionName, List<String> objectToken) {
         userReadLock();
         try {
-            short typeId = typeStringToId.get(typeName);
+            short typeId = checkType(typeName);
             Action want = typeToActionMap.get(typeId).get(actionName);
             PEntryObject object = provider.generateObject(
                     typeName, objectToken, globalStateMgr);
@@ -276,5 +275,12 @@ public class PrivilegeManager {
             actions.add(actionMap.get(actionName));
         }
         return new ActionSet(actions);
+    }
+
+    private short checkType(String typeName) throws PrivilegeException {
+        if (!typeStringToId.containsKey(typeName)) {
+            throw new PrivilegeException("cannot find type " + typeName + " in " + typeStringToId.keySet());
+        }
+        return typeStringToId.get(typeName);
     }
 }
