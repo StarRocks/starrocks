@@ -55,6 +55,7 @@ import com.starrocks.planner.DataStreamSink;
 import com.starrocks.planner.DeltaLakeScanNode;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.ExportSink;
+import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
@@ -2328,7 +2329,8 @@ public class Coordinator {
             FragmentScanRangeAssignment assignment =
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
             if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
-                    scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode) {
+                    scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
+                    scanNode instanceof FileTableScanNode) {
                 if (connectContext != null) {
                     queryOptions.setUse_scan_block_cache(connectContext.getSessionVariable().getUseScanBlockCache());
                     queryOptions.setEnable_populate_block_cache(
