@@ -56,6 +56,7 @@ PROPERTIES(
 > - You need to specify the table property `replication_num`, which represents the number of data replicas, as `1` because the StarRocks instance you deployed has only one BE node.
 > - If no [data model](../table_design/Data_model.md) is specified, a Duplicate Key model is created by default. See [Duplicate Key model](../table_design/Data_model.md#duplicate-key-model)
 > - The columns of the table exactly correspond to the fields of data that you will be loading into StarRocks in the tutorial on [loading and querying data](../quick_start/Import_and_query.md).
+> - To guarantee the high performance **in the production environment**, we strongly recommend that you strategize the data partitioning plan for the table by using the `PARTITION BY` clause. See [Design partitioning and bucketing rules](../table_design/Data_model.md#design-partitioning-and-bucketing-rules) for more instructions.
 
 After the table is created, you can check the details of the table using the DESC statement, and view all the tables in the database by executing [SHOW TABLES](../sql-reference/sql-statements/data-manipulation/SHOW%20TABLES.md). Tables in StarRocks support schema changes. You can see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE) for more information.
 
