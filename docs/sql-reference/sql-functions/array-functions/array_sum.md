@@ -1,6 +1,8 @@
 # array_sum
 
-## description
+## Description
+
+Sums all values in an array.
 
 ### Syntax
 
@@ -8,9 +10,7 @@
 array_sum(array(type))
 ```
 
-Sum all data in an ARRAY and return the result.
-
-## example
+## Examples
 
 ```plain text
 mysql> select array_sum([11, 11, 12]);
@@ -27,7 +27,3 @@ mysql> select array_sum([11.33, 11.11, 12.324]);
 | 34.764                          |
 +---------------------------------+
 ```
-
-## keyword
-
-ARRAY_SUM,ARRAY

@@ -64,6 +64,15 @@ struct TTextFileDesc {
 
     // property 'line.delim'
     2: optional string line_delim
+
+    // property 'collection.delim' 
+    3: optional string collection_delim
+
+    // property 'mapkey.delim'
+    4: optional string mapkey_delim
+
+    // compression type.
+    5: optional Types.TCompressionType compression_type;
 }
 
 enum TSchemaTableType {
@@ -80,6 +89,7 @@ enum TSchemaTableType {
     SCH_GLOBAL_STATUS,
     SCH_GLOBAL_VARIABLES,
     SCH_KEY_COLUMN_USAGE,
+    SCH_MATERIALIZED_VIEWS,
     SCH_OPEN_TABLES,
     SCH_PARTITIONS,
     SCH_PLUGINS,
