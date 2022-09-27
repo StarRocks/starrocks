@@ -81,6 +81,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
@@ -119,14 +120,20 @@ public class InsertPlanner {
             }
             PhysicalOlapScanOperator node = (PhysicalOlapScanOperator) optExpr.getOp();
             if (node.getTable().equals(this.targetTable)) {
-                QueryRelation queryRelation = this.insert.getQueryStatement().getQueryRelation();
-                ValuesRelation valueRelation = (ValuesRelation) queryRelation;
-                List<ColumnRefOperator> valuesOutputColumns = node.getOutputColumns();
+                ValuesRelation valueRelation = (ValuesRelation) this.insert.getQueryStatement().getQueryRelation();
+                Table table = node.getTable();
+                List<ColumnRefOperator> scanOutputColumns = node.getOutputColumns();
+                Set<String> columnNames = scanOutputColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toSet());
 
                 List<List<ScalarOperator>> values = new ArrayList<>();
                 for (List<Expr> row : valueRelation.getRows()) {
                     List<ScalarOperator> valuesRow = new ArrayList<>();
                     for (int fieldIdx = 0; fieldIdx < row.size(); ++fieldIdx) {
+                        // Skip fields that not in the ScanOperator of view
+                        String fieldName = table.getBaseSchema().get(fieldIdx).getName();
+                        if (!columnNames.contains(fieldName)) {
+                            continue;
+                        }
                         Expr rowField = row.get(fieldIdx);
                         Type outputType = valueRelation.getRelationFields().getFieldByIndex(fieldIdx).getType();
                         Type fieldType = rowField.getType();
@@ -144,12 +151,12 @@ public class InsertPlanner {
                         valuesRow.add(constant);
 
                         if (constant.isNullable()) {
-                            valuesOutputColumns.get(fieldIdx).setNullable(true);
+                            scanOutputColumns.get(fieldIdx).setNullable(true);
                         }
                     }
                     values.add(valuesRow);
                 }
-                OptExpression res = OptExpression.create(new PhysicalValuesOperator(valuesOutputColumns, values, -1, null,
+                OptExpression res = OptExpression.create(new PhysicalValuesOperator(scanOutputColumns, values, -1, null,
                         optExpr.getOp().getProjection()), optExpr);
                 // Avoid set statistic and cost here
                 res.setStatistics(optExpr.getStatistics());
