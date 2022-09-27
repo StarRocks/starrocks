@@ -3366,8 +3366,6 @@ public class LocalMetastore implements ConnectorMetadata {
             olap.getTableProperty().getProperties()
                     .put(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME, String.valueOf(dataProperty.getCooldownTimeMs()));
 
-            // Create table
-            db.createTableWithLock(olap, false);
 
             // Create partition
             Long version = Partition.PARTITION_INIT_VERSION;
@@ -3375,6 +3373,9 @@ public class LocalMetastore implements ConnectorMetadata {
             Partition imtPartition = createPartition(db, olap, partitionId, partitionName, version, imtPartitionTabletIdSet);
             buildPartitions(db, olap, Collections.singletonList(imtPartition));
             olap.addPartition(imtPartition);
+
+            // Create table
+            db.createTableWithLock(olap, false);
 
             IMTInfo imt = null;
             try {
