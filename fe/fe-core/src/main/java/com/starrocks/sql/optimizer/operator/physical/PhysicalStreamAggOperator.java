@@ -14,6 +14,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.commons.collections.CollectionUtils;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -23,6 +24,10 @@ public class PhysicalStreamAggOperator extends PhysicalOperator {
 
     private final List<ColumnRefOperator> groupBys;
     private final Map<ColumnRefOperator, CallOperator> aggregations;
+
+    // Map from AggExpr and GroupingExpr Index to IMT column Index
+    private Map<Integer, Integer> aggExprImtMap;
+    private Map<Integer, Integer> groupExprImtMap;
 
     // IMT information
     private IMTInfo aggImt;
@@ -51,8 +56,27 @@ public class PhysicalStreamAggOperator extends PhysicalOperator {
         return this.aggImt;
     }
 
+    public Map<Integer, Integer> getAggExprImtMap() {
+        return this.aggExprImtMap;
+    }
+
+    public Map<Integer, Integer> getGroupExprImtMap() {
+        return this.groupExprImtMap;
+    }
+
     public void setAggImt(IMTInfo imt) {
         this.aggImt = imt;
+
+        // TODO: assign it when creating IMT
+        this.aggExprImtMap = new HashMap<>();
+        this.groupExprImtMap = new HashMap<>();
+        int columnIdx = 0;
+        for (int i = 0; i < groupBys.size(); i++) {
+            this.groupExprImtMap.put(i, columnIdx++);
+        }
+        for (int i = 0; i < aggregations.size(); i++) {
+            this.aggExprImtMap.put(i, columnIdx++);
+        }
     }
 
     @Override

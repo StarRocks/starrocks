@@ -2461,7 +2461,10 @@ public class PlanFragmentBuilder {
                     new StreamAggNode(context.getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
+
             aggregationNode.setAggImt(node.getAggImt());
+            aggregationNode.setAggExprImtMap(node.getAggExprImtMap());
+            aggregationNode.setGroupExprImtMap(node.getGroupExprImtMap());
 
             inputFragment.setPlanRoot(aggregationNode);
             return inputFragment;

@@ -14,6 +14,7 @@ import com.starrocks.thrift.TStreamAggregationNode;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class StreamAggNode extends PlanNode {
@@ -21,6 +22,10 @@ public class StreamAggNode extends PlanNode {
     private final AggregateInfo aggInfo;
     private IMTInfo detailImt;
     private IMTInfo aggImt;
+
+    // Map from AggExpr and GroupingExpr Index to IMT column Index
+    private Map<Integer, Integer> aggExprImtMap;
+    private Map<Integer, Integer> groupExprImtMap;
 
     public StreamAggNode(PlanNodeId id, PlanNode input, AggregateInfo aggInfo) {
         super(id, aggInfo.getOutputTupleId().asList(), "STREAM_AGG");
@@ -35,6 +40,14 @@ public class StreamAggNode extends PlanNode {
 
     public void setAggImt(IMTInfo imt) {
         this.aggImt = imt;
+    }
+
+    public void setGroupExprImtMap(Map<Integer, Integer> groupExprImtMap) {
+        this.groupExprImtMap = groupExprImtMap;
+    }
+
+    public void setAggExprImtMap(Map<Integer, Integer> aggExprImtMap) {
+        this.aggExprImtMap = aggExprImtMap;
     }
 
     @Override
@@ -57,6 +70,12 @@ public class StreamAggNode extends PlanNode {
             }
             if (aggImt != null) {
                 output.append(detailPrefix).append("agg_imt: ").append(aggImt.toString()).append("\n");
+            }
+            if (groupExprImtMap != null) {
+                output.append(detailPrefix).append("group_expr_map: ").append(groupExprImtMap).append("\n");
+            }
+            if (aggExprImtMap != null) {
+                output.append(detailPrefix).append("agg_expr_map: ").append(aggExprImtMap).append("\n");
             }
         }
         return output.toString();
