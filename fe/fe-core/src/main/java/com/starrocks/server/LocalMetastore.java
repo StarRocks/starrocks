@@ -3221,6 +3221,11 @@ public class LocalMetastore implements ConnectorMetadata {
         // Infer primary key for realtime refresh
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
+        for (Column column : baseSchema) {
+            if (column.isKey()) {
+                column.setIsAllowNull(false);
+            }
+        }
 
         // create distribution info
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);

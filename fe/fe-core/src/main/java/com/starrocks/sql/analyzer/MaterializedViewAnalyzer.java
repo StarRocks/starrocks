@@ -401,6 +401,13 @@ public class MaterializedViewAnalyzer {
                     statement.setKeysType(KeysType.PRIMARY_KEYS);
                     distributionDesc = KeyPropertyBuilder.buildDistribution(statement.getQueryStatement());
                     statement.setDistributionDesc(distributionDesc);
+                    // Set all key column to nonnull
+                    // TODO: support nullable key
+                    for (Column column : mvColumnItems) {
+                        if (column.isKey()) {
+                            column.setIsAllowNull(false);
+                        }
+                    }
                 } else if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
                     distributionDesc = new HashDistributionDesc(Config.default_bucket_num,
                             Lists.newArrayList(mvColumnItems.get(0).getName()));
