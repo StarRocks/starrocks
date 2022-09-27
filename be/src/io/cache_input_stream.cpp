@@ -37,8 +37,8 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
         int64_t size = std::min(BLOCK_SIZE, end - off);
         int64_t load_size = std::min(BLOCK_SIZE, _size - off);
 
-        VLOG_FILE << "[CacheInputStream] offset = " << _offset << ", end = " << end << ", block_id = " << i
-                  << ", off = " << off << ", size = " << size << " , load_size = " << load_size;
+        // VLOG_FILE << "[CacheInputStream] offset = " << _offset << ", end = " << end << ", block_id = " << i
+        //           << ", off = " << off << ", size = " << size << " , load_size = " << load_size;
 
         StatusOr<size_t> res;
         char* src = nullptr;
