@@ -11,18 +11,22 @@ namespace starrocks::io {
 
 CacheInputStream::CacheInputStream(const std::string& filename, std::shared_ptr<SeekableInputStream> stream)
         : _filename(filename), _stream(stream), _offset(0) {
-    // _cache_key.resize(8);
-    // char* data = _cache_key.data();
-    // uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
-    // memcpy(data, &hash_value, sizeof(hash_value));
-    _cache_key = _filename;
-    _buffer.reserve(BLOCK_SIZE);
     _size = _stream->get_size().value();
+#ifdef WITH_BLOCK_CACHE
+    // _cache_key = _filename;
+    // use hash(filename) as cache key.
+    _cache_key.resize(8);
+    char* data = _cache_key.data();
+    uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
+    memcpy(data, &hash_value, sizeof(hash_value));
+    _buffer.reserve(BlockCache::instance()->block_size());
+#endif
 }
 
 #ifdef WITH_BLOCK_CACHE
 StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
     BlockCache* cache = BlockCache::instance();
+    const int64_t BLOCK_SIZE = cache->block_size();
     int64_t end = _offset + count;
     int64_t start_block_id = _offset / BLOCK_SIZE;
     int64_t end_block_id = (end - 1) / BLOCK_SIZE;
@@ -38,6 +42,7 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
 
         StatusOr<size_t> res;
         char* src = nullptr;
+        // try read data from cache.
         {
             SCOPED_RAW_TIMER(&_stats.read_cache_ns);
             res = cache->read_cache(_cache_key, off, load_size, _buffer.data());
@@ -48,6 +53,7 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
             // TODO: Replace the above with a safe zero copy interface
             //st = cache->read_cache_zero_copy(_cache_key, off, load_size, (const char**)&src);
         }
+        // if not found, read from stream and write back to cache.
         if (res.status().is_not_found()) {
             RETURN_IF_ERROR(_stream->read_at_fully(off, _buffer.data(), load_size));
             {
@@ -64,10 +70,9 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
         } else if (!res.ok()) {
             return res;
         } else {
-            // size = st.value();
             _stats.read_cache_bytes += size;
         }
-
+        // handle data alignment for first block
         if (i == start_block_id) {
             int64_t shift = _offset - start_block_id * BLOCK_SIZE;
             DCHECK(size > shift);
