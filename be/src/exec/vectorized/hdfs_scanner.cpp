@@ -194,6 +194,7 @@ Status HdfsScanner::open_random_access_file() {
                 std::make_shared<io::CompressedSeekableInputStream>(compressed_input_stream);
         _file = std::make_unique<RandomAccessFile>(compressed_seekable_input_stream, _raw_file->filename());
     }
+    _file->set_size(_scanner_params.file_size);
     return Status::OK();
 }
 

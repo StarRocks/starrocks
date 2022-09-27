@@ -12,6 +12,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
@@ -32,6 +33,8 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -154,7 +157,7 @@ public class InformationSchemaDataSourceTest {
                 Assert.assertTrue(info.getTable_catalog().equals("def"));
                 Assert.assertTrue(info.getTable_schema().equals("test_db"));
                 Assert.assertTrue(info.getTable_name().equals("test_table_pk"));
-                Assert.assertTrue(info.getTable_type().equals("OLAP"));
+                Assert.assertTrue(info.getTable_type().equals("BASE TABLE"));
                 Assert.assertTrue(info.getEngine().equals("StarRocks"));
                 Assert.assertTrue(info.getVersion() == -1L);
                 Assert.assertTrue(info.getRow_format().equals("NULL"));
@@ -174,11 +177,53 @@ public class InformationSchemaDataSourceTest {
                 Assert.assertTrue(info.getTable_comment().equals("test_comment"));
             } 
             if (info.getTable_name().equals("test_view")) {
+                Assert.assertTrue(info.getTable_type().equals("VIEW"));
                 Assert.assertTrue(info.getTable_rows() == -1L);
                 Assert.assertTrue(info.getAvg_row_length() == -1L);
                 Assert.assertTrue(info.getData_length() == -1L);
                 Assert.assertTrue(info.getUpdate_time() == -1L);
             }
         });
+    }
+
+    @Test
+    public void testTransferTableTypeToAdaptMysql() throws NoSuchMethodException, 
+                                                            SecurityException, 
+                                                            IllegalAccessException,
+                                                            IllegalArgumentException, 
+                                                            InvocationTargetException, 
+                                                            ClassNotFoundException {
+
+        Class<?> clazz = Class.forName(InformationSchemaDataSource.class.getName());
+        Method m = clazz.getDeclaredMethod("transferTableTypeToAdaptMysql", TableType.class);
+        m.setAccessible(true);
+        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.MYSQL)).
+                equals("EXTERNAL TABLE"));
+        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.HIVE)).
+                equals("EXTERNAL TABLE"));
+        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.ICEBERG)).
+                equals("EXTERNAL TABLE"));
+        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.HUDI)).
+                equals("EXTERNAL TABLE"));
+        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.LAKE)).
+                equals("EXTERNAL TABLE"));
+        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.ELASTICSEARCH)).
+                equals("EXTERNAL TABLE"));
+        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.JDBC)).
+                equals("EXTERNAL TABLE"));
+        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.OLAP)).
+                equals("BASE TABLE"));
+        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.OLAP_EXTERNAL)).
+                equals("BASE TABLE"));
+        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.MATERIALIZED_VIEW)).
+                equals("MATERIALIZED VIEW"));
+        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.VIEW)).
+                equals("VIEW"));
+        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.SCHEMA)).
+                equals("BASE TABLE"));
+        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.INLINE_VIEW)).
+                equals("BASE TABLE"));
+        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.BROKER)).
+                equals("BASE TABLE"));
     }
 }

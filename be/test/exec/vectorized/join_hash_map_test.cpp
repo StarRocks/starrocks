@@ -115,7 +115,7 @@ Buffer<uint8_t> JoinHashMapTest::create_bools(uint32_t count, int32_t flag) {
     }
 
     if (flag == 1) {
-        // all 0
+        // all 1
         for (uint32_t i = 0; i < count; i++) {
             nulls[i] = 1;
         }
@@ -2388,6 +2388,47 @@ TEST_F(JoinHashMapTest, EmptyHashMapTest) {
     check_empty_hash_map(TJoinOp::RIGHT_OUTER_JOIN, 5, 0, 0);
     check_empty_hash_map(TJoinOp::RIGHT_ANTI_JOIN, 5, 0, 0);
     check_empty_hash_map(TJoinOp::CROSS_JOIN, 5, 0, 0);
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, NullAwareAntiJoinTest) {
+    JoinHashTableItems table_items;
+    HashTableProbeState probe_state;
+
+    uint32_t build_row_count = 4;
+    uint32_t probe_row_count = 3;
+
+    table_items.first.resize(build_row_count + 1, 0);
+    table_items.next.resize(build_row_count + 1);
+    table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
+    auto build_col_nulls = create_bools(build_row_count + 1, 3);
+    auto column_1 = create_nullable_column(TYPE_INT);
+    column_1->append(*create_nullable_column(TYPE_INT, build_col_nulls, 0, build_row_count + 1));
+    table_items.key_columns.emplace_back(column_1);
+    table_items.join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
+    table_items.row_count = build_row_count;
+
+    auto probe_col_nulls = create_bools(build_row_count, 3);
+
+    probe_state.null_array = &probe_col_nulls;
+    prepare_probe_state(&probe_state, probe_row_count);
+    for (size_t i = 0; i < probe_row_count; i++) {
+        probe_state.next[i] = 0;
+    }
+
+    Buffer<int32_t> build_data;
+    Buffer<int32_t> probe_data;
+    this->prepare_probe_data(&build_data, build_row_count);
+    this->prepare_probe_data(&probe_data, probe_row_count);
+
+    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
+    join_hash_map->_probe_from_ht_for_null_aware_anti_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
+                                                                                     probe_data);
+
+    // null in probe table match all build table rows
+    ASSERT_EQ(probe_state.probe_match_index[0], build_row_count);
+    // value in probe table not hit hash table match all null value rows in build table
+    ASSERT_EQ(probe_state.probe_match_index[1], 1);
 }
 
 } // namespace starrocks::vectorized

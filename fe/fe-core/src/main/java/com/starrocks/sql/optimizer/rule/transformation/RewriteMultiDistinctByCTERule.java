@@ -124,6 +124,10 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
             return false;
         }
 
+        if (agg.getLimit() >= 0) {
+            return false;
+        }
+
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
 
@@ -147,10 +151,16 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
                 .filter(kv -> kv.getValue().isDistinct()).map(Map.Entry::getKey).collect(Collectors.toList());
         List<ColumnRefOperator> otherAggregate = aggregate.getAggregations().entrySet().stream()
                 .filter(kv -> !kv.getValue().isDistinct()).map(Map.Entry::getKey).collect(Collectors.toList());
+        List<ColumnRefOperator> groupingKeys = aggregate.getGroupingKeys();
+        boolean hasGroupBy = !groupingKeys.isEmpty();
 
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
         LinkedList<OptExpression> allCteConsumes = buildDistinctAggCTEConsume(aggregate, distinctAggList, cteProduce,
                 columnRefFactory, columnRefMap);
+        // For inner join(with group by), distinct aggregate cannot have limitation
+        if (hasGroupBy) {
+            allCteConsumes.forEach(opt -> opt.getOp().setLimit(Operator.DEFAULT_LIMIT));
+        }
 
         if (otherAggregate.size() > 0) {
             allCteConsumes.offer(
@@ -158,15 +168,14 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
                             columnRefMap));
         }
 
-        List<ColumnRefOperator> groupingKeys = aggregate.getGroupingKeys();
         // left deep join tree
         while (allCteConsumes.size() > 1) {
             OptExpression left = allCteConsumes.poll();
             OptExpression right = allCteConsumes.poll();
             OptExpression join;
-            if (groupingKeys.isEmpty()) {
-                join = OptExpression.create(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null), left,
-                        right);
+            if (!hasGroupBy) {
+                join = OptExpression.create(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null),
+                        left, right);
             } else {
                 // create inner join when aggregate has group by keys
                 join = buildInnerJoin(left, right);

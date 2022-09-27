@@ -161,7 +161,7 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
     }
 
     std::vector<ExprContext*> cloned_conjunct_ctxs;
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(_conjunct_ctxs, state, &cloned_conjunct_ctxs));
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
 
     for (ExprContext* ctx : cloned_conjunct_ctxs) {
         const Expr* root_expr = ctx->root();
@@ -252,6 +252,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.scan_ranges = {&scan_range};
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
+    scanner_params.file_size = _scan_range.file_length;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;

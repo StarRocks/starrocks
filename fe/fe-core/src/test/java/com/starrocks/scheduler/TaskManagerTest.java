@@ -3,25 +3,17 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Queues;
-import com.starrocks.analysis.DmlStmt;
-import com.starrocks.analysis.StatementBase;
-import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.SubmitTaskStmt;
-import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -36,9 +28,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.PriorityBlockingQueue;
-import java.util.stream.Collectors;
 
 public class TaskManagerTest {
 
@@ -136,60 +126,6 @@ public class TaskManagerTest {
 
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
 
-    }
-
-    @Test
-    public void submitMvAsyncTaskTest() {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-            }
-        };
-        String sql = "create materialized view test.mv1\n" +
-                "partition by date_trunc('month',k1)\n" +
-                "distributed by hash(k2)\n" +
-                "refresh async every(interval 20 second)\n" +
-                "properties('replication_num' = '1')\n" +
-                "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;";
-        Database testDb = null;
-        try {
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            TaskRunHistory taskRunHistory = taskManager.getTaskRunManager().getTaskRunHistory();
-            taskRunHistory.getAllHistory().clear();
-
-            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-            testDb = GlobalStateMgr.getCurrentState().getDb("test");
-
-            // at least 2 times = schedule 1 times + execute 1 times
-            List<TaskRunStatus> taskRuns = null;
-            int retryCount = 0;
-            int maxRetry = 5;
-            while (retryCount < maxRetry) {
-                ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-                taskRuns = taskManager.showTaskRunStatus(null);
-                if (taskRuns.size() == 2) {
-                    Set<Constants.TaskRunState> taskRunStates =
-                            taskRuns.stream().map(TaskRunStatus::getState).collect(Collectors.toSet());
-                    if (taskRunStates.size() == 1 && (taskRunStates.contains(Constants.TaskRunState.FAILED) ||
-                            taskRunStates.contains(Constants.TaskRunState.SUCCESS))) {
-                        break;
-                    }
-                }
-                retryCount++;
-                LOG.info("SubmitMvAsyncTaskTest is waiting for TaskRunState retryCount:" + retryCount);
-            }
-            for (TaskRunStatus taskRun : taskRuns) {
-                Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRun.getState());
-            }
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
-        } finally {
-            if (testDb != null) {
-                testDb.dropTable("mv1");
-            }
-        }
     }
 
     @Test

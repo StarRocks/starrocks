@@ -35,7 +35,6 @@ import com.starrocks.common.TreeNode;
 import com.starrocks.common.io.Writable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -1170,24 +1169,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      */
     public Expr negate() {
         return new CompoundPredicate(CompoundPredicate.Operator.NOT, this, null);
-    }
-
-    /**
-     * Returns the subquery of an expr. Returns null if this expr does not contain
-     * a subquery.
-     * <p>
-     * TODO: Support predicates with more that one subqueries when we implement
-     * the independent subquery evaluation.
-     */
-    public Subquery getSubquery() {
-        if (!contains(Subquery.class)) {
-            return null;
-        }
-        List<Subquery> subqueries = Lists.newArrayList();
-        collect(Subquery.class, subqueries);
-        Preconditions.checkState(subqueries.size() == 1,
-                "only support one subquery in " + AST2SQL.toString(this));
-        return subqueries.get(0);
     }
 
     @Override

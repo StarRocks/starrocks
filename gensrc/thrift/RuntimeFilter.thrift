@@ -76,7 +76,7 @@ struct TRuntimeFilterDescription {
   14: optional list<i32> bucketseq_to_instance;
 
   // partition_by_exprs are used for computing partition ids in probe side
-  // when join's equal conjuncts size > 1.
+  // when partition_by_exprs are not equal to probe_expr.
   15: optional map<Types.TPlanNodeId, list<Exprs.TExpr>> plan_node_id_to_partition_by_exprs;
 }
 

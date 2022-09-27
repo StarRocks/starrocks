@@ -260,6 +260,9 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     //
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
+        if (predicate.isSubquery()) {
+            return predicate;
+        }
         if (predicate.getChildren().size() != 2) {
             return predicate;
         }

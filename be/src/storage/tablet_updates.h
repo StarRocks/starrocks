@@ -293,7 +293,8 @@ private:
     // Find all but the latest already-applied versions whose creation time is less than or
     // equal to |expire_time|, then append them into |expire_list| and erase them from the
     // in-memory version list.
-    void _erase_expired_versions(int64_t expire_time, std::vector<std::unique_ptr<EditVersionInfo>>* expire_list);
+    void _erase_expired_versions(int64_t expire_time, std::vector<std::unique_ptr<EditVersionInfo>>* expire_list,
+                                 int64_t* min_readable_version);
 
     std::set<uint32_t> _active_rowsets();
 

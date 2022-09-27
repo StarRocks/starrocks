@@ -9,6 +9,7 @@
 #include "runtime/global_dict/types.h"
 #include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
+#include "storage/olap_runtime_range_pruner.h"
 #include "storage/tuple.h"
 
 namespace starrocks {
@@ -64,6 +65,7 @@ struct TabletReaderParams {
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 
     bool sorted_by_keys = false;
+    OlapRuntimeScanRangePruner runtime_range_pruner;
 
 public:
     std::string to_string() const;

@@ -38,7 +38,11 @@ import java.util.List;
 
 public class PrivilegeStmtAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
-        new PrivilegeStatementAnalyzerVisitor().analyze(statement, session);
+        if (session.getGlobalStateMgr().isUsingNewPrivilege()) {
+            PrivilegeStmtAnalyzerV2.analyze(statement, session);
+        } else {
+            new PrivilegeStatementAnalyzerVisitor().analyze(statement, session);
+        }
     }
 
     static class PrivilegeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {

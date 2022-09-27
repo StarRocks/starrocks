@@ -134,6 +134,10 @@ CONF_Int32(sleep_one_second, "1");
 // The sleep time for five seconds.
 CONF_Int32(sleep_five_seconds, "5");
 
+// The count of thread to compact
+CONF_Int32(compact_threads, "4");
+CONF_Int32(compact_thread_pool_queue_size, "100");
+
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 // The user function dir.
@@ -250,7 +254,7 @@ CONF_Int64(index_stream_cache_capacity, "10737418240");
 // CONF_Int64(max_packed_row_block_size, "20971520");
 
 // Cache for storage page size
-CONF_String(storage_page_cache_limit, "20%");
+CONF_mString(storage_page_cache_limit, "20%");
 // whether to disable page cache feature in storage
 CONF_Bool(disable_storage_page_cache, "false");
 // whether to disable column pool
@@ -273,10 +277,6 @@ CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "1000");
 // -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 // CONF_Int32(cumulative_compaction_write_mbytes_per_sec, "100");
-// cumulative compaction skips recently published deltas in order to prevent
-// compacting a version that might be queried (in case the query planning phase took some time).
-// the following config set the window size
-CONF_mInt32(cumulative_compaction_skip_window_seconds, "30");
 
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_Int32(update_compaction_num_threads_per_disk, "1");
@@ -645,7 +645,7 @@ CONF_mInt32(sys_minidump_interval, "600");
 // The maximum number of version per tablet. If the
 // number of version exceeds this value, new write
 // requests will fail.
-CONF_Int16(tablet_max_versions, "1000");
+CONF_mInt16(tablet_max_versions, "1000");
 
 // The maximum number of pending versions allowed for a primary key tablet
 CONF_mInt32(tablet_max_pending_versions, "1000");

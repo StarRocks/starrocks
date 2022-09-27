@@ -91,12 +91,9 @@ public:
         int notnull_equal_count = 0;
 
         CompareVector cmp_vector(null_data.size());
-        // TODO: use IMD select_if
         auto merge_cmp_vector = [](CompareVector& a, CompareVector& b) {
             DCHECK_EQ(a.size(), b.size());
-            for (size_t i = 0; i < a.size(); ++i) {
-                a[i] = a[i] == 0 ? b[i] : a[i];
-            }
+            SIMD_selector<TYPE_TINYINT>::select_if((uint8_t*)a.data(), a, a, b);
         };
         if (_rhs_value.is_null()) {
             for (size_t i = 0; i < null_data.size(); i++) {

@@ -68,7 +68,6 @@ public:
 #endif
     }
 
-#ifdef __AVX2__
     void insert_hash_in_same_bucket(const uint64_t* hash_values, size_t n) {
         if (n == 0) return;
         const uint32_t bucket_idx = hash_values[0] & _directory_mask;
@@ -92,7 +91,6 @@ public:
         }
 #endif
     }
-#endif
 
     size_t max_serialized_size() const;
     size_t serialize(uint8_t* data) const;

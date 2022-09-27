@@ -30,7 +30,6 @@ import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -60,6 +59,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
@@ -74,6 +74,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
 
 public class Load {
     private static final Logger LOG = LogManager.getLogger(Load.class);
@@ -516,7 +518,7 @@ public class Load {
      *                         and column exists in both schema and expr args.
      */
     private static void replaceSrcSlotDescType(Table tbl, Map<String, Expr> exprsByName, TupleDescriptor srcTupleDesc,
-            Set<String> excludedColumns) throws UserException {
+                                               Set<String> excludedColumns) throws UserException {
         for (Map.Entry<String, Expr> entry : exprsByName.entrySet()) {
             // if expr is a simple SlotRef such as set(k1=k)
             // we can use k1's type for k, no need to convert to varchar
@@ -634,7 +636,7 @@ public class Load {
             exprsByName.put(entry.getKey(), expr);
         }
     }
-    
+
     /**
      * This method is used to transform hadoop function.
      * The hadoop function includes: replace_value, strftime, time_format, alignment_timestamp, default_value, now.
@@ -684,8 +686,12 @@ public class Load {
                         if (defaultValueType == Column.DefaultValueType.CONST) {
                             exprs.add(new StringLiteral(column.calculatedDefaultValue()));
                         } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                            throw new UserException("Column(" + columnName + ") has unsupported default value:"
-                                    + column.getDefaultExpr().getExpr());
+                            if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
+                                exprs.add(column.getDefaultExpr().obtainExpr());
+                            } else {
+                                throw new UserException("Column(" + columnName + ") has unsupported default value:"
+                                        + column.getDefaultExpr().getExpr());
+                            }
                         } else if (defaultValueType == Column.DefaultValueType.NULL) {
                             if (column.isAllowNull()) {
                                 exprs.add(NullLiteral.create(Type.VARCHAR));
@@ -707,8 +713,12 @@ public class Load {
                         if (defaultValueType == Column.DefaultValueType.CONST) {
                             innerIfExprs.add(new StringLiteral(column.calculatedDefaultValue()));
                         } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                            throw new UserException("Column(" + columnName + ") has unsupported default value:"
-                                    + column.getDefaultExpr().getExpr());
+                            if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
+                                innerIfExprs.add(column.getDefaultExpr().obtainExpr());
+                            } else {
+                                throw new UserException("Column(" + columnName + ") has unsupported default value:"
+                                        + column.getDefaultExpr().getExpr());
+                            }
                         } else if (defaultValueType == Column.DefaultValueType.NULL) {
                             if (column.isAllowNull()) {
                                 innerIfExprs.add(NullLiteral.create(Type.VARCHAR));

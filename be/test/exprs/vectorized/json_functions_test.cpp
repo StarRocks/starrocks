@@ -828,22 +828,28 @@ INSTANTIATE_TEST_SUITE_P(JsonLengthTest, JsonLengthTestFixture,
                         ));
 // clang-format on
 
-class JsonKeysTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string>> {};
+class JsonKeysTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::string>> {};
 
 TEST_P(JsonKeysTestFixture, json_keys) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto json_column = JsonColumn::create();
 
     std::string param_json = std::get<0>(GetParam());
-    std::string param_result = std::get<1>(GetParam());
+    std::string param_path = std::get<1>(GetParam());
+    std::string param_result = std::get<2>(GetParam());
 
     auto json = JsonValue::parse(param_json);
     ASSERT_TRUE(json.ok());
     json_column->append(&*json);
 
-    Columns columns{json_column};
+    Columns columns;
+    columns.push_back(json_column);
+    if (!param_path.empty()) {
+        auto path_column = BinaryColumn::create();
+        path_column->append(param_path);
+        columns.push_back(path_column);
+    }
 
-    // ctx.get()->impl()->set_constant_columns(columns);
     Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
     ASSERT_OK(st);
 
@@ -865,13 +871,16 @@ TEST_P(JsonKeysTestFixture, json_keys) {
 
 // clang-format off
 INSTANTIATE_TEST_SUITE_P(JsonKeysTest, JsonKeysTestFixture,
-                         ::testing::Values(std::make_tuple(R"({ "k1": 1, "k2": 2 })", R"(["k1", "k2"])"),
-                                           std::make_tuple(R"({ "k1": "v1" })",  R"(["k1"])"),
-                                           std::make_tuple(R"({ "k1": {"k2": 1} })",  R"(["k1"])"),
-                                           std::make_tuple(R"({ })",  R"([])"),
-                                           std::make_tuple(R"( [] )",  "NULL"),
-                                           std::make_tuple(R"( 1 )",  "NULL"),
-                                           std::make_tuple(R"( "hehe")", "NULL")
+                         ::testing::Values(std::make_tuple(R"({ "k1": 1, "k2": 2 })", "", R"(["k1", "k2"])"),
+                                           std::make_tuple(R"({ "k1": "v1" })",  "", R"(["k1"])"),
+                                           std::make_tuple(R"({ "k1": {"k2": 1} })",  "", R"(["k1"])"),
+                                           std::make_tuple(R"({ })",  "", R"([])"),
+                                           std::make_tuple(R"( [] )",  "", "NULL"),
+                                           std::make_tuple(R"( 1 )",  "", "NULL"),
+                                           std::make_tuple(R"( "hehe")", "", "NULL"),
+                                           std::make_tuple(R"({ "k1": "v1" })",  "$.k1", R"(NULL)"),
+                                           std::make_tuple(R"({ "k1": "v1" })",  "$.k3", R"(NULL)"),
+                                           std::make_tuple(R"({ "k1": {"k2": 1} })",  "$.k1", R"(["k2"])")
                          ));
 
 // clang-format on

@@ -8,7 +8,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -73,9 +72,9 @@ public class DistributedEnvTPCDSPlanTest extends TPCDSPlanTestBase {
                 " having count(*) >= 10\n" +
                 " order by cnt, a.ca_state\n" +
                 " limit 100;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("0:OlapScanNode\n" +
-                "     TABLE: store_sales"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: store_sales");
         FeConstants.runningUnitTest = false;
     }
 }

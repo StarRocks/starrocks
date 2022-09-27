@@ -34,6 +34,7 @@ public:
     StatusOr<int64_t> position() override { return _offset; }
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override;
     Status seek(int64_t offset) override;
+    void set_size(int64_t size) override;
 
 private:
     hdfsFS _fs;
@@ -89,6 +90,10 @@ StatusOr<int64_t> HdfsInputStream::get_size() {
         if (!st.ok()) return st;
     }
     return _file_size;
+}
+
+void HdfsInputStream::set_size(int64_t value) {
+    _file_size = value;
 }
 
 StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {
@@ -174,9 +179,6 @@ Status HDFSWritableFile::close() {
         return Status::OK();
     }
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
-        // If we open a file and close it immediately here (before this file is flushed to the disk),
-        // hdfs cannot find the file and will cause BE crash.
-        // To avoid this, before closing the file, we need to call file sync.
         int r = hdfsHSync(_fs, _file);
         if (r != 0) {
             return Status::IOError("sync error, file: {}"_format(_path));

@@ -1455,11 +1455,35 @@ public class Config extends ConfigBase {
     @ConfField
     public static int hive_meta_load_concurrency = 4;
 
+    /**
+     * The interval of lazy refreshing hive metastore cache
+     */
     @ConfField
     public static long hive_meta_cache_refresh_interval_s = 3600L * 2L;
 
+    /**
+     * Hive metastore cache ttl
+     */
     @ConfField
     public static long hive_meta_cache_ttl_s = 3600L * 24L;
+
+    /**
+     * Remote file's metadata from hdfs or s3 cache ttl
+     */
+    @ConfField
+    public static long remote_file_cache_ttl_s = 3600 * 36L;
+
+    /**
+     * The interval of lazy refreshing remote file's metadata cache
+     */
+    @ConfField
+    public static long remote_file_cache_refresh_interval_s = 60;
+
+    /**
+     * Number of threads to load remote file's metadata concurrency.
+     */
+    @ConfField
+    public static int remote_file_metadata_load_concurrency = 32;
 
     /**
      * Hive MetaStore Client socket timeout in seconds.
@@ -1684,13 +1708,6 @@ public class Config extends ConfigBase {
     public static int metadata_journal_max_batch_cnt = 100;
 
     /**
-     * Fqdn function switch,
-     * this switch will be deleted after release the fqdn func
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_fqdn_func = false;
-
-    /**
      * jaeger tracing endpoint, empty thing disables tracing
      */
     @ConfField
@@ -1731,4 +1748,11 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean recursive_dir_search_enabled = false;
+
+    /**
+     * Number of profile infos reserved by `ProfileManager` for recently executed query.
+     * Default value: 500
+     */
+    @ConfField(mutable = true)
+    public static int profile_info_reserved_num = 500;
 }
