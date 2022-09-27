@@ -62,7 +62,7 @@ void MemInfo::init() {
 
         while (meminfo.good() && !meminfo.eof()) {
             getline(meminfo, line);
-            std::vector <std::string> fields = strings::Split(line, " ", strings::SkipWhitespace());
+            std::vector<std::string> fields = strings::Split(line, " ", strings::SkipWhitespace());
 
             // We expect lines such as, e.g., 'MemTotal: 16129508 kB'
             if (fields.size() < 3) {
