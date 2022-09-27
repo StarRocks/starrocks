@@ -498,6 +498,9 @@ class QueryTransformer {
 
         List<Ordering> orderings = new ArrayList<>();
         for (OrderByElement item : orderByExpressions) {
+            if (item.getExpr().isLiteral()) {
+                continue;
+            }
             ColumnRefOperator column =
                     (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(item.getExpr(),
                             subOpt.getExpressionMapping(), columnRefFactory);
@@ -508,6 +511,11 @@ class QueryTransformer {
                 orderByColumns.add(column);
             }
         }
+
+        if (orderByColumns.isEmpty()) {
+            return subOpt;
+        }
+
         LogicalTopNOperator sortOperator = new LogicalTopNOperator(orderings);
 
         return subOpt.withNewRoot(sortOperator);
