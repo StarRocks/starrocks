@@ -11,7 +11,9 @@ For more information about basic statistics, see [Gather statistics for CBO](../
 #### Syntax
 
 ```SQL
-ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) PROPERTIES (property [,property]);
+ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
+[WITH SYNC | ASYNC MODE]
+PROPERTIES (property [,property]);
 ```
 
 #### Parameter description
@@ -22,6 +24,8 @@ ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) PROPERTIES (property
   - If no collection type is specified, full collection is used by default.
 
 - `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected.
+
+- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
 
 - `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in the `fe.conf` file are used. The properties that are actually used can be viewed via the `Properties` column in the output of SHOW ANALYZE STATUS.
 
@@ -63,13 +67,17 @@ For more information about histograms, see [Gather statistics for CBO](../../../
 #### Syntax
 
 ```SQL
-ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name] [WITH N BUCKETS]
+ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
+[WITH SYNC | ASYNC MODE]
+[WITH N BUCKETS]
 PROPERTIES (property [,property]);
 ```
 
 #### Parameter description
 
 - `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected. This parameter is required for histograms.
+
+- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
 
 - `WITH N BUCKETS`: `N` is the number of buckets for histogram collection. If not specified, the default value in `fe.conf` is used.
 
