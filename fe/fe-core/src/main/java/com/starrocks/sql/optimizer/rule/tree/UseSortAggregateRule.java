@@ -49,7 +49,7 @@ public class UseSortAggregateRule extends OptExpressionVisitor<Void, Void> imple
         if (!agg.getType().isGlobal()) {
             return null;
         }
-        
+
         OlapTable table = (OlapTable) scan.getTable();
         if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
             return null;
