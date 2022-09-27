@@ -284,8 +284,22 @@ void* StorageEngine::_garbage_sweeper_thread_callback(void* arg) {
         // when usage < 60%,curr_interval is about max_interval,
         // when usage > 80%, curr_interval is close to min_interval
         curr_interval = curr_interval > min_interval ? curr_interval : min_interval;
-        SLEEP_IN_BG_WORKER(curr_interval);
 
+        // For shutdown gracefully
+        std::cv_status cv_status = std::cv_status::no_timeout;
+        int64_t left_seconds = curr_interval;
+        while (!_bg_worker_stopped.load(std::memory_order_consume) && left_seconds > 0) {
+            std::unique_lock<std::mutex> lk(_trash_sweeper_mutex);
+            cv_status = _trash_sweeper_cv.wait_for(lk, std::chrono::seconds(1));
+            if (cv_status == std::cv_status::no_timeout) {
+                LOG(INFO) << "trash sweeper has been notified";
+                break;
+            }
+            --left_seconds;
+        }
+        if (_bg_worker_stopped.load(std::memory_order_consume)) {
+            break;
+        }
         // start sweep, and get usage after sweep
         Status res = _start_trash_sweep(&usage);
         if (!res.ok()) {
