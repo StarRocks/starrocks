@@ -3,7 +3,6 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -47,11 +46,6 @@ public class UseSortAggregateRule extends OptExpressionVisitor<Void, Void> imple
         PhysicalHashAggregateOperator agg = (PhysicalHashAggregateOperator) optExpression.getOp();
 
         if (!agg.getType().isGlobal()) {
-            return null;
-        }
-
-        OlapTable table = (OlapTable) scan.getTable();
-        if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
             return null;
         }
 

@@ -172,7 +172,7 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
         } else {
             _collect_iter = new_heap_merge_iterator(seg_iters);
         }
-    } else if (params.sorted_by_keys && keys_type == DUP_KEYS && seg_iters.size() > 1) {
+    } else if (params.sorted_by_keys && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) && seg_iters.size() > 1) {
         _collect_iter = new_heap_merge_iterator(seg_iters);
     } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr) ||
                (select_all_keys && seg_iters.size() == 1)) {
