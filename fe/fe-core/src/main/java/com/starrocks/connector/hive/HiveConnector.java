@@ -42,7 +42,7 @@ public class HiveConnector implements Connector {
     private HiveMetadataFactory createMetadataFactory() {
         IHiveMetastore metastore = internalMgr.createHiveMetastore();
         RemoteFileIO remoteFileIO = internalMgr.createRemoteFileIO();
-        return new HiveMetadataFactory(
+        return new HiveMetadataFactory(properties.get(HIVE_METASTORE_URIS),
                 catalogName,
                 metastore,
                 remoteFileIO,

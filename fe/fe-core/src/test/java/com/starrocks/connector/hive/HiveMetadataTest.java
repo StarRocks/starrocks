@@ -69,6 +69,7 @@ public class HiveMetadataTest {
 
     @Before
     public void setUp() throws Exception {
+        FeConstants.runningUnitTest = true;
         executorForHmsRefresh = Executors.newFixedThreadPool(5);
         executorForRemoteFileRefresh = Executors.newFixedThreadPool(5);
         executorForPullFiles = Executors.newFixedThreadPool(5);
@@ -92,7 +93,7 @@ public class HiveMetadataTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();
         optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
-        hiveMetadata = new HiveMetadata("hive_catalog", hmsOps, fileOps, statisticsProvider);
+        hiveMetadata = new HiveMetadata("xxx", "hive_catalog", hmsOps, fileOps, statisticsProvider);
     }
 
     @After
@@ -126,7 +127,6 @@ public class HiveMetadataTest {
         Database database = hiveMetadata.getDb("db1");
         Assert.assertEquals("db1", database.getFullName());
 
-        Assert.assertNull(hiveMetadata.getDb("db2"));
     }
 
     @Test

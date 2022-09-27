@@ -9,7 +9,6 @@ import java.util.Map;
 public class CachingRemoteFileConf {
     private final long cacheTtlSec;
     private final long cacheRefreshIntervalSec;
-    private final int loadRemoteFileMetadataThreadNum;
     private final long cacheMaxSize = 100000L;
     private final int perQueryCacheMaxSize = 10000;
 
@@ -18,8 +17,6 @@ public class CachingRemoteFileConf {
                 String.valueOf(Config.remote_file_cache_ttl_s)));
         this.cacheRefreshIntervalSec = Long.parseLong(conf.getOrDefault("remote_file_cache_refresh_interval_sec",
                 String.valueOf(Config.remote_file_cache_refresh_interval_s)));
-        this.loadRemoteFileMetadataThreadNum = Integer.parseInt(conf.getOrDefault("remote_file_load_thread_num",
-                String.valueOf(Config.remote_file_metadata_load_concurrency)));
     }
 
     public long getCacheTtlSec() {
@@ -36,9 +33,5 @@ public class CachingRemoteFileConf {
 
     public int getPerQueryCacheMaxSize() {
         return perQueryCacheMaxSize;
-    }
-
-    public int getLoadRemoteFileMetadataThreadNum() {
-        return loadRemoteFileMetadataThreadNum;
     }
 }

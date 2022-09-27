@@ -9,13 +9,18 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.external.RemoteFileInfo;
 import com.starrocks.external.RemoteFileOperations;
+import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HiveMetastoreOperations;
 import com.starrocks.external.hive.HiveStatisticsProvider;
+import com.starrocks.external.hive.HiveTableName;
 import com.starrocks.external.hive.Partition;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -33,24 +38,51 @@ public class HiveMetadata implements ConnectorMetadata {
     private final RemoteFileOperations fileOperations;
     private final HiveStatisticsProvider statisticsProvider;
 
-    public HiveMetadata(String catalogName,
+    private HiveMetaCache metaCache = null;
+    private final String resourceName;
+
+    public HiveMetadata(String resourceName, String catalogName,
                         HiveMetastoreOperations hmsOps,
                         RemoteFileOperations fileOperations,
                         HiveStatisticsProvider statisticsProvider) {
+        this.resourceName = resourceName;
         this.catalogName = catalogName;
         this.hmsOps = hmsOps;
         this.fileOperations = fileOperations;
         this.statisticsProvider = statisticsProvider;
     }
 
+    public HiveMetaCache getCache() throws DdlException {
+        if (metaCache == null) {
+            metaCache = GlobalStateMgr.getCurrentState().getHiveRepository().getMetaCache(resourceName);
+        }
+        return metaCache;
+    }
+
     @Override
     public List<String> listDbNames() {
-        return hmsOps.getAllDatabaseNames();
+        if (!FeConstants.runningUnitTest) {
+            try {
+                return getCache().getAllDatabaseNames();
+            } catch (Exception e) {
+                throw new RuntimeException();
+            }
+        } else {
+            return hmsOps.getAllDatabaseNames();
+        }
     }
 
     @Override
     public List<String> listTableNames(String dbName) {
-        return hmsOps.getAllTableNames(dbName);
+        if (!FeConstants.runningUnitTest) {
+            try {
+                return getCache().getAllTableNames(dbName);
+            } catch (Exception e) {
+                throw new RuntimeException();
+            }
+        } else {
+            return hmsOps.getAllTableNames(dbName);
+        }
     }
 
     @Override
@@ -61,23 +93,32 @@ public class HiveMetadata implements ConnectorMetadata {
     @Override
     public Database getDb(String dbName) {
         Database database;
-        try {
-            database = hmsOps.getDb(dbName);
-        } catch (Exception e) {
-            LOG.error("Failed to get hive meta cache on {}.{}", catalogName, dbName);
-            return null;
+        if (!FeConstants.runningUnitTest) {
+            try {
+                database = getCache().getDb(dbName);
+            } catch (Exception e) {
+                LOG.error("Failed to get hive meta cache on {}.{}", catalogName, dbName);
+                return null;
+            }
+        } else {
+            return hmsOps.getDb(dbName);
         }
+
         return database;
     }
 
     @Override
     public Table getTable(String dbName, String tblName) {
         Table table;
-        try {
-            table = hmsOps.getTable(dbName, tblName);
-        } catch (Exception e) {
-            LOG.error("Failed to get hive meta cache on {}.{}.{}", catalogName, dbName, tblName);
-            return null;
+        if (!FeConstants.runningUnitTest) {
+            try {
+                table = getCache().getTable(HiveTableName.of(dbName, tblName));
+            } catch (Exception e) {
+                LOG.error("Failed to get hive meta cache on {}.{}.{}", catalogName, dbName, tblName);
+                return null;
+            }
+        } else {
+            return hmsOps.getTable(dbName, tblName);
         }
 
         return table;

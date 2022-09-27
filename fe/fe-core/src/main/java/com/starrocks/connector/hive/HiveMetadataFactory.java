@@ -16,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import static com.starrocks.external.hive.CachingHiveMetastore.createQueryLevelInstance;
 
 public class HiveMetadataFactory {
+    private final String uris;
     private final String catalogName;
     private final IHiveMetastore metastore;
     private final RemoteFileIO remoteFileIO;
@@ -24,13 +25,14 @@ public class HiveMetadataFactory {
     private final ExecutorService pullRemoteFileExecutor;
     private final boolean isRecursive;
 
-    public HiveMetadataFactory(String catalogName,
+    public HiveMetadataFactory(String uris, String catalogName,
                                IHiveMetastore metastore,
                                RemoteFileIO remoteFileIO,
                                CachingHiveMetastoreConf hmsConf,
                                CachingRemoteFileConf fileConf,
                                ExecutorService pullRemoteFileExecutor,
                                boolean isRecursive) {
+        this.uris = uris;
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO;
@@ -49,6 +51,6 @@ public class HiveMetadataFactory {
                 isRecursive);
         HiveStatisticsProvider statisticsProvider = new HiveStatisticsProvider(hiveMetastoreOperations, remoteFileOperations);
 
-        return new HiveMetadata(catalogName, hiveMetastoreOperations, remoteFileOperations, statisticsProvider);
+        return new HiveMetadata(uris, catalogName, hiveMetastoreOperations, remoteFileOperations, statisticsProvider);
     }
 }

@@ -38,21 +38,20 @@ public class HiveConnectorInternalMgr {
     private ExecutorService pullRemoteFileExecutor;
 
     private final boolean isRecursive;
+    private final int loadRemoteFileMetadataThreadNum;
 
     public HiveConnectorInternalMgr(String catalogName, Map<String, String> properties) {
         this.catalogName = catalogName;
         this.properties = properties;
         this.enableMetastoreCache = Boolean.parseBoolean(properties.getOrDefault("enable_metastore_cache", "true"));
-        if (enableMetastoreCache) {
-            hmsConf = new CachingHiveMetastoreConf(properties);
-        }
+        this.hmsConf = new CachingHiveMetastoreConf(properties);
 
         this.enableRemoteFileCache = Boolean.parseBoolean(properties.getOrDefault("enable_remote_file_cache", "true"));
-        if (enableRemoteFileCache) {
-            remoteFileConf = new CachingRemoteFileConf(properties);
-        }
+        this.remoteFileConf = new CachingRemoteFileConf(properties);
 
-        isRecursive = Boolean.parseBoolean(properties.getOrDefault("hive_recursive_directories", "false"));
+        this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("hive_recursive_directories", "false"));
+        this.loadRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_load_thread_num",
+                String.valueOf(Config.remote_file_metadata_load_concurrency)));
     }
 
     public void shutdown() {
@@ -121,7 +120,7 @@ public class HiveConnectorInternalMgr {
 
     public ExecutorService getPullRemoteFileExecutor() {
         if (pullRemoteFileExecutor == null) {
-            pullRemoteFileExecutor = Executors.newFixedThreadPool(remoteFileConf.getLoadRemoteFileMetadataThreadNum(),
+            pullRemoteFileExecutor = Executors.newFixedThreadPool(loadRemoteFileMetadataThreadNum,
                     new ThreadFactoryBuilder().setNameFormat("pull-remote-files-%d").build());
         }
 

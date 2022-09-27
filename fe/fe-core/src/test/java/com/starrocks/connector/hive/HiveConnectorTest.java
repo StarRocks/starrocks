@@ -6,6 +6,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.FeConstants;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.external.CachingRemoteFileConf;
@@ -68,6 +69,7 @@ public class HiveConnectorTest {
 
     @Test
     public void testCreateHiveConnector(@Mocked HiveConnectorInternalMgr internalMgr) {
+        FeConstants.runningUnitTest = true;
         Map<String, String> properties = ImmutableMap.of("hive.metastore.uris", "thrift://127.0.0.1:9083", "type", "hive");
         new Expectations() {
             {
