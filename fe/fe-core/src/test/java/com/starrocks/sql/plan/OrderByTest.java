@@ -121,6 +121,45 @@ public class OrderByTest extends PlanTestBase {
     }
 
     @Test
+    public void tstOrderByNullLiteral() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "select * from t0 order by null limit 10;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0\n" +
+                "     limit: 10");
+
+        sql = "select * from (select max(v5) from t1) tmp order by null limit 10;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(2: v5)\n" +
+                "  |  group by: \n" +
+                "  |  limit: 10");
+
+        // TODO opt this case
+        sql = "select * from (select max(v5) from t1) tmp order by \"\" > null limit 10;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:TOP-N\n" +
+                "  |  order by: <slot 5> 5: expr ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 4> : 4: max\n" +
+                "  |  <slot 5> : NULL");
+    }
+
+    @Test
     public void testOrderByGroupByWithSubquery() throws Exception {
         String sql = "select t0.v2, sum(v3) as x3, " +
                 "(select sum(v5) from t1) as x1, " +
