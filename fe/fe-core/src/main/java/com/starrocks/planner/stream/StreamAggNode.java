@@ -106,6 +106,13 @@ public class StreamAggNode extends PlanNode {
         String groupingStr = groupingExprs.stream().map(Expr::toSql).collect(Collectors.joining(", "));
         msg.stream_agg_node.setSql_grouping_keys(groupingStr);
 
+        if (aggExprImtMap != null) {
+            msg.stream_agg_node.setAgg_func_imt_map(aggExprImtMap);
+        }
+        if (groupExprImtMap != null) {
+            msg.stream_agg_node.setGrouping_expr_imt_map(groupExprImtMap);
+        }
+
         // TODO: add more functionalities
 
         msg.stream_agg_node.setAgg_func_set_version(3);
