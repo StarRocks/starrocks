@@ -907,6 +907,20 @@ public class AggregateTest extends PlanTestBase {
         FeConstants.runningUnitTest = false;
     }
 
+    public void testWindowFunnelWithInvalidModeWindow() throws Exception {
+        FeConstants.runningUnitTest = true;
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("mode argument's range must be [0-7]");
+        String sql =
+                "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 8, [L_PARTKEY = 1]) from lineitem_partition_colocate" +
+                " group by L_ORDERKEY;";
+        try {
+            getFragmentPlan(sql);
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
+    }
+
     @Test
     public void testWindowFunnelWithNonDecimalWindow() throws Exception {
         FeConstants.runningUnitTest = true;
