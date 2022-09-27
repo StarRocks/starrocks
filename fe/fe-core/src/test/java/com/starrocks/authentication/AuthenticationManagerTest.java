@@ -3,30 +3,38 @@
 package com.starrocks.authentication;
 
 import com.starrocks.analysis.CreateUserStmt;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
 
 public class AuthenticationManagerTest {
-    ConnectContext ctx;
+    static ConnectContext ctx;
 
-    @Before
-    public void setUp() throws Exception {
+    @BeforeClass
+    public static void setUp() throws Exception {
+        UtFrameUtils.setUpForPersistTest();
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+    }
+
+    @AfterClass
+    public static void teardown() throws Exception {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
     public void testInitDefault() throws Exception {
-        AuthenticationManager manager = new AuthenticationManager();
-        manager.init();
+        AuthenticationManager manager = ctx.getGlobalStateMgr().getAuthenticationManager();
         Assert.assertTrue(manager.doesUserExist(UserIdentity.ROOT));
         Assert.assertFalse(manager.doesUserExist(UserIdentity.createAnalyzedUserIdentWithIp("fake", "%")));
         Assert.assertEquals(new UserProperty().getMaxConn(), manager.getMaxConn(AuthenticationManager.ROOT_USER));
@@ -45,7 +53,6 @@ public class AuthenticationManagerTest {
                 testUserWithIp.getQualifiedUser(), testUserWithIp.getHost(), scramble, seed));
         Assert.assertFalse(masterManager.doesUserExist(testUser));
         Assert.assertFalse(masterManager.doesUserExist(testUserWithIp));
-        UtFrameUtils.setUpForPersistTest();
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
         masterManager.save(emptyImage.getDataOutputStream());
@@ -117,7 +124,48 @@ public class AuthenticationManagerTest {
         Assert.assertEquals(user, testUserWithIp);
         user = followerManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.2", scramble, seed);
         Assert.assertNull(user);
+    }
 
-        UtFrameUtils.tearDownForPersisTest();
+    @Test
+    public void testDropAlterUser() throws Exception {
+        UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test", "%");
+        byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
+        byte[] scramble = MysqlPassword.scramble(seed, "abc");
+
+        AuthenticationManager manager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        Assert.assertNull(manager.checkPassword(
+                testUser.getQualifiedUser(), testUser.getHost(), scramble, seed));
+        Assert.assertFalse(manager.doesUserExist(testUser));
+
+        String sql = "create user test;";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+        Assert.assertNull(manager.checkPassword(
+                testUser.getQualifiedUser(), testUser.getHost(), scramble, seed));
+        Assert.assertTrue(manager.doesUserExist(testUser));
+
+        sql = "alter user test identified by 'abc'";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+        Assert.assertEquals(testUser,
+                manager.checkPassword(testUser.getQualifiedUser(), testUser.getHost(), scramble, seed));
+        Assert.assertTrue(manager.doesUserExist(testUser));
+
+        StatementBase dropStmt = UtFrameUtils.parseStmtWithNewParser("drop user test", ctx);
+        DDLStmtExecutor.execute(dropStmt, ctx);
+        Assert.assertNull(manager.checkPassword(
+                testUser.getQualifiedUser(), testUser.getHost(), scramble, seed));
+        Assert.assertFalse(manager.doesUserExist(testUser));
+
+        // can drop twice
+        DDLStmtExecutor.execute(dropStmt, ctx);
+
+        // cannot alter twice
+        try {
+            DDLStmtExecutor.execute(stmt, ctx);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("failed to alter user 'test'@'%'"));
+        }
     }
 }

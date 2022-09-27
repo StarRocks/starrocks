@@ -895,6 +895,17 @@ public class EditLog {
                             info.getUserIdentity(), info.getAuthenticationInfo(), info.getUserProperty());
                     break;
                 }
+                case OperationType.OP_ALTER_USER_V2: {
+                    AlterUserInfo info = (AlterUserInfo) journal.getData();
+                    globalStateMgr.getAuthenticationManager().replayAlterUser(
+                            info.getUserIdentity(), info.getAuthenticationInfo());
+                    break;
+                }
+                case OperationType.OP_DROP_USER_V2: {
+                    UserIdentity userIdentity = (UserIdentity) journal.getData();
+                    globalStateMgr.getAuthenticationManager().replayDropUser(userIdentity);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1527,5 +1538,14 @@ public class EditLog {
         info.setAuthenticationInfo(authenticationInfo);
         info.setUserProperty(userProperty);
         logEdit(OperationType.OP_CREATE_USER_V2, info);
+    }
+
+    public void logAlterUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo) {
+        AlterUserInfo info = new AlterUserInfo(userIdentity, authenticationInfo);
+        logEdit(OperationType.OP_ALTER_USER_V2, info);
+    }
+
+    public void logDropUser(UserIdentity userIdentity) {
+        logEdit(OperationType.OP_ALTER_USER_V2, userIdentity);
     }
 }

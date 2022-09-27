@@ -383,7 +383,11 @@ public class DDLStmtExecutor {
                         context.getGlobalStateMgr().getAuth().createUser((CreateUserStmt) stmt);
                     }
                 } else if (stmt instanceof AlterUserStmt) {
-                    context.getGlobalStateMgr().getAuth().alterUser((AlterUserStmt) stmt);
+                    if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                        context.getGlobalStateMgr().getAuthenticationManager().alterUser((AlterUserStmt) stmt);
+                    } else {
+                        context.getGlobalStateMgr().getAuth().alterUser((AlterUserStmt) stmt);
+                    }
                 } else {
                     throw new DdlException("unsupported user stmt: " + stmt.toSql());
                 }
@@ -394,7 +398,12 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropUserStatement(DropUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuth().dropUser(stmt);
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    context.getGlobalStateMgr().getAuthenticationManager().dropUser(stmt);
+                } else {
+                    context.getGlobalStateMgr().getAuth().dropUser(stmt);
+                }
+
             });
             return null;
         }
