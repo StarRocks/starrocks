@@ -1,5 +1,27 @@
 # StarRocks version 2.3
 
+## 2.3.3
+
+Release date: September 27, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Query result may be inaccurate when you query an Hive external table stored as a text file. [#11546](https://github.com/StarRocks/starrocks/pull/11546)
+
+- Nested arrays are not supported when you query Parquet files. [#10983](https://github.com/StarRocks/starrocks/pull/10983)
+
+- Queries or a query may time out if concurrent queries that read data from StarRocks and external data sources are routed to the same resource group, or a query reads data from StarRocks and external data sources. [#10983](https://github.com/StarRocks/starrocks/pull/10983)
+
+- When the Pipeline execution engine is enabled by default, the parameter parallel_fragment_exec_instance_num is changed to 1. It will cause data loading by using INSERT INTO to be slow. [#11462](https://github.com/StarRocks/starrocks/pull/11462)
+
+- BE may crash if there are mistakes when a expression is initialized. [#11396](https://github.com/StarRocks/starrocks/pull/11396)
+
+- The error heap-buffer-overflow may occur if you execute ORDER BY LIMIT.  [#11185](https://github.com/StarRocks/starrocks/pull/11185)
+
+- Schema change fails if you restart Leader FE in the meantime. [#11561](https://github.com/StarRocks/starrocks/pull/11561)
+
 ## 2.3.2
 
 Release date: September 7, 2022
@@ -128,3 +150,7 @@ Fixed the following bugs:
 - StarGo, a cluster management tool, can deploy, start, upgrade, and roll back clusters and manage multiple clusters. For more information, see [Deploy StarRocks with StarGo](../administration/stargo.md).
 
 - The pipeline engine is enabled by default when you upgrade StarRocks to version 2.3 or deploy StarRocks. The pipeline engine can improve the performance of simple queries in high concurrency scenarios and complex queries. If you detect significant performance regressions when using StarRocks 2.3, you can disable the pipeline engine by executing the `SET GLOBAL` statement to set `enable_pipeline_engine` to `false`.
+
+- The [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md) statement is compatible with the MySQL syntax and displays the privileges assigned to a user in the form of GRANT statements.
+
+- It is recommended that the memory_limitation_per_thread_for_schema_change ( BE configuration item)  use the default value 2 GB, and data is written to disk when data volume exceeds this limit. Therefore, if you have previously set this parameter to a larger value, it is recommended that you set it to 2 GB, otherwise a schema change task may take up a large amount of memory.
