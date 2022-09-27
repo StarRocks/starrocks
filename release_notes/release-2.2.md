@@ -1,5 +1,37 @@
 # StarRocks version 2.2
 
+## 2.2.7
+
+发布日期： 2022 年 9 月 23 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 导入 JSON 数据时可能出现数据丢失。 ([#11054](https://github.com/StarRocks/starrocks/issues/11054))
+- SHOW FULL TABLES 返回结果错误。 （[#11126](https://github.com/StarRocks/starrocks/issues/11126)）
+- 视图权限问题，之前版本需要同时拥有 base 表和视图的权限才能访问视图的数据，修复后只需要拥有视图权限就可以访问。 ([#11290](https://github.com/StarRocks/starrocks/pull/11290))
+- 复杂查询中一个 exists/in 子查询的bug。 ([#11415](https://github.com/StarRocks/starrocks/pull/11415))
+- REFRESH EXTERNAL TABLE 在 Hive 中做过 schema change 以后会失败。([#11406](https://github.com/StarRocks/starrocks/pull/11406))
+- FE在回放创建 bitmap 索引操作时可能出错。（[#11261](https://github.com/StarRocks/starrocks/pull/11261)）
+
+## 2.2.6
+
+发布日期： 2022 年 9 月 14 日
+
+### 问题修复
+
+修复了以下问题：
+
+- 子查询中有 LIMIT 时，`order by``...`` limit``...``offset`结果不准确。（[#9698](https://github.com/StarRocks/starrocks/issues/9698)）
+- 大规模数据的 Partial update 导致 BE crash。([#9809](https://github.com/StarRocks/starrocks/issues/9809))
+- 当 Bitmap 超过 2 GB 时，compaction 会导致 crash。([#11159](https://github.com/StarRocks/starrocks/pull/11159))
+- like/regexp 函数中 pattern 超过 16 KB 无法使用。([#10364](https://github.com/StarRocks/starrocks/issues/10364))
+
+### 行为调整
+
+- 修改 array<json> 的结果展示形式，输出结果使用单引号而不是转义符。 ([#10790](https://github.com/StarRocks/starrocks/issues/10790))
+
 ## 2.2.5
 
 发布日期： 2022 年 8 月 18 日
