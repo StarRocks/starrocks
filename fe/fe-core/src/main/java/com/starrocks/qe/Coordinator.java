@@ -204,6 +204,8 @@ public class Coordinator {
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
 
+    private final boolean usePipeline;
+
     // Resource group
     WorkGroup workGroup = null;
 
@@ -247,6 +249,8 @@ public class Coordinator {
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
         this.forceScheduleLocal = context.getSessionVariable().isForceScheduleLocal();
+
+        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
 
     // Used for broker load task/export task coordinator
@@ -269,6 +273,8 @@ public class Coordinator {
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
+
+        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
 
     public long getJobId() {
@@ -518,11 +524,6 @@ public class Coordinator {
             int backendId = 0;
             int profileFragmentId = 0;
 
-            // Disable pipeline engine for `INSERT INTO`.
-            // TODO: remove this when load supports pipeline engine.
-            boolean isEnablePipelineEngine = connectContext != null &&
-                    connectContext.getSessionVariable().isEnablePipelineEngine() &&
-                    fragments.stream().allMatch(PlanFragment::canUsePipeline);
             Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
 
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
@@ -544,7 +545,7 @@ public class Coordinator {
                 for (FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
                     fInstanceExecParam.backendId = backendId++;
                 }
-                if (isEnablePipelineEngine) {
+                if (usePipeline) {
                     List<FInstanceExecParam> firstFInstanceParamList = new ArrayList<>();
                     List<FInstanceExecParam> remainingFInstanceParamList = new ArrayList<>();
 
@@ -580,7 +581,7 @@ public class Coordinator {
                     Map<TUniqueId, TNetworkAddress> instanceId2Host =
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams =
-                            params.toThrift(instanceId2Host.keySet(), descTable, dbIds, isEnablePipelineEngine);
+                            params.toThrift(instanceId2Host.keySet(), descTable, dbIds, usePipeline);
                     List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
                     // This is a load process, and it is the first fragment.
@@ -704,8 +705,6 @@ public class Coordinator {
 
     private void setGlobalRuntimeFilterParams(FragmentExecParams topParams, TNetworkAddress mergeHost)
             throws Exception {
-        boolean enablePipelineEngine = connectContext != null &&
-                connectContext.getSessionVariable().isEnablePipelineEngine();
 
         Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
         List<RuntimeFilterDescription> broadcastGRFList = Lists.newArrayList();
@@ -713,7 +712,6 @@ public class Coordinator {
         for (PlanFragment fragment : fragments) {
             fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
             fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
-            boolean usePipeline = enablePipelineEngine && fragment.canUsePipeline();
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {
                 List<TRuntimeFilterProberParams> probeParamList = Lists.newArrayList();
@@ -1193,9 +1191,8 @@ public class Coordinator {
             PlanFragment fragment = fragments.get(i);
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
 
-            boolean dopAdaptionEnabled = connectContext != null &&
-                    connectContext.getSessionVariable().isPipelineDopAdaptionEnabled() &&
-                    fragment.getPlanRoot().canUsePipeLine();
+            boolean dopAdaptionEnabled =
+                    usePipeline && connectContext.getSessionVariable().isPipelineDopAdaptionEnabled();
 
             // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
             if (fragment.getChildren().size() > 0 && fragment.getChild(0) instanceof MultiCastPlanFragment) {
@@ -1749,7 +1746,7 @@ public class Coordinator {
             return;
         }
 
-        if (!sessionVariable.isEnablePipelineEngine()) {
+        if (!usePipeline) {
             return;
         }
 
@@ -2710,5 +2707,18 @@ public class Coordinator {
             scanRangeParams.scan_range = scanRangeLocations.scan_range;
             scanRangeParamsList.add(scanRangeParams);
         }
+    }
+
+    /**
+     * Whether it can use pipeline engine.
+     * @param connectContext It is null for broker broker export.
+     * @param fragments All the fragments need to execute.
+     * @return true if enabling pipeline in the session variable and all the fragments can use pipeline,
+     * otherwise false.
+     */
+    private boolean canUsePipeline(ConnectContext connectContext, List<PlanFragment> fragments) {
+        return connectContext != null &&
+                connectContext.getSessionVariable().isEnablePipelineEngine() &&
+                fragments.stream().allMatch(PlanFragment::canUsePipeline);
     }
 }

@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "common/object_pool.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "fs/fs_hdfs.h"
@@ -255,12 +256,14 @@ private:
     void update_hdfs_counter(HdfsScanProfile* profile);
 
 protected:
+    Status open_random_access_file();
     std::atomic_bool _pending_token = false;
 
     HdfsScannerContext _scanner_ctx;
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanStats _stats;
+    ObjectPool _pool;
     // predicate collections.
     std::vector<ExprContext*> _conjunct_ctxs;
     // columns we want to fetch.
@@ -271,6 +274,8 @@ protected:
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
     std::unique_ptr<RandomAccessFile> _raw_file;
     std::unique_ptr<RandomAccessFile> _file;
+    // by default it's no compression.
+    CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
 };
 
 } // namespace starrocks::vectorized

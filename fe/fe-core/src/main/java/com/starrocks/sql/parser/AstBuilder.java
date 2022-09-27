@@ -670,7 +670,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.qualifiedName() != null) {
             database = getQualifiedName(context.qualifiedName()).toString();
         }
-        return new ShowMaterializedViewStmt(database);
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new ShowMaterializedViewStmt(database, stringLiteral.getValue());
+        } else if (context.expression() != null) {
+            return new ShowMaterializedViewStmt(database, (Expr) visit(context.expression()));
+        } else {
+            return new ShowMaterializedViewStmt(database);
+        }
     }
 
     @Override

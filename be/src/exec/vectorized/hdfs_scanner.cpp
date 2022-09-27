@@ -5,7 +5,9 @@
 #include <boost/algorithm/string.hpp>
 
 #include "column/column_helper.h"
+#include "exec/decompressor.h"
 #include "exec/exec_node.h"
+#include "io/compressed_input_stream.h"
 
 namespace starrocks::vectorized {
 
@@ -56,7 +58,7 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
     }
 
     // general conjuncts.
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(_scanner_params.conjunct_ctxs, runtime_state, &_conjunct_ctxs));
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(runtime_state, &_pool, _scanner_params.conjunct_ctxs, &_conjunct_ctxs));
 
     // slot id conjuncts.
     const auto& conjunct_ctxs_by_slot = _scanner_params.conjunct_ctxs_by_slot;
@@ -64,7 +66,8 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
         for (auto iter = conjunct_ctxs_by_slot.begin(); iter != conjunct_ctxs_by_slot.end(); ++iter) {
             SlotId slot_id = iter->first;
             _conjunct_ctxs_by_slot.insert({slot_id, std::vector<ExprContext*>()});
-            RETURN_IF_ERROR(Expr::clone_if_not_exists(iter->second, runtime_state, &_conjunct_ctxs_by_slot[slot_id]));
+            RETURN_IF_ERROR(
+                    Expr::clone_if_not_exists(runtime_state, &_pool, iter->second, &_conjunct_ctxs_by_slot[slot_id]));
         }
     }
 
@@ -148,10 +151,6 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     if (_is_open) {
         return Status::OK();
     }
-    CHECK(_file == nullptr) << "File has already been opened";
-    ASSIGN_OR_RETURN(_raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path));
-    _file = std::make_unique<RandomAccessFile>(
-            std::make_shared<CountedSeekableInputStream>(_raw_file->stream(), &_stats), _raw_file->filename());
     _build_scanner_context();
     auto status = do_open(runtime_state);
     if (status.ok()) {
@@ -194,6 +193,25 @@ void HdfsScanner::enter_pending_queue() {
 
 uint64_t HdfsScanner::exit_pending_queue() {
     return _pending_queue_sw.reset();
+}
+
+Status HdfsScanner::open_random_access_file() {
+    CHECK(_file == nullptr) << "File has already been opened";
+    ASSIGN_OR_RETURN(_raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path))
+    auto stream = std::make_shared<CountedSeekableInputStream>(_raw_file->stream(), &_stats);
+    if (_compression_type == CompressionTypePB::NO_COMPRESSION) {
+        _file = std::make_unique<RandomAccessFile>(stream, _raw_file->filename());
+    } else {
+        using DecompressorPtr = std::shared_ptr<Decompressor>;
+        std::unique_ptr<Decompressor> dec;
+        RETURN_IF_ERROR(Decompressor::create_decompressor(_compression_type, &dec));
+        auto compressed_input_stream =
+                std::make_shared<io::CompressedInputStream>(stream, DecompressorPtr(dec.release()));
+        auto compressed_seekable_input_stream =
+                std::make_shared<io::CompressedSeekableInputStream>(compressed_input_stream);
+        _file = std::make_unique<RandomAccessFile>(compressed_seekable_input_stream, _raw_file->filename());
+    }
+    return Status::OK();
 }
 
 void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
