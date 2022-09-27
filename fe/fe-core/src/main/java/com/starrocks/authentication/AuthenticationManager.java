@@ -167,11 +167,11 @@ public class AuthenticationManager {
             UserIdentity userIdentity, UserAuthenticationInfo info, boolean shouldExists) throws AuthenticationException {
         if (userToAuthenticationInfo.containsKey(userIdentity)) {
             if (! shouldExists) {
-                throw new AuthenticationException("failed to find user " + userIdentity.getQualifiedUser());
+                throw new AuthenticationException("user " + userIdentity.getQualifiedUser() + " already exists");
             }
         } else {
             if (shouldExists) {
-                throw new AuthenticationException("user " + userIdentity.getQualifiedUser() + " already exists");
+                throw new AuthenticationException("failed to find user " + userIdentity.getQualifiedUser());
             }
         }
         userToAuthenticationInfo.put(userIdentity, info);
