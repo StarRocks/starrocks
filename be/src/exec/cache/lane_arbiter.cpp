@@ -16,12 +16,9 @@ LaneArbiter::LaneArbiter(int num_lanes)
 void LaneArbiter::enable_passthrough_mode() {
     _passthrough_mode = true;
 }
+
 bool LaneArbiter::in_passthrough_mode() const {
     return _passthrough_mode;
-}
-bool LaneArbiter::has_free_lane() const {
-    return std::any_of(_assignments.begin(), _assignments.end(),
-                       [](auto& assign) { return assign == LANE_UNASSIGNED; });
 }
 
 int LaneArbiter::num_lanes() const {

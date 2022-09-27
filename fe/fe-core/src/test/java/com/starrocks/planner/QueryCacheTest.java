@@ -9,6 +9,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
@@ -365,7 +366,7 @@ public class QueryCacheTest {
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         ctx.getSessionVariable().setEnableQueryCache(true);
-        ctx.getSessionVariable().setEnableTestMode(true);
+        FeConstants.runningUnitTest = true;
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("qc_db").useDatabase("qc_db");
         starRocksAssert.withTable(createTbl0StmtStr);

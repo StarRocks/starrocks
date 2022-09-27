@@ -21,7 +21,6 @@
 
 package com.starrocks.qe;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
@@ -279,12 +278,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
-
-    // test_mode is only used in FE unit tests, it is invisible to user, we must check the
-    // results of partition predicate decomposition in UT, but PartitionPruneRule always prune
-    // partitions have no data. when this flag is on, these empty partitions are not pruned.
-    public static final String ENABLE_TEST_MODE = "test_mode";
-
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -673,9 +666,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = QUERY_CACHE_ENTRY_MAX_ROWS)
     private long queryCacheEntryMaxRows = 409600;
-
-    @VarAttr(name = ENABLE_TEST_MODE, flag = VariableMgr.INVISIBLE)
-    private boolean enableTestMode = false;
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
@@ -1248,16 +1238,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isQueryCacheForcePopulate() {
         return queryCacheForcePopulate;
-    }
-
-    @VisibleForTesting
-    public boolean isEnableTestMode() {
-        return enableTestMode;
-    }
-
-    @VisibleForTesting
-    public void setEnableTestMode(boolean on) {
-        enableTestMode = on;
     }
 
     // Serialize to thrift object

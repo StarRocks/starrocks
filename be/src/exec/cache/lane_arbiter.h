@@ -1,6 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
+#include <gutil/macros.h>
+
 #include <atomic>
 #include <memory>
 #include <optional>
@@ -51,7 +53,6 @@ public:
     ~LaneArbiter() = default;
     void enable_passthrough_mode();
     bool in_passthrough_mode() const;
-    bool has_free_lane() const;
     AcquireResult try_acquire_lane(LaneOwnerType lane_owner);
     size_t must_acquire_lane(LaneOwnerType lane_owner);
     void release_lane(LaneOwnerType lane_owner);
@@ -61,8 +62,7 @@ public:
 
 private:
     int32_t _acquire_lane(LaneOwnerType lane_owner);
-    LaneArbiter(const LaneArbiter&) = delete;
-    LaneArbiter& operator=(const LaneArbiter&) = delete;
+    DISALLOW_COPY_AND_MOVE(LaneArbiter);
     std::atomic<bool> _passthrough_mode;
     const size_t _num_lanes;
     std::vector<LaneAssignment> _assignments;
