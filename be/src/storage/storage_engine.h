@@ -332,6 +332,9 @@ private:
     std::mutex _checker_mutex;
     std::condition_variable _checker_cv;
 
+    std::mutex _trash_sweeper_mutex;
+    std::condition_variable _trash_sweeper_cv;
+
     // For tablet and disk-stat report
     std::mutex _report_mtx;
     std::condition_variable _report_cv;
