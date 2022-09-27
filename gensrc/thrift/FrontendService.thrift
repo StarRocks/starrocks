@@ -324,6 +324,10 @@ struct TTableStatus {
     5: optional i64 last_check_time
     6: optional i64 create_time
     20: optional string ddl_sql
+    // id for materialized view
+    21: optional string id
+    // row_count for materialized view
+    22: optional string rows
 }
 
 struct TListTableStatusResult {
@@ -483,8 +487,11 @@ struct TShowResultSet {
 struct TMasterOpResult {
     1: required i64 maxJournalId;
     2: required binary packet;
+    // for show statement
     3: optional TShowResultSet resultSet;
     4: optional string state;
+    // for query statement
+    5: optional list<binary> channelBufferList;
 }
 
 struct TIsMethodSupportedRequest {
