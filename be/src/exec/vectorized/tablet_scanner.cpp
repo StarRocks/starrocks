@@ -133,11 +133,11 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
         _params.chunk_size = runtime_state()->chunk_size();
     }
 
-    PredicateParser parser(_tablet->tablet_schema());
+    auto parser = _pool.add(new PredicateParser(_tablet->tablet_schema()));
     std::vector<PredicatePtr> preds;
-    RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(&parser, &preds));
+    RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(parser, &preds));
     for (auto& p : preds) {
-        if (parser.can_pushdown(p.get())) {
+        if (parser->can_pushdown(p.get())) {
             _params.predicates.push_back(p.get());
         } else {
             _predicates.add(p.get());
@@ -335,6 +335,8 @@ void TabletScanner::update_counter() {
     COUNTER_UPDATE(_parent->_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
     COUNTER_UPDATE(_parent->_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
     COUNTER_UPDATE(_parent->_seg_zm_filtered_counter, _reader->stats().segment_stats_filtered);
+    COUNTER_UPDATE(_parent->_seg_rt_filtered_counter, _reader->stats().runtime_stats_filtered);
+
     COUNTER_UPDATE(_parent->_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_parent->_bf_filtered_counter, _reader->stats().rows_bf_filtered);
     COUNTER_UPDATE(_parent->_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
