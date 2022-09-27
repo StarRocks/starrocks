@@ -52,11 +52,20 @@ export_mem_limit_from_conf() {
         fi
     done < $1
 
-    # read /proc/meminfo to fetch total memory of machine
-    mem_total=$(cat /proc/meminfo |grep 'MemTotal' |awk -F : '{print $2}' |sed 's/^[ \t]*//g' | awk '{printf $1}')
-    if [ "$mem_total" == "" ]; then
-        echo "can't get mem info from /proc/meminfo"
-        return 1
+    if [ -f /.dockerenv ]; then
+        mem_total=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes | awk '{printf $1}')
+        if [ "$mem_total" == "" ]; then
+            echo "can't get mem info from /sys/fs/cgroup/memory/memory.limit_in_bytes"
+            return 1
+        fi
+        mem_total=`expr $mem_total / 1024`
+    else
+        # read /proc/meminfo to fetch total memory of machine
+        mem_total=$(cat /proc/meminfo |grep 'MemTotal' |awk -F : '{print $2}' |sed 's/^[ \t]*//g' | awk '{printf $1}')
+        if [ "$mem_total" == "" ]; then
+            echo "can't get mem info from /proc/meminfo"
+            return 1
+        fi
     fi
 
     if [ "$mem_limit_is_set" == "false" ]; then

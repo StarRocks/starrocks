@@ -35,36 +35,58 @@ bool MemInfo::_s_initialized = false;
 int64_t MemInfo::_s_physical_mem = -1;
 
 void MemInfo::init() {
-    // Read from /proc/meminfo
-    std::ifstream meminfo("/proc/meminfo", std::ios::in);
-    std::string line;
+    // check if application is in docker container or not via /.dockerenv file
+    std::ifstream dockerEnv("/.dockerenv");
 
-    while (meminfo.good() && !meminfo.eof()) {
-        getline(meminfo, line);
-        std::vector<std::string> fields = strings::Split(line, " ", strings::SkipWhitespace());
+    if (dockerEnv.goods() && !dockerEnv.eof()) {
+        // Read from /sys/fs/cgroup/memory/memory.limit_in_bytes
+        std::ifstream memoryLimit("/sys/fs/cgroup/memory/memory.limit_in_bytes");
+        std::string line;
 
-        // We expect lines such as, e.g., 'MemTotal: 16129508 kB'
-        if (fields.size() < 3) {
-            continue;
-        }
-
-        if (fields[0].compare("MemTotal:") != 0) {
-            continue;
-        }
-
+        getline(memoryLimit, line);
         StringParser::ParseResult result;
-        int64_t mem_total_kb = StringParser::string_to_int<int64_t>(fields[1].data(), fields[1].size(), &result);
+        int64_t memory_limit_bytes = StringParser::string_to_int<int64_t>(line.data(), line.size(), &result);
 
         if (result == StringParser::PARSE_SUCCESS) {
-            // Entries in /proc/meminfo are in KB.
-            _s_physical_mem = mem_total_kb * 1024L;
+            _s_physical_mem = memory_limit_bytes;
         }
 
-        break;
-    }
+        if (memoryLimit.is_open()) {
+            memoryLimit.close();
+        }
 
-    if (meminfo.is_open()) {
-        meminfo.close();
+    } else {
+        // Read from /proc/meminfo
+        std::ifstream meminfo("/proc/meminfo", std::ios::in);
+        std::string line;
+
+        while (meminfo.good() && !meminfo.eof()) {
+            getline(meminfo, line);
+            std::vector <std::string> fields = strings::Split(line, " ", strings::SkipWhitespace());
+
+            // We expect lines such as, e.g., 'MemTotal: 16129508 kB'
+            if (fields.size() < 3) {
+                continue;
+            }
+
+            if (fields[0].compare("MemTotal:") != 0) {
+                continue;
+            }
+
+            StringParser::ParseResult result;
+            int64_t mem_total_kb = StringParser::string_to_int<int64_t>(fields[1].data(), fields[1].size(), &result);
+
+            if (result == StringParser::PARSE_SUCCESS) {
+                // Entries in /proc/meminfo are in KB.
+                _s_physical_mem = mem_total_kb * 1024L;
+            }
+
+            break;
+        }
+
+        if (meminfo.is_open()) {
+            meminfo.close();
+        }
     }
 
     if (_s_physical_mem == -1) {
