@@ -365,4 +365,33 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Data type of first column cannot be HLL",
                 () -> createTable("create table test.tmp3\n" + "(k1 hll, k2 float)\n"));
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testNameWithUnderscore() throws Exception {
+        // table name with one underscore is fine
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql = "CREATE TABLE test._txx(_k1 VARCHAR(100)) DISTRIBUTED BY HASH(_k1) "
+                + "BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
+        starRocksAssert.withTable(sql);
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                .getTable("_txx");
+        Assert.assertEquals(1, table.getColumns().size());
+        Assert.assertNotNull(
+                table.getColumn("_k1"));
+
+        // table name with two underscore is not allowed
+        sql = "CREATE TABLE test.__txx(_k1 VARCHAR(100)) DISTRIBUTED BY HASH(_k1) "
+                + "BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
+        try {
+            starRocksAssert.withTable(sql);
+            Assert.fail();
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("Incorrect table name"));
+        }
+    }
+}
+>>>>>>> 0e2f13a5b ([Enhancement] support table name with one leading underscore (#11642))
