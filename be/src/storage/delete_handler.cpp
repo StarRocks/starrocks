@@ -146,6 +146,8 @@ bool DeleteConditionHandler::is_condition_value_valid(const TabletColumn& column
     } else if (field_type == OLAP_FIELD_TYPE_DATE || field_type == OLAP_FIELD_TYPE_DATE_V2 ||
                field_type == OLAP_FIELD_TYPE_DATETIME || field_type == OLAP_FIELD_TYPE_TIMESTAMP) {
         valid_condition = valid_datetime(value_str);
+    } else if (field_type == OLAP_FIELD_TYPE_IPV4) {
+        valid_condition = valid_ipv4(value_str);
     } else if (field_type == OLAP_FIELD_TYPE_BOOL) {
         valid_condition = valid_bool(value_str);
     } else {

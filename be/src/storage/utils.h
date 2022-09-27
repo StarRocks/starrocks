@@ -146,6 +146,8 @@ bool valid_datetime(const std::string& value_str);
 
 bool valid_bool(const std::string& value_str);
 
+bool valid_ipv4(const std::string& value_str);
+
 // Util used to get string name of thrift enum item
 #define EnumToString(enum_type, index, out)                   \
     do {                                                      \

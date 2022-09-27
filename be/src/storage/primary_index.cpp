@@ -898,6 +898,8 @@ static std::unique_ptr<HashIndex> create_hash_index(FieldType key_type, size_t f
         return std::make_unique<HashIndexImpl<int32_t>>();
     case OLAP_FIELD_TYPE_TIMESTAMP:
         return std::make_unique<HashIndexImpl<int64_t>>();
+    case OLAP_FIELD_TYPE_IPV4:
+        return std::make_unique<HashIndexImpl<int64_t>>();
     default:
         return nullptr;
     }

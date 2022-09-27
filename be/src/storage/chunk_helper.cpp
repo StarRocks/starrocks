@@ -51,6 +51,11 @@ struct CppColumnTraits<OLAP_FIELD_TYPE_TIMESTAMP> {
     using ColumnType = vectorized::TimestampColumn;
 };
 
+template <>
+struct CppColumnTraits<OLAP_FIELD_TYPE_IPV4> {
+    using ColumnType = vectorized::Ipv4Column;
+};
+
 // deprecated
 template <>
 struct CppColumnTraits<OLAP_FIELD_TYPE_DECIMAL> {

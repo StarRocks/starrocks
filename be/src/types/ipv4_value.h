@@ -49,7 +49,7 @@ public:
 
 Ipv4Value Ipv4Value::create(std::string ip) {
     Ipv4Value ts;
-    ts._ip = 123455;
+    ts._ip = 121;
     return ts;
 }
 

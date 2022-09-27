@@ -239,6 +239,10 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<OLAP_FIELD_TYPE_DATETIME, PLAIN_ENCODING>();
     _add_map<OLAP_FIELD_TYPE_DATETIME, FOR_ENCODING, true>();
 
+    _add_map<OLAP_FIELD_TYPE_IPV4, BIT_SHUFFLE>();
+    _add_map<OLAP_FIELD_TYPE_IPV4, PLAIN_ENCODING>();
+    _add_map<OLAP_FIELD_TYPE_IPV4, FOR_ENCODING, true>();
+
     _add_map<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE>();
     _add_map<OLAP_FIELD_TYPE_TIMESTAMP, PLAIN_ENCODING>();
     _add_map<OLAP_FIELD_TYPE_TIMESTAMP, FOR_ENCODING, true>();

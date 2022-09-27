@@ -581,6 +581,7 @@ ValueColumnAggregatorPtr create_value_aggregator(FieldType type, FieldAggregatio
             CASE_MAX(OLAP_FIELD_TYPE_DATE, DateColumn, DateValue)
             CASE_MAX(OLAP_FIELD_TYPE_DATE_V2, DateColumn, DateValue)
             CASE_MAX(OLAP_FIELD_TYPE_DATETIME, TimestampColumn, TimestampValue)
+            CASE_MAX(OLAP_FIELD_TYPE_IPV4, Ipv4Column, Ipv4Value)
             CASE_MAX(OLAP_FIELD_TYPE_TIMESTAMP, TimestampColumn, TimestampValue)
             CASE_MAX(OLAP_FIELD_TYPE_CHAR, BinaryColumn, SliceState)
             CASE_MAX(OLAP_FIELD_TYPE_VARCHAR, BinaryColumn, SliceState)
@@ -605,6 +606,7 @@ ValueColumnAggregatorPtr create_value_aggregator(FieldType type, FieldAggregatio
             CASE_MIN(OLAP_FIELD_TYPE_DATE, DateColumn, DateValue)
             CASE_MIN(OLAP_FIELD_TYPE_DATE_V2, DateColumn, DateValue)
             CASE_MIN(OLAP_FIELD_TYPE_DATETIME, TimestampColumn, TimestampValue)
+            CASE_MIN(OLAP_FIELD_TYPE_IPV4, Ipv4Column, Ipv4Value)
             CASE_MIN(OLAP_FIELD_TYPE_TIMESTAMP, TimestampColumn, TimestampValue)
             CASE_MIN(OLAP_FIELD_TYPE_CHAR, BinaryColumn, SliceState)
             CASE_MIN(OLAP_FIELD_TYPE_VARCHAR, BinaryColumn, SliceState)
@@ -630,6 +632,7 @@ ValueColumnAggregatorPtr create_value_aggregator(FieldType type, FieldAggregatio
             CASE_REPLACE(OLAP_FIELD_TYPE_DATE, DateColumn, DateValue)
             CASE_REPLACE(OLAP_FIELD_TYPE_DATE_V2, DateColumn, DateValue)
             CASE_REPLACE(OLAP_FIELD_TYPE_DATETIME, TimestampColumn, TimestampValue)
+            CASE_REPLACE(OLAP_FIELD_TYPE_IPV4, Ipv4Column, Ipv4Value)
             CASE_REPLACE(OLAP_FIELD_TYPE_TIMESTAMP, TimestampColumn, TimestampValue)
             CASE_REPLACE(OLAP_FIELD_TYPE_CHAR, BinaryColumn, SliceState)
             CASE_REPLACE(OLAP_FIELD_TYPE_VARCHAR, BinaryColumn, SliceState)
@@ -696,6 +699,7 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(
         CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_DECIMAL128, Decimal128Column)
         CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_DATE_V2, DateColumn)
         CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_TIMESTAMP, TimestampColumn)
+        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_IPV4, Ipv4Column)
         CASE_DEFAULT_WARNING(type)
     }
 }

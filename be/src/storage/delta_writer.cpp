@@ -268,6 +268,7 @@ Status DeltaWriter::_flush_memtable() {
 
 void DeltaWriter::_reset_mem_table() {
     if (!_schema_initialized) {
+        std::cout << "zdccc========================schema:" << _tablet_schema->debug_string() << std::endl;
         _vectorized_schema = std::move(MemTable::convert_schema(_tablet_schema, _opt.slots));
         _schema_initialized = true;
     }

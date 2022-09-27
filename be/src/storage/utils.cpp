@@ -377,4 +377,8 @@ bool valid_bool(const std::string& value_str) {
     return result == StringParser::PARSE_SUCCESS;
 }
 
+bool valid_ipv4(const std::string& value_str) {
+    return true;
+}
+
 } // namespace starrocks

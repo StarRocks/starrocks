@@ -750,6 +750,11 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE> : public ScalarTypeInfoImplBase<
             return Status::OK();
         }
 
+        if (src_type->type() == FieldType::OLAP_FIELD_TYPE_IPV4) {
+            //todo zd
+            return Status::OK();
+        }
+
         if (src_type->type() == FieldType::OLAP_FIELD_TYPE_INT) {
             using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_INT>::CppType;
             SrcType src_value = unaligned_load<SrcType>(src);
@@ -915,6 +920,36 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_TIMESTAMP> : public ScalarTypeInfoImpl
     }
     static void set_to_max(void* buf) { unaligned_store<CppType>(buf, vectorized::timestamp::MAX_TIMESTAMP); }
     static void set_to_min(void* buf) { unaligned_store<CppType>(buf, vectorized::timestamp::MIN_TIMESTAMP); }
+};
+
+template <>
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_IPV4> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_IPV4> {
+    //todo zd
+    static Status from_string(void* buf, const std::string& scan_key) {
+        auto timestamp = unaligned_load<vectorized::Ipv4Value>(buf);
+        if (!timestamp.from_string(scan_key.data(), scan_key.size())) {
+            // Compatible with OLAP_FIELD_TYPE_DATETIME
+            timestamp.from_string("1400-01-01 00:00:00", sizeof("1400-01-01 00:00:00") - 1);
+        }
+        unaligned_store<vectorized::Ipv4Value>(buf, timestamp);
+        return Status::OK();
+    }
+
+    static std::string to_string(const void* src) {
+        auto timestamp = unaligned_load<vectorized::Ipv4Value>(src);
+        return timestamp.to_string();
+    }
+
+    static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) {
+        vectorized::Ipv4Value value;
+        auto converter = vectorized::get_type_converter(src_type->type(), OLAP_FIELD_TYPE_IPV4);
+        auto st = converter->convert(&value, src, mem_pool);
+        unaligned_store<vectorized::Ipv4Value>(dest, value);
+        RETURN_IF_ERROR(st);
+        return Status::OK();
+    }
+    static void set_to_max(void* buf) { unaligned_store<CppType>(buf, vectorized::timestamp::MAX_TIMESTAMP); }
+    static void set_to_min(void* buf) { unaligned_store<CppType>(buf, 0l); }
 };
 
 template <>

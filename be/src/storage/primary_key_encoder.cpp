@@ -238,6 +238,7 @@ bool PrimaryKeyEncoder::is_supported(const vectorized::Field& f) {
     case OLAP_FIELD_TYPE_VARCHAR:
     case OLAP_FIELD_TYPE_DATE_V2:
     case OLAP_FIELD_TYPE_TIMESTAMP:
+    case OLAP_FIELD_TYPE_IPV4:
         return true;
     default:
         return false;
@@ -318,6 +319,9 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
         case OLAP_FIELD_TYPE_TIMESTAMP:
             *pcolumn = vectorized::TimestampColumn::create_mutable();
             break;
+        case OLAP_FIELD_TYPE_IPV4:
+            *pcolumn = vectorized::Ipv4Column ::create_mutable();
+            break;
         default:
             return Status::NotSupported(StringPrintf("primary key type not support: %s", field_type_to_string(type)));
         }
@@ -386,6 +390,11 @@ static void prepare_ops_datas(const vectorized::Schema& schema, const vectorized
             };
             break;
         case OLAP_FIELD_TYPE_TIMESTAMP:
+            ops[j] = [](const void* data, int idx, string* buff) {
+                encode_integral(((const int64_t*)data)[idx], buff);
+            };
+            break;
+        case OLAP_FIELD_TYPE_IPV4:
             ops[j] = [](const void* data, int idx, string* buff) {
                 encode_integral(((const int64_t*)data)[idx], buff);
             };

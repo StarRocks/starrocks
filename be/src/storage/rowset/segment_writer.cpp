@@ -286,6 +286,9 @@ Status SegmentWriter::_write_raw_data(const std::vector<Slice>& slices) {
 }
 
 Status SegmentWriter::append_chunk(const vectorized::Chunk& chunk) {
+//    std::cout << "zdprint===================" << chunk.debug_columns() << std::endl;
+//    std::cout << "zdprint===================" << chunk.debug_row(0) << std::endl;
+//    std::cout << "zdprint===================" << chunk.debug_row(1) << std::endl;
     DCHECK_EQ(_column_writers.size(), chunk.num_columns());
     for (size_t i = 0; i < _column_writers.size(); ++i) {
         const vectorized::Column* col = chunk.get_column_by_index(i).get();

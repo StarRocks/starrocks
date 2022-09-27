@@ -189,6 +189,7 @@ public:
                       Type == OLAP_FIELD_TYPE_DATE_V2 ||
                       Type == OLAP_FIELD_TYPE_DATETIME ||
                       Type == OLAP_FIELD_TYPE_TIMESTAMP ||
+                      Type == OLAP_FIELD_TYPE_IPV4 ||
                       Type == OLAP_FIELD_TYPE_DECIMAL_V2 ||
                       Type == OLAP_FIELD_TYPE_DECIMAL32 ||
                       Type == OLAP_FIELD_TYPE_DECIMAL64 ||

@@ -51,6 +51,7 @@ public:
         case OLAP_FIELD_TYPE_DOUBLE:
         case OLAP_FIELD_TYPE_DATETIME:
         case OLAP_FIELD_TYPE_TIMESTAMP:
+        case OLAP_FIELD_TYPE_IPV4:
         case OLAP_FIELD_TYPE_DECIMAL64:
             return 8;
         case OLAP_FIELD_TYPE_DECIMAL:

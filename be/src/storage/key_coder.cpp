@@ -54,6 +54,7 @@ private:
         add_mapping<OLAP_FIELD_TYPE_LARGEINT>();
         add_mapping<OLAP_FIELD_TYPE_DATETIME>();
         add_mapping<OLAP_FIELD_TYPE_TIMESTAMP>();
+        add_mapping<OLAP_FIELD_TYPE_IPV4>();
 
         add_mapping<OLAP_FIELD_TYPE_DATE>();
         add_mapping<OLAP_FIELD_TYPE_DATE_V2>();
