@@ -949,6 +949,10 @@ struct TStreamAggregationNode {
   // IMT info
   10: optional Descriptors.TIMTDescriptor detail_imt
   11: optional Descriptors.TIMTDescriptor agg_result_imt
+  // Map from grouping expression to IMT column index
+  12: optional map<i32, i32> grouping_expr_imt_map
+  // Map from aggregate-function index to IMT column index
+  13: optional map<i32, i32> agg_func_imt_map
 
   // For vector query engine
   20: optional bool has_outer_join_child
