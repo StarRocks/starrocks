@@ -1,5 +1,25 @@
 # StarRocks version 2.3
 
+## 2.3.3
+
+发布日期： 2022 年 9 月 27 日
+
+### 问题修复
+
+- 修复查询文件格式为 Textfile 的 Hive 表，结果不准确的问题。[#11546](https://github.com/StarRocks/starrocks/pull/11546)
+
+- 修复查询 Parquet 格式的文件时不支持查询嵌套的 ARRAY 的问题。[#10983](https://github.com/StarRocks/starrocks/pull/10983)
+
+- 修复一个查询读取外部数据源和 StarRocks 表，或者并行查询读取外部数据源和 StarRocks 表，并且查询路由至一个资源组，则可能会导致查询超时的问题。[#10983](https://github.com/StarRocks/starrocks/pull/10983)
+
+- 修复默认开启 Pipeline 执行引擎后，参数 parallel_fragment_exec_instance_num 变为  1，导致 INSERT INTO 导入变慢的问题。[#11462](https://github.com/StarRocks/starrocks/pull/11462)
+
+- 修复表达式在初始阶段发生错误时可能导致 BE 停止服务的问题。[#11396](https://github.com/StarRocks/starrocks/pull/11396)
+
+- 修复执行 ORDER BY LIMIT 时导致堆溢出的问题。 [#11185](https://github.com/StarRocks/starrocks/pull/11185)
+
+- 修复重启 Leader FE，会造成 schema change 执行失败的问题。 [#11561](https://github.com/StarRocks/starrocks/pull/11561)
+
 ## 2.3.2
 
 发布日期： 2022 年 9 月 7 日
@@ -127,3 +147,4 @@
 - 【Preview】提供集群管理工具 StarGo，提供集群部署、启停、升级、回滚、多集群管理等多种能力。相关文档，请参见[通过 StarGo 部署 StarRocks 集群](../administration/stargo.md)。
 - 部署或者升级至 2.3 版本，默认开启 Pipeline 执行引擎，预期在高并发小查询、复杂大查询场景下获得明显的性能优势。如果使用 2.3 版本时遇到明显的性能回退，则可以通过设置 `SET GLOBAL enable_pipeline_engine = false;`，关闭 Pipeline 执行引擎。
 - [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md) 语句兼容 MySQL语法，显示授权 GRANT 语句。
+- 建议单个 schema change 任务数据占用内存上限memory_limitation_per_thread_for_schema_change( BE 配置项) 保持为默认值 2 GB，数据超过上限后写入磁盘。因此如果您之前调大该参数，则建议恢复为 2 GB，否则可能会出现单个 schema change 任务数据占用大量内存的问题。  
