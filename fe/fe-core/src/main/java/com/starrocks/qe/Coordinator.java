@@ -2133,6 +2133,9 @@ public class Coordinator {
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
             if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode) {
+                if (connectContext != null) {
+                    queryOptions.setUse_scan_block_cache(connectContext.getSessionVariable().getUseScanBlockCache());
+                }
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                 getSelectorComputeNodes(hasComputeNode),
@@ -3347,8 +3350,9 @@ public class Coordinator {
 
     /**
      * Whether it can use pipeline engine.
+     *
      * @param connectContext It is null for broker broker export.
-     * @param fragments All the fragments need to execute.
+     * @param fragments      All the fragments need to execute.
      * @return true if enabling pipeline in the session variable and all the fragments can use pipeline,
      * otherwise false.
      */
