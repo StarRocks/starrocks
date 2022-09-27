@@ -3,16 +3,15 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
-#include "exec/pipeline/lookupjoin/lookup_join_context.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/scan_node.h"
+#include "exec/stream/lookupjoin/lookup_join_context.h"
 #include "exec/vectorized/join_hash_map.h"
 #include "exprs/vectorized/column_ref.h"
 
 namespace starrocks {
-
 
 class StreamJoinNode final : public starrocks::ExecNode {
 public:

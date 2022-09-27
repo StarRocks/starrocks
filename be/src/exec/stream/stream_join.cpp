@@ -6,10 +6,9 @@
 #include "column/const_column.h"
 #include "exec/exec_node.h"
 #include "exec/stream/imt_olap_table.h"
+#include "exec/stream/lookupjoin/lookup_join_probe_operator.h"
+#include "exec/stream/lookupjoin/lookup_join_seek_operator.h"
 #include "gen_cpp/Descriptors_types.h"
-#include "exec/pipeline/lookupjoin/index_seek_operator.h"
-#include "exec/pipeline/lookupjoin/lookup_join_probe_operator.h"
-#include "exec/pipeline/lookupjoin/lookup_join_operator.h"
 #include "runtime/primitive_type.h"
 #include "storage/chunk_helper.h"
 
@@ -83,7 +82,9 @@ pipeline::OpFactories StreamJoinNode::decompose_to_pipeline(pipeline::PipelineBu
     _right_row_desc = child(1)->row_desc();
     // assert right_op must be index_seek operator.
     assert (right_ops.size() >= 1);
-    if (typeid(*(right_ops[0])) != typeid(pipeline::IndexSeekOperatorFactory)) {
+
+    if (typeid(*(right_ops[0])) != typeid(pipeline::LookupJoinSeekOperatorFactory)) {
+        assert (typeid(*(left_ops[0])) != typeid(pipeline::LookupJoinSeekOperatorFactory));
         left_ops.swap(right_ops);
         _left_row_desc = child(1)->row_desc();
         _right_row_desc = child(0)->row_desc();
@@ -106,12 +107,9 @@ pipeline::OpFactories StreamJoinNode::decompose_to_pipeline(pipeline::PipelineBu
     left_ops.emplace_back(std::move(left_factory));
     context->add_pipeline(left_ops);
 
-    auto index_seek_factory = down_cast<pipeline::IndexSeekOperatorFactory*>(right_source);
+    // TODO: Convert OlapTableScan to IndexSeek here.
+    auto index_seek_factory = down_cast<pipeline::LookupJoinSeekOperatorFactory*>(right_source);
     index_seek_factory->with_lookup_join_context(_lookup_join_context);
-    auto right_factory = std::make_shared<pipeline::LookupJoinOperatorFactory>(
-            context->next_operator_id(), id(), _lookup_join_context);
-    right_ops.emplace_back(std::move(right_factory));
-
     return right_ops;
 }
 

@@ -29,7 +29,8 @@ Status AggregateBaseNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 Status AggregateBaseNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    _aggregator = std::make_shared<Aggregator>(_tnode);
+    auto params = convert_to_aggregator_params(_tnode);
+    _aggregator = std::make_shared<Aggregator>(std::move(params));
     return _aggregator->prepare(state, _pool, runtime_profile(), _mem_tracker.get());
 }
 

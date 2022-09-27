@@ -9,12 +9,12 @@
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/lookupjoin/index_seek_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
+#include "exec/stream/lookupjoin/lookup_join_seek_operator.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
@@ -771,9 +771,9 @@ void OlapScanNode::_close_pending_scanners() {
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     // Shortcuit: IndexSeek
     if (_is_index_seek) {
-        auto index_seek_op = std::make_shared<pipeline::IndexSeekOperatorFactory>(context->next_operator_id(), id(),
-                                                                                  _olap_scan_node,
-                                                                                  _runtime_filter_collector);
+        auto index_seek_op = std::make_shared<pipeline::LookupJoinSeekOperatorFactory>(context->next_operator_id(), id(),
+                                                                                       _olap_scan_node,
+                                                                                       _runtime_filter_collector);
         OpFactories ops;
         ops.emplace_back(std::move(index_seek_op));
         return ops;
