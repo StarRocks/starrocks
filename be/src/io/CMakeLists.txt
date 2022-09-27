@@ -15,4 +15,5 @@ add_library(IO STATIC
         readable.cpp
         s3_input_stream.cpp
         s3_output_stream.cpp
+        cache_input_stream.cpp
         )
