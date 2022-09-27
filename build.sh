@@ -125,7 +125,7 @@ fi
 USE_JEMALLOC=ON
 
 HELP=0
-if [ $# == 1 ] ; then
+if [[ $OPTS =~ "-j" ]] && [ $# == 3 ] || [ $# == 1 ] ; then
     # default
     BUILD_BE=1
     BUILD_FE=1
