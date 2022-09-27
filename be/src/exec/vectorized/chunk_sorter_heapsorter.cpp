@@ -179,7 +179,18 @@ void HeapChunkSorter::_do_filter_data_for_type(detail::ChunkHolder* chunk_holder
 
     DCHECK_EQ(top_cursor_column->is_nullable(), input_column->is_nullable());
 
-    if (top_cursor_column->is_nullable()) {
+    if (top_cursor_column->only_null()) {
+        // case for order by null
+        bool top_is_null = top_cursor_column->is_null(cursor_rid);
+        int null_compare_flag = this->nan_direction();
+        auto* __restrict__ filter_data = filter->data();
+
+        for (int i = 0; i < row_sz; ++i) {
+            if (!top_is_null) {
+                filter_data[i] = null_compare_flag < 0;
+            }
+        }
+    } else if (top_cursor_column->is_nullable()) {
         bool top_is_null = top_cursor_column->is_null(cursor_rid);
         const auto& need_filter_data =
                 ColumnHelper::cast_to_raw<TYPE>(down_cast<NullableColumn*>(top_cursor_column.get())->data_column())
