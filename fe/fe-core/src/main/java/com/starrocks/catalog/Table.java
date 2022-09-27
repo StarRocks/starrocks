@@ -206,6 +206,14 @@ public class Table extends MetaObject implements Writable {
         return type == TableType.HIVE;
     }
 
+    public boolean isHudiTable() {
+        return type == TableType.HUDI;
+    }
+
+    public boolean isIcebergTable() {
+        return type == TableType.ICEBERG;
+    }
+
     // for create table
     public boolean isOlapOrLakeTable() {
         return isOlapTable() || isLakeTable();

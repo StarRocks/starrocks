@@ -7,6 +7,7 @@ import com.clearspring.analytics.util.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -384,5 +385,43 @@ public class MockHiveRepository extends HiveRepository {
 
         mockTables.put(t1.getTableName(), new HiveTableInfo(t1, partitionKeyList, partitionList,
                 new HiveTableStats(100, 1149)));
+
+        cols = Lists.newArrayList();
+        cols.add(new FieldSchema("l_orderkey", "int", null));
+        cols.add(new FieldSchema("l_partkey", "int", null));
+        cols.add(new FieldSchema("l_suppkey", "int", null));
+        cols.add(new FieldSchema("l_linenumber", "int", null));
+        cols.add(new FieldSchema("l_quantity", "decimal", null));
+        cols.add(new FieldSchema("l_extendedprice", "decimal", null));
+        cols.add(new FieldSchema("l_discount", "decimal", null));
+        cols.add(new FieldSchema("l_tax", "decimal", null));
+        cols.add(new FieldSchema("l_returnflag", "string", null));
+        cols.add(new FieldSchema("l_linestatus", "string", null));
+        cols.add(new FieldSchema("l_commitdate", "date", null));
+        cols.add(new FieldSchema("l_receiptdate", "date", null));
+        cols.add(new FieldSchema("l_shipinstruct", "string", null));
+        cols.add(new FieldSchema("l_shipmode", "string", null));
+        cols.add(new FieldSchema("l_comment", "string", null));
+        sd = new StorageDescriptor(cols, "", "",  "", false, -1, null, Lists.newArrayList(),
+                Lists.newArrayList(), Maps.newHashMap());
+        Table lineItemPar = new Table("lineitem_par", "partitioned_db", null, 0, 0, 0,  sd,
+                ImmutableList.of(new FieldSchema("l_shipdate", "Date", null)), Maps.newHashMap(), null, null, "EXTERNAL_TABLE");
+        List<PartitionKey> lineitemPartitionKeyList = Lists.newArrayList();
+        lineitemPartitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(1998, 1, 1)),
+                ImmutableList.of(PrimitiveType.DATE)));
+        lineitemPartitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(1998, 1, 2)),
+                ImmutableList.of(PrimitiveType.DATE)));
+        lineitemPartitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(1998, 1, 3)),
+                ImmutableList.of(PrimitiveType.DATE)));
+        lineitemPartitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(1998, 1, 4)),
+                ImmutableList.of(PrimitiveType.DATE)));
+        lineitemPartitionKeyList.add(new PartitionKey(ImmutableList.of(new DateLiteral(1998, 1, 5)),
+                ImmutableList.of(PrimitiveType.DATE)));
+
+        List<HivePartition> lineitemPartitionList = Lists.newArrayList();
+        lineitemPartitionKeyList.forEach(key -> lineitemPartitionList.add(new HivePartition(null, ImmutableList.of(), null)));
+
+        mockTables.put(lineItemPar.getTableName(), new HiveTableInfo(lineItemPar, lineitemPartitionKeyList, lineitemPartitionList,
+                new HiveTableStats(600037902, 45585436421L)));
     }
 }
