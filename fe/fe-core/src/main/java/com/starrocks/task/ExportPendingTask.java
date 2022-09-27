@@ -116,7 +116,6 @@ public class ExportPendingTask extends LeaderTask {
                 snapshotRequest.setTablet_id(internalScanRange.getTablet_id());
                 snapshotRequest.setSchema_hash(Integer.parseInt(internalScanRange.getSchema_hash()));
                 snapshotRequest.setVersion(Long.parseLong(internalScanRange.getVersion()));
-                snapshotRequest.setVersion_hash(0);
                 snapshotRequest.setTimeout(job.getTimeoutSecond());
                 snapshotRequest.setPreferred_snapshot_format(TypesConstants.TPREFER_SNAPSHOT_REQ_VERSION);
 

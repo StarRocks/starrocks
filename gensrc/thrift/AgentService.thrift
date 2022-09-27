@@ -60,7 +60,6 @@ struct TCreateTabletReq {
     1: required Types.TTabletId tablet_id
     2: required TTabletSchema tablet_schema
     3: optional Types.TVersion version
-    4: optional Types.TVersionHash version_hash // Deprecated
     5: optional Types.TStorageMedium storage_medium
     6: optional bool in_restore_mode
     // this new tablet should be colocate with base tablet
@@ -118,7 +117,6 @@ struct TPushReq {
     1: required Types.TTabletId tablet_id
     2: required Types.TSchemaHash schema_hash
     3: required Types.TVersion version
-    4: required Types.TVersionHash version_hash // Deprecated
     5: required i64 timeout
     6: required Types.TPushType push_type
     7: optional string http_file_path
@@ -147,7 +145,6 @@ struct TCloneReq {
     4: optional Types.TStorageMedium storage_medium
     // these are visible version(hash) actually
     5: optional Types.TVersion committed_version
-    6: optional Types.TVersionHash committed_version_hash // Deprecated
     7: optional i32 task_version
     8: optional i64 src_path_hash
     9: optional i64 dest_path_hash
@@ -167,14 +164,12 @@ struct TCancelDeleteDataReq {
     1: required Types.TTabletId tablet_id
     2: required Types.TSchemaHash schema_hash
     3: required Types.TVersion version
-    4: required Types.TVersionHash version_hash // Deprecated
 }
 
 struct TCheckConsistencyReq {
     1: required Types.TTabletId tablet_id
     2: required Types.TSchemaHash schema_hash
     3: required Types.TVersion version
-    4: required Types.TVersionHash version_hash // Deprecated
 }
 
 struct TUploadReq {
@@ -195,7 +190,6 @@ struct TSnapshotRequest {
     1: required Types.TTabletId tablet_id
     2: required Types.TSchemaHash schema_hash
     3: optional Types.TVersion version // not used
-    4: optional Types.TVersionHash version_hash // Deprecated
     5: optional i64 timeout
     6: optional list<Types.TVersion> missing_version
     7: optional bool list_files
@@ -220,7 +214,6 @@ struct TClearRemoteFileReq {
 struct TPartitionVersionInfo {
     1: required Types.TPartitionId partition_id
     2: required Types.TVersion version
-    3: required Types.TVersionHash version_hash // Deprecated
 }
 
 struct TMoveDirReq {
@@ -258,7 +251,6 @@ struct TRecoverTabletReq {
     1: optional Types.TTabletId tablet_id
     2: optional Types.TSchemaHash schema_hash
     3: optional Types.TVersion version
-    4: optional Types.TVersionHash version_hash // Deprecated
 }
 
 enum TTabletMetaType {

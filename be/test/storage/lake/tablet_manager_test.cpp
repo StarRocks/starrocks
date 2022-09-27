@@ -95,7 +95,6 @@ TEST_F(LakeTabletManagerTest, create_and_drop_tablet) {
     TCreateTabletReq req;
     req.tablet_id = 65535;
     req.__set_version(1);
-    req.__set_version_hash(0);
     req.tablet_schema.schema_hash = 270068375;
     req.tablet_schema.short_key_column_count = 2;
     EXPECT_OK(_tablet_manager->create_tablet(req));

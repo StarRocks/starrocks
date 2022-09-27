@@ -18,7 +18,7 @@
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
   + [Overview of data loading](./loading/Loading_intro.md)
-  + [Load data from a local file system or a streaming data source using HTTP push](./loading/StreamLoad.md)
+  + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS or cloud storage](./loading/BrokerLoad.md)
   + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
   + [Bulk load using Apache Spark™](./loading/SparkLoad.md)
@@ -339,6 +339,8 @@
         + [json_each](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_exists](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
+        + [json_length](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_length.md)
+        + [json_keys](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
     + Bitmap Functions
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](./sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
