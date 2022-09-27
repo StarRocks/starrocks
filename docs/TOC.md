@@ -183,6 +183,8 @@
       + [SHOW BACKUP](./sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP.md)
       + [SHOW CATALOGS](./sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md)
       + [SHOW CREATE MATERIALIZED VIEW](/sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20MATERIALIZED%20VIEW.md)
+      + [SHOW CREATE TABLE](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md)
+      + [SHOW CREATE VIEW](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20VIEW.md)
       + [SHOW DATA](./sql-reference/sql-statements/data-manipulation/SHOW%20DATA.md)
       + [SHOW DATABASES](./sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md)
       + [SHOW DELETE](./sql-reference/sql-statements/data-manipulation/SHOW%20DELETE.md)
