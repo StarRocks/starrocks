@@ -258,7 +258,7 @@ public class StarOSAgent {
         }
     }
 
-    private List<Long> createShardGroup(long groupId) throws DdlException {
+    private void createShardGroup(long groupId) throws DdlException {
         List<ShardGroupInfo> shardGroupInfos = null;
         try {
             List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
@@ -271,8 +271,6 @@ public class StarOSAgent {
                 throw new DdlException("Failed to create shard group. error: " + e.getMessage());
             }
         }
-
-        return shardGroupInfos.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toList());
     }
 
     public List<Long> createShards(int numShards, ShardStorageInfo shardStorageInfo, long groupId) throws DdlException {
