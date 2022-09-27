@@ -669,6 +669,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return statisticCollectParallelism;
     }
 
+    public void setStatisticCollectParallelism(int parallelism) {
+        this.statisticCollectParallelism = parallelism;
+    }
+
     public int getUseComputeNodes() {
         return useComputeNodes;
     }
