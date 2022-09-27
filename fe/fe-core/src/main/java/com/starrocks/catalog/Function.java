@@ -77,7 +77,10 @@ public class Function implements Writable {
         // Used to drop UDF. User can drop function through name or name and arguments.
         // If X is matchable with Y, this will only check X's element is identical with Y's.
         // e.g. fn is matchable with fn(int), fn(float) and fn(int) is only matchable with fn(int).
-        IS_MATCHABLE
+        IS_MATCHABLE,
+
+        // match names is ok
+        MATCH_NAME
     }
 
     // Function id, every function has a unique id. Now all built-in functions' id is 0
@@ -217,6 +220,10 @@ public class Function implements Writable {
         this.userVisible = userVisible;
     }
 
+    public void setArgsType(Type[] newTypes) {
+        argTypes = newTypes;
+    }
+
     public Type getVarArgsType() {
         if (!hasVarArgs) {
             return Type.INVALID;
@@ -309,6 +316,8 @@ public class Function implements Writable {
                 return isAssignCompatible(other);
             case IS_MATCHABLE:
                 return isMatchable(other);
+            case MATCH_NAME:
+                return other.functionName().equals(this.functionName());
             default:
                 Preconditions.checkState(false);
                 return false;

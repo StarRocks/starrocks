@@ -263,6 +263,7 @@ public class FunctionSet {
     public static final String BITMAP_UNION_INT = "bitmap_union_int";
     public static final String INTERSECT_COUNT = "intersect_count";
     public static final String BITMAP_DICT = "bitmap_dict";
+    public static final String EXCHANGE_BYTES = "exchange_bytes";
 
     // Array functions:
     public static final String ARRAY_AGG = "array_agg";
@@ -477,6 +478,7 @@ public class FunctionSet {
                     .add(FunctionSet.MD5_SUM_NUMERIC)
                     .add(FunctionSet.BITMAP_EMPTY)
                     .add(FunctionSet.HLL_EMPTY)
+                    .add(FunctionSet.EXCHANGE_BYTES)
                     .build();
 
     public static final Set<String> decimalRoundFunctions =
@@ -697,6 +699,11 @@ public class FunctionSet {
         // count(*)
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
                 new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
+
+        // EXCHANGE_BYTES
+        addBuiltin(AggregateFunction.createBuiltin(EXCHANGE_BYTES,
+                Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT, true,
+                true, false, true));
 
         for (Type t : Type.getSupportedTypes()) {
             if (t.isFunctionType()) {

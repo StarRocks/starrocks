@@ -931,6 +931,8 @@ AggregateFuncResolver::AggregateFuncResolver() {
     ADD_ALL_TYPE("any_value", true);
     add_aggregate_mapping<TYPE_JSON, TYPE_JSON>("any_value");
 
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("exchange_bytes");
+
     add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BIGINT>("multi_distinct_count");
     add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT>("multi_distinct_count");
     add_aggregate_mapping<TYPE_SMALLINT, TYPE_BIGINT>("multi_distinct_count");
