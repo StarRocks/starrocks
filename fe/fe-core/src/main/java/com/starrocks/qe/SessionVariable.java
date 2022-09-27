@@ -689,6 +689,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableHiveColumnStats;
     }
 
+    public void setEnableHiveColumnStats(boolean enableHiveColumnStats) {
+        this.enableHiveColumnStats = enableHiveColumnStats;
+    }
+
     public int getHivePartitionStatsSampleSize() {
         return hivePartitionStatsSampleSize;
     }

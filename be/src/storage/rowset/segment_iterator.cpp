@@ -25,6 +25,7 @@
 #include "storage/column_or_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
+#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
 #include "storage/roaring2range.h"
@@ -184,6 +185,7 @@ private:
     };
 
     Status _init();
+    Status _try_to_update_ranges_by_runtime_filter();
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
     template <bool check_global_dict>
@@ -255,6 +257,8 @@ private:
     RawColumnIterators _column_iterators;
     ColumnDecoders _column_decoders;
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
+    // delete predicates
+    std::map<ColumnId, ColumnOrPredicate> _del_predicates;
 
     DelVectorPtr _del_vec;
     roaring_uint32_iterator_t _roaring_iter;
@@ -364,6 +368,23 @@ Status SegmentIterator::_init() {
     _range_iter = _scan_range.new_iterator();
 
     return Status::OK();
+}
+
+Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
+    return _opts.runtime_range_pruner.update_range_if_arrived([this](auto cid, const PredicateList& predicates) {
+        const ColumnPredicate* del_pred;
+        auto iter = _del_predicates.find(cid);
+        del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
+        SparseRange r;
+        RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r));
+        size_t prev_size = _scan_range.span_size();
+        SparseRange res;
+        _range_iter = _range_iter.intersection(r, &res);
+        std::swap(res, _scan_range);
+        _range_iter.set_range(&_scan_range);
+        _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
+        return Status::OK();
+    });
 }
 
 template <bool check_global_dict>
@@ -545,7 +566,6 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     // will be a mapping of `c1` to predicate `c1=1 or c1=100` and a
     // mapping of `c2` to predicate `c2=100 or c2=200`.
     std::set<ColumnId> columns;
-    std::map<ColumnId, ColumnOrPredicate> del_predicates;
     _opts.delete_predicates.get_column_ids(&columns);
     for (ColumnId cid : columns) {
         std::vector<const ColumnPredicate*> preds;
@@ -553,7 +573,7 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
             _opts.delete_predicates[i].predicates_of_column(cid, &preds);
         }
         DCHECK(!preds.empty());
-        del_predicates.insert({cid, ColumnOrPredicate(get_type_info(preds[0]->type_info()), cid, preds)});
+        _del_predicates.insert({cid, ColumnOrPredicate(get_type_info(preds[0]->type_info()), cid, preds)});
     }
 
     // -------------------------------------------------------------
@@ -573,8 +593,8 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
         }
 
         const ColumnPredicate* del_pred;
-        auto iter = del_predicates.find(cid);
-        del_pred = iter != del_predicates.end() ? &(iter->second) : nullptr;
+        auto iter = _del_predicates.find(cid);
+        del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
         SparseRange r;
         RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(query_preds, del_pred, &r));
         zm_range = zm_range.intersection(r);
@@ -771,6 +791,8 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
         _inited = true;
     }
 
+    RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
+
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
@@ -785,6 +807,8 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
         RETURN_IF_ERROR(_init());
         _inited = true;
     }
+
+    RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
 
     DCHECK_EQ(0, chunk->num_rows());
 

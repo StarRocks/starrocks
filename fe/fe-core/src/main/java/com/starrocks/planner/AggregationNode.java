@@ -36,6 +36,7 @@ import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStreamingPreaggregationMode;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -193,34 +194,27 @@ public class AggregationNode extends PlanNode {
             output.append(detailPrefix).append(nameDetail).append("\n");
         }
         if (aggInfo.getAggregateExprs() != null && aggInfo.getMaterializedAggregateExprs().size() > 0) {
-            output.append(detailPrefix).append("output: ").append(
-                    getExplainString(aggInfo.getAggregateExprs())).append("\n");
+            if (detailLevel == TExplainLevel.VERBOSE) {
+                output.append(detailPrefix).append("aggregate: ");
+            } else {
+                output.append(detailPrefix).append("output: ");
+            }
+            output.append(getVerboseExplain(aggInfo.getAggregateExprs(), detailLevel)).append("\n");
         }
-        output.append(detailPrefix).append("group by: ").append(
-                getExplainString(aggInfo.getGroupingExprs())).append("\n");
-        if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("having: ").append(getExplainString(conjuncts)).append("\n");
-        }
-        return output.toString();
-    }
-
-    @Override
-    protected String getNodeVerboseExplain(String detailPrefix) {
-        StringBuilder output = new StringBuilder();
-        String nameDetail = getDisplayLabelDetail();
-        if (nameDetail != null) {
-            output.append(detailPrefix).append(nameDetail).append("\n");
-        }
-        if (aggInfo.getAggregateExprs() != null && aggInfo.getMaterializedAggregateExprs().size() > 0) {
-            output.append(detailPrefix).append("aggregate: ").append(
-                    getVerboseExplain(aggInfo.getAggregateExprs())).append("\n");
-        }
-        if (aggInfo.getGroupingExprs() != null && aggInfo.getGroupingExprs().size() > 0) {
+        // TODO: unify them
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            if (CollectionUtils.isNotEmpty(aggInfo.getGroupingExprs())) {
+                output.append(detailPrefix).append("group by: ").append(
+                        getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
+            }
+        } else {
             output.append(detailPrefix).append("group by: ").append(
-                    getVerboseExplain(aggInfo.getGroupingExprs())).append("\n");
+                    getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
         }
+
+
         if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts)).append("\n");
+            output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel)).append("\n");
         }
         return output.toString();
     }

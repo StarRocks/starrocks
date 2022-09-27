@@ -1231,6 +1231,7 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadCompactionManager(dis, checksum);
             remoteChecksum = dis.readLong();
+            loadRBACPrivilege(dis);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1313,6 +1314,13 @@ public class GlobalStateMgr {
         }
         LOG.info("finished replay alterJob from image");
         return newChecksum;
+    }
+
+    // TODO put this at the end of the image before 3.0 release
+    public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
+        if (usingNewPrivilege) {
+            this.authenticationManager = AuthenticationManager.load(dis);
+        }
     }
 
     public long loadAlterJob(DataInputStream dis, long checksum, AlterJobV2.JobType type) throws IOException {
@@ -1475,6 +1483,7 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = compactionManager.saveCompactionManager(dos, checksum);
             dos.writeLong(checksum);
+            saveRBACPrivilege(dos);
         }
 
         if (usingNewPrivilege) {
@@ -1515,6 +1524,13 @@ public class GlobalStateMgr {
             checksum = saveAlterJob(dos, checksum, type);
         }
         return checksum;
+    }
+
+    // TODO put this at the end of the image before 3.0 release
+    public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
+        if (usingNewPrivilege) {
+            this.authenticationManager.save(dos);
+        }
     }
 
     public long saveAlterJob(DataOutputStream dos, long checksum, AlterJobV2.JobType type) throws IOException {

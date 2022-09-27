@@ -7,7 +7,6 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
@@ -218,33 +217,6 @@ public class IcebergScanNode extends ScanNode {
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));
         output.append("\n");
-
-        output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
-        output.append("\n");
-
-        output.append(prefix).append(String.format("numNodes=%s", numNodes));
-        output.append("\n");
-
-        return output.toString();
-    }
-
-    @Override
-    protected String getNodeVerboseExplain(String prefix) {
-        StringBuilder output = new StringBuilder();
-
-        output.append(prefix).append("TABLE: ").append(srIcebergTable.getTable()).append("\n");
-
-        if (null != sortColumn) {
-            output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
-        }
-        if (!conjuncts.isEmpty()) {
-            output.append(prefix).append("PREDICATES: ").append(
-                    getExplainString(conjuncts)).append("\n");
-        }
-        if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
-            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
-        }
 
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");

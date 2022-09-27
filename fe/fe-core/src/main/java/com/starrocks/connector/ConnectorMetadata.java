@@ -54,6 +54,16 @@ public interface ConnectorMetadata {
     }
 
     /**
+     * Return all partition names of the table.
+     * @param databaseName the name of the database
+     * @param tableName the name of the table
+     * @return a list of partition names
+     */
+    default List<String> listPartitionNames(String databaseName, String tableName) {
+        return Lists.newArrayList();
+    }
+
+    /**
      * Get Table descriptor for the table specific by `dbName`.`tblName`
      *
      * @param dbName  - the string represents the database name
@@ -65,12 +75,12 @@ public interface ConnectorMetadata {
     }
 
     /**
-     * Return all partition names of the table.
-     * @param databaseName the name of the database
-     * @param tableName the name of the table
-     * @return a list of partition names
+     * Get the remote file information from hdfs or s3. It is mainly used to generate ScanRange for scheduling.
+     * @param table
+     * @param partitionKeys selected columns
+     * @return the remote file information of the query to scan.
      */
-    default List<String> getPartitionNames(String databaseName, String tableName) {
+    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
         return Lists.newArrayList();
     }
 
@@ -87,16 +97,6 @@ public interface ConnectorMetadata {
                                           List<ColumnRefOperator> columns,
                                           List<PartitionKey> partitionKeys) {
         return Statistics.builder().build();
-    }
-
-    /**
-     * Get the remote file information from hdfs or s3. It is mainly used to generate ScanRange for scheduling.
-     * @param table
-     * @param partitionKeys selected columns
-     * @return the remote file information of the query to scan.
-     */
-    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
-        return Lists.newArrayList();
     }
 
     default void createDb(String dbName) throws DdlException, AlreadyExistsException {
