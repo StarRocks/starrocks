@@ -27,15 +27,21 @@ import com.starrocks.mysql.privilege.Role;
 import com.starrocks.system.SystemInfoService;
 
 public class FeNameFormat {
-    private static final String LABEL_REGEX = "^[-_A-Za-z0-9]{1,128}$";
-    public static final String COMMON_NAME_REGEX = "^[a-zA-Z][a-zA-Z0-9_]{0,63}$";
+    private FeNameFormat() {}
+
+    private static final String LABEL_REGEX = "^[-\\w]{1,128}$";
+    public static final String COMMON_NAME_REGEX = "^[a-zA-Z]\\w{0,63}$|^_[a-zA-Z0-9]\\w{0,62}$";
     // Now we can not accept all characters because current design of delete save delete cond contains column name
     // so it can not distinguish whether it is an operator or a column name
     // the future new design will improve this problem and open this limitation
     private static final String COLUMN_NAME_REGEX = "^[^\0=<>!\\*]{1,64}$";
 
     // The user name  by kerberos authentication may include the host name, so additional adaptation is required.
+<<<<<<< HEAD
     private static final String MYSQL_USER_NAME_REGEX = "^[a-zA-Z][a-zA-Z0-9_]{1,63}/?[.a-zA-Z0-9_-]{0,63}$";
+=======
+    private static final String MYSQL_USER_NAME_REGEX = "^\\w{1,64}/?[.\\w-]{0,63}$";
+>>>>>>> 0e2f13a5b ([Enhancement] support table name with one leading underscore (#11642))
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
 
