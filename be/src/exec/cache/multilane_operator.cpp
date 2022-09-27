@@ -177,8 +177,8 @@ Status MultilaneOperator::push_chunk(RuntimeState* state, const vectorized::Chun
         DCHECK(!lane.processor->is_finished() && lane.processor->need_input());
         return lane.processor->push_chunk(state, chunk);
     }
-    auto lane_owner = chunk->tablet_id();
-    auto is_last_chunk = chunk->is_last_chunk();
+    auto lane_owner = chunk->owner_info().owner_id();
+    auto is_last_chunk = chunk->owner_info().is_last_chunk();
 
     DCHECK(_owner_to_lanes.count(lane_owner));
     auto& lane = _lanes[_owner_to_lanes[lane_owner]];
@@ -202,8 +202,8 @@ StatusOr<vectorized::ChunkPtr> MultilaneOperator::_pull_chunk_from_lane(RuntimeS
 
     auto create_eof_chunk = [&lane]() -> auto {
         auto eof_chunk = std::make_shared<vectorized::Chunk>();
-        eof_chunk->set_tablet_id(lane.lane_owner, true);
-        eof_chunk->set_passthrough(false);
+        eof_chunk->owner_info().set_owner_id(lane.lane_owner, true);
+        eof_chunk->owner_info().set_passthrough(false);
         lane.eof_sent = true;
         return eof_chunk;
     };
@@ -222,8 +222,8 @@ StatusOr<vectorized::ChunkPtr> MultilaneOperator::_pull_chunk_from_lane(RuntimeS
     lane.eof_sent = processor_is_finished;
 
     if (chunk != nullptr) {
-        chunk->set_tablet_id(lane.lane_owner, processor_is_finished);
-        chunk->set_passthrough(false);
+        chunk->owner_info().set_owner_id(lane.lane_owner, processor_is_finished);
+        chunk->owner_info().set_passthrough(false);
         return chunk;
     }
 
@@ -254,7 +254,7 @@ StatusOr<vectorized::ChunkPtr> MultilaneOperator::pull_chunk(RuntimeState* state
 
     if (_passthrough_chunk != nullptr) {
         DCHECK(passthrough_mode && _can_passthrough);
-        _passthrough_chunk->set_passthrough(true);
+        _passthrough_chunk->owner_info().set_passthrough(true);
         return std::move(_passthrough_chunk);
     } else {
         return nullptr;

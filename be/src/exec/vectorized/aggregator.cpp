@@ -552,7 +552,7 @@ void Aggregator::process_limit(vectorized::ChunkPtr* chunk) {
 }
 
 Status Aggregator::evaluate_exprs(vectorized::Chunk* chunk) {
-    _set_passthrough(chunk->is_passthrough());
+    _set_passthrough(chunk->owner_info().is_passthrough());
     _reset_exprs();
     return _evaluate_exprs(chunk);
 }

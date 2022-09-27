@@ -25,7 +25,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.gson.Gson;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
@@ -35,6 +34,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TAggregationNode;
@@ -203,7 +203,7 @@ public class AggregationNode extends PlanNode {
         } else {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }
-        msg.agg_node.setAgg_func_set_version(3);
+        msg.agg_node.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
     }
 
     protected String getDisplayLabelDetail() {
@@ -332,7 +332,7 @@ public class AggregationNode extends PlanNode {
         } else {
             aggrNode.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }
-        aggrNode.setAgg_func_set_version(3);
+        aggrNode.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
         planNode.setNode_type(TPlanNodeType.AGGREGATION_NODE);
         planNode.setAgg_node(aggrNode);
         normalizeConjuncts(normalizer, planNode, conjuncts);

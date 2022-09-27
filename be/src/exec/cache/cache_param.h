@@ -12,7 +12,7 @@ struct CacheParam {
     int num_lanes;
     int32_t plan_node_id;
     std::string digest;
-    CacheKeySuffixMap cache_key_suffixes;
+    CacheKeySuffixMap cache_key_prefixes;
     SlotRemapping slot_remapping;
     SlotRemapping reverse_slot_remapping;
     bool force_populate;

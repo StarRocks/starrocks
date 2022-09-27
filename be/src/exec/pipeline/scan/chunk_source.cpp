@@ -76,14 +76,14 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
                     ++num_read_chunks;
-                    chunk->set_tablet_id(tablet_id, true);
+                    chunk->owner_info().set_owner_id(tablet_id, true);
                     _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
                 }
                 break;
             }
 
             ++num_read_chunks;
-            chunk->set_tablet_id(tablet_id, false);
+            chunk->owner_info().set_owner_id(tablet_id, false);
             _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
         }
 

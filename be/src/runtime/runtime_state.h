@@ -67,7 +67,7 @@ class QueryContext;
 // query and shared across all execution nodes of that query.
 class RuntimeState {
 public:
-    // for ut onl
+    // for ut only
     RuntimeState() {}
     // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,

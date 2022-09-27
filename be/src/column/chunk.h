@@ -11,6 +11,7 @@
 #include "column/column_hash.h"
 #include "column/schema.h"
 #include "common/global_types.h"
+#include "exec/cache/owner_info.h"
 #include "gutil/strings/substitute.h"
 #include "util/phmap/phmap.h"
 
@@ -242,27 +243,7 @@ public:
         return false;
     }
 
-    // |--last_chunk(1bit)--|--passthrough(1bit)|--tablet_id(62bit)--|
-    static constexpr int64_t LAST_CHUNK_BIT = 1L << 63;
-    static constexpr int64_t PASSTHROUGH_BIT = 1L << 62;
-    static constexpr int64_t TABLET_ID_BITS = PASSTHROUGH_BIT - 1L;
-    static constexpr int64_t LAST_CHUNK_MASK = ~LAST_CHUNK_BIT;
-    static constexpr int64_t PASSTHROUGH_MASK = ~PASSTHROUGH_BIT;
-    static constexpr int64_t TABLET_ID_MASK = ~TABLET_ID_BITS;
-
-    void set_tablet_id(int64_t tablet_id, bool is_last_chunk) {
-        _tablet_id = tablet_id | (is_last_chunk ? LAST_CHUNK_BIT : 0);
-    }
-    int64_t tablet_id() const { return _tablet_id & TABLET_ID_BITS; }
-    bool is_last_chunk() const { return (_tablet_id & LAST_CHUNK_BIT) == LAST_CHUNK_BIT; }
-    void set_passthrough(bool on) {
-        if (on) {
-            _tablet_id = _tablet_id | PASSTHROUGH_BIT;
-        } else {
-            _tablet_id = _tablet_id & PASSTHROUGH_MASK;
-        }
-    }
-    bool is_passthrough() const { return (_tablet_id & PASSTHROUGH_BIT) == PASSTHROUGH_BIT; }
+    cache::owner_info& owner_info() { return _owner_info; }
 
 private:
     void rebuild_cid_index();
@@ -274,7 +255,7 @@ private:
     SlotHashMap _slot_id_to_index;
     TupleHashMap _tuple_id_to_index;
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
-    int64_t _tablet_id = 0L;
+    cache::owner_info _owner_info;
 };
 
 inline const ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) const {

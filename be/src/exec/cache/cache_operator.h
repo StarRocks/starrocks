@@ -27,7 +27,7 @@ using CacheOperatorPtr = std::shared_ptr<CacheOperator>;
 
 class CacheOperator final : public pipeline::Operator {
 public:
-    CacheOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, CacheManagerPtr& cache_mgr,
+    CacheOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, CacheManagerRawPtr cache_mgr,
                   const CacheParam& cache_param);
 
     ~CacheOperator() = default;
@@ -44,7 +44,6 @@ public:
     Status set_finished(RuntimeState* state) override;
     Status set_finishing(RuntimeState* state) override;
     LaneArbiterPtr lane_arbiter() { return _lane_arbiter; }
-    bool is_multilane() const override { return true; }
     void set_multilane_operators(MultilaneOperators&& multilane_operators) {
         _multilane_operators = std::move(multilane_operators);
     }
@@ -52,7 +51,7 @@ public:
 private:
     bool _should_passthrough(size_t num_rows, size_t num_bytes);
     vectorized::ChunkPtr _pull_chunk_from_per_lane_buffer(PerLaneBufferPtr& buffer);
-    CacheManagerPtr _cache_mgr;
+    CacheManagerRawPtr _cache_mgr;
     const CacheParam& _cache_param;
     LaneArbiterPtr _lane_arbiter;
     std::unordered_map<int64_t, size_t> _owner_to_lanes;
@@ -90,14 +89,14 @@ using CacheOperatorFactoryPtr = std::shared_ptr<CacheOperatorFactory>;
 
 class CacheOperatorFactory : public pipeline::OperatorFactory {
 public:
-    CacheOperatorFactory(int32_t id, int32_t plan_node_id, CacheManagerPtr& cache_mgr, const CacheParam& cache_param);
+    CacheOperatorFactory(int32_t id, int32_t plan_node_id, CacheManagerRawPtr cache_mgr, const CacheParam& cache_param);
     ~CacheOperatorFactory() = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
-    CacheManagerPtr _cache_mgr;
+    CacheManagerRawPtr _cache_mgr;
     const CacheParam& _cache_param;
 };
 } // namespace cache

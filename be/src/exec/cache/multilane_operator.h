@@ -58,8 +58,6 @@ public:
 
     Status reset_lane(LaneOwnerType lane_id, std::vector<vectorized::ChunkPtr>&& chunks);
 
-    bool is_multilane() const override { return true; }
-
 private:
     StatusOr<vectorized::ChunkPtr> _pull_chunk_from_lane(RuntimeState* state, Lane& lane, bool passthrough_mode);
     using FinishCallback = std::function<Status(pipeline::OperatorPtr&, RuntimeState*)>;

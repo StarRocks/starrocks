@@ -204,7 +204,7 @@ set(EXEC_FILES
     cache/cache_operator.cpp
     cache/cache_manager.cpp
     cache/lane_arbiter.cpp
-    cache/conjugate_operator.cpp cache/cache_param.h)
+    cache/conjugate_operator.cpp)
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.

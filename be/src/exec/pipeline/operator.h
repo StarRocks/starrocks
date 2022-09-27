@@ -101,6 +101,21 @@ public:
     // Push chunk to this operator
     virtual Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) = 0;
 
+    // reset_state is used by MultilaneOperator in cache mechanism, because lanes in MultilaneOperator are
+    // re-used by tablets, before the lane serves for the current tablet, it must invoke reset_state to re-prepare
+    // the operators (such as: Project, ChunkAccumulate, DictDecode, Aggregate) that is decorated by MultilaneOperator
+    // and clear the garbage that previous tablet has produced.
+    //
+    // In multi-version cache, when cache is hit partially, the partial-hit cache value should be refilled back to the
+    // pre-cache operator(e.g. pre-cache Agg operator) that precedes CacheOperator immediately, the Rowsets of delta
+    // version and the partial-hit cache value will be merged in this pre-cache operator.
+    //
+    // which operators should override this functions?
+    // 1. operators not decorated by MultiOperator: not required
+    // 2. operators decorated by MultilaneOperator and it precedes CacheOperator immediately: required, and must refill back
+    // partial-hit cache value via the `chunks` parameter, e.g.
+    //  MultilaneOperator<ConjugateOperator<AggregateBlockingSinkOperator, AggregateBlockingSourceOperator>>
+    // 3. operators decorated by MultilaneOperator except case 2: e.g. ProjectOperator, Chunk AccumulateOperator and etc.
     virtual Status reset_state(std::vector<ChunkPtr>&& chunks) { return Status::OK(); }
 
     int32_t get_id() const { return _id; }
@@ -161,9 +176,6 @@ public:
     RuntimeState* runtime_state() const;
 
     void set_prepare_time(int64_t cost_ns);
-
-    // Multilane operator return true, including cache::CacheOperator and cache::MultilaneOperator
-    virtual bool is_multilane() const { return false; }
 
 protected:
     OperatorFactory* _factory;

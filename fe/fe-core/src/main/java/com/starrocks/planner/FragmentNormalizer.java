@@ -1,3 +1,5 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
 package com.starrocks.planner;
 
 import com.clearspring.analytics.util.Lists;
@@ -60,7 +62,7 @@ public class FragmentNormalizer {
         this.fragment = fragment;
     }
 
-    public static Range<PartitionKey> toClosedOpenRange(Range<PartitionKey> range) {
+    static Range<PartitionKey> toClosedOpenRange(Range<PartitionKey> range) {
         PartitionKey lowerBound = range.lowerEndpoint();
         PartitionKey upperBound = range.upperEndpoint();
         if (!lowerBound.isMinValue() && !range.contains(lowerBound)) {

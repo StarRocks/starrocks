@@ -59,14 +59,14 @@ struct PerLaneBuffer {
         }
         // CRITICAL!!!: we should append last empty chunk to the empty buffer to guarantee that pull_chunk method
         // would fetch a chunk and reset_lane.
-        if (!chunk->is_empty() || (chunks.empty() && chunk->is_last_chunk())) {
+        if (!chunk->is_empty() || (chunks.empty() && chunk->owner_info().is_last_chunk())) {
             chunks.push_back(chunk);
             num_rows += chunk->num_rows();
             num_bytes += chunk->bytes_usage();
         }
 
-        if (chunk->is_last_chunk()) {
-            state = chunk->is_last_chunk() ? PLBS_TOTAL : PLBS_PARTIAL;
+        if (chunk->owner_info().is_last_chunk()) {
+            state = chunk->owner_info().is_last_chunk() ? PLBS_TOTAL : PLBS_PARTIAL;
         }
     }
 
@@ -96,7 +96,7 @@ struct PerLaneBuffer {
     }
 };
 
-CacheOperator::CacheOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, CacheManagerPtr& cache_mgr,
+CacheOperator::CacheOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, CacheManagerRawPtr cache_mgr,
                              const CacheParam& cache_param)
         : pipeline::Operator(factory, factory->id(), factory->get_name(), factory->plan_node_id(), driver_sequence),
           _cache_mgr(cache_mgr),
@@ -123,7 +123,7 @@ static inline Chunks remap_chunks(const Chunks& chunks, const SlotRemapping& slo
         for (auto [slot_id, new_slot_id] : slot_remapping) {
             auto column = chunk->get_column_by_slot_id(slot_id);
             new_chunk->append_column(column, new_slot_id);
-            new_chunk->set_tablet_id(chunk->tablet_id(), false);
+            new_chunk->owner_info().set_owner_id(chunk->owner_info().owner_id(), false);
         }
         new_chunks.push_back(std::move(new_chunk));
     }
@@ -154,18 +154,7 @@ Status CacheOperator::prepare(RuntimeState* state) {
 }
 
 static inline std::string flatten_tablet_set(const std::unordered_set<int64_t>& tablets) {
-    std::string s;
-    if (tablets.empty()) {
-        return s;
-    }
-    s.reserve(tablets.size() * 11);
-    auto it = tablets.begin();
-    s.append(fmt::to_string(*it++));
-    while (it != tablets.end()) {
-        s.append(",");
-        s.append(fmt::to_string(*it++));
-    }
-    return s;
+    return fmt::format("{}", fmt::join(tablets.begin(), tablets.end(), ","));
 }
 
 void CacheOperator::close(RuntimeState* state) {
@@ -197,12 +186,12 @@ bool CacheOperator::probe_cache(int64_t tablet_id, int64_t version) {
     buffer->lane = lane;
     buffer->required_version = version;
 
-    if (_cache_param.force_populate || !_cache_param.cache_key_suffixes.count(tablet_id)) {
+    if (_cache_param.force_populate || !_cache_param.cache_key_prefixes.count(tablet_id)) {
         buffer->state = PLBS_MISS;
         return false;
     }
     // probe cache
-    const std::string& cache_key = _cache_param.digest + _cache_param.cache_key_suffixes.at(tablet_id);
+    const std::string& cache_key = _cache_param.digest + _cache_param.cache_key_prefixes.at(tablet_id);
     auto probe_status = _cache_mgr->probe(cache_key);
 
     // Cache MISS when failed to probe
@@ -277,7 +266,7 @@ bool CacheOperator::probe_cache(int64_t tablet_id, int64_t version) {
             buffer->chunks = std::move(chunks);
             if (all_rs_empty) {
                 buffer->state = PLBS_HIT_TOTAL;
-                buffer->chunks.back()->set_tablet_id(tablet_id, true);
+                buffer->chunks.back()->owner_info().set_owner_id(tablet_id, true);
                 update_metrics(chunks);
             } else {
                 // TODO(by satanson): PLBS_HIT_PARTIAL is an important case will be optimized later,
@@ -303,9 +292,9 @@ void CacheOperator::populate_cache(int64_t tablet_id) {
     auto& buffer = _per_lane_buffers[lane];
     DCHECK(buffer->should_populate_cache());
 
-    const auto cache_key_suffix_it = _cache_param.cache_key_suffixes.find(tablet_id);
+    const auto cache_key_suffix_it = _cache_param.cache_key_prefixes.find(tablet_id);
     // uncacheable
-    if (cache_key_suffix_it == _cache_param.cache_key_suffixes.end()) {
+    if (cache_key_suffix_it == _cache_param.cache_key_prefixes.end()) {
         buffer->state = PLBS_POPULATE;
         return;
     }
@@ -379,7 +368,7 @@ Status CacheOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr
         _passthrough_chunk = chunk;
         return Status::OK();
     }
-    auto lane_owner = chunk->tablet_id();
+    auto lane_owner = chunk->owner_info().owner_id();
     DCHECK(_owner_to_lanes.count(lane_owner));
     auto lane_id = _owner_to_lanes[lane_owner];
     auto& buffer = _per_lane_buffers[lane_id];
@@ -403,7 +392,7 @@ vectorized::ChunkPtr CacheOperator::_pull_chunk_from_per_lane_buffer(PerLaneBuff
     if (buffer->has_chunks()) {
         auto chunk = buffer->get_next_chunk();
         if (buffer->can_release()) {
-            _lane_arbiter->release_lane(chunk->tablet_id());
+            _lane_arbiter->release_lane(chunk->owner_info().owner_id());
             buffer->clear();
         }
         return chunk;
@@ -444,7 +433,7 @@ StatusOr<vectorized::ChunkPtr> CacheOperator::pull_chunk(RuntimeState* state) {
     return std::move(_passthrough_chunk);
 }
 
-CacheOperatorFactory::CacheOperatorFactory(int32_t id, int32_t plan_node_id, CacheManagerPtr& cache_mgr,
+CacheOperatorFactory::CacheOperatorFactory(int32_t id, int32_t plan_node_id, CacheManagerRawPtr cache_mgr,
                                            const CacheParam& cache_param)
 
         : pipeline::OperatorFactory(id, "cache", plan_node_id), _cache_mgr(cache_mgr), _cache_param(cache_param) {}

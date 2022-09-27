@@ -202,10 +202,10 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     if (res == nullptr) {
         return nullptr;
     }
-    auto tablet_id = res->tablet_id();
-    auto is_last_chunk = res->is_last_chunk();
+    auto tablet_id = res->owner_info().owner_id();
+    auto is_last_chunk = res->owner_info().is_last_chunk();
     eval_runtime_bloom_filters(res.get());
-    res->set_tablet_id(tablet_id, is_last_chunk);
+    res->owner_info().set_owner_id(tablet_id, is_last_chunk);
     return res;
 }
 

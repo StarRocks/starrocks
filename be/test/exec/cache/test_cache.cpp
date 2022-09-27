@@ -123,7 +123,7 @@ TEST_F(CacheTest, testCacheManager) {
 
 ChunkPtr create_test_chunk(cache::LaneOwnerType owner, long from, long to, bool is_last_chunk) {
     ChunkPtr chunk = std::make_shared<Chunk>();
-    chunk->set_tablet_id(owner, is_last_chunk);
+    chunk->owner_info().set_owner_id(owner, is_last_chunk);
     if (from == to) {
         return chunk;
     }
@@ -151,7 +151,7 @@ cache::CacheParam create_test_cache_param(bool force_populate, bool force_passth
     cache_param.force_populate = force_populate;
     cache_param.plan_node_id = 10;
     cache_param.digest = "cache_key_";
-    cache_param.cache_key_suffixes = {{1, "tablet#1"}, {2, "tablet#2"}, {3, "tablet#3"}, {4, "tablet#4"},
+    cache_param.cache_key_prefixes = {{1, "tablet#1"}, {2, "tablet#2"}, {3, "tablet#3"}, {4, "tablet#4"},
                                       {5, "tablet#5"}, {6, "tablet#6"}, {7, "tablet#7"}, {8, "tablet#8"}};
     cache_param.slot_remapping = {{1, 1}};
     cache_param.reverse_slot_remapping = {{1, 1}};
@@ -185,7 +185,7 @@ Tasks create_test_pipelines(const cache::CacheParam& cache_param, size_t dop, ca
     auto cache_id = ++id;
     auto plan_node_id = ++id;
     auto cache_op_factory =
-            std::make_shared<cache::CacheOperatorFactory>(cache_id, plan_node_id, cache_mgr, cache_param);
+            std::make_shared<cache::CacheOperatorFactory>(cache_id, plan_node_id, cache_mgr.get(), cache_param);
     for (size_t i = 0, size = opFactories.size(); i < size; ++i) {
         opFactories[i] = std::make_shared<cache::MultilaneOperatorFactory>(++id, opFactories[i], cache_param.num_lanes);
     }
@@ -257,8 +257,9 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, vectorized::ChunkPtr in
     while (true) {
         if (!first_op->is_finished() && first_op->need_input() && !pushed) {
             LOG(WARNING) << strings::Substitute("[EXEC] Push input chunk: op=$0, num_rows=$1, tablet_id=$2, eof=$3",
-                                                first_op->get_name(), input_chunk->num_rows(), input_chunk->tablet_id(),
-                                                input_chunk->is_last_chunk());
+                                                first_op->get_name(), input_chunk->num_rows(),
+                                                input_chunk->owner_info().owner_id(),
+                                                input_chunk->owner_info().is_last_chunk());
             first_op->push_chunk(state, input_chunk);
             pushed = true;
         }
@@ -282,8 +283,8 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, vectorized::ChunkPtr in
                 }
                 LOG(WARNING) << strings::Substitute(
                         "[EXEC] Transfer chunk: from_op=$0, to_op=$1, num_rows=$2, tablet_id=$3, eof=$4",
-                        curr_op->get_name(), next_op->get_name(), chunk->num_rows(), chunk->tablet_id(),
-                        chunk->is_last_chunk());
+                        curr_op->get_name(), next_op->get_name(), chunk->num_rows(), chunk->owner_info().owner_id(),
+                        chunk->owner_info().is_last_chunk());
                 next_op->push_chunk(state, chunk);
                 num_steps += pushed;
                 if (curr_op->is_finished()) {

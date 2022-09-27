@@ -141,6 +141,17 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
+static inline bool is_multilane(pipeline::OperatorPtr& op) {
+    if (dynamic_cast<cache::MultilaneOperator*>(op.get()) != nullptr) {
+        return true;
+    }
+
+    if (dynamic_cast<cache::CacheOperator*>(op.get()) != nullptr) {
+        return true;
+    }
+    return false;
+}
+
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
     COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
@@ -207,8 +218,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 }
 
                 if (return_status.ok()) {
-                    if (maybe_chunk.value() && (maybe_chunk.value()->num_rows() > 0 ||
-                                                (maybe_chunk.value()->is_last_chunk() && next_op->is_multilane()))) {
+                    if (maybe_chunk.value() &&
+                        (maybe_chunk.value()->num_rows() > 0 ||
+                         (maybe_chunk.value()->owner_info().is_last_chunk() && is_multilane(next_op)))) {
                         size_t row_num = maybe_chunk.value()->num_rows();
                         total_rows_moved += row_num;
                         {

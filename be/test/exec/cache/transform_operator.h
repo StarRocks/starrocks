@@ -12,6 +12,21 @@ namespace starrocks::vectorized {
 using MapFunc = std::function<double(double)>;
 using ReduceFunc = std::function<double(double, double)>;
 
+// MapOperator and ReduceOperator are two simple operators introduced to test query cache, MapOperator works in
+// chunk-at-at-time style, ReduceOperator works in full-materialized style. We use MapOperator instead of
+// Project/ChunkAccumulate/DictDecode operators and use ReduceOperator instead of aggregation operators to set up
+// a cacheable pipeline then verify the correctness of MultilaneOperator/CacheOperator/ConjugateOperator.
+// for an example:
+// 1. map(x->(-1)**x * x) -> map(x->4.0/x) -> reduce(x,y->x+y): calculate pi=3.1415926 if values of the input column ranges
+//  from 0..n.
+// 2. map(x->2*x) -> map( x-> x+1) -> reduce(x,y->x+y): calculate n*n if values of the input column ranges from 0..n
+// The pipeline is decorated by MultilaneOperator/CacheOperator/ConjugateOperator as follows:
+// MultilaneOperator<MapOperator> -> MultilaneOperator<MapOperator> ->
+//  MultilaneOperator<ConjugateOperator<ReduceSinkOperator, ReduceSourceOperator>> -> CacheOperator ->
+//  ReduceSinkOperator.
+//
+// So we just control the behavior of cache populate/probe/passthrough mode, then input 0..n input these pipelines, to
+// verify the output to be pi=3.1415926 or square(n).
 class MapOperator final : public pipeline::Operator {
 public:
     MapOperator(pipeline::OperatorFactory* factory, int driver_sequence, MapFunc map_func);

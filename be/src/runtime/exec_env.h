@@ -207,7 +207,7 @@ public:
 
     int64_t get_storage_page_cache_size();
 
-    cache::CacheManagerPtr cache_mgr() const { return _cache_mgr; }
+    cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
@@ -316,7 +316,7 @@ private:
     lake::LocationProvider* _lake_location_provider = nullptr;
 
     AgentServer* _agent_server = nullptr;
-    cache::CacheManagerPtr _cache_mgr;
+    cache::CacheManagerRawPtr _cache_mgr;
 };
 
 template <>

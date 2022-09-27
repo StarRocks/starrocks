@@ -356,7 +356,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
                     cache_suffix_key.insert(cache_suffix_key.end(), region.begin(), region.end());
                     cache_suffix_key.insert(cache_suffix_key.end(), (uint8_t*)&tablet_id,
                                             ((uint8_t*)&tablet_id) + sizeof(tablet_id));
-                    _fragment_ctx->cache_param().cache_key_suffixes[tablet_id] = std::move(cache_suffix_key);
+                    _fragment_ctx->cache_param().cache_key_prefixes[tablet_id] = std::move(cache_suffix_key);
                 }
             }
         }
