@@ -24,6 +24,8 @@ package com.starrocks.persist;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
@@ -771,6 +773,11 @@ public class EditLog {
                     globalStateMgr.getRoutineLoadManager().replayAlterRoutineLoadJob(log);
                     break;
                 }
+                case OperationType.OP_ALTER_LOAD_JOB: {
+                    AlterLoadJobOperationLog log = (AlterLoadJobOperationLog) journal.getData();
+                    globalStateMgr.getLoadManager().replayAlterLoadJob(log);
+                    break;
+                }
                 case OperationType.OP_GLOBAL_VARIABLE_V2: {
                     GlobalVarPersistInfo info = (GlobalVarPersistInfo) journal.getData();
                     globalStateMgr.replayGlobalVariableV2(info);
@@ -880,6 +887,12 @@ public class EditLog {
                 case OperationType.OP_STARMGR: {
                     StarMgrJournal j = (StarMgrJournal) journal.getData();
                     StarMgrServer.getCurrentState().getStarMgr().replay(j.getJournal());
+                    break;
+                }
+                case OperationType.OP_CREATE_USER_V2: {
+                    CreateUserInfo info = (CreateUserInfo) journal.getData();
+                    globalStateMgr.getAuthenticationManager().replayCreateUser(
+                            info.getUserIdentity(), info.getAuthenticationInfo(), info.getUserProperty());
                     break;
                 }
                 default: {
@@ -1424,6 +1437,10 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, log);
     }
 
+    public void logAlterLoadJob(AlterLoadJobOperationLog log) {
+        logEdit(OperationType.OP_ALTER_LOAD_JOB, log);
+    }
+
     public void logGlobalVariableV2(GlobalVarPersistInfo info) {
         logEdit(OperationType.OP_GLOBAL_VARIABLE_V2, info);
     }
@@ -1504,4 +1521,11 @@ public class EditLog {
         logEdit(OperationType.OP_STARMGR, journal);
     }
 
+    public void logCreateUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo, UserProperty userProperty) {
+        CreateUserInfo info = new CreateUserInfo();
+        info.setUserIdentity(userIdentity);
+        info.setAuthenticationInfo(authenticationInfo);
+        info.setUserProperty(userProperty);
+        logEdit(OperationType.OP_CREATE_USER_V2, info);
+    }
 }

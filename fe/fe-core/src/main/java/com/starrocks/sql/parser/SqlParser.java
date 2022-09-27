@@ -3,10 +3,10 @@ package com.starrocks.sql.parser;
 
 import com.clearspring.analytics.util.Lists;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.ImportColumnsStmt;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.StatementPlanner;
@@ -92,8 +92,19 @@ public class SqlParser {
         StarRocksParser.sqlMode = sqlMode;
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
-        StarRocksParser.ExpressionContext expressionContext = parser.expression();
-        return ((Expr) new AstBuilder(sqlMode).visit(expressionContext));
+        StarRocksParser.ExpressionSingletonContext expressionSingleton = parser.expressionSingleton();
+        return ((Expr) new AstBuilder(sqlMode).visit(expressionSingleton.expression()));
+    }
+
+    public static ImportColumnsStmt parseImportColumns(String expressionSql, long sqlMode) {
+        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(expressionSql)));
+        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        StarRocksParser parser = new StarRocksParser(tokenStream);
+        StarRocksParser.sqlMode = sqlMode;
+        parser.removeErrorListeners();
+        parser.addErrorListener(new ErrorHandler());
+        StarRocksParser.ImportColumnsContext importColumnsContext = parser.importColumns();
+        return (ImportColumnsStmt) new AstBuilder(sqlMode).visit(importColumnsContext);
     }
 
     public static StatementBase parseFirstStatement(String originSql, long sqlMode) {
@@ -104,7 +115,11 @@ public class SqlParser {
         SqlScanner input = new SqlScanner(new StringReader(originStmt), sqlMode);
         com.starrocks.analysis.SqlParser parser = new com.starrocks.analysis.SqlParser(input);
         try {
-            return SqlParserUtils.getStmt(parser, idx);
+            List<StatementBase> stmts = (List<StatementBase>) parser.parse().value;
+            if (idx >= stmts.size()) {
+                throw new AnalysisException("Invalid statement index: " + idx + ". size: " + stmts.size());
+            }
+            return stmts.get(idx);
         } catch (Error e) {
             throw new ParsingException("Please check your sql, we meet an error when parsing.");
         } catch (AnalysisException e) {

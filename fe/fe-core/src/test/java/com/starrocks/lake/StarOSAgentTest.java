@@ -8,6 +8,7 @@ import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.proto.AllocateStorageInfo;
+import com.staros.proto.CreateShardInfo;
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
@@ -235,12 +236,14 @@ public class StarOSAgentTest {
 
     @Test
     public void testCreateShards() throws StarClientException, DdlException {
-        new Expectations() {
-            {
-                client.createShard("1", 2, 1, null, null);
-                minTimes = 0;
-                result = Lists.newArrayList(ShardInfo.newBuilder().setShardId(10L).build(),
-                        ShardInfo.newBuilder().setShardId(11L).build());
+        ShardInfo shard1 = ShardInfo.newBuilder().setShardId(10L).build();
+        ShardInfo shard2 = ShardInfo.newBuilder().setShardId(11L).build();
+        List<ShardInfo> shards = Lists.newArrayList(shard1, shard2);
+        new MockUp<StarClient>() {
+            @Mock
+            public List<ShardInfo> createShard(String serviceId, List<CreateShardInfo> createShardInfos)
+                    throws StarClientException {
+                return shards;
             }
         };
 

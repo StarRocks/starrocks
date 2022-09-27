@@ -21,6 +21,14 @@ bool PredicateParser::can_pushdown(const ColumnPredicate* predicate) const {
            column.aggregation() == FieldAggregationMethod::OLAP_FIELD_AGGREGATION_NONE;
 }
 
+bool PredicateParser::can_pushdown(const SlotDescriptor* slot_desc) const {
+    const size_t index = _schema.field_index(slot_desc->col_name());
+    CHECK(index <= _schema.num_columns());
+    const TabletColumn& column = _schema.column(index);
+    return _schema.keys_type() == KeysType::PRIMARY_KEYS ||
+           column.aggregation() == FieldAggregationMethod::OLAP_FIELD_AGGREGATION_NONE;
+}
+
 ColumnPredicate* PredicateParser::parse_thrift_cond(const TCondition& condition) const {
     const size_t index = _schema.field_index(condition.column_name);
     RETURN_IF(index >= _schema.num_columns(), nullptr);

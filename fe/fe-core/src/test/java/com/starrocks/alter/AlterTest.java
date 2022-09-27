@@ -53,6 +53,7 @@ import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -61,6 +62,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
@@ -333,8 +335,8 @@ public class AlterTest {
                 getDb("test").getTable("mv2");
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
-        Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1` AS `k1`," +
-                " `test`.`testTable1`.`k2` AS `k2` FROM `test`.`testTable1`", task.getDefinition());
+        Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
+                "FROM `test`.`testTable1`", task.getDefinition());
         dropMaterializedView("drop materialized view test.mv2");
     }
 
@@ -1381,7 +1383,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p20140103"));
 
         String dropSQL = "drop table test_partition_0day";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
 
     }
@@ -1564,7 +1566,7 @@ public class AlterTest {
         Assert.assertEquals(2, ((OlapTable) table).getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists3";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
     }
 
@@ -2169,6 +2171,17 @@ public class AlterTest {
         Assert.assertEquals("[k1, k2]", clause.getColumnsByPos().toString());
     }
 
+    @Test
+    public void testAlterDatabaseQuota() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void alterDatabaseQuota(AlterDatabaseQuotaStmt stmt) throws DdlException {
+            }
+        };
+        String sql = "alter database test set data quota 1KB;";
+        AlterDatabaseQuotaStmt stmt = (AlterDatabaseQuotaStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+    }
 
     @Test(expected = DdlException.class)
     public void testFindTruncatePartitionEntrance() throws Exception {

@@ -64,7 +64,6 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobManager;
@@ -824,33 +823,18 @@ public class StmtExecutor {
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
         GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
-        try {
-            GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool().submit(() -> {
-                StatisticExecutor statisticExecutor = new StatisticExecutor();
-                if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
-                    statisticExecutor.collectStatistics(
-                            new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                                    StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                                    analyzeStmt.getProperties()),
-                            analyzeStatus,
-                            //Sync load cache, auto-populate column statistic cache after Analyze table manually
-                            false);
-                } else {
-                    statisticExecutor.collectStatistics(
-                            StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
-                                    analyzeStmt.getColumnNames(),
-                                    analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
-                                            StatsConstants.AnalyzeType.FULL,
-                                    StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
-                            analyzeStatus,
-                            //Sync load cache, auto-populate column statistic cache after Analyze table manually
-                            false);
-                }
-            });
-        } catch (RejectedExecutionException e) {
-            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
-            analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
-            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        if (analyzeStmt.isAsync()) {
+            try {
+                GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool().submit(() -> {
+                    executeAnalyze(analyzeStmt, analyzeStatus, db, table);
+                });
+            } catch (RejectedExecutionException e) {
+                analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+                analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
+                GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            }
+        } else {
+            executeAnalyze(analyzeStmt, analyzeStatus, db, table);
         }
 
         ShowResultSet resultSet = analyzeStatus.toShowResult();
@@ -861,6 +845,29 @@ public class StmtExecutor {
         }
 
         sendShowResult(resultSet);
+    }
+
+    private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
+            statisticExecutor.collectStatistics(
+                    new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
+                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                            analyzeStmt.getProperties()),
+                    analyzeStatus,
+                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                    false);
+        } else {
+            statisticExecutor.collectStatistics(
+                    StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
+                            analyzeStmt.getColumnNames(),
+                            analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
+                                    StatsConstants.AnalyzeType.FULL,
+                            StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
+                    analyzeStatus,
+                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                    false);
+        }
     }
 
     private void handleDropStatsStmt() {
@@ -1067,7 +1074,7 @@ public class StmtExecutor {
 
     private void handleDdlStmt() {
         try {
-            ShowResultSet resultSet = DataDefinitionExecutorFactory.execute(parsedStmt, context);
+            ShowResultSet resultSet = DDLStmtExecutor.execute(parsedStmt, context);
             if (resultSet == null) {
                 context.getState().setOk();
             } else {
@@ -1087,7 +1094,7 @@ public class StmtExecutor {
             LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
             // Return message to info client what happened.
             context.getState().setError(e.getMessage());
-        } catch (Exception e) {
+        } catch (Throwable e) {
             // Maybe our bug
             LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
             context.getState().setError("Unexpected exception: " + e.getMessage());
@@ -1273,7 +1280,7 @@ public class StmtExecutor {
                     containOlapScanNode = true;
                 }
             }
-            
+
             TLoadJobType type = null;
             if (containOlapScanNode) {
                 coord.setLoadJobType(TLoadJobType.INSERT_QUERY);

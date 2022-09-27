@@ -478,7 +478,7 @@ public class CreateFunctionStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateFunction(this, context);
+        return visitor.visitCreateFunctionStmt(this, context);
     }
 
     @Override

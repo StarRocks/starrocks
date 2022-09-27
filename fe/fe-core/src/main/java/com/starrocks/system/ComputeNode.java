@@ -72,6 +72,7 @@ public class ComputeNode implements IComputable, Writable {
     private int heartbeatRetryTimes = 0;
 
     // port of starlet on BE
+    @SerializedName("starletPort")
     private volatile int starletPort;
 
     public ComputeNode() {

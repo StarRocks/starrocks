@@ -9,6 +9,7 @@ import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
@@ -135,6 +136,9 @@ import java.util.TreeSet;
 
 public class PrivilegeChecker {
     public static void check(StatementBase statement, ConnectContext session) {
+        if (session.getGlobalStateMgr().isUsingNewPrivilege()) {
+            return;
+        }
         new PrivilegeCheckerVisitor().check(statement, session);
     }
 
@@ -837,7 +841,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext session) {
+        public Void visitAlterDatabaseQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext session) {
             String dbName = statement.getDbName();
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
@@ -858,7 +862,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitDropFunction(DropFunctionStmt statement, ConnectContext context) {
+        public Void visitDropFunctionStmt(DropFunctionStmt statement, ConnectContext context) {
             // check operation privilege
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
@@ -868,7 +872,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitCreateFunction(CreateFunctionStmt statement, ConnectContext context) {
+        public Void visitCreateFunctionStmt(CreateFunctionStmt statement, ConnectContext context) {
             // check operation privilege
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
@@ -937,7 +941,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowFunctions(ShowFunctionsStmt statement, ConnectContext context) {
+        public Void visitShowFunctionsStmt(ShowFunctionsStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.SHOW)) {
@@ -1265,6 +1269,14 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitCreateRepositoryStmt(CreateRepositoryStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropRepositoryStmt(DropRepositoryStmt statement, ConnectContext context) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }

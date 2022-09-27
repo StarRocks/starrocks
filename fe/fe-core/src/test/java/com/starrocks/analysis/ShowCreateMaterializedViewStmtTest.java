@@ -84,7 +84,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k1`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1`, `tbl1`.`k2`\nFROM `tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv1", "mv1_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -112,7 +112,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv2", "mv2_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -140,7 +140,8 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k1`, `test`.`tbl1`.`k2` + `test`.`tbl1`.`v1` AS `k3` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1`, `tbl1`.`k2` + `tbl1`.`v1` AS `k3`\n" +
+                "FROM `tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv3", "mv3_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -168,7 +169,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv4", "mv4_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -202,7 +203,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv5", "mv5_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -236,7 +237,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv6", "mv6_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -270,7 +271,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv7", "mv7_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));

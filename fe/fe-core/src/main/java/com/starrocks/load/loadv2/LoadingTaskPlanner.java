@@ -182,7 +182,8 @@ public class LoadingTaskPlanner {
 
         // 2. Olap table sink
         List<Long> partitionIds = getAllPartitionIds();
-        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds);
+        // Parallel pipeline loads are currently not supported, so disable the pipeline engine when users need parallel load
+        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, parallelInstanceNum <= 1);
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         olapTableSink.complete();
 
@@ -246,7 +247,8 @@ public class LoadingTaskPlanner {
 
         // 4. Olap table sink
         List<Long> partitionIds = getAllPartitionIds();
-        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds);
+        // Parallel pipeline loads are currently not supported, so disable the pipeline engine when users need parallel load
+        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, parallelInstanceNum <= 1);
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         olapTableSink.complete();
 

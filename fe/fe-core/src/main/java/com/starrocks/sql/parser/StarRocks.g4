@@ -81,6 +81,7 @@ statement
 
     //Routine Statement
     | createRoutineLoadStatement
+    | alterRoutineLoadStatement
     | stopRoutineLoadStatement
     | resumeRoutineLoadStatement
     | pauseRoutineLoadStatement
@@ -135,6 +136,7 @@ statement
     | showLoadStatement
     | showLoadWarningsStatement
     | cancelLoadStatement
+    | alterLoadStatement
 
     //Show Statement
     | showAuthorStatement
@@ -155,6 +157,7 @@ statement
     | showProcesslistStatement
     | showStatusStatement
     | showTabletStatement
+    | showTransactionStatement
     | showTriggersStatement
     | showUserStatement
     | showUserPropertyStatement
@@ -188,6 +191,7 @@ statement
 
     //  Repository Satement
     | createRepositoryStatement
+    | dropRepositoryStatement
 
     // Sql BlackList And WhiteList Statement
     | addSqlBlackListStatement
@@ -718,12 +722,23 @@ createRoutineLoadStatement
         dataSourceProperties?
     ;
 
+alterRoutineLoadStatement
+    : ALTER ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+        (loadProperties (',' loadProperties)*)?
+        jobProperties?
+        dataSource?
+    ;
+
+dataSource
+    : FROM source=identifier dataSourceProperties
+    ;
+
 loadProperties
-    : (colSeparatorProperty)
-    | (rowDelimiterProperty)
-    | (COLUMNS columnProperties)
-    | (WHERE expression)
-    | (partitionNames)
+    : colSeparatorProperty
+    | rowDelimiterProperty
+    | importColumns
+    | WHERE expression
+    | partitionNames
     ;
 
 colSeparatorProperty
@@ -734,9 +749,13 @@ rowDelimiterProperty
     : ROWS TERMINATED BY string
     ;
 
+importColumns
+    : COLUMNS columnProperties
+    ;
+
 columnProperties
     : '('
-        (qualifiedName | assignmentList) (',' (qualifiedName | assignmentList))*
+        (qualifiedName | assignment) (',' (qualifiedName | assignment))*
       ')'
     ;
 
@@ -774,7 +793,9 @@ showRoutineLoadTaskStatement
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
-    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')?
+        (WITH (SYNC | ASYNC) MODE)?
+        properties?
     ;
 
 dropStatsStatement
@@ -783,7 +804,9 @@ dropStatsStatement
 
 analyzeHistogramStatement
     : ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON identifier (',' identifier)*
-        (WITH bucket=INTEGER_VALUE BUCKETS)? properties?
+        (WITH (SYNC | ASYNC) MODE)?
+        (WITH bucket=INTEGER_VALUE BUCKETS)?
+        properties?
     ;
 
 dropHistogramStatement
@@ -940,6 +963,11 @@ cancelLoadStatement
     : CANCEL LOAD (FROM identifier)? (WHERE expression)?
     ;
 
+alterLoadStatement
+    : ALTER LOAD FOR (db=qualifiedName '.')? name=identifier
+        jobProperties?
+    ;
+
 // ------------------------------------------- Show Statement ----------------------------------------------------------
 
 showAuthorStatement
@@ -996,6 +1024,10 @@ showProcedureStatement
 
 showProcStatement
     : SHOW PROC path=string
+    ;
+
+showTransactionStatement
+    : SHOW TRANSACTION ((FROM | IN) db=qualifiedName)? (WHERE expression)?
     ;
 
 showTriggersStatement
@@ -1376,6 +1408,10 @@ createRepositoryStatement
     PROPERTIES propertyList
     ;
 
+dropRepositoryStatement
+    : DROP REPOSITORY identifier
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -1403,6 +1439,10 @@ expressionsWithDefault
 
 expressionOrDefault
     : expression | DEFAULT
+    ;
+
+expressionSingleton
+    : expression EOF
     ;
 
 expression
@@ -1826,7 +1866,7 @@ nonReserved
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
-    | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODIFY | MONTH | MERGE
+    | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
     | OBSERVER | OFFSET | ONLY | OPEN | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST

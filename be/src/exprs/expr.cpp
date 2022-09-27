@@ -272,7 +272,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     }
     case TExprNodeType::CAST_EXPR: {
         if (texpr_node.__isset.child_type || texpr_node.__isset.child_type_desc) {
-            *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(texpr_node));
+            *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(pool, texpr_node));
             break;
         } else {
             // @TODO: will call FunctionExpr, implement later

@@ -12,7 +12,7 @@ import java.util.Set;
 
 public class DefaultExpr {
 
-    public static final Set<String> SUPPORTED_DEFAULT_FNS = ImmutableSet.of("uuid()", "uuid_numeric()");
+    public static final Set<String> SUPPORTED_DEFAULT_FNS = ImmutableSet.of("now()", "uuid()", "uuid_numeric()");
 
     @SerializedName("expr")
     private String expr;

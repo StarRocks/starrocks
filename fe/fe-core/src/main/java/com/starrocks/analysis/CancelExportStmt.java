@@ -6,6 +6,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.UUID;
 
@@ -95,4 +96,8 @@ public class CancelExportStmt extends DdlStmt {
         return stringBuilder.toString();
     }
 
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCancelExportStatement(this, context);
+    }
 }

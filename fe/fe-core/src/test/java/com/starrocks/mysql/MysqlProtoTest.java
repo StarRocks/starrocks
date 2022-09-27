@@ -96,6 +96,10 @@ public class MysqlProtoTest {
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
+
+                globalStateMgr.isUsingNewPrivilege();
+                minTimes = 0;
+                result = false;
             }
         };
 
@@ -238,6 +242,7 @@ public class MysqlProtoTest {
         mockPassword(false);
         mockAccess();
         ConnectContext context = new ConnectContext(null);
+        context.setGlobalStateMgr(globalStateMgr);
         Assert.assertTrue(MysqlProto.negotiate(context));
     }
 

@@ -2,11 +2,14 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AddSqlBlackListStmt;
+import com.starrocks.analysis.AlterLoadStmt;
+import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.LimitElement;
@@ -20,6 +23,7 @@ import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowSnapshotStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.common.AnalysisException;
@@ -425,13 +429,13 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitDropFunction(DropFunctionStmt statement, ConnectContext context) {
+        public Void visitDropFunctionStmt(DropFunctionStmt statement, ConnectContext context) {
             DropStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
-        public Void visitCreateFunction(CreateFunctionStmt statement, ConnectContext context) {
+        public Void visitCreateFunctionStmt(CreateFunctionStmt statement, ConnectContext context) {
             try {
                 statement.analyze(context);
             } catch (AnalysisException e) {
@@ -447,7 +451,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext context) {
+        public Void visitAlterDatabaseQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext context) {
             AlterDbQuotaAnalyzer.analyze(statement, context);
             return null;
         }
@@ -496,6 +500,17 @@ public class Analyzer {
         @Override
         public Void visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, ConnectContext session) {
             CreateRoutineLoadAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        public Void visitAlterRoutineLoadStatement(AlterRoutineLoadStmt statement, ConnectContext session) {
+            AlterRoutineLoadAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterLoadStatement(AlterLoadStmt statement, ConnectContext session) {
+            AlterLoadAnalyzer.analyze(statement, session);
             return null;
         }
 
@@ -573,6 +588,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitShowTransactionStmt(ShowTransactionStmt statement, ConnectContext session) {
+            ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
         public Void visitLoadStmt(LoadStmt statement, ConnectContext context) {
             LoadStmtAnalyzer.analyze(statement, context);
             return null;
@@ -616,7 +637,13 @@ public class Analyzer {
 
         @Override
         public Void visitCreateRepositoryStmt(CreateRepositoryStmt statement, ConnectContext context) {
-            CreateRepositoryAnalyzer.analyze(statement, context);
+            RepositoryAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropRepositoryStmt(DropRepositoryStmt statement, ConnectContext context) {
+            RepositoryAnalyzer.analyze(statement, context);
             return null;
         }
     }

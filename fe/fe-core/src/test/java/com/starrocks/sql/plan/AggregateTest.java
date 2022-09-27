@@ -277,7 +277,7 @@ public class AggregateTest extends PlanTestBase {
     public void testAggConstPredicate() throws Exception {
         String queryStr = "select MIN(v1) from t0 having abs(1) = 2";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("  1:AGGREGATE (update finalize)\n"
+        Assert.assertTrue(explainString, explainString.contains("  1:AGGREGATE (update finalize)\n"
                 + "  |  output: min(1: v1)\n"
                 + "  |  group by: \n"
                 + "  |  having: abs(1) = 2\n"));
@@ -854,6 +854,57 @@ public class AggregateTest extends PlanTestBase {
         } finally {
             FeConstants.runningUnitTest = false;
         }
+    }
+
+    @Test
+    public void testWindowFunnelWithConstantMultipleStage() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'auto',new_planner_agg_stage='3')*/ "
+                + "1,2,(window_funnel(900,lo_orderdate,0,[(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) "
+                + "= 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'A', "
+                + "(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate  "
+                + "as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'B',(case when ((((cast(lo_orderdate as "
+                + "BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else "
+                + "'C' end) = 'C'])) as __col_4, (count(distinct lo_orderdate)) "
+                + "as __col_18 from lineorder_flat_for_mv group by 1,2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "window_funnel(43: window_funnel, 900, 0)");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testWindowFunnelWithOutMultipleStage() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'auto',new_planner_agg_stage='3')*/ "
+                + "1,2,(window_funnel(900,lo_orderdate,0,[(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) "
+                + "= 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'A', "
+                + "(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate  "
+                + "as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'B',(case when ((((cast(lo_orderdate as "
+                + "BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else "
+                + "'C' end) = 'C'])) as __col_4, (count(distinct lo_orderdate)) "
+                + "as __col_18 from lineorder_flat_for_mv";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "window_funnel(41: window_funnel, 900, 0)");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testWindowFunnelWithMultipleStage() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select /*+ SET_VAR (streaming_preaggregation_mode = 'auto',new_planner_agg_stage='3') */ " +
+                "year, k, __col_4,__col_18 from  (select  date_trunc('year',lo_orderdate) as year,left(c_name,1) as k," +
+                "(window_funnel(900,lo_orderdate,0,[(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' " +
+                "when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'A'," +
+                "(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' " +
+                "when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'B'," +
+                "(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' " +
+                "when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'C'])) as __col_4, " +
+                "(count(distinct lo_orderdate)) as __col_18 from lineorder_flat_for_mv group " +
+                "by date_trunc('year',lo_orderdate)," +
+                "left(c_name,1) ) t;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "window_funnel(43: window_funnel, 900, 0)");
+        FeConstants.runningUnitTest = false;
     }
 
     @Test

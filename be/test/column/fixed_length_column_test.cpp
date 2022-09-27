@@ -590,4 +590,24 @@ TEST(FixedLengthColumnTest, test_fixed_length_column_downgrade) {
     ASSERT_FALSE(column->has_large_column());
 }
 
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_replicate) {
+    auto column = FixedLengthColumn<int32_t>::create();
+    column->append(7);
+    column->append(3);
+
+    Offsets offsets;
+    offsets.push_back(0);
+    offsets.push_back(3);
+    offsets.push_back(5);
+
+    auto c2 = column->replicate(offsets);
+    ASSERT_EQ(5, c2->size());
+    ASSERT_EQ(c2->get(0).get_int32(), 7);
+    ASSERT_EQ(c2->get(1).get_int32(), 7);
+    ASSERT_EQ(c2->get(2).get_int32(), 7);
+    ASSERT_EQ(c2->get(3).get_int32(), 3);
+    ASSERT_EQ(c2->get(4).get_int32(), 3);
+}
+
 } // namespace starrocks::vectorized
