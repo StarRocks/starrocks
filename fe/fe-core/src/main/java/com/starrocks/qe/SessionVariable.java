@@ -150,6 +150,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
+    /**
+     * Whether to allow the generation of one-phase local aggregation with the local shuffle operator
+     * (ScanNode->LocalShuffleNode->OnePhaseAggNode) regardless of the differences between grouping keys
+     * and scan distribution keys, when there is only one BE.
+     */
     public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
 
     public static final String ENABLE_DELIVER_BATCH_FRAGMENTS = "enable_deliver_batch_fragments";
