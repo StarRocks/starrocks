@@ -8,6 +8,7 @@ import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
+import com.starrocks.analysis.AlterLoadStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.BaseViewStmt;
@@ -400,6 +401,12 @@ public class Analyzer {
         @Override
         public Void visitRecoverPartitionStmt(RecoverPartitionStmt statement, ConnectContext context) {
             RecoverPartitionAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterLoadStatement(AlterLoadStmt statement, ConnectContext session) {
+            AlterLoadAnalyzer.analyze(statement, session);
             return null;
         }
 

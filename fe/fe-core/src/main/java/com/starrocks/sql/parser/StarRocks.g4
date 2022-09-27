@@ -122,6 +122,7 @@ statement
     | showLoadStatement                                                                     #showLoad
     | showLoadWarningsStatement                                                             #showLoadWarnings
     | cancelLoadStatement                                                                   #cancelLoad
+    | alterLoadStatement                                                                    #alterLoad
 
     // Other statement
     | USE qualifiedName                                                                     #useDb
@@ -760,8 +761,16 @@ cancelLoadStatement
     : CANCEL LOAD (FROM identifier)? (WHERE expression)?
     ;
 
-// ------------------------------------------- Other Statement ---------------------------------------------------------
+alterLoadStatement
+    : ALTER LOAD FOR (db=qualifiedName '.')? name=identifier
+        jobProperties?
+    ;
 
+jobProperties
+    : properties
+    ;
+
+// ------------------------------------------- Other Statement ---------------------------------------------------------
 showDatabasesStatement
     : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
