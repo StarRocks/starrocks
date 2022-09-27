@@ -47,6 +47,7 @@ FileResultWriter::~FileResultWriter() {
 Status FileResultWriter::init(RuntimeState* state) {
     _state = state;
     _init_profile();
+    RETURN_IF_ERROR(_create_fs());
 
     return Status::OK();
 }
@@ -61,10 +62,7 @@ void FileResultWriter::_init_profile() {
     _written_data_bytes = ADD_COUNTER(profile, "WrittenDataBytes", TUnit::BYTES);
 }
 
-Status FileResultWriter::_create_file_writer() {
-    std::string file_name = _get_next_file_name();
-    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-
+Status FileResultWriter::_create_fs() {
     if (_fs == nullptr) {
         if (_file_opts->is_local_file) {
             _fs = new_fs_posix();
@@ -81,6 +79,13 @@ Status FileResultWriter::_create_file_writer() {
         return Status::InternalError(
                 strings::Substitute("file system initialize failed for file $0", _file_opts->file_path));
     }
+    return Status::OK();
+}
+
+Status FileResultWriter::_create_file_writer() {
+    std::string file_name = _get_next_file_name();
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+
     ASSIGN_OR_RETURN(auto writable_file, _fs->new_writable_file(opts, file_name));
 
     switch (_file_opts->file_format) {
@@ -106,6 +111,11 @@ Status FileResultWriter::open(RuntimeState* state) {
     // In open() function, we are in pthread environemnt, pthread and JNI doesn't have a conflict
     RETURN_IF_ERROR(_create_file_writer());
     return Status::OK();
+}
+
+bool FileResultWriter::can_run_in_bthread() {
+    DCHECK(_fs != nullptr);
+    return _fs->type() != FileSystem::HDFS;
 }
 
 // file name format as: my_prefix_0.csv

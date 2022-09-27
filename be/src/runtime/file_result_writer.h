@@ -87,9 +87,12 @@ public:
     Status append_chunk(vectorized::Chunk* chunk) override;
     Status close() override;
     Status open(RuntimeState* state) override;
+    bool can_run_in_bthread();
 
 private:
     void _init_profile();
+
+    Status _create_fs();
 
     Status _create_file_writer();
     // get next export file name

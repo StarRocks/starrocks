@@ -14,6 +14,7 @@ DIAGNOSTIC_POP
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
+#include "udf/java/utils.h"
 #include "util/defer_op.h"
 #include "util/spinlock.h"
 
@@ -62,6 +63,8 @@ public:
 private:
     void process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter);
 
+    Status process_writer_op(std::function<Status()> op);
+
     std::vector<ExprContext*> _output_expr_ctxs;
 
     std::shared_ptr<ResultFileOptions> _file_opts;
@@ -88,6 +91,7 @@ private:
     static const int32_t kExecutionQueueSizeLimit = 64;
 };
 
+// this function will be executed in bthread
 int FileSinkBuffer::execute_io_task(void* meta, bthread::TaskIterator<const vectorized::ChunkPtr>& iter) {
     FileSinkBuffer* file_sink_buffer = static_cast<FileSinkBuffer*>(meta);
     for (; iter; ++iter) {
@@ -110,7 +114,7 @@ void FileSinkBuffer::process_chunk(bthread::TaskIterator<const vectorized::Chunk
     }
 
     if (!_is_writer_opened) {
-        if (Status status = _writer->open(_state); !status.ok()) {
+        if (Status status = process_writer_op([this]() { return _writer->open(_state); }); !status.ok()) {
             set_io_status(status);
             close(_state);
             return;
@@ -123,9 +127,20 @@ void FileSinkBuffer::process_chunk(bthread::TaskIterator<const vectorized::Chunk
         close(_state);
         return;
     }
-    if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {
+    if (Status status = process_writer_op([this, chunk]() { return _writer->append_chunk(chunk.get()); });
+        !status.ok()) {
         set_io_status(status);
         close(_state);
+    }
+}
+
+Status FileSinkBuffer::process_writer_op(std::function<Status()> op) {
+    // for some writers(eg. hdfs) that cannot be executed in bthread, we need to put them in pthread.
+    if (_writer->can_run_in_bthread()) {
+        return op();
+    } else {
+        auto ret = call_hdfs_scan_function_in_pthread(op);
+        return ret->get_future().get();
     }
 }
 
@@ -169,6 +184,7 @@ bool FileSinkBuffer::need_input() {
 
 Status FileSinkBuffer::set_finishing() {
     if (--_num_result_sinkers == 0) {
+        // when all writes are over, we add a nullptr as a special mark to trigger close
         if (bthread::execution_queue_execute(*_exec_queue_id, nullptr) != 0) {
             return Status::InternalError("submit task failed");
         }
@@ -187,10 +203,12 @@ void FileSinkBuffer::cancel_one_sinker() {
 }
 
 void FileSinkBuffer::close(RuntimeState* state) {
+    int64_t num_written_rows = 0;
     if (_writer != nullptr) {
-        if (Status status = _writer->close(); !status.ok()) {
+        if (Status status = process_writer_op([this]() { return _writer->close(); }); !status.ok()) {
             set_io_status(status);
         }
+        num_written_rows = _writer->get_written_rows();
         _writer.reset();
     }
 
@@ -200,6 +218,7 @@ void FileSinkBuffer::close(RuntimeState* state) {
         query_statistic->add_scan_stats(query_ctx->cur_scan_rows_num(), query_ctx->get_scan_bytes());
         query_statistic->add_cpu_costs(query_ctx->cpu_cost());
         query_statistic->add_mem_costs(query_ctx->mem_cost_bytes());
+        query_statistic->set_returned_rows(num_written_rows);
         _sender->set_query_statistics(query_statistic);
         Status final_status = _fragment_ctx->final_status();
         Status io_status = get_io_status();
