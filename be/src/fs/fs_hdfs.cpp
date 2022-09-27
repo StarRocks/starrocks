@@ -179,9 +179,6 @@ Status HDFSWritableFile::close() {
         return Status::OK();
     }
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
-        // If we open a file and close it immediately here (before this file is flushed to the disk),
-        // hdfs cannot find the file and will cause BE crash.
-        // To avoid this, before closing the file, we need to call file sync.
         int r = hdfsHSync(_fs, _file);
         if (r != 0) {
             return Status::IOError("sync error, file: {}"_format(_path));
