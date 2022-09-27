@@ -78,7 +78,7 @@ drop materialized view mv4;
 create materialized view mv5
 refresh realtime 
 as 
-select t0_c0, count(*) as cnt
+select t0_c0, count(t0_c0) as cnt, sum(t0_c0) as sum
 from t0
 group by t0_c0;
 
