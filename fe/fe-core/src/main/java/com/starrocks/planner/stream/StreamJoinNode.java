@@ -10,6 +10,7 @@ import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.thrift.TEqJoinCondition;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStreamJoinNode;
@@ -75,8 +76,8 @@ public class StreamJoinNode extends JoinNode {
     }
 
     @Override
-    protected String getNodeVerboseExplain(String detailPrefix) {
-        String joinStr = super.getNodeVerboseExplain(detailPrefix);
+    protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
+        String joinStr = super.getNodeExplainString(detailPrefix, detailLevel);
         joinStr += detailPrefix + "rhs_imt: ";
         if (rightIMT != null) {
             joinStr += rightIMT + "\n";
