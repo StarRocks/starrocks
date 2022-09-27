@@ -1616,7 +1616,8 @@ public class AggregateTest extends PlanTestBase {
             sql = "select v1, sum(v3) from t0 group by v1";
             plan = getCostExplain(sql);
             assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                    "  |  aggregate: sum[([3: v3, BIGINT, true]); args: BIGINT; result: BIGINT; args nullable: true; result nullable: true]\n" +
+                    "  |  aggregate: sum[([3: v3, BIGINT, true]); args: BIGINT; result: BIGINT;" +
+                    " args nullable: true; result nullable: true]\n" +
                     "  |  group by: [1: v1, BIGINT, true]\n" +
                     "  |  sorted streaming: true");
         }
@@ -1624,7 +1625,8 @@ public class AggregateTest extends PlanTestBase {
             sql = "select sum(l) from (select sum(length(v3)) l from t0 group by v1) tx";
             plan = getCostExplain(sql);
             assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                    "  |  aggregate: sum[([4: length, INT, true]); args: INT; result: BIGINT; args nullable: true; result nullable: true]\n" +
+                    "  |  aggregate: sum[([4: length, INT, true]); args: INT; result: BIGINT;" +
+                    " args nullable: true; result nullable: true]\n" +
                     "  |  sorted streaming: true");
         }
         connectContext.getSessionVariable().setEnableSortAggregate(false);
