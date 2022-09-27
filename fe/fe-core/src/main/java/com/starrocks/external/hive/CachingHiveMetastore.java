@@ -245,7 +245,6 @@ public class CachingHiveMetastore implements IHiveMetastore {
     public Map<String, HivePartitionStatistics> getPresentPartitionsStatistics(List<NewHivePartitionName> partitions) {
         return partitionStatsCache.getAllPresent(partitions).entrySet().stream()
                 .collect(Collectors.toMap(entry -> entry.getKey().getPartitionNames().get(), Map.Entry::getValue));
-
     }
 
     private HivePartitionStatistics loadPartitionStatistics(NewHivePartitionName hivePartitionName) {
@@ -291,5 +290,4 @@ public class CachingHiveMetastore implements IHiveMetastore {
             throw new UncheckedExecutionException(e);
         }
     }
-
 }

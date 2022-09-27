@@ -145,6 +145,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         this.partColumnNames = partColumnNames;
         this.dataColumnNames = dataColumnNames;
         this.hiveProperties = properties;
+        initHmsTableInfo();
     }
 
     public String getHiveDbTable() {
