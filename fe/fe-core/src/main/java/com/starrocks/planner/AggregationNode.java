@@ -229,6 +229,9 @@ public class AggregationNode extends PlanNode {
         if (!conjuncts.isEmpty()) {
             output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts)).append("\n");
         }
+        if (useSortAgg) {
+            output.append(detailPrefix).append("sorted streaming: true\n");
+        }
         return output.toString();
     }
 
