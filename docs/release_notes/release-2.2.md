@@ -1,5 +1,45 @@
 # StarRocks version 2.2
 
+## 2.2.7
+
+Release date: September 23, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Data may be lost when users load JSON data into StarRocks. [#11054](https://github.com/StarRocks/starrocks/issues/11054)
+
+- The output from SHOW FULL TABLES is incorrect. [#11126](https://github.com/StarRocks/starrocks/issues/11126)
+
+- In previous versions, to access data in a view, users must have permissions on both the base tables and the view. In the current version, users are only required to have permissions on the view. [#11290](https://github.com/StarRocks/starrocks/pull/11290)
+
+- The result from a complex query that is nested with EXISTS or IN is incorrect. [#11415](https://github.com/StarRocks/starrocks/pull/11415)
+
+- REFRESH EXTERNAL TABLE fails if the schema of the corresponding Hive table is changed. [#11406](https://github.com/StarRocks/starrocks/pull/11406)
+
+- An error may occur when a non-leader FE replays the bitmap index creation operation. [#11261](
+
+## 2.2.6
+
+Release date: September 14, 2022
+
+## Bug Fixes
+
+The following bugs are fixed:
+
+- The result of `order by... limit...offset` is incorrect when the subquery contains LIMIT. [#9698](https://github.com/StarRocks/starrocks/issues/9698)
+
+- The BE crashes if partial update is performed on a table with large data volume. [#9809](https://github.com/StarRocks/starrocks/issues/9809)
+
+- Compaction causes BEs to crash if the size of BITMAP data to compact exceeds 2 GB. [#11159](https://github.com/StarRocks/starrocks/pull/11159)
+
+- The like() and regexp() functions do not work if the pattern length exceeds 16 KB. [#10364](https://github.com/StarRocks/starrocks/issues/10364)
+
+## Behavior Change
+
+The format used to represent ARRAY<JSON> values in the output is modified. Escape characters are no longer used in the returned JSON values. For example, `[{"k1":"v1"}]` is used, instead of `"[{\"k1\":\"v1\"}]"`. [#10790](https://github.com/StarRocks/starrocks/issues/10790)
+
 ## 2.2.5
 
 Release date: August 18, 2022
@@ -7,6 +47,7 @@ Release date: August 18, 2022
 ### Improvements
 
 - Improved the system performance when the pipeline engine is enabled. [#9580](https://github.com/StarRocks/starrocks/pull/9580)
+
 - Improved the accuracy of memory statistics for index metadata. [#9837](https://github.com/StarRocks/starrocks/pull/9837)
 
 ### Bug Fixes
@@ -14,6 +55,7 @@ Release date: August 18, 2022
 The following bugs are fixed:
 
 - BEs may be stuck in querying Kafka partition offsets (`get_partition_offset`) during Routine Load. [#9937](https://github.com/StarRocks/starrocks/pull/9937)
+
 - An error occurs when multiple Broker Load threads attempt to load the same HDFS file. [#9507](https://github.com/StarRocks/starrocks/pull/9507)
 
 ## 2.2.4
@@ -23,6 +65,7 @@ Release date: August 3, 2022
 ### Improvements
 
 - Supports synchronizing schema changes on Hive table to the corresponding external table. [#9010](https://github.com/StarRocks/starrocks/pull/9010)
+
 - Supports loading ARRAY data in Parquet files via Broker Load. [#9131](https://github.com/StarRocks/starrocks/pull/9131)
 
 ### Bug Fixes
@@ -30,7 +73,9 @@ Release date: August 3, 2022
 The following bugs are fixed:
 
 - Broker Load cannot handle Kerberos logins with multiple keytab files. [#8820](https://github.com/StarRocks/starrocks/pull/8820) [#8837](https://github.com/StarRocks/starrocks/pull/8837)
+
 - Supervisor may fail to restart services if **stop_be.sh** exits immediately after it is executed. [#9175](https://github.com/StarRocks/starrocks/pull/9175)
+
 - Incorrect Join Reorder precedence causes error "Column cannot be resolved". [#9063](https://github.com/StarRocks/starrocks/pull/9063) [#9487](https://github.com/StarRocks/starrocks/pull/9487)
 
 ## 2.2.3
@@ -42,7 +87,9 @@ Release date: July 24, 2022
 The following bugs are fixed:
 
 - An error occurs when users delete a resource group. [#8036](https://github.com/StarRocks/starrocks/pull/8036)
+
 - Thrift server exits when the number of threads is insufficient. [#7974](https://github.com/StarRocks/starrocks/pull/7974)
+
 - In some scenarios, join reorder in CBO returns no results. [#7099](https://github.com/StarRocks/starrocks/pull/7099) [#7831](https://github.com/StarRocks/starrocks/pull/7831) [#6866](https://github.com/StarRocks/starrocks/pull/6866)
 
 ## 2.2.2
@@ -60,8 +107,11 @@ Release date: June 29, 2022
 The following bugs are fixed:
 
 - The number of replicas (`replication_num`) created by using CTAS is incorrect. [#7036](https://github.com/StarRocks/starrocks/pull/7036)
+
 - Metadata may be lost after ALTER ROUTINE LOAD is performed. [#7068](https://github.com/StarRocks/starrocks/pull/7068)
+
 - Runtime filters fail to be pushed down. [#7206](https://github.com/StarRocks/starrocks/pull/7206) [#7258](https://github.com/StarRocks/starrocks/pull/7258)
+
 - Pipeline issues that may cause memory leaks.  [#7295](https://github.com/StarRocks/starrocks/pull/7295)
 
 - Deadlock may occur when a Routine Load job is aborted. [#6849](https://github.com/StarRocks/starrocks/pull/6849)
@@ -77,8 +127,11 @@ Release date: June 2, 2022
 ### Improvements
 
 - Optimized the data loading performance and reduced long tail latency by reconstructing part of the hotspot code and reducing lock granularity. [#6641](https://github.com/StarRocks/starrocks/pull/6641)
+
 - Added the CPU and memory usage information of the machines on which BEs are deployed for each query to the FE audit log. [#6208](https://github.com/StarRocks/starrocks/pull/6208) [#6209](https://github.com/StarRocks/starrocks/pull/6209)
+
 - Supported JSON data types in the tables that use the Primary Key model and tables that use the Unique Key model. [#6544](https://github.com/StarRocks/starrocks/pull/6544)
+
 - Reduced FEs load by reducing lock granularity and deduplicating BE report requests. Optimized the report performance when a large number of BEs are deployed, and solved the issue of Routine Load tasks getting stuck in a large cluster. [#6293](https://github.com/StarRocks/starrocks/pull/6293)
 
 ### Bug Fixes
@@ -86,7 +139,9 @@ Release date: June 2, 2022
 The following bugs are fixed:
 
 - An error occurs when StarRocks parses the escape characters specified in the `SHOW FULL TABLES FROM DatabaseName` statement. [#6559](https://github.com/StarRocks/starrocks/issues/6559)
+
 - FE disk space usage rises sharply (Fix this bug by rolling back the BDBJE version). [#6708](https://github.com/StarRocks/starrocks/pull/6708)
+
 - BEs become faulty because relevant fields cannot be found in the data returned after columnar scanning is enabled (`enable_docvalue_scan=true`). [#6600](https://github.com/StarRocks/starrocks/pull/6600)
 
 ## 2.2.0
