@@ -771,7 +771,7 @@ public class LocalMetastore implements ConnectorMetadata {
         } else if (engineName.equalsIgnoreCase("elasticsearch") || engineName.equalsIgnoreCase("es")) {
             createEsTable(db, stmt);
             return;
-        } else if (engineName.equalsIgnoreCase("hive")) {
+        } else if (engineName.equalsIgnoreCase("hive") || engineName.equalsIgnoreCase("file")) {
             createHiveTable(db, stmt);
             return;
         } else if (engineName.equalsIgnoreCase("iceberg")) {

@@ -1994,7 +1994,16 @@ public class GlobalStateMgr {
         if (table.isLakeTable()) {
             sb.append(CreateTableStmt.LAKE_ENGINE_NAME.toUpperCase()).append(" ");
         } else {
-            sb.append(table.getType().name()).append(" ");
+            if (table.getType() == TableType.HIVE) {
+                HiveTable hiveTable = (HiveTable) table;
+                if (hiveTable.isFileEngine()) {
+                    sb.append("FILE").append(" ");
+                } else {
+                    sb.append(table.getType().name()).append(" ");
+                }
+            } else {
+                sb.append(table.getType().name()).append(" ");
+            }
         }
 
         if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
@@ -2215,11 +2224,13 @@ public class GlobalStateMgr {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hiveTable.getDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(hiveTable.getTableName()).append("\",\n");
-            sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
-            if (!hiveTable.getHiveProperties().isEmpty()) {
-                sb.append(",\n");
+            if (!hiveTable.isFileEngine()) {
+                sb.append("\"database\" = \"").append(hiveTable.getDbName()).append("\",\n");
+                sb.append("\"table\" = \"").append(hiveTable.getTableName()).append("\",\n");
+                sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
+                if (!hiveTable.getHiveProperties().isEmpty()) {
+                    sb.append(",\n");
+                }
             }
             sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
             sb.append("\n)");

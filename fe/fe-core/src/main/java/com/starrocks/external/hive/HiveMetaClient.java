@@ -120,6 +120,11 @@ public class HiveMetaClient {
         }
     }
 
+    public HiveMetaClient() {
+        HiveConf conf = new HiveConf();
+        this.conf = conf;
+    }
+
     private void init() {
         CurrentNotificationEventId currentNotificationEventId = getCurrentNotificationEventId();
         this.baseHmsEventId = currentNotificationEventId.getEventId();
@@ -767,6 +772,41 @@ public class HiveMetaClient {
                 fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
                         ImmutableList.copyOf(fileBlockDescs), ImmutableList.of(),
                         isSplittable, getTextFileFormatDesc(sd)));
+            }
+        } catch (FileNotFoundException ignored) {
+            // hive empty partition may not create directory
+        }
+        return fileDescs;
+    }
+
+    public List<HdfsFileDesc> getFileEngineDescs(String dirPath, boolean isSplittable,
+                                                  TextFileFormatDesc td) throws Exception {
+        URI uri = new Path(dirPath).toUri();
+        Configuration conf = new Configuration();
+        FileSystem fileSystem = FileSystem.get(uri, conf);;
+        List<HdfsFileDesc> fileDescs = Lists.newArrayList();
+
+        // fileSystem.listLocatedStatus is an api to list all statuses and
+        // block locations of the files in the given path in one operation.
+        // The performance is better than getting status and block location one by one.
+        try {
+            // files in hdfs may have multiple directories, we just deal with the only level
+            RemoteIterator<LocatedFileStatus> blockIterator = null;
+            blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
+            while (blockIterator.hasNext()) {
+                LocatedFileStatus locatedFileStatus = blockIterator.next();
+                if (locatedFileStatus.isDirectory()) {
+                    continue;
+                }
+                String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
+                if (!dirPath.endsWith("/") && !fileName.isEmpty()) {
+                    throw new Exception("the path is a directory but didn't end with '/'");
+                }
+                BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
+                List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
+                fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
+                        ImmutableList.copyOf(fileBlockDescs), ImmutableList.of(),
+                        isSplittable, td));
             }
         } catch (FileNotFoundException ignored) {
             // hive empty partition may not create directory

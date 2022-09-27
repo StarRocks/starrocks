@@ -43,10 +43,15 @@ import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.external.ColumnTypeConverter;
 import com.starrocks.external.HiveMetaStoreTableUtils;
+import com.starrocks.external.ObjectStorageUtils;
+import com.starrocks.external.hive.HdfsFileDesc;
 import com.starrocks.external.hive.HiveColumnStats;
+import com.starrocks.external.hive.HiveMetaClient;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.HiveTableStats;
+import com.starrocks.external.hive.RemoteFileInputFormat;
+import com.starrocks.external.hive.text.TextFileFormatDesc;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -94,6 +99,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     private static final String JSON_KEY_PART_COLUMN_NAMES = "partColumnNames";
     private static final String JSON_KEY_DATA_COLUMN_NAMES = "dataColumnNames";
     private static final String JSON_KEY_HIVE_PROPERTIES = "hiveProperties";
+
+    // used for engine = file
+    private static final String JSON_KEY_FILE_PATH = "path";
+    private static final String JSON_KEY_FORMAT = "format";
+
     private static final String JSON_KEY_SR_DB_NAME = "srDbName";
 
     public static final String HIVE_DB = "database";
@@ -115,6 +125,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     private HiveMetaStoreTableInfo hmsTableInfo;
 
     private HiveRepository hiveRepository;
+    private boolean fileEngine;
 
     public HiveTable() {
         super(TableType.HIVE);
@@ -187,6 +198,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     public List<String> getDataColumnNames() {
+        // return null column names so that orc will get data with name
+        if (fileEngine) {
+            return Lists.newArrayList();
+        }
         return dataColumnNames;
     }
 
@@ -223,26 +238,77 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     public Map<PartitionKey, Long> getPartitionKeys() throws DdlException {
+        if (fileEngine) {
+            return fileEnginePartitionKeys();
+        }
         return HiveMetaStoreTableUtils.getPartitionKeys(hmsTableInfo);
+    }
+
+    private Map<PartitionKey, Long> fileEnginePartitionKeys() {
+        Map<PartitionKey, Long> result = Maps.newHashMap();
+        result.put(new PartitionKey(), new Long(1));
+        return result;
+    }
+
+    private List<HivePartition> fileEnginePartitions() throws DdlException {
+        String path = hiveProperties.get(JSON_KEY_FILE_PATH);
+        if (!path.isEmpty()) {
+            RemoteFileInputFormat format = RemoteFileInputFormat.UNKNOWN;
+            if (hiveProperties.get(JSON_KEY_FORMAT).equalsIgnoreCase("parquet")) {
+                format = RemoteFileInputFormat.PARQUET;
+            } else if (hiveProperties.get(JSON_KEY_FORMAT).equalsIgnoreCase("orc")) {
+                format = RemoteFileInputFormat.ORC;
+            }
+            HiveMetaClient client = new HiveMetaClient();
+            try {
+                List<HdfsFileDesc> hdfsFileDescs = client.getFileEngineDescs(ObjectStorageUtils.formatObjectStoragePath(path),
+                        true, new TextFileFormatDesc("|", "\n", "-", ":"));
+                HivePartition hivePartition = new HivePartition(format, ImmutableList.copyOf(hdfsFileDescs),
+                        path);
+                List<HivePartition> result = Lists.newArrayList();
+                result.add(hivePartition);
+                return result;
+            } catch (Exception e) {
+                throw new DdlException(e.getMessage());
+            }
+        } else {
+            throw new DdlException("please check hdfs path");
+        }
     }
 
     @Override
     public List<HivePartition> getPartitions(List<PartitionKey> partitionKeys) throws DdlException {
+        if (fileEngine) {
+            return fileEnginePartitions();
+        }
         return HiveMetaStoreTableUtils.getPartitions(hmsTableInfo, partitionKeys);
     }
 
     @Override
     public HiveTableStats getTableStats() throws DdlException {
+        if (fileEngine) {
+            return new HiveTableStats(-1, -1);
+        }
         return HiveMetaStoreTableUtils.getTableStats(hmsTableInfo);
     }
 
     @Override
     public Map<String, HiveColumnStats> getTableLevelColumnStats(List<String> columnNames) throws DdlException {
+        if (fileEngine) {
+            Map<String, HiveColumnStats> result = Maps.newHashMap();
+            for (String name : dataColumnNames) {
+                result.put(name, HiveColumnStats.UNKNOWN);
+            }
+            return result;
+        }
         return HiveMetaStoreTableUtils.getTableLevelColumnStats(hmsTableInfo, columnNames);
     }
 
     @Override
     public void refreshTableCache(String dbName, String tableName) throws DdlException {
+        if (fileEngine) {
+            return;
+        }
         org.apache.hadoop.hive.metastore.api.Table table;
         try {
             table = hiveRepository.getTable(resourceName, this.hiveDbName, this.hiveTableName);
@@ -338,11 +404,17 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void refreshPartCache(List<String> partNames) throws DdlException {
+        if (fileEngine) {
+            return;
+        }
         hiveRepository.refreshPartitionCache(hmsTableInfo, partNames);
     }
 
     @Override
     public void refreshTableColumnStats() throws DdlException {
+        if (fileEngine) {
+            return;
+        }
         hiveRepository.refreshTableColumnStats(hmsTableInfo);
     }
 
@@ -352,6 +424,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
      */
     @Override
     public long getPartitionStatsRowCount(List<PartitionKey> partitions) {
+        if (fileEngine) {
+            return -1;
+        }
         return HiveMetaStoreTableUtils.getPartitionStatsRowCount(hmsTableInfo, partitions);
     }
 
@@ -363,6 +438,32 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
 
         Map<String, String> copiedProps = Maps.newHashMap(properties);
+        hdfsPath = copiedProps.get(JSON_KEY_FILE_PATH);
+
+        if (!Strings.isNullOrEmpty(hdfsPath)) {
+            //we didn't generate dataColumnNames so that orc and parquet can get column use column name.
+
+            copiedProps.remove(JSON_KEY_FILE_PATH);
+            String format = copiedProps.get(JSON_KEY_FORMAT);
+            if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")) {
+                throw new DdlException("not supported format");
+            }
+            copiedProps.remove(JSON_KEY_FORMAT);
+            if (!copiedProps.isEmpty()) {
+                throw new DdlException("Unknown table properties: " + copiedProps.toString());
+            }
+            for (Column c : fullSchema) {
+                dataColumnNames.add(c.getName());
+            }
+
+            fileEngine = true;
+            hiveDbName = "";
+            hiveTableName = name;
+            resourceName = "singleFile";
+            hiveProperties.put(JSON_KEY_FILE_PATH, hdfsPath);
+            hiveProperties.put(JSON_KEY_FORMAT, format);
+            return;
+        }
         hiveDbName = copiedProps.get(HIVE_DB);
         if (Strings.isNullOrEmpty(hiveDbName)) {
             throw new DdlException(String.format(PROPERTY_MISSING_MSG, HIVE_DB, HIVE_DB));
@@ -462,6 +563,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         if (!copiedProps.isEmpty()) {
             throw new DdlException("Unknown table properties: " + copiedProps.toString());
         }
+    }
+
+    public boolean isFileEngine() {
+        return fileEngine;
     }
 
     private void checkResource(String resourceName) throws DdlException {
@@ -602,6 +707,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 for (Map.Entry<String, JsonElement> entry : jHiveProperties.entrySet()) {
                     hiveProperties.put(entry.getKey(), entry.getValue().getAsString());
                 }
+                if (hiveProperties.containsKey(JSON_KEY_FORMAT)) {
+                    fileEngine = true;
+                }
             }
             if (jsonObject.has(JSON_KEY_DATA_COLUMN_NAMES)) {
                 JsonArray jDataColumnNames = jsonObject.getAsJsonArray(JSON_KEY_DATA_COLUMN_NAMES);
@@ -637,12 +745,18 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void onCreate() {
+        if (fileEngine) {
+            return;
+        }
         hiveRepository.getCounter().add(resourceName, hiveDbName, hiveTableName);
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().registerTable(this);
     }
 
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
+        if (fileEngine) {
+            return;
+        }
         if (hiveRepository.getCounter().reduce(resourceName, hiveDbName, hiveTableName) == 0) {
             hiveRepository.clearCache(hmsTableInfo);
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unregisterTable(this);
