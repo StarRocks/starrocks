@@ -24,8 +24,6 @@ public class UserAuthenticationInfo implements Writable {
     private String authPlugin = null;
     @SerializedName(value = "t")
     private String textForAuthPlugin = null;
-    @SerializedName(value = "up")
-    private UserProperty userProperty = new UserProperty();
     @SerializedName(value = "h")
     private String origHost;
     @SerializedName(value = "u")
@@ -47,7 +45,7 @@ public class UserAuthenticationInfo implements Writable {
         return isAnyHost || hostPattern.match(remoteHost);
     }
 
-    public void analyse() throws AuthenticationException {
+    public void analyze() throws AuthenticationException {
         try {
             isAnyUser = origUser.equals(ANY_USER);
             isAnyHost = origHost.equals(ANY_HOST);
@@ -88,6 +86,6 @@ public class UserAuthenticationInfo implements Writable {
     public void setOrigUserHost(String origUser, String origHost) throws AuthenticationException {
         this.origUser = origUser;
         this.origHost = origHost;
-        analyse();
+        analyze();
     }
 }
