@@ -8,9 +8,9 @@
 
 namespace starrocks::pipeline {
 
-LookupJoinProbeOperator::LookupJoinProbeOperator(
-        OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-        const std::shared_ptr<LookupJoinContext>& lookup_join_context)
+LookupJoinProbeOperator::LookupJoinProbeOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                                                 int32_t driver_sequence,
+                                                 const std::shared_ptr<LookupJoinContext>& lookup_join_context)
         : Operator(factory, id, "lookup_join_probe", plan_node_id, driver_sequence),
           _lookup_join_context(lookup_join_context) {
     _lookup_join_context->ref();
@@ -37,7 +37,7 @@ StatusOr<vectorized::ChunkPtr> LookupJoinProbeOperator::pull_chunk(RuntimeState*
 }
 
 Status LookupJoinProbeOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    VLOG(1) << "put the chunk:"<< chunk->num_rows();
+    VLOG(1) << "put the chunk:" << chunk->num_rows();
     if (!_lookup_join_context->blocking_put(chunk)) {
         return Status::InternalError("Add chunk into lookup join queue failed.");
     }

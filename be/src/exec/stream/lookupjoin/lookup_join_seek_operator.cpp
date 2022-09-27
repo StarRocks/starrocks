@@ -1,8 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include "exec/stream/lookupjoin/lookup_join_seek_operator.h"
+
 #include "column/chunk.h"
 #include "exec/pipeline/operator.h"
-#include "exec/stream/lookupjoin/lookup_join_seek_operator.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exprs/vectorized/binary_predicate.h"
 #include "exprs/vectorized/literal.h"
@@ -13,9 +14,8 @@
 
 namespace starrocks::pipeline {
 
-LookupJoinSeekOperator::LookupJoinSeekOperator(OperatorFactory* factory, int32_t id,
-                                               int32_t plan_node_id, const int32_t driver_sequence,
-                                               const TOlapScanNode& olap_scan_node,
+LookupJoinSeekOperator::LookupJoinSeekOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                                               const int32_t driver_sequence, const TOlapScanNode& olap_scan_node,
                                                const vectorized::RuntimeFilterProbeCollector& runtime_filter_collector,
                                                std::shared_ptr<LookupJoinContext> lookup_join_context)
         : SourceOperator(factory, id, "index_seek", plan_node_id, driver_sequence),
@@ -45,10 +45,9 @@ Status LookupJoinSeekOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status LookupJoinSeekOperator::_init_tablet_reader(RuntimeState* state,
-                                                   TabletReaderState& reader_state) {
-    VLOG(1) << "do prepare with dependency, _row_id:"<< std::to_string(_row_id) <<
-            ", _probe_chunk size:" << (_probe_chunk ? std::to_string(_probe_chunk->num_rows()) : "0");
+Status LookupJoinSeekOperator::_init_tablet_reader(RuntimeState* state, TabletReaderState& reader_state) {
+    VLOG(1) << "do prepare with dependency, _row_id:" << std::to_string(_row_id)
+            << ", _probe_chunk size:" << (_probe_chunk ? std::to_string(_probe_chunk->num_rows()) : "0");
     if (_lookup_join_context->is_finished()) {
         VLOG(1) << "lookup join context finished";
         set_finishing(state);
@@ -108,7 +107,8 @@ void LookupJoinSeekOperator::_init_row_desc() {
 
 Expr* LookupJoinSeekOperator::_create_eq_conjunct_expr(ObjectPool* pool, PrimitiveType ptype) {
     TExprNode expr_node;
-    expr_node.opcode = TExprOpcode::EQ;;
+    expr_node.opcode = TExprOpcode::EQ;
+    ;
     expr_node.child_type = to_thrift(ptype);
     expr_node.node_type = TExprNodeType::BINARY_PRED;
     expr_node.num_children = 2;
@@ -128,8 +128,7 @@ Expr* LookupJoinSeekOperator::_create_literal_expr(ObjectPool* pool, const Colum
 }
 
 // Construct a new context by using the new probe chunk with the row_id-th.
-Status LookupJoinSeekOperator::_init_conjunct_ctxs(TabletReaderState& reader_state,
-                                                   uint32_t row_id) {
+Status LookupJoinSeekOperator::_init_conjunct_ctxs(TabletReaderState& reader_state, uint32_t row_id) {
     auto& conjunct_ctxs = reader_state.conjunct_ctxs;
     auto* pool = &(reader_state.pool);
     DCHECK_EQ(conjunct_ctxs.size(), _join_key_descs.size());
@@ -142,11 +141,11 @@ Status LookupJoinSeekOperator::_init_conjunct_ctxs(TabletReaderState& reader_sta
         Expr* expr = _create_eq_conjunct_expr(pool, left_join_key_type->type);
         expr->add_child(const_cast<vectorized::ColumnRef*>(desc.right_column_ref));
         expr->add_child(_create_literal_expr(pool, left_column, row_id, *left_join_key_type));
-        VLOG(1)<<"expr:"<<expr->debug_string();
+        VLOG(1) << "expr:" << expr->debug_string();
 
         conjunct_ctxs.emplace_back(pool->add(new ExprContext(expr)));
     };
-    VLOG(1) << "conjunct contexts:"<<Expr::debug_string(conjunct_ctxs);
+    VLOG(1) << "conjunct contexts:" << Expr::debug_string(conjunct_ctxs);
     return Status::OK();
 }
 
@@ -156,8 +155,7 @@ Status LookupJoinSeekOperator::_get_tablet(const TInternalScanRange* scan_range)
     return Status::OK();
 }
 
-Status LookupJoinSeekOperator::_init_conjuncts_manager(RuntimeState* state,
-                                                       TabletReaderState& reader_state) {
+Status LookupJoinSeekOperator::_init_conjuncts_manager(RuntimeState* state, TabletReaderState& reader_state) {
     vectorized::OlapScanConjunctsManager* cm = &(reader_state.conjuncts_manager);
     cm->conjunct_ctxs_ptr = &(reader_state.conjunct_ctxs);
     cm->tuple_desc = _tuple_desc;
@@ -177,13 +175,12 @@ Status LookupJoinSeekOperator::_init_conjuncts_manager(RuntimeState* state,
     return Status::OK();
 }
 
-Status LookupJoinSeekOperator::_init_reader_state(RuntimeState* state,
-                                                  TabletReaderState& reader_state) {
+Status LookupJoinSeekOperator::_init_reader_state(RuntimeState* state, TabletReaderState& reader_state) {
     auto& params = (vectorized::TabletReaderParams&)reader_state.params;
     auto& conjuncts_manager = reader_state.conjuncts_manager;
     auto& not_push_down_predicates = reader_state.not_push_down_predicates;
-    auto& key_ranges= reader_state.key_ranges;
-    auto& predicate_free_pool= reader_state.predicate_free_pool;
+    auto& key_ranges = reader_state.key_ranges;
+    auto& predicate_free_pool = reader_state.predicate_free_pool;
 
     params.is_pipeline = true;
     params.chunk_size = state->chunk_size();
@@ -255,7 +252,7 @@ Status LookupJoinSeekOperator::_prepare_tablet_reader(RuntimeState* state) {
     scan_range = scan_ranges[0];
     RETURN_IF_ERROR(_get_tablet(scan_range));
     RETURN_IF_ERROR(_init_scanner_columns(_scanner_columns));
-    VLOG(1) << " _version:" << _version <<",  _scanner_columns size:" << _scanner_columns.size();
+    VLOG(1) << " _version:" << _version << ",  _scanner_columns size:" << _scanner_columns.size();
     _child_schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), _scanner_columns);
 
     return Status::OK();
@@ -317,8 +314,8 @@ Status LookupJoinSeekOperator::_seek_row(RuntimeState* state) {
         DCHECK(_reader);
         // seek the data
         auto read_schema = _reader->output_schema();
-        for (auto& name: read_schema.field_names()) {
-            VLOG(1) << "name:"<< name;
+        for (auto& name : read_schema.field_names()) {
+            VLOG(1) << "name:" << name;
         }
 
         VLOG(1) << "do index seek pull_chunk";

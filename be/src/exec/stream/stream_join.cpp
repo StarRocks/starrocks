@@ -16,7 +16,6 @@ namespace starrocks {
 
 // ==========================  StreamJoinNode ==========================
 
-
 Status StreamJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
     DCHECK(tnode.__isset.stream_join_node);
@@ -36,15 +35,15 @@ Status StreamJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.left, &left));
         _probe_expr_ctxs.push_back(left);
         auto* left_expr = left->root();
-        assert (left_expr->is_slotref()) ;
+        assert(left_expr->is_slotref());
 
         RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.right, &right));
         _build_expr_ctxs.push_back(right);
         auto* right_expr = right->root();
-        assert (right_expr->is_slotref()) ;
+        assert(right_expr->is_slotref());
         _join_key_descs.emplace_back(pipeline::LookupJoinKeyDesc{&left_expr->type(),
-                                                                    down_cast<vectorized::ColumnRef*>(left_expr),
-                                                                    down_cast<vectorized::ColumnRef*>(right_expr)});
+                                                                 down_cast<vectorized::ColumnRef*>(left_expr),
+                                                                 down_cast<vectorized::ColumnRef*>(right_expr)});
         _rl_join_key_descs.emplace_back(pipeline::LookupJoinKeyDesc{&right_expr->type(),
                                                                     down_cast<vectorized::ColumnRef*>(right_expr),
                                                                     down_cast<vectorized::ColumnRef*>(left_expr)});
@@ -69,7 +68,8 @@ Status StreamJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     // TODO: support output columns later.
     if (tnode.stream_join_node.__isset.output_columns) {
-        _output_slots.insert(tnode.stream_join_node.output_columns.begin(), tnode.stream_join_node.output_columns.end());
+        _output_slots.insert(tnode.stream_join_node.output_columns.begin(),
+                             tnode.stream_join_node.output_columns.end());
     }
 
     return Status::OK();
@@ -81,10 +81,10 @@ pipeline::OpFactories StreamJoinNode::decompose_to_pipeline(pipeline::PipelineBu
     _left_row_desc = child(0)->row_desc();
     _right_row_desc = child(1)->row_desc();
     // assert right_op must be index_seek operator.
-    assert (right_ops.size() >= 1);
+    assert(right_ops.size() >= 1);
 
     if (typeid(*(right_ops[0])) != typeid(pipeline::LookupJoinSeekOperatorFactory)) {
-        assert (typeid(*(left_ops[0])) != typeid(pipeline::LookupJoinSeekOperatorFactory));
+        assert(typeid(*(left_ops[0])) != typeid(pipeline::LookupJoinSeekOperatorFactory));
         left_ops.swap(right_ops);
         _left_row_desc = child(1)->row_desc();
         _right_row_desc = child(0)->row_desc();
@@ -95,15 +95,12 @@ pipeline::OpFactories StreamJoinNode::decompose_to_pipeline(pipeline::PipelineBu
     auto* left_source = down_cast<SourceOperatorFactory*>(left_ops[0].get());
 
     pipeline::LookupJoinContextParams params(left_source->degree_of_parallelism(),
-                                             right_source->degree_of_parallelism(),
-                                             _join_key_descs,
-                                             _left_row_desc,
-                                             _right_row_desc,
-                                             _other_join_conjunct_ctxs);
+                                             right_source->degree_of_parallelism(), _join_key_descs, _left_row_desc,
+                                             _right_row_desc, _other_join_conjunct_ctxs);
     _lookup_join_context = std::make_shared<pipeline::LookupJoinContext>(std::move(params));
     // Left side
-    auto left_factory = std::make_shared<pipeline::LookupJoinProbeOperatorFactory>(
-            context->next_operator_id(), id(), _lookup_join_context);
+    auto left_factory = std::make_shared<pipeline::LookupJoinProbeOperatorFactory>(context->next_operator_id(), id(),
+                                                                                   _lookup_join_context);
     left_ops.emplace_back(std::move(left_factory));
     context->add_pipeline(left_ops);
 

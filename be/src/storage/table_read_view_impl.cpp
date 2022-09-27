@@ -1,19 +1,19 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
+#include "storage/table_read_view_impl.h"
+
 #include "column/datum.h"
 #include "column/datum_convert.h"
 #include "column/vectorized_fwd.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_row_iterator.h"
 #include "storage/projection_iterator.h"
-#include "storage/table_read_view_impl.h"
 #include "storage/tablet_reader.h"
 
 namespace starrocks {
 
 TableReadViewImpl::TableReadViewImpl(const TableReadViewParams& params, TabletSharedPtr tablet)
-        : TableReadView(params),
-          _tablet(tablet) {
+        : TableReadView(params), _tablet(tablet) {
     // TODO refer to olap_chunk_source.cpp to construct schema for TabletReader
     // * _init_olap_reader
     // * _init_unused_output_columns
@@ -45,8 +45,8 @@ StatusOr<ChunkIteratorPtr> TableReadViewImpl::get_chunk(const Row& key, const Re
     // TODO support reverse order
     DCHECK(!read_option.reverse_order);
     DCHECK(key.size() <= _params.sort_key_schema.num_fields());
-    std::shared_ptr<vectorized::TabletReader> reader = std::make_shared<vectorized::TabletReader>(
-            _tablet, _params.version, _schema);
+    std::shared_ptr<vectorized::TabletReader> reader =
+            std::make_shared<vectorized::TabletReader>(_tablet, _params.version, _schema);
     Status status = reader->prepare();
     if (!status.ok()) {
         return status;

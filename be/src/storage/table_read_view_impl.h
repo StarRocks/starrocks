@@ -7,7 +7,7 @@
 
 namespace starrocks {
 
-class TableReadViewImpl: public TableReadView {
+class TableReadViewImpl : public TableReadView {
 public:
     explicit TableReadViewImpl(const TableReadViewParams& params, TabletSharedPtr tablet);
 
@@ -15,8 +15,8 @@ public:
 
     StatusOr<RowIteratorSharedPtr> get(const Row& key, const ReadOption& read_option) override;
 
-    std::vector<StatusOr<RowIteratorSharedPtr>> batch_get(
-            const std::vector<const Row*>& keys, const std::vector<const ReadOption*>& read_options) override;
+    std::vector<StatusOr<RowIteratorSharedPtr>> batch_get(const std::vector<const Row*>& keys,
+                                                          const std::vector<const ReadOption*>& read_options) override;
 
     StatusOr<ChunkIteratorPtr> get_chunk(const Row& key, const ReadOption& read_option) override;
 
@@ -45,10 +45,9 @@ public:
         return std::vector<std::future<StatusOr<ChunkIteratorPtr>>>();
     }
 
-    void close() override {};
+    void close() override{};
 
 private:
-
     std::vector<const ColumnPredicate*> build_column_predicates(
             const Row& key, const std::vector<const vectorized::ColumnPredicate*>& output_predicates);
 

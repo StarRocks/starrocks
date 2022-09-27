@@ -6,11 +6,11 @@
 #include "exec/scan_node.h"
 
 namespace starrocks {
-    
+
 class StreamScanNode final : public starrocks::ExecNode {
 public:
-
-    StreamScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs): ExecNode(pool, tnode, descs) {}
+    StreamScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
+            : ExecNode(pool, tnode, descs) {}
     ~StreamScanNode() override {}
 };
 

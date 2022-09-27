@@ -16,7 +16,6 @@ using ChunkIteratorPtr = vectorized::ChunkIteratorPtr;
 
 // Parameters used to create a TableReadView
 struct TableReadViewParams {
-
     // Version of data to read
     Version version;
 
@@ -29,7 +28,6 @@ struct TableReadViewParams {
 
 // Options used to control the behaviour of a read
 struct ReadOption {
-
     // Whether to return rows in reverse order by the sort key
     bool reverse_order = false;
 
@@ -51,8 +49,7 @@ struct ReadOption {
 // but there is no guarantee about the order of rows under the same sort key.
 class TableReadView {
 public:
-    explicit TableReadView(const TableReadViewParams& params)
-            : _params(params) {}
+    explicit TableReadView(const TableReadViewParams& params) : _params(params) {}
 
     // Whether the data read on this view is organized in columnar format in the underlying
     // storage. This flag can be decided according to what data to read, and how they are
@@ -128,7 +125,6 @@ public:
     virtual void close() = 0;
 
 protected:
-
     const TableReadViewParams& _params;
 };
 

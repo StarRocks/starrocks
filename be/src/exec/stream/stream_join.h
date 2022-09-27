@@ -16,8 +16,7 @@ namespace starrocks {
 class StreamJoinNode final : public starrocks::ExecNode {
 public:
     StreamJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-            : ExecNode(pool, tnode, descs) {
-    }
+            : ExecNode(pool, tnode, descs) {}
     ~StreamJoinNode() override {}
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;

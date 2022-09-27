@@ -10,7 +10,7 @@ public:
     void put() {}
     void put_batch() {}
 
-    void commit() {};
+    void commit(){};
 };
 
 using TableWriteViewSharedPtr = std::shared_ptr<TableWriteView>;

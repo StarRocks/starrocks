@@ -8,8 +8,8 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/stream/lookupjoin/lookup_join_context.h"
+#include "exec/vectorized/olap_scan_prepare.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_reader.h"
 
@@ -32,8 +32,7 @@ struct TabletReaderState {
 // LookupJoinSeekOperator
 class LookupJoinSeekOperator final : public SourceOperator {
 public:
-    LookupJoinSeekOperator(OperatorFactory* factory, int32_t id,
-                           int32_t plan_node_id, const int32_t driver_sequence,
+    LookupJoinSeekOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const int32_t driver_sequence,
                            const TOlapScanNode& olap_scan_node,
                            const vectorized::RuntimeFilterProbeCollector& runtime_filter_collector,
                            std::shared_ptr<LookupJoinContext> lookup_join_context);
@@ -61,7 +60,7 @@ private:
 
     Expr* _create_eq_conjunct_expr(ObjectPool* pool, PrimitiveType ptype);
     Expr* _create_literal_expr(ObjectPool* pool, const ColumnPtr& input_column, uint32_t row_id,
-                               const TypeDescriptor& type_desc) ;
+                               const TypeDescriptor& type_desc);
 
     vectorized::ChunkPtr _init_ouput_chunk(RuntimeState* state);
     void _permute_output_chunk(RuntimeState* state, vectorized::ChunkPtr* result);
@@ -102,12 +101,11 @@ private:
 
 class LookupJoinSeekOperatorFactory final : public SourceOperatorFactory {
 public:
-    LookupJoinSeekOperatorFactory(int32_t id, int32_t plan_node_id,
-                                  const TOlapScanNode& olap_scan_node,
+    LookupJoinSeekOperatorFactory(int32_t id, int32_t plan_node_id, const TOlapScanNode& olap_scan_node,
                                   const vectorized::RuntimeFilterProbeCollector& runtime_filter_collector)
             : SourceOperatorFactory(id, "index_seek", plan_node_id),
               _olap_scan_node(olap_scan_node),
-              _runtime_filter_collector(runtime_filter_collector){}
+              _runtime_filter_collector(runtime_filter_collector) {}
 
     ~LookupJoinSeekOperatorFactory() override = default;
 
@@ -120,15 +118,11 @@ public:
     }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<LookupJoinSeekOperator>(this, _id,
-                                                        _plan_node_id, driver_sequence,
-                                                        _olap_scan_node,
-                                                        _runtime_filter_collector,
-                                                        _lookup_join_context);
+        return std::make_shared<LookupJoinSeekOperator>(this, _id, _plan_node_id, driver_sequence, _olap_scan_node,
+                                                        _runtime_filter_collector, _lookup_join_context);
     }
 
 private:
-
     const TOlapScanNode& _olap_scan_node;
     const vectorized::RuntimeFilterProbeCollector& _runtime_filter_collector;
     std::shared_ptr<LookupJoinContext> _lookup_join_context;
