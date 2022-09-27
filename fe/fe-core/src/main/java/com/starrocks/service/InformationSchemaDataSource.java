@@ -89,6 +89,7 @@ public class InformationSchemaDataSource {
         return dbs;
     }
 
+    // tables_config
     public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request) throws TException {
         
         TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
@@ -141,6 +142,8 @@ public class InformationSchemaDataSource {
 
     private static TTableConfigInfo genNormalTableConfigInfo(Table table, TTableConfigInfo tableConfigInfo) {
         OlapTable olapTable = (OlapTable) table;
+        tableConfigInfo.setTable_engine(olapTable.getType().toString());
+        tableConfigInfo.setTable_model(olapTable.getKeysType().toString());
         // Distribution info
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
         String distributeKey = distributionInfo.getDistributionKey();
@@ -206,6 +209,8 @@ public class InformationSchemaDataSource {
     }
 
     private static TTableConfigInfo genDefaultConfigInfo(TTableConfigInfo tableConfigInfo) {
+        tableConfigInfo.setTable_engine(DEF);
+        tableConfigInfo.setTable_model(DEF);
         tableConfigInfo.setPrimary_key(DEF);
         tableConfigInfo.setPartition_key(DEF);
         tableConfigInfo.setDistribute_bucket(0);
@@ -216,6 +221,7 @@ public class InformationSchemaDataSource {
         return tableConfigInfo;
     }
 
+    // tables
     public static TGetTablesInfoResponse generateTablesInfoResponse(TGetTablesInfoRequest request) throws TException {
         
         TGetTablesInfoResponse response = new TGetTablesInfoResponse();
