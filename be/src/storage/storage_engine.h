@@ -315,6 +315,18 @@ private:
     // threads to run tablet checkpoint
     std::vector<std::thread> _tablet_checkpoint_threads;
 
+<<<<<<< HEAD
+=======
+    std::thread _compaction_scheduler;
+
+    std::thread _compaction_checker_thread;
+    std::mutex _checker_mutex;
+    std::condition_variable _checker_cv;
+
+    std::mutex _trash_sweeper_mutex;
+    std::condition_variable _trash_sweeper_cv;
+
+>>>>>>> a2b9cb83e ([Enhancement] speed up trash sweep (#11514))
     // For tablet and disk-stat report
     std::mutex _report_mtx;
     std::condition_variable _report_cv;
