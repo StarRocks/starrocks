@@ -56,7 +56,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -220,7 +219,7 @@ public class InsertPlanner {
             optimizedPlan = rewriteScanToValues(insertStmt, optimizedPlan, optimizer.getContext());
 
             // Assign IMT
-            Map<PhysicalOperator, IMTInfo> imtInfo = view.getIMTInfo();
+            Map<Integer, IMTInfo> imtInfo = view.getIMTInfo();
             IMTCreateInfo.IMTAssigner.assign(optimizedPlan, imtInfo);
 
             // Build plan fragment

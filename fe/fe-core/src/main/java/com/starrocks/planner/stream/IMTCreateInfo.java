@@ -20,15 +20,12 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamAggOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalStreamJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -39,7 +36,6 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TIMTType;
 import com.starrocks.thrift.TResultSinkType;
-import javax.ws.rs.NotSupportedException;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
@@ -73,7 +69,12 @@ public class IMTCreateInfo {
         this.distributionInfo = distributionInfo;
     }
 
-    public static Map<PhysicalOperator, IMTCreateInfo> analyzeFromMV(MaterializedView mv, ConnectContext ctx) {
+    /**
+     * Analyze IMT for MV
+     *
+     * @return map of id to IMT
+     */
+    public static Map<Integer, IMTCreateInfo> analyzeFromMV(MaterializedView mv, ConnectContext ctx) {
         SessionVariable session = ctx.getSessionVariable();
         String viewDefine = mv.getViewDefineSql();
         StatementBase sqlStmt = SqlParser.parse(viewDefine, ctx.getSessionVariable()).get(0);
@@ -103,9 +104,9 @@ public class IMTCreateInfo {
             session.enableStreamPlanner(false);
         }
 
-        Map<PhysicalOperator, IMTCreateInfo> createInfo = IMTAnalyzer.analyze(execPlan.getPhysicalPlan(), execPlan);
+        Map<Integer, IMTCreateInfo> createInfo = IMTAnalyzer.analyze(execPlan.getPhysicalPlan(), execPlan);
         if (createInfo.size() > 1) {
-            throw new NotSupportedException("not support more than one IMT right now");
+            throw new UnsupportedOperationException("not support more than one IMT right now");
         }
         return createInfo;
     }
@@ -149,37 +150,52 @@ public class IMTCreateInfo {
     /**
      * Analyze IMT usage of each StreamOperator
      */
-    static class IMTAnalyzer extends OperatorVisitor<Void, ExecPlan> {
+    static class IMTAnalyzer extends OptExpressionVisitor<Void, ExecPlan> {
 
-        private Map<PhysicalOperator, IMTCreateInfo> createInfoMap = new HashMap<>();
+        private Map<Integer, IMTCreateInfo> createInfoMap = new HashMap<>();
+        private int exprSeq = 0;
 
-        public IMTAnalyzer(OptExpression optExpr, ExecPlan ctx) {
-            optExpr.getOp().accept(this, ctx);
+        public IMTAnalyzer() {
         }
 
-        public static Map<PhysicalOperator, IMTCreateInfo> analyze(OptExpression optExpr, ExecPlan ctx) {
-            IMTAnalyzer analyzer = new IMTAnalyzer(optExpr, ctx);
-            optExpr.getOp().accept(analyzer, ctx);
+        public static Map<Integer, IMTCreateInfo> analyze(OptExpression optExpr, ExecPlan ctx) {
+            IMTAnalyzer analyzer = new IMTAnalyzer();
+            optExpr.getOp().accept(analyzer, optExpr, ctx);
             return analyzer.createInfoMap;
         }
 
         @Override
-        public Void visitOperator(Operator node, ExecPlan context) {
-            throw new NotSupportedException("Not supported operator");
+        public Void visit(OptExpression node, ExecPlan context) {
+            // throw new UnsupportedOperationException("Not supported operator: " + node);
+            return null;
         }
 
         @Override
-        public Void visitPhysicalStreamJoin(PhysicalStreamJoinOperator node, ExecPlan context) {
+        public Void visitPhysicalStreamJoin(OptExpression node, ExecPlan context) {
             // StreamJoin do not need any IMT/state
             return null;
         }
 
         @Override
-        public Void visitPhysicalStreamAgg(PhysicalStreamAggOperator node, ExecPlan context) {
+        public Void visitPhysicalProject(OptExpression optExpr, ExecPlan context) {
+            return null;
+        }
+
+        @Override
+        public Void visitPhysicalFilter(OptExpression optExpr, ExecPlan context) {
+            return null;
+        }
+
+        @Override
+        public Void visitPhysicalStreamAgg(OptExpression optExpr, ExecPlan context) {
+            visit(optExpr.inputAt(0), context);
+            exprSeq++;
+
+            PhysicalStreamAggOperator node = (PhysicalStreamAggOperator) optExpr.getOp();
             // Distribution Info
             List<ColumnRefOperator> groupByKeys = node.getGroupBys();
             if (CollectionUtils.isEmpty(groupByKeys)) {
-                throw new NotSupportedException("must have group by expression");
+                throw new UnsupportedOperationException("must have group by expression");
             }
             List<Column> distributeColumns = new ArrayList<>();
             for (ColumnRefOperator columnRef : groupByKeys) {
@@ -200,7 +216,7 @@ public class IMTCreateInfo {
                 String funcName = aggFunc.getFunction().functionName();
                 boolean supported = funcName.equalsIgnoreCase("SUM") || funcName.equalsIgnoreCase("COUNT");
                 if (!supported) {
-                    throw new NotSupportedException("agg function not supported in MV: " + funcName);
+                    throw new UnsupportedOperationException("agg function not supported in MV: " + funcName);
                 }
                 String columnName = funcName;
                 for (ScalarOperator arg : aggFunc.getChildren()) {
@@ -220,7 +236,8 @@ public class IMTCreateInfo {
 
             IMTCreateInfo res = new IMTCreateInfo(tableName, columns, partitionInfo, distributionInfo);
             res.setComment(node.toString());
-            createInfoMap.put(node, res);
+
+            createInfoMap.put(exprSeq, res);
 
             return null;
         }
@@ -229,27 +246,48 @@ public class IMTCreateInfo {
     /**
      * Assign IMT to each StreamOperator
      */
-    public static class IMTAssigner extends OperatorVisitor<Void, ExecPlan> {
+    public static class IMTAssigner extends OptExpressionVisitor<Void, ExecPlan> {
 
-        private final Map<PhysicalOperator, IMTInfo> imtInfo;
+        private final Map<Integer, IMTInfo> imtInfo;
+        private int exprSeq = 0;
 
-        private IMTAssigner(Map<PhysicalOperator, IMTInfo> imtInfo) {
+        private IMTAssigner(Map<Integer, IMTInfo> imtInfo) {
             this.imtInfo = imtInfo;
         }
 
-        public static void assign(OptExpression optExpr, Map<PhysicalOperator, IMTInfo> imtInfo) {
+        public static void assign(OptExpression optExpr, Map<Integer, IMTInfo> imtInfo) {
             IMTAssigner assigner = new IMTAssigner(imtInfo);
-            optExpr.getOp().accept(assigner, null);
+            optExpr.getOp().accept(assigner, optExpr, null);
         }
 
         @Override
-        public Void visitOperator(Operator node, ExecPlan context) {
+        public Void visit(OptExpression optExpr, ExecPlan context) {
             return null;
         }
 
         @Override
-        public Void visitPhysicalStreamAgg(PhysicalStreamAggOperator node, ExecPlan plan) {
-            IMTInfo imt = imtInfo.get(node);
+        public Void visitPhysicalStreamJoin(OptExpression node, ExecPlan context) {
+            // StreamJoin do not need any IMT/state
+            return null;
+        }
+
+        @Override
+        public Void visitPhysicalProject(OptExpression optExpr, ExecPlan context) {
+            return null;
+        }
+
+        @Override
+        public Void visitPhysicalFilter(OptExpression optExpr, ExecPlan context) {
+            return null;
+        }
+
+        @Override
+        public Void visitPhysicalStreamAgg(OptExpression optExpr, ExecPlan plan) {
+            visit(optExpr.inputAt(0), plan);
+            exprSeq++;
+
+            PhysicalStreamAggOperator node = (PhysicalStreamAggOperator) optExpr.getOp();
+            IMTInfo imt = imtInfo.get(exprSeq);
             Preconditions.checkState(imt != null, "Must have an imt here");
 
             node.setAggImt(imt);

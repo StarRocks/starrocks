@@ -15,6 +15,7 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
@@ -33,11 +34,11 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -46,6 +47,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -327,8 +329,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "partitionRefTableExprs")
     private List<Expr> partitionRefTableExprs;
 
-    // TODO: serialize and persist it
-    private Map<PhysicalOperator, IMTInfo> imtInfo;
+    @SerializedName(value = "imtMapping")
+    private Map<Integer, Long> groupIdToIMTId;
+
+    private Map<Integer, IMTInfo> imtInfo;
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -436,11 +440,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return result;
     }
 
-    public void setIMTInfo(Map<PhysicalOperator, IMTInfo> imtInfo) {
+    public void setIMTInfo(Map<Integer, IMTInfo> imtInfo) {
         this.imtInfo = imtInfo;
+        this.groupIdToIMTId = imtInfo.entrySet()
+                .stream()
+                .map(kv -> Pair.of(kv.getKey(), kv.getValue().toOlapTable().id))
+                .collect(Collectors.toMap(Pair::getLeft, Pair::getRight));
     }
 
-    public Map<PhysicalOperator, IMTInfo> getIMTInfo() {
+    public Map<Integer, IMTInfo> getIMTInfo() {
         return this.imtInfo;
     }
 
@@ -544,6 +552,25 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     public static MaterializedView read(DataInput in) throws IOException {
         String json = Text.readString(in);
         MaterializedView mv = GsonUtils.GSON.fromJson(json, MaterializedView.class);
+
+        // Recover IMT info
+        mv.imtInfo = new HashMap<>();
+        if (mv.groupIdToIMTId != null) {
+            for (Map.Entry<Integer, Long> entry : mv.groupIdToIMTId.entrySet()) {
+                long tableId = entry.getValue();
+                Database db = GlobalStateMgr.getCurrentState().getDb(mv.dbId);
+                Table table = db.getTable(tableId);
+                Preconditions.checkState(table.isOlapTable(), "must be a olap");
+                try {
+                    IMTInfo imt = IMTInfo.fromOlapTable(mv.dbId, (OlapTable) table, false);
+                    mv.imtInfo.put(entry.getKey(), imt);
+                } catch (UserException e) {
+                    throw new RuntimeException(e);
+                }
+                LOG.info(String.format("recover IMT for MV: tableId=%d mv=%s", tableId, mv.getName()));
+            }
+        }
+
         return mv;
     }
 

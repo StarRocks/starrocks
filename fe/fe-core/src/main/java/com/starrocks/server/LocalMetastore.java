@@ -183,7 +183,6 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -3250,7 +3249,7 @@ public class LocalMetastore implements ConnectorMetadata {
         materializedView.setBaseIndexId(baseIndexId);
 
         // Analyze IMT information
-        Map<PhysicalOperator, IMTCreateInfo> imtCreate = IMTCreateInfo.analyzeFromMV(materializedView, context);
+        Map<Integer, IMTCreateInfo> imtCreate = IMTCreateInfo.analyzeFromMV(materializedView, context);
 
         // set base index meta
         int schemaVersion = 0;
@@ -3326,8 +3325,8 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // Create IMT
-        Map<PhysicalOperator, IMTInfo> imtInfo = new HashMap<>();
-        for (Map.Entry<PhysicalOperator, IMTCreateInfo> entry : imtCreate.entrySet()) {
+        Map<Integer, IMTInfo> imtInfo = new HashMap<>();
+        for (Map.Entry<Integer, IMTCreateInfo> entry : imtCreate.entrySet()) {
             long partitionId = GlobalStateMgr.getCurrentState().getNextId();
             String partitionName = "imt_part";
             PartitionInfo imtPartitionInfo = new SinglePartitionInfo();
@@ -3478,7 +3477,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         if (table instanceof MaterializedView) {
             MaterializedView view = (MaterializedView) table;
-            Map<PhysicalOperator, IMTInfo> imtInfo = view.getIMTInfo();
+            Map<Integer, IMTInfo> imtInfo = view.getIMTInfo();
             if (imtInfo != null && !imtInfo.isEmpty()) {
                 // TODO: consider IMT sharing
                 for (IMTInfo imt : imtInfo.values()) {
