@@ -8,7 +8,7 @@ Release date: September 27, 2022
 
 The following bugs are fixed:
 
-- Query result may be inaccurate when you query an Hive external table stored as text file. [#11546](https://github.com/StarRocks/starrocks/pull/11546)
+- Query result may be inaccurate when you query an Hive external table stored as a text file. [#11546](https://github.com/StarRocks/starrocks/pull/11546)
 
 - Nested arrays are not supported when you query Parquet files. [#10983](https://github.com/StarRocks/starrocks/pull/10983)
 
