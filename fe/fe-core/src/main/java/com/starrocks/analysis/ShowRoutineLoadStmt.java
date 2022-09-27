@@ -169,6 +169,8 @@ public class ShowRoutineLoadStmt extends ShowStmt {
         sb.append(" ROUTINE LOAD");
         if (!Strings.isNullOrEmpty(labelName.getLabelName())) {
             sb.append(" FOR ").append(labelName.toString());
+        } else {
+            sb.append(" FROM ").append(labelName.getDbName());
         }
         if (whereClause != null) {
             sb.append(" WHERE ").append(whereClause.toSql());
