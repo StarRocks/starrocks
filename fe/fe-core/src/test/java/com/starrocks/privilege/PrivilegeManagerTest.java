@@ -140,8 +140,8 @@ public class PrivilegeManagerTest {
         }
 
         @Override
-        public boolean keyMatch(PEntryObject pEntryObject) {
-            return pEntryObject instanceof FakeObject && ((FakeObject) pEntryObject).tokens.equals(tokens);
+        public boolean equals(Object obj) {
+            return obj instanceof FakeObject && ((FakeObject) obj).tokens.equals(tokens);
         }
     }
 

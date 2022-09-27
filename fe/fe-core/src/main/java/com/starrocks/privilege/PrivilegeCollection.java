@@ -37,7 +37,7 @@ public class PrivilegeCollection {
      */
     private PrivilegeEntry findEntry(List<PrivilegeEntry> privilegeEntryList, PEntryObject object, boolean isGrant) {
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
-            if (privilegeEntry.object.keyMatch(object) && isGrant == privilegeEntry.isGrant) {
+            if (privilegeEntry.object.equals(object) && isGrant == privilegeEntry.isGrant) {
                 return privilegeEntry;
             }
         }
@@ -131,7 +131,7 @@ public class PrivilegeCollection {
         }
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
-            if (privilegeEntry.object.keyMatch(object) && privilegeEntry.actionSet.contain(want)) {
+            if (privilegeEntry.object.equals(object) && privilegeEntry.actionSet.contains(want)) {
                 return true;
             }
         }
@@ -144,7 +144,7 @@ public class PrivilegeCollection {
         }
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
-            if (privilegeEntry.actionSet.contain(want)) {
+            if (privilegeEntry.actionSet.contains(want)) {
                 return true;
             }
         }
@@ -162,8 +162,8 @@ public class PrivilegeCollection {
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
             if (privilegeEntry.isGrant
-                    && privilegeEntry.object.keyMatch(object)
-                    && privilegeEntry.actionSet.contain(want)) {
+                    && privilegeEntry.object.equals(object)
+                    && privilegeEntry.actionSet.contains(want)) {
                 return true;
             }
         }

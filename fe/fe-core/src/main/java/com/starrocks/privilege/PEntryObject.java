@@ -16,7 +16,12 @@ public class PEntryObject {
         this.id = id;
     }
 
-    public boolean keyMatch(PEntryObject pEntryObject) {
-        return (pEntryObject instanceof PEntryObject) && (pEntryObject.id == this.id);
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof PEntryObject)) {
+            return false;
+        }
+        PEntryObject other = (PEntryObject) obj;
+        return other.id == this.id;
     }
 }

@@ -23,7 +23,7 @@ public class ActionSet {
         this.bitSet = bitSet;
     }
 
-    public boolean contain(Action action) {
+    public boolean contains(Action action) {
         return (bitSet & (1L << action.getId())) != 0;
     }
 

@@ -34,11 +34,11 @@ public class TablePEntryObject extends PEntryObject {
     }
 
     @Override
-    public boolean keyMatch(PEntryObject pEntryObject) {
-        if (!(pEntryObject instanceof TablePEntryObject)) {
+    public boolean equals(Object obj) {
+        if (!(obj instanceof TablePEntryObject)) {
             return false;
         }
-        TablePEntryObject other = (TablePEntryObject) pEntryObject;
+        TablePEntryObject other = (TablePEntryObject) obj;
         return other.databaseId == databaseId && other.id == id;
     }
 }
