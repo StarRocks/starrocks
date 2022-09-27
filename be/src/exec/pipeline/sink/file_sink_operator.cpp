@@ -61,9 +61,9 @@ public:
     static int execute_io_task(void* meta, bthread::TaskIterator<const vectorized::ChunkPtr>& iter);
 
 private:
-    void process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter);
+    void _process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter);
 
-    Status process_writer_op(std::function<Status()> op);
+    Status _process_writer_op(std::function<Status()> op);
 
     std::vector<ExprContext*> _output_expr_ctxs;
 
@@ -95,12 +95,12 @@ private:
 int FileSinkBuffer::execute_io_task(void* meta, bthread::TaskIterator<const vectorized::ChunkPtr>& iter) {
     FileSinkBuffer* file_sink_buffer = static_cast<FileSinkBuffer*>(meta);
     for (; iter; ++iter) {
-        file_sink_buffer->process_chunk(iter);
+        file_sink_buffer->_process_chunk(iter);
     }
     return 0;
 }
 
-void FileSinkBuffer::process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter) {
+void FileSinkBuffer::_process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter) {
     --_num_pending_chunks;
     // close is already done, just skip
     if (_is_finished) {
@@ -114,7 +114,7 @@ void FileSinkBuffer::process_chunk(bthread::TaskIterator<const vectorized::Chunk
     }
 
     if (!_is_writer_opened) {
-        if (Status status = process_writer_op([this]() { return _writer->open(_state); }); !status.ok()) {
+        if (Status status = _process_writer_op([this]() { return _writer->open(_state); }); !status.ok()) {
             set_io_status(status);
             close(_state);
             return;
@@ -127,14 +127,14 @@ void FileSinkBuffer::process_chunk(bthread::TaskIterator<const vectorized::Chunk
         close(_state);
         return;
     }
-    if (Status status = process_writer_op([this, chunk]() { return _writer->append_chunk(chunk.get()); });
+    if (Status status = _process_writer_op([this, chunk]() { return _writer->append_chunk(chunk.get()); });
         !status.ok()) {
         set_io_status(status);
         close(_state);
     }
 }
 
-Status FileSinkBuffer::process_writer_op(std::function<Status()> op) {
+Status FileSinkBuffer::_process_writer_op(std::function<Status()> op) {
     // for some writers(eg. hdfs) that cannot be executed in bthread, we need to put them in pthread.
     if (_writer->can_run_in_bthread()) {
         return op();
@@ -205,7 +205,7 @@ void FileSinkBuffer::cancel_one_sinker() {
 void FileSinkBuffer::close(RuntimeState* state) {
     int64_t num_written_rows = 0;
     if (_writer != nullptr) {
-        if (Status status = process_writer_op([this]() { return _writer->close(); }); !status.ok()) {
+        if (Status status = _process_writer_op([this]() { return _writer->close(); }); !status.ok()) {
             set_io_status(status);
         }
         num_written_rows = _writer->get_written_rows();
