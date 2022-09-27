@@ -365,4 +365,22 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Data type of first column cannot be HLL",
                 () -> createTable("create table test.tmp3\n" + "(k1 hll, k2 float)\n"));
     }
+
+    @Test
+    public void testNameWithUnderscore() throws Exception {
+        // table name with one underscore is fine
+        String sql = "CREATE TABLE test._txx(_k1 VARCHAR(100)) DISTRIBUTED BY HASH(_k1) "
+                + "BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
+        createTable(sql);
+
+        // table name with two underscore is not allowed
+        sql = "CREATE TABLE test.__txx(_k1 VARCHAR(100)) DISTRIBUTED BY HASH(_k1) "
+                + "BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
+        try {
+            createTable(sql);
+            Assert.fail();
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("Incorrect table name"));
+        }
+    }
 }
