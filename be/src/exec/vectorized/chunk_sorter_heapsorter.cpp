@@ -165,7 +165,7 @@ void HeapChunkSorter::_do_filter_data_for_type(detail::ChunkHolder* chunk_holder
     if (top_cursor_column->only_null()) {
         // case for order by null
         bool top_is_null = top_cursor_column->is_null(cursor_rid);
-        int null_compare_flag = _sort_desc.get_column_desc(0).nan_direction();
+        int null_compare_flag = _null_first_flag[0];
         auto* __restrict__ filter_data = filter->data();
 
         if (!top_is_null) {
