@@ -94,12 +94,7 @@ public:
 private:
     friend class QueryStatistics;
 
-    void merge(QueryStatistics* statistics) {
-        std::lock_guard<SpinLock> l(_lock);
-        for (auto& pair : _query_statistics) {
-            statistics->merge(*(pair.second));
-        }
-    }
+    void merge(QueryStatistics* statistics);
 
     std::map<int, QueryStatistics*> _query_statistics;
     SpinLock _lock;

@@ -58,6 +58,13 @@ void QueryStatisticsRecvr::insert(const PQueryStatistics& statistics, int sender
     query_statistics->merge_pb(statistics);
 }
 
+void QueryStatisticsRecvr::merge(QueryStatistics* statistics) {
+    std::lock_guard<SpinLock> l(_lock);
+    for (auto& pair : _query_statistics) {
+        statistics->merge(*(pair.second));
+    }
+}
+
 QueryStatisticsRecvr::~QueryStatisticsRecvr() {
     // It is unnecessary to lock here, because the destructor will be
     // called alter DataStreamRecvr's close in ExchangeNode.

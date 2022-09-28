@@ -10,6 +10,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
 #include "util/thread.h"
 
@@ -23,7 +24,10 @@ QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
           _total_fragments(0),
           _num_fragments(0),
-          _num_active_fragments(0) {}
+          _num_active_fragments(0) {
+    _query_statistics = std::make_shared<QueryStatistics>();
+    _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
+}
 
 QueryContext::~QueryContext() {
     // When destruct FragmentContextManager, we use query-level MemTracker. since when PipelineDriver executor

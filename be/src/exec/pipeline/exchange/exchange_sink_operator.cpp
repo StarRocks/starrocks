@@ -47,12 +47,13 @@ public:
     Status init(RuntimeState* state);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
-    Status send_one_chunk(const vectorized::Chunk* chunk, int32_t driver_sequence, bool eos);
+    Status send_one_chunk(RuntimeState* state, const vectorized::Chunk* chunk, int32_t driver_sequence, bool eos);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
     // When the chunk is sent really rather than bachend, *is_real_sent will
     // be set to true.
-    Status send_one_chunk(const vectorized::Chunk* chunk, int32_t driver_sequence, bool eos, bool* is_real_sent);
+    Status send_one_chunk(RuntimeState* state, const vectorized::Chunk* chunk, int32_t driver_sequence, bool eos,
+                          bool* is_real_sent);
 
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
@@ -168,7 +169,7 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chun
     }
 
     if (_chunks[driver_sequence]->num_rows() + size > state->chunk_size()) {
-        RETURN_IF_ERROR(send_one_chunk(_chunks[driver_sequence].get(), driver_sequence, false));
+        RETURN_IF_ERROR(send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
         // we only clear column data, because we need to reuse column schema
         _chunks[driver_sequence]->set_num_rows(0);
     }
@@ -177,14 +178,14 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chun
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, int32_t driver_sequence,
-                                                     bool eos) {
+Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const vectorized::Chunk* chunk,
+                                                     int32_t driver_sequence, bool eos) {
     bool is_real_sent = false;
-    return send_one_chunk(chunk, driver_sequence, eos, &is_real_sent);
+    return send_one_chunk(state, chunk, driver_sequence, eos, &is_real_sent);
 }
 
-Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, int32_t driver_sequence, bool eos,
-                                                     bool* is_real_sent) {
+Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const vectorized::Chunk* chunk,
+                                                     int32_t driver_sequence, bool eos, bool* is_real_sent) {
     *is_real_sent = false;
     if (_chunk_request == nullptr) {
         _chunk_request = std::make_shared<PTransmitChunkParams>();
@@ -221,6 +222,8 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
     if (_current_request_bytes > config::max_transmit_batched_bytes || eos) {
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);
+        auto* query_statistic = _chunk_request->mutable_query_statistics();
+        state->delta_query_statistic()->to_pb(query_statistic);
         butil::IOBuf attachment;
         int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment,
@@ -259,10 +262,10 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
     if (!fragment_ctx->is_canceled()) {
         for (auto driver_sequence = 0; driver_sequence < _chunks.size(); ++driver_sequence) {
             if (_chunks[driver_sequence] != nullptr) {
-                RETURN_IF_ERROR(send_one_chunk(_chunks[driver_sequence].get(), driver_sequence, false));
+                RETURN_IF_ERROR(send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
             }
         }
-        RETURN_IF_ERROR(send_one_chunk(nullptr, ExchangeSinkOperator::DEFAULT_DRIVER_SEQUENCE, true));
+        RETURN_IF_ERROR(send_one_chunk(state, nullptr, ExchangeSinkOperator::DEFAULT_DRIVER_SEQUENCE, true));
     }
 
     return Status::OK();
@@ -440,7 +443,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         int has_not_pass_through = false;
         for (auto idx : _channel_indices) {
             if (_channels[idx]->use_pass_through()) {
-                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(send_chunk, DEFAULT_DRIVER_SEQUENCE, false));
+                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(state, send_chunk, DEFAULT_DRIVER_SEQUENCE, false));
             } else {
                 has_not_pass_through = true;
             }
@@ -488,7 +491,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
 
         auto& channel = local_channels[_curr_random_channel_idx];
         bool real_sent = false;
-        RETURN_IF_ERROR(channel->send_one_chunk(send_chunk, DEFAULT_DRIVER_SEQUENCE, false, &real_sent));
+        RETURN_IF_ERROR(channel->send_one_chunk(state, send_chunk, DEFAULT_DRIVER_SEQUENCE, false, &real_sent));
         if (real_sent) {
             _curr_random_channel_idx = (_curr_random_channel_idx + 1) % local_channels.size();
         }
