@@ -112,7 +112,7 @@ public abstract class Resource implements Writable {
     }
 
     public boolean needMappingCatalog() {
-        return type == ResourceType.HIVE || type == ResourceType.ICEBERG || type == ResourceType.HUDI;
+        return type == ResourceType.HIVE || type == ResourceType.HUDI;
     }
 
     /**
