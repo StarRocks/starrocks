@@ -21,6 +21,8 @@
 
 #include "types/bitmap_value.h"
 
+#include "gutil/strings/split.h"
+#include "gutil/strings/substitute.h"
 #include "types/bitmap_value_detail.h"
 #include "util/phmap/phmap.h"
 
@@ -738,6 +740,14 @@ bool BitmapValue::deserialize(const char* src) {
         break;
     }
     default:
+        return false;
+    }
+    return true;
+}
+
+bool BitmapValue::split_as_uint64_t(const Slice& slice, std::vector<uint64_t>* result) {
+    result->clear();
+    if (slice.size > INT32_MAX || !SplitStringAndParse({slice.data, (int)slice.size}, ",", &safe_strtou64, result)) {
         return false;
     }
     return true;

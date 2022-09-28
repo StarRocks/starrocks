@@ -37,6 +37,7 @@
 #include "common/logging.h"
 #include "util/coding.h"
 #include "util/phmap/phmap_fwd_decl.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
@@ -129,6 +130,10 @@ public:
     void compress() const;
 
     void clear();
+
+    // return false means varchar to bitmap failed,
+    // else true, and collect uint64_t into result.
+    static bool split_as_uint64_t(const Slice& slice, std::vector<uint64_t>* result);
 
 private:
     void _convert_to_smaller_type();

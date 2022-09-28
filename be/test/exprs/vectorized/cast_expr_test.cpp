@@ -907,6 +907,66 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap) {
     }
 }
 
+TEST_F(VectorizedCastExprTest, stringCastBitmap) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::OBJECT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string p("1, 342, 2222");
+
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        ASSERT_TRUE(ptr->is_timestamp());
+
+        // right cast
+        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        ASSERT_EQ(10, v->size());
+
+        std::vector<int64_t> expect_array;
+        expect_array.push_back(1);
+        expect_array.push_back(342);
+        expect_array.push_back(2222);
+        for (int j = 0; j < v->size(); ++j) {
+            std::vector<int64_t> array;
+            v->get_data()[j]->to_array(&array);
+            ASSERT_EQ(expect_array, array);
+        }
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastBitmapFailed) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::OBJECT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string p("1, 342,sdf 2222");
+
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        ASSERT_TRUE(ptr->is_timestamp());
+
+        // right cast
+        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        ASSERT_EQ(10, v->size());
+
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_TRUE(v->is_null(j));
+        }
+    }
+}
+
 TEST_F(VectorizedCastExprTest, stringCastTimestmap2) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::DATETIME);

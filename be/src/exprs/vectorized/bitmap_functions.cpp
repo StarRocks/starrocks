@@ -172,8 +172,7 @@ ColumnPtr BitmapFunctions::bitmap_from_string(FunctionContext* context, const Co
 
         auto slice = viewer.value(row);
 
-        bits.clear();
-        if (slice.size > INT32_MAX || !SplitStringAndParse({slice.data, (int)slice.size}, ",", &safe_strtou64, &bits)) {
+        if (!BitmapValue::split_as_uint64_t(slice, &bits)) {
             builder.append_null();
             continue;
         }
