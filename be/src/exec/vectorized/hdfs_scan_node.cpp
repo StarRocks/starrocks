@@ -661,6 +661,11 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
     std::string native_file_path = scan_range.full_path;
     if (_lake_table != nullptr && _lake_table->has_partition()) {
         auto* partition_desc = _lake_table->get_partition(scan_range.partition_id);
+        if (partition_desc == nullptr) {
+            return Status::InternalError(fmt::format(
+                    "Plan inconsistency. scan_range.partition_id = {} not found in partition description map",
+                    scan_range.partition_id));
+        }
 
         SCOPED_TIMER(_profile.open_file_timer);
 
