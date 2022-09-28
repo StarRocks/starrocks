@@ -4,8 +4,6 @@
 
 Converts an input into the specified type. For example, `cast (input as BIGINT)` converts the input into a BIGINT value.
 
-From v2.4, StarRocks supports conversion to the ARRAY type.
-
 ### Syntax
 
 ```Haskell
@@ -55,64 +53,7 @@ Example 1: common data conversions
     +-------------------+
 ```
 
-Example 2: Convert the input into ARRAY.
-
-```Plain Text
-    -- Convert string to ARRAY<ANY>.
-
-    select cast('[1,2,3]' as array<int>);
-    +-------------------------------+
-    | CAST('[1,2,3]' AS ARRAY<INT>) |
-    +-------------------------------+
-    | [1,2,3]                       |
-    +-------------------------------+
-
-    select cast('[1,2,3]' as array<bigint>);
-    +----------------------------------+
-    | CAST('[1,2,3]' AS ARRAY<BIGINT>) |
-    +----------------------------------+
-    | [1,2,3]                          |
-    +----------------------------------+
-
-    select cast('[1,2,3]' as array<string>);
-    +------------------------------------------+
-    | CAST('[1,2,3]' AS ARRAY<VARCHAR(65533)>) |
-    +------------------------------------------+
-    | ["1","2","3"]                            |
-    +------------------------------------------+
-
-    select cast('["a", "b", "c"]' as array<string>);
-    +--------------------------------------------------+
-    | CAST('["a", "b", "c"]' AS ARRAY<VARCHAR(65533)>) |
-    +--------------------------------------------------+
-    | ["a","b","c"]                                    |
-    +--------------------------------------------------+
-
-    -- Convert JSON array to ARRAY<ANY>.
-
-    select cast(parse_json('[{"a":1}, {"a": 2}]')  as array<json>);
-    +----------------------------------------------------------+
-    | CAST((parse_json('[{"a":1}, {"a": 2}]')) AS ARRAY<JSON>) |
-    +----------------------------------------------------------+
-    | ['{"a": 1}','{"a": 2}']                                  |
-    +----------------------------------------------------------+
-    
-    select cast(parse_json('[1, 2, 3]')  as array<int>);
-    +-----------------------------------------------+
-    | CAST((parse_json('[1, 2, 3]')) AS ARRAY<INT>) |
-    +-----------------------------------------------+
-    | [1,2,3]                                       |
-    +-----------------------------------------------+
-    
-    select cast(parse_json('["1","2","3"]') as array<string>);
-    +--------------------------------------------------------------+
-    | CAST((parse_json('["1","2","3"]')) AS ARRAY<VARCHAR(65533)>) |
-    +--------------------------------------------------------------+
-    | ["1","2","3"]                                                |
-    +--------------------------------------------------------------+
-```
-
-Example 3: Convert data during loading.
+Example 2: Convert data during loading.
 
 ```bash
     curl --location-trusted -u root: -T ~/user_data/bigint \
