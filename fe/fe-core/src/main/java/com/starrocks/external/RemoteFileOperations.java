@@ -20,18 +20,23 @@ public class RemoteFileOperations {
     protected CachingRemoteFileIO remoteFileIO;
     private final ExecutorService executor;
     private final boolean isRecursive;
+    private final boolean enableCatalogLevelCache;
 
-    public RemoteFileOperations(CachingRemoteFileIO remoteFileIO, ExecutorService executor, boolean isRecursive) {
+    public RemoteFileOperations(CachingRemoteFileIO remoteFileIO,
+                                ExecutorService executor,
+                                boolean isRecursive,
+                                boolean enableCatalogLevelCache) {
         this.remoteFileIO = remoteFileIO;
         this.executor = executor;
         this.isRecursive = isRecursive;
+        this.enableCatalogLevelCache = enableCatalogLevelCache;
     }
 
-    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions) {
+    public List<RemoteFileInfo> getRemoteFiles(Collection<Partition> partitions) {
         return getRemoteFiles(partitions, Optional.empty());
     }
 
-    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, Optional<String> hudiTableLocation) {
+    public List<RemoteFileInfo> getRemoteFiles(Collection<Partition> partitions, Optional<String> hudiTableLocation) {
         Map<RemotePathKey, Partition> pathKeyToPartition = partitions.stream()
                 .collect(Collectors.toMap(
                         partition -> RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation),
@@ -78,6 +83,14 @@ public class RemoteFileOperations {
         return fillFileInfo(presentFiles, pathKeyToPartition);
     }
 
+    public List<RemoteFileInfo> getRemoteFileInfoForStats(Collection<Partition> partitions, Optional<String> hudiTableLocation) {
+        if (enableCatalogLevelCache) {
+            return getPresentFilesInCache(partitions, hudiTableLocation);
+        } else {
+            return getRemoteFiles(partitions, hudiTableLocation);
+        }
+    }
+
     private List<RemoteFileInfo> fillFileInfo(
             Map<RemotePathKey, List<RemoteFileDesc>> files,
             Map<RemotePathKey, Partition> partitions) {
@@ -102,5 +115,9 @@ public class RemoteFileOperations {
                         .collect(Collectors.toList()));
 
         return builder.build();
+    }
+
+    public void invalidateAll() {
+        remoteFileIO.invalidateAll();
     }
 }

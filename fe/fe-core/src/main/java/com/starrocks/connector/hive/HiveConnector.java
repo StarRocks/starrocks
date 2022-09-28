@@ -42,7 +42,8 @@ public class HiveConnector implements Connector {
     private HiveMetadataFactory createMetadataFactory() {
         IHiveMetastore metastore = internalMgr.createHiveMetastore();
         RemoteFileIO remoteFileIO = internalMgr.createRemoteFileIO();
-        return new HiveMetadataFactory(properties.get(HIVE_METASTORE_URIS),
+
+        return new HiveMetadataFactory(
                 catalogName,
                 metastore,
                 remoteFileIO,
@@ -59,5 +60,6 @@ public class HiveConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
+        metadataFactory.getCacheUpdateProcessor().ifPresent(CacheUpdateProcessor::invalidateAll);
     }
 }

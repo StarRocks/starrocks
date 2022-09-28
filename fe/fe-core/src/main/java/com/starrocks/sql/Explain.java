@@ -223,7 +223,7 @@ public class Explain {
             PhysicalHudiScanOperator scan = (PhysicalHudiScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- Hudi-SCAN [")
-                    .append(((HudiTable) scan.getTable()).getTable())
+                    .append(((HudiTable) scan.getTable()).getTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)

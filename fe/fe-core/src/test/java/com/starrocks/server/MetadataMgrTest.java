@@ -4,6 +4,7 @@ package com.starrocks.server;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.external.hive.HiveMetaStoreThriftClient;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
@@ -70,7 +71,7 @@ public class MetadataMgrTest {
         try {
             metadataMgr.listTableNames("default_catalog", "db2");
             Assert.fail();
-        } catch (DdlException e) {
+        } catch (StarRocksConnectorException e) {
             Assert.assertTrue(e.getMessage().contains("Database db2 doesn't exist"));
         }
 

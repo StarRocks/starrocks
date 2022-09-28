@@ -35,8 +35,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static com.starrocks.external.HiveMetaStoreTableUtils.CONNECTOR_DATABASE_ID_ID_GENERATOR;
-import static com.starrocks.external.HiveMetaStoreTableUtils.CONNECTOR_TABLE_ID_ID_GENERATOR;
+import static com.starrocks.external.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
 
 public class IcebergUtil {
 
@@ -251,7 +250,7 @@ public class IcebergUtil {
             fullSchema.add(column);
         }
 
-        return new IcebergTable(CONNECTOR_TABLE_ID_ID_GENERATOR.getNextId().asInt(), icebergTable.name(),
+        return new IcebergTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), icebergTable.name(),
                 fullSchema, properties);
     }
 
@@ -310,7 +309,7 @@ public class IcebergUtil {
     }
 
     public static Database convertToSRDatabase(String dbName) {
-        return new Database(CONNECTOR_DATABASE_ID_ID_GENERATOR.getNextId().asInt(), dbName);
+        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName);
     }
 
     private static ArrayType convertToArrayType(org.apache.iceberg.types.Type icebergType) {

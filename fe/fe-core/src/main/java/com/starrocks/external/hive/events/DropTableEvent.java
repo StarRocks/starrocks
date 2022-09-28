@@ -4,10 +4,7 @@ package com.starrocks.external.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.external.HiveMetaStoreTableUtils;
-import com.starrocks.external.hive.HiveMetaCache;
-import com.starrocks.external.hive.HiveTableName;
+import com.starrocks.connector.hive.CacheUpdateProcessor;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.messaging.json.JSONDropTableMessage;
 import org.apache.logging.log4j.LogManager;
@@ -23,7 +20,7 @@ public class DropTableEvent extends MetastoreTableEvent {
     private final String dbName;
     private final String tableName;
 
-    private DropTableEvent(NotificationEvent event, HiveMetaCache metaCache) {
+    private DropTableEvent(NotificationEvent event, CacheUpdateProcessor metaCache) {
         super(event, metaCache);
         Preconditions.checkArgument(MetastoreEventType.DROP_TABLE.equals(getEventType()));
         JSONDropTableMessage dropTableMessage =
@@ -40,13 +37,15 @@ public class DropTableEvent extends MetastoreTableEvent {
         }
     }
 
-    public static List<MetastoreEvent> getEvents(NotificationEvent event, HiveMetaCache metaCache) {
+    public static List<MetastoreEvent> getEvents(NotificationEvent event, CacheUpdateProcessor metaCache) {
         return Lists.newArrayList(new DropTableEvent(event, metaCache));
     }
 
     @Override
     protected boolean existInCache() {
-        return cache.getTableFromCache(HiveTableName.of(dbName, tableName)) != null;
+        // TODO(stephen): refactor this function
+        return false;
+        // return cache.getTableFromCache(HiveTableName.of(dbName, tableName)) != null;
     }
 
     @Override
@@ -55,7 +54,9 @@ public class DropTableEvent extends MetastoreTableEvent {
     }
 
     protected boolean isSupported() {
-        return !HiveMetaStoreTableUtils.isInternalCatalog(cache.getResourceName());
+        // TODO(stephen): refactor this function
+        return false;
+        // return !IcebergTable.isInternalCatalog(cache.getResourceName());
     }
 
     @Override
@@ -65,11 +66,12 @@ public class DropTableEvent extends MetastoreTableEvent {
         }
 
         try {
-            HiveTable table = (HiveTable) cache.getTableFromCache(HiveTableName.of(dbName, tableName));
-            if (table == null) {
-                return;
-            }
-            cache.clearCache(table.getHmsTableInfo());
+            // TODO(stephen): refactor this function
+            // HiveTable table = (HiveTable) cache.getTableFromCache(HiveTableName.of(dbName, tableName));
+            // if (table == null) {
+            //    return;
+            // }
+            // cache.clearCache(table.getHmsTableInfo());
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);

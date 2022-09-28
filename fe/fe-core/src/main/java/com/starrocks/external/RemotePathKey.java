@@ -26,6 +26,12 @@ public class RemotePathKey {
         this.hudiTableLocation = hudiTableLocation;
     }
 
+    public boolean approximateMatchPath(String basePath, boolean isRecursive) {
+        String pathWithSlash = path.endsWith("/") ? path : path + "/";
+        String basePathWithSlash =  basePath.endsWith("/") ? basePath : basePath + "/";
+        return pathWithSlash.startsWith(basePathWithSlash) && (this.isRecursive == isRecursive);
+    }
+
     public String getPath() {
         return path;
     }

@@ -39,7 +39,7 @@ public interface ConnectorMetadata {
      *
      * @return a list of string containing all database names of connector
      */
-    default List<String> listDbNames() throws DdlException {
+    default List<String> listDbNames() {
         return Lists.newArrayList();
     }
 
@@ -49,7 +49,7 @@ public interface ConnectorMetadata {
      * @param dbName - the string of which all table names are listed
      * @return a list of string containing all table names of `dbName`
      */
-    default List<String> listTableNames(String dbName) throws DdlException {
+    default List<String> listTableNames(String dbName) {
         return Lists.newArrayList();
     }
 
@@ -97,6 +97,15 @@ public interface ConnectorMetadata {
                                           List<ColumnRefOperator> columns,
                                           List<PartitionKey> partitionKeys) {
         return Statistics.builder().build();
+    }
+
+    /**
+     * Clean the query level cache after the query.
+     */
+    default void clearQueryLevelCache() {
+    }
+
+    default void refreshTable(String dbName, String tableName, Table table, List<String> partitionNames) {
     }
 
     default void createDb(String dbName) throws DdlException, AlreadyExistsException {

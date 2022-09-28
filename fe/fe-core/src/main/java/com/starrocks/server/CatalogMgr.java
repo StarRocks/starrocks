@@ -98,7 +98,6 @@ public class CatalogMgr {
         } finally {
             writeUnLock();
         }
-
     }
 
     public void dropCatalog(DropCatalogStmt stmt) {
@@ -186,13 +185,6 @@ public class CatalogMgr {
         } finally {
             writeUnLock();
         }
-    }
-
-    public boolean existSameUrlCatalog(String url) {
-        long hasSameUriCatalogNum =  catalogs.entrySet().stream()
-                .filter(entry -> entry.getValue().getConfig().getOrDefault(HIVE_METASTORE_URIS, "").equals(url))
-                .count();
-        return hasSameUriCatalogNum > 1;
     }
 
     public long loadCatalogs(DataInputStream dis, long checksum) throws IOException, DdlException {
@@ -323,7 +315,12 @@ public class CatalogMgr {
         }
 
         public static String getResourceMappingCatalogName(String resourceName, String type) {
-            return RESOURCE_MAPPING_CATALOG_PREFIX + type + "_" + resourceName;
+            return (RESOURCE_MAPPING_CATALOG_PREFIX + type + "_" + resourceName).toLowerCase(Locale.ROOT);
+        }
+
+        public static String toResourceName(String catalogName, String type) {
+            return isResourceMappingCatalog(catalogName) ?
+                    catalogName.substring(RESOURCE_MAPPING_CATALOG_PREFIX.length() + type.length() + 1) : catalogName;
         }
     }
 }

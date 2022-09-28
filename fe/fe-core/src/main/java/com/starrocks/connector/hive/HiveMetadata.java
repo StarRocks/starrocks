@@ -3,24 +3,20 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.external.RemoteFileInfo;
 import com.starrocks.external.RemoteFileOperations;
-import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HiveMetastoreOperations;
 import com.starrocks.external.hive.HiveStatisticsProvider;
-import com.starrocks.external.hive.HiveTableName;
 import com.starrocks.external.hive.Partition;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -30,59 +26,36 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class HiveMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(HiveMetadata.class);
     private final String catalogName;
     private final HiveMetastoreOperations hmsOps;
-    private final RemoteFileOperations fileOperations;
+    private final RemoteFileOperations fileOps;
     private final HiveStatisticsProvider statisticsProvider;
+    private final Optional<CacheUpdateProcessor> cacheUpdateProcessor;
 
-    private HiveMetaCache metaCache = null;
-    private final String resourceName;
-
-    public HiveMetadata(String resourceName, String catalogName,
+    public HiveMetadata(String catalogName,
                         HiveMetastoreOperations hmsOps,
                         RemoteFileOperations fileOperations,
-                        HiveStatisticsProvider statisticsProvider) {
-        this.resourceName = resourceName;
+                        HiveStatisticsProvider statisticsProvider,
+                        Optional<CacheUpdateProcessor> cacheUpdateProcessor) {
         this.catalogName = catalogName;
         this.hmsOps = hmsOps;
-        this.fileOperations = fileOperations;
+        this.fileOps = fileOperations;
         this.statisticsProvider = statisticsProvider;
-    }
-
-    public HiveMetaCache getCache() throws DdlException {
-        if (metaCache == null) {
-            metaCache = GlobalStateMgr.getCurrentState().getHiveRepository().getMetaCache(resourceName);
-        }
-        return metaCache;
+        this.cacheUpdateProcessor = cacheUpdateProcessor;
     }
 
     @Override
     public List<String> listDbNames() {
-        if (!FeConstants.runningUnitTest) {
-            try {
-                return getCache().getAllDatabaseNames();
-            } catch (Exception e) {
-                throw new RuntimeException();
-            }
-        } else {
-            return hmsOps.getAllDatabaseNames();
-        }
+        return hmsOps.getAllDatabaseNames();
     }
 
     @Override
     public List<String> listTableNames(String dbName) {
-        if (!FeConstants.runningUnitTest) {
-            try {
-                return getCache().getAllTableNames(dbName);
-            } catch (Exception e) {
-                throw new RuntimeException();
-            }
-        } else {
-            return hmsOps.getAllTableNames(dbName);
-        }
+        return hmsOps.getAllTableNames(dbName);
     }
 
     @Override
@@ -93,15 +66,11 @@ public class HiveMetadata implements ConnectorMetadata {
     @Override
     public Database getDb(String dbName) {
         Database database;
-        if (!FeConstants.runningUnitTest) {
-            try {
-                database = getCache().getDb(dbName);
-            } catch (Exception e) {
-                LOG.error("Failed to get hive meta cache on {}.{}", catalogName, dbName);
-                return null;
-            }
-        } else {
-            return hmsOps.getDb(dbName);
+        try {
+            database = hmsOps.getDb(dbName);
+        } catch (Exception e) {
+            LOG.error("Failed to get hive database [{}.{}]", catalogName, dbName);
+            return null;
         }
 
         return database;
@@ -110,22 +79,18 @@ public class HiveMetadata implements ConnectorMetadata {
     @Override
     public Table getTable(String dbName, String tblName) {
         Table table;
-        if (!FeConstants.runningUnitTest) {
-            try {
-                table = getCache().getTable(HiveTableName.of(dbName, tblName));
-            } catch (Exception e) {
-                LOG.error("Failed to get hive meta cache on {}.{}.{}", catalogName, dbName, tblName);
-                return null;
-            }
-        } else {
-            return hmsOps.getTable(dbName, tblName);
+        try {
+            table = hmsOps.getTable(dbName, tblName);
+        } catch (Exception e) {
+            LOG.error("Failed to get hive table [{}.{}.{}]", catalogName, dbName, tblName);
+            return null;
         }
 
         return table;
     }
 
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
-        ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
+        ImmutableCollection.Builder<Partition> partitions = ImmutableList.builder();
         String dbName = ((HiveMetaStoreTable) table).getDbName();
         String tblName = ((HiveMetaStoreTable) table).getTableName();
 
@@ -135,7 +100,7 @@ public class HiveMetadata implements ConnectorMetadata {
             partitions.addAll(hmsOps.getPartitionByNames(table, partitionKeys).values());
         }
 
-        return fileOperations.getRemoteFiles(partitions.build());
+        return fileOps.getRemoteFiles(partitions.build());
     }
 
     public Statistics getTableStatistics(OptimizerContext session,
@@ -168,5 +133,18 @@ public class HiveMetadata implements ConnectorMetadata {
         }
 
         return statistics;
+    }
+
+    public void refreshTable(String dbName, String tableName, Table table, List<String> partitionNames) {
+        if (partitionNames != null && partitionNames.size() > 1) {
+            cacheUpdateProcessor.ifPresent(processor -> processor.refreshPartition(table, partitionNames));
+        } else {
+            cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(dbName, tableName, table));
+        }
+    }
+
+    public void clearQueryLevelCache() {
+        hmsOps.invalidateAll();
+        fileOps.invalidateAll();
     }
 }
