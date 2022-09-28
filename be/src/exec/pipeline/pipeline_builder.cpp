@@ -202,9 +202,9 @@ OpFactories PipelineBuilderContext::interpolate_cache_operator(
     auto source_op = downstream_pipeline.front();
     downstream_pipeline.clear();
 
-    auto dop = dynamic_cast<SourceOperatorFactory*>(source_op.get())->degree_of_parallelism();
+    auto dop = down_cast<SourceOperatorFactory*>(source_op.get())->degree_of_parallelism();
     auto conjugate_op = std::make_shared<cache::ConjugateOperatorFactory>(sink_op, source_op);
-    upstream_pipeline.push_back(conjugate_op);
+    upstream_pipeline.push_back(std::move(conjugate_op));
 
     auto last_ml_op_idx = upstream_pipeline.size() - 1;
     for (auto i = 1; i < upstream_pipeline.size(); ++i) {
@@ -224,7 +224,7 @@ OpFactories PipelineBuilderContext::interpolate_cache_operator(
     auto merge_operators = merge_operators_generator(true);
     upstream_pipeline.push_back(std::move(std::get<0>(merge_operators)));
     downstream_pipeline.push_back(std::move(std::get<1>(merge_operators)));
-    dynamic_cast<SourceOperatorFactory*>(downstream_pipeline.front().get())->set_degree_of_parallelism(dop);
+    down_cast<SourceOperatorFactory*>(downstream_pipeline.front().get())->set_degree_of_parallelism(dop);
     return downstream_pipeline;
 }
 

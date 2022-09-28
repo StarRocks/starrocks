@@ -314,7 +314,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         cache_param.force_populate = tcache_param.force_populate;
         cache_param.entry_max_bytes = tcache_param.entry_max_bytes;
         cache_param.entry_max_rows = tcache_param.entry_max_rows;
-        for (auto [slot, remapped_slot] : tcache_param.slot_remapping) {
+        for (auto& [slot, remapped_slot] : tcache_param.slot_remapping) {
             cache_param.slot_remapping[slot] = remapped_slot;
             cache_param.reverse_slot_remapping[remapped_slot] = slot;
         }
