@@ -981,5 +981,4 @@ TEST_F(JsonScannerTest, test_illegal_input_with_jsonpath) {
     ASSERT_TRUE(scanner->get_next().status().is_data_quality_error());
 }
 
-
 } // namespace starrocks::vectorized
