@@ -88,5 +88,12 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "drop user test_user";
         dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals("test_user", dropUserStmt.getUserIdent().getQualifiedUser());
+
+        sql = "drop user root";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("cannot drop root!"));
+        }
     }
 }

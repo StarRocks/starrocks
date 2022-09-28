@@ -80,6 +80,9 @@ public class PrivilegeStmtAnalyzerV2 {
         @Override
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
             analyseUser(stmt.getUserIdent(), false);
+            if (stmt.getUserIdent().equals(UserIdentity.ROOT)) {
+                throw new SemanticException("cannot drop root!");
+            }
             return null;
         }
 

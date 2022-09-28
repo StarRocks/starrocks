@@ -51,7 +51,6 @@ public class AuthenticationManagerTest {
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
 
         AuthenticationManager masterManager = new AuthenticationManager();
-        masterManager.init();
         Assert.assertNull(masterManager.checkPassword(
                 testUserWithIp.getQualifiedUser(), testUserWithIp.getHost(), scramble, seed));
         Assert.assertFalse(masterManager.doesUserExist(testUser));
@@ -195,8 +194,8 @@ public class AuthenticationManagerTest {
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
 
         AuthenticationManager masterManager = ctx.getGlobalStateMgr().getAuthenticationManager();
-        masterManager.init();
         Assert.assertFalse(masterManager.doesUserExist(testUser));
+        Assert.assertTrue(masterManager.doesUserExist(UserIdentity.ROOT));
 
         // 1. create empty image
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
@@ -208,6 +207,8 @@ public class AuthenticationManagerTest {
         CreateUserStmt createStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         masterManager.createUser(createStmt);
         Assert.assertTrue(masterManager.doesUserExist(testUser));
+        Assert.assertEquals(testUser, masterManager.checkPassword(
+                testUser.getQualifiedUser(), "10.1.1.1", new byte[0], null));
 
         // 3. alter user
         sql = "alter user test identified by 'abc'";
@@ -238,6 +239,8 @@ public class AuthenticationManagerTest {
         followerManager.replayCreateUser(
                 createInfo.getUserIdentity(), createInfo.getAuthenticationInfo(), createInfo.getUserProperty());
         Assert.assertTrue(followerManager.doesUserExist(testUser));
+        Assert.assertEquals(testUser, followerManager.checkPassword(
+                testUser.getQualifiedUser(), "10.1.1.1", new byte[0], null));
         // 7.2 replay alter user
         AlterUserInfo alterInfo = (AlterUserInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
         followerManager.replayAlterUser(alterInfo.getUserIdentity(), alterInfo.getAuthenticationInfo());
@@ -247,14 +250,18 @@ public class AuthenticationManagerTest {
         UserIdentity dropInfo = (UserIdentity) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
         followerManager.replayDropUser(dropInfo);
         Assert.assertFalse(followerManager.doesUserExist(testUser));
+        Assert.assertTrue(followerManager.doesUserExist(UserIdentity.ROOT));
 
         // 8. verify alter image
         AuthenticationManager alterManager = AuthenticationManager.load(alterImage.getDataInputStream());
+        Assert.assertTrue(alterManager.doesUserExist(testUser));
         Assert.assertEquals(testUser, alterManager.checkPassword(
                 testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
+        Assert.assertTrue(alterManager.doesUserExist(UserIdentity.ROOT));
 
         // 9. verify final image
         AuthenticationManager finalManager = AuthenticationManager.load(finalImage.getDataInputStream());
         Assert.assertFalse(finalManager.doesUserExist(testUser));
+        Assert.assertTrue(finalManager.doesUserExist(UserIdentity.ROOT));
     }
 }
