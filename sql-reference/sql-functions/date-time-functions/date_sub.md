@@ -7,14 +7,14 @@
 ## 语法
 
 ```Haskell
-INT DATE_SUB(DATETIME date,INTERVAL expr type)
+DATETIME DATE_SUB(DATETIME date,INTERVAL expr type)
 ```
 
 ## 参数说明
 
-* date 参数是合法的日期表达式。
-* expr 参数是希望添加的时间间隔。
-* type 参数可以是下列值：YEAR, MONTH, DAY, HOUR, MINUTE, SECOND。
+* `date` ：合法的日期表达式。
+* `expr` ：要减去的时间间隔。
+* `type` ：可以是下列值：YEAR, MONTH, DAY, HOUR, MINUTE, SECOND。
 
 ## 示例
 

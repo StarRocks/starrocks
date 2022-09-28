@@ -125,7 +125,7 @@ curl --location-trusted -u root: -T ~/user_data/bigint \
 
 > **说明**
 >
-> 在导入过程中, 对于原始数据类型为浮点数的 STRING 做转换时，数据会被转换成 NULL。比如浮点数 12.0 会转为 NULL。如果想强制将这种类型的原始数据转为 BIGINT, 需要先将STRING类型的浮点数转为DOUBLE，再转为 BIGINT，请参考如下示例:
+> 在导入过程中，对于原始数据类型为浮点数的 STRING 做转换时，数据会被转换成 NULL。比如浮点数 12.0 会转为 NULL。如果想强制将这种类型的原始数据转为 BIGINT，需要先将STRING类型的浮点数转为DOUBLE，再转为 BIGINT，请参考如下示例:
 
 ```bash
 curl --location-trusted -u root: -T ~/user_data/bigint \

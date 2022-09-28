@@ -2,7 +2,7 @@
 
 ## 功能
 
-返回一个空 bitmap, 主要用于 insert 或 stream load 时填充默认值, 如下例:
+返回一个空 bitmap，主要用于 insert 或 stream load 时填充默认值，如下例:
 
 ```bash
 cat data | curl --location-trusted -u user:passwd -T - \

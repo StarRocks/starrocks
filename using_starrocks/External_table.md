@@ -688,7 +688,7 @@ select count(*) from profile_wos_p7;
 
 ### 缓存更新
 
-Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可以缓存到 StarRocks FE 中，缓存的内存结构为 Guava LoadingCache。您可以在 fe.conf 文件中通过设置`hive_meta_cache_refresh_interval_s`参数修改缓存自动刷新的间隔时间（默认值为`7200`, 单位：秒），也可以通过设置`hive_meta_cache_ttl_s`参数修改缓存的失效时间（默认值为`86400`，单位：秒）。修改后需重启 FE 生效。
+Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可以缓存到 StarRocks FE 中，缓存的内存结构为 Guava LoadingCache。您可以在 fe.conf 文件中通过设置`hive_meta_cache_refresh_interval_s`参数修改缓存自动刷新的间隔时间（默认值为`7200`，单位：秒），也可以通过设置`hive_meta_cache_ttl_s`参数修改缓存的失效时间（默认值为`86400`，单位：秒）。修改后需重启 FE 生效。
 
 #### 手动更新元数据缓存
 

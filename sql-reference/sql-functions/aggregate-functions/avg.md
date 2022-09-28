@@ -12,7 +12,7 @@ AVG([DISTINCT] expr)
 
 ## 参数说明
 
-`epxr`: 被选取的表达式, 可选字段 DISTINCT 参数。
+`epxr`: 被选取的表达式，可选字段 DISTINCT 参数。
 
 ## 返回值说明
 

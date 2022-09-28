@@ -1,12 +1,12 @@
 # 使用 HyperLogLog 实现近似去重
 
-本文介绍如何通过 HyperLogLog（HLL）在 StarRocks 中近似去重。
+本文介绍如何通过 HyperLogLog（HLL）在 StarRocks 中实现近似去重。
 
 HyperLogLog 是一种近似去重算法，在部分对去重精度要求不高的场景下，您可以选择使用 HyperLogLog 算法减轻数据去重分析的计算压力。根据数据集大小以及所采用的哈希函数的类型，HyperLogLog 算法的误差可控制在 1% 至 10% 左右。
 
 ## 创建包含 HLL 列的表
 
-使用 HLL 去重，需要在建表语句中，将目标的指标列的类型设置为 **HLL**，聚合函数设置为 **HLL_UNION**。
+使用 HLL 去重，需要在建表语句中，将目标指标列的类型设置为 **HLL**，聚合函数设置为 **HLL_UNION**。只有聚合模型表 (Aggregate Key) 支持 HLL 类型列。
 
 > 说明
 > 您无需向 HLL 列导入数据。HLL 列的数据将根据您指定的 `HLL_HASH` 函数基于导入的数据自动生成。导入数据时，该函数将自动根据指定的列生成 HLL 列。HLL 算法常用于替代 `count distinct`，通过结合物化视图在业务上用于快速计算 uv。
