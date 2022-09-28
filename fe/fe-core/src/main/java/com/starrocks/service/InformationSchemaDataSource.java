@@ -3,8 +3,8 @@
 package com.starrocks.service;
 
 import com.google.common.base.Joiner;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.gson.Gson;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -22,9 +22,11 @@ import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
@@ -40,6 +42,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 
 public class InformationSchemaDataSource {
@@ -134,11 +137,66 @@ public class InformationSchemaDataSource {
         return resp;
     }
 
-    static final ImmutableList<String> SHOW_PROPERTIES_NAME = new ImmutableList.Builder<String>()
-            .add(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)
-            .add(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
-            .add(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
-            .build();
+    private static Map<String, String> genProps(Table table) {
+
+        OlapTable olapTable = (OlapTable) table;
+        Map<String, String> propsMap = new HashMap<>(); 
+        
+        propsMap.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(olapTable.getDefaultReplicationNum()));
+        
+        // bloom filter
+        Set<String> bfColumnNames = olapTable.getCopiedBfColumns();
+        if (bfColumnNames != null) {
+            propsMap.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ").join(olapTable.getCopiedBfColumns()));
+        }
+
+        // colocateTable
+        String colocateTable = olapTable.getColocateGroup();
+        if (colocateTable != null) {
+            propsMap.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, colocateTable);
+        }
+
+        // dynamic partition
+        if (olapTable.dynamicPartitionExists()) {
+            propsMap.put("dynamic_partition", olapTable.getTableProperty().getDynamicPartitionProperty().getPropString());
+        }
+
+        // in memory
+        propsMap.put(PropertyAnalyzer.PROPERTIES_INMEMORY, String.valueOf(olapTable.isInMemory()));
+
+        // enable storage cache && cache ttl
+        if (table.isLakeTable()) {
+            Map<String, String> storageProperties = ((LakeTable) olapTable).getProperties();
+            propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, 
+                    storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE));
+            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 
+                    storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL));
+            propsMap.put(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, 
+                    storageProperties.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK));
+        }
+
+        // storage type
+        propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT, olapTable.getStorageFormat().name());
+        
+        // enable_persistent_index
+        propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, String.valueOf(olapTable.enablePersistentIndex()));
+
+        // compression type
+        if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME || 
+                olapTable.getCompressionType() == TCompressionType.LZ4) {
+            propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "LZ4");
+        } else {
+            propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, olapTable.getCompressionType().name());
+        }
+
+        // storage media
+        Map<String, String> properties = olapTable.getTableProperty().getProperties();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, 
+                    properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        }
+        return propsMap;
+    }
 
     private static TTableConfigInfo genNormalTableConfigInfo(Table table, TTableConfigInfo tableConfigInfo) {
         OlapTable olapTable = (OlapTable) table;
@@ -184,20 +242,7 @@ public class InformationSchemaDataSource {
         tableConfigInfo.setDistribute_type("HASH");
         tableConfigInfo.setDistribute_key(distributeKey);
         tableConfigInfo.setSort_key(isSortKey(olapTable.getKeysType()) ? keysSb.toString() : DEF_NULL);
-
-        Map<String, String> properties = olapTable.getTableProperty().getProperties();
-        Map<String, String> showProperties = new HashMap<>();
-        SHOW_PROPERTIES_NAME.forEach(key -> {
-            if (properties.containsKey(key)) {
-                showProperties.put(key, properties.get(key));
-            }
-        });
-        if (null != olapTable.getColocateGroup()) {
-            showProperties.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, olapTable.getColocateGroup());
-        }
-        Short replicationNum = olapTable.getDefaultReplicationNum();
-        showProperties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(replicationNum));
-        tableConfigInfo.setProperties(showProperties.toString());
+        tableConfigInfo.setProperties(new Gson().toJson(genProps(table)));
         return tableConfigInfo;
     }
 
