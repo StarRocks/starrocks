@@ -161,7 +161,7 @@ StarRocks 提供 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/
   用于导入的最大内存使用量和最大内存使用百分比，用来限制单个 BE 上所有导入作业的内存总和的使用上限。StarRocks 系统会在两个参数中取较小者，作为最终的使用上限。
 
   - `load_process_max_memory_limit_bytes`：指定 BE 上最大内存使用量，默认为 100 GB。
-  - `load_process_max_memory_limit_percent`：指定 BE 上最大内存使用百分比，默认为 30%。该参数与 `mem_limit` 参数不同。`mem_limit` 参数指定的是 BE 进程内存上限，默认硬上限为 BE 所在机器内存的 90%, 软上限为 BE 所在机器内存的 80%。
+  - `load_process_max_memory_limit_percent`：指定 BE 上最大内存使用百分比，默认为 30%。该参数与 `mem_limit` 参数不同。`mem_limit` 参数指定的是 BE 进程内存上限，默认硬上限为 BE 所在机器内存的 90%，软上限为 BE 所在机器内存的 80%。
 
     假设 BE 所在机器物理内存大小为 M，则用于导入的内存上限为：`M x 80% x 30%`。
 

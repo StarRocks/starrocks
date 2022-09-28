@@ -55,7 +55,7 @@ IDENTIFIED WITH auth_plugin AS 'auth_string'
     ALTER USER 'jack' IDENTIFIED WITH mysql_native_password AS '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
     ```
 
-    后面加密的内容可以通过 PASSWORD()获得到, 例如：
+    后面加密的内容可以通过 PASSWORD()获得到，例如：
 
     ```sql
     SELECT PASSWORD('123456');

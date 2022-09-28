@@ -47,7 +47,7 @@ WHERE
     SHOW EXPORT FROM example_db ORDER BY StartTime DESC;
     ```
 
-4. 展示指定 db 的导出任务，state 为 "exporting", 并按 StartTime 降序排序。
+4. 展示指定 db 的导出任务，state 为 "exporting"，并按 StartTime 降序排序。
 
     ```sql
     SHOW EXPORT FROM example_db WHERE STATE = "exporting" ORDER BY StartTime DESC;

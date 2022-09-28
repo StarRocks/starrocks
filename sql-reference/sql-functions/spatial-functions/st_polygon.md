@@ -12,7 +12,7 @@ ST_Polygon(wkt)
 
 ## 参数说明
 
-`wkt`: 待转化的 WKT, 支持的数据类型为 VARCHAR。
+`wkt`: 待转化的 WKT，支持的数据类型为 VARCHAR。
 
 ## 返回值说明
 

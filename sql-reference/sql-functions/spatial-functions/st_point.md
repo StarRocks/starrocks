@@ -2,7 +2,7 @@
 
 ## 功能
 
-通过给定的 X 坐标值、Y 坐标值返回对应的 Point, 当前这个值只在球面集合上有意义, X/Y 对应的是经度/纬度(longitude/latitude)。
+通过给定的 X 坐标值、Y 坐标值返回对应的 Point，当前这个值只在球面集合上有意义，X/Y 对应的是经度/纬度(longitude/latitude)。
 
 ## 语法
 
@@ -12,9 +12,9 @@ ST_Point(x, y)
 
 ## 参数说明
 
-`x`: X 坐标值, 支持数据类型为 DOUBLE。
+`x`: X 坐标值，支持数据类型为 DOUBLE。
 
-`y`: Y 坐标值, 支持数据类型为 DOUBLE。
+`y`: Y 坐标值，支持数据类型为 DOUBLE。
 
 ## 返回值说明
 

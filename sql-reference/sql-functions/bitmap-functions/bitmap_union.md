@@ -2,7 +2,7 @@
 
 ## 功能
 
-输入一组 bitmap 值, 求这一组 bitmap 值的并集, 并返回。
+输入一组 bitmap 值，求这一组 bitmap 值的并集，并返回。
 
 ## 语法
 
@@ -34,7 +34,7 @@ from table
 group by page_id;
 ```
 
-当 user_id 字段为 int 时, 上面查询语义等同于
+当 user_id 字段为 int 时，上面查询语义等同于
 
 ```sql
 select page_id, count(distinct user_id)

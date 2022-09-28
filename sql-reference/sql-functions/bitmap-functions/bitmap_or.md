@@ -2,7 +2,7 @@
 
 ## 功能
 
-计算两个输入 bitmap 的并集，返回新的 bitmap。
+计算两个输入的 bitmap 的并集，并返回新的 bitmap。并集指将两个集合中的所有元素合并在一起后组成的集合。重复元素只计入一次。
 
 ## 语法
 
@@ -22,15 +22,17 @@ BITMAP_OR(lhs, rhs)
 
 ## 示例
 
+计算两个 bitmap 的并集，并返回并集中元素个数的总和。
+
 ```Plain Text
-MySQL > select bitmap_count(bitmap_or(to_bitmap(1), to_bitmap(2))) cnt;
+select bitmap_count(bitmap_or(to_bitmap(1), to_bitmap(2))) cnt;
 +------+
 | cnt  |
 +------+
 |    2 |
 +------+
 
-MySQL > select bitmap_count(bitmap_or(to_bitmap(1), to_bitmap(1))) cnt;
+select bitmap_count(bitmap_or(to_bitmap(1), to_bitmap(1))) cnt;
 +------+
 | cnt  |
 +------+

@@ -34,7 +34,7 @@ mysql> select array_position([1, NULL], NULL);
 1 row in set (0.00 sec)
 ```
 
-也可以应用在多维数组中, 获取某个子数组的位置，此时要求子数组元素完全匹配，包括元素排列顺序
+也可以应用在多维数组中，获取某个子数组的位置，此时要求子数组元素完全匹配，包括元素排列顺序
 
 ```plain text
 mysql> select array_position([[1,2,3], [4,5,6]], [4,5,6]);

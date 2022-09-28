@@ -57,7 +57,7 @@ SELECT lhs.id, rhs.parent, lhs.c1, rhs.c2 FROM tree_data lhs, tree_data rhs WHER
 
 #### 笛卡尔积 (Cross Join)
 
-Cross join 会产生大量的结果，须慎用 cross join,
+Cross join 会产生大量的结果，须慎用 cross join。
 
 即使需要使用 Cross Join 时也需要使用过滤条件并且确保返回结果数较少。例如：
 

@@ -36,7 +36,7 @@ COUNT(DISTINCT expr [,expr,...])
 
 ## 示例
 
-假设有表`test`, 按照订单`id`显示每个订单的国家、商品类别、供应商编号。
+假设有表`test`，按照订单`id`显示每个订单的国家、商品类别、供应商编号。
 
 ```Plain
 select * from test order by id;

@@ -2,7 +2,7 @@
 
 ## 功能
 
-解析并获取 `json_str` 内 `json_path` 的浮点型内容。如果 `json_str` 格式不对或 `json_path` 格式不对, 或者无法找到匹配项, 则返回 NULL。
+解析并获取 `json_str` 内 `json_path` 的浮点型内容。如果 `json_str` 格式不对或 `json_path` 格式不对，或者无法找到匹配项，则返回 NULL。
 
 ## 语法
 
@@ -14,7 +14,7 @@ get_json_double(json_str, json_path)
 
 `json_str`: json 字符串，支持的数据类型为 VARCHAR。
 
-`json_path`: 指定的路径，支持的数据类型为 VARCHAR，其中 json_path 必须以 $ 符号作为开头, 使用 . 作为路径分割符, 如果路径中包含 `.`, 则可以使用双引号包围。使用 [ ] 表示数组下标, 从 0 开始, path 的内容不能包含 ", [ 和 ]。
+`json_path`: 指定的路径，支持的数据类型为 VARCHAR，其中 json_path 必须以 $ 符号作为开头，使用 . 作为路径分割符，如果路径中包含 `.`，则可以使用双引号包围。使用 [ ] 表示数组下标，从 0 开始，path 的内容不能包含 ", [ 和 ]。
 
 ## 返回值说明
 

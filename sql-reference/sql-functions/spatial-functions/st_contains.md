@@ -12,9 +12,9 @@ ST_Contains(shape1, shape2)
 
 ## 参数说明
 
-`shape1`: 几何图形 1，包含图形, 支持的数据类型为 GEOMETRY。
+`shape1`: 几何图形 1，包含图形，支持的数据类型为 GEOMETRY。
 
-`shape2`: 几何图形 2，被包含图形, 支持的数据类型为 GEOMETRY。
+`shape2`: 几何图形 2，被包含图形，支持的数据类型为 GEOMETRY。
 
 ## 返回值说明
 
