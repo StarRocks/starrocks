@@ -38,7 +38,7 @@ The following bugs are fixed:
 
 ### Behavior Change
 
-The format used to represent ARRAY<JSON> values in the output is modified. Escape characters are no longer used in the returned JSON values. For example, `[{"k1":"v1"}]` is used, instead of `"[{\"k1\":\"v1\"}]"`. [#10790](https://github.com/StarRocks/starrocks/issues/10790)
+The format used to represent JSON values in an array in the output is modified. Escape characters are no longer used in the returned JSON values. [#10790](https://github.com/StarRocks/starrocks/issues/10790)
 
 ## 2.2.5
 
