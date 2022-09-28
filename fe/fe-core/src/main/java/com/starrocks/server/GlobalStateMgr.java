@@ -881,6 +881,7 @@ public class GlobalStateMgr {
     // set usingNewPrivilege = true in UT
     public void initAuth(boolean usingNewPrivilege) {
         if (usingNewPrivilege) {
+            this.usingNewPrivilege = usingNewPrivilege;
             this.auth = null;
             this.domainResolver = null;
             this.authenticationManager = new AuthenticationManager();
