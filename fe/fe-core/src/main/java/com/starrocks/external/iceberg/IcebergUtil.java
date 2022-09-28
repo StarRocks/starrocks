@@ -215,7 +215,7 @@ public class IcebergUtil {
                 fullSchema, properties);
     }
 
-    static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {
+    public static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {
         if (icebergType == null) {
             return Type.NULL;
         }
