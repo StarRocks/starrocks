@@ -17,6 +17,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.OriginStatement;
@@ -38,6 +39,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -309,6 +311,7 @@ public class StatisticExecutor {
     private static ExecPlan getExecutePlan(Map<String, Database> dbs, ConnectContext context,
                                            StatementBase parsedStmt, boolean isStatistic, boolean isLockDb) {
         ExecPlan execPlan;
+        boolean forceDisablePipeline = false;
         try {
             if (isLockDb) {
                 lock(dbs);
@@ -319,6 +322,16 @@ public class StatisticExecutor {
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, context).transform(
                     ((QueryStatement) parsedStmt).getQueryRelation());
+
+            // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
+            boolean isEnablePipeline = context.getSessionVariable().isEnablePipelineEngine();
+            boolean canUsePipeline =
+                    isEnablePipeline && ResultSink.canUsePipeLine(TResultSinkType.STATISTIC) &&
+                            logicalPlan.canUsePipeline();
+            forceDisablePipeline = isEnablePipeline && !canUsePipeline;
+            if (forceDisablePipeline) {
+                context.getSessionVariable().setEnablePipelineEngine(false);
+            }
 
             Optimizer optimizer = new Optimizer();
             OptExpression optimizedPlan = optimizer.optimize(
@@ -332,6 +345,9 @@ public class StatisticExecutor {
                     .createStatisticPhysicalPlan(optimizedPlan, context, logicalPlan.getOutputColumn(),
                             columnRefFactory, isStatistic);
         } finally {
+            if (forceDisablePipeline) {
+                context.getSessionVariable().setEnablePipelineEngine(true);
+            }
             if (isLockDb) {
                 unLock(dbs);
             }
