@@ -30,7 +30,7 @@
 
 ### 行为调整
 
-- 修改 array<json> 的结果展示形式，输出结果使用单引号而不是转义符。 ([#10790](https://github.com/StarRocks/starrocks/issues/10790))
+- 修改返回结果中`ARRAY<JSON>`的展示形式，输出结果使用单引号而不是转义符。 ([#10790](https://github.com/StarRocks/starrocks/issues/10790))
 
 ## 2.2.5
 
