@@ -5,12 +5,8 @@ package com.starrocks.sql.optimizer.transformer;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.DateLiteral;
-<<<<<<< HEAD
-=======
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
->>>>>>> 601029cf3 ([BugFix] simplify expr hashCode calculating (#10954))
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -45,7 +41,7 @@ public class SqlToScalarOperatorTranslatorTest {
             complexFunc = new FunctionCallExpr("if",  ImmutableList.of(predicate, test, complexFunc));
         }
         CallOperator so = (CallOperator) SqlToScalarOperatorTranslator.translate(complexFunc,
-                new ExpressionMapping(null, Collections.emptyList()), new ColumnRefFactory());
+                new ExpressionMapping(null, Collections.emptyList()));
         assertEquals("if", so.getFnName());
     }
 }
