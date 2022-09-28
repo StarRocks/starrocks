@@ -11,7 +11,13 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
+>>>>>>> 8c824a757 ([cherry-pick][branch-2.3] support dynamically change slot per path conf (#11756))
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -20,10 +26,15 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class TabletSchedulerTest {
     @Mocked
@@ -31,7 +42,7 @@ public class TabletSchedulerTest {
 
     @Before
     public void setup() throws Exception {
-        new Expectations(globalStateMgr) {
+        new Expectations() {
             {
                 globalStateMgr.getColocateTableIndex();
                 minTimes = 0;
@@ -43,7 +54,7 @@ public class TabletSchedulerTest {
     TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
     TabletSchedulerStat tabletSchedulerStat = new TabletSchedulerStat();
     @Test
-    public void testSubmitBatchTaskIfNotExpired() throws Exception {
+    public void testSubmitBatchTaskIfNotExpired() {
         Database badDb = new Database(1, "mal");
         Database goodDB = new Database(2, "bueno");
         Table badTable = new Table(3, "mal", Table.TableType.OLAP, new ArrayList<>());
@@ -91,4 +102,107 @@ public class TabletSchedulerTest {
         // only the last survive
         Assert.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(3), recycleBin, expireTime));
     }
+<<<<<<< HEAD
 }
+=======
+
+    private void updateSlotWithNewConfig(int new_slot_per_path, Method updateWorkingSlotsMethod,
+                                         TabletScheduler tabletScheduler)
+            throws InvocationTargetException, IllegalAccessException {
+        Config.schedule_slot_num_per_path = new_slot_per_path;
+        updateWorkingSlotsMethod.invoke(tabletScheduler, null);
+    }
+
+    private long takeSlotNTimes(int nTimes, TabletScheduler.PathSlot pathSlot, long pathHash) throws SchedException {
+        long result = -1;
+        while (nTimes-- > 0) {
+            result = pathSlot.takeSlot(pathHash);
+        }
+        return result;
+    }
+
+    private void freeSlotNTimes(int nTimes, TabletScheduler.PathSlot pathSlot, long pathHash) {
+        while (nTimes-- > 0) {
+            pathSlot.freeSlot(pathHash);
+        }
+    }
+
+    @Test
+    public void testUpdateWorkingSlots() throws NoSuchMethodException, InvocationTargetException,
+            IllegalAccessException, SchedException {
+        TDisk td11 = new TDisk("/path11", 1L, 2L, true);
+        td11.setPath_hash(11);
+        TDisk td12 = new TDisk("/path12", 1L, 2L, true);
+        td12.setPath_hash(12);
+        Map<String, TDisk> backendDisks1 = new HashMap<>();
+        backendDisks1.put("/path11", td11);
+        backendDisks1.put("/path12", td12);
+        Backend be1 = new Backend(1, "192.168.0.1", 9030);
+        be1.setAlive(true);
+        be1.updateDisks(backendDisks1);
+        systemInfoService.addBackend(be1);
+
+        TDisk td21 = new TDisk("/path21", 1L, 2L, true);
+        td21.setPath_hash(21);
+        TDisk td22 = new TDisk("/path22", 1L, 2L, true);
+        td22.setPath_hash(22);
+        Map<String, TDisk> backendDisks2 = new HashMap<>();
+        backendDisks2.put("/path21", td21);
+        backendDisks2.put("/path22", td22);
+        Backend be2 = new Backend(2, "192.168.0.2", 9030);
+        be2.updateDisks(backendDisks2);
+        be2.setAlive(true);
+        systemInfoService.addBackend(be2);
+
+        TabletScheduler tabletScheduler =
+                new TabletScheduler(globalStateMgr, systemInfoService, tabletInvertedIndex, tabletSchedulerStat);
+        Method m = TabletScheduler.class.getDeclaredMethod("updateWorkingSlots", null);
+        m.setAccessible(true);
+        m.invoke(tabletScheduler, null);
+        Map<Long, TabletScheduler.PathSlot> bslots = tabletScheduler.getBackendsWorkingSlots();
+        Assert.assertEquals(2, bslots.get(1L).peekSlot(11));
+        Assert.assertEquals(2, bslots.get(2L).peekSlot(22));
+        long result = takeSlotNTimes(2, bslots.get(1L), 11L);
+        Assert.assertEquals(11, result);
+        result = takeSlotNTimes(1, bslots.get(1L), 11L);
+        Assert.assertEquals(-1, result);
+        freeSlotNTimes(2, bslots.get(1L), 11L);
+        Assert.assertEquals(2, bslots.get(1L).getSlotTotal(11));
+
+        updateSlotWithNewConfig(128, m, tabletScheduler); // test max slot
+        Assert.assertEquals(64, bslots.get(1L).getSlotTotal(11));
+        Assert.assertEquals(64, bslots.get(1L).peekSlot(11));
+
+        updateSlotWithNewConfig(0, m, tabletScheduler); // test min slot
+        Assert.assertEquals(2, bslots.get(1L).peekSlot(11));
+        Assert.assertEquals(2, bslots.get(2L).peekSlot(22));
+        takeSlotNTimes(10, bslots.get(1L), 11L); // not enough, can only get 2 free slot
+        takeSlotNTimes(10, bslots.get(2L), 21L); // not enough, can only get 2 free slot
+        Assert.assertEquals(0, bslots.get(1L).peekSlot(11));
+        Assert.assertEquals(0, bslots.get(2L).peekSlot(21));
+        Assert.assertEquals(2, bslots.get(1L).getSlotTotal(11));
+
+        updateSlotWithNewConfig(2, m, tabletScheduler);
+        Assert.assertEquals(0, bslots.get(1L).peekSlot(11));
+        Assert.assertEquals(2, bslots.get(1L).peekSlot(12));
+
+        updateSlotWithNewConfig(4, m, tabletScheduler);
+        Assert.assertEquals(2, bslots.get(2L).peekSlot(21));
+        Assert.assertEquals(4, bslots.get(2L).peekSlot(22));
+        Assert.assertEquals(4, bslots.get(1L).getSlotTotal(11));
+
+        takeSlotNTimes(5, bslots.get(1L), 11); // not enough, can only get 2 free slot
+        updateSlotWithNewConfig(2, m, tabletScheduler); // decrease total slot
+        // this is normal because slot taken haven't return
+        Assert.assertEquals(-2, bslots.get(1L).peekSlot(11));
+        Assert.assertEquals(2, bslots.get(1L).peekSlot(12));
+        Assert.assertEquals(0, bslots.get(2L).peekSlot(21));
+
+        freeSlotNTimes(2, bslots.get(1L), 11L);
+        Assert.assertEquals(0, bslots.get(1L).peekSlot(11));
+
+        freeSlotNTimes(2, bslots.get(1L), 11L);
+        Assert.assertEquals(bslots.get(1L).peekSlot(11), bslots.get(1L).getSlotTotal(11));
+    }
+}
+>>>>>>> 8c824a757 ([cherry-pick][branch-2.3] support dynamically change slot per path conf (#11756))
