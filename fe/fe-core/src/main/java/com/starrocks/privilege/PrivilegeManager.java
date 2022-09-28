@@ -43,7 +43,8 @@ public class PrivilegeManager {
 
     private final ReentrantReadWriteLock userLock;
 
-    public PrivilegeManager() {
+    // only when deserialized
+    protected PrivilegeManager() {
         typeStringToId = new HashMap<>();
         typeToActionMap = new HashMap<>();
         userToPrivilegeCollection = new HashMap<>();
@@ -75,6 +76,7 @@ public class PrivilegeManager {
             }
         }
         userToPrivilegeCollection = new HashMap<>();
+        userToPrivilegeCollection.put(UserIdentity.ROOT, new UserPrivilegeCollection());
         userLock = new ReentrantReadWriteLock();
     }
 
@@ -368,7 +370,6 @@ public class PrivilegeManager {
                 } else {
                     ret.provider = provider;
                 }
-                ret.userToPrivilegeCollection = new HashMap<>();
                 // 1 json for num user
                 int numUser = (int) reader.readJson(int.class);
                 LOG.info("loading {} users", numUser);

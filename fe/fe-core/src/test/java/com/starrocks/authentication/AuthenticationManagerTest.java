@@ -26,7 +26,6 @@ public class AuthenticationManagerTest {
     @Test
     public void testInitDefault() throws Exception {
         AuthenticationManager manager = new AuthenticationManager();
-        manager.init();
         Assert.assertTrue(manager.doesUserExist(UserIdentity.ROOT));
         Assert.assertFalse(manager.doesUserExist(UserIdentity.createAnalyzedUserIdentWithIp("fake", "%")));
         Assert.assertEquals(new UserProperty().getMaxConn(), manager.getMaxConn(AuthenticationManager.ROOT_USER));
@@ -40,7 +39,6 @@ public class AuthenticationManagerTest {
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
 
         AuthenticationManager masterManager = new AuthenticationManager();
-        masterManager.init();
         Assert.assertNull(masterManager.checkPassword(
                 testUserWithIp.getQualifiedUser(), testUserWithIp.getHost(), scramble, seed));
         Assert.assertFalse(masterManager.doesUserExist(testUser));

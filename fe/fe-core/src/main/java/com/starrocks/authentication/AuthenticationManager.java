@@ -59,7 +59,7 @@ public class AuthenticationManager {
         lock.writeLock().unlock();
     }
 
-    public void init() throws AuthenticationException {
+    public AuthenticationManager() {
         // default plugin
         AuthenticationProviderFactory.installPlugin(
                 PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
@@ -68,7 +68,11 @@ public class AuthenticationManager {
         UserIdentity rootUser = new UserIdentity(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
         rootUser.setIsAnalyzed();
         UserAuthenticationInfo info = new UserAuthenticationInfo();
-        info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
+        try {
+            info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
+        } catch (AuthenticationException e) {
+            throw new RuntimeException("should not happened!", e);
+        }
         info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
         info.setPassword(new byte[0]);
         userToAuthenticationInfo.put(rootUser, info);
