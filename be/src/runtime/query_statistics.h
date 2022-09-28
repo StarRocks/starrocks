@@ -37,12 +37,6 @@ class QueryStatistics {
 public:
     QueryStatistics() {}
 
-    void merge(const QueryStatistics& other) {
-        scan_rows += other.scan_rows;
-        scan_bytes += other.scan_bytes;
-        _stats_items.insert(_stats_items.end(), other._stats_items.begin(), other._stats_items.end());
-    }
-
     void set_returned_rows(int64_t num_rows) { this->returned_rows = num_rows; }
 
     void add_stats_item(QueryStatisticsItemPB& stats_item) {
@@ -60,7 +54,8 @@ public:
 
     void add_mem_costs(int64_t bytes) { mem_cost_bytes += bytes; }
 
-    void merge(QueryStatisticsRecvr* recvr);
+    void merge(const QueryStatistics& other);
+    void aggregate(QueryStatisticsRecvr* recvr);
 
     void clear() {
         scan_rows = 0;
@@ -90,11 +85,9 @@ public:
     ~QueryStatisticsRecvr();
 
     void insert(const PQueryStatistics& statistics, int sender_id);
+    void aggregate(QueryStatistics* statistics);
 
 private:
-    friend class QueryStatistics;
-
-    void merge(QueryStatistics* statistics);
 
     std::map<int, QueryStatistics*> _query_statistics;
     SpinLock _lock;

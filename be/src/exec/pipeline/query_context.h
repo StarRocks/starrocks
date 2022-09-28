@@ -129,30 +129,12 @@ public:
 
     std::shared_ptr<starrocks::debug::QueryTrace> shared_query_trace() { return _query_trace; }
 
-    std::shared_ptr<QueryStatistics> total_query_statistic() {
-        auto query_statistic = std::make_shared<QueryStatistics>();
-        query_statistic->add_scan_stats(_total_scan_rows_num, _total_scan_bytes);
-        query_statistic->add_cpu_costs(_total_cpu_cost_ns);
-        // TODO: how to accumulate memory cost
-        query_statistic->add_mem_costs(mem_cost_bytes());
-        return query_statistic;
-    }
-
-    std::shared_ptr<QueryStatistics> delta_query_statistic() {
-        auto query_statistic = std::make_shared<QueryStatistics>();
-        query_statistic->add_scan_stats(_delta_scan_rows_num.exchange(0), _delta_scan_bytes.exchange(0));
-        query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
-        // TODO: how to accumulate memory cost
-        query_statistic->add_mem_costs(mem_cost_bytes());
-        return query_statistic;
-    }
-
-    std::shared_ptr<QueryStatistics> maintained_query_statistic() { return _query_statistics; }
-    std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv() { return _sub_plan_query_statistics_recvr; }
-    std::shared_ptr<QueryStatistics> merged_query_statistic() {
-        _query_statistics->merge(_sub_plan_query_statistics_recvr.get());
-        return _query_statistics;
-    }
+    std::shared_ptr<QueryStatistics> total_query_statistic();
+    // Delta statistic since last retrieve
+    std::shared_ptr<QueryStatistics> delta_query_statistic();
+    std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv();
+    // Merged statistic from all executor nodes
+    std::shared_ptr<QueryStatistics> merged_query_statistic();
 
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
@@ -185,7 +167,6 @@ private:
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;
-    std::shared_ptr<QueryStatistics> _query_statistics;                     // For local aggregate
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive
 
     int64_t _scan_limit = 0;

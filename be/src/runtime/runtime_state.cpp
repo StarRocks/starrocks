@@ -401,9 +401,7 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
 std::shared_ptr<QueryStatistics> RuntimeState::delta_query_statistic() {
     return _query_ctx->delta_query_statistic();
 }
-std::shared_ptr<QueryStatistics> RuntimeState::query_statistic() {
-    return _query_ctx->maintained_query_statistic();
-}
+
 std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {
     return _query_ctx->maintained_query_recv();
 }

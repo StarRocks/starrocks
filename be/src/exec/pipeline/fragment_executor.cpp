@@ -437,7 +437,6 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         if (sink_profile != nullptr) {
             runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
         }
-        // datasink->set_query_statistics(runtime_state->query_statistic());
         RETURN_IF_ERROR(_decompose_data_sink_to_operator(runtime_state, &context, request, datasink));
     }
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());

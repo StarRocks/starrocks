@@ -33,8 +33,16 @@ void QueryStatistics::to_pb(PQueryStatistics* statistics) {
     *statistics->mutable_stats_items() = {_stats_items.begin(), _stats_items.end()};
 }
 
-void QueryStatistics::merge(QueryStatisticsRecvr* recvr) {
-    recvr->merge(this);
+void QueryStatistics::aggregate(QueryStatisticsRecvr* recvr) {
+    recvr->aggregate(this);
+}
+
+void QueryStatistics::merge(const QueryStatistics& other) {
+    scan_rows += other.scan_rows;
+    scan_bytes += other.scan_bytes;
+    cpu_ns += other.cpu_ns;
+    mem_cost_bytes += other.mem_cost_bytes;
+    _stats_items.insert(_stats_items.end(), other._stats_items.begin(), other._stats_items.end());
 }
 
 void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
@@ -58,7 +66,7 @@ void QueryStatisticsRecvr::insert(const PQueryStatistics& statistics, int sender
     query_statistics->merge_pb(statistics);
 }
 
-void QueryStatisticsRecvr::merge(QueryStatistics* statistics) {
+void QueryStatisticsRecvr::aggregate(QueryStatistics* statistics) {
     std::lock_guard<SpinLock> l(_lock);
     for (auto& pair : _query_statistics) {
         statistics->merge(*(pair.second));

@@ -307,7 +307,6 @@ public:
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
     std::shared_ptr<QueryStatistics> delta_query_statistic();
-    std::shared_ptr<QueryStatistics> query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
 private:
