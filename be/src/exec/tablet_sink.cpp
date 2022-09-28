@@ -163,9 +163,16 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_is_lake_tablet(_parent->_is_lake_table);
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);
+    VLOG(1) << "node channel open :" << index_id << ", _index_tablets_map:" << _index_tablets_map.count(index_id)
+            << ", size:" << _index_tablets_map.size();
     for (auto& tablet : _index_tablets_map[index_id]) {
+        if (tablet.partition_id() == 0) {
+            VLOG(1) << "skip partition_id = 0";
+            continue;
+        }
         auto ptablet = request.add_tablets();
         ptablet->Swap(&tablet);
+        VLOG(1) << "ptablet partition_id:" << ptablet->partition_id() << ", tablet_id:" << ptablet->tablet_id();
     }
     request.set_num_senders(_parent->_num_senders);
     request.set_need_gen_rollup(_parent->_need_gen_rollup);
@@ -694,7 +701,9 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
 IndexChannel::~IndexChannel() = default;
 
 Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets) {
+    VLOG(1) << "tablets size:" << tablets.size();
     for (const auto& tablet : tablets) {
+        VLOG(1) << "tablet tablet_id: " << tablet.tablet_id();
         auto* location = _parent->_location->find_tablet(tablet.tablet_id());
         if (location == nullptr) {
             auto msg = fmt::format("Not found tablet: {}", tablet.tablet_id());
@@ -702,6 +711,7 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
         }
         std::vector<NodeChannel*> channels;
         std::vector<int64_t> bes;
+        VLOG(1) << "nodes size:" << location->node_ids.size();
         for (auto& node_id : location->node_ids) {
             NodeChannel* channel = nullptr;
             auto it = _node_channels.find(node_id);
@@ -712,12 +722,15 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
             } else {
                 channel = it->second.get();
             }
+            VLOG(1) << "add tablet: " << tablet.tablet_id();
             channel->add_tablet(_index_id, tablet);
             channels.push_back(channel);
             bes.emplace_back(node_id);
         }
         _tablet_to_be.emplace(tablet.tablet_id(), std::move(bes));
     }
+    VLOG(1) << "_node_channels size:"<<_node_channels.size();
+
     for (auto& it : _node_channels) {
         RETURN_IF_ERROR(it.second->init(state));
     }
@@ -725,7 +738,7 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
 }
 
 bool IndexChannel::has_intolerable_failure() {
-    return _failed_channels.size() >= ((_parent->_num_repicas + 1) / 2);
+    return _failed_channels.size() >= ((_parent->_num_replicas + 1) / 2);
 }
 
 OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status) : _pool(pool) {
@@ -742,7 +755,7 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     _txn_id = table_sink.txn_id;
     _txn_trace_parent = table_sink.txn_trace_parent;
     _span = Tracer::Instance().start_trace_or_add_span("olap_table_sink", _txn_trace_parent);
-    _num_repicas = table_sink.num_replicas;
+    _num_replicas = table_sink.num_replicas;
     _need_gen_rollup = table_sink.need_gen_rollup;
     _tuple_desc_id = table_sink.tuple_id;
     _is_lake_table = table_sink.is_lake_table;
@@ -756,6 +769,33 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
 
     if (table_sink.__isset.load_channel_timeout_s) {
         _load_channel_timeout_s = table_sink.load_channel_timeout_s;
+    } else {
+        _load_channel_timeout_s = config::streaming_load_rpc_max_alive_time_sec;
+    }
+
+    return Status::OK();
+}
+
+Status OlapTableSink::init(const OlapTableSinkParams& params) {
+    _load_id.set_hi(params.load_id.hi());
+    _load_id.set_lo(params.load_id.lo());
+    _txn_id = params.txn_id;
+    _txn_trace_parent = params.txn_trace_parent;
+    _span = Tracer::Instance().start_trace_or_add_span("olap_table_sink", _txn_trace_parent);
+    _num_replicas = params.num_replicas;
+    _need_gen_rollup = params.need_gen_rollup;
+    _tuple_desc_id = params.tuple_id;
+    _is_lake_table = params.is_lake_table;
+    _keys_type = params.keys_type;
+    _schema = std::make_shared<OlapTableSchemaParam>();
+    RETURN_IF_ERROR(_schema->init(params.schema));
+    _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, params.partition));
+    RETURN_IF_ERROR(_vectorized_partition->init());
+    _location = _pool->add(new OlapTableLocationParam(params.location));
+    _nodes_info = _pool->add(new StarRocksNodesInfo(params.nodes_info));
+
+    if (params.load_channel_timeout_s != 0) {
+        _load_channel_timeout_s = params.load_channel_timeout_s;
     } else {
         _load_channel_timeout_s = config::streaming_load_rpc_max_alive_time_sec;
     }
@@ -863,13 +903,16 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 
 Status OlapTableSink::_init_node_channels(RuntimeState* state) {
     const auto& partitions = _vectorized_partition->get_partitions();
+    VLOG(1) << "_schema size:" << _schema->indexes().size();
     for (int i = 0; i < _schema->indexes().size(); ++i) {
         // collect all tablets belong to this rollup
         std::vector<PTabletWithPartition> tablets;
         auto* index = _schema->indexes()[i];
         for (auto* part : partitions) {
+            VLOG(1) << "partition:" << i << ", exists:" << part->indexes.size();
             for (auto tablet : part->indexes[i].tablets) {
                 PTabletWithPartition tablet_info;
+                VLOG(1) <<"set tablet_id:"<<tablet<<", part id:"<< part->id;
                 tablet_info.set_tablet_id(tablet);
                 tablet_info.set_partition_id(part->id);
 
@@ -1035,7 +1078,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
     {
         SCOPED_RAW_TIMER(&_convert_batch_ns);
         if (!_output_expr_ctxs.empty()) {
-            _output_chunk = std::make_unique<vectorized::Chunk>();
+            _output_chunk = std::make_shared<vectorized::Chunk>();
             for (size_t i = 0; i < _output_expr_ctxs.size(); ++i) {
                 ASSIGN_OR_RETURN(ColumnPtr tmp, _output_expr_ctxs[i]->evaluate(chunk));
                 ColumnPtr output_column = nullptr;

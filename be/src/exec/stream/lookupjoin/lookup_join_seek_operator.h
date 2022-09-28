@@ -103,7 +103,7 @@ class LookupJoinSeekOperatorFactory final : public SourceOperatorFactory {
 public:
     LookupJoinSeekOperatorFactory(int32_t id, int32_t plan_node_id, const TOlapScanNode& olap_scan_node,
                                   const vectorized::RuntimeFilterProbeCollector& runtime_filter_collector)
-            : SourceOperatorFactory(id, "index_seek", plan_node_id),
+            : SourceOperatorFactory(id, "lookup_join_seek", plan_node_id),
               _olap_scan_node(olap_scan_node),
               _runtime_filter_collector(runtime_filter_collector) {}
 

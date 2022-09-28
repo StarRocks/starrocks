@@ -5,7 +5,6 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "exec/exec_node.h"
-#include "exec/stream/imt_olap_table.h"
 #include "exec/stream/lookupjoin/lookup_join_probe_operator.h"
 #include "exec/stream/lookupjoin/lookup_join_seek_operator.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -44,22 +43,31 @@ Status StreamJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _join_key_descs.emplace_back(pipeline::LookupJoinKeyDesc{&left_expr->type(),
                                                                  down_cast<vectorized::ColumnRef*>(left_expr),
                                                                  down_cast<vectorized::ColumnRef*>(right_expr)});
-        _rl_join_key_descs.emplace_back(pipeline::LookupJoinKeyDesc{&right_expr->type(),
-                                                                    down_cast<vectorized::ColumnRef*>(right_expr),
-                                                                    down_cast<vectorized::ColumnRef*>(left_expr)});
+    }
+
+    if (tnode.stream_join_node.__isset.lhs_imt) {
+        auto& lhs_imt = tnode.stream_join_node.lhs_imt;
+        VLOG(2) << "Detailed lhs_imt: " << lhs_imt;
+        if (lhs_imt.imt_type != TIMTType::OLAP_TABLE) {
+            return Status::NotSupported("only OLAP_TABLE imt is supported");
+        }
+
+//        // TODO: use RouteInfo to lookup table
+//        _lhs_imt = std::make_shared<IMTStateTable>(lhs_imt);
+//        RETURN_IF_ERROR(_lhs_imt->init());
+//        VLOG(2) << "Right side of stream_join: " << _lhs_imt->debug_string();
     }
     if (tnode.stream_join_node.__isset.rhs_imt) {
         auto& rhs_imt = tnode.stream_join_node.rhs_imt;
+        VLOG(2) << "Detailed rhs_imt: " << rhs_imt;
         if (rhs_imt.imt_type != TIMTType::OLAP_TABLE) {
             return Status::NotSupported("only OLAP_TABLE imt is supported");
         }
 
-        // TODO: use RouteInfo to lookup table
-        OlapTableRouteInfo rhs_table;
-        RETURN_IF_ERROR(rhs_table.init(rhs_imt));
-
-        VLOG(2) << "Right side of stream_join: " << rhs_table.debug_string();
-        VLOG(2) << "Detailed rhs_imt: " << rhs_imt;
+//        // TODO: use RouteInfo to lookup table
+//        _rhs_imt = std::make_shared<IMTStateTable>(rhs_imt);
+//        RETURN_IF_ERROR(_rhs_imt->init());
+//        VLOG(2) << "Right side of stream_join: " << _rhs_imt->debug_string();
     }
 
     // other conjuncts.
@@ -84,11 +92,7 @@ pipeline::OpFactories StreamJoinNode::decompose_to_pipeline(pipeline::PipelineBu
     assert(right_ops.size() >= 1);
 
     if (typeid(*(right_ops[0])) != typeid(pipeline::LookupJoinSeekOperatorFactory)) {
-        assert(typeid(*(left_ops[0])) != typeid(pipeline::LookupJoinSeekOperatorFactory));
-        left_ops.swap(right_ops);
-        _left_row_desc = child(1)->row_desc();
-        _right_row_desc = child(0)->row_desc();
-        _join_key_descs = _rl_join_key_descs;
+        throw std::runtime_error("Only support right table as lookup-join table");
     }
 
     auto* right_source = down_cast<SourceOperatorFactory*>(right_ops[0].get());

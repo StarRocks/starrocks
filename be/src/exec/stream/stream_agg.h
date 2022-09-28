@@ -8,6 +8,7 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/vectorized/aggregator.h"
+#include "exec/stream/imt_state_table.h"
 
 namespace starrocks {
 
@@ -26,6 +27,9 @@ private:
     // pipeline decomposition.
     std::vector<ExprContext*> _group_by_expr_ctxs;
     AggregatorPtr _aggregator = nullptr;
+
+    IMTStateTablePtr _imt_detail;
+    IMTStateTablePtr _imt_agg_result;
 };
 
 } // namespace starrocks

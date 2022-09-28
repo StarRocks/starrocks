@@ -207,7 +207,7 @@ set(EXEC_FILES
     stream/lookupjoin/lookup_join_probe_operator.cpp
     stream/stream_agg.cpp
     stream/stream_join.cpp
-    stream/imt_olap_table.cpp
+    stream/imt_state_table.cpp
 )
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection

@@ -3,16 +3,16 @@ drop table t0;
 drop table t1;
 
 CREATE TABLE `t0` (
-  `t0_c0` int(11) NULL COMMENT "",
-  `t0_c1` string
+  `t0_c0` int(11) NOT NULL COMMENT "",
+  `t0_c1` string NOT NULL
 ) ENGINE=OLAP
 DUPLICATE KEY(`t0_c0`)
 DISTRIBUTED BY HASH(`t0_c0`) BUCKETS 1
 PROPERTIES ( "replication_num" = "1", "colocate_with" = "group1");
 
 CREATE TABLE `t1` (
-  `t1_c0` int(11) NULL COMMENT "",
-  `t1_c1` string
+  `t1_c0` int(11) NOT NULL COMMENT "",
+  `t1_c1` string NOT NULL
 ) ENGINE=OLAP
 DUPLICATE KEY(`t1_c0`)
 DISTRIBUTED BY HASH(`t1_c0`) BUCKETS 1

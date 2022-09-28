@@ -56,8 +56,9 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     }
     vectorized::Schema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
     std::unique_ptr<vectorized::Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
-        CHECK(false) << "create column for primary key encoder failed";
+    auto status = PrimaryKeyEncoder::create_column(pkey_schema, &pk_column);
+    if (!status.ok()) {
+        CHECK(false) << fmt::format("create column for primary key encoder failed:{}", status.get_error_msg());
     }
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
@@ -83,7 +84,8 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     }
     // TODO(cbl): auto close iterators on failure
     auto& itrs = res.value();
-    CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+    CHECK(itrs.size() == rowset->num_segments()) <<
+            fmt::format("itrs.size({}) != num_segments({})", itrs.size(), rowset->num_segments());
     _upserts.resize(rowset->num_segments());
     // only hold pkey, so can use larger chunk size
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);

@@ -4,7 +4,6 @@
 
 #include "exec/stream/aggregate/streaming_aggregate_sink_operator.h"
 #include "exec/stream/aggregate/streaming_aggregate_source_operator.h"
-#include "exec/stream/imt_olap_table.h"
 
 namespace starrocks {
 
@@ -18,49 +17,29 @@ Status StreamAggNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
-    // detail imt
     if (tnode.stream_agg_node.__isset.detail_imt) {
         auto& detail_imt = tnode.stream_agg_node.detail_imt;
+        VLOG(2) << "detail_imt: " << detail_imt;
         if (detail_imt.imt_type != TIMTType::OLAP_TABLE) {
             return Status::NotSupported("only OLAP_TABLE imt is supported");
         }
 
         // TODO: use RouteInfo to lookup table
-        OlapTableRouteInfo detail_imt_table;
-        RETURN_IF_ERROR(detail_imt_table.init(detail_imt));
-
-        VLOG(2) << "Right side of stream_join: " << detail_imt_table.debug_string();
-        VLOG(2) << "Detailed rhs_imt: " << detail_imt;
+        _imt_detail = std::make_shared<IMTStateTable>(detail_imt);
+        RETURN_IF_ERROR(_imt_detail->init());
+        VLOG(2) << "_imt_detail: " << _imt_detail->debug_string();
     }
-
-    // detail imt
-    if (tnode.stream_agg_node.__isset.detail_imt) {
-        auto& detail_imt = tnode.stream_agg_node.detail_imt;
-        if (detail_imt.imt_type != TIMTType::OLAP_TABLE) {
-            return Status::NotSupported("only OLAP_TABLE imt is supported");
-        }
-
-        // TODO: use RouteInfo to lookup table
-        OlapTableRouteInfo detail_imt_table;
-        RETURN_IF_ERROR(detail_imt_table.init(detail_imt));
-
-        VLOG(2) << "detail_imt_table: " << detail_imt_table.debug_string();
-        VLOG(2) << "Detailed rhs_imt: " << detail_imt;
-    }
-
-    // detail imt
     if (tnode.stream_agg_node.__isset.agg_result_imt) {
         auto& agg_result_imt = tnode.stream_agg_node.agg_result_imt;
+        VLOG(2) << "agg_result_imt: " << agg_result_imt;
         if (agg_result_imt.imt_type != TIMTType::OLAP_TABLE) {
             return Status::NotSupported("only OLAP_TABLE imt is supported");
         }
 
         // TODO: use RouteInfo to lookup table
-        OlapTableRouteInfo agg_result_imt_table;
-        RETURN_IF_ERROR(agg_result_imt_table.init(agg_result_imt));
-
-        VLOG(2) << "agg_result_imt_table: " << agg_result_imt_table.debug_string();
-        VLOG(2) << "agg_result_imt: " << agg_result_imt;
+        _imt_agg_result = std::make_shared<IMTStateTable>(agg_result_imt);
+        RETURN_IF_ERROR(_imt_agg_result->init());
+        VLOG(2) << "_agg_result_imt: " << _imt_agg_result->debug_string();
     }
 
     return Status::OK();
@@ -80,14 +59,18 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > StreamAggNode::decompos
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto sink_operator = std::make_shared<pipeline::StreamingAggregateSinkOperatorFactory>(context->next_operator_id(),
-                                                                                           id(), aggregator_factory);
+                                                                                           id(), aggregator_factory,
+                                                                                           _imt_detail, _imt_agg_result);
     // Initialize OperatorFactory's fields involving runtime filters.
     operators_with_sink.emplace_back(sink_operator);
     context->add_pipeline(operators_with_sink);
 
     OpFactories operators_with_source;
+    FragmentContext* fragment_context = context->fragment_context();
     auto source_operator = std::make_shared<pipeline::StreamingAggregateSourceOperatorFactory>(
-            context->next_operator_id(), id(), aggregator_factory);
+            context->next_operator_id(), id(), aggregator_factory,
+            _imt_detail, _imt_agg_result,
+            fragment_context);
     // Aggregator must be used by a pair of sink and source operators,
     // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);

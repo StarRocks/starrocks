@@ -115,6 +115,12 @@ public class StreamAggNode extends PlanNode {
 
         // TODO: add more functionalities
 
+        if (this.detailImt != null) {
+            msg.stream_agg_node.setDetail_imt(detailImt.toThrift());
+        }
+        if (this.aggImt != null) {
+            msg.stream_agg_node.setAgg_result_imt(aggImt.toThrift());
+        }
         msg.stream_agg_node.setAgg_func_set_version(3);
     }
 
