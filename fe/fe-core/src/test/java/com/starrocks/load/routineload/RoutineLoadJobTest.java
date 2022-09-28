@@ -40,6 +40,7 @@ import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.ViewDefBuilder;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
@@ -345,7 +346,7 @@ public class RoutineLoadJobTest {
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                 stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
         Assert.assertEquals("a,b,c,d=a", Joiner.on(",").join(routineLoadJob.getColumnDescs()));
-        Assert.assertEquals("`a` = 1", routineLoadJob.getWhereExpr().toSql());
+        Assert.assertEquals("`a` = 1", ViewDefBuilder.build(routineLoadJob.getWhereExpr()));
         Assert.assertEquals("','", routineLoadJob.getColumnSeparator().toString());
         Assert.assertEquals("'A'", routineLoadJob.getRowDelimiter().toString());
         Assert.assertEquals("p1,p2,p3", Joiner.on(",").join(routineLoadJob.getPartitions().getPartitionNames()));
@@ -502,7 +503,7 @@ public class RoutineLoadJobTest {
                 "WHERE (((`a` = 5) " +
                 "AND (`b` LIKE 'c1%')) " +
                 "AND (`c` BETWEEN 1 AND 100)) " +
-                "AND (substring(`d`, 1, 5) = 'cefd') " +
+                "AND ((substring(`d`, 1, 5)) = 'cefd') " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
     }
