@@ -3,13 +3,16 @@
 package com.starrocks.authentication;
 
 import com.starrocks.analysis.CreateUserStmt;
+import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -118,17 +121,18 @@ public class AuthenticationManagerTest {
 
         // pure from image
         AuthenticationManager imageManager = AuthenticationManager.load(finalImage.getDataInputStream());
-        Assert.assertTrue(followerManager.doesUserExist(testUser));
-        Assert.assertTrue(followerManager.doesUserExist(testUserWithIp));
-        user = followerManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.1", scramble, seed);
+        Assert.assertTrue(imageManager.doesUserExist(testUser));
+        Assert.assertTrue(imageManager.doesUserExist(testUserWithIp));
+        user = imageManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.1", scramble, seed);
         Assert.assertEquals(user, testUserWithIp);
-        user = followerManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.2", scramble, seed);
+        user = imageManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.2", scramble, seed);
         Assert.assertNull(user);
     }
 
     @Test
     public void testDropAlterUser() throws Exception {
         UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test", "%");
+        UserIdentity testUserWithIp = UserIdentity.createAnalyzedUserIdentWithIp("test", "10.1.1.1");
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
 
@@ -136,13 +140,18 @@ public class AuthenticationManagerTest {
         Assert.assertNull(manager.checkPassword(
                 testUser.getQualifiedUser(), testUser.getHost(), scramble, seed));
         Assert.assertFalse(manager.doesUserExist(testUser));
+        Assert.assertFalse(manager.doesUserExist(testUserWithIp));
 
         String sql = "create user test;";
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
+        Assert.assertTrue(manager.doesUserExist(testUser));
+        sql = "create user 'test'@'10.1.1.1' identified by 'abc'";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
         Assert.assertNull(manager.checkPassword(
                 testUser.getQualifiedUser(), testUser.getHost(), scramble, seed));
-        Assert.assertTrue(manager.doesUserExist(testUser));
+        Assert.assertTrue(manager.doesUserExist(testUserWithIp));
 
         sql = "alter user test identified by 'abc'";
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -167,5 +176,85 @@ public class AuthenticationManagerTest {
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("failed to alter user 'test'@'%'"));
         }
+
+        // still has max connection
+        Assert.assertNotNull(manager.getMaxConn("test"));
+
+        sql = "drop user 'test'@'10.1.1.1' ";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+        DDLStmtExecutor.execute(dropStmt, ctx);
+
+        // can't get max connection after all test user are dropped
+        Assert.assertThrows(NullPointerException.class, () -> manager.getMaxConn("test"));
+    }
+
+    @Test
+    public void testDropAlterPersist() throws Exception {
+        UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test", "%");
+        byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
+        byte[] scramble = MysqlPassword.scramble(seed, "abc");
+
+        AuthenticationManager masterManager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        masterManager.init();
+        Assert.assertFalse(masterManager.doesUserExist(testUser));
+
+        // 1. create empty image
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        masterManager.save(emptyImage.getDataOutputStream());
+
+        // 2. create user
+        String sql = "create user test";
+        CreateUserStmt createStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        masterManager.createUser(createStmt);
+        Assert.assertTrue(masterManager.doesUserExist(testUser));
+
+        // 3. alter user
+        sql = "alter user test identified by 'abc'";
+        AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        masterManager.alterUser(alterUserStmt);
+        Assert.assertEquals(testUser, masterManager.checkPassword(
+                testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
+
+        // 4. save image after alter
+        UtFrameUtils.PseudoImage alterImage = new UtFrameUtils.PseudoImage();
+        masterManager.save(alterImage.getDataOutputStream());
+
+        // 5. drop user
+        sql = "drop user test";
+        DropUserStmt dropStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        masterManager.dropUser(dropStmt);
+        Assert.assertFalse(masterManager.doesUserExist(testUser));
+
+        // 6. save final image
+        UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
+        masterManager.save(finalImage.getDataOutputStream());
+
+        // 7. verify replay...
+        AuthenticationManager followerManager = AuthenticationManager.load(emptyImage.getDataInputStream());
+        Assert.assertFalse(followerManager.doesUserExist(testUser));
+        // 7.1 replay create user
+        CreateUserInfo createInfo = (CreateUserInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        followerManager.replayCreateUser(
+                createInfo.getUserIdentity(), createInfo.getAuthenticationInfo(), createInfo.getUserProperty());
+        Assert.assertTrue(followerManager.doesUserExist(testUser));
+        // 7.2 replay alter user
+        AlterUserInfo alterInfo = (AlterUserInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        followerManager.replayAlterUser(alterInfo.getUserIdentity(), alterInfo.getAuthenticationInfo());
+        Assert.assertEquals(testUser, followerManager.checkPassword(
+                testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
+        // 7.3 replay drop user
+        UserIdentity dropInfo = (UserIdentity) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        followerManager.replayDropUser(dropInfo);
+        Assert.assertFalse(followerManager.doesUserExist(testUser));
+
+        // 8. verify alter image
+        AuthenticationManager alterManager = AuthenticationManager.load(alterImage.getDataInputStream());
+        Assert.assertEquals(testUser, alterManager.checkPassword(
+                testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
+
+        // 9. verify final image
+        AuthenticationManager finalManager = AuthenticationManager.load(finalImage.getDataInputStream());
+        Assert.assertFalse(finalManager.doesUserExist(testUser));
     }
 }

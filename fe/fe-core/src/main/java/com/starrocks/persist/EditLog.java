@@ -1546,6 +1546,6 @@ public class EditLog {
     }
 
     public void logDropUser(UserIdentity userIdentity) {
-        logEdit(OperationType.OP_ALTER_USER_V2, userIdentity);
+        logEdit(OperationType.OP_DROP_USER_V2, userIdentity);
     }
 }

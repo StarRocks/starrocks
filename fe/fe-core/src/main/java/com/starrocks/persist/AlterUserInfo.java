@@ -4,6 +4,7 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -39,6 +40,14 @@ public class AlterUserInfo implements Writable {
 
     public static AlterUserInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, AlterUserInfo.class);
+        AlterUserInfo ret = GsonUtils.GSON.fromJson(json, AlterUserInfo.class);
+        try {
+            ret.authenticationInfo.analyze();
+        } catch (AuthenticationException e) {
+            IOException exception = new IOException(e);
+            exception.initCause(e);
+            throw exception;
+        }
+        return ret;
     }
 }
