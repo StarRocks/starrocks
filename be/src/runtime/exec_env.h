@@ -207,6 +207,7 @@ public:
     AgentServer* agent_server() const { return _agent_server; }
 
     int64_t get_storage_page_cache_size();
+    int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 

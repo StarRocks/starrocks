@@ -37,6 +37,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
+#include "util/gc_helper.h"
 #include "util/thread.h"
 #include "util/time.h"
 
@@ -202,8 +203,88 @@ Status StorageEngine::start_bg_threads() {
         }
     }
 
+    _adjust_cache_thread = std::thread([this] { _adjust_pagecache_callback(nullptr); });
+    Thread::set_thread_name(_adjust_cache_thread, "adjust_cache");
+
     LOG(INFO) << "All backgroud threads of storage engine have started.";
     return Status::OK();
+}
+
+void evict_pagecache(StoragePageCache* cache, int64_t bytes_to_dec) {
+    if (bytes_to_dec > 0) {
+        int64_t bytes = bytes_to_dec;
+        while (bytes >= GCBYTES_ONE_STEP) {
+            cache->adjust_capacity(-GCBYTES_ONE_STEP, kcacheMinSize);
+            bytes -= GCBYTES_ONE_STEP;
+        }
+        if (bytes > 0) {
+            cache->adjust_capacity(-bytes, kcacheMinSize);
+        }
+    }
+}
+
+void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    GCHelper dec_advisor(config::pagecache_adjuct_period, config::auto_adjust_pagecache_interval, MonoTime::Now());
+    GCHelper inc_advisor(config::pagecache_adjuct_period, config::auto_adjust_pagecache_interval, MonoTime::Now());
+    auto cache = StoragePageCache::instance();
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        SLEEP_IN_BG_WORKER(config::auto_adjust_pagecache_interval);
+        if (!config::enable_auto_adjust_pagecache) {
+            continue;
+        }
+        if (config::disable_storage_page_cache) {
+            continue;
+        }
+        MemTracker* memtracker = ExecEnv::GetInstance()->process_mem_tracker();
+        if (memtracker == nullptr || !memtracker->has_limit() || cache == nullptr) {
+            continue;
+        }
+
+        // Check config valid
+        int64_t memory_urgent_level = config::memory_urgent_level;
+        int64_t memory_high_level = config::memory_high_level;
+        if (UNLIKELY(!(memory_urgent_level > memory_high_level && memory_high_level >= 1 &&
+                       memory_urgent_level <= 100))) {
+            LOG(WARNING) << "memory water level config is illegal: memory_urgent_level=" << memory_urgent_level
+                         << " memory_high_level=" << memory_high_level;
+            memory_urgent_level = 85;
+            memory_high_level = 75;
+            LOG(INFO) << "force reset memory water level. "
+                      << "memory_urgent_level=" << memory_urgent_level << ", memory_high_level=" << memory_high_level;
+        }
+
+        int64_t memory_urgent = memtracker->limit() * memory_urgent_level / 100;
+        int64_t delta_urgent = memtracker->consumption() - memory_urgent;
+        int64_t memory_high = memtracker->limit() * memory_high_level / 100;
+        if (delta_urgent > 0) {
+            // Memory usage exceeds memory_urgent_level, reduce size immediately.
+            cache->adjust_capacity(-delta_urgent, kcacheMinSize);
+            size_t bytes_to_dec = dec_advisor.bytes_should_gc(MonoTime::Now(), memory_urgent - memory_high);
+            evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec));
+            continue;
+        }
+
+        int64_t delta_high = memtracker->consumption() - memory_high;
+        if (delta_high > 0) {
+            size_t bytes_to_dec = dec_advisor.bytes_should_gc(MonoTime::Now(), delta_high);
+            evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec));
+        } else {
+            int64_t max_cache_size = std::min(ExecEnv::GetInstance()->get_storage_page_cache_size(), kcacheMinSize);
+            int64_t cur_cache_size = cache->get_capacity();
+            if (cur_cache_size >= max_cache_size) {
+                continue;
+            }
+            int64_t delta_cache = max_cache_size - cur_cache_size;
+            size_t bytes_to_inc = inc_advisor.bytes_should_gc(MonoTime::Now(), delta_cache);
+            if (bytes_to_inc > 0) {
+                cache->adjust_capacity(bytes_to_inc);
+            }
+        }
+    }
+    return nullptr;
 }
 
 void* StorageEngine::_fd_cache_clean_callback(void* arg) {

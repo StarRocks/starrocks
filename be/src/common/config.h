@@ -52,6 +52,18 @@ CONF_mInt64(tc_free_memory_rate, "0");
 // tcmalloc gc period, default 60, it should be between [1, 180]
 CONF_mInt64(tc_gc_period, "60");
 
+CONF_mBool(enable_auto_adjust_pagecache, "false");
+// Memory urget water level, if the memory usage exceeds this level, reduce the size of
+// the Pagecache immediately, it should be between (memory_high_level, 100].
+CONF_mInt64(memory_urgent_level, "85");
+// Memory high water level, if the memory usage exceeds this level, reduce the size of
+// the Pagecache slowly, it should be between [1, memory_urgent_level).
+CONF_mInt64(memory_high_level, "75");
+// Pagecache size adjust period, default 20, it should be between [1, 180].
+CONF_Int64(pagecache_adjuct_period, "20");
+// Sleep time in seconds between pagecache adjust iterations.
+CONF_Int64(auto_adjust_pagecache_interval, "10");
+
 // Bound on the total amount of bytes allocated to thread caches.
 // This bound is not strict, so it is possible for the cache to go over this bound
 // in certain circumstances. The maximum value of this flag is capped to 1GB.
