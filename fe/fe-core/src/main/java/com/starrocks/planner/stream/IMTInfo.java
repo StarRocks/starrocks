@@ -7,6 +7,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TIMTDescriptor;
 import com.starrocks.thrift.TIMTType;
+import com.starrocks.thrift.TUniqueId;
 
 /**
  * Intermediate materialized table
@@ -14,8 +15,12 @@ import com.starrocks.thrift.TIMTType;
 public class IMTInfo {
 
     private TIMTType type;
-    private boolean needMaintain;
     private OlapTableRouteInfo olapTable;
+
+    // If this IMT needs to be maintained by operator
+    private boolean needMaintain;
+    private TUniqueId loadId;
+    private long txnId;
 
     public static IMTInfo fromOlapTable(long dbId, OlapTable table, boolean needMaintain) throws UserException {
         IMTInfo res = new IMTInfo();
@@ -25,11 +30,32 @@ public class IMTInfo {
         return res;
     }
 
+    public String getName() {
+        return this.olapTable.getTableName();
+    }
+
+    public boolean isNeedMaintain() {
+        return needMaintain;
+    }
+
+    public void setNeedMaintain(boolean needMaintain) {
+        this.needMaintain = needMaintain;
+    }
+
+    public void setLoadInfo(TUniqueId loadId, long txnId) {
+        this.loadId = loadId;
+        this.txnId = txnId;
+    }
+
     public TIMTDescriptor toThrift() {
         TIMTDescriptor desc = new TIMTDescriptor();
         desc.setImt_type(this.type);
-        desc.setNeed_maintain(this.needMaintain);
         desc.setOlap_table(this.olapTable.toThrift());
+        desc.setNeed_maintain(this.needMaintain);
+        if (this.needMaintain) {
+            desc.setLoad_id(this.loadId);
+            desc.setTxn_id(this.txnId);
+        }
         return desc;
     }
 

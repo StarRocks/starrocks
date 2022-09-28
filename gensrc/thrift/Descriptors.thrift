@@ -427,6 +427,6 @@ struct TIMTDescriptor {
   3: optional bool need_maintain // Not implemented
 
   // For maintained IMT, some extra information are necessary
-  11: required Types.TUniqueId load_id
-  12: required i64 txn_id
+  11: optional Types.TUniqueId load_id
+  12: optional i64 txn_id
 }

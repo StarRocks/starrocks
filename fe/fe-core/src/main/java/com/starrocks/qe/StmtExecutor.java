@@ -83,6 +83,7 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.stream.IMTInfo;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
@@ -1305,6 +1306,19 @@ public class StmtExecutor {
                 dataSink.init(context.getExecutionId(), transactionId, database.getId(),
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS());
             }
+
+            // Prepare IMT info
+            List<IMTInfo> imtInfo = execPlan.getIMTInfo();
+            if (CollectionUtils.isNotEmpty(imtInfo)) {
+                for (IMTInfo imt : imtInfo) {
+                    if (imt.isNeedMaintain()) {
+                        imt.setLoadInfo(context.getExecutionId(), transactionId);
+                        LOG.info(String.format("prepare load info for IMT %s: loadId=%s txnId=%d",
+                                imt.getName(), context.getExecutionId().toString(), transactionId));
+                    }
+                }
+            }
+
 
             coord = new Coordinator(context, execPlan.getFragments(), execPlan.getScanNodes(),
                     execPlan.getDescTbl().toThrift());

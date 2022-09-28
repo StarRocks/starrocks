@@ -235,6 +235,7 @@ public class InsertPlanner {
             execPlan = new PlanFragmentBuilder().createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
                     queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+            execPlan.setIMTInfo(new ArrayList<>(imtInfo.values()));
         } finally {
             session.getSessionVariable().enableStreamPlanner(false);
         }

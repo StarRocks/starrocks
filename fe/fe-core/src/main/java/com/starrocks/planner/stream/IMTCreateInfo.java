@@ -291,6 +291,7 @@ public class IMTCreateInfo {
             Preconditions.checkState(imt != null, "Must have an imt here");
 
             node.setAggImt(imt);
+            imt.setNeedMaintain(true);
             return null;
         }
 

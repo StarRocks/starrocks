@@ -10,6 +10,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.stream.IMTInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -38,12 +39,22 @@ public class ExecPlan {
     private final IdGenerator<PlanNodeId> nodeIdGenerator = PlanNodeId.createGenerator();
     private final IdGenerator<PlanFragmentId> fragmentIdGenerator = PlanFragmentId.createGenerator();
 
+    private List<IMTInfo> imtInfo;
+
     public ExecPlan(ConnectContext connectContext, List<String> colNames,
                     OptExpression physicalPlan, List<ColumnRefOperator> outputColumns) {
         this.connectContext = connectContext;
         this.colNames = colNames;
         this.physicalPlan = physicalPlan;
         this.outputColumns = outputColumns;
+    }
+
+    public void setIMTInfo(List<IMTInfo> imtInfo) {
+        this.imtInfo = imtInfo;
+    }
+
+    public List<IMTInfo> getIMTInfo() {
+        return this.imtInfo;
     }
 
     public ConnectContext getConnectContext() {
