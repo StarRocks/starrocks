@@ -28,6 +28,7 @@
 #include "gutil/strings/split.h"
 #include "util/pretty_printer.h"
 #include "util/string_parser.hpp"
+#include "util/fs_util.h"
 
 namespace starrocks {
 
@@ -36,9 +37,8 @@ int64_t MemInfo::_s_physical_mem = -1;
 
 void MemInfo::init() {
     // check if application is in docker container or not via /.dockerenv file
-    std::ifstream dockerEnv("/.dockerenv");
 
-    if (dockerEnv.goods() && !dockerEnv.eof()) {
+    if (fs::path_exist("/.dockerenv")) {
         // Read from /sys/fs/cgroup/memory/memory.limit_in_bytes
         std::ifstream memoryLimit("/sys/fs/cgroup/memory/memory.limit_in_bytes");
         std::string line;
