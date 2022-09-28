@@ -20,7 +20,30 @@ DIAGNOSTIC_POP
 
 namespace starrocks::pipeline {
 
+class FileSinkIOExecutor : public bthread::Executor {
+public:
+    static FileSinkIOExecutor* instance() {
+        static FileSinkIOExecutor s_instance;
+        return &s_instance;
+    }
+
+    int submit(void* (*fn)(void*), void* args) override {
+        bool ret = ExecEnv::GetInstance()->pipeline_sink_io_pool()->try_offer([fn, args]() { fn(args); });
+        return ret ? 0 : -1;
+    }
+
+private:
+    FileSinkIOExecutor() = default;
+
+    ~FileSinkIOExecutor() = default;
+};
+
 // FileSinkBuffer accepts input from all FileSinkOperators, it uses an execution queue to asynchronously write chunks to file one by one.
+// Because many interfaces of FileResultWriter include sync IO, we need to avoid calling the writer in pipeline execution thread.
+// @TODO: In fact, we need a MPSC queue, the producers in compute thread produce chunk, the consumer in io thread consume and write chunk to remote system.
+// but the existing collaborative IO scheduling is diffcult to handle this scenario and can't be integrated into the workgroup mechanism.
+// In order to achieve simplicity, the io task will be put into a dedicated thread pool, the sink io task of different queries is completely scheduled by os,
+// which needs to be solved by a new adaptive io task scheduler.
 class FileSinkBuffer {
 public:
     FileSinkBuffer(std::vector<ExprContext*>& output_expr_ctxs, std::shared_ptr<ResultFileOptions> file_opts,
@@ -62,8 +85,6 @@ public:
 
 private:
     void _process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter);
-
-    Status _process_writer_op(std::function<Status()> op);
 
     std::vector<ExprContext*> _output_expr_ctxs;
 
@@ -114,7 +135,7 @@ void FileSinkBuffer::_process_chunk(bthread::TaskIterator<const vectorized::Chun
     }
 
     if (!_is_writer_opened) {
-        if (Status status = _process_writer_op([this]() { return _writer->open(_state); }); !status.ok()) {
+        if (Status status = _writer->open(_state); !status.ok()) {
             set_io_status(status);
             close(_state);
             return;
@@ -127,20 +148,9 @@ void FileSinkBuffer::_process_chunk(bthread::TaskIterator<const vectorized::Chun
         close(_state);
         return;
     }
-    if (Status status = _process_writer_op([this, chunk]() { return _writer->append_chunk(chunk.get()); });
-        !status.ok()) {
+    if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {
         set_io_status(status);
         close(_state);
-    }
-}
-
-Status FileSinkBuffer::_process_writer_op(std::function<Status()> op) {
-    // for some writers(eg. hdfs) that cannot be executed in bthread, we need to put them in pthread.
-    if (_writer->can_run_in_bthread()) {
-        return op();
-    } else {
-        auto ret = call_hdfs_scan_function_in_pthread(op);
-        return ret->get_future().get();
     }
 }
 
@@ -157,6 +167,7 @@ Status FileSinkBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_profi
     RETURN_IF_ERROR(_writer->init(state));
 
     bthread::ExecutionQueueOptions options;
+    options.executor = FileSinkIOExecutor::instance();
     _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<const vectorized::ChunkPtr>>();
     int ret = bthread::execution_queue_start<const vectorized::ChunkPtr>(_exec_queue_id.get(), &options,
                                                                          &FileSinkBuffer::execute_io_task, this);
@@ -205,7 +216,7 @@ void FileSinkBuffer::cancel_one_sinker() {
 void FileSinkBuffer::close(RuntimeState* state) {
     int64_t num_written_rows = 0;
     if (_writer != nullptr) {
-        if (Status status = _process_writer_op([this]() { return _writer->close(); }); !status.ok()) {
+        if (Status status = _writer->close(); !status.ok()) {
             set_io_status(status);
         }
         num_written_rows = _writer->get_written_rows();
