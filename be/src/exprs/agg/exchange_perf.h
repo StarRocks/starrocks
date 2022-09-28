@@ -24,7 +24,7 @@ class ExchangePerfAggregateFunction final
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         this->data(state).bytes = 0;
-        this->start_time = MonotonicNanos();
+        this->data(state).start_time = MonotonicNanos();
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
