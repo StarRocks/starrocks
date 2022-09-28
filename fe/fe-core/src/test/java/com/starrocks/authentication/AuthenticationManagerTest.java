@@ -178,7 +178,7 @@ public class AuthenticationManagerTest {
         }
 
         // still has max connection
-        Assert.assertNotNull(manager.getMaxConn("test"));
+        Assert.assertNotEquals(0, manager.getMaxConn("test"));
 
         sql = "drop user 'test'@'10.1.1.1' ";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
