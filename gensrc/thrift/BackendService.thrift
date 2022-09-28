@@ -44,55 +44,13 @@ struct TTabletStatResult {
     1: required map<i64, TTabletStat> tablets_stats
 }
 
-struct TKafkaLoadInfo {
-    1: required string brokers;
-    2: required string topic;
-    3: required map<i32, i64> partition_begin_offset;
-    4: optional map<string, string> properties;
-}
-
-struct TPulsarLoadInfo {
-    1: required string service_url;
-    2: required string topic;
-    3: required string subscription;
-    4: required list<string> partitions;
-    5: optional map<string, i64> initial_positions;
-    6: optional map<string, string> properties;
-}
-
-struct TRoutineLoadTask {
-    1: required Types.TLoadSourceType type
-    2: required i64 job_id
-    3: required Types.TUniqueId id
-    4: required i64 txn_id
-    5: required i64 auth_code
-    6: optional string db
-    7: optional string tbl
-    8: optional string label
-    9: optional i64 max_interval_s
-    10: optional i64 max_batch_rows
-    11: optional i64 max_batch_size
-    12: optional TKafkaLoadInfo kafka_load_info
-    13: optional InternalService.TExecPlanFragmentParams params
-    14: optional PlanNodes.TFileFormatType format
-    15: optional TPulsarLoadInfo pulsar_load_info
-}
-
-struct TKafkaMetaProxyRequest {
-    1: optional TKafkaLoadInfo kafka_info
-}
-
-struct TKafkaMetaProxyResult {
-    1: optional list<i32> partition_ids
-}
-
 struct TProxyRequest {
-    1: optional TKafkaMetaProxyRequest kafka_meta_request;
+    1: optional InternalService.TKafkaMetaProxyRequest kafka_meta_request;
 }
 
 struct TProxyResult {
     1: required Status.TStatus status;
-    2: optional TKafkaMetaProxyResult kafka_meta_result;
+    2: optional InternalService.TKafkaMetaProxyResult kafka_meta_result;
 }
 
 service BackendService {
@@ -138,7 +96,9 @@ service BackendService {
 
     TTabletStatResult get_tablet_stat();
 
-    Status.TStatus submit_routine_load_task(1:list<TRoutineLoadTask> tasks);
+    Status.TStatus submit_routine_load_task(1:list<InternalService.TRoutineLoadTask> tasks);
+
+    Status.TStatus commit_routine_load_offset(1:list<InternalService.TRoutineLoadCommitOffsetInfo> infos);
 
     // starrocks will build  a scan context for this session, context_id returned if success
     StarrocksExternalService.TScanOpenResult open_scanner(1: StarrocksExternalService.TScanOpenParams params);

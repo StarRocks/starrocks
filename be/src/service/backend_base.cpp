@@ -38,6 +38,7 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
+#include "runtime/routine_load/routine_load_executor.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "service_be/backend_service.h"
 #include "service_cn/compute_service.h"
@@ -115,6 +116,20 @@ void BackendServiceBase::submit_routine_load_task(TStatus& t_status, const std::
         Status st = _exec_env->routine_load_task_executor()->submit_task(task);
         if (!st.ok()) {
             LOG(WARNING) << "failed to submit routine load task. job id: " << task.job_id << " task id: " << task.id;
+            return st.to_thrift(&t_status);
+        }
+    }
+
+    return Status::OK().to_thrift(&t_status);
+}
+
+void BackendServiceBase::commit_routine_load_offset(TStatus& t_status,
+                                                    const std::vector<TRoutineLoadCommitOffsetInfo>& commit_infos) {
+    for (auto& commit_info : commit_infos) {
+        Status st = _exec_env->routine_load_executor()->commit_offset(commit_info);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to commit routine load task. job id: " << commit_info.job_id
+                         << " task id: " << commit_info.id;
             return st.to_thrift(&t_status);
         }
     }

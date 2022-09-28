@@ -52,6 +52,9 @@ public:
     const TUniqueId& fragment_instance_id() const { return _unique_request.params.fragment_instance_id; }
     int32_t sender_id() const { return _unique_request.params.sender_id; }
 
+    bool has_routine_load_task() const { return _unique_request.__isset.routine_load_task; }
+    const TRoutineLoadTaskV2& routine_load_task() const { return _unique_request.routine_load_task; }
+
     const std::vector<TScanRangeParams>& scan_ranges_of_node(TPlanNodeId node_id) const;
     const std::map<int32_t, std::vector<TScanRangeParams>>& per_driver_seq_scan_ranges_of_node(
             TPlanNodeId node_id) const;
@@ -96,6 +99,7 @@ private:
     Status _prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_global_dict(const UnifiedExecPlanFragmentParams& request);
     Status _prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_routine_load_consumer(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
 
     Status _decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
                                             const UnifiedExecPlanFragmentParams& request,

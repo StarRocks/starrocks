@@ -20,9 +20,12 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
+#include "runtime/stream_load/stream_load_executor.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {
+class StreamLoadContext;
+
 namespace pipeline {
 
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
@@ -30,7 +33,7 @@ class FragmentContext {
     friend FragmentContextManager;
 
 public:
-    FragmentContext() {}
+    FragmentContext() : _stream_load_context(nullptr) {}
     ~FragmentContext() {
         _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
         _drivers.clear();
@@ -76,14 +79,7 @@ public:
         return status == nullptr ? Status::OK() : *status;
     }
 
-    void cancel(const Status& status) {
-        _runtime_state->set_is_cancelled(true);
-        set_final_status(status);
-        if (_runtime_state->query_options().query_type == TQueryType::LOAD) {
-            starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id,
-                                                                                                 _fragment_instance_id);
-        }
-    }
+    void cancel(const Status& status);
 
     void finish() { cancel(Status::OK()); }
 
@@ -116,6 +112,9 @@ public:
     bool enable_resource_group() const { return _enable_resource_group; }
 
     void set_driver_token(DriverLimiter::TokenPtr driver_token) { _driver_token = std::move(driver_token); }
+
+    void set_stream_load_context(StreamLoadContext* context) { _stream_load_context = context; }
+    StreamLoadContext* get_stream_load_context() { return _stream_load_context; }
 
 private:
     // Id of this query
@@ -151,6 +150,7 @@ private:
     bool _enable_resource_group = false;
 
     DriverLimiter::TokenPtr _driver_token = nullptr;
+    StreamLoadContext* _stream_load_context;
 };
 
 class FragmentContextManager {

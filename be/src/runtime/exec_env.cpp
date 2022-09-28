@@ -50,6 +50,7 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
+#include "runtime/routine_load/routine_load_executor.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
@@ -224,6 +225,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
+    _routine_load_executor = new RoutineLoadExecutor(this);
     _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
     _runtime_filter_worker = new RuntimeFilterWorker(this);
     _runtime_filter_cache = new RuntimeFilterCache(8);
@@ -419,6 +421,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_small_file_mgr);
     SAFE_DELETE(_transaction_mgr);
     SAFE_DELETE(_stream_context_mgr);
+    SAFE_DELETE(_routine_load_executor);
     SAFE_DELETE(_routine_load_task_executor);
     SAFE_DELETE(_stream_load_executor);
     SAFE_DELETE(_brpc_stub_cache);

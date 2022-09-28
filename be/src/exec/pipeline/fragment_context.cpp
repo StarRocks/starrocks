@@ -5,6 +5,7 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "runtime/stream_load/stream_load_context.h"
 
 namespace starrocks::pipeline {
 
@@ -24,6 +25,25 @@ void FragmentContext::set_final_status(const Status& status) {
             for (auto& driver : _drivers) {
                 executor->cancel(driver.get());
             }
+        }
+    }
+}
+
+void FragmentContext::cancel(const Status& status) {
+    _runtime_state->set_is_cancelled(true);
+    set_final_status(status);
+    if (_runtime_state->query_options().query_type == TQueryType::LOAD) {
+        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id,
+                                                                                             _fragment_instance_id);
+    }
+    if (_stream_load_context) {
+        if (_stream_load_context->body_sink) {
+            Status st;
+            _stream_load_context->body_sink->cancel(st);
+        }
+        if (_stream_load_context->unref()) {
+            delete _stream_load_context;
+            _stream_load_context = nullptr;
         }
     }
 }
@@ -76,6 +96,16 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
         if (it->second->runtime_state()->query_options().query_type == TQueryType::LOAD) {
             starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
                                                                                                  fragment_id);
+        }
+        if (it->second->_stream_load_context) {
+            if (it->second->_stream_load_context->body_sink) {
+                Status st;
+                it->second->_stream_load_context->body_sink->cancel(st);
+            }
+            if (it->second->_stream_load_context->unref()) {
+                delete it->second->_stream_load_context;
+                it->second->_stream_load_context = nullptr;
+            }
         }
         _fragment_contexts.erase(it);
     }

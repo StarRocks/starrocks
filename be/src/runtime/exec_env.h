@@ -58,6 +58,7 @@ class ThreadResourceMgr;
 class WebPageHandler;
 class StreamLoadExecutor;
 class RoutineLoadTaskExecutor;
+class RoutineLoadExecutor;
 class SmallFileMgr;
 class PluginMgr;
 class RuntimeFilterWorker;
@@ -179,6 +180,7 @@ public:
 
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
+    RoutineLoadExecutor* routine_load_executor() { return _routine_load_executor; }
     HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
 
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
@@ -301,6 +303,7 @@ private:
 
     StreamLoadExecutor* _stream_load_executor = nullptr;
     RoutineLoadTaskExecutor* _routine_load_task_executor = nullptr;
+    RoutineLoadExecutor* _routine_load_executor = nullptr;
     SmallFileMgr* _small_file_mgr = nullptr;
     HeartbeatFlags* _heartbeat_flags = nullptr;
 

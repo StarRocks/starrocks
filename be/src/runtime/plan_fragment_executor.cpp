@@ -39,8 +39,10 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
+#include "runtime/routine_load/routine_load_executor.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/stream_load/stream_load_context.h"
 #include "util/parse_util.h"
 #include "util/uid_util.h"
 
@@ -56,7 +58,8 @@ PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_call
           _is_report_success(true),
           _is_report_on_cancel(true),
           _collect_query_statistics_with_every_batch(false),
-          _is_runtime_filter_merge_node(false) {}
+          _is_runtime_filter_merge_node(false),
+          _stream_load_context(nullptr) {}
 
 PlanFragmentExecutor::~PlanFragmentExecutor() {
     close();
@@ -173,6 +176,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     VLOG(3) << "plan_root=\n" << _plan->debug_string();
     _chunk = std::make_shared<vectorized::Chunk>();
     _prepared = true;
+    RETURN_IF_ERROR(_prepare_routine_load_consumer(request));
 
     return Status::OK();
 }
@@ -378,6 +382,16 @@ void PlanFragmentExecutor::cancel() {
         starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
                 _runtime_state->fragment_instance_id());
     }
+    if (_stream_load_context) {
+        if (_stream_load_context->body_sink) {
+            Status st;
+            _stream_load_context->body_sink->cancel(st);
+        }
+        if (_stream_load_context->unref()) {
+            delete _stream_load_context;
+            _stream_load_context = nullptr;
+        }
+    }
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
     _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
 
@@ -434,6 +448,16 @@ void PlanFragmentExecutor::close() {
             starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
                     _runtime_state->fragment_instance_id());
         }
+        if (_stream_load_context) {
+            if (_stream_load_context->body_sink) {
+                Status st;
+                _stream_load_context->body_sink->cancel(st);
+            }
+            if (_stream_load_context->unref()) {
+                delete _stream_load_context;
+                _stream_load_context = nullptr;
+            }
+        }
         // _runtime_state init failed
         if (_plan != nullptr) {
             _plan->close(_runtime_state);
@@ -467,6 +491,20 @@ void PlanFragmentExecutor::close() {
     }
 
     _closed = true;
+}
+
+Status PlanFragmentExecutor::_prepare_routine_load_consumer(const TExecPlanFragmentParams& request) {
+    if (!request.__isset.routine_load_task) {
+        return Status::OK();
+    }
+    StatusOr<StreamLoadContext*> maybe_stream_load_ctx =
+            _exec_env->routine_load_executor()->submit_task(request.routine_load_task);
+    if (!maybe_stream_load_ctx.ok()) {
+        return maybe_stream_load_ctx.status();
+    }
+
+    _stream_load_context = maybe_stream_load_ctx.value();
+    return Status::OK();
 }
 
 } // namespace starrocks

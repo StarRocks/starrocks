@@ -32,6 +32,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
+#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {
 
@@ -142,6 +143,8 @@ public:
     }
 
 private:
+    Status _prepare_routine_load_consumer(const TExecPlanFragmentParams& request);
+
     ExecEnv* _exec_env;        // not owned
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     TUniqueId _query_id;
@@ -210,6 +213,8 @@ private:
 
     // If this is a runtime filter merge node for some query.
     bool _is_runtime_filter_merge_node;
+
+    StreamLoadContext* _stream_load_context;
 
     ObjectPool* obj_pool() { return _runtime_state->obj_pool(); }
 

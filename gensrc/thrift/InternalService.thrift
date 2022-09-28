@@ -100,6 +100,59 @@ enum TTabletInternalParallelMode {
   FORCE_SPLIT
 }
 
+struct TKafkaLoadInfo {
+    1: required string brokers;
+    2: required string topic;
+    3: required map<i32, i64> partition_begin_offset;
+    4: optional map<string, string> properties;
+}
+
+struct TPulsarLoadInfo {
+    1: required string service_url;
+    2: required string topic;
+    3: required string subscription;
+    4: required list<string> partitions;
+    5: optional map<string, i64> initial_positions;
+    6: optional map<string, string> properties;
+}
+
+struct TKafkaMetaProxyRequest {
+    1: optional TKafkaLoadInfo kafka_info
+}
+
+struct TKafkaMetaProxyResult {
+    1: optional list<i32> partition_ids
+}
+
+struct TRoutineLoadTaskV2 {
+    1: required Types.TLoadSourceType type
+    2: required i64 job_id
+    3: required Types.TUniqueId id
+    4: required i64 txn_id
+    5: required i64 auth_code
+    6: optional string db
+    7: optional string tbl
+    8: optional string label
+    9: optional i64 max_interval_s
+    10: optional i64 max_batch_rows
+    11: optional i64 max_batch_size
+    12: optional TKafkaLoadInfo kafka_load_info
+    14: optional PlanNodes.TFileFormatType format
+}
+
+
+struct TRoutineLoadCommitOffsetInfo {
+    1: required Types.TLoadSourceType type
+    2: required i64 job_id
+    3: required Types.TUniqueId id
+    4: required i64 txn_id
+    5: required i64 auth_code
+    6: optional string db
+    7: optional string tbl
+    8: optional string label
+    10: optional TKafkaLoadInfo kafka_load_info
+}
+
 // Query options with their respective defaults
 struct TQueryOptions {
   1: optional bool abort_on_error = 0
@@ -323,6 +376,26 @@ struct TExecPlanFragmentParams {
   
   // Sharing data between drivers of same scan operator
   56: optional bool enable_shared_scan
+
+  70: optional TRoutineLoadTaskV2 routine_load_task
+}
+
+struct TRoutineLoadTask {
+    1: required Types.TLoadSourceType type
+    2: required i64 job_id
+    3: required Types.TUniqueId id
+    4: required i64 txn_id
+    5: required i64 auth_code
+    6: optional string db
+    7: optional string tbl
+    8: optional string label
+    9: optional i64 max_interval_s
+    10: optional i64 max_batch_rows
+    11: optional i64 max_batch_size
+    12: optional TKafkaLoadInfo kafka_load_info
+    13: optional TExecPlanFragmentParams params
+    14: optional PlanNodes.TFileFormatType format
+    15: optional TPulsarLoadInfo pulsar_load_info
 }
 
 struct TExecPlanFragmentResult {

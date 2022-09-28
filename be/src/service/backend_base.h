@@ -104,6 +104,8 @@ public:
 
     void submit_routine_load_task(TStatus& t_status, const std::vector<TRoutineLoadTask>& tasks) override;
 
+    void commit_routine_load_offset(TStatus& t_status, const std::vector<TRoutineLoadCommitOffsetInfo>& infos) override;
+
     // used for external service, open means start the scan procedure
     void open_scanner(TScanOpenResult& result_, const TScanOpenParams& params) override;
 

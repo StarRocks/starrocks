@@ -31,6 +31,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/result_sink.h"
+#include "runtime/routine_load/routine_load_executor.h"
 #include "util/debug/query_trace.h"
 #include "util/pretty_printer.h"
 #include "util/time.h"
@@ -350,6 +351,20 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     return Status::OK();
 }
 
+Status FragmentExecutor::_prepare_routine_load_consumer(ExecEnv* exec_env,
+                                                        const UnifiedExecPlanFragmentParams& request) {
+    if (!request.has_routine_load_task()) {
+        return Status::OK();
+    }
+    StatusOr<StreamLoadContext*> maybe_stream_load_ctx =
+            exec_env->routine_load_executor()->submit_task(request.routine_load_task());
+    if (!maybe_stream_load_ctx.ok()) {
+        return maybe_stream_load_ctx.status();
+    }
+    _fragment_ctx->set_stream_load_context(maybe_stream_load_ctx.value());
+    return Status::OK();
+}
+
 Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const auto fragment_instance_id = request.fragment_instance_id();
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
@@ -495,6 +510,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
     RETURN_IF_ERROR(_prepare_global_dict(request));
     RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
+    RETURN_IF_ERROR(_prepare_routine_load_consumer(exec_env, request));
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     prepare_success = true;

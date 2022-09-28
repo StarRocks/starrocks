@@ -36,6 +36,7 @@ import com.starrocks.thrift.TMiniLoadEtlStatusResult;
 import com.starrocks.thrift.TMiniLoadEtlTaskRequest;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.thrift.TRoutineLoadCommitOffsetInfo;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TScanBatchResult;
 import com.starrocks.thrift.TScanCloseParams;
@@ -199,6 +200,12 @@ public class GenericPoolTest {
 
         @Override
         public TStatus submit_routine_load_task(List<TRoutineLoadTask> tasks) throws TException {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public TStatus commit_routine_load_offset(List<TRoutineLoadCommitOffsetInfo> infos) throws TException {
             // TODO Auto-generated method stub
             return null;
         }
