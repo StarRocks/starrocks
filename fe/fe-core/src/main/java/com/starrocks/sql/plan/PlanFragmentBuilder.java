@@ -1257,19 +1257,23 @@ public class PlanFragmentBuilder {
              */
             TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
 
+            boolean forExchange = node.getAggregations().values().stream().anyMatch(aggFunc ->
+                    aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES));
             ArrayList<Expr> groupingExpressions = Lists.newArrayList();
 
-            for (ColumnRefOperator grouping : node.getGroupBys()) {
-                Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+            if (!forExchange) {
+                for (ColumnRefOperator grouping : node.getGroupBys()) {
+                    Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
 
-                groupingExpressions.add(groupingExpr);
+                    groupingExpressions.add(groupingExpr);
 
-                SlotDescriptor slotDesc =
-                        context.getDescTbl().addSlotDescriptor(outputTupleDesc, new SlotId(grouping.getId()));
-                slotDesc.setType(groupingExpr.getType());
-                slotDesc.setIsNullable(groupingExpr.isNullable());
-                slotDesc.setIsMaterialized(true);
+                    SlotDescriptor slotDesc =
+                            context.getDescTbl().addSlotDescriptor(outputTupleDesc, new SlotId(grouping.getId()));
+                    slotDesc.setType(groupingExpr.getType());
+                    slotDesc.setIsNullable(groupingExpr.isNullable());
+                    slotDesc.setIsMaterialized(true);
+                }
             }
 
             ArrayList<FunctionCallExpr> aggregateExprList = Lists.newArrayList();

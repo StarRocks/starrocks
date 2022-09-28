@@ -59,6 +59,10 @@ public class SplitAggregateRule extends TransformationRule {
 
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        if (agg.getAggregations().values().stream().anyMatch(aggFunc ->
+                aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES))) {
+            return false;
+        }
         // Only apply this rule if the aggregate type is global and not split
         return agg.getType().isGlobal() && !agg.isSplit();
     }
@@ -109,6 +113,12 @@ public class SplitAggregateRule extends TransformationRule {
         if (mustGenerateMultiStageAggregate(input, distinctAggCallOperator)) {
             return true;
         }
+
+        if (((LogicalAggregationOperator) input.getOp()).getAggregations().values().stream().anyMatch(aggFunc ->
+                aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES))) {
+            return false;
+        }
+
         // 3. Respect user hint
         int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
         if (aggStage == 1) {

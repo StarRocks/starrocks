@@ -34,6 +34,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -156,6 +157,7 @@ public class AggregationNode extends PlanNode {
 
         List<TExpr> aggregateFunctions = Lists.newArrayList();
         StringBuilder sqlAggFuncBuilder = new StringBuilder();
+        boolean forExchange = false;
         // only serialize agg exprs that are being materialized
         for (FunctionCallExpr e : aggInfo.getMaterializedAggregateExprs()) {
             aggregateFunctions.add(e.treeToThrift());
@@ -163,6 +165,9 @@ public class AggregationNode extends PlanNode {
                 sqlAggFuncBuilder.append(", ");
             }
             sqlAggFuncBuilder.append(e.toSql());
+            if (e.getFnName().getFunction().equals(FunctionSet.EXCHANGE_BYTES)) {
+                forExchange = true;
+            }
         }
 
         msg.agg_node =
@@ -176,7 +181,7 @@ public class AggregationNode extends PlanNode {
         }
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
-        if (groupingExprs != null) {
+        if (groupingExprs != null && !forExchange) {
             msg.agg_node.setGrouping_exprs(Expr.treesToThrift(groupingExprs));
             StringBuilder sqlGroupingKeysBuilder = new StringBuilder();
             for (Expr e : groupingExprs) {

@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.cost;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -156,6 +157,13 @@ public class CostModel {
             // eg. select count(*) from (select * table limit 2) t
             if (context.getChildOperator(0).hasLimit()) {
                 return true;
+            }
+            if (context.getOp() instanceof PhysicalHashAggregateOperator) {
+                PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
+                if (operator.getAggregations().values().stream().anyMatch(callOperator
+                        -> callOperator.getFnName().equals(FunctionSet.EXCHANGE_BYTES))) {
+                    return true;
+                }
             }
             return false;
         }
