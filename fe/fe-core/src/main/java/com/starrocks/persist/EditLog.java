@@ -62,6 +62,7 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.plugin.PluginInfo;
+import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
@@ -892,7 +893,21 @@ public class EditLog {
                 case OperationType.OP_CREATE_USER_V2: {
                     CreateUserInfo info = (CreateUserInfo) journal.getData();
                     globalStateMgr.getAuthenticationManager().replayCreateUser(
-                            info.getUserIdentity(), info.getAuthenticationInfo(), info.getUserProperty());
+                            info.getUserIdentity(),
+                            info.getAuthenticationInfo(),
+                            info.getUserProperty(),
+                            info.getUserPrivilegeCollection(),
+                            info.getPluginId(),
+                            info.getPluginVersion());
+                    break;
+                }
+                case OperationType.OP_UPDATE_USER_PRIVILEGE_V2: {
+                    UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo) journal.getData();
+                    globalStateMgr.getPrivilegeManager().replayUpdateUserPrivilegeCollection(
+                            info.getUserIdentity(),
+                            info.getPrivilegeCollection(),
+                            info.getPluginId(),
+                            info.getPluginVersion());
                     break;
                 }
                 case OperationType.OP_ALTER_USER_V2: {
@@ -1532,11 +1547,15 @@ public class EditLog {
         logEdit(OperationType.OP_STARMGR, journal);
     }
 
-    public void logCreateUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo, UserProperty userProperty) {
-        CreateUserInfo info = new CreateUserInfo();
-        info.setUserIdentity(userIdentity);
-        info.setAuthenticationInfo(authenticationInfo);
-        info.setUserProperty(userProperty);
+    public void logCreateUser(
+            UserIdentity userIdentity,
+            UserAuthenticationInfo authenticationInfo,
+            UserProperty userProperty,
+            UserPrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        CreateUserInfo info = new CreateUserInfo(
+                userIdentity, authenticationInfo, userProperty, privilegeCollection, pluginId, pluginVersion);
         logEdit(OperationType.OP_CREATE_USER_V2, info);
     }
 
@@ -1547,5 +1566,15 @@ public class EditLog {
 
     public void logDropUser(UserIdentity userIdentity) {
         logEdit(OperationType.OP_DROP_USER_V2, userIdentity);
+    }
+
+    public void logUpdateUserPrivilege(
+            UserIdentity userIdentity,
+            UserPrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        UserPrivilegeCollectionInfo info = new UserPrivilegeCollectionInfo(
+                userIdentity, privilegeCollection, pluginId, pluginVersion);
+        logEdit(OperationType.OP_UPDATE_USER_PRIVILEGE_V2, info);
     }
 }

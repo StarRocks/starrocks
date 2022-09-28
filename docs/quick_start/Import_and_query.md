@@ -18,7 +18,7 @@ Log in to StarRocks via your MySQL client, and execute the following statements 
 INSERT INTO sr_member
 WITH LABEL insertDemo
 VALUES
-    (001,"zhangsan",100000,"2022-03-13",true),
+    (001,"tom",100000,"2022-03-13",true),
     (002,"johndoe",210000,"2022-03-14",false),
     (003,"maruko",200000,"2022-03-14",true),
     (004,"ronaldo",100000,"2022-03-15",false),
@@ -54,7 +54,7 @@ StarRocks is compatible with SQL-92.
   | sr_id | name     | city_code | reg_date   | verified |
   +-------+----------+-----------+------------+----------+
   |     3 | maruko   |    200000 | 2022-03-14 |        1 |
-  |     1 | zhangsan |    100000 | 2022-03-13 |        1 |
+  |     1 | tom      |    100000 | 2022-03-13 |        1 |
   |     4 | ronaldo  |    100000 | 2022-03-15 |        0 |
   |     6 | mohammed |    300000 | 2022-03-17 |        1 |
   |     5 | pavlov   |    210000 | 2022-03-16 |        0 |
@@ -77,7 +77,7 @@ StarRocks is compatible with SQL-92.
   +-------+----------+
   | sr_id | name     |
   +-------+----------+
-  |     1 | zhangsan |
+  |     1 | tom |
   |     3 | maruko   |
   |     2 | johndoe  |
   +-------+----------+

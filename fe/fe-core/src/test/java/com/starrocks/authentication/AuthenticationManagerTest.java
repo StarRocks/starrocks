@@ -100,7 +100,13 @@ public class AuthenticationManagerTest {
 
         // replay create test@%; no password
         CreateUserInfo info = (CreateUserInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
-        followerManager.replayCreateUser(info.getUserIdentity(), info.getAuthenticationInfo(), info.getUserProperty());
+        followerManager.replayCreateUser(
+                info.getUserIdentity(),
+                info.getAuthenticationInfo(),
+                info.getUserProperty(),
+                info.getUserPrivilegeCollection(),
+                info.getPluginId(),
+                info.getPluginVersion());
         Assert.assertTrue(followerManager.doesUserExist(testUser));
         Assert.assertFalse(followerManager.doesUserExist(testUserWithIp));
         user = followerManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.1", new byte[0], new byte[0]);
@@ -108,7 +114,13 @@ public class AuthenticationManagerTest {
 
         // replay create test@10.1.1.1
         info = (CreateUserInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
-        followerManager.replayCreateUser(info.getUserIdentity(), info.getAuthenticationInfo(), info.getUserProperty());
+        followerManager.replayCreateUser(
+                info.getUserIdentity(),
+                info.getAuthenticationInfo(),
+                info.getUserProperty(),
+                info.getUserPrivilegeCollection(),
+                info.getPluginId(),
+                info.getPluginVersion());
         Assert.assertTrue(followerManager.doesUserExist(testUser));
         Assert.assertTrue(followerManager.doesUserExist(testUserWithIp));
         user = followerManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.1", scramble, seed);
@@ -237,7 +249,8 @@ public class AuthenticationManagerTest {
         // 7.1 replay create user
         CreateUserInfo createInfo = (CreateUserInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
         followerManager.replayCreateUser(
-                createInfo.getUserIdentity(), createInfo.getAuthenticationInfo(), createInfo.getUserProperty());
+                createInfo.getUserIdentity(), createInfo.getAuthenticationInfo(), createInfo.getUserProperty(),
+                createInfo.getUserPrivilegeCollection(), createInfo.getPluginId(), createInfo.getPluginVersion());
         Assert.assertTrue(followerManager.doesUserExist(testUser));
         Assert.assertEquals(testUser, followerManager.checkPassword(
                 testUser.getQualifiedUser(), "10.1.1.1", new byte[0], null));

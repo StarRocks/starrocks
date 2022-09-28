@@ -424,9 +424,17 @@ public class DDLStmtExecutor {
         public ShowResultSet visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt instanceof GrantPrivilegeStmt) {
-                    context.getGlobalStateMgr().getAuth().grant((GrantPrivilegeStmt) stmt);
+                    if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                        context.getGlobalStateMgr().getPrivilegeManager().grant((GrantPrivilegeStmt) stmt);
+                    } else {
+                        context.getGlobalStateMgr().getAuth().grant((GrantPrivilegeStmt) stmt);
+                    }
                 } else {
-                    context.getGlobalStateMgr().getAuth().revoke((RevokePrivilegeStmt) stmt);
+                    if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                        context.getGlobalStateMgr().getPrivilegeManager().revoke((RevokePrivilegeStmt) stmt);
+                    } else {
+                        context.getGlobalStateMgr().getAuth().revoke((RevokePrivilegeStmt) stmt);
+                    }
                 }
             });
             return null;
