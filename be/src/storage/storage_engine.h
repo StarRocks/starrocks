@@ -47,7 +47,6 @@
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/rowset/rowset_id_generator.h"
-#include "storage/table.h"
 #include "storage/tablet.h"
 
 namespace bthread {
@@ -154,9 +153,6 @@ public:
     Status execute_task(EngineTask* task);
 
     TabletManager* tablet_manager() { return _tablet_manager.get(); }
-
-    // TODO should use table id or name to get table
-    std::shared_ptr<Table> get_table(TTabletId tablet_id);
 
     TxnManager* txn_manager() { return _txn_manager.get(); }
 
