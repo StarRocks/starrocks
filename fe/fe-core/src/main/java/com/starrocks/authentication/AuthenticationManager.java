@@ -175,7 +175,7 @@ public class AuthenticationManager {
         }
     }
 
-    private void dropUserNoLock(UserIdentity userIdentity) throws DdlException {
+    private void dropUserNoLock(UserIdentity userIdentity) {
         // 1. remove from userToAuthenticationInfo
         if (!userToAuthenticationInfo.containsKey(userIdentity)) {
             LOG.warn("cannot find user {}", userIdentity);
