@@ -34,6 +34,10 @@ public class LogicalProperty implements Property {
         return outputColumns;
     }
 
+    public void setOutputColumns(ColumnRefSet outputColumns) {
+        this.outputColumns = outputColumns;
+    }
+
     public int getLeftMostScanTabletsNum() {
         return leftMostScanTabletsNum;
     }
