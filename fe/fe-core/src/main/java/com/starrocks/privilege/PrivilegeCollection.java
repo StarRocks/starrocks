@@ -86,14 +86,14 @@ public class PrivilegeCollection {
                     // intend to grant with grant option, and there's already an entry that grant without grant option
                     // we should remove the entry and create a new one or added to the matching one
                     removeAction(privilegeEntryList, oppositeEntry, actionSet);
-                    addAction(privilegeEntryList, entry, actionSet, object, isGrant);
+                    addAction(privilegeEntryList, entry, actionSet, object, true);
                 } else {
                     // intend to grant without grant option, and there's already an entry that grant with grant option
                     // we should check for each action, for those that's not in the existing entry
-                    // we should create a new entry or added to the matching one
+                    // we should create a new entry or add to the matching one
                     ActionSet remaining = oppositeEntry.actionSet.difference(actionSet);
                     if (! remaining.isEmpty()) {
-                        addAction(privilegeEntryList, entry, remaining, object, isGrant);
+                        addAction(privilegeEntryList, entry, remaining, object, false);
                     }
                 }
             }
@@ -111,7 +111,7 @@ public class PrivilegeCollection {
             if (entry != null) {
                 removeAction(privilegeEntryList, entry, actionSet);
             }
-            // some of the actions may not granted
+            // some of the actions may not be granted
             entry = findEntry(privilegeEntryList, object, !isGrant);
             if (entry != null) {
                 // 1. intend to revoke with grant option but already grant object without grant option

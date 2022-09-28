@@ -25,11 +25,19 @@ public interface AuthorizationProvider {
      */
     PEntryObject generateObject(String type, List<String> objectTokens, GlobalStateMgr mgr) throws PrivilegeException;
 
+    /**
+     * validate if grant is allowed
+     * e.g. To forbid `NODE` privilege being granted, we should put some code here.
+     */
     boolean validateGrant(
             short type,
             Action want,
             PEntryObject object);
 
+    /**
+     * check if certain action of certain type is allowed on certain object.
+     * Developers can implement their own logic here.
+     */
     boolean check(
             short type,
             Action want,
@@ -51,6 +59,9 @@ public interface AuthorizationProvider {
             PEntryObject object,
             PrivilegeCollection currentPrivilegeCollection);
 
+    /**
+     * Used for metadata upgrade
+     */
     void upgradePrivilegeCollection(
             PrivilegeCollection info, short pluginId, short metaVersion) throws PrivilegeException;
 }

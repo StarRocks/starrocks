@@ -55,6 +55,9 @@ public class PrivilegeCheckerV2 {
         );
     }
 
+    /**
+     * check privilege by AST tree
+     */
     private static class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
         public void check(StatementBase statement, ConnectContext session) {
             visit(statement, session);
