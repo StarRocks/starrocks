@@ -45,7 +45,7 @@ import java.util.stream.Collectors;
 
 public class StatementPlanner {
 
-    public ExecPlan plan(StatementBase stmt, ConnectContext session, TResultSinkType resultSinkType)
+    public ExecPlan plan(StatementBase stmt, ConnectContext session)
             throws AnalysisException {
         if (stmt instanceof QueryStatement) {
             OptimizerTraceUtil.logQueryStatement(session, "after parse:\n%s", (QueryStatement) stmt);
@@ -62,7 +62,8 @@ public class StatementPlanner {
             try {
                 lock(dbs);
                 session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
-                resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
+                TResultSinkType resultSinkType =
+                        queryStmt.hasOutFileClause() ? TResultSinkType.FILE : TResultSinkType.MYSQL_PROTOCAL;
                 ExecPlan plan = createQueryPlan(queryStmt.getQueryRelation(), session, resultSinkType);
                 setOutfileSink(queryStmt, plan);
 
