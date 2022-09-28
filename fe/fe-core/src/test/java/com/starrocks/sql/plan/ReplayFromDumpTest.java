@@ -49,6 +49,7 @@ public class ReplayFromDumpTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setJoinImplementationMode("auto");
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
     }
@@ -56,6 +57,7 @@ public class ReplayFromDumpTest {
     @Before
     public void before() {
         BackendCoreStat.reset();
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
     }
 
     @AfterClass
@@ -141,14 +143,14 @@ public class ReplayFromDumpTest {
     }
 
     private Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
-                                                        TExplainLevel level)
-            throws Exception {
+                                                        TExplainLevel level) throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
         if (sessionVariable != null) {
             queryDumpInfo.setSessionVariable(sessionVariable);
         }
         queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000);
         queryDumpInfo.getSessionVariable().setEnableLocalShuffleAgg(false);
+        queryDumpInfo.getSessionVariable().setCboPushDownAggregateMode(-1);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));
