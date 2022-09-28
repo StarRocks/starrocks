@@ -1,49 +1,27 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/ExportStmt.java
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
-
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.Delimiter;
+import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -82,6 +60,7 @@ public class ExportStmt extends StatementBase {
     private String rowDelimiter;
     private boolean includeQueryId = true;
 
+    // may catalog.db.table
     private TableRef tableRef;
     private long exportStartTime;
 
@@ -103,12 +82,24 @@ public class ExportStmt extends StatementBase {
         return exportStartTime;
     }
 
+    public void setTblName(TableName tblName) {
+        this.tblName = tblName;
+    }
+
+    public void setPartitions(List<String> partitions) {
+        this.partitions = partitions;
+    }
+
     public void setExportStartTime(long exportStartTime) {
         this.exportStartTime = exportStartTime;
     }
 
     public TableName getTblName() {
         return tblName;
+    }
+
+    public TableRef getTableRef() {
+        return tableRef;
     }
 
     public List<String> getPartitions() {
@@ -149,78 +140,19 @@ public class ExportStmt extends StatementBase {
 
     @Override
     public boolean needAuditEncryption() {
-        if (brokerDesc != null) {
-            return true;
-        }
-        return false;
+        return brokerDesc != null;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-
-        tableRef = analyzer.resolveTableRef(tableRef);
-        Preconditions.checkNotNull(tableRef);
-        tableRef.analyze(analyzer);
-
-        this.tblName = tableRef.getName();
-
-        PartitionNames partitionNames = tableRef.getPartitionNames();
-        if (partitionNames != null) {
-            if (partitionNames.isTemp()) {
-                throw new AnalysisException("Do not support exporting temporary partitions");
-            }
-            partitions = partitionNames.getPartitionNames();
-        }
-
-        // check auth
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                tblName.getDb(), tblName.getTbl(),
-                PrivPredicate.SELECT)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "EXPORT",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(),
-                    tblName.getTbl());
-        }
-
-        // check table && partitions && columns whether exist
-        checkTable(analyzer.getCatalog());
-
-        // check path is valid
-        // generate file name prefix
-        checkPath();
-
-        // check broker whether exist
-        if (brokerDesc == null) {
-            throw new AnalysisException("broker is not provided");
-        }
-        
-        if (brokerDesc.hasBroker()) {
-            if (!analyzer.getCatalog().getBrokerMgr().containsBroker(brokerDesc.getName())) {
-                throw new AnalysisException("broker " + brokerDesc.getName() + " does not exist");
-            }
-
-            FsBroker broker = analyzer.getCatalog().getBrokerMgr().getAnyBroker(brokerDesc.getName());
-            if (broker == null) {
-                throw new AnalysisException("failed to get alive broker");
-            }
-        }
-
-        // check properties
-        checkProperties(properties);
-    }
-
-    private void checkTable(GlobalStateMgr globalStateMgr) throws AnalysisException {
+    public void checkTable(GlobalStateMgr globalStateMgr) {
         Database db = globalStateMgr.getDb(tblName.getDb());
         if (db == null) {
-            throw new AnalysisException("Db does not exist. name: " + tblName.getDb());
+            throw new SemanticException("Db does not exist. name: " + tblName.getDb());
         }
-
         db.readLock();
         try {
             Table table = db.getTable(tblName.getTbl());
             if (table == null) {
-                throw new AnalysisException("Table[" + tblName.getTbl() + "] does not exist");
+                throw new SemanticException("Table[" + tblName.getTbl() + "] does not exist");
             }
 
             Table.TableType tblType = table.getType();
@@ -234,7 +166,7 @@ public class ExportStmt extends StatementBase {
                 case INLINE_VIEW:
                 case VIEW:
                 default:
-                    throw new AnalysisException("Table[" + tblName.getTbl() + "] is " + tblType.toString() +
+                    throw new SemanticException("Table[" + tblName.getTbl() + "] is " + tblType +
                             " type, do not support EXPORT.");
             }
 
@@ -242,7 +174,7 @@ public class ExportStmt extends StatementBase {
                 for (String partitionName : partitions) {
                     Partition partition = table.getPartition(partitionName);
                     if (partition == null) {
-                        throw new AnalysisException("Partition [" + partitionName + "] does not exist.");
+                        throw new SemanticException("Partition [" + partitionName + "] does not exist.");
                     }
                 }
             }
@@ -250,7 +182,7 @@ public class ExportStmt extends StatementBase {
             // check columns
             if (columnNames != null) {
                 if (columnNames.isEmpty()) {
-                    throw new AnalysisException("Columns is empty.");
+                    throw new SemanticException("Columns is empty.");
                 }
 
                 Set<String> tableColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -260,10 +192,10 @@ public class ExportStmt extends StatementBase {
                 Set<String> uniqColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
                 for (String columnName : columnNames) {
                     if (!uniqColumnNames.add(columnName)) {
-                        throw new AnalysisException("Duplicated column [" + columnName + "]");
+                        throw new SemanticException("Duplicated column [" + columnName + "]");
                     }
                     if (!tableColumns.contains(columnName)) {
-                        throw new AnalysisException("Column [" + columnName + "] does not exist in table.");
+                        throw new SemanticException("Column [" + columnName + "] does not exist in table.");
                     }
                 }
             }
@@ -272,21 +204,20 @@ public class ExportStmt extends StatementBase {
         }
     }
 
-    private void checkPath() throws AnalysisException {
+    public void checkPath() {
         if (Strings.isNullOrEmpty(path)) {
-            throw new AnalysisException("No dest path specified.");
+            throw new SemanticException("No dest path specified.");
         }
 
         try {
             URI uri = new URI(path);
             String scheme = uri.getScheme();
             if (scheme == null) {
-                throw new AnalysisException(
-                        "Invalid export path. please use valid scheme: " + VALID_SCHEMES.toString());
+                throw new SemanticException("Invalid export path. please use valid scheme: " + VALID_SCHEMES);
             }
             path = uri.normalize().toString();
         } catch (URISyntaxException e) {
-            throw new AnalysisException("Invalid path format. " + e.getMessage());
+            throw new SemanticException("Invalid path format. " + e.getMessage());
         }
 
         if (path.endsWith("/")) {
@@ -299,7 +230,7 @@ public class ExportStmt extends StatementBase {
         }
     }
 
-    private void checkProperties(Map<String, String> properties) throws AnalysisException {
+    public void checkProperties(Map<String, String> properties) throws AnalysisException {
         this.columnSeparator = PropertyAnalyzer.analyzeColumnSeparator(
                 properties, ExportStmt.DEFAULT_COLUMN_SEPARATOR);
         this.columnSeparator = Delimiter.convertDelimiter(this.columnSeparator);
@@ -372,6 +303,11 @@ public class ExportStmt extends StatementBase {
         }
 
         return sb.toString();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitExportStatement(this, context);
     }
 
     @Override

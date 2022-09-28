@@ -5,9 +5,12 @@ package com.starrocks.external;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
@@ -16,6 +19,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.connector.ConnectorDatabaseId;
@@ -26,6 +30,7 @@ import com.starrocks.external.hive.HivePartitionStats;
 import com.starrocks.external.hive.HiveTableStats;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
+import com.starrocks.sql.ast.PartitionValue;
 import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
@@ -36,6 +41,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -368,5 +374,52 @@ public class HiveMetaStoreTableUtils {
     // We will reconstruct this part later. The concept of resource will not be used for external catalog
     public static boolean isInternalCatalog(String resourceName) {
         return !resourceName.startsWith("thrift://");
+    }
+
+    // Map partition values to partition ranges, eg
+    // [NULL,1992-01-01,1992-01-02,1992-01-03]
+    //               ||
+    //               \/
+    // [0000-01-01, 1992-01-01),[1992-01-01, 1992-01-02),[1992-01-02, 1992-01-03),[1993-01-03, 9999-12-31)
+    public static Map<String, Range<PartitionKey>> getPartitionRange(HiveMetaStoreTable hiveMetaStoreTable,
+                                                                     Column partitionColumn)
+            throws DdlException, AnalysisException {
+        Map<String, Range<PartitionKey>> partitionRangeMap = new LinkedHashMap<>();
+        Map<PartitionKey, Long> partitionKeyMap = hiveMetaStoreTable.getPartitionKeys();
+        Map<String, PartitionKey> partitionMap = Maps.newHashMap();
+        for (Map.Entry<PartitionKey, Long> entry : partitionKeyMap.entrySet()) {
+            String partitionName = "p" + entry.getKey().getKeys().get(0).getStringValue();
+            // generate legal partition name
+            partitionName = partitionName.replaceAll("[^a-zA-Z0-9_]*", "");
+            partitionMap.put(partitionName, entry.getKey());
+        }
+        LinkedHashMap<String, PartitionKey> sortedPartitionLinkMap = partitionMap.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue(PartitionKey::compareTo))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+        int index = 0;
+        PartitionKey lastPartitionKey = null;
+        String lastPartitionName = null;
+        for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
+            if (index == 0) {
+                lastPartitionName = entry.getKey();
+                lastPartitionKey = entry.getValue();
+                if (lastPartitionKey.getKeys().get(0).isNullable()) {
+                    // If partition key is NULL literal, rewrite it to min value.
+                    lastPartitionKey = PartitionKey.createInfinityPartitionKey(ImmutableList.of(partitionColumn), false);
+                }
+                ++index;
+                continue;
+            }
+            partitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, entry.getValue()));
+            lastPartitionName = entry.getKey();
+            lastPartitionKey = entry.getValue();
+        }
+        if (lastPartitionName != null) {
+            partitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey,
+                    PartitionKey.createPartitionKey(ImmutableList.of(new PartitionValue(
+                            LiteralExpr.createMaxValue(partitionColumn.getType()).getStringValue())),
+                            ImmutableList.of(partitionColumn))));
+        }
+        return partitionRangeMap;
     }
 }

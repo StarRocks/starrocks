@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.BaseViewStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
@@ -63,6 +64,7 @@ import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.LoadStmt;
@@ -85,6 +87,7 @@ import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
+import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowResourcesStmt;
@@ -562,12 +565,6 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext session) {
-            statement.analyze();
-            return null;
-        }
-
-        @Override
         public Void visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt statement, ConnectContext session) {
             ShowStmtAnalyzer.analyze(statement, session);
             return null;
@@ -608,6 +605,8 @@ public class Analyzer {
             CancelLoadStmtAnalyzer.analyze(statement, context);
             return null;
         }
+
+        // ---------------------------------------- Backup Restore Statement -------------------------------------------
 
         @Override
         public Void visitBackupStatement(BackupStmt statement, ConnectContext context) {
@@ -651,7 +650,35 @@ public class Analyzer {
             return null;
         }
 
-        // --------------------------------------- Plugin Statement --------------------------------------------------------
+        // ------------------------------------ Sql BlackList And WhiteList Statement ----------------------------------
+
+        @Override
+        public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext session) {
+            statement.analyze();
+            return null;
+        }
+
+        // ------------------------------------------- Export Statement ------------------------------------------------
+
+        @Override
+        public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
+            ExportStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowExportStatement(ShowExportStmt statement, ConnectContext context) {
+            ExportStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCancelExportStatement(CancelExportStmt statement, ConnectContext context) {
+            ExportStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ------------------------------------------- Plugin Statement ------------------------------------------------
 
         public Void visitInstallPluginStatement(InstallPluginStmt statement, ConnectContext context) {
             PluginAnalyzer.analyze(statement, context);
@@ -663,7 +690,7 @@ public class Analyzer {
             return null;
         }
 
-        // --------------------------------------- File Statement ----------------------------------------------------------
+        // --------------------------------------- File Statement ------------------------------------------------------
 
         public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {
             FileAnalyzer.analyze(statement, context);

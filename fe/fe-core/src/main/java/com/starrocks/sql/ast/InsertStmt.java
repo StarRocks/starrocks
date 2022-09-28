@@ -134,11 +134,6 @@ public class InsertStmt extends DmlStmt {
     }
 
     @Override
-    public ArrayList<Expr> getResultExprs() {
-        return resultExprs;
-    }
-
-    @Override
     public TableName getTableName() {
         return tblName;
     }
@@ -165,15 +160,6 @@ public class InsertStmt extends DmlStmt {
 
     public void setTargetColumns(List<Column> targetColumns) {
         this.targetColumns = targetColumns;
-    }
-
-    @Override
-    public void reset() {
-        super.reset();
-        targetPartitionIds.clear();
-        resultExprs.clear();
-        exprByName.clear();
-        targetColumns.clear();
     }
 
     @Override

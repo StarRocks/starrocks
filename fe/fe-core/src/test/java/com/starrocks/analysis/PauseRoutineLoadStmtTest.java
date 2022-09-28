@@ -10,18 +10,15 @@ import org.junit.Test;
 
 public class PauseRoutineLoadStmtTest {
 
-    private ConnectContext ctx;
-
     @Test
     public void testNormal() throws Exception {
-        ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ctx.setDatabase("testDb");
 
         PauseRoutineLoadStmt stmt = new PauseRoutineLoadStmt(new LabelName("testDb","label"));
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("PAUSE ROUTINE LOAD FOR testDb.label", stmt.toSql());
         Assert.assertEquals("testDb", stmt.getDbFullName());
+        Assert.assertEquals("label", stmt.getName());
     }
-
 }

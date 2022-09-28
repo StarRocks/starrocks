@@ -10,8 +10,8 @@ public class CachingHiveMetastoreConf {
     private final long cacheTtlSec;
     private final long cacheRefreshIntervalSec;
     private final long cacheMaxNum = 100000;
-    private final int cacheRefreshThreadMaxNum = 20;
     private final int perQueryCacheMaxNum = 10000;
+    private final int cacheRefreshThreadMaxNum = 20;
 
     private final boolean enableListNamesCache;
 

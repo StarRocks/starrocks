@@ -90,8 +90,6 @@ public class DeleteStmt extends DmlStmt {
 
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-
         if (tblName == null) {
             throw new AnalysisException("Table is not set");
         }

@@ -6,7 +6,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
@@ -302,19 +301,6 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         } catch (Exception e) {
             LOG.error("error happens when parsing create/alter routine load stmt: " + origStmt.originStmt, e);
             return null;
-        }
-    }
-
-    /**
-     * @deprecated Use CreateRoutineLoadAnalyzer.analyze has check db and table
-     */
-    @Deprecated
-    public void checkDBTable(Analyzer analyzer) throws AnalysisException {
-        labelName.analyze(analyzer);
-        dbName = labelName.getDbName();
-        name = labelName.getLabelName();
-        if (Strings.isNullOrEmpty(tableName)) {
-            throw new AnalysisException("Table name should not be null");
         }
     }
 

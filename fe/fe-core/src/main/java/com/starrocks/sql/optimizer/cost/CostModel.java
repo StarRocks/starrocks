@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer.cost;
 import com.google.common.base.Preconditions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -216,6 +217,17 @@ public class CostModel {
                     }
                     break;
                 case SHUFFLE:
+                    // This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
+                    // which contains two steps:
+                    // 1. Ignore the network cost for ExchangeNode when estimating cost model.
+                    // 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
+                    boolean ignoreNetworkCost = sessionVariable.isEnableLocalShuffleAgg()
+                            && sessionVariable.isEnablePipelineEngine()
+                            && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+                    double networkCost = ignoreNetworkCost ? 0 : Math.max(statistics.getOutputSize(outputColumns), 1);
+
+                    result = CostEstimate.of(statistics.getOutputSize(outputColumns), 0, networkCost);
+                    break;
                 case GATHER:
                     result = CostEstimate.of(statistics.getOutputSize(outputColumns), 0,
                             Math.max(statistics.getOutputSize(outputColumns), 1));

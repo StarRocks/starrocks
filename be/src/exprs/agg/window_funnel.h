@@ -11,6 +11,7 @@
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -36,7 +37,7 @@ struct ComparePairFirst final {
     }
 };
 
-enum FunnelMode : int { DEDUPLICATION = 1, FIXED = 2, DEDUPLICATION_FIXED = 3 };
+enum FunnelMode : int { DEDUPLICATION = 1, FIXED = 2, DEDUPLICATION_FIXED = 3, INCREASE = 4 };
 
 namespace InteralTypeOfFunnel {
 template <PrimitiveType primitive_type>
@@ -75,9 +76,13 @@ struct WindowFunnelState {
 
     // first args is timestamp, second is event position.
     using TimestampEvent = std::pair<TimestampType, uint8_t>;
-    using TimestampVector = std::vector<TimestampType>;
+    struct TimestampTypePair {
+        TimestampType start_timestamp = -1;
+        TimestampType last_timestamp = -1;
+    };
+    using TimestampVector = std::vector<TimestampTypePair>;
     int64_t window_size;
-    int32_t mode = 0;
+    mutable int32_t mode = 0;
     uint8_t events_size;
     bool sorted = true;
     char buffer[reserve_list_size * sizeof(TimestampEvent)];
@@ -172,9 +177,11 @@ struct WindowFunnelState {
             sort();
         }
 
+        bool increase = (mode & INCREASE);
+        mode &= DEDUPLICATION_FIXED;
         auto const& ordered_events_list = events_list;
         if (!mode) {
-            TimestampVector events_timestamp(events_size, -1);
+            TimestampVector events_timestamp(events_size);
             auto begin = ordered_events_list.begin();
             while (begin != ordered_events_list.end()) {
                 TimestampType timestamp = (*begin).first;
@@ -187,19 +194,26 @@ struct WindowFunnelState {
 
                 event_idx -= 1;
                 if (event_idx == 0) {
-                    events_timestamp[0] = timestamp;
-                } else if (events_timestamp[event_idx - 1] >= 0 &&
-                           timestamp <= events_timestamp[event_idx - 1] + window_size) {
-                    events_timestamp[event_idx] = events_timestamp[event_idx - 1];
-                    if (event_idx + 1 == events_size) {
-                        return events_size;
+                    events_timestamp[0].start_timestamp = timestamp;
+                    events_timestamp[0].last_timestamp = timestamp;
+                } else if (events_timestamp[event_idx - 1].start_timestamp >= 0) {
+                    bool matched = timestamp <= events_timestamp[event_idx - 1].start_timestamp + window_size;
+                    if (increase) {
+                        matched = matched && events_timestamp[event_idx - 1].last_timestamp < timestamp;
+                    }
+                    if (matched) {
+                        events_timestamp[event_idx].start_timestamp = events_timestamp[event_idx - 1].start_timestamp;
+                        events_timestamp[event_idx].last_timestamp = timestamp;
+                        if (event_idx + 1 == events_size) {
+                            return events_size;
+                        }
                     }
                 }
                 ++begin;
             }
 
             for (size_t event = events_timestamp.size(); event > 0; --event) {
-                if (events_timestamp[event - 1] >= 0) {
+                if (events_timestamp[event - 1].start_timestamp >= 0) {
                     return event;
                 }
             }
@@ -215,7 +229,7 @@ struct WindowFunnelState {
         /*
          * EventTimestamp's element is the timestamp of event.
          */
-        TimestampVector events_timestamp(events_size, -1);
+        TimestampVector events_timestamp(events_size);
         auto begin = ordered_events_list.begin();
         switch (mode) {
         // mode: deduplication
@@ -232,12 +246,12 @@ struct WindowFunnelState {
                 event_idx -= 1;
                 // begin a new event chain.
                 if (event_idx == 0) {
-                    events_timestamp[0] = timestamp;
+                    events_timestamp[0].start_timestamp = timestamp;
                     if (event_idx > curr_event_level) {
                         curr_event_level = event_idx;
                     }
                     // encounter condition of deduplication: an existing event occurs.
-                } else if (events_timestamp[event_idx] >= 0) {
+                } else if (events_timestamp[event_idx].start_timestamp >= 0) {
                     if (curr_event_level > max_level) {
                         max_level = curr_event_level;
                     }
@@ -245,8 +259,8 @@ struct WindowFunnelState {
                     // Eliminate last event chain
                     eliminate_last_event_chains(&curr_event_level, &events_timestamp);
 
-                } else if (events_timestamp[event_idx - 1] >= 0) {
-                    if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level)) {
+                } else if (events_timestamp[event_idx - 1].start_timestamp >= 0) {
+                    if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level, increase)) {
                         return events_size;
                     }
                 }
@@ -267,13 +281,13 @@ struct WindowFunnelState {
 
                 event_idx -= 1;
                 if (event_idx == 0) {
-                    events_timestamp[0] = timestamp;
+                    events_timestamp[0].start_timestamp = timestamp;
                     if (event_idx > curr_event_level) {
                         curr_event_level = event_idx;
                     }
                     first_event = true;
                     // encounter condition of fixed: a leap event occurred.
-                } else if (first_event && events_timestamp[event_idx - 1] < 0) {
+                } else if (first_event && events_timestamp[event_idx - 1].start_timestamp < 0) {
                     if (curr_event_level >= 0) {
                         if (curr_event_level > max_level) {
                             max_level = curr_event_level;
@@ -282,8 +296,8 @@ struct WindowFunnelState {
                         // Eliminate last event chain
                         eliminate_last_event_chains(&curr_event_level, &events_timestamp);
                     }
-                } else if (events_timestamp[event_idx - 1] >= 0) {
-                    if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level)) {
+                } else if (events_timestamp[event_idx - 1].start_timestamp >= 0) {
+                    if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level, increase)) {
                         return events_size;
                     }
                 }
@@ -305,12 +319,12 @@ struct WindowFunnelState {
                 event_idx -= 1;
 
                 if (event_idx == 0) {
-                    events_timestamp[0] = timestamp;
+                    events_timestamp[0].start_timestamp = timestamp;
                     if (event_idx > curr_event_level) {
                         curr_event_level = event_idx;
                     }
                     first_event = true;
-                } else if (events_timestamp[event_idx] >= 0) {
+                } else if (events_timestamp[event_idx].start_timestamp >= 0) {
                     if (curr_event_level > max_level) {
                         max_level = curr_event_level;
                     }
@@ -318,7 +332,7 @@ struct WindowFunnelState {
                     // Eliminate last event chain
                     eliminate_last_event_chains(&curr_event_level, &events_timestamp);
 
-                } else if (first_event && events_timestamp[event_idx - 1] < 0) {
+                } else if (first_event && events_timestamp[event_idx - 1].start_timestamp < 0) {
                     if (curr_event_level >= 0) {
                         if (curr_event_level > max_level) {
                             max_level = curr_event_level;
@@ -327,8 +341,8 @@ struct WindowFunnelState {
                         // Eliminate last event chain
                         eliminate_last_event_chains(&curr_event_level, &events_timestamp);
                     }
-                } else if (events_timestamp[event_idx - 1] >= 0) {
-                    if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level)) {
+                } else if (events_timestamp[event_idx - 1].start_timestamp >= 0) {
+                    if (promote_to_next_level(&events_timestamp, timestamp, event_idx, &curr_event_level, increase)) {
                         return events_size;
                     }
                 }
@@ -349,19 +363,22 @@ struct WindowFunnelState {
 
     static void eliminate_last_event_chains(int8_t* curr_event_level, TimestampVector* events_timestamp) {
         for (; (*curr_event_level) >= 0; --(*curr_event_level)) {
-            (*events_timestamp)[(*curr_event_level)] = -1;
+            (*events_timestamp)[(*curr_event_level)].start_timestamp = -1;
         }
     }
 
     bool promote_to_next_level(TimestampVector* events_timestamp, const TimestampType& timestamp,
-                               const int8_t event_idx, int8_t* curr_event_level) const {
-        auto first_timestamp = (*events_timestamp)[event_idx - 1];
+                               const int8_t event_idx, int8_t* curr_event_level, bool increase) const {
+        auto first_timestamp = (*events_timestamp)[event_idx - 1].start_timestamp;
         bool time_matched = (timestamp <= (first_timestamp + window_size));
+        if (increase) {
+            time_matched = time_matched && (*events_timestamp)[event_idx - 1].last_timestamp < timestamp;
+        }
 
         if (time_matched) {
             // use prev level event's event_chain_level to record with this event.
-            (*events_timestamp)[event_idx] = first_timestamp;
-
+            (*events_timestamp)[event_idx].start_timestamp = first_timestamp;
+            (*events_timestamp)[event_idx].last_timestamp = timestamp;
             // update curr_event_level to bigger one.
             if (event_idx > (*curr_event_level)) {
                 (*curr_event_level) = event_idx;

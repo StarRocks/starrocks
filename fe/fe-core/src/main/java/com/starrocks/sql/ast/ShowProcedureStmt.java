@@ -3,6 +3,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -32,7 +33,7 @@ public class ShowProcedureStmt extends ShowStmt {
     }
 
     public ShowProcedureStmt(Expr where) {
-        this.where = where;
+        setPredicate((Predicate) where);
     }
 
     public ShowProcedureStmt() {

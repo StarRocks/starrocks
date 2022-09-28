@@ -33,7 +33,7 @@ public class AuthenticationManagerTest {
     }
 
     @Test
-    public void testCreateUserAndReplay() throws Exception {
+    public void testCreateUserPersist() throws Exception {
         UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test", "%");
         UserIdentity testUserWithIp = UserIdentity.createAnalyzedUserIdentWithIp("test", "10.1.1.1");
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
@@ -47,6 +47,8 @@ public class AuthenticationManagerTest {
         Assert.assertFalse(masterManager.doesUserExist(testUserWithIp));
         UtFrameUtils.setUpForPersistTest();
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        masterManager.save(emptyImage.getDataOutputStream());
 
         // master create test@%; no password
         String sql = "create user test";
@@ -74,13 +76,16 @@ public class AuthenticationManagerTest {
         user = masterManager.checkPassword(testUser.getQualifiedUser(), testUserWithIp.getHost(), scramble, seed);
         Assert.assertEquals(user, testUserWithIp);
 
+        // make final snapshot
+        UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
+        masterManager.save(finalImage.getDataOutputStream());
+
         // login from 10.1.1.2 with password will fail
         user = masterManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.2", scramble, seed);
         Assert.assertNull(user);
 
         // start to replay
-        AuthenticationManager followerManager = new AuthenticationManager();
-        followerManager.init();
+        AuthenticationManager followerManager = AuthenticationManager.load(emptyImage.getDataInputStream());
         Assert.assertFalse(followerManager.doesUserExist(testUser));
         Assert.assertFalse(followerManager.doesUserExist(testUserWithIp));
 
@@ -101,6 +106,15 @@ public class AuthenticationManagerTest {
         Assert.assertEquals(user, testUserWithIp);
 
         // login from 10.1.1.2 with password will fail
+        user = followerManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.2", scramble, seed);
+        Assert.assertNull(user);
+
+        // pure from image
+        AuthenticationManager imageManager = AuthenticationManager.load(finalImage.getDataInputStream());
+        Assert.assertTrue(followerManager.doesUserExist(testUser));
+        Assert.assertTrue(followerManager.doesUserExist(testUserWithIp));
+        user = followerManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.1", scramble, seed);
+        Assert.assertEquals(user, testUserWithIp);
         user = followerManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.2", scramble, seed);
         Assert.assertNull(user);
 

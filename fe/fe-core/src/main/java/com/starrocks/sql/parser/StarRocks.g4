@@ -4,11 +4,21 @@ grammar StarRocks;
 import StarRocksLex;
 
 sqlStatements
-    : (singleStatement (SEMICOLON EOF? | EOF))+
+    : singleStatement+ EOF
     ;
 
+
+/*
+sqlStatements
+    : (singleStatement (SEMICOLON | SEMICOLON EOF? | EOF))+
+    ;
+*/
 singleStatement
-    : statement
+    : statement (MINUS_SYMBOL MINUS_SYMBOL)? SEMICOLON? | emptyStatement
+    ;
+
+emptyStatement
+    : SEMICOLON
     ;
 
 statement

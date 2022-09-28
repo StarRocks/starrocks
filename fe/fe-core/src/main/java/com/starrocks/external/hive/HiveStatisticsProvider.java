@@ -57,11 +57,10 @@ public class HiveStatisticsProvider {
     }
 
     public Statistics getTableStatistics(
+            OptimizerContext session,
             Table table,
             List<ColumnRefOperator> columns,
-            List<PartitionKey> partitionKeys,
-            OptimizerContext session) {
-
+            List<PartitionKey> partitionKeys) {
         Statistics.Builder builder = Statistics.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         if (hmsTbl.isUnPartitioned()) {

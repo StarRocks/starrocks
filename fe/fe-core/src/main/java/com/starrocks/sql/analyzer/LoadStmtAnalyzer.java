@@ -57,11 +57,7 @@ public class LoadStmtAnalyzer {
                 }
             }
             label.setDbName(dbName);
-            try {
-                FeNameFormat.checkLabel(label.getLabelName());
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
-            }
+            FeNameFormat.checkLabel(label.getLabelName());
         }
 
         private void analyzeDataDescriptions(LoadStmt statement) {

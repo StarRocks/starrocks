@@ -20,7 +20,7 @@ public class ShowRoutineLoadStmtTest {
         ShowRoutineLoadStmt stmt = new ShowRoutineLoadStmt(new LabelName("testDb","label"), false);
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW ROUTINE LOAD FOR `testDb`.`label`", stmt.toString());
+        Assert.assertEquals("label", stmt.getName());
         Assert.assertEquals("testDb", stmt.getDbFullName());
         Assert.assertFalse(stmt.isIncludeHistory());
         Assert.assertEquals(18, stmt.getMetaData().getColumnCount());
@@ -28,14 +28,13 @@ public class ShowRoutineLoadStmtTest {
     }
 
     @Test
-    public void testFromDB() throws Exception {
+    public void testFromDB() {
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.setDatabase("testDb");
 
         ShowRoutineLoadStmt stmt = new ShowRoutineLoadStmt(new LabelName("testDb",null), false);
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW ROUTINE LOAD FROM testDb", stmt.toString());
         Assert.assertEquals("testDb", stmt.getDbFullName());
     }
 }

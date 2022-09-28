@@ -4,9 +4,6 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.UserIdentity;
 
-// drop user cmy@['domain'];
-// drop user cmy  <==> drop user cmy@'%'
-// drop user cmy@'192.168.1.%'
 public class DropUserStmt extends DdlStmt {
     private final UserIdentity userIdent;
 
@@ -15,10 +12,6 @@ public class DropUserStmt extends DdlStmt {
     }
 
     public UserIdentity getUserIdentity() {
-        return userIdent;
-    }
-
-    public UserIdentity getUserIdent() {
         return userIdent;
     }
 

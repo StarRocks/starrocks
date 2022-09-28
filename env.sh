@@ -39,6 +39,11 @@ if [[ -z ${STARROCKS_THIRDPARTY} ]]; then
     export STARROCKS_THIRDPARTY=${STARROCKS_HOME}/thirdparty
 fi
 
+# set cachelib dir
+if [[ -z ${CACHELIB_DIR} ]]; then
+    export CACHELIB_DIR=${STARROCKS_THIRDPARTY}/installed/cachelib
+fi
+
 # check python
 if [[ -z ${PYTHON} ]]; then
     export PYTHON=python

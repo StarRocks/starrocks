@@ -296,7 +296,7 @@ public class PrivilegeStmtAnalyzer {
 
         @Override
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdent(), session, false);
+            analyseUser(stmt.getUserIdentity(), session, false);
             return null;
         }
 

@@ -81,12 +81,6 @@ public class RepositoryAnalyzer {
         if (Strings.isNullOrEmpty(repoName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Repository does not empty");
         }
-
-        try {
-            FeNameFormat.checkCommonName("repository", repoName);
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
-        }
+        FeNameFormat.checkCommonName("repository", repoName);
     }
-
 }

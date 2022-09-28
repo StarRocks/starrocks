@@ -82,6 +82,7 @@ private:
     RuntimeProfile::Counter* _write_timer;
 
     std::unique_ptr<FileBuilder> _file_builder;
+    bool _closed = false;
 };
 
 } // end namespace starrocks
