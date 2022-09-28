@@ -14,7 +14,6 @@ import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeWithoutTestView;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeFunctionTest {
