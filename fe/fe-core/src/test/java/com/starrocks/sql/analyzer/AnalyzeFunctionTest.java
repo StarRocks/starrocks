@@ -76,42 +76,14 @@ public class AnalyzeFunctionTest {
 
     @Test
     public void testDateFloor() {
-        analyzeWithoutTestView("select time_slice(th, interval 1 year) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 month) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 day) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 week) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 quarter) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 hour) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 minute) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 second) from tall");
-
-        // Use other texts.
-        analyzeWithoutTestView("select time_slice(th, interval 1 year, fjwel) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 month, nkljer) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 day, vneurhj) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 week, vkenwk) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 quarter, cvjlR) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 hour, vjljel) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 minute, pjofj) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 second, aerwefoj) from tall");
-
-        analyzeWithoutTestView("select time_slice(th, interval 1 year, FLOOR) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 month, FLOOR) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 day, FLOOR) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 week, FLOOR) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 quarter, FLOOR) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 hour, FLOOR) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 minute, FLOOR) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 second, FLOOR) from tall");
-
-        analyzeWithoutTestView("select time_slice(th, interval 1 year, ceil) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 month, ceil) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 day, ceil) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 week, ceil) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 quarter, ceil) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 hour, ceil) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 minute, ceil) from tall");
-        analyzeWithoutTestView("select time_slice(th, interval 1 second, ceil) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 year) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 month) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 day) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 week) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 quarter) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 hour) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 minute) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 second) from tall");
 
         analyzeFail("select time_slice(ta, th) from tall",
                 "time_slice requires second parameter must be a constant interval");

@@ -3971,7 +3971,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
                 IntervalLiteral intervalLiteral = (IntervalLiteral) e2;
 
-                Expr e3 = (Expr) visit(context.expression(2));
+                ParseNode e3 = (ParseNode) visit(context.expression(2));
                 if (!(e3 instanceof UnitBoundary)) {
                     e3 = new UnitBoundary("floor");
                 }
