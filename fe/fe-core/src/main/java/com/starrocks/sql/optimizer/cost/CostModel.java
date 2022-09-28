@@ -160,8 +160,9 @@ public class CostModel {
             }
             if (context.getOp() instanceof PhysicalHashAggregateOperator) {
                 PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
-                if (operator.getAggregations().values().stream().anyMatch(callOperator
-                        -> callOperator.getFnName().equals(FunctionSet.EXCHANGE_BYTES))) {
+                if (operator.getAggregations().values().stream().anyMatch(aggFunc
+                        -> aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES) ||
+                        aggFunc.getFnName().equals(FunctionSet.EXCHANGE_RATIO))) {
                     return true;
                 }
             }

@@ -264,7 +264,7 @@ public class FunctionSet {
     public static final String INTERSECT_COUNT = "intersect_count";
     public static final String BITMAP_DICT = "bitmap_dict";
     public static final String EXCHANGE_BYTES = "exchange_bytes";
-
+    public static final String EXCHANGE_RATIO = "exchange_ratio";
     // Array functions:
     public static final String ARRAY_AGG = "array_agg";
     public static final String ARRAY_CONCAT = "array_concat";
@@ -479,6 +479,7 @@ public class FunctionSet {
                     .add(FunctionSet.BITMAP_EMPTY)
                     .add(FunctionSet.HLL_EMPTY)
                     .add(FunctionSet.EXCHANGE_BYTES)
+                    .add(FunctionSet.EXCHANGE_RATIO)
                     .build();
 
     public static final Set<String> decimalRoundFunctions =
@@ -594,6 +595,15 @@ public class FunctionSet {
             return null;
         }
 
+        // specially matching exactly one function by name
+        if (mode == Function.CompareMode.MATCH_NAME) {
+            if (fns.size() == 1) {
+                return fns.get(0);
+            } else {
+                return null;
+            }
+        }
+
         // First check for identical
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_IDENTICAL)) {
@@ -700,9 +710,13 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
                 new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
 
-        // EXCHANGE_BYTES with various arguments
+        // EXCHANGE_BYTES/_RATIO with various arguments
         addBuiltin(AggregateFunction.createBuiltin(EXCHANGE_BYTES,
                 Lists.newArrayList(), Type.BIGINT, Type.BIGINT, true,
+                true, false, true));
+
+        addBuiltin(AggregateFunction.createBuiltin(EXCHANGE_RATIO,
+                Lists.newArrayList(), Type.BIGINT, Type.VARCHAR, true,
                 true, false, true));
 
         for (Type t : Type.getSupportedTypes()) {

@@ -79,7 +79,7 @@ public class Function implements Writable {
         // e.g. fn is matchable with fn(int), fn(float) and fn(int) is only matchable with fn(int).
         IS_MATCHABLE,
 
-        // match names is ok
+        // matching exactly one function by name, which accepts various arguments.
         MATCH_NAME
     }
 

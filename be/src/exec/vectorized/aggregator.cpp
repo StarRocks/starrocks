@@ -182,7 +182,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
                 arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
             }
 
-            if (fn.name.function_name == "exchange_bytes") {
+            if (fn.name.function_name == "exchange_bytes" || fn.name.function_name == "exchange_ratio") {
                 arg_type = TypeDescriptor(TYPE_BIGINT);
             }
 

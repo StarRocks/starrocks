@@ -2,20 +2,29 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
+#include "util/time.h"
 
 namespace starrocks::vectorized {
 
-struct AggregateExchangeBytesFunctionState : public AggregateFunctionEmptyState {
+enum AggExchangePerfType { BYTES = 0, RATIO = 1 };
+
+struct AggregateExchangePerfFunctionState : public AggregateFunctionEmptyState {
     int64_t bytes = 0;
+    int64_t start_time = MonotonicNanos();
 };
 
-class ExchangeBytesAggregateFunction final
-        : public AggregateFunctionBatchHelper<AggregateExchangeBytesFunctionState, ExchangeBytesAggregateFunction> {
+template <AggExchangePerfType PerfType>
+class ExchangePerfAggregateFunction final
+        : public AggregateFunctionBatchHelper<AggregateExchangePerfFunctionState,
+                                              ExchangePerfAggregateFunction<PerfType>> {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         this->data(state).bytes = 0;
+        this->start_time = MonotonicNanos();
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -62,8 +71,20 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        DCHECK(to->is_numeric());
-        down_cast<Int64Column*>(to)->append(this->data(state).bytes);
+        if (PerfType == BYTES) {
+            DCHECK(to->is_numeric());
+            down_cast<Int64Column*>(to)->append(this->data(state).bytes);
+        } else if (PerfType == RATIO) {
+            DCHECK(to->is_binary());
+            int64_t elapsed_time = MonotonicNanos() - this->data(state).start_time;
+            double ratio = 0;
+            if (elapsed_time > 0) {
+                ratio = this->data(state).bytes * 1000000000.0 / elapsed_time;
+            }
+            string res = fmt::format("{:.2f} KB/s", ratio);
+            BinaryColumn* column = down_cast<BinaryColumn*>(to);
+            column->append(Slice(res));
+        }
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
@@ -72,7 +93,7 @@ public:
         column->get_data().assign(chunk_size, 1);
     }
 
-    std::string get_name() const override { return "exchange_bytes"; }
+    std::string get_name() const override { return PerfType == BYTES ? "exchange_bytes" : "exchange_ratio"; }
 };
 
 } // namespace starrocks::vectorized

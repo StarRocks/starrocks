@@ -17,7 +17,7 @@
 #include "exprs/agg/bitmap_union_int.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/distinct.h"
-#include "exprs/agg/exchange_bytes.h"
+#include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/histogram.h"
 #include "exprs/agg/hll_ndv.h"
@@ -71,7 +71,8 @@ public:
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeCountDistinctAggregateFunctionV2();
 
-    static AggregateFunctionPtr MakeExchangeBytesAggregateFunction();
+    template <AggExchangePerfType PerfType>
+    static AggregateFunctionPtr MakeExchangePerfAggregateFunction();
 
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeGroupConcatAggregateFunction();
@@ -217,8 +218,9 @@ AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunctionV2() {
     return std::make_shared<DistinctAggregateFunctionV2<PT, AggDistinctType::COUNT>>();
 }
 
-AggregateFunctionPtr AggregateFactory::MakeExchangeBytesAggregateFunction() {
-    return std::make_shared<ExchangeBytesAggregateFunction>();
+template <AggExchangePerfType PerfType>
+AggregateFunctionPtr AggregateFactory::MakeExchangePerfAggregateFunction() {
+    return std::make_shared<ExchangePerfAggregateFunction<PerfType>>();
 }
 
 template <PrimitiveType PT>
@@ -727,8 +729,10 @@ public:
             return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
         } else if (name == "max_by") {
             return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
-        } else if(name == "exchange_bytes") {
-            return AggregateFactory::MakeExchangeBytesAggregateFunction();
+        } else if (name == "exchange_bytes") {
+            return AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::BYTES>();
+        } else if (name == "exchange_ratio") {
+            return AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::RATIO>();
         }
         return nullptr;
     }
@@ -930,8 +934,9 @@ AggregateFuncResolver::AggregateFuncResolver() {
     ADD_ALL_TYPE("min", true);
     ADD_ALL_TYPE("any_value", true);
     add_aggregate_mapping<TYPE_JSON, TYPE_JSON>("any_value");
-
+    // just hack the arguments' types, because they are various.
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("exchange_bytes");
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_VARCHAR>("exchange_ratio");
 
     add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BIGINT>("multi_distinct_count");
     add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT>("multi_distinct_count");
@@ -1241,7 +1246,6 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_array_mapping<TYPE_BIGINT, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATETIME, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
-    add_array_mapping<TYPE_BIGINT, TYPE_BIGINT>("exchange_bytes");
 }
 
 #undef ADD_ALL_TYPE

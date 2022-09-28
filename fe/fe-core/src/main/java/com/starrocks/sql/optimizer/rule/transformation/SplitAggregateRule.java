@@ -59,9 +59,10 @@ public class SplitAggregateRule extends TransformationRule {
 
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
-        // must not apply this rule if there are exchange_bytes()
+        // must not apply this rule if there are exchange_bytes/_ratio()
         if (agg.getAggregations().values().stream().anyMatch(aggFunc ->
-                aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES))) {
+                aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES) ||
+                        aggFunc.getFnName().equals(FunctionSet.EXCHANGE_RATIO))) {
             return false;
         }
         // Only apply this rule if the aggregate type is global and not split
@@ -123,9 +124,10 @@ public class SplitAggregateRule extends TransformationRule {
         if (aggStage == 0 && input.getLogicalProperty().isExecuteInOneTablet()) {
             return false;
         }
-        // 5。 must not apply this rule if there are exchange_bytes()
+        // 5。 must not apply this rule if there are exchange_bytes/_ratio()
         if (((LogicalAggregationOperator) input.getOp()).getAggregations().values().stream().anyMatch(aggFunc ->
-                aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES))) {
+                aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES) ||
+                        aggFunc.getFnName().equals(FunctionSet.EXCHANGE_RATIO))) {
             return false;
         }
         // Default, we could generate two stage aggregate

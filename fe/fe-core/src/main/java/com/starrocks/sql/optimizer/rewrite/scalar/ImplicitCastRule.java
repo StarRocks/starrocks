@@ -53,9 +53,10 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                 }
             }
         } else {
-            // functions with various data types do not need to implicit cast, such as array_map, exchange_bytes()
+            // functions with various data types do not need to implicit cast, such as following functionis.
             if (fn.functionName().equals(FunctionSet.ARRAY_MAP) ||
-                    fn.functionName().equals(FunctionSet.EXCHANGE_BYTES)) {
+                    fn.functionName().equals(FunctionSet.EXCHANGE_BYTES) ||
+                    fn.functionName().equals(FunctionSet.EXCHANGE_RATIO)) {
                 return call;
             }
             if (!call.isAggregate() || FunctionSet.AVG.equalsIgnoreCase(fn.functionName())) {
