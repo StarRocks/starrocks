@@ -1257,10 +1257,11 @@ public class PlanFragmentBuilder {
              */
             TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
 
+            ArrayList<Expr> groupingExpressions = Lists.newArrayList();
+            // EXCHANGE_BYTES aggregate the total bytes on a node, without grouping, so remove group-by here.
+            // the group-by expressions just denote the hash distribution of an exchange operator.
             boolean forExchange = node.getAggregations().values().stream().anyMatch(aggFunc ->
                     aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES));
-            ArrayList<Expr> groupingExpressions = Lists.newArrayList();
-
             if (!forExchange) {
                 for (ColumnRefOperator grouping : node.getGroupBys()) {
                     Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,

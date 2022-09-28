@@ -157,7 +157,6 @@ public class AggregationNode extends PlanNode {
 
         List<TExpr> aggregateFunctions = Lists.newArrayList();
         StringBuilder sqlAggFuncBuilder = new StringBuilder();
-        boolean forExchange = false;
         // only serialize agg exprs that are being materialized
         for (FunctionCallExpr e : aggInfo.getMaterializedAggregateExprs()) {
             aggregateFunctions.add(e.treeToThrift());
@@ -165,9 +164,6 @@ public class AggregationNode extends PlanNode {
                 sqlAggFuncBuilder.append(", ");
             }
             sqlAggFuncBuilder.append(e.toSql());
-            if (e.getFnName().getFunction().equals(FunctionSet.EXCHANGE_BYTES)) {
-                forExchange = true;
-            }
         }
 
         msg.agg_node =
@@ -181,7 +177,7 @@ public class AggregationNode extends PlanNode {
         }
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
-        if (groupingExprs != null && !forExchange) {
+        if (groupingExprs != null) {
             msg.agg_node.setGrouping_exprs(Expr.treesToThrift(groupingExprs));
             StringBuilder sqlGroupingKeysBuilder = new StringBuilder();
             for (Expr e : groupingExprs) {
