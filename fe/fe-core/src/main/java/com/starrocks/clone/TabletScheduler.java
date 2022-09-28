@@ -102,6 +102,9 @@ public class TabletScheduler extends MasterDaemon {
 
     public static final int BALANCE_SLOT_NUM_FOR_PATH = 2;
 
+    private static final int MAX_SLOT_PER_PATH = 64;
+    private static final int MIN_SLOT_PER_PATH = 2;
+
     /*
      * Tablet is added to pendingTablets as well it's id in allTabletIds.
      * TabletScheduler will take tablet from pendingTablets but will not remove it's id from allTabletIds when
@@ -125,6 +128,8 @@ public class TabletScheduler extends MasterDaemon {
     // cluster name -> load statistic
     private Map<String, ClusterLoadStatistic> statisticMap = Maps.newConcurrentMap();
     private long lastStatUpdateTime = 0;
+
+    private int currentSlotPerPathConfig = 0;
 
     private long lastSlotAdjustTime = 0;
 
@@ -184,6 +189,18 @@ public class TabletScheduler extends MasterDaemon {
      * update working slots at the beginning of each round
      */
     private boolean updateWorkingSlots() {
+        // Compute delta that will be checked to update slot number per storage path and
+        // record new value of `Config.schedule_slot_num_per_path`.
+        int cappedVal = Config.schedule_slot_num_per_path < MIN_SLOT_PER_PATH ? MIN_SLOT_PER_PATH :
+                (Config.schedule_slot_num_per_path > MAX_SLOT_PER_PATH ? MAX_SLOT_PER_PATH :
+                        Config.schedule_slot_num_per_path);
+        int delta = 0;
+        int oldSlotPerPathConfig = currentSlotPerPathConfig;
+        if (currentSlotPerPathConfig != 0) {
+            delta = cappedVal - currentSlotPerPathConfig;
+        }
+        currentSlotPerPathConfig = cappedVal;
+
         ImmutableMap<Long, Backend> backends = infoService.getBackendsInCluster(null);
         for (Backend backend : backends.values()) {
             if (!backend.hasPathHash() && backend.isAlive()) {
@@ -202,7 +219,7 @@ public class TabletScheduler extends MasterDaemon {
                 List<Long> pathHashes = backends.get(beId).getDisks().values().stream()
                         .filter(v -> v.getState() == DiskState.ONLINE)
                         .map(DiskInfo::getPathHash).collect(Collectors.toList());
-                backendsWorkingSlots.get(beId).updatePaths(pathHashes);
+                backendsWorkingSlots.get(beId).updatePaths(pathHashes, currentSlotPerPathConfig);
             } else {
                 deletedBeIds.add(beId);
             }
@@ -219,10 +236,18 @@ public class TabletScheduler extends MasterDaemon {
             if (!backendsWorkingSlots.containsKey(be.getId())) {
                 List<Long> pathHashes =
                         be.getDisks().values().stream().map(DiskInfo::getPathHash).collect(Collectors.toList());
-                PathSlot slot = new PathSlot(pathHashes, Config.schedule_slot_num_per_path);
+                PathSlot slot = new PathSlot(pathHashes, currentSlotPerPathConfig);
                 backendsWorkingSlots.put(be.getId(), slot);
                 LOG.info("add new backend {} with slots num: {}", be.getId(), be.getDisks().size());
             }
+        }
+
+        if (delta != 0) {
+            LOG.info("Going to update slots per path. delta: {}, before: {}", delta, oldSlotPerPathConfig);
+            int finalDelta = delta;
+            backendsWorkingSlots.forEach((beId, pathSlot) -> {
+                pathSlot.updateSlot(finalDelta);
+            });
         }
 
         return true;
@@ -1467,29 +1492,30 @@ public class TabletScheduler extends MasterDaemon {
         }
 
         // update the path
-        public synchronized void updatePaths(List<Long> paths) {
+        public synchronized void updatePaths(List<Long> paths, int currentSlotPerPathConfig) {
             // delete non exist path
             pathSlots.entrySet().removeIf(entry -> !paths.contains(entry.getKey()));
 
             // add new path
             for (Long pathHash : paths) {
                 if (!pathSlots.containsKey(pathHash)) {
-                    pathSlots.put(pathHash, new Slot(Config.schedule_slot_num_per_path));
+                    pathSlots.put(pathHash, new Slot(currentSlotPerPathConfig));
                 }
             }
         }
 
-        // Update the total slots num of specified paths, increase or decrease
-        public synchronized void updateSlot(List<Long> pathHashs, int delta) {
-            for (Long pathHash : pathHashs) {
+        // Update the total slots num of every storage path on a specified BE based on new configuration.
+        public synchronized void updateSlot(int delta) {
+            for (Long pathHash : pathSlots.keySet()) {
                 Slot slot = pathSlots.get(pathHash);
                 if (slot == null) {
                     continue;
                 }
 
                 slot.total += delta;
+                slot.available += delta;
                 slot.rectify();
-                LOG.debug("decrease path {} slots num to {}", pathHash, pathSlots.get(pathHash).total);
+                LOG.debug("Update path {} slots num to {}", pathHash, slot.total);
             }
         }
 
@@ -1544,6 +1570,15 @@ public class TabletScheduler extends MasterDaemon {
             }
             slot.rectify();
             return slot.available;
+        }
+
+        public synchronized int getSlotTotal(long pathHash) {
+            Slot slot = pathSlots.get(pathHash);
+            if (slot == null) {
+                return -1;
+            }
+            slot.rectify();
+            return slot.total;
         }
 
         public synchronized int getTotalAvailSlotNum() {
