@@ -67,17 +67,17 @@ public class IcebergTableStatisticCalculator {
         IcebergFileStats icebergFileStats = new IcebergTableStatisticCalculator(icebergTable).
                 generateIcebergFileStats(icebergPredicates, columns);
 
-        Map<Integer, String> idToColumnNames = columns.stream()
-                .filter(column -> column.type().isPrimitiveType())
-                .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.name()));
+        Map<Integer, String> idToColumnNames = columns.stream().
+                filter(column -> !IcebergUtil.convertColumnType(column.type()).isUnknown())
+                .collect(Collectors.toMap(Types.NestedField::fieldId, Types.NestedField::name));
 
         double recordCount = Math.max(icebergFileStats == null ? 0 : icebergFileStats.getRecordCount(), 1);
         for (Map.Entry<Integer, String> idColumn : idToColumnNames.entrySet()) {
             List<ColumnRefOperator> columnList = colRefToColumnMetaMap.keySet().stream().filter(
                     key -> key.getName().equalsIgnoreCase(idColumn.getValue())).collect(Collectors.toList());
-            if (columnList == null || columnList.size() != 1) {
+            if (columnList.size() != 1) {
                 LOG.debug("This column is not required column name " + idColumn.getValue() + " column list size "
-                        + (columnList == null ? "null" : columnList.size()));
+                        + columnList.size());
                 continue;
             }
 
@@ -95,17 +95,17 @@ public class IcebergTableStatisticCalculator {
         IcebergFileStats icebergFileStats = generateIcebergFileStats(icebergPredicates, columns);
 
         Map<Integer, String> idToColumnNames = columns.stream()
-                .filter(column -> column.type().isPrimitiveType())
-                .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.name()));
+                .filter(column -> !IcebergUtil.convertColumnType(column.type()).isUnknown())
+                .collect(Collectors.toMap(Types.NestedField::fieldId, Types.NestedField::name));
 
         Statistics.Builder statisticsBuilder = Statistics.builder();
         double recordCount = Math.max(icebergFileStats == null ? 0 : icebergFileStats.getRecordCount(), 1);
         for (Map.Entry<Integer, String> idColumn : idToColumnNames.entrySet()) {
             List<ColumnRefOperator> columnList = colRefToColumnMetaMap.keySet().stream().filter(
                     key -> key.getName().equalsIgnoreCase(idColumn.getValue())).collect(Collectors.toList());
-            if (columnList == null || columnList.size() != 1) {
+            if (columnList.size() != 1) {
                 LOG.debug("This column is not required column name " + idColumn.getValue() + " column list size "
-                        + (columnList == null ? "null" : columnList.size()));
+                        + columnList.size());
                 continue;
             }
 
