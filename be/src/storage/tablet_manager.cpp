@@ -484,15 +484,16 @@ bool TabletManager::get_next_batch_tablets(size_t batch_size, std::vector<Tablet
     }
 }
 
-TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir) {
+TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir,
+                                                              std::pair<int32_t, int32_t> tablet_shards_range) {
     int64_t now_ms = UnixMillis();
     const std::string& compaction_type_str = compaction_type == CompactionType::BASE_COMPACTION ? "base" : "cumulative";
     // only do compaction if compaction #rowset > 1
     uint32_t highest_score = 1;
     TabletSharedPtr best_tablet;
-    for (const auto& tablets_shard : _tablets_shards) {
-        std::shared_lock rlock(tablets_shard.lock);
-        for (auto [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+    for (int32_t i = tablet_shards_range.first; i < tablet_shards_range.second; i++) {
+        std::shared_lock rlock(_tablets_shards[i].lock);
+        for (auto [tablet_id, tablet_ptr] : _tablets_shards[i].tablet_map) {
             if (tablet_ptr->keys_type() == PRIMARY_KEYS) {
                 continue;
             }
