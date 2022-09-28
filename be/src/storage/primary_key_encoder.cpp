@@ -254,12 +254,31 @@ bool PrimaryKeyEncoder::is_supported(const vectorized::Schema& schema) {
     return true;
 }
 
+bool PrimaryKeyEncoder::is_supported_with_sort_key(const vectorized::Schema& schema) {
+    for (const auto sort_key_idx : schema.sort_key_idxes()) {
+        if (!is_supported(*schema.field(sort_key_idx))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 FieldType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& schema) {
     if (!is_supported(schema)) {
         return OLAP_FIELD_TYPE_NONE;
     }
     if (schema.num_key_fields() == 1) {
         return schema.field(0)->type()->type();
+    }
+    return OLAP_FIELD_TYPE_VARCHAR;
+}
+
+FieldType PrimaryKeyEncoder::encoded_primary_key_type_with_sort_key(const vectorized::Schema& schema) {
+    if (!is_supported_with_sort_key(schema)) {
+        return OLAP_FIELD_TYPE_NONE;
+    }
+    if (schema.sort_key_idxes().size() == 1) {
+        return schema.field(schema.sort_key_idxes()[0])->type()->type();
     }
     return OLAP_FIELD_TYPE_VARCHAR;
 }
@@ -324,6 +343,50 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
     } else {
         // composite keys encoding to binary
         // TODO(cbl): support fixed length encoded keys, e.g. (int32, int32) => int64
+        *pcolumn = std::make_unique<vectorized::BinaryColumn>();
+    }
+    return Status::OK();
+}
+
+Status PrimaryKeyEncoder::create_column_with_sort_key(const vectorized::Schema& schema,
+                                                      std::unique_ptr<vectorized::Column>* pcolumn) {
+    if (!is_supported_with_sort_key(schema)) {
+        return Status::NotSupported("type not supported for primary key encoding");
+    }
+    if (schema.sort_key_idxes().size() == 1) {
+        auto type = schema.field(schema.sort_key_idxes()[0])->type()->type();
+        switch (type) {
+        case OLAP_FIELD_TYPE_BOOL:
+            *pcolumn = vectorized::BooleanColumn::create_mutable();
+            break;
+        case OLAP_FIELD_TYPE_TINYINT:
+            *pcolumn = vectorized::Int8Column::create_mutable();
+            break;
+        case OLAP_FIELD_TYPE_SMALLINT:
+            *pcolumn = vectorized::Int16Column::create_mutable();
+            break;
+        case OLAP_FIELD_TYPE_INT:
+            *pcolumn = vectorized::Int32Column::create_mutable();
+            break;
+        case OLAP_FIELD_TYPE_BIGINT:
+            *pcolumn = vectorized::Int64Column::create_mutable();
+            break;
+        case OLAP_FIELD_TYPE_LARGEINT:
+            *pcolumn = vectorized::Int128Column::create_mutable();
+            break;
+        case OLAP_FIELD_TYPE_VARCHAR:
+            *pcolumn = std::make_unique<vectorized::BinaryColumn>();
+            break;
+        case OLAP_FIELD_TYPE_DATE_V2:
+            *pcolumn = vectorized::DateColumn::create_mutable();
+            break;
+        case OLAP_FIELD_TYPE_TIMESTAMP:
+            *pcolumn = vectorized::TimestampColumn::create_mutable();
+            break;
+        default:
+            return Status::NotSupported(StringPrintf("primary key type not support: %s", field_type_to_string(type)));
+        }
+    } else {
         *pcolumn = std::make_unique<vectorized::BinaryColumn>();
     }
     return Status::OK();

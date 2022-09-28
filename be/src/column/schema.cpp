@@ -8,12 +8,13 @@ namespace starrocks::vectorized {
 
 #ifdef BE_TEST
 
-Schema::Schema(Fields fields) : Schema(fields, KeysType::DUP_KEYS) {}
+Schema::Schema(Fields fields) : Schema(fields, KeysType::DUP_KEYS, std::vector<ColumnId>{}) {}
 
 #endif
 
-Schema::Schema(Fields fields, KeysType keys_type)
+Schema::Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes)
         : _fields(std::move(fields)),
+          _sort_key_idxes(sort_key_idxes),
           _name_to_index_append_buffer(nullptr),
           _share_name_to_index(false),
           _keys_type(static_cast<uint8_t>(keys_type)) {
@@ -29,6 +30,7 @@ Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
         DCHECK_LT(cids[i], schema->_fields.size());
         _fields[i] = schema->_fields[cids[i]];
     }
+    _sort_key_idxes = schema->sort_key_idxes();
     auto is_key = [](const FieldPtr& f) { return f->is_key(); };
     _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
     _build_index_map(_fields);
@@ -43,6 +45,7 @@ Schema::Schema(Schema* schema)
     for (int i = 0; i < schema->_fields.size(); i++) {
         _fields[i] = schema->_fields[i];
     }
+    _sort_key_idxes = schema->sort_key_idxes();
     if (schema->_name_to_index_append_buffer == nullptr) {
         // share the name_to_index with schema, later append fields will be added to _name_to_index_append_buffer
         schema->_share_name_to_index = true;
@@ -62,6 +65,7 @@ Schema::Schema(const Schema& schema)
     for (int i = 0; i < schema._fields.size(); i++) {
         _fields[i] = schema._fields[i];
     }
+    _sort_key_idxes = schema.sort_key_idxes();
     if (schema._name_to_index_append_buffer == nullptr) {
         // share the name_to_index with schema&, later append fields will be added to _name_to_index_append_buffer
         schema._share_name_to_index = true;
@@ -83,6 +87,7 @@ Schema& Schema::operator=(const Schema& other) {
     for (int i = 0; i < this->_fields.size(); i++) {
         this->_fields[i] = other._fields[i];
     }
+    this->_sort_key_idxes = other.sort_key_idxes();
     if (other._name_to_index_append_buffer == nullptr) {
         // share the name_to_index with schema&, later append fields will be added to _name_to_index_append_buffer
         other._share_name_to_index = true;
@@ -152,7 +157,9 @@ void Schema::remove(size_t idx) {
 
 const FieldPtr& Schema::field(size_t idx) const {
     DCHECK_GE(idx, 0);
-    DCHECK_LT(idx, _fields.size());
+    if (_sort_key_idxes.empty()) {
+        DCHECK_LT(idx, _fields.size());
+    }
     return _fields[idx];
 }
 

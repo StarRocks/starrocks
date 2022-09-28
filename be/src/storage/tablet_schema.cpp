@@ -436,7 +436,7 @@ void TabletSchema::_init_schema() const {
         auto f = ChunkHelper::convert_field_to_format_v2(cid, column(cid));
         fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
     }
-    _schema = std::make_unique<vectorized::Schema>(std::move(fields), keys_type());
+    _schema = std::make_unique<vectorized::Schema>(std::move(fields), keys_type(), _sort_key_idxes);
 }
 
 vectorized::Schema* TabletSchema::schema() const {
@@ -474,6 +474,10 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         if (column.is_key()) {
             _num_key_columns++;
         }
+    }
+    _sort_key_idxes.reserve(schema.sort_key_idxes_size());
+    for (auto i = 0; i < schema.sort_key_idxes_size(); ++i) {
+        _sort_key_idxes.push_back(schema.sort_key_idxes(i));
     }
     _num_short_key_columns = schema.num_short_key_columns();
     _num_rows_per_row_block = schema.num_rows_per_row_block();

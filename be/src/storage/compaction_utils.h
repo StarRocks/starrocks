@@ -46,6 +46,10 @@ public:
     static void split_column_into_groups(size_t num_columns, size_t num_key_columns, int64_t max_columns_per_group,
                                          std::vector<std::vector<uint32_t>>* column_groups);
 
+    static void split_column_into_groups_sort_key(size_t num_columns, const std::vector<ColumnId> sort_key_idxes,
+                                                  int64_t max_columns_per_group,
+                                                  std::vector<std::vector<uint32_t>>* column_groups);
+
     // choose compaction algorithm according to tablet schema, max columns per group and segment iterator num.
     // 1. if the number of columns in the schema is less than or equal to max_columns_per_group, use HORIZONTAL_COMPACTION.
     // 2. if source_num is less than or equal to 1, or is more than MAX_SOURCES, use HORIZONTAL_COMPACTION.

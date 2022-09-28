@@ -206,6 +206,10 @@ Status MemTable::finalize() {
                     _result_chunk = upserts;
                 }
             }
+            if (_keys_type == KeysType::PRIMARY_KEYS && !_vectorized_schema->sort_key_idxes().empty()) {
+                _chunk = _result_chunk;
+                _sort(true, true);
+            }
             _aggregator.reset();
             _aggregator_memory_usage = 0;
             _aggregator_bytes_usage = 0;
@@ -283,11 +287,10 @@ void MemTable::_aggregate(bool is_final) {
     }
 }
 
-void MemTable::_sort(bool is_final) {
+void MemTable::_sort(bool is_final, bool by_sort_key) {
     SmallPermutation perm = create_small_permutation(static_cast<uint32_t>(_chunk->num_rows()));
     std::swap(perm, _permutations);
-    _sort_column_inc();
-
+    _sort_column_inc(by_sort_key);
     if (is_final) {
         // No need to reserve, it will be reserve in IColumn::append_selective(),
         // Otherwise it will use more peak memory
@@ -356,15 +359,25 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
     return Status::OK();
 }
 
-void MemTable::_sort_column_inc() {
+void MemTable::_sort_column_inc(bool by_sort_key) {
     Columns columns;
-    int sort_columns = _vectorized_schema->num_key_fields();
-    for (int i = 0; i < _vectorized_schema->num_key_fields(); i++) {
-        columns.push_back(_chunk->get_column_by_index(i));
+    if (!by_sort_key) {
+        int sort_columns = _vectorized_schema->num_key_fields();
+        for (int i = 0; i < sort_columns; i++) {
+            columns.push_back(_chunk->get_column_by_index(i));
+        }
+        Status st =
+                stable_sort_and_tie_columns(false, columns, SortDescs::asc_null_first(sort_columns), &_permutations);
+        CHECK(st.ok());
+    } else {
+        int sort_columns = _vectorized_schema->sort_key_idxes().size();
+        for (const auto sort_key_idx : _vectorized_schema->sort_key_idxes()) {
+            columns.push_back(_chunk->get_column_by_index(sort_key_idx));
+        }
+        Status st =
+                stable_sort_and_tie_columns(false, columns, SortDescs::asc_null_first(sort_columns), &_permutations);
+        CHECK(st.ok());
     }
-
-    Status st = stable_sort_and_tie_columns(false, columns, SortDescs::asc_null_first(sort_columns), &_permutations);
-    CHECK(st.ok());
 }
 
 } // namespace starrocks::vectorized

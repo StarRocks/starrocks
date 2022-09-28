@@ -218,9 +218,15 @@ public:
         MonotonicStopWatch timer;
         timer.start();
         if (cfg.algorithm == VERTICAL_COMPACTION) {
-            CompactionUtils::split_column_into_groups(tablet.num_columns(), tablet.num_key_columns(),
-                                                      config::vertical_compaction_max_columns_per_group,
-                                                      &column_groups);
+            if (tablet.tablet_schema().sort_key_idxes().empty()) {
+                CompactionUtils::split_column_into_groups(tablet.num_columns(), tablet.num_key_columns(),
+                                                          config::vertical_compaction_max_columns_per_group,
+                                                          &column_groups);
+            } else {
+                CompactionUtils::split_column_into_groups_sort_key(
+                        tablet.num_columns(), tablet.tablet_schema().sort_key_idxes(),
+                        config::vertical_compaction_max_columns_per_group, &column_groups);
+            }
             RETURN_IF_ERROR(_do_merge_vertically(tablet, version, rowsets, writer, cfg, column_groups,
                                                  &total_input_size, &total_rows, &total_chunk, &stats));
         } else {
@@ -251,13 +257,16 @@ private:
                                   size_t* total_input_size, size_t* total_rows, size_t* total_chunk,
                                   OlapReaderStatistics* stats, RowSourceMaskBuffer* mask_buffer = nullptr,
                                   std::vector<std::unique_ptr<RowSourceMaskBuffer>>* rowsets_mask_buffer = nullptr) {
-        std::unique_ptr<vectorized::Column> pk_column;
-        if (schema.num_key_fields() > 1) {
-            if (!PrimaryKeyEncoder::create_column(schema, &pk_column).ok()) {
+        std::unique_ptr<vectorized::Column> sort_column;
+        if (schema.sort_key_idxes().size() > 1) {
+            if (!PrimaryKeyEncoder::create_column_with_sort_key(schema, &sort_column).ok()) {
+                LOG(FATAL) << "create sort column for primary key encoder failed";
+            }
+        } else if (schema.num_key_fields() > 1) {
+            if (!PrimaryKeyEncoder::create_column(schema, &sort_column).ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";
             }
         }
-
         std::vector<std::unique_ptr<vector<RowSourceMask>>> rowsets_source_masks;
         uint16_t order = 0;
         for (const auto& rowset : rowsets) {
@@ -276,9 +285,9 @@ private:
             } else {
                 entry.segment_itr = std::move(new_heap_merge_iterator(res.value()));
             }
-            if (pk_column) {
+            if (sort_column) {
                 entry.encode_schema = &schema;
-                entry.chunk_pk_column = pk_column->clone_shared();
+                entry.chunk_pk_column = sort_column->clone_shared();
                 entry.chunk_pk_column->reserve(_chunk_size);
             }
             if (rowsets_mask_buffer && res.value().size() > 1) {
@@ -305,9 +314,13 @@ private:
         std::unique_ptr<vector<RowSourceMask>> source_masks;
         if (mask_buffer) {
             source_masks = std::make_unique<vector<RowSourceMask>>();
-            column_indexes.reserve(schema.num_key_fields());
-            for (uint32_t i = 0; i < schema.num_key_fields(); ++i) {
-                column_indexes.emplace_back(i);
+            if (schema.sort_key_idxes().empty()) {
+                column_indexes.reserve(schema.num_key_fields());
+                for (uint32_t i = 0; i < schema.num_key_fields(); ++i) {
+                    column_indexes.emplace_back(i);
+                }
+            } else {
+                column_indexes = tablet.tablet_schema().sort_key_idxes();
             }
         }
 
@@ -510,7 +523,12 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
                                 RowsetWriter* writer, const MergeConfig& cfg) {
     Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema());
     std::unique_ptr<RowsetMerger> merger;
-    auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema);
+    auto key_type = OLAP_FIELD_TYPE_UNKNOWN;
+    if (tablet.tablet_schema().sort_key_idxes().empty()) {
+        key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema);
+    } else {
+        key_type = PrimaryKeyEncoder::encoded_primary_key_type_with_sort_key(schema);
+    }
     switch (key_type) {
     case OLAP_FIELD_TYPE_BOOL:
         merger = std::make_unique<RowsetMergerImpl<uint8_t>>();

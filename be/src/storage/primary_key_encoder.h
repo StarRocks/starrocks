@@ -26,14 +26,18 @@ public:
     static bool is_supported(const vectorized::Field& f);
 
     static bool is_supported(const vectorized::Schema& schema);
+    static bool is_supported_with_sort_key(const vectorized::Schema& schema);
 
     // Return |OLAP_FIELD_TYPE_NONE| if no primary key contained in |schema|.
     static FieldType encoded_primary_key_type(const vectorized::Schema& schema);
+    static FieldType encoded_primary_key_type_with_sort_key(const vectorized::Schema& schema);
 
     // Return -1 if encoded key is not fixed size
     static size_t get_encoded_fixed_size(const vectorized::Schema& schema);
 
     static Status create_column(const vectorized::Schema& schema, std::unique_ptr<vectorized::Column>* pcolumn);
+    static Status create_column_with_sort_key(const vectorized::Schema& schema,
+                                              std::unique_ptr<vectorized::Column>* pcolumn);
 
     static void encode(const vectorized::Schema& schema, const vectorized::Chunk& chunk, size_t offset, size_t len,
                        vectorized::Column* dest);

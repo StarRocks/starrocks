@@ -215,6 +215,38 @@ public:
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
+    TabletSharedPtr create_tablet_with_sort_key(int64_t tablet_id, int32_t schema_hash) {
+        TCreateTabletReq request;
+        request.tablet_id = tablet_id;
+        request.__set_version(1);
+        request.tablet_schema.schema_hash = schema_hash;
+        request.tablet_schema.short_key_column_count = 1;
+        request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+        request.tablet_schema.storage_type = TStorageType::COLUMN;
+        request.tablet_schema.sort_key_idxes = {1};
+
+        TColumn k1;
+        k1.column_name = "pk";
+        k1.__set_is_key(true);
+        k1.column_type.type = TPrimitiveType::BIGINT;
+        request.tablet_schema.columns.push_back(k1);
+
+        TColumn k2;
+        k2.column_name = "v1";
+        k2.__set_is_key(false);
+        k2.column_type.type = TPrimitiveType::SMALLINT;
+        request.tablet_schema.columns.push_back(k2);
+
+        TColumn k3;
+        k3.column_name = "v2";
+        k3.__set_is_key(false);
+        k3.column_type.type = TPrimitiveType::INT;
+        request.tablet_schema.columns.push_back(k3);
+        auto st = StorageEngine::instance()->create_tablet(request);
+        CHECK(st.ok()) << st.to_string();
+        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+    }
+
     TabletSharedPtr create_tablet2(int64_t tablet_id, int32_t schema_hash) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
@@ -623,6 +655,31 @@ TEST_F(TabletUpdatesTest, writeread_with_persistent_index) {
     test_writeread(true);
 }
 
+TEST_F(TabletUpdatesTest, writeread_with_sort_key) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet_with_sort_key(rand(), rand());
+    // write
+    const int N = 8000;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    auto rs0 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+    auto rs1 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
+    ASSERT_EQ(3, _tablet->updates()->max_version());
+    auto rs2 = create_rowset(_tablet, keys, NULL, true);
+    ASSERT_TRUE(_tablet->rowset_commit(4, rs2).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+
+    // read
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    ASSERT_EQ(N, read_tablet(_tablet, 3));
+    ASSERT_EQ(N, read_tablet(_tablet, 2));
+}
+
 void TabletUpdatesTest::test_writeread_with_delete(bool enable_persistent_index) {
     _tablet = create_tablet(rand(), rand());
     _tablet->set_enable_persistent_index(enable_persistent_index);
@@ -660,6 +717,36 @@ TEST_F(TabletUpdatesTest, writeread_with_delete) {
 
 TEST_F(TabletUpdatesTest, writeread_with_delete_with_persistent_index) {
     test_writeread_with_delete(true);
+}
+
+TEST_F(TabletUpdatesTest, writeread_with_delete_with_sort_key) {
+    _tablet = create_tablet_with_sort_key(rand(), rand());
+    // write
+    const int N = 8000;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    // Insert [0, 1, 2 ... N)
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+
+    // Delete [0, 1, 2 ... N/2)
+    vectorized::Int64Column deletes;
+    deletes.append_numbers(keys.data(), sizeof(int64_t) * keys.size() / 2);
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, {}, &deletes)).ok());
+    ASSERT_EQ(3, _tablet->updates()->max_version());
+    ASSERT_EQ(N / 2, read_tablet(_tablet, 3));
+
+    // Delete [0, 1, 2 ... N) and insert [N, N+1, N+2 ... 2*N)
+    deletes.resize(0);
+    deletes.append_numbers(keys.data(), sizeof(int64_t) * keys.size());
+    for (int i = 0; i < N; i++) {
+        keys[i] = N + i;
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys, &deletes)).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
 }
 
 TEST_F(TabletUpdatesTest, writeread_with_overlapping_deletes_only_batches) {
@@ -1143,6 +1230,39 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index) {
     test_horizontal_compaction(true);
 }
 
+TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
+    auto orig = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 5;
+    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
+
+    int N = 100;
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet_with_sort_key(rand(), rand());
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    const auto& best_tablet =
+            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
+    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
+    ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 3, keys));
+    ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
+    ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
+    // the time interval is not enough after last compaction
+    EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+}
+
 void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
     auto orig = config::vertical_compaction_max_columns_per_group;
     config::vertical_compaction_max_columns_per_group = 1;
@@ -1183,6 +1303,39 @@ TEST_F(TabletUpdatesTest, vertical_compaction) {
 
 TEST_F(TabletUpdatesTest, vertical_compaction_with_persistent_index) {
     test_vertical_compaction(true);
+}
+
+TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {
+    auto orig = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 1;
+    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
+
+    int N = 100;
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet_with_sort_key(rand(), rand());
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    const auto& best_tablet =
+            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
+    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
+    ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    EXPECT_EQ(N, read_tablet_and_compare(best_tablet, 3, keys));
+    ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
+    ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
+    // the time interval is not enough after last compaction
+    EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
 }
 
 void TabletUpdatesTest::test_compaction_with_empty_rowset(bool enable_persistent_index, bool vertical,
