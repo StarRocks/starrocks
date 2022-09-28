@@ -174,6 +174,7 @@ import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
@@ -364,6 +365,7 @@ public class GlobalStateMgr {
     private boolean usingNewPrivilege = USING_NEW_PRIVILEGE;
 
     private AuthenticationManager authenticationManager;
+    private PrivilegeManager privilegeManager;
 
     private DomainResolver domainResolver;
 
@@ -538,6 +540,7 @@ public class GlobalStateMgr {
             this.auth = new Auth();
             this.domainResolver = new DomainResolver(auth);
             this.authenticationManager = null;
+            this.privilegeManager = null;
         }
 
         this.resourceGroupMgr = new ResourceGroupMgr(this);
@@ -670,6 +673,10 @@ public class GlobalStateMgr {
 
     public AuthenticationManager getAuthenticationManager() {
         return authenticationManager;
+    }
+
+    public PrivilegeManager getPrivilegeManager() {
+        return privilegeManager;
     }
 
     public ResourceGroupMgr getResourceGroupMgr() {
@@ -891,8 +898,10 @@ public class GlobalStateMgr {
             this.usingNewPrivilege = true;
             this.authenticationManager = new AuthenticationManager();
             this.authenticationManager.init();
+            this.privilegeManager = new PrivilegeManager(this, null);
             this.auth = null;
             this.domainResolver = null;
+            LOG.info("using new privilege framework..");
         }
     }
 
