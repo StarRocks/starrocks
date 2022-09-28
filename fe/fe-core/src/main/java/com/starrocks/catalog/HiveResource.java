@@ -4,6 +4,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -35,6 +36,9 @@ public class HiveResource extends Resource {
     @SerializedName(value = "metastoreURIs")
     private String metastoreURIs;
 
+    @SerializedName(value = "properties")
+    private Map<String, String> properties;
+
     public HiveResource(String name) {
         super(name, ResourceType.HIVE);
     }
@@ -42,7 +46,7 @@ public class HiveResource extends Resource {
     @Override
     protected void setProperties(Map<String, String> properties) throws DdlException {
         Preconditions.checkState(properties != null, "properties can not be null");
-
+        this.properties = Maps.newHashMap(properties);
         metastoreURIs = properties.get(HIVE_METASTORE_URIS);
         if (!FeConstants.runningUnitTest) {
             if (StringUtils.isBlank(metastoreURIs)) {
@@ -60,6 +64,10 @@ public class HiveResource extends Resource {
 
     public String getHiveMetastoreURIs() {
         return metastoreURIs;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties == null ? Maps.newHashMap() : properties;
     }
 
     /**

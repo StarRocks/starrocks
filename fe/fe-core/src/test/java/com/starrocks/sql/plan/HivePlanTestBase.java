@@ -165,6 +165,7 @@ public class HivePlanTestBase extends PlanTestBase {
 
         Map<String, String> properties = Maps.newHashMap();
         properties.put("type", "hive");
+        properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
         CreateResourceStmt createResourceStmt = new CreateResourceStmt(true, "hive0", properties);
         createResourceStmt.setResourceType(Resource.ResourceType.HIVE);
         connectContext.getGlobalStateMgr().getResourceMgr().createResource(createResourceStmt);

@@ -14,7 +14,6 @@ import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.external.ColumnTypeConverter;
 import com.starrocks.external.hive.text.TextFileFormatDesc;
-import com.starrocks.server.CatalogMgr;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
@@ -24,7 +23,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.server.CatalogMgr.RESOURCE_MAPPING_CATALOG_PREFIX;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.RESOURCE_MAPPING_CATALOG_PREFIX;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static java.util.Objects.requireNonNull;
 import static org.apache.hadoop.hive.common.StatsSetupConst.ROW_COUNT;
 import static org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE;
@@ -79,7 +79,7 @@ public class HiveMetastoreApiConverter {
     }
 
     public static String toResourceName(String catalogName) {
-        return CatalogMgr.isResourceMappingCatalog(catalogName) ?
+        return isResourceMappingCatalog(catalogName) ?
                 catalogName.substring(RESOURCE_MAPPING_CATALOG_PREFIX.length()) : catalogName;
     }
 
