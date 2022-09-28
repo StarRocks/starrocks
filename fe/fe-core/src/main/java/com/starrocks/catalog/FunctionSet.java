@@ -700,9 +700,9 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
                 new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
 
-        // EXCHANGE_BYTES
+        // EXCHANGE_BYTES with various arguments
         addBuiltin(AggregateFunction.createBuiltin(EXCHANGE_BYTES,
-                Lists.newArrayList(Type.BIGINT), Type.BIGINT, Type.BIGINT, true,
+                Lists.newArrayList(), Type.BIGINT, Type.BIGINT, true,
                 true, false, true));
 
         for (Type t : Type.getSupportedTypes()) {

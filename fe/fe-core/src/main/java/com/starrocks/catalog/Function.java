@@ -316,8 +316,6 @@ public class Function implements Writable {
                 return isAssignCompatible(other);
             case IS_MATCHABLE:
                 return isMatchable(other);
-            case MATCH_NAME:
-                return other.functionName().equals(this.functionName());
             default:
                 Preconditions.checkState(false);
                 return false;
