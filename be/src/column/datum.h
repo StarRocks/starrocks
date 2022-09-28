@@ -98,7 +98,7 @@ public:
             static_assert(sizeof(TimestampValue) == sizeof(int64_t));
             return reinterpret_cast<const T&>(std::get<int64_t>(_value));
         } else if constexpr (std::is_same_v<Ipv4Value, T>) {
-            static_assert(sizeof(Ipv4Value) == sizeof(int64_t));
+            static_assert(sizeof(Ipv4Value) == sizeof(uint));
             return reinterpret_cast<const T&>(std::get<int64_t>(_value));
         } else if constexpr (std::is_same_v<bool, T>) {
             return reinterpret_cast<const T&>(std::get<int8_t>(_value));

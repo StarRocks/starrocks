@@ -530,7 +530,7 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
         merger = std::make_unique<RowsetMergerImpl<int64_t>>();
         break;
     case OLAP_FIELD_TYPE_IPV4:
-        merger = std::make_unique<RowsetMergerImpl<int64_t>>();
+        merger = std::make_unique<RowsetMergerImpl<uint>>();
         break;
     default:
         return Status::NotSupported(StringPrintf("primary key type not support: %s", field_type_to_string(key_type)));

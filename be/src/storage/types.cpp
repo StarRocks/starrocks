@@ -948,8 +948,8 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_IPV4> : public ScalarTypeInfoImplBase<
         RETURN_IF_ERROR(st);
         return Status::OK();
     }
-    static void set_to_max(void* buf) { unaligned_store<CppType>(buf, vectorized::timestamp::MAX_TIMESTAMP); }
-    static void set_to_min(void* buf) { unaligned_store<CppType>(buf, 0l); }
+    static void set_to_max(void* buf) { unaligned_store<CppType>(buf, 4294967295); }
+    static void set_to_min(void* buf) { unaligned_store<CppType>(buf, 0); }
 };
 
 template <>

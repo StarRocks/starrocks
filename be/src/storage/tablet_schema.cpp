@@ -217,6 +217,7 @@ uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_
     case OLAP_FIELD_TYPE_FLOAT:
     case OLAP_FIELD_TYPE_DATE_V2:
     case OLAP_FIELD_TYPE_DECIMAL32:
+    case OLAP_FIELD_TYPE_IPV4:
         return 4;
     case OLAP_FIELD_TYPE_BIGINT:
     case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
@@ -224,7 +225,6 @@ uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_
     case OLAP_FIELD_TYPE_DATETIME:
     case OLAP_FIELD_TYPE_TIMESTAMP:
     case OLAP_FIELD_TYPE_DECIMAL64:
-    case OLAP_FIELD_TYPE_IPV4:
         return 8;
     case OLAP_FIELD_TYPE_DECIMAL:
         return 12;

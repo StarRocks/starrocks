@@ -13,7 +13,8 @@
 
 namespace starrocks::vectorized {
 
-    typedef int64_t Ipv4;
+    typedef uint Ipv4;
+    static const uint IPV4_LEN = 16;
 
 class Ipv4Value {
 public:
@@ -34,7 +35,7 @@ public:
 
     std::string to_string() const;
 
-    bool from_string(const char* date_str, size_t len);
+    bool from_string(const char* ip_str, size_t len);
 
     // Returns the formatted string length or -1 on error.
 //    int to_string(char* s, size_t n) const;
@@ -88,7 +89,7 @@ namespace std {
 template <>
 struct hash<starrocks::vectorized::Ipv4Value> {
     size_t operator()(const starrocks::vectorized::Ipv4Value& v) const {
-        return std::hash<int64_t>()(v._ip);
+        return std::hash<uint>()(v._ip);
     }
 };
 } // namespace std

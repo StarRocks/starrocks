@@ -396,7 +396,7 @@ static void prepare_ops_datas(const vectorized::Schema& schema, const vectorized
             break;
         case OLAP_FIELD_TYPE_IPV4:
             ops[j] = [](const void* data, int idx, string* buff) {
-                encode_integral(((const int64_t*)data)[idx], buff);
+                encode_integral(((const uint*)data)[idx], buff);
             };
             break;
         default:

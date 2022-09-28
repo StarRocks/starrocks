@@ -305,13 +305,13 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_INT:
     case TYPE_FLOAT:
     case TYPE_DECIMAL32:
+    case TYPE_IPV4:
         return 4;
 
     case TYPE_BIGINT:
     case TYPE_DOUBLE:
     case TYPE_TIME:
     case TYPE_DECIMAL64:
-    case TYPE_IPV4:
         return 8;
 
     case TYPE_DATE:
