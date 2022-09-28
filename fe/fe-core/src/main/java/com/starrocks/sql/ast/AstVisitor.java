@@ -32,6 +32,7 @@ import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
+import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
@@ -51,6 +52,7 @@ import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.ShowExportStmt;
 import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowRolesStmt;
@@ -132,6 +134,19 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowDataStmt(ShowDataStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    // ---------------------------------------- Export Statement -------------------------------------------------------
+    public R visitExportStmt(ExportStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCancelExportStmt(CancelExportStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowExportStmt(ShowExportStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ---------------------------------------- Show Statement ---------------------------------------------------------

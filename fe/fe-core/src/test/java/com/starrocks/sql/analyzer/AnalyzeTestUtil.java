@@ -229,7 +229,7 @@ public class AnalyzeTestUtil {
     public static void analyzeFail(String originStmt, String exceptMessage) {
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
-                    connectContext.getSessionVariable().getSqlMode()).get(0);
+                    connectContext.getSessionVariable()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
         } catch (ParsingException | SemanticException | UnsupportedException e) {

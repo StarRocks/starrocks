@@ -180,13 +180,13 @@ statement
     | dropRoleStatement
 
 
-    // Backup Restore Satement
+    // Backup Restore Statement
     | backupStatement
     | showBackupStatement
     | restoreStatement
     | showRestoreStatement
 
-    // Snapshot Satement
+    // Snapshot Statement
     | showSnapshotStatement
 
     //  Repository Satement
@@ -198,6 +198,11 @@ statement
     | delSqlBlackListStatement
     | showSqlBlackListStatement
     | showWhiteListStatement
+
+    // Export Statement
+    | exportStatement
+    | cancelExportStatement
+    | showExportStatement
 
     // Other statement
     | killStatement
@@ -1159,6 +1164,18 @@ showSqlBlackListStatement
 showWhiteListStatement
     : SHOW WHITELIST
     ;
+
+// ------------------------------------------- Export Statement --------------------------------------------------------
+exportStatement
+    : EXPORT TABLE tableDesc colList=columnAliases? TO path=string properties? broker=brokerDesc
+    ;
+cancelExportStatement
+    : CANCEL EXPORT (FROM db=identifier)? WHERE expression
+    ;
+showExportStatement
+    : SHOW EXPORT (FROM db=identifier)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    ;
+
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showProcesslistStatement
