@@ -69,7 +69,7 @@ public class ResourceMgr implements Writable {
             .build();
 
     public static final ImmutableList<String> NEED_MAPPING_CATALOG_RESOURCES = new ImmutableList.Builder<String>()
-            .add("hive").add("iceberg").add("hudi")
+            .add("hive").add("hudi")
             .build();
 
     @SerializedName(value = "nameToResource")
