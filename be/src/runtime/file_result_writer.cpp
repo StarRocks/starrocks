@@ -113,11 +113,6 @@ Status FileResultWriter::open(RuntimeState* state) {
     return Status::OK();
 }
 
-bool FileResultWriter::can_run_in_bthread() {
-    DCHECK(_fs != nullptr);
-    return _fs->type() != FileSystem::HDFS;
-}
-
 // file name format as: my_prefix_0.csv
 std::string FileResultWriter::_get_next_file_name() {
     std::stringstream ss;
