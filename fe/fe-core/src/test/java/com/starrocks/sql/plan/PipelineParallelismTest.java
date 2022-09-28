@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.PlanFragment;
@@ -69,6 +70,20 @@ public class PipelineParallelismTest extends PlanTestBase {
         // equal to the corresponding session variables.
         Assert.assertEquals(parallelExecInstanceNum, fragment1.getParallelExecNum());
         Assert.assertEquals(1, fragment1.getPipelineDop());
+    }
+
+    @Test
+    public void testOutfile() throws Exception {
+        ExecPlan plan = getExecPlan("SELECT v1,v2,v3 FROM t0  INTO OUTFILE \"hdfs://path/to/result_\""
+                + "FORMAT AS CSV PROPERTIES" +
+                "(\"broker.name\" = \"my_broker\"," +
+                "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
+                "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
+        System.out.println(plan.getExplainString(StatementBase.ExplainLevel.COST));
+        PlanFragment fragment0 = plan.getFragments().get(0);
+        assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "RESULT SINK");
+        Assert.assertEquals(1, fragment0.getParallelExecNum());
+        Assert.assertEquals(numHardwareCores / 2, fragment0.getPipelineDop());
     }
 
     @Test
