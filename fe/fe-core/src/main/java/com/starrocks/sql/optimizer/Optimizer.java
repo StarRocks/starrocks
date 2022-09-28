@@ -426,6 +426,9 @@ public class Optimizer {
             }
             Preconditions.checkState(table instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) table;
+            if (!mv.isActive()) {
+                continue;
+            }
             MaterializationContext materializationContext = mv.getMaterializationContext();
             if (materializationContext != null) {
                 context.addCandidateMvs(materializationContext);
@@ -466,7 +469,8 @@ public class Optimizer {
             TableRelation tableRelation = new TableRelation(tableName);
             LogicalPlan mvQueryPlan =
                     new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(tableRelation);
-            materializationContext = new MaterializationContext(mv, mvQueryPlan.getRoot().getOp(), optimizedPlan);
+            materializationContext = new MaterializationContext(
+                    mv, mvQueryPlan.getRoot().getOp(), optimizedPlan, columnRefFactory);
             // TODO(hkp): it is not a good idea to set back to mv
             mv.setMaterializationContext(materializationContext);
             context.addCandidateMvs(materializationContext);

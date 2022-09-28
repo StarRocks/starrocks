@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
+import org.apache.commons.lang3.tuple.Triple;
 
 import java.util.Collections;
 import java.util.List;
@@ -68,9 +69,10 @@ public class MaterializedViewRewriteRule extends TransformationRule {
         List<ScalarOperator> queryConjuncts = RewriteUtils.getAllPredicates(filter);
         ScalarOperator queryPredicate = Utils.compoundAnd(queryConjuncts);
         // column equality predicates and residual predicates
-        final Pair<ScalarOperator, ScalarOperator> splitedPredicatePair = RewriteUtils.splitPredicate(queryPredicate);
+        // final Pair<ScalarOperator, ScalarOperator> splitedPredicatePair = RewriteUtils.splitPredicate(queryPredicate);
+        final Triple<ScalarOperator, ScalarOperator, ScalarOperator> predicateTriple = RewriteUtils.splitPredicateToTriple(queryPredicate);
         EquivalenceClasses queryEc = new EquivalenceClasses();
-        for (ScalarOperator equalPredicate : Utils.extractConjuncts(splitedPredicatePair.first)) {
+        for (ScalarOperator equalPredicate : Utils.extractConjuncts(predicateTriple.getLeft())) {
             Preconditions.checkState(equalPredicate.isColumnRef());
             ColumnRefOperator left = (ColumnRefOperator) equalPredicate.getChild(0);
             ColumnRefOperator right = (ColumnRefOperator) equalPredicate.getChild(1);
@@ -90,7 +92,7 @@ public class MaterializedViewRewriteRule extends TransformationRule {
                 continue;
             }
 
-            MaterializedViewRewriter rewriter = new MaterializedViewRewriter(splitedPredicatePair, queryEc,
+            MaterializedViewRewriter rewriter = new MaterializedViewRewriter(predicateTriple, queryEc,
                     null, filter, queryRefTables, mvRefTables, mvContext, context);
             OptExpression rewritten = rewriter.rewriteQuery();
             if (rewritten != null) {

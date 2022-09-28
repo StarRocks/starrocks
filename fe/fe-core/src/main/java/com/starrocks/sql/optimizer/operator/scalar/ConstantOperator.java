@@ -92,6 +92,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return new ConstantOperator(type);
     }
 
+    public static ConstantOperator create(Object value, Type type) {
+        return new ConstantOperator(value, type);
+    }
+
     public static ConstantOperator createBoolean(boolean value) {
         return new ConstantOperator(value, Type.BOOLEAN);
     }

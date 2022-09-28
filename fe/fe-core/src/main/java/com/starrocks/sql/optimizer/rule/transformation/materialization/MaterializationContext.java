@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 
 import java.util.List;
@@ -16,12 +17,17 @@ public class MaterializationContext {
     // Logical OptExpression for query of materialized view
     private OptExpression mvExpression;
 
+    // for column -> relationId mapping, column -> table mapping
+    private ColumnRefFactory mvColumnRefFactory;
+
     public MaterializationContext(MaterializedView mv,
                                   Operator scanMvOperator,
-                                  OptExpression mvExpression) {
+                                  OptExpression mvExpression,
+                                  ColumnRefFactory columnRefFactory) {
         this.mv = mv;
         this.scanMvOperator = scanMvOperator;
         this.mvExpression = mvExpression;
+        this.mvColumnRefFactory = columnRefFactory;
     }
 
     public MaterializedView getMv() {
@@ -34,5 +40,9 @@ public class MaterializationContext {
 
     public OptExpression getMvExpression() {
         return mvExpression;
+    }
+
+    public ColumnRefFactory getMvColumnRefFactory() {
+        return mvColumnRefFactory;
     }
 }
