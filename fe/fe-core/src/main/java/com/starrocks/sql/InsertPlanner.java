@@ -96,61 +96,77 @@ public class InsertPlanner {
         //6. Optimize logical plan and build physical plan
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
-        Optimizer optimizer = new Optimizer();
-        PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
-        OptExpression optimizedPlan = optimizer.optimize(
-                session,
-                logicalPlan.getRoot(),
-                requiredPropertySet,
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
+        // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
+        boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
+        boolean canUsePipeline =
+                isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable()) &&
+                        logicalPlan.canUsePipeline();
+        boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
+        try {
+            if (forceDisablePipeline) {
+                session.getSessionVariable().setEnablePipelineEngine(false);
+            }
+            Optimizer optimizer = new Optimizer();
+            PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
+            OptExpression optimizedPlan = optimizer.optimize(
+                    session,
+                    logicalPlan.getRoot(),
+                    requiredPropertySet,
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
 
-        //7. Build fragment exec plan
-        ExecPlan execPlan;
-        if ((queryRelation instanceof SelectRelation &&
-                queryRelation.hasLimit())
-                || insertStmt.getTargetTable() instanceof MysqlTable) {
-            execPlan = new PlanFragmentBuilder().createPhysicalPlan(
-                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames());
-        } else {
-            execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames());
-        }
+            //7. Build fragment exec plan
+            ExecPlan execPlan;
+            if ((queryRelation instanceof SelectRelation &&
+                    queryRelation.hasLimit())
+                    || insertStmt.getTargetTable() instanceof MysqlTable) {
+                execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                        optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                        queryRelation.getColumnOutputNames());
+            } else {
+                execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
+                        optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                        queryRelation.getColumnOutputNames());
+            }
 
-        DescriptorTable descriptorTable = execPlan.getDescTbl();
-        TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
+            DescriptorTable descriptorTable = execPlan.getDescTbl();
+            TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
-        List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-        long tableId = insertStmt.getTargetTable().getId();
-        for (Column column : insertStmt.getTargetTable().getFullSchema()) {
-            SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
-            slotDescriptor.setIsMaterialized(true);
-            slotDescriptor.setType(column.getType());
-            slotDescriptor.setColumn(column);
-            slotDescriptor.setIsNullable(column.isAllowNull());
-            if (column.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
-                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
-                if (dict != null && dict.isPresent()) {
-                    globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), dict.get()));
+            List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+            long tableId = insertStmt.getTargetTable().getId();
+            for (Column column : insertStmt.getTargetTable().getFullSchema()) {
+                SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(column.getType());
+                slotDescriptor.setColumn(column);
+                slotDescriptor.setIsNullable(column.isAllowNull());
+                if (column.getType().isVarchar() &&
+                        IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
+                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
+                    if (dict != null && dict.isPresent()) {
+                        globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), dict.get()));
+                    }
                 }
             }
-        }
-        olapTuple.computeMemLayout();
+            olapTuple.computeMemLayout();
 
-        DataSink dataSink;
-        if (insertStmt.getTargetTable() instanceof OlapTable) {
-            dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
-                    insertStmt.getTargetPartitionIds());
-        } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
-            dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
-        } else {
-            throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
+            DataSink dataSink;
+            if (insertStmt.getTargetTable() instanceof OlapTable) {
+                dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
+                        insertStmt.getTargetPartitionIds());
+            } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
+                dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
+            } else {
+                throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
+            }
+            execPlan.getFragments().get(0).setSink(dataSink);
+            execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
+            return execPlan;
+        } finally {
+            if (forceDisablePipeline) {
+                session.getSessionVariable().setEnablePipelineEngine(true);
+            }
         }
-        execPlan.getFragments().get(0).setSink(dataSink);
-        execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
-        return execPlan;
     }
 
     private void castLiteralToTargetColumnsType(InsertStmt insertStatement) {
