@@ -93,11 +93,16 @@ public class NMysqlChannel extends MysqlChannel {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
+        if (closed) {
+            return;
+        }
         try {
             conn.close();
         } catch (IOException e) {
             LOG.warn("Close channel exception, ignore.");
+        } finally {
+            closed = true;
         }
     }
 
