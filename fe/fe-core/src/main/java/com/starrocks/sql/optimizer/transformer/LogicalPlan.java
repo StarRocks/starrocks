@@ -33,4 +33,8 @@ public class LogicalPlan {
     public List<ColumnRefOperator> getCorrelation() {
         return correlation;
     }
+
+    public boolean canUsePipeline() {
+        return root.getRoot().canUsePipeLine();
+    }
 }
