@@ -312,6 +312,8 @@ public:
 
     virtual int64_t mem_usage() const = 0;
 
+    int nan_direction() const { return _sort_order_flag[0] * _null_first_flag[0]; }
+
 protected:
     inline size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
 

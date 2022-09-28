@@ -860,6 +860,12 @@ public class PlanTestBase {
         return planCount;
     }
 
+    public static void assertContains(String text, String... pattern) {
+        for (String s : pattern) {
+            Assert.assertTrue(text, text.contains(s));
+        }
+    }
+
     public void runFileUnitTest(String filename, boolean debug) {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + filename + ".sql");
