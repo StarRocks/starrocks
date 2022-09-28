@@ -560,10 +560,10 @@ public class GlobalStateMgr {
                 new LeaderTaskExecutor("pending_load_task_scheduler", Config.async_load_task_pool_size,
                         Config.desired_max_waiting_jobs, !isCheckpointCatalog);
         // One load job will be split into multiple loading tasks, the queue size is not
-        // determined, so set async_load_task_pool_size * 10
+        // determined, so set desired_max_waiting_jobs * 10
         this.loadingLoadTaskScheduler = new PriorityLeaderTaskExecutor("loading_load_task_scheduler",
                 Config.async_load_task_pool_size,
-                Config.async_load_task_pool_size * 10, !isCheckpointCatalog);
+                Config.desired_max_waiting_jobs * 10, !isCheckpointCatalog);
         this.loadJobScheduler = new LoadJobScheduler();
         this.loadManager = new LoadManager(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadManager);
