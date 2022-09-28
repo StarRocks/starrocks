@@ -28,7 +28,7 @@
 #include "gutil/strings/split.h"
 #include "util/pretty_printer.h"
 #include "util/string_parser.hpp"
-#include "util/fs_util.h"
+#include "fs/fs_util.h"
 
 namespace starrocks {
 
