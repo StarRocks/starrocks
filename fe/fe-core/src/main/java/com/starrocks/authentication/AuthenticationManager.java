@@ -11,6 +11,9 @@ import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -128,7 +131,14 @@ public class AuthenticationManager {
                     userProperty = new UserProperty();
                     userNameToProperty.put(userIdentity.getQualifiedUser(), userProperty);
                 }
-                GlobalStateMgr.getCurrentState().getEditLog().logCreateUser(userIdentity, info, userProperty);
+                GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+                PrivilegeManager privilegeManager = globalStateMgr.getPrivilegeManager();
+                // init user privilege
+                UserPrivilegeCollection collection = privilegeManager.onCreateUser(userIdentity);
+                short pluginId = privilegeManager.getProviderPluginId();
+                short pluginVersion = privilegeManager.getProviderPluginVerson();
+                globalStateMgr.getEditLog().logCreateUser(
+                        userIdentity, info, userProperty, collection, pluginId, pluginVersion);
             } finally {
                 writeUnlock();
             }
@@ -138,8 +148,13 @@ public class AuthenticationManager {
     }
 
     public void replayCreateUser(
-            UserIdentity userIdentity, UserAuthenticationInfo info, UserProperty userProperty)
-            throws AuthenticationException {
+            UserIdentity userIdentity,
+            UserAuthenticationInfo info,
+            UserProperty userProperty,
+            UserPrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion)
+            throws AuthenticationException, PrivilegeException {
         writeLock();
         try {
             info.analyze();
@@ -147,6 +162,10 @@ public class AuthenticationManager {
             if (userProperty != null) {
                 userNameToProperty.put(userIdentity.getQualifiedUser(), userProperty);
             }
+
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            globalStateMgr.getPrivilegeManager().replayUpdateUserPrivilegeCollection(
+                    userIdentity, privilegeCollection, pluginId, pluginVersion);
         } finally {
             writeUnlock();
         }
@@ -156,11 +175,11 @@ public class AuthenticationManager {
             UserIdentity userIdentity, UserAuthenticationInfo info, boolean shouldExists) throws AuthenticationException {
         if (userToAuthenticationInfo.containsKey(userIdentity)) {
             if (! shouldExists) {
-                throw new AuthenticationException("failed to find user " + userIdentity.getQualifiedUser());
+                throw new AuthenticationException("user " + userIdentity.getQualifiedUser() + " already exists");
             }
         } else {
             if (shouldExists) {
-                throw new AuthenticationException("user " + userIdentity.getQualifiedUser() + " already exists");
+                throw new AuthenticationException("failed to find user " + userIdentity.getQualifiedUser());
             }
         }
         userToAuthenticationInfo.put(userIdentity, info);

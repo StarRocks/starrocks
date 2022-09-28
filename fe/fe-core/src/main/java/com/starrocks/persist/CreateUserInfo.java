@@ -9,6 +9,7 @@ import com.starrocks.authentication.UserProperty;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.privilege.UserPrivilegeCollection;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -21,29 +22,52 @@ public class CreateUserInfo  implements Writable {
     UserAuthenticationInfo authenticationInfo;
     @SerializedName(value = "p")
     UserProperty userProperty;
+    @SerializedName(value = "c")
+    UserPrivilegeCollection userPrivilegeCollection;
+
+    @SerializedName(value = "i")
+    short pluginId;
+
+    @SerializedName(value = "v")
+    short pluginVersion;
+
+    public CreateUserInfo(
+            UserIdentity userIdentity,
+            UserAuthenticationInfo authenticationInfo,
+            UserProperty userProperty,
+            UserPrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        this.userIdentity = userIdentity;
+        this.authenticationInfo = authenticationInfo;
+        this.userProperty = userProperty;
+        this.userPrivilegeCollection = privilegeCollection;
+        this.pluginId = pluginId;
+        this.pluginVersion = pluginVersion;
+    }
 
     public UserIdentity getUserIdentity() {
         return userIdentity;
-    }
-
-    public void setUserIdentity(UserIdentity userIdentity) {
-        this.userIdentity = userIdentity;
     }
 
     public UserAuthenticationInfo getAuthenticationInfo() {
         return authenticationInfo;
     }
 
-    public void setAuthenticationInfo(UserAuthenticationInfo authenticationInfo) {
-        this.authenticationInfo = authenticationInfo;
-    }
-
     public UserProperty getUserProperty() {
         return userProperty;
     }
 
-    public void setUserProperty(UserProperty userProperty) {
-        this.userProperty = userProperty;
+    public UserPrivilegeCollection getUserPrivilegeCollection() {
+        return userPrivilegeCollection;
+    }
+
+    public short getPluginId() {
+        return pluginId;
+    }
+
+    public short getPluginVersion() {
+        return pluginVersion;
     }
 
     @Override
