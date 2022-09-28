@@ -45,6 +45,8 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
+import com.starrocks.task.PriorityLeaderTask;
+import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.transaction.TransactionState;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -341,6 +343,7 @@ public class BrokerLoadJobTest {
                                           @Injectable BrokerFileGroup brokerFileGroup2,
                                           @Injectable BrokerFileGroup brokerFileGroup3,
                                           @Mocked LeaderTaskExecutor leaderTaskExecutor,
+                                          @Mocked PriorityLeaderTaskExecutor priorityLeaderTaskExecutor,
                                           @Injectable OlapTable olapTable,
                                           @Mocked LoadingTaskPlanner loadingTaskPlanner) {
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
@@ -384,6 +387,9 @@ public class BrokerLoadJobTest {
                 result = 2L;
                 result = 3L;
                 leaderTaskExecutor.submit((LeaderTask) any);
+                minTimes = 0;
+                result = true;
+                priorityLeaderTaskExecutor.submit((PriorityLeaderTask) any);
                 minTimes = 0;
                 result = true;
             }
