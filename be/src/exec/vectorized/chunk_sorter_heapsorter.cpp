@@ -168,8 +168,8 @@ void HeapChunkSorter::_do_filter_data_for_type(detail::ChunkHolder* chunk_holder
         int null_compare_flag = _sort_desc.get_column_desc(0).nan_direction();
         auto* __restrict__ filter_data = filter->data();
 
-        for (int i = 0; i < row_sz; ++i) {
-            if (!top_is_null) {
+        if (!top_is_null) {
+            for (int i = 0; i < row_sz; ++i) {
                 filter_data[i] = null_compare_flag < 0;
             }
         }
