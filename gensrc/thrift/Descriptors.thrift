@@ -425,4 +425,8 @@ struct TIMTDescriptor {
   1: optional TIMTType imt_type
   2: optional TOlapTableRouteInfo olap_table
   3: optional bool need_maintain // Not implemented
+
+  // For maintained IMT, some extra information are necessary
+  11: required Types.TUniqueId load_id
+  12: required i64 txn_id
 }
