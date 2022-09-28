@@ -153,6 +153,7 @@ public class PrivilegeManagerTest {
             return new FakeObject(objectTokens);
         }
     }
+
     @Test
     public void testPersist() throws Exception {
         UtFrameUtils.setUpForPersistTest();
@@ -177,6 +178,8 @@ public class PrivilegeManagerTest {
                 PrivilegeTypes.TableActions.SELECT.toString(),
                 DB_TBL_TOKENS));
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        masterManager.save(emptyImage.getDataOutputStream());
 
 
         sql = "grant select on db.tbl to test_user";
@@ -187,6 +190,8 @@ public class PrivilegeManagerTest {
                 PrivilegeTypes.TABLE.toString(),
                 PrivilegeTypes.TableActions.SELECT.toString(),
                 DB_TBL_TOKENS));
+        UtFrameUtils.PseudoImage grantImage = new UtFrameUtils.PseudoImage();
+        masterManager.save(grantImage.getDataOutputStream());
 
         sql = "revoke select on db.tbl from test_user";
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, rootCtx);
@@ -196,10 +201,13 @@ public class PrivilegeManagerTest {
                 PrivilegeTypes.TABLE.toString(),
                 PrivilegeTypes.TableActions.SELECT.toString(),
                 DB_TBL_TOKENS));
+        UtFrameUtils.PseudoImage revokeImage = new UtFrameUtils.PseudoImage();
+        masterManager.save(revokeImage.getDataOutputStream());
 
 
         // start to replay
-        PrivilegeManager followerManager = new PrivilegeManager(masterGlobalStateMgr, new FakeProvider());
+        PrivilegeManager followerManager = PrivilegeManager.load(
+                emptyImage.getDataInputStream(), masterGlobalStateMgr, new FakeProvider());
 
         UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
         followerManager.replayUpdateUserPrivilegeCollection(
@@ -214,6 +222,23 @@ public class PrivilegeManagerTest {
         followerManager.replayUpdateUserPrivilegeCollection(
                 info.getUserIdentity(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
         Assert.assertFalse(followerManager.check(
+                testCtx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
+
+
+        // check image
+        PrivilegeManager imageManager = PrivilegeManager.load(
+                grantImage.getDataInputStream(), masterGlobalStateMgr, new FakeProvider());
+        Assert.assertTrue(imageManager.check(
+                testCtx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
+        imageManager = PrivilegeManager.load(
+                revokeImage.getDataInputStream(), masterGlobalStateMgr, new FakeProvider());
+        Assert.assertFalse(imageManager.check(
                 testCtx,
                 PrivilegeTypes.TABLE.toString(),
                 PrivilegeTypes.TableActions.SELECT.toString(),

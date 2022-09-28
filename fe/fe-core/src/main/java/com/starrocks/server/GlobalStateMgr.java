@@ -1320,6 +1320,7 @@ public class GlobalStateMgr {
     public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
         if (usingNewPrivilege) {
             this.authenticationManager = AuthenticationManager.load(dis);
+            this.privilegeManager = PrivilegeManager.load(dis, this, null);
         }
     }
 
@@ -1530,6 +1531,7 @@ public class GlobalStateMgr {
     public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
         if (usingNewPrivilege) {
             this.authenticationManager.save(dos);
+            this.privilegeManager.save(dos);
         }
     }
 
