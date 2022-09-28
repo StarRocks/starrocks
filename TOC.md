@@ -71,6 +71,7 @@
     + [参数配置](/administration/Configuration.md)
     + [监控报警](/administration/Monitor_and_Alert.md)
     + [集群管理](/administration/Cluster_administration.md)
+    + [启用 FQDN 访问](/administration/enable_fqdn.md)
     + [升级 DorisDB 到 StarRocks](/administration/update_from_dorisdb.md)
     + [升级 Apache Doris 到 StarRocks](/administration/update_from_doris.md)
     + 管理资源
