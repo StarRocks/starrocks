@@ -57,10 +57,8 @@ Status HiveDataSource::open(RuntimeState* state) {
     }
 
     _use_block_cache = config::block_cache_enable;
-    if (!_use_block_cache) {
-        if (state->query_options().__isset.use_scan_block_cache) {
-            _use_block_cache = state->query_options().use_scan_block_cache;
-        }
+    if (state->query_options().__isset.use_scan_block_cache) {
+        _use_block_cache &= state->query_options().use_scan_block_cache;
     }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
