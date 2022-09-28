@@ -12,7 +12,7 @@ ST_AsText(geo)
 
 ## 参数说明
 
-`geo`: 待转化的参数, 支持的数据类型为 GEOMETRY。
+`geo`: 待转化的参数，支持的数据类型为 GEOMETRY。
 
 ## 返回值说明
 

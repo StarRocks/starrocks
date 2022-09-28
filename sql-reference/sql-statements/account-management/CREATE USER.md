@@ -73,7 +73,7 @@ auth_option: {
     CREATE USER jack@'172.10.1.10' IDENTIFIED WITH mysql_native_password AS '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
     ```
 
-    后面加密的内容可以通过 PASSWORD()获得到, 例如：
+    后面加密的内容可以通过 PASSWORD()获得到，例如：
 
     ```sql
     SELECT PASSWORD('123456');

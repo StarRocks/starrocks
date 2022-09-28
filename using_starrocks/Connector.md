@@ -4,7 +4,7 @@
 
 ### Catalog
 
-StarRocks中的Catalog包括两种类型，分别为Internal Catalog与External Catalog. Catalog包含用户所有的Database. 当前StarRocks中存在一个默认的Internal Catalog实例，其默认值为`default_catalog`. 对于存储在StarRocks中的Database/Table/View 等，均在Internal Catalog下，如OlapTable和External Hive Table。对于External Catalog, 是用户通过执行Create Catalog DDL语句所得。每个External Catalog下存在一个Connector来获取外部的数据源信息。当前版本仅支持Hive Connector. 用户可指定fully-qualified进行查询指定catalog的数据表。如通过指定`hive_catalog.hive_db.hive_table`来查询用户自定义的hive_catalog中的表。也可以通过指定`default_catalog.my_db.my_olap_table`来查询Olap表，同时也可对不同catalog间的数据进行联邦查询。
+StarRocks中的Catalog包括两种类型，分别为Internal Catalog与External Catalog. Catalog包含用户所有的Database. 当前StarRocks中存在一个默认的Internal Catalog实例，其默认值为`default_catalog`. 对于存储在StarRocks中的Database/Table/View 等，均在Internal Catalog下，如OlapTable和External Hive Table。对于External Catalog，是用户通过执行Create Catalog DDL语句所得。每个External Catalog下存在一个Connector来获取外部的数据源信息。当前版本仅支持Hive Connector. 用户可指定fully-qualified进行查询指定catalog的数据表。如通过指定`hive_catalog.hive_db.hive_table`来查询用户自定义的hive_catalog中的表。也可以通过指定`default_catalog.my_db.my_olap_table`来查询Olap表，同时也可对不同catalog间的数据进行联邦查询。
 
 ### Connector
 

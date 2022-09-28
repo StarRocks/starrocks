@@ -22,9 +22,9 @@
 
 * `array` 只支持一维数组。
 * `array` 不支持 Decimal 类型。
-* 如果参数 `sep` 为 NULL, 返回值为 NULL。
+* 如果参数 `sep` 为 NULL，返回值为 NULL。
 * 如果没有传 `null_replace_str` 参数，NULL 会被丢弃。
-* 如果参数 `null_replace_str` 为 NULL, 返回值为 NULL。
+* 如果参数 `null_replace_str` 为 NULL，返回值为 NULL。
 
 ## 示例
 

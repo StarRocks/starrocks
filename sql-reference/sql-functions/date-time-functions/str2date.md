@@ -2,7 +2,7 @@
 
 ## 功能
 
-通过 `format` 指定的方式将 `str` 转化为 `DATE` 类型, 如果转化结果不对返回 NULL。
+通过 `format` 指定的方式将 `str` 转化为 `DATE` 类型，如果转化结果不对返回 NULL。
 
 >注：功能与 [str_to_date](../date-time-functions/str_to_date.md) 函数相同，只是返回值数据类型不同。
 

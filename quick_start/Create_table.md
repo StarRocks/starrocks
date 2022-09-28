@@ -177,7 +177,7 @@ SHOW ALTER TABLE COLUMN\G;
 
 当作业状态为 FINISHED，则表示作业完成，新的表结构修改已生效。
 
-修改 Schema 完成之后, 您可以通过以下命令查看最新的表结构。
+修改 Schema 完成之后，您可以通过以下命令查看最新的表结构。
 
 ```sql
 DESC table_name;
@@ -229,7 +229,7 @@ CREATE USER 'test' IDENTIFIED by '123456';
 GRANT ALL on example_db to test;
 ```
 
-通过登录被授权的 `test` 账户,其他用户就可以操作 `example_db` 数据库了。
+通过登录被授权的 `test` 账户，就可以操作 `example_db` 数据库。
 
 ```bash
 mysql -h 127.0.0.1 -P9030 -utest -p123456

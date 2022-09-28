@@ -2,7 +2,7 @@
 
 ## 功能
 
-计算地球两点之间的球面距离, 单位是「米」。
+计算地球两点之间的球面距离，单位是「米」。
 
 ## 语法
 
@@ -12,13 +12,13 @@ ST_Distance_Sphere(x_lng, x_lat, y_lng, y_lat)
 
 ## 参数说明
 
-`x_lng`: X 点的经度, 支持的数据类型为 DOUBLE。
+`x_lng`: X 点的经度，支持的数据类型为 DOUBLE。
 
-`x_lat`: X 点的纬度, 支持的数据类型为 DOUBLE。
+`x_lat`: X 点的纬度，支持的数据类型为 DOUBLE。
 
-`y_lng`: Y 点的经度, 支持的数据类型为 DOUBLE。
+`y_lng`: Y 点的经度，支持的数据类型为 DOUBLE。
 
-`y_lat`: Y 点的纬度, 支持的数据类型为 DOUBLE。
+`y_lat`: Y 点的纬度，支持的数据类型为 DOUBLE。
 
 ## 返回值说明
 

@@ -157,7 +157,7 @@ StarRocks 提供 Flink CDC connector、flink-connector-starrocks 和 StarRocks-m
     flink.starrocks.load-url= 192.168.1.1:8030
     flink.starrocks.username=root
     flink.starrocks.password=
-    # 如果导入数据不方便选出合适的分隔符可以考虑使用 Json 格式，但是会有一定的性能损失, 使用方法：用以下参数替换 flink.starrocks.sink.properties.column_separator 和 flink.starrocks.sink.properties.row_delimiter 参数
+    # 如果导入数据不方便选出合适的分隔符可以考虑使用 Json 格式，但是会有一定的性能损失，使用方法：用以下参数替换 flink.starrocks.sink.properties.column_separator 和 flink.starrocks.sink.properties.row_delimiter 参数
     flink.starrocks.sink.properties.strip_outer_array=true
     flink.starrocks.sink.properties.format=json
     ```
