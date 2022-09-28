@@ -184,6 +184,9 @@ public:
 
     virtual uint64_t get_lookup_count() = 0;
     virtual uint64_t get_hit_count() = 0;
+    
+    //  Decrease or increase cache capacity.
+    virtual bool adjust_capacity(int64_t delta, size_t min_capacity = 0) = 0;
 
 private:
     Cache(const Cache&) = delete;
@@ -324,12 +327,17 @@ public:
     void get_cache_status(rapidjson::Document* document) override;
     void set_capacity(size_t capacity) override;
     size_t get_capacity() override;
+<<<<<<< HEAD
     uint64_t get_lookup_count() override;
     uint64_t get_hit_count() override;
+=======
+    bool adjust_capacity(int64_t delta, size_t min_capacity = 0) override;
+>>>>>>> 4f2d65199 (Add adjust size api to page cache)
 
 private:
     static uint32_t _hash_slice(const CacheKey& s);
     static uint32_t _shard(uint32_t hash);
+    void _set_capacity(size_t capacity);
 
     LRUCache _shards[kNumShards];
     std::mutex _mutex;
