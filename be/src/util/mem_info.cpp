@@ -25,10 +25,10 @@
 #include <fstream>
 #include <iostream>
 
+#include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "util/pretty_printer.h"
 #include "util/string_parser.hpp"
-#include "fs/fs_util.h"
 
 namespace starrocks {
 
