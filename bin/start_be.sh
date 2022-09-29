@@ -116,7 +116,9 @@ if [ ! -d $UDF_RUNTIME_DIR ]; then
     mkdir -p ${UDF_RUNTIME_DIR}
 fi
 
-rm -f ${UDF_RUNTIME_DIR}/*
+if [ ! -z ${UDF_RUNTIME_DIR} ]; then
+    rm -f ${UDF_RUNTIME_DIR}/*
+fi
 
 pidfile=$PID_DIR/be.pid
 
@@ -136,7 +138,7 @@ if [[ $(ulimit -n) -lt 60000 ]]; then
   ulimit -n 65535
 fi
 
-export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:30000,dirty_decay_ms:30000,lg_tcache_max:23,metadata_thp:auto,background_thread:true,prof:true"
+export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true"
 
 # Prevent JVM from handling any internally or externally generated signals.
 # Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.

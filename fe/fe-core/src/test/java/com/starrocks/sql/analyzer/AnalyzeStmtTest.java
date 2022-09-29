@@ -56,13 +56,16 @@ public class AnalyzeStmtTest {
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db").useDatabase("db");
         starRocksAssert.withTable(createTblStmtStr);
+
+        createTblStmtStr = "create table db.tb2(kk1 int, kk2 json) "
+                + "DUPLICATE KEY(kk1) distributed by hash(kk1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
     }
 
     @Test
     public void testAllColumns() {
         String sql = "analyze table db.tbl";
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
-
         Assert.assertNull(analyzeStmt.getColumnNames());
     }
 
@@ -97,6 +100,18 @@ public class AnalyzeStmtTest {
     public void testProperties() {
         String sql = "analyze full table db.tbl properties('expire_sec' = '30')";
         analyzeFail(sql, "Property 'expire_sec' is not valid");
+
+        sql = "analyze full table db.tbl";
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertFalse(analyzeStmt.isAsync());
+
+        sql = "analyze full table db.tbl with sync mode";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertFalse(analyzeStmt.isAsync());
+
+        sql = "analyze full table db.tbl with async mode";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertTrue(analyzeStmt.isAsync());
     }
 
     @Test
@@ -157,6 +172,7 @@ public class AnalyzeStmtTest {
                         "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint(20))) as string), cast(min(cast(min as bigint(20))) as string) " +
                         "FROM column_statistics WHERE table_id = 10004 and column_name = \"v2\" GROUP BY db_id, table_id, column_name",
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(10002L, 10004L, Lists.newArrayList(v1, v2)));
+
         Assert.assertEquals("SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
                         "data_size, distinct_count, null_count, max, min " +
                         "FROM table_statistic_v1 WHERE db_id = 10002 and table_id = 10004 and column_name in ('v1', 'v2')",
@@ -261,5 +277,26 @@ public class AnalyzeStmtTest {
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+    }
+
+    @Test
+    public void testObjectColumns() {
+        Database database = GlobalStateMgr.getCurrentState().getDb("db");
+        OlapTable table = (OlapTable) database.getTable("tb2");
+
+        Column kk1 = table.getColumn("kk1");
+        Column kk2 = table.getColumn("kk2");
+
+        Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
+                        "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), " +
+                        " cast(max(cast(max as int(11))) as string), cast(min(cast(min as int(11))) as string) " +
+                        "FROM column_statistics WHERE table_id = 10138 and column_name = \"kk1\" " +
+                        "GROUP BY db_id, table_id, column_name " +
+                        "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
+                        "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
+                        "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string) " +
+                        "FROM column_statistics WHERE table_id = 10138 and column_name = \"kk2\" " +
+                        "GROUP BY db_id, table_id, column_name",
+                StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(), Lists.newArrayList(kk1, kk2)));
     }
 }

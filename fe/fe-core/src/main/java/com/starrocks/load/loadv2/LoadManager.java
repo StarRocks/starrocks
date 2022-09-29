@@ -25,6 +25,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.AlterLoadStmt;
 import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.catalog.Database;
@@ -43,6 +44,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
+import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -120,6 +122,36 @@ public class LoadManager implements Writable {
         // The job must be submitted after edit log.
         // It guarantee that load job has not been changed before edit log.
         loadJobScheduler.submitJob(loadJob);
+    }
+
+    public void alterLoadJob(AlterLoadStmt stmt) throws DdlException {
+        Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDbName());
+        if (db == null) {
+            throw new DdlException("Db does not exist. name: " + stmt.getDbName());
+        }
+
+        LoadJob loadJob = null;
+        readLock();
+        try {
+            Map<String, List<LoadJob>> labelToLoadJobs = dbIdToLabelToLoadJobs.get(db.getId());
+            if (labelToLoadJobs == null) {
+                throw new DdlException("Load job does not exist");
+            }
+            List<LoadJob> loadJobList = labelToLoadJobs.get(stmt.getLabel());
+            if (loadJobList == null) {
+                throw new DdlException("Load job does not exist");
+            }
+            Optional<LoadJob> loadJobOptional = loadJobList.stream().filter(entity -> !entity.isTxnDone()).findFirst();
+            if (!loadJobOptional.isPresent()) {
+                throw new DdlException("There is no uncompleted job which label is " + stmt.getLabel());
+            }
+            loadJob = loadJobOptional.get();
+
+        } finally {
+            readUnlock();
+        }
+
+        loadJob.alterJob(stmt);
     }
 
     public void replayCreateLoadJob(LoadJob loadJob) {
@@ -238,6 +270,17 @@ public class LoadManager implements Writable {
             LOG.info("remove expired job: {}", job);
             unprotectedRemoveJobReleatedMeta(job);
         }
+    }
+
+    public void replayAlterLoadJob(AlterLoadJobOperationLog op) {
+        long jobId = op.getJobId();
+        LoadJob job = idToLoadJob.get(jobId);
+        if (job == null) {
+            LOG.warn("replay alter load job state failed. error: job not found, id: {}", jobId);
+            return;
+        }
+
+        job.replayAlterJob(op);
     }
 
     public long getLoadJobNum(JobState jobState, long dbId) {

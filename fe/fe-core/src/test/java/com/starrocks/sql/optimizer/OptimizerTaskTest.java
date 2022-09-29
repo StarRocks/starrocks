@@ -79,7 +79,7 @@ public class OptimizerTaskTest {
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setMaxTransformReorderJoins(8);
         ctx.getSessionVariable().setEnableReplicationJoin(false);
-        ctx.getSessionVariable().setJoinImplementationMode("hash");
+        ctx.getSessionVariable().setJoinImplementationMode("auto");
         ctx.setDumpInfo(new MockDumpInfo());
         call = new CallOperator(FunctionSet.SUM, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
         new Expectations(call) {{
@@ -164,7 +164,7 @@ public class OptimizerTaskTest {
         assertEquals(memo.getGroups().get(2).getLogicalExpressions().
                 get(0).getOp().getOpType(), OperatorType.LOGICAL_JOIN);
         assertEquals(memo.getGroups().get(2).getPhysicalExpressions().
-                get(0).getOp().getOpType(), OperatorType.PHYSICAL_HASH_JOIN);
+                get(0).getOp().getOpType(), OperatorType.PHYSICAL_NESTLOOP_JOIN);
 
         MemoStatusChecker checker = new MemoStatusChecker(memo, 2, new ColumnRefSet(Lists.newArrayList(column1)));
         checker.checkStatus();
@@ -232,7 +232,7 @@ public class OptimizerTaskTest {
         assertEquals(memo.getGroups().get(2).getLogicalExpressions().
                 get(0).getOp().getOpType(), OperatorType.LOGICAL_JOIN);
         assertEquals(memo.getGroups().get(2).getPhysicalExpressions().
-                get(0).getOp().getOpType(), OperatorType.PHYSICAL_HASH_JOIN);
+                get(0).getOp().getOpType(), OperatorType.PHYSICAL_NESTLOOP_JOIN);
 
         assertEquals(memo.getGroups().get(3).getLogicalExpressions().size(), 1);
         assertEquals(memo.getGroups().get(3).getPhysicalExpressions().size(), 1);
@@ -245,7 +245,7 @@ public class OptimizerTaskTest {
         assertEquals(memo.getGroups().get(4).getLogicalExpressions().
                 get(0).getOp().getOpType(), OperatorType.LOGICAL_JOIN);
         assertEquals(memo.getGroups().get(4).getPhysicalExpressions().
-                get(0).getOp().getOpType(), OperatorType.PHYSICAL_HASH_JOIN);
+                get(0).getOp().getOpType(), OperatorType.PHYSICAL_NESTLOOP_JOIN);
     }
 
     @Test
@@ -558,8 +558,8 @@ public class OptimizerTaskTest {
         OptExpression physicalTree = optimizer.optimize(ctx, topJoin, new PhysicalPropertySet(),
                 new ColumnRefSet(Lists.newArrayList(column1)),
                 columnRefFactory);
-        assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_HASH_JOIN);
-        assertEquals(physicalTree.inputAt(0).getOp().getOpType(), OperatorType.PHYSICAL_HASH_JOIN);
+        assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_NESTLOOP_JOIN);
+        assertEquals(physicalTree.inputAt(0).getOp().getOpType(), OperatorType.PHYSICAL_NESTLOOP_JOIN);
         assertEquals(physicalTree.inputAt(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
     }
 

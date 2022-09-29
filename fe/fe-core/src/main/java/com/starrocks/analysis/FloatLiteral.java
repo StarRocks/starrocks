@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Objects;
 
 public class FloatLiteral extends LiteralExpr {
     private double value;
@@ -212,7 +213,7 @@ public class FloatLiteral extends LiteralExpr {
 
     @Override
     public int hashCode() {
-        return 31 * super.hashCode() + Double.hashCode(value);
+        return Objects.hash(super.hashCode(), value);
     }
 }
 

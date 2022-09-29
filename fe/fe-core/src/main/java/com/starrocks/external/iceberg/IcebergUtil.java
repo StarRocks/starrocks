@@ -4,6 +4,7 @@ package com.starrocks.external.iceberg;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -214,7 +215,7 @@ public class IcebergUtil {
                 fullSchema, properties);
     }
 
-    static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {
+    public static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {
         if (icebergType == null) {
             return Type.NULL;
         }
@@ -251,7 +252,12 @@ public class IcebergUtil {
                 int scale = ((Types.DecimalType) icebergType).scale();
                 return ScalarType.createUnifiedDecimalType(precision, scale);
             case LIST:
-                return convertColumnType(icebergType.asListType().elementType());
+                Type type = convertToArrayType(icebergType);
+                if (type.isArrayType()) {
+                    return type;
+                } else {
+                    return Type.UNKNOWN_TYPE;
+                }
             case TIME:
             case FIXED:
             case BINARY:
@@ -265,5 +271,9 @@ public class IcebergUtil {
 
     public static Database convertToSRDatabase(String dbName) {
         return new Database(connectorDbIdIdGenerator.getNextId().asInt(), dbName);
+    }
+
+    private static ArrayType convertToArrayType(org.apache.iceberg.types.Type icebergType) {
+        return new ArrayType(convertColumnType(icebergType.asNestedType().asListType().elementType()));
     }
 }

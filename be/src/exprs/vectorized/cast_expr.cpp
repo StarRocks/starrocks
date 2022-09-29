@@ -18,16 +18,18 @@
 #include "exprs/vectorized/decimal_cast_expr.h"
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/casts.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "runtime/large_int_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
+#include "runtime/types.h"
 #include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
+#include "velocypack/Iterator.h"
 
 namespace starrocks::vectorized {
+
 #define THROW_RUNTIME_ERROR_WITH_TYPE(TYPE)              \
     std::stringstream ss;                                \
     ss << "not supported type " << type_to_string(TYPE); \
@@ -1360,7 +1362,7 @@ private:
         }                                                                  \
     }
 
-Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
+Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& node) {
     PrimitiveType to_type = TypeDescriptor::from_thrift(node.type).type;
     PrimitiveType from_type = thrift_to_type(node.child_type);
 
@@ -1389,7 +1391,7 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
             cast.slot_ref.slot_id = 0;
             cast.slot_ref.tuple_id = 0;
 
-            Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(cast);
+            Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(pool, cast);
             if (cast_element_expr == nullptr) {
                 LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", array_field_type_cast_from.debug_string(),
                                                     array_field_type_cast_to.debug_string());
@@ -1397,6 +1399,10 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
             }
             ColumnRef* child = new ColumnRef(cast);
             cast_element_expr->add_child(child);
+            if (pool) {
+                pool->add(cast_element_expr);
+                pool->add(child);
+            }
 
             return new VectorizedCastArrayExpr(cast_element_expr, node);
         } else {
@@ -1424,6 +1430,32 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
             return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_HLL, false>(node);
         }
     }
+    // Cast string to array<ANY>
+    if ((from_type == TYPE_VARCHAR || from_type == TYPE_JSON) && to_type == TYPE_ARRAY) {
+        TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
+        TExprNode cast;
+        cast.type = cast_to.children[0].to_thrift();
+        cast.child_type = to_thrift(from_type);
+        cast.slot_ref.slot_id = 0;
+        cast.slot_ref.tuple_id = 0;
+
+        Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(pool, cast);
+        if (cast_element_expr == nullptr) {
+            return nullptr;
+        }
+        ColumnRef* child = new ColumnRef(cast);
+        cast_element_expr->add_child(child);
+        if (pool) {
+            pool->add(cast_element_expr);
+            pool->add(child);
+        }
+
+        if (from_type == TYPE_VARCHAR) {
+            return new CastStringToArray(node, cast_element_expr, cast_to);
+        } else {
+            return new CastJsonToArray(node, cast_element_expr, cast_to);
+        }
+    }
 
     if (to_type == TYPE_VARCHAR) {
         switch (from_type) {
@@ -1445,7 +1477,8 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
             CASE_TO_STRING_FROM(TYPE_DECIMAL128, allow_throw_exception);
             CASE_TO_STRING_FROM(TYPE_JSON, allow_throw_exception);
         default:
-            LOG(WARNING) << "vectorized engine not support from type: " << from_type << ", to type: " << to_type;
+            LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
+                         << ", to type: " << type_to_string(to_type);
             return nullptr;
         }
     } else if (from_type == TYPE_JSON || to_type == TYPE_JSON) {
@@ -1462,7 +1495,8 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
                 CASE_FROM_JSON_TO(TYPE_DOUBLE, allow_throw_exception);
                 CASE_FROM_JSON_TO(TYPE_JSON, allow_throw_exception);
             default:
-                LOG(WARNING) << "vectorized engine not support from type: " << from_type << ", to type: " << to_type;
+                LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
+                             << ", to type: " << type_to_string(to_type);
                 return nullptr;
             }
         } else {
@@ -1482,7 +1516,8 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
                 CASE_TO_JSON(TYPE_DECIMAL64, allow_throw_exception);
                 CASE_TO_JSON(TYPE_DECIMAL128, allow_throw_exception);
             default:
-                LOG(WARNING) << "vectorized engine not support from type: " << from_type << ", to type: " << to_type;
+                LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
+                             << ", to type: " << type_to_string(to_type);
                 return nullptr;
             }
         }
@@ -1504,7 +1539,7 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
             CASE_TO_TYPE(TYPE_DECIMAL64, allow_throw_exception);
             CASE_TO_TYPE(TYPE_DECIMAL128, allow_throw_exception);
         default:
-            LOG(WARNING) << "vectorized engine not support to type: " << to_type;
+            LOG(WARNING) << "vectorized engine not support cast to type: " << type_to_string(to_type);
             return nullptr;
         }
     }
@@ -1520,7 +1555,7 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
         node.type = to.to_thrift();
         node.child_type = to_thrift(from.type);
 
-        expr = from_thrift(node);
+        expr = from_thrift(pool, node);
     } else {
         const TypeDescriptor* from_type = &from;
         const TypeDescriptor* to_type = &to;
@@ -1540,7 +1575,7 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
         node.slot_ref.slot_id = 0;
         node.slot_ref.tuple_id = 0;
 
-        Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(node);
+        Expr* cast_element_expr = from_thrift(pool, node);
         if (cast_element_expr == nullptr) {
             LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", from.debug_string(), to.debug_string());
             return nullptr;

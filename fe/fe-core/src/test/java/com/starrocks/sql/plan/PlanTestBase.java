@@ -70,6 +70,7 @@ public class PlanTestBase {
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
 
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -1052,6 +1053,7 @@ public class PlanTestBase {
     @AfterClass
     public static void afterClass() {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
     }
 
     public static void assertContains(String text, String... pattern) {

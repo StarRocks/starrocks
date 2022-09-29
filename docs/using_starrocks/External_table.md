@@ -761,8 +761,9 @@ When you create an external table, you need to specify the data types of columns
 | UUID              | STRING / VARCHAR           |
 | FIXED(L)          | CHAR                       |
 | BINARY            | VARCHAR                    |
+| LIST              | ARRAY                      |
 
-StarRocks does not support querying Iceberg data whose data type is TIMESTAMPTZ, STRUCT, LIST, and MAP.
+StarRocks does not support querying Iceberg data whose data type is TIMESTAMPTZ, STRUCT, and MAP.
 
 #### Step 4: Query the data in Apache Iceberg
 

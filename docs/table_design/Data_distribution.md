@@ -315,11 +315,7 @@ ALTER TABLE site_access
 DROP PARTITION p1;
 ```
 
-<<<<<<< HEAD
-In a StarRocks system, a partitioned bucket is a unit of actual physical file organization. Since 2.4, StarRocks supports parallel scanning of a tablet. A tablet related to a query can be scanned by multiple threads in parallel, so that the number of tablets can not limit query performance. As a result, you can  set a proper number of buckets  more easily. First, you need to estimate data volume in each partition. And then you can figure out the number of buckets by allocating every 10 GB raw data to one tablet.  
-=======
 > Note: If a partition is deleted within 24 hours, the data of the partition remains in Trash. During the period, you can execute the [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) statement to restore this data.
->>>>>>> 14aa18d03 ([Doc] update data distribution (#11426))
 
 ### Restore a partition
 
@@ -398,5 +394,5 @@ SET("dynamic_partition.enable"="false");
 
 > Note:
 >
-> - To check the properties of dynamic partitioning of a table, execute the SHOW CREATE TABLE statement.
+> - To check the properties of dynamic partitioning of a table, execute the [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md) statement.
 > - You can also use the ALTER TABLE statement to modify other properties of a table.
