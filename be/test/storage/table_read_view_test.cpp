@@ -11,6 +11,7 @@
 #include "column/datum_convert.h"
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
+#include "exec/stream/imt_state_table.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
@@ -177,7 +178,7 @@ public:
         TOlapTablePartitionParam partition_param = build_partition();
         TOlapTableLocationParam location_param = build_location();
 
-        TOlapTableRouteInfo olap_table;
+        TIMTStateTable olap_table;
         olap_table.__set_db_name("read_view_test_db");
         olap_table.__set_table_name("read_view_test_table");
         olap_table.__set_schema(schema_param);
@@ -188,7 +189,7 @@ public:
         descriptor.__set_imt_type(TIMTType::OLAP_TABLE);
         descriptor.__set_olap_table(olap_table);
 
-        _table_route_info = std::make_shared<OlapTableRouteInfo>();
+        _table_route_info = std::make_shared<IMTStateTable>();
         Status status = _table_route_info->init(descriptor);
         if (!status.ok()) {
             std::cout << status.get_error_msg() << std::endl;
@@ -219,7 +220,7 @@ protected:
     int64_t table_id;
     int64_t version;
     std::vector<TabletSharedPtr> _tablets;
-    std::shared_ptr<OlapTableRouteInfo> _table_route_info;
+    std::shared_ptr<IMTStateTable> _table_route_info;
 };
 
 void collect_chunk_iterator_result(StatusOr<ChunkIteratorPtr> status_or, DatumRowVector& result) {
@@ -304,7 +305,10 @@ TEST_F(TableReadViewTest, test_basic_read) {
     params.output_schema.append(tablet_schema.field(2));
     params.output_schema.append(tablet_schema.field(4));
     // 2.4 create TableReadView
-    TableReadViewSharedPtr table_read_view = Table::build_table(_table_route_info)->create_table_read_view(params);
+    auto table = std::make_shared<Table>(_table_route_info->table_name(),
+                                         _table_route_info->table_id(),
+                                         _table_route_info->get_tablets());
+    TableReadViewSharedPtr table_read_view = table->create_table_read_view(params);
 
     DatumRowVector expect_results = get_expect_output(rows, std::vector<int>{0, 2, 4});
     ReadOption read_option;

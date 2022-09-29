@@ -30,7 +30,6 @@ public:
     Status set_finishing(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
-//    bool pending_finish() const override;
 
     void close(RuntimeState* state) override;
 
