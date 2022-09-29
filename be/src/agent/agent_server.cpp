@@ -186,7 +186,7 @@ void AgentServer::Impl::init_or_die() {
     // callback, so that we can match the dop of FE clone task scheduling.
     BUILD_DYNAMIC_TASK_THREAD_POOL("clone", MIN_CLONE_TASK_THREADS_IN_POOL,
                                    _exec_env->store_paths().size() * config::parallel_clone_task_per_path,
-                                   std::numeric_limits<int>::max(), _thread_pool_clone);
+                                   DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 #endif
 
     // It is the same code to create workers of each type, so we use a macro
@@ -340,7 +340,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         auto signature = task->signature;                                                                          \
         if (register_task_info(task_type, signature)) {                                                            \
             LOG(INFO) << "Submit task success. type=" << t_task_type << ", signature=" << signature;               \
-            pool->submit_func(                                                                                     \
+            ret_st = pool->submit_func(                                                                            \
                     std::bind(do_func, std::make_shared<AGENT_REQ>(*task, task->request, time(nullptr)), env));    \
         } else {                                                                                                   \
             LOG(INFO) << "Submit task failed, already exists type=" << t_task_type << ", signature=" << signature; \
