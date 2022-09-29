@@ -174,7 +174,19 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
             _collect_iter = new_heap_merge_iterator(seg_iters);
         }
     } else if (params.sorted_by_keys && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) && seg_iters.size() > 1) {
-        _collect_iter = new_heap_merge_iterator(seg_iters);
+        if (params.profile != nullptr && (params.is_pipeline || params.profile->parent() != nullptr)) {
+            RuntimeProfile* p;
+            if (params.is_pipeline) {
+                p = params.profile;
+            } else {
+                p = params.profile->parent()->create_child("MERGE", true, true);
+            }
+            RuntimeProfile::Counter* sort_timer = ADD_TIMER(p, "Sort");
+            _collect_iter = new_heap_merge_iterator(seg_iters);
+            _collect_iter = timed_chunk_iterator(_collect_iter, sort_timer);
+        } else {
+            _collect_iter = new_heap_merge_iterator(seg_iters);
+        }
     } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr) ||
                (select_all_keys && seg_iters.size() == 1)) {
         //             UnionIterator
