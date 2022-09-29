@@ -7,6 +7,9 @@
 #include "exec/tablet_sink.h"
 #include "exec/vectorized/tablet_info.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "storage/table.h"
+#include "storage/table_read_view.h"
+#include "storage/table_write_view.h"
 
 namespace starrocks {
 

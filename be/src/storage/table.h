@@ -4,7 +4,6 @@
 
 #include <utility>
 
-#include "exec/stream/imt_olap_table.h"
 #include "storage/table_read_view.h"
 #include "storage/table_write_view.h"
 #include "storage/tablet.h"
@@ -17,7 +16,7 @@ namespace starrocks {
 // And we can extend this abstraction to do more things in the future.
 class Table {
 public:
-    // TODO construct with OlapTableRouteInfo
+    // TODO construct with IMTStateTable
     explicit Table(std::string table_name, int64_t table_id, const std::vector<int64_t>& tablet_ids)
             : _table_name(table_name), _table_id(table_id), _tablet_ids(tablet_ids) {}
 
@@ -26,10 +25,6 @@ public:
 
     // TODO create write view
     TableWriteViewSharedPtr create_table_write_view() { return nullptr; }
-
-    static std::shared_ptr<Table> build_table(std::shared_ptr<OlapTableRouteInfo> table_info) {
-        return std::make_shared<Table>(table_info->table_name(), table_info->table_id(), table_info->get_tablets());
-    }
 
 private:
     std::string _table_name;
