@@ -8,6 +8,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
+import java.util.Objects;
 
 public class TablePEntryObject extends PEntryObject {
     @SerializedName(value = "d")
@@ -19,11 +20,11 @@ public class TablePEntryObject extends PEntryObject {
         }
         Database database = mgr.getDb(tokens.get(0));
         if (database == null) {
-            throw new PrivilegeException("invalid db in " + tokens);
+            throw new PrivilegeException("cannot find db: " + tokens.get(0));
         }
         Table table = database.getTable(tokens.get(1));
         if (table == null) {
-            throw new PrivilegeException("invalid table in " + tokens);
+            throw new PrivilegeException("cannot find table " + tokens.get(1) + " in db " + tokens.get(0));
         }
         return new TablePEntryObject(database.getId(), table.getId());
     }
@@ -31,6 +32,11 @@ public class TablePEntryObject extends PEntryObject {
     public TablePEntryObject(long databaseId, long tableId) {
         super(tableId);
         this.databaseId = databaseId;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), databaseId);
     }
 
     @Override

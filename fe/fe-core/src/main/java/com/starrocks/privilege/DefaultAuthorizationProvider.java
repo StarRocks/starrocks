@@ -50,6 +50,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
         }
     }
 
+    // ADMIN/GRANT is not allowed on system type. TBD
     @Override
     public void validateGrant(short type, ActionSet wantSet, PEntryObject object) {}
 

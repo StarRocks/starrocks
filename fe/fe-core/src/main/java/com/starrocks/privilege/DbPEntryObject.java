@@ -15,13 +15,18 @@ public class DbPEntryObject extends PEntryObject {
         }
         Database database = mgr.getDb(tokens.get(0));
         if (database == null) {
-            throw new PrivilegeException("invalid db in " + tokens);
+            throw new PrivilegeException("cannot find db: " + tokens.get(0));
         }
         return new DbPEntryObject(database.getId());
     }
 
     public DbPEntryObject(long dbId) {
         super(dbId);
+    }
+
+    @Override
+    public int hashCode() {
+        return super.hashCode();
     }
 
     @Override

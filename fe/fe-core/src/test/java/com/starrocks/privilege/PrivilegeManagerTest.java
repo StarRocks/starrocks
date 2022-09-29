@@ -66,7 +66,7 @@ public class PrivilegeManagerTest {
                 PrivilegeTypes.TableActions.SELECT.toString(),
                 DB_TBL_TOKENS));
 
-        String sql = "grant select on db.tbl to test_user";
+        String sql = "grant select on table db.tbl to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantStmt);
 
@@ -96,6 +96,7 @@ public class PrivilegeManagerTest {
                 PrivilegeTypes.TableActions.SELECT.toString(),
                 DB_TBL_TOKENS));
 
+        // grant many priveleges
         sql = "grant select, insert, delete on table db.tbl to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantStmt);
@@ -110,6 +111,46 @@ public class PrivilegeManagerTest {
                 PrivilegeTypes.TableActions.INSERT.toString(),
                 DB_TBL_TOKENS));
         Assert.assertTrue(manager.check(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.DELETE.toString(),
+                DB_TBL_TOKENS));
+
+        // revoke only select
+        sql = "revoke select on db.tbl from test_user";
+        revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        manager.revoke(revokeStmt);
+        Assert.assertFalse(manager.check(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
+        Assert.assertTrue(manager.check(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.INSERT.toString(),
+                DB_TBL_TOKENS));
+        Assert.assertTrue(manager.check(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.DELETE.toString(),
+                DB_TBL_TOKENS));
+
+        // revoke all
+        sql = "revoke insert, delete, select on table db.tbl from test_user";
+        revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        manager.revoke(revokeStmt);
+        Assert.assertFalse(manager.check(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
+        Assert.assertFalse(manager.check(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.INSERT.toString(),
+                DB_TBL_TOKENS));
+        Assert.assertFalse(manager.check(
                 ctx,
                 PrivilegeTypes.TABLE.toString(),
                 PrivilegeTypes.TableActions.DELETE.toString(),

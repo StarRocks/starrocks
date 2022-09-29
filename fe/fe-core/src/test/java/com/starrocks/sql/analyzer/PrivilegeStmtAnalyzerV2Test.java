@@ -107,7 +107,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid db in [dbx, tblxx]"));
+            Assert.assertTrue(e.getMessage().contains("cannot find db: dbx"));
         }
 
         sql = "grant insert on db1.tblxx to test";
@@ -115,7 +115,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid table in [db1, tblxx"));
+            Assert.assertTrue(e.getMessage().contains("cannot find table tblxx in db db1"));
         }
 
         sql = "grant drop on database db1.tbl1 to test";
@@ -131,7 +131,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid db in"));
+            Assert.assertTrue(e.getMessage().contains("cannot find db: dbx"));
         }
 
         UtFrameUtils.tearDownForPersisTest();
