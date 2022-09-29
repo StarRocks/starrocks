@@ -416,7 +416,11 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         // Also remove all unrelated objs
         Preconditions.checkState(infos.size() == 1);
         BackupJobInfo jobInfo = infos.get(0);
-        checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs());
+        // If TableRefs is empty, it means that we do not specify any table in Restore stmt.
+        // So, we should restore all table in current database.
+        if (stmt.getTableRefs().size() != 0) {
+            checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs());
+        }
 
         TableType t = TableType.OLAP;
         BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
