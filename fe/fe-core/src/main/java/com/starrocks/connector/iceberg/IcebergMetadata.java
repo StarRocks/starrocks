@@ -19,11 +19,13 @@ import org.apache.thrift.TException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG;
 import static com.starrocks.catalog.IcebergTable.ICEBERG_IMPL;
 import static com.starrocks.catalog.IcebergTable.ICEBERG_METASTORE_URIS;
+import static com.starrocks.external.HiveMetaStoreTableUtils.CONNECTOR_TABLE_ID_ID_GENERATOR;
 import static com.starrocks.external.iceberg.IcebergUtil.getIcebergCustomCatalog;
 import static com.starrocks.external.iceberg.IcebergUtil.getIcebergHiveCatalog;
 
@@ -35,6 +37,8 @@ public class IcebergMetadata implements ConnectorMetadata {
     private String catalogImpl;
     private IcebergCatalog icebergCatalog;
     private Map<String, String> customProperties;
+
+    private final Map<TableIdentifier, Integer> cacheMap = new ConcurrentHashMap<>();
 
     public IcebergMetadata(Map<String, String> properties) {
         if (IcebergCatalogType.HIVE_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG))) {
@@ -77,15 +81,24 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(String dbName, String tblName) {
+        TableIdentifier ti = IcebergUtil.getIcebergTableIdentifier(dbName, tblName);
         try {
-            org.apache.iceberg.Table icebergTable
-                    = icebergCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
-            if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.CUSTOM_CATALOG)) {
-                return IcebergUtil.convertCustomCatalogToSRTable(icebergTable, catalogImpl, dbName, tblName, customProperties);
+            int id;
+            if (cacheMap.containsKey(ti)) {
+                LOG.info("Getting Iceberg table {} from cache.", ti.toString());
+                id = cacheMap.get(ti);
+            } else {
+                id = CONNECTOR_TABLE_ID_ID_GENERATOR.getNextId().asInt();
+                cacheMap.put(ti, id);
             }
-            return IcebergUtil.convertHiveCatalogToSRTable(icebergTable, metastoreURI, dbName, tblName);
+            org.apache.iceberg.Table icebergTable = icebergCatalog.loadTable(ti);
+            if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.CUSTOM_CATALOG)) {
+                return IcebergUtil.convertCustomCatalogToSRTable(icebergTable, catalogImpl, dbName, tblName,
+                        customProperties, id);
+            }
+            return IcebergUtil.convertHiveCatalogToSRTable(icebergTable, metastoreURI, dbName, tblName, id);
         } catch (DdlException e) {
-            LOG.error("Failed to get iceberg table " + IcebergUtil.getIcebergTableIdentifier(dbName, tblName), e);
+            LOG.error("Failed to get iceberg table {}", ti.toString(), e);
             return null;
         }
     }
