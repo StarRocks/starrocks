@@ -495,14 +495,12 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
     _total_moved += shard->num_entry_moved;
     size_t shard_kv_size = 0;
     if (key_size != 0) {
-        shard_kv_size = (key_size + kIndexValueSize) * kvs.size();;
+        shard_kv_size = (key_size + kIndexValueSize) * kvs.size();
         _total_kv_size += shard_kv_size;
-        //_total_kv_size += (key_size + kIndexValueSize) * kvs.size();
     } else {
-        shard_kv_size = std::accumulate(kvs.begin(), kvs.end(), (size_t)0, [](size_t s, const auto& e) { return s + e.size; });
+        shard_kv_size =
+                std::accumulate(kvs.begin(), kvs.end(), (size_t)0, [](size_t s, const auto& e) { return s + e.size; });
         _total_kv_size += shard_kv_size;
-        //_total_kv_size +=
-        //        std::accumulate(kvs.begin(), kvs.end(), (size_t)0, [](size_t s, const auto& e) { return s + e.size; });
     }
     shard_meta->set_data_size(shard_kv_size);
     _total_bytes += pos_after - pos_before;
@@ -817,10 +815,11 @@ public:
 
     size_t memory_usage() { return _map.capacity() * (1 + (KeySize + 3) / 4 * 4 + kIndexValueSize); }
 
-    void update_overlap_size(size_t num_overlap) override { _overlap_num += num_overlap; }
-    size_t overlap_num() { return _overlap_num; }
+    void update_overlap_info(size_t overlap_size, size_t overlap_usage) override { _overlap_size += overlap_size; }
+    size_t overlap_size() { return _overlap_size; }
+
 private:
-    size_t _overlap_num = 0;
+    size_t _overlap_size = 0;
     phmap::flat_hash_map<KeyType, IndexValue, FixedKeyHash<KeySize>> _map;
 };
 
@@ -1149,24 +1148,28 @@ public:
         offset += kv_header_size;
         const auto key_size = UNALIGNED_LOAD32(buff.data());
         DCHECK(key_size == kKeySizeMagicNum);
-        const auto nums = UNALIGNED_LOAD32(buff.data() + kv_header_size - 4);
-        Slice keys[nums];
-        std::vector<IndexValue> values;
-        values.reserve(nums);
-        std::vector<std::string> kv_buffs(nums);
-        for (auto i = 0; i < nums; ++i) {
-            raw::stl_string_resize_uninitialized(&buff, sizeof(uint32_t));
-            RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
-            offset += sizeof(uint32_t);
-            const auto kv_pair_size = UNALIGNED_LOAD32(buff.data());
-            raw::stl_string_resize_uninitialized(&kv_buffs[i], kv_pair_size);
-            RETURN_IF_ERROR(file->read_at_fully(offset, kv_buffs[i].data(), kv_buffs[i].size()));
-            keys[i] = Slice(kv_buffs[i].data(), kv_pair_size - kIndexValueSize);
-            const auto value = UNALIGNED_LOAD64(kv_buffs[i].data() + kv_pair_size - kIndexValueSize);
-            values.emplace_back(value);
-            offset += kv_pair_size;
+        auto nums = UNALIGNED_LOAD32(buff.data() + kv_header_size - 4);
+        while (nums > 0) {
+            size_t batch_num = (nums > 4096) ? 4096 : nums;
+            Slice keys[batch_num];
+            std::vector<IndexValue> values;
+            values.reserve(batch_num);
+            std::vector<std::string> kv_buffs(batch_num);
+            for (size_t i = 0; i < batch_num; ++i) {
+                raw::stl_string_resize_uninitialized(&buff, sizeof(uint32_t));
+                RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
+                offset += sizeof(uint32_t);
+                const auto kv_pair_size = UNALIGNED_LOAD32(buff.data());
+                raw::stl_string_resize_uninitialized(&kv_buffs[i], kv_pair_size);
+                RETURN_IF_ERROR(file->read_at_fully(offset, kv_buffs[i].data(), kv_buffs[i].size()));
+                keys[i] = Slice(kv_buffs[i].data(), kv_pair_size - kIndexValueSize);
+                const auto value = UNALIGNED_LOAD64(kv_buffs[i].data() + kv_pair_size - kIndexValueSize);
+                values.emplace_back(value);
+                offset += kv_pair_size;
+            }
+            RETURN_IF_ERROR(load_wals(nums, keys, values.data()));
+            nums -= batch_num;
         }
-        RETURN_IF_ERROR(load_wals(nums, keys, values.data()));
         return Status::OK();
     }
 
@@ -1217,19 +1220,21 @@ public:
         return ret;
     }
 
-    void update_overlap_size(size_t num_overlap) override {
-        _overlap_kv_pairs_usage += num_overlap * (_total_kv_pairs_usage / size());
-        _overlap_num += num_overlap;
+    void update_overlap_info(size_t overlap_size, size_t overlap_usage) override {
+        _overlap_kv_pairs_usage += overlap_usage;
+        _overlap_size += overlap_size;
     }
 
-    size_t overlap_num() { return _overlap_num; }
+    size_t overlap_size() { return _overlap_size; }
 
 private:
     friend ShardByLengthMutableIndex;
     friend PersistentIndex;
     phmap::flat_hash_set<KeyType, StringHash, EqualOnStringWithHash> _set;
     size_t _total_kv_pairs_usage = 0;
-    size_t _overlap_num = 0;
+    // _overlap_num and _overlap_kv_pairs_usage will lost after be restart,
+    // but it is not very important because it will be fixed in later _merge_compaction.
+    size_t _overlap_size = 0;
     size_t _overlap_kv_pairs_usage = 0;
 };
 
@@ -1618,12 +1623,33 @@ Status ShardByLengthMutableIndex::erase(size_t n, const Slice* keys, IndexValue*
     return Status::OK();
 }
 
-Status ShardByLengthMutableIndex::update_overlap_size(size_t key_size, size_t num_overlap) {
+Status ShardByLengthMutableIndex::update_overlap_info(size_t key_size, size_t num_overlap, const Slice* keys,
+                                                      const IndexValue* values, const KeysInfo& keys_info, bool erase) {
+    DCHECK(_fixed_key_size != -1);
     const auto [shard_offset, shard_size] = _shard_info_by_key_size[key_size];
-    CHECK(shard_size == 1);
-    for (size_t i = 0; i < shard_size; ++i) {
-        _shards[shard_offset + i]->update_overlap_size(num_overlap);
+    DCHECK(shard_size == 1);
+    if (key_size > 0) {
+        for (size_t i = 0; i < shard_size; ++i) {
+            _shards[shard_offset + i]->update_overlap_info(num_overlap, 0);
+        }
+    } else {
+        DCHECK(key_size == 0);
+        DCHECK(_fixed_key_size == 0);
+        size_t overlap_size = 0;
+        for (size_t i = 0; i < keys_info.size(); i++) {
+            auto key_idx = keys_info.key_idxes[i];
+            if (values[key_idx].get_value() != NullIndexValue) {
+                overlap_size += keys[key_idx].get_size() + kIndexValueSize;
+            }
+        }
+        if (erase) {
+            overlap_size *= 2;
+        }
+        for (size_t i = 0; i < shard_size; ++i) {
+            _shards[shard_offset + i]->update_overlap_info(num_overlap, overlap_size);
+        }
     }
+
     return Status::OK();
 }
 
@@ -2672,7 +2698,7 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
         size_t num_found_before = num_found;
         for (const auto& [key_size, keys_info] : not_founds_by_key_size) {
             RETURN_IF_ERROR(_l1->get(n, keys, keys_info, old_values, &num_found, key_size));
-            _l0->update_overlap_size(key_size, num_found - num_found_before);
+            _l0->update_overlap_info(key_size, num_found - num_found_before, keys, old_values, keys_info, false);
             num_found_before = num_found;
         }
     }
@@ -2708,7 +2734,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
         size_t num_erased_before = num_erased;
         for (const auto& [key_size, keys_info] : not_founds_by_key_size) {
             RETURN_IF_ERROR(_l1->get(n, keys, keys_info, old_values, &num_erased, key_size));
-            _l0->update_overlap_size(key_size, num_erased - num_erased_before);
+            _l0->update_overlap_info(key_size, num_erased - num_erased_before, keys, old_values, keys_info, true);
             num_erased_before = num_erased;
         }
     }
@@ -3021,7 +3047,7 @@ Status PersistentIndex::_merge_compaction() {
                                                       (size_t)0, [](size_t s, const auto& e) { return s + e.size; });
         const auto l1_kv_pairs_usage = std::accumulate(std::next(_l1->_shards.begin(), l1_shard_offset),
                                                        std::next(_l1->_shards.begin(), l1_shard_offset + l1_shard_size),
-                                                       (size_t)0, [](size_t s, const auto& e) { return s + e.data_size; });
+                                                       0UL, [](size_t s, const auto& e) { return s + e.data_size; });
         if (l0_kv_pairs_size == 0 && l1_kv_pairs_size != 0) {
             for (auto i = 0; i < l1_shard_size; i++) {
                 RETURN_IF_ERROR(writer->write_shard_as_rawbuff(_l1->_shards[l1_shard_offset + i], _l1.get()));
@@ -3032,16 +3058,16 @@ Status PersistentIndex::_merge_compaction() {
         auto total_kv_pairs_usage = l0_kv_pairs_usage + l1_kv_pairs_usage;
         if (key_size == 0) {
             size_t overlap_usage = dynamic_cast<SliceMutableIndex*>(_l0->_shards[0].get())->_overlap_kv_pairs_usage;
-            size_t overlap_size = dynamic_cast<SliceMutableIndex*>(_l0->_shards[0].get())->_overlap_num;
+            size_t overlap_size = dynamic_cast<SliceMutableIndex*>(_l0->_shards[0].get())->_overlap_size;
             CHECK(total_kv_pairs_usage >= overlap_usage);
             CHECK(total_kv_pairs_size >= overlap_size);
             total_kv_pairs_size -= overlap_size;
             total_kv_pairs_usage -= overlap_usage;
         } else {
-            size_t overlap_num = _l0->_shards[l0_shard_offset]->overlap_num();
-            CHECK(total_kv_pairs_size >= overlap_num);
-            total_kv_pairs_size -= overlap_num;
-            total_kv_pairs_usage -= (key_size + kIndexValueSize) * overlap_num;
+            size_t overlap_size = _l0->_shards[l0_shard_offset]->overlap_size();
+            CHECK(total_kv_pairs_size >= overlap_size);
+            total_kv_pairs_size -= overlap_size;
+            total_kv_pairs_usage -= (key_size + kIndexValueSize) * overlap_size;
         }
         const auto [nshard, npage_hint] = MutableIndex::estimate_nshard_and_npage(total_kv_pairs_usage);
         const auto nbucket = MutableIndex::estimate_nbucket(key_size, total_kv_pairs_size, nshard, npage_hint);

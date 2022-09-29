@@ -164,8 +164,9 @@ public:
 
     virtual size_t memory_usage() = 0;
 
-    virtual void update_overlap_size(size_t num_overlap) = 0;
-    virtual size_t overlap_num() = 0;
+    virtual void update_overlap_info(size_t overlap_size, size_t overlap_usage) = 0;
+
+    virtual size_t overlap_size() = 0;
 
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 
@@ -276,7 +277,8 @@ public:
 
     size_t memory_usage();
 
-    Status update_overlap_size(size_t key_size, size_t num_overlap);
+    Status update_overlap_info(size_t key_size, size_t num_overlap, const Slice* keys, const IndexValue* values,
+                               const KeysInfo& keys_info, bool erase);
 
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
