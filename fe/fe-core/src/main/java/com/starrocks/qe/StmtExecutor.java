@@ -108,6 +108,7 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.Constants;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.task.LoadEtlTask;
+import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
@@ -1105,6 +1106,12 @@ public class StmtExecutor {
         long transactionId = -1;
         if (targetTable instanceof ExternalOlapTable) {
             ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+            TAuthenticateParams authenticateParams = new TAuthenticateParams();
+            authenticateParams.setUser(externalTable.getSourceTableUser());
+            authenticateParams.setPasswd(externalTable.getSourceTablePassword());
+            authenticateParams.setHost(context.getRemoteIP());
+            authenticateParams.setDb_name(externalTable.getSourceTableDbName());
+            authenticateParams.setTable_names(Lists.newArrayList(externalTable.getSourceTableDbName()));
             transactionId =
                     GlobalStateMgr.getCurrentGlobalTransactionMgr()
                             .beginRemoteTransaction(externalTable.getSourceTableDbId(),
@@ -1114,7 +1121,8 @@ public class StmtExecutor {
                                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                                             FrontendOptions.getLocalHostAddress()),
                                     sourceType,
-                                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                                    ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
+                                    authenticateParams);
         } else {
             transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                     database.getId(),

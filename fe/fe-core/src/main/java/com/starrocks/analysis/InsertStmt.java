@@ -57,6 +57,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
@@ -323,13 +324,19 @@ public class InsertStmt extends DmlStmt {
             if (targetTable instanceof ExternalOlapTable) {
                 LoadJobSourceType sourceType = LoadJobSourceType.INSERT_STREAMING;
                 ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                TAuthenticateParams authenticateParams = new TAuthenticateParams();
+                authenticateParams.setUser(externalTable.getSourceTableUser());
+                authenticateParams.setPasswd(externalTable.getSourceTablePassword());
+                authenticateParams.setHost(ConnectContext.get().getRemoteIP());
+                authenticateParams.setDb_name(externalTable.getSourceTableDbName());
+                authenticateParams.setTable_names(Lists.newArrayList(externalTable.getSourceTableDbName()));
                 transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                         .beginRemoteTransaction(externalTable.getSourceTableDbId(),
                                 Lists.newArrayList(externalTable.getSourceTableId()), label,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
                                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                                sourceType, timeoutSecond);
+                                sourceType, timeoutSecond, authenticateParams);
             } else if (targetTable instanceof OlapTable) {
                 LoadJobSourceType sourceType = LoadJobSourceType.INSERT_STREAMING;
                 MetricRepo.COUNTER_LOAD_ADD.increase(1L);
