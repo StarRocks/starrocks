@@ -3202,7 +3202,7 @@ public class GlobalStateMgr {
         localMetastore.onEraseDatabase(dbId);
     }
 
-    public Set<Long> onErasePartition(Partition partition) {
+    public Map<Long, Set<Long>> onErasePartition(Partition partition) {
         return localMetastore.onErasePartition(partition);
     }
 

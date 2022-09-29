@@ -1497,7 +1497,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // drop
-        Set<Long> tabletIdSet = new HashSet<Long>();
+        Map<Long, Set<Long>> partitionToShardIds = new HashMap<>();
         if (isTempPartition) {
             olapTable.dropTempPartition(partitionName, true);
         } else {
@@ -1514,7 +1514,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             }
-            tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
+            partitionToShardIds = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
             try {
                 for (Long mvId : olapTable.getRelatedMaterializedViews()) {
                     MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
@@ -1533,8 +1533,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 clause.isForceDrop());
         editLog.logDropPartition(info);
 
-        if (!tabletIdSet.isEmpty()) {
-            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+        if (!partitionToShardIds.isEmpty()) {
+            stateMgr.getShardManager().getShardDeleter().addUnusedShardGroupId(partitionToShardIds);
         }
 
         LOG.info("succeed in droping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
@@ -1544,16 +1544,16 @@ public class LocalMetastore implements ConnectorMetadata {
     public void replayDropPartition(DropPartitionInfo info) {
         Database db = this.getDb(info.getDbId());
         db.writeLock();
-        Set<Long> tabletIdSet = new HashSet<Long>();
+        Map<Long, Set<Long>> partitionToShardIds = new HashMap<>();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
             if (info.isTempPartition()) {
                 olapTable.dropTempPartition(info.getPartitionName(), true);
             } else {
-                tabletIdSet = olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
+                partitionToShardIds = olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
             }
-            if (!tabletIdSet.isEmpty()) {
-                stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+            if (!partitionToShardIds.isEmpty()) {
+                stateMgr.getShardManager().getShardDeleter().addUnusedShardGroupId(partitionToShardIds);
             }
         } finally {
             db.writeUnlock();
@@ -4600,8 +4600,9 @@ public class LocalMetastore implements ConnectorMetadata {
         colocateTableIndex.removeTable(olapTable.getId());
     }
 
-    public Set<Long> onErasePartition(Partition partition) {
+    public Map<Long, Set<Long>> onErasePartition(Partition partition) {
         // remove tablet in inverted index
+        Map<Long, Set<Long>> partitionToShardIds = new HashMap<>();
         Set<Long> tabletIdSet = new HashSet<Long>();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
@@ -4615,7 +4616,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 invertedIndex.deleteTablet(tabletId);
             }
         }
-        return tabletIdSet;
+        partitionToShardIds.put(partition.getId(), tabletIdSet);
+        return partitionToShardIds;
     }
 
     // for test only
