@@ -78,6 +78,9 @@ public:
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
+    // can_passthrough should be true for the operator that precedes cache_operator immediately.
+    // because only this operator is computation-intensive, so its input chunks must be pass through
+    // this operator if its computation imposes an unacceptable performance penalty on cache mechanism.
     void set_can_passthrough(bool on) { _can_passthrough = on; }
 
 private:

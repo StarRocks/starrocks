@@ -52,7 +52,7 @@ bool MultilaneOperator::need_input() const {
         }
     }
 
-    // in non-passthrough mode, all lanes should be available, because we do not known which lane the chunk coming in the
+    // in non-passthrough mode, all lanes should be available, because we do not know which lane the chunk coming in the
     // future belongs to.
     return std::all_of(_owner_to_lanes.begin(), _owner_to_lanes.end(), [this](auto& pair) {
         auto lane_id = pair.second;
