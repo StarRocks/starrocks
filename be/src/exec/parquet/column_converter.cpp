@@ -157,8 +157,8 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         break;
     }
     case tparquet::Type::type::INT96: {
+        need_convert = true;
         if (col_type == PrimitiveType::TYPE_DATETIME) {
-            need_convert = true;
             auto _converter = std::make_unique<Int96ToDateTimeConverter>();
             RETURN_IF_ERROR(_converter->init(timezone));
             *converter = std::move(_converter);
