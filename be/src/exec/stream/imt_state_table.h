@@ -30,6 +30,10 @@ public:
     Status close(RuntimeState* state);
     Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk);
     stream_load::OlapTableSink* olap_table_sink() { return _olap_table_sink.get(); };
+    TableReadViewSharedPtr get_table_reader(const TableReadViewParams& params) {
+        DCHECK(_table);
+        return _table->create_table_read_view(params);
+    }
 
     int64_t table_id() const;
     const std::string& table_name() const;
@@ -52,6 +56,7 @@ private:
     std::vector<TExpr> _output_exprs;
     stream_load::OlapTableSinkParams _olap_table_sink_params;
     std::unique_ptr<stream_load::OlapTableSink> _olap_table_sink;
+    std::shared_ptr<Table> _table;
 };
 
 } // namespace starrocks
