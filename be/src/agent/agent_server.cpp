@@ -134,44 +134,44 @@ void AgentServer::Impl::init_or_die() {
                                    DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_publish_version);
 
     BUILD_DYNAMIC_TASK_THREAD_POOL("drop", config::drop_tablet_worker_count, config::drop_tablet_worker_count,
-                                   DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_drop);
+                                   std::numeric_limits<int>::max(), _thread_pool_drop);
 
     BUILD_DYNAMIC_TASK_THREAD_POOL("create_tablet", config::create_tablet_worker_count,
-                                   config::create_tablet_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                   config::create_tablet_worker_count, std::numeric_limits<int>::max(),
                                    _thread_pool_create_tablet);
 
     BUILD_DYNAMIC_TASK_THREAD_POOL("alter_tablet", config::alter_tablet_worker_count, config::alter_tablet_worker_count,
-                                   DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_alter_tablet);
+                                   std::numeric_limits<int>::max(), _thread_pool_alter_tablet);
 
     BUILD_DYNAMIC_TASK_THREAD_POOL("clear_transaction", config::clear_transaction_task_worker_count,
-                                   config::clear_transaction_task_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                   config::clear_transaction_task_worker_count, std::numeric_limits<int>::max(),
                                    _thread_pool_clear_transaction);
 
     BUILD_DYNAMIC_TASK_THREAD_POOL("storage_medium_migrate", config::storage_medium_migrate_count,
-                                   config::storage_medium_migrate_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                   config::storage_medium_migrate_count, std::numeric_limits<int>::max(),
                                    _thread_pool_storage_medium_migrate);
 
     BUILD_DYNAMIC_TASK_THREAD_POOL("check_consistency", config::check_consistency_worker_count,
-                                   config::check_consistency_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                   config::check_consistency_worker_count, std::numeric_limits<int>::max(),
                                    _thread_pool_check_consistency);
 
     BUILD_DYNAMIC_TASK_THREAD_POOL("upload", config::upload_worker_count, config::upload_worker_count,
-                                   DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_upload);
+                                   std::numeric_limits<int>::max(), _thread_pool_upload);
 
     BUILD_DYNAMIC_TASK_THREAD_POOL("download", config::download_worker_count, config::download_worker_count,
-                                   DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_download);
+                                   std::numeric_limits<int>::max(), _thread_pool_download);
 
     BUILD_DYNAMIC_TASK_THREAD_POOL("make_snapshot", config::make_snapshot_worker_count,
-                                   config::make_snapshot_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                   config::make_snapshot_worker_count, std::numeric_limits<int>::max(),
                                    _thread_pool_make_snapshot);
 
     BUILD_DYNAMIC_TASK_THREAD_POOL("release_snapshot", config::release_snapshot_worker_count,
-                                   config::release_snapshot_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                   config::release_snapshot_worker_count, std::numeric_limits<int>::max(),
                                    _thread_pool_release_snapshot);
 
-    BUILD_DYNAMIC_TASK_THREAD_POOL("move_dir", 1, 1, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_move_dir);
+    BUILD_DYNAMIC_TASK_THREAD_POOL("move_dir", 1, 1, std::numeric_limits<int>::max(), _thread_pool_move_dir);
 
-    BUILD_DYNAMIC_TASK_THREAD_POOL("update_tablet_meta_info", 1, 1, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+    BUILD_DYNAMIC_TASK_THREAD_POOL("update_tablet_meta_info", 1, 1, std::numeric_limits<int>::max(),
                                    _thread_pool_update_tablet_meta_info);
 
 #ifndef BE_TEST
@@ -186,7 +186,7 @@ void AgentServer::Impl::init_or_die() {
     // callback, so that we can match the dop of FE clone task scheduling.
     BUILD_DYNAMIC_TASK_THREAD_POOL("clone", MIN_CLONE_TASK_THREADS_IN_POOL,
                                    _exec_env->store_paths().size() * config::parallel_clone_task_per_path,
-                                   DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
+                                   std::numeric_limits<int>::max(), _thread_pool_clone);
 #endif
 
     // It is the same code to create workers of each type, so we use a macro
