@@ -68,7 +68,7 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema, const 
     }
 
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments));
+    RETURN_IF_ERROR(load_segments(&segments, /*fill_cache=*/seg_options.reader_type == READER_QUERY));
     for (auto& seg_ptr : segments) {
         if (seg_ptr->num_rows() == 0) {
             continue;
@@ -102,12 +102,12 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema, const 
     }
 }
 
-Status Rowset::load_segments(std::vector<SegmentPtr>* segments) {
+Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache) {
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
     segments->reserve(_rowset_metadata->segments().size());
     for (const auto& seg_name : _rowset_metadata->segments()) {
-        ASSIGN_OR_RETURN(auto segment, _tablet->load_segment(seg_name, seg_id++, &footer_size_hint, true));
+        ASSIGN_OR_RETURN(auto segment, _tablet->load_segment(seg_name, seg_id++, &footer_size_hint, fill_cache));
         segments->emplace_back(std::move(segment));
     }
     return Status::OK();
