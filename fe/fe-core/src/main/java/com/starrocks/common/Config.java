@@ -1225,9 +1225,11 @@ public class Config extends ConfigBase {
 
     /**
      * If set to true, auth check for StarRocks external table will be enabled. The check
-     * only happens on the target cluster.
+     * only happens on the target cluster. The default is false to ensure users can upgrade
+     * StarRocks smoothly. Otherwise, the upgrade can fail if the existed external table has
+     * wrong user/password, and the authentication is checked in the new version of StarRocks.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static boolean enable_starrocks_external_table_auth_check = false;
 
     /**
