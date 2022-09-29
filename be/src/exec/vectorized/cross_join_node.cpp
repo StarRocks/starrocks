@@ -66,7 +66,6 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
                 RETURN_IF_ERROR(rf_desc->init(_pool, desc));
                 _build_runtime_filters.emplace_back(rf_desc);
             }
-            DCHECK_LE(_build_runtime_filters.size(), _conjunct_ctxs.size());
         }
         return Status::OK();
     }
