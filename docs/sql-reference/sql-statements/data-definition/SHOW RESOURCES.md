@@ -9,7 +9,3 @@ Syntax:
 ```sql
 SHOW RESOURCES
 ```
-
-## keyword
-
-SHOW RESOURCES
