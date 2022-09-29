@@ -85,12 +85,12 @@ public class PrivilegeManager {
             throw new DdlException("role not supported!");  // support it later
         }
         try {
-            short typeId = checkType(stmt.getPrivType());
-            ActionSet actionSet = checkActionSet(stmt.getPrivType(), typeId, stmt.getPrivList());
-            PEntryObject object = provider.generateObject(
-                    stmt.getPrivType(), stmt.getPrivilegeObjectNameTokenList(), globalStateMgr);
-            List<PEntryObject> objects = Arrays.asList(object); // only support one object for now TBD
-            grantToUser(typeId, actionSet, objects, stmt.isWithGrantOption(), stmt.getUserIdentity());
+            grantToUser(
+                    stmt.getTypeId(),
+                    stmt.getActionList(),
+                    Arrays.asList(stmt.getObject()), // only support one object for now TBD
+                    stmt.isWithGrantOption(),
+                    stmt.getUserIdentity());
         } catch (PrivilegeException e) {
             throw new DdlException("grant failed: " + stmt.getOrigStmt(), e);
         }
@@ -118,12 +118,12 @@ public class PrivilegeManager {
             throw new DdlException("role not supported!");  // support it later
         }
         try {
-            short typeId = checkType(stmt.getPrivType());
-            ActionSet actionSet = checkActionSet(stmt.getPrivType(), typeId, stmt.getPrivList());
-            PEntryObject object = provider.generateObject(
-                    stmt.getPrivType(), stmt.getPrivilegeObjectNameTokenList(), globalStateMgr);
-            List<PEntryObject> objects = Arrays.asList(object); // only support one object for now TBD
-            revokeFromUser(typeId, actionSet, objects, stmt.isWithGrantOption(), stmt.getUserIdentity());
+            revokeFromUser(
+                    stmt.getTypeId(),
+                    stmt.getActionList(),
+                    Arrays.asList(stmt.getObject()), // only support one object for now TBD
+                    stmt.isWithGrantOption(),
+                    stmt.getUserIdentity());
         } catch (PrivilegeException e) {
             throw new DdlException("revoke failed: " + stmt.getOrigStmt(), e);
         }
@@ -146,12 +146,16 @@ public class PrivilegeManager {
         }
     }
 
+    public void validateGrant(short type, ActionSet wantSet, PEntryObject object) throws PrivilegeException {
+        provider.validateGrant(type, wantSet, object);
+    }
+
     public boolean check(ConnectContext context, String typeName, String actionName, List<String> objectToken) {
         userReadLock();
         try {
             PEntryObject object = provider.generateObject(
                     typeName, objectToken, globalStateMgr);
-            short typeId = checkType(typeName);
+            short typeId = analyzeType(typeName);
             Action want = typeToActionMap.get(typeId).get(actionName);
             return provider.check(typeId, want, object, mergePrivilegeCollection(context));
         } catch (PrivilegeException e) {
@@ -163,10 +167,11 @@ public class PrivilegeManager {
         }
     }
 
+
     public boolean checkAnyObject(ConnectContext context, String typeName, String actionName) {
         userReadLock();
         try {
-            short typeId = checkType(typeName);
+            short typeId = analyzeType(typeName);
             Action want = typeToActionMap.get(typeId).get(actionName);
             return provider.checkAnyObject(typeId, want, mergePrivilegeCollection(context));
         } catch (PrivilegeException e) {
@@ -180,7 +185,7 @@ public class PrivilegeManager {
     public boolean hasType(ConnectContext context, String typeName) {
         userReadLock();
         try {
-            short typeId = checkType(typeName);
+            short typeId = analyzeType(typeName);
             return provider.hasType(typeId, mergePrivilegeCollection(context));
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when hasType type[{}]", typeName, e);
@@ -193,7 +198,7 @@ public class PrivilegeManager {
     public boolean allowGrant(ConnectContext context, String typeName, String actionName, List<String> objectToken) {
         userReadLock();
         try {
-            short typeId = checkType(typeName);
+            short typeId = analyzeType(typeName);
             Action want = typeToActionMap.get(typeId).get(actionName);
             PEntryObject object = provider.generateObject(
                     typeName, objectToken, globalStateMgr);
@@ -260,11 +265,15 @@ public class PrivilegeManager {
         return userToPrivilegeCollection.get(userIdentity);
     }
 
-    private ActionSet checkActionSet(String typeName, short typeId, List<String> actionNameList)
+    public ActionSet analyzeActionSet(String typeName, short typeId, List<String> actionNameList)
             throws PrivilegeException {
         Map<String, Action> actionMap = typeToActionMap.get(typeId);
         List<Action> actions = new ArrayList<>();
         for (String actionName : actionNameList) {
+            // in consideration of legacy format such as SELECT_PRIV
+            if (actionName.endsWith("_PRIV")) {
+                actionName = actionName.substring(0, actionName.length() - 5);
+            }
             if (!actionMap.containsKey(actionName)) {
                 throw new PrivilegeException("invalid action " + actionName + " for " + typeName);
             }
@@ -273,10 +282,14 @@ public class PrivilegeManager {
         return new ActionSet(actions);
     }
 
-    private short checkType(String typeName) throws PrivilegeException {
+    public short analyzeType(String typeName) throws PrivilegeException {
         if (!typeStringToId.containsKey(typeName)) {
             throw new PrivilegeException("cannot find type " + typeName + " in " + typeStringToId.keySet());
         }
         return typeStringToId.get(typeName);
+    }
+
+    public PEntryObject analyzeObject(String typeName, List<String> objectTokenList) throws PrivilegeException {
+        return this.provider.generateObject(typeName, objectTokenList, globalStateMgr);
     }
 }

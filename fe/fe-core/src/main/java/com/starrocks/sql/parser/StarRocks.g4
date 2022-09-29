@@ -1078,6 +1078,8 @@ privilegeActionReserved
     | GRANT
     | LOAD
     | SELECT
+    | INSERT
+    | DELETE
     ;
 
 privilegeActionList
@@ -1089,16 +1091,28 @@ privilegeAction
     | identifier
     ;
 
+privilegeTypeReserved
+    : SYSTEM
+    | TABLE
+    | DATABASE
+    | CATALOG
+    ;
+
+privilegeType
+    : privilegeTypeReserved
+    | identifier
+    ;
+
 grantPrivilegeStatement
     : GRANT IMPERSONATE ON user TO ( user | ROLE identifierOrString )                                       #grantImpersonateBrief
     | GRANT privilegeActionList ON tablePrivilegeObjectName TO (user | ROLE identifierOrString)        #grantTablePrivBrief
-    | GRANT privilegeActionList ON identifier privilegeObjectName TO (user | ROLE identifierOrString)  #grantPrivWithType
+    | GRANT privilegeActionList ON privilegeType privilegeObjectName TO (user | ROLE identifierOrString)  #grantPrivWithType
     ;
 
 revokePrivilegeStatement
     : REVOKE IMPERSONATE ON user FROM ( user | ROLE identifierOrString )                                  #revokeImpersonateBrief
     | REVOKE privilegeActionList ON tablePrivilegeObjectName FROM (user | ROLE identifierOrString)   #revokeTablePrivBrief
-    | REVOKE privilegeActionList ON identifier privilegeObjectName FROM (user | ROLE identifierOrString) #revokePrivWithType
+    | REVOKE privilegeActionList ON privilegeType privilegeObjectName FROM (user | ROLE identifierOrString) #revokePrivWithType
     ;
 
 grantRoleStatement

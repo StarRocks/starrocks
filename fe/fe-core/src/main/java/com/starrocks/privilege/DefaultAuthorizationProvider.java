@@ -17,6 +17,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     // support only all validate actions in table level for now
     static {
         VALID_MAP.put(PrivilegeTypes.TABLE.toString(), PrivilegeTypes.TABLE.getValidActions());
+        VALID_MAP.put(PrivilegeTypes.DATABASE.toString(), PrivilegeTypes.DATABASE.getValidActions());
     }
 
     @Override
@@ -41,15 +42,16 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case TABLE:
                 return TablePEntryObject.generate(mgr, objectTokens);
 
+            case DATABASE:
+                return DbPEntryObject.generate(mgr, objectTokens);
+
             default:
                 throw new PrivilegeException("unexpected type " + typeStr);
         }
     }
 
     @Override
-    public boolean validateGrant(short type, Action want, PEntryObject object) {
-        return true;
-    }
+    public void validateGrant(short type, ActionSet wantSet, PEntryObject object) {}
 
     @Override
     public boolean check(short type, Action want, PEntryObject object, PrivilegeCollection currentPrivilegeCollection) {

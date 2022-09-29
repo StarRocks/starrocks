@@ -4,6 +4,8 @@ package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
 
+import java.util.Objects;
+
 /**
  * interface is hard to serialized/deserialized using GSON
  * to simplify the implementation, the base class PEntryObject contains one data field called `id`.
@@ -14,6 +16,11 @@ public class PEntryObject {
 
     public PEntryObject(long id) {
         this.id = id;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
     }
 
     @Override

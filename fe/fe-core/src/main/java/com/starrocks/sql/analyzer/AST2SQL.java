@@ -109,7 +109,7 @@ public class AST2SQL {
                 String priv = privilege.toString().toUpperCase();
                 sb.append(priv.substring(0, priv.length() - 5));
             }
-            if (stmt.getPrivType().equals("TABLE")) {
+            if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
                 sb.append(" ON " + stmt.getTblPattern());
             } else if (stmt.getPrivType().equals("RESOURCE")) {
                 sb.append(" ON RESOURCE ").append(stmt.getResourcePattern());
