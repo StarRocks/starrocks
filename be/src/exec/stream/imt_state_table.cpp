@@ -38,7 +38,7 @@ Status IMTStateTable::_init_table_sink() {
     _olap_table_sink_params.need_gen_rollup = false;
     _olap_table_sink_params.is_lake_table = false;
     _olap_table_sink_params.keys_type = TKeysType::PRIMARY_KEYS;
-    _olap_table_sink_params.tuple_id = 1;
+    _olap_table_sink_params.tuple_id = _imt.olap_table.schema.tuple_desc.id;
     _olap_table_sink_params.nodes_info = _imt.olap_table.nodes_info;;
     _olap_table_sink_params.schema = _imt.olap_table.schema;
     _olap_table_sink_params.partition = _imt.olap_table.partition;
