@@ -2087,7 +2087,6 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
                                      IndexValue* values, size_t* num_found) const {
     const auto& shard_info = _shards[shard_idx];
     if (shard_info.size == 0 || shard_info.npage == 0 || keys_info.size() == 0) {
-        //LOG(WARNING) << "shard exist but size is empty, nshard: " << shard_info.size << " npage: " << shard_info.npage << " size: " << keys_info.size();
         return Status::OK();
     }
     std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
@@ -2189,7 +2188,6 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, const KeysInfo& keys_inf
                            size_t* num_found, size_t key_size) const {
     auto iter = _shard_info_by_length.find(key_size);
     if (iter == _shard_info_by_length.end()) {
-        //LOG(WARNING) << "no key length: " << key_size << " in l1";
         return Status::OK();
     }
     size_t found = 0;
@@ -2640,7 +2638,6 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     RETURN_IF_ERROR(_check_and_flush_l0());
     // for case1 and case2
     if (_flushed) {
-        //LOG(INFO) << "flush version " << _version.to_string();
         // update PersistentIndexMetaPB
         index_meta->set_size(_size);
         index_meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
@@ -2651,14 +2648,12 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         // clear _l0 and reload _l1
         RETURN_IF_ERROR(_reload(*index_meta));
     } else if (_dump_snapshot) {
-        //LOG(INFO) << "dump snapshot version " << _version.to_string();
         index_meta->set_size(_size);
         index_meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kSnapshot));
     } else {
-        //LOG(INFO) << "append wal version " << _version.to_string();
         index_meta->set_size(_size);
         index_meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
         _version.to_pb(index_meta->mutable_version());
@@ -2787,7 +2782,6 @@ Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValu
             failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);
         }
     }
-    //LOG(INFO) << "try_replace total num is " << n << ", not found num is " << num_not_found;
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
     _dump_snapshot |= _can_dump_directly();
     if (!_dump_snapshot) {
@@ -2834,10 +2828,8 @@ Status PersistentIndex::_check_and_flush_l0() {
     }
     _flushed = true;
     if (_l1 == nullptr) {
-        //LOG(INFO) << "flush l0";
         RETURN_IF_ERROR(_flush_l0());
     } else {
-        //LOG(INFO) << "merge compaction";
         RETURN_IF_ERROR(_merge_compaction());
     }
     return Status::OK();
