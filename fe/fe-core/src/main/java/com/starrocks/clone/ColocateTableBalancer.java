@@ -282,7 +282,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
     }
 
     /*
-     * The balance logic is as follow:
+     * The balance logic is as follows:
      *
      * All backends: A,B,C,D,E,F,G,H,I,J
      *
@@ -362,18 +362,22 @@ public class ColocateTableBalancer extends LeaderDaemon {
             List<Map.Entry<Long, Long>> backendWithReplicaNum =
                     getSortedBackendReplicaNumPairs(availableBeIds, unavailableBeIds, statistic,
                             flatBackendsPerBucketSeq);
-            if (backendWithReplicaNum.size() <= 1) {
+            Set<Long> decommissionedBackends = getDecommissionedBackends(infoService, colocateIndex, groupId);
+            if (backendWithReplicaNum.isEmpty() ||
+                    (backendWithReplicaNum.size() == 1 && decommissionedBackends.isEmpty())) {
                 // There is not enough replicas for us to do relocation or balance, because in this case we
                 // can not choose a valid backend to migrate replica to, end the outer loop.
                 break;
             }
 
             int leftBound;
-            if (!hasUnavailableBe || replicationNum == 1) {
+            if (!hasUnavailableBe || (replicationNum == 1 && decommissionedBackends.isEmpty())) {
                 // There are two cases:
                 // 1. there is no unavailable bucketId to relocate
-                // 2. there is unavailable bucketId to relocate, but the number of replica is one, we can do
-                //    nothing but wait for the dead BE to come alive, in this case we shouldn't change the bucket
+                // 2. there is unavailable(only dead) bucketId to relocate, but the number of replica is one, we can do
+                //    nothing but wait for the dead BEs to come alive ( for decommissioned backends, they are alive,
+                //    and we intend to migrate replicas from them, so in this case we
+                //    should do relocation ), in this case we shouldn't change the bucket
                 //    sequence which will cause a lot of wasted colocate balancing work and further more make the
                 //    colocate group unstable for longer time, but we can still do the balance work.
                 //
@@ -536,6 +540,19 @@ public class ColocateTableBalancer extends LeaderDaemon {
             }
         }
         return unavailableBeIds;
+    }
+
+    private Set<Long> getDecommissionedBackends(SystemInfoService infoService, ColocateTableIndex colocateIndex,
+                                                GroupId groupId) {
+        Set<Long> backends = colocateIndex.getBackendsByGroup(groupId);
+        Set<Long> decommissionedBackends = Sets.newHashSet();
+        for (Long backendId : backends) {
+            Backend be = infoService.getBackend(backendId);
+            if (be != null && be.isDecommissioned() && be.isAlive()) {
+                decommissionedBackends.add(backendId);
+            }
+        }
+        return decommissionedBackends;
     }
 
     private List<Long> getAvailableBeIds(SystemInfoService infoService) {
