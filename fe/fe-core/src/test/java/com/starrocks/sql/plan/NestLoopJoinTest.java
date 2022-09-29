@@ -111,4 +111,14 @@ public class NestLoopJoinTest extends PlanTestBase {
         Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
     }
 
+    @Test
+    public void testRuntimeFilter() throws Exception {
+        String sql = "select * from t0 where t0.v1 > (select max(v1) from t0 )";
+        assertPlanContains(sql, "  6:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other join predicates: 1: v1 > 7: max\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (7: max), remote = false\n");
+    }
 }
