@@ -44,9 +44,7 @@ public class AlterUserInfo implements Writable {
         try {
             ret.authenticationInfo.analyze();
         } catch (AuthenticationException e) {
-            IOException exception = new IOException(e);
-            exception.initCause(e);
-            throw exception;
+            throw new IOException(e);
         }
         return ret;
     }
