@@ -46,12 +46,12 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -312,8 +312,12 @@ public class OlapScanNode extends ScanNode {
             tablet.getQueryableReplicas(allQueryableReplicas, localReplicas,
                     visibleVersion, localBeId, schemaHash);
             if (allQueryableReplicas.isEmpty()) {
-                LOG.error("no queryable replica found in tablet {}. visible version {}",
-                        tabletId, visibleVersion);
+                String replicaInfos = "";
+                if (tablet instanceof LocalTablet) {
+                    replicaInfos = ((LocalTablet) tablet).getReplicaInfos();
+                }
+                LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
+                        tabletId, visibleVersion, replicaInfos);
                 if (LOG.isDebugEnabled()) {
                     if (olapTable.isLakeTable()) {
                         LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((LakeTablet) tablet).getShardId(),
@@ -324,7 +328,8 @@ public class OlapScanNode extends ScanNode {
                         }
                     }
                 }
-                throw new UserException("Failed to get scan range, no queryable replica found in tablet: " + tabletId);
+                throw new UserException(
+                        "Failed to get scan range, no queryable replica found in tablet: " + tabletId + " " + replicaInfos);
             }
 
             List<Replica> replicas = null;

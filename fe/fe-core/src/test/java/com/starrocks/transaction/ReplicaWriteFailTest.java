@@ -8,14 +8,12 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.sql.SQLException;
-import java.util.Random;
 
-public class TxnWithWriteFailureTest {
+public class ReplicaWriteFailTest {
     @BeforeClass
     public static void setUp() throws Exception {
         Config.enable_new_publish_mechanism = true;
-        int fePort = new Random().nextInt(10000) + 50000;
-        PseudoCluster.getOrCreate("pseudo_cluster_" + fePort, true, fePort, 3);
+        PseudoCluster.getOrCreateWithRandomPort(true, 3);
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql(null, "create database test");
         cluster.runSql("test",

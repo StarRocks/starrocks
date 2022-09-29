@@ -114,6 +114,7 @@ public class ReportHandler extends Daemon {
     private Map<ReportType, Map<Long, ReportTask>> pendingTaskMap = Maps.newHashMap();
 
     public ReportHandler() {
+        super("ReportHandler");
         GaugeMetric<Long> gaugeQueueSize = new GaugeMetric<Long>(
                 "report_queue_size", MetricUnit.NOUNIT, "report queue size") {
             @Override
@@ -238,7 +239,7 @@ public class ReportHandler extends Daemon {
     private void putToQueue(ReportTask reportTask) throws Exception {
         synchronized (pendingTaskMap) {
             if (!pendingTaskMap.containsKey(reportTask.type)) {
-                throw new Exception("Unkonw report task type" + reportTask.toString());
+                throw new Exception("Unknown report task type" + reportTask.toString());
             }
             ReportTask oldTask = pendingTaskMap.get(reportTask.type).get(reportTask.beId);
             if (oldTask == null) {

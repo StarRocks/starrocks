@@ -245,7 +245,7 @@ public class TransactionState implements Writable {
 
     // used for PublishDaemon to check whether this txn can be published
     // not persisted, so need to rebuilt if FE restarts
-    private TransactionChecker finishChecker = null;
+    private volatile TransactionChecker finishChecker = null;
     private long checkTimes = 0;
     private Span txnSpan = null;
     private String traceParent = null;
@@ -576,7 +576,7 @@ public class TransactionState implements Writable {
     public boolean isTimeout(long currentMillis) {
         return (transactionStatus == TransactionStatus.PREPARE && currentMillis - prepareTime > timeoutMs)
                 || (transactionStatus == TransactionStatus.PREPARED && (currentMillis - commitTime)
-                        / 1000 > Config.prepared_transaction_default_timeout_second);
+                / 1000 > Config.prepared_transaction_default_timeout_second);
     }
 
     /*
@@ -874,17 +874,27 @@ public class TransactionState implements Writable {
     }
 
     // Note: caller should hold db lock
-    public void buildFinishChecker(Database db) {
-        this.finishChecker = TransactionChecker.create(this, db);
+    public void prepareFinishChecker(Database db) {
+        if (finishChecker == null) {
+            synchronized (this) {
+                if (finishChecker == null) {
+                    finishChecker = TransactionChecker.create(this, db);
+                }
+            }
+        }
     }
 
     public boolean checkCanFinish() {
         // this may happen if FE restarts
         if (finishChecker == null) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                // consider txn finished if db is dropped
+                return true;
+            }
             db.readLock();
             try {
-                finishChecker = TransactionChecker.create(this, db);
+                prepareFinishChecker(db);
             } finally {
                 db.readUnlock();
             }
