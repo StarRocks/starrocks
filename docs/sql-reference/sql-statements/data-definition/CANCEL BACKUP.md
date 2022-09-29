@@ -17,7 +17,3 @@ CANCEL BACKUP FROM db_name;
     ```sql
     CANCEL BACKUP FROM example_db;
     ```
-
-## keyword
-
-CANCEL, BACKUP

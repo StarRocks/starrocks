@@ -49,7 +49,3 @@ Now the show tablet command supports filtering according to the following fields
     ```sql
     SHOW TABLET 10000;
     ```
-
-## keyword
-
-SHOW,TABLET,LIMIT

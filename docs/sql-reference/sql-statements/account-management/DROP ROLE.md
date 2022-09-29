@@ -19,7 +19,3 @@ DROP ROLE role1;
   ```sql
   DROP ROLE role1;
   ```
-
-## keyword
-
-   DROP, ROLE
