@@ -634,9 +634,11 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     context_params.num_left_probers = left_source->degree_of_parallelism();
     context_params.num_right_sinkers = right_source->degree_of_parallelism();
     context_params.plan_node_id = _id;
-    context_params.filters = conjunct_ctxs();
     context_params.rf_hub = context->fragment_context()->runtime_filter_hub();
     context_params.rf_descs = std::move(_build_runtime_filters);
+    // The order or filters should keep same with NestLoopJoinNode::buildRuntimeFilters
+    context_params.filters = _join_conjuncts;
+    std::copy(conjunct_ctxs().begin(), conjunct_ctxs().end(), std::back_inserter(context_params.filters));
 
     auto cross_join_context = std::make_shared<NLJoinContext>(std::move(context_params));
 
