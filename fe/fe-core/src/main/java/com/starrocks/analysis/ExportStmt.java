@@ -161,7 +161,9 @@ public class ExportStmt extends StatementBase {
 
     public void checkTable(GlobalStateMgr globalStateMgr) {
         Database db = globalStateMgr.getDb(tblName.getDb());
-
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+        }
         db.readLock();
         try {
             Table table = db.getTable(tblName.getTbl());

@@ -231,10 +231,6 @@ public class ExportStmtAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                 }
             }
-            // Check db.
-            if (context.getGlobalStateMgr().getDb(dbName) == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-            }
             return dbName;
         }
 

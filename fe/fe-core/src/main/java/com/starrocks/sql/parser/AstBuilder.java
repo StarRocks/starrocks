@@ -502,20 +502,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.identifier() != null) {
             db = ((Identifier) visit(context.identifier())).getValue();
         }
-        Expr where = null;
-        if (context.expression() != null) {
-            where = (Expr) visit(context.expression());
+        LimitElement le = null;
+        if (context.limitElement() != null) {
+            le = (LimitElement) visit(context.limitElement());
         }
         List<OrderByElement> orderByElements = null;
         if (context.ORDER() != null) {
             orderByElements = new ArrayList<>();
             orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
         }
-        LimitElement limitElement = null;
-        if (context.limitElement() != null) {
-            limitElement = (LimitElement) visit(context.limitElement());
+        Expr whereExpr = null;
+        if (context.expression() != null) {
+            whereExpr = (Expr) visit(context.expression());
         }
-        return new ShowExportStmt(db, where, orderByElements, limitElement);
+        return new ShowExportStmt(db, whereExpr, orderByElements, le);
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------
