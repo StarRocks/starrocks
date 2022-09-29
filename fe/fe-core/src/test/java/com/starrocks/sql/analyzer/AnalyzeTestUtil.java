@@ -82,11 +82,6 @@ public class AnalyzeTestUtil {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
-        starRocksAssert.withView("CREATE VIEW test.tall_view (ta, tb, tc, td)\n" +
-                "AS\n" +
-                "SELECT ta, tb, tc, SUM(td) FROM tall\n" +
-                "WHERE ta = \"test\" GROUP BY ta,tb,tc;");
-
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `test_object` (\n" +
                 "  `v1` int(11) NULL,\n" +
                 "  `v2` int(11) NULL,\n" +

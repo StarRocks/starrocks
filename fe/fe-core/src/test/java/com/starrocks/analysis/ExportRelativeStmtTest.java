@@ -130,7 +130,7 @@ public class ExportRelativeStmtTest {
                 "BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         analyzeFail(originStmt);
 
-        originStmt = "EXPORT TABLE tall_view TO \"hdfs://hdfs_host:port/a/b/c/\" " +
+        originStmt = "EXPORT TABLE view_to_drop TO \"hdfs://hdfs_host:port/a/b/c/\" " +
                 "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         analyzeFail(originStmt);
 
