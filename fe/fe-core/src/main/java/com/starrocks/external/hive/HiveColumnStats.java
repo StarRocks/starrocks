@@ -3,6 +3,7 @@
 package com.starrocks.external.hive;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.external.ColumnTypeConverter;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.metastore.api.BooleanColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
@@ -130,7 +131,7 @@ public class HiveColumnStats {
     }
 
     public boolean init(String hiveType, ColumnStatisticsData statsData) {
-        hiveType = Utils.getTypeKeyword(hiveType);
+        hiveType = ColumnTypeConverter.getTypeKeyword(hiveType);
         boolean isValid = false;
         switch (hiveType.toUpperCase()) {
             case "BOOLEAN":

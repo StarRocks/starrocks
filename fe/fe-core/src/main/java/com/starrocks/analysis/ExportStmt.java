@@ -41,8 +41,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.starrocks.sql.ast.PartitionNames;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -67,7 +66,7 @@ public class ExportStmt extends StatementBase {
     private static final String DEFAULT_FILE_NAME_PREFIX = "data_";
 
     private static final Set<String> VALID_SCHEMES = Sets.newHashSet(
-            "afs", "bos", "hdfs", "oss", "s3a", "cosn", "viewfs");
+            "afs", "bos", "hdfs", "oss", "s3a", "cosn", "viewfs", "ks3");
 
     private TableName tblName;
     private List<String> partitions;
@@ -253,7 +252,6 @@ public class ExportStmt extends StatementBase {
                 }
 
                 Set<String> tableColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-                int index = 0;
                 for (Column column : table.getBaseSchema()) {
                     tableColumns.add(column.getName());
                 }

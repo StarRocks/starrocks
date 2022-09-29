@@ -117,6 +117,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     @SerializedName(value = "clusterId")
+    @Deprecated
     protected int clusterId;
 
     @SerializedName(value = "state")
@@ -257,10 +258,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     public long getBaseIndexId() {
         return baseIndexId;
-    }
-
-    public void setClusterId(int clusterId) {
-        this.clusterId = clusterId;
     }
 
     public int getClusterId() {

@@ -21,4 +21,6 @@ Status SeekableInputStream::skip(int64_t count) {
     return seek(pos + count);
 }
 
+void SeekableInputStream::set_size(int64_t count) {}
+
 } // namespace starrocks::io

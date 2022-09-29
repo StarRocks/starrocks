@@ -9,6 +9,7 @@ import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.proto.AllocateStorageInfo;
+import com.staros.proto.CreateShardInfo;
 import com.staros.proto.ObjectStorageType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
@@ -25,6 +26,7 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -257,7 +259,17 @@ public class StarOSAgent {
         prepare();
         List<ShardInfo> shardInfos = null;
         try {
-            shardInfos = client.createShard(serviceId, numShards, 1, shardStorageInfo, null);
+            List<CreateShardInfo> createShardInfos = new ArrayList<>(numShards);
+            for (int i = 0; i < numShards; ++i) {
+                CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
+                builder.setReplicaCount(1);
+                builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
+                if (shardStorageInfo != null) {
+                    builder.setShardStorageInfo(shardStorageInfo);
+                }
+                createShardInfos.add(builder.build());
+            }
+            shardInfos = client.createShard(serviceId, createShardInfos);
             LOG.debug("Create shards success. shard infos: {}", shardInfos);
         } catch (StarClientException e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());

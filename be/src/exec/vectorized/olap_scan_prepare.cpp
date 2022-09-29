@@ -12,6 +12,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
+#include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_parser.h"
 #include "storage/vectorized_column_predicate.h"
 #include "types/date_value.hpp"
@@ -378,10 +379,16 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
         using ValueType = typename vectorized::RunTimeTypeTraits<SlotType>::CppType;
         SlotId slot_id;
 
-        // runtime filter existed and does not have null.
-        if (rf == nullptr || rf->has_null()) continue;
         // probe expr is slot ref and slot id matches.
         if (!desc->is_probe_slot_ref(&slot_id) || slot_id != slot.id()) continue;
+
+        // runtime filter existed and does not have null.
+        if (rf == nullptr) {
+            rt_ranger_params.add_unarrived_rf(desc, &slot);
+            continue;
+        }
+
+        if (rf->has_null()) continue;
 
         const RuntimeBloomFilter<SlotType>* filter = down_cast<const RuntimeBloomFilter<SlotType>*>(rf);
         // If this column doesn't have other filter, we use join runtime filter

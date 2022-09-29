@@ -76,7 +76,6 @@ public:
     static void set_default_create_tablet_request(TCreateTabletReq* request) {
         request->tablet_id = 12345;
         request->__set_version(1);
-        request->__set_version_hash(0);
         request->tablet_schema.schema_hash = 1111;
         request->tablet_schema.short_key_column_count = 2;
         request->tablet_schema.keys_type = TKeysType::DUP_KEYS;

@@ -13,7 +13,6 @@ import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -32,6 +31,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -296,6 +296,13 @@ public class AnalyzerUtils {
         return tables;
     }
 
+    public static Map<TableName, Table> collectAllTableAndViewWithAlias(SelectRelation statementBase) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        new AnalyzerUtils.TableAndViewCollectorWithAlias(tables).visit(statementBase);
+        return tables;
+    }
+
+
     public static Map<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
         Map<String, TableRelation> tableRelations = Maps.newHashMap();
         new AnalyzerUtils.TableRelationCollector(tableRelations).visit(statementBase);
@@ -306,6 +313,24 @@ public class AnalyzerUtils {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
         new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
         return subQueryRelations;
+    }
+
+    public static Map<TableName, Table> collectAllTableAndView(StatementBase statementBase) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        new AnalyzerUtils.TableAndViewCollector(tables).visit(statementBase);
+        return tables;
+    }
+
+    private static class TableAndViewCollector extends TableCollector {
+        public TableAndViewCollector(Map<TableName, Table> dbs) {
+            super(dbs);
+        }
+
+        public Void visitView(ViewRelation node, Void context) {
+            Table table = node.getView();
+            tables.put(node.getResolveTableName(), table);
+            return null;
+        }
     }
 
     private static class TableCollectorWithAlias extends TableCollector {

@@ -16,6 +16,7 @@
 #include "column/map_column.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/literal.h"
+#include "fs/fs.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
@@ -2279,6 +2280,93 @@ int OrcChunkReader::get_column_id_by_name(const std::string& name) const {
         return it->second;
     }
     return -1;
+}
+
+// ======================================================================================
+
+ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length)
+        : _file(std::move(file)), _length(length), _cache_buffer(0), _cache_offset(0), _buffer_stream(_file) {
+    SharedBufferedInputStream::CoalesceOptions options = {.max_dist_size = config::io_coalesce_read_max_distance_size,
+                                                          .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+    _buffer_stream.set_coalesce_options(options);
+}
+
+void ORCHdfsFileStream::prepareCache(orc::InputStream::PrepareCacheScope scope, uint64_t offset, uint64_t length) {
+    const size_t cache_max_size = config::orc_file_cache_max_size;
+    if (length > cache_max_size) return;
+    if (canUseCacheBuffer(offset, length)) return;
+
+    // If this stripe is small, probably other stripes are also small
+    // we combine those reads into one, and try to read several stripes in one shot.
+    if (scope == orc::InputStream::PrepareCacheScope::READ_FULL_STRIPE) {
+        length = std::min(_length - offset, cache_max_size);
+    }
+
+    _cache_buffer.resize(length);
+    _cache_offset = offset;
+    doRead(_cache_buffer.data(), length, offset, true);
+}
+
+bool ORCHdfsFileStream::canUseCacheBuffer(uint64_t offset, uint64_t length) {
+    if ((_cache_buffer.size() != 0) && (offset >= _cache_offset) &&
+        ((offset + length) <= (_cache_offset + _cache_buffer.size()))) {
+        return true;
+    }
+    return false;
+}
+
+void ORCHdfsFileStream::read(void* buf, uint64_t length, uint64_t offset) {
+    if (canUseCacheBuffer(offset, length)) {
+        size_t idx = offset - _cache_offset;
+        memcpy(buf, _cache_buffer.data() + idx, length);
+    } else {
+        doRead(buf, length, offset, false);
+    }
+}
+
+const std::string& ORCHdfsFileStream::getName() const {
+    return _file->filename();
+}
+
+void ORCHdfsFileStream::doRead(void* buf, uint64_t length, uint64_t offset, bool direct) {
+    if (buf == nullptr) {
+        throw orc::ParseError("Buffer is null");
+    }
+    Status status;
+    if (direct || !_buffer_stream_enabled) {
+        status = _file->read_at_fully(offset, buf, length);
+    } else {
+        const uint8_t* ptr = nullptr;
+        size_t nbytes = length;
+        status = _buffer_stream.get_bytes(&ptr, offset, &nbytes, false);
+        DCHECK_EQ(nbytes, length);
+        if (status.ok()) {
+            ::memcpy(buf, ptr, length);
+        }
+    }
+    if (!status.ok()) {
+        auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
+        throw orc::ParseError(msg);
+    }
+}
+
+void ORCHdfsFileStream::clearIORanges() {
+    _buffer_stream_enabled = false;
+    _buffer_stream.release();
+}
+
+void ORCHdfsFileStream::setIORanges(std::vector<orc::InputStream::IORange>& io_ranges) {
+    _buffer_stream_enabled = true;
+    std::vector<SharedBufferedInputStream::IORange> bs_io_ranges;
+    for (const auto& r : io_ranges) {
+        bs_io_ranges.emplace_back(SharedBufferedInputStream::IORange{.offset = static_cast<int64_t>(r.offset),
+                                                                     .size = static_cast<int64_t>(r.size)});
+    }
+    Status st = _buffer_stream.set_io_ranges(bs_io_ranges);
+    if (!st.ok()) {
+        auto msg = strings::Substitute("Failed to setIORanges $0: $1", _file->filename(), st.to_string());
+        throw orc::ParseError(msg);
+    }
 }
 
 } // namespace starrocks::vectorized

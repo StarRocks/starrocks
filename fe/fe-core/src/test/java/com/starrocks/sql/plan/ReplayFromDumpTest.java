@@ -19,6 +19,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -47,6 +48,7 @@ public class ReplayFromDumpTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setJoinImplementationMode("auto");
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
     }
@@ -54,6 +56,11 @@ public class ReplayFromDumpTest {
     @Before
     public void before() {
         BackendCoreStat.reset();
+    }
+
+    @AfterClass
+    public static void afterClass() throws Exception {
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
     }
 
     public String getModelContent(String filename, String model) {
@@ -141,6 +148,7 @@ public class ReplayFromDumpTest {
             queryDumpInfo.setSessionVariable(sessionVariable);
         }
         queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        queryDumpInfo.getSessionVariable().setEnableLocalShuffleAgg(false);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));
@@ -168,8 +176,8 @@ public class ReplayFromDumpTest {
         sessionVariable.setNewPlanerAggStage(2);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch17"), sessionVariable);
-        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update serialize)"));
-        Assert.assertTrue(replayPair.second.contains("3:AGGREGATE (merge finalize)"));
+        Assert.assertTrue(replayPair.second.contains("2:AGGREGATE (update serialize)"));
+        Assert.assertTrue(replayPair.second.contains("4:AGGREGATE (merge finalize)"));
     }
 
     @Test
@@ -209,7 +217,7 @@ public class ReplayFromDumpTest {
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
         // Check the size of the left and right tables
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  49:NESTLOOP JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("49:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  other join predicates: cast([934: d_month_seq, INT, true] as BIGINT) <= [1017: expr, BIGINT, true]\n" +
                 "  |  cardinality: 18262\n" +
@@ -244,7 +252,7 @@ public class ReplayFromDumpTest {
                 "  |    \n" +
                 "  32:OlapScanNode\n" +
                 "     table: date_dim, rollup: date_dim"));
-        Assert.assertTrue(replayPair.second.contains(" |----18:EXCHANGE\n" +
+        Assert.assertTrue(replayPair.second.contains("  |----18:EXCHANGE\n" +
                 "  |       cardinality: 6304\n" +
                 "  |    \n" +
                 "  2:OlapScanNode\n" +
@@ -371,6 +379,14 @@ public class ReplayFromDumpTest {
     }
 
     @Test
+    public void testTPCDS64() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/tpcds64"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains(" 83:SELECT\n" +
+                "  |  predicates: 521: d_year = 1999"));
+    }
+
+    @Test
     public void testCrossReorder() throws Exception {
         RuleSet mockRule = new RuleSet() {
             @Override
@@ -422,8 +438,10 @@ public class ReplayFromDumpTest {
     public void testJoinWithPipelineDop() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_pipeline_dop"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("25:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)"));
+        Assert.assertTrue(replayPair.second.contains("24:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 5: ss_customer_sk = 52: c_customer_sk"));
     }
 
     @Test
@@ -484,7 +502,7 @@ public class ReplayFromDumpTest {
                 getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), null,
                         TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  20:Project\n" +
-                "  |  <slot 6> : bitmap_and(24: bitmap_union, 32: bitmap_union)\n" +
+                "  |  <slot 33> : bitmap_and(21: bitmap_union, 29: bitmap_union)\n" +
                 "  |  \n" +
                 "  19:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
@@ -493,7 +511,7 @@ public class ReplayFromDumpTest {
                 "  |----18:EXCHANGE\n" +
                 "  |    \n" +
                 "  11:Project\n" +
-                "  |  <slot 24> : 21: bitmap_union"));
+                "  |  <slot 21> : 18: bitmap_union"));
     }
 
     @Test
@@ -575,15 +593,15 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second, replayPair.second.contains(" 21:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: if(22: c_0_0 != 1: c_0_0, 4: c_0_3, 23: c_0_3) = 21: expr, " +
-                "CASE WHEN (24: countRows IS NULL) OR (24: countRows = 0) THEN FALSE WHEN 1: c_0_0 IS NULL " +
-                "THEN NULL WHEN 17: c_0_0 IS NOT NULL THEN TRUE WHEN 25: countNotNulls < 24: countRows " +
-                "THEN NULL ELSE FALSE END IS NULL"));
+                "  |  other join predicates: if(20: c_0_0 != 1: c_0_0, 4: c_0_3, 21: c_0_3) = '1969-12-28', " +
+                "CASE WHEN (22: countRows IS NULL) OR (22: countRows = 0) THEN FALSE " +
+                "WHEN 1: c_0_0 IS NULL THEN NULL WHEN 16: c_0_0 IS NOT NULL THEN TRUE " +
+                "WHEN 23: countNotNulls < 22: countRows THEN NULL ELSE FALSE END IS NULL"));
         Assert.assertTrue(replayPair.second.contains("14:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: c_0_0 = 17: c_0_0\n" +
-                "  |  other join predicates: if(17: c_0_0 != 1: c_0_0, 4: c_0_3, 19: c_0_3) = 18: expr"));
+                "  |  equal join conjunct: 1: c_0_0 = 16: c_0_0\n" +
+                "  |  other join predicates: if(16: c_0_0 != 1: c_0_0, 4: c_0_3, 18: c_0_3) = '1969-12-28'"));
     }
 
     @Test
@@ -613,7 +631,7 @@ public class ReplayFromDumpTest {
     public void testHiveTPCH08UsingResource() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch08_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second.contains("33:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("30:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [33: o_orderkey, INT, true] = [17: l_orderkey, INT, true]\n" +
                 "  |  build runtime filters:\n" +
@@ -663,7 +681,7 @@ public class ReplayFromDumpTest {
     public void testParHiveTPCH08UsingCatalog() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch08_catalog"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second.contains("21:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("18:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [18: l_partkey, INT, true] = [1: p_partkey, INT, true]\n" +
                 "  |  build runtime filters:\n" +

@@ -57,8 +57,7 @@ Status CumulativeCompaction::compact() {
 
 Status CumulativeCompaction::pick_rowsets_to_compact() {
     std::vector<RowsetSharedPtr> candidate_rowsets;
-    _tablet->pick_candicate_rowsets_to_cumulative_compaction(config::cumulative_compaction_skip_window_seconds,
-                                                             &candidate_rowsets);
+    _tablet->pick_candicate_rowsets_to_cumulative_compaction(&candidate_rowsets);
 
     if (candidate_rowsets.empty()) {
         return Status::NotFound("cumulative compaction no suitable version error.");

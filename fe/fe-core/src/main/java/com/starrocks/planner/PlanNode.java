@@ -468,7 +468,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return "";
     }
 
-    protected String getNodeVerboseExplain(String prefix) {
+    private String getNodeVerboseExplain(String prefix) {
         return getNodeExplainString(prefix, TExplainLevel.VERBOSE);
     }
 
@@ -638,7 +638,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return output.toString();
     }
 
-    private String getVerboseExplain(List<? extends Expr> exprs, TExplainLevel level) {
+    protected String getVerboseExplain(List<? extends Expr> exprs, TExplainLevel level) {
         if (exprs == null) {
             return "";
         }
@@ -801,7 +801,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         }
         if (isBound && description.canProbeUse(this)) {
             description.addProbeExpr(id.asInt(), probeExpr);
-            description.addPartitionByExprs(id.asInt(), partitionByExprs);
+            description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
             probeRuntimeFilters.add(description);
             return true;
         }
@@ -859,7 +859,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             // can not push down to children.
             // use runtime filter at this level.
             description.addProbeExpr(id.asInt(), probeExpr);
-            description.addPartitionByExprs(id.asInt(), partitionByExprs);
+            description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
             probeRuntimeFilters.add(description);
             return true;
         }

@@ -1,8 +1,8 @@
 # StarRocks version 2.4
 
-## 2.4.0 RC01
+## 2.4.0 RC
 
-Release date: September 9th, 2022
+Release date: September 17th, 2022
 
 ### New Features
 
@@ -33,9 +33,7 @@ Release date: September 9th, 2022
 
 ### Improvements
 
-- The Primary Key model supports flushing VARCHAR-type primary key indexes to disks.
-
-  From version 2.4.0, the Primary Key model supports the same data types for primary key indexes regardless of whether persistent primary key index is turned on or not.
+- The Primary Key model supports flushing VARCHAR-type primary key indexes to disks. From version 2.4.0, the Primary Key model supports the same data types for primary key indexes regardless of whether persistent primary key index is turned on or not.
 
 - Optimized the query performance on external tables.
 
@@ -50,6 +48,10 @@ Release date: September 9th, 2022
 
 - Adaptive multi-threading is enabled for tablet scanning to reduce the dependency of scanning performance on the tablet number. As a result, you can set the number of buckets more easily. For more information, see [Determine the number of buckets](../table_design/Data_distribution.md#how-to-determine-the-number-of-buckets).
 
+- Supports querying compressed TXT files in Apache Hive.
+
+- Adjusted the mechanisms of default PageCache size calculation and memory consistency check to avoid OOM issues during multi-instance deployments.
+
 - Functions:
 
   - You can use COUNT DISTINCT over multiple columns to calculate the number of distinct column combinations. For more information, see [count](../sql-reference/sql-functions/aggregate-functions/count.md).
@@ -62,18 +64,24 @@ The following bugs are fixed:
 
 - DECIMAL data types returned by DESC are different from those specified in the CREATE TABLE statement. [#7309](https://github.com/StarRocks/starrocks/pull/7309)
 
-- FE metadata management issues that affect the stability of FE. [#6685](https://github.com/StarRocks/starrocks/pull/6685) [#9445](https://github.com/StarRocks/starrocks/pull/9445) [#7974](https://github.com/StarRocks/starrocks/pull/7974) [#7455](https://github.com/StarRocks/starrocks/pull/7455)
+- FE metadata management issues that affect the stability of FEs. [#6685](https://github.com/StarRocks/starrocks/pull/6685) [#9445](https://github.com/StarRocks/starrocks/pull/9445) [#7974](https://github.com/StarRocks/starrocks/pull/7974) [#7455](https://github.com/StarRocks/starrocks/pull/7455)
 
 - Data load-related issues:
 
-  - Broke Load fails when ARRAY-type column is set. [#9158](https://github.com/StarRocks/starrocks/pull/9158)
+  - Broke Load fails when ARRAY columns are specified. [#9158](https://github.com/StarRocks/starrocks/pull/9158)
   - Replicas are inconsistent after data is loaded to a non-Duplicate Key table via Broker Load. [#8714](https://github.com/StarRocks/starrocks/pull/8714)
   - Executing ALTER ROUTINE LOAD raises NPE. [#7804](https://github.com/StarRocks/starrocks/pull/7804)
 
-- Data Lake analytic-related issues:
+- Data Lake analytics-related issues:
 
-  - Queries on Parquet-format in Hive external tables fail. [#7413](https://github.com/StarRocks/starrocks/pull/7413) [#7482](https://github.com/StarRocks/starrocks/pull/7482) [#7624](https://github.com/StarRocks/starrocks/pull/7624)
-  - Incorrect results are returned to queries with `limit` clause on Elasticsearch external table. [#9226](https://github.com/StarRocks/starrocks/pull/9226)
+  - Queries on Parquet data in Hive external tables fail. [#7413](https://github.com/StarRocks/starrocks/pull/7413) [#7482](https://github.com/StarRocks/starrocks/pull/7482) [#7624](https://github.com/StarRocks/starrocks/pull/7624)
+  - Incorrect results are returned for queries with the `limit` clause on Elasticsearch external tables. [#9226](https://github.com/StarRocks/starrocks/pull/9226)
+
+- An unknown error occurs during queries on an Apache Iceberg table with a complex data type. [#11298](https://github.com/StarRocks/starrocks/pull/11298)
+
+- Metadata is inconsistent between the Leader FE and Follower FE nodes. [#11215](https://github.com/StarRocks/starrocks/pull/11215)
+
+- BE crashes when the size of BITMAP data exceeds 2 GB. [#11178](https://github.com/StarRocks/starrocks/pull/11178)
 
 ### Behavior Change
 
@@ -81,5 +89,5 @@ Page Cache is enabled by default. The default cache size is 20% of the system me
 
 ### Others
 
-- Announcing the general availability of the Resource Group.
+- Announcing the general availability of Resource Group.
 - Announcing the general availability of the JSON data type and its related functions.

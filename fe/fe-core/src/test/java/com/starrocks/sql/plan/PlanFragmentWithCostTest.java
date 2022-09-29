@@ -22,8 +22,11 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class PlanFragmentWithCostTest extends PlanTestBase {
+    private static final int NUM_TABLE2_ROWS = 10000;
+    private static final int NUM_TABLE0_ROWS = 10000;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -33,10 +36,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
-        setTableStatistics(table2, 10000);
+        setTableStatistics(table2, NUM_TABLE2_ROWS);
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
-        setTableStatistics(t0, 10000);
+        setTableStatistics(t0, NUM_TABLE0_ROWS);
 
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withTable("CREATE TABLE test_mv\n" +
@@ -1321,51 +1324,51 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 " from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
         String plan3 = getFragmentPlan(sql3);
         assertContains(plan3, "PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:1: LO_ORDERDATE | 2: LO_ORDERKEY | 41: sum | 42: count\n" +
-                "  PARTITION: UNPARTITIONED\n" +
-                "\n" +
-                "  RESULT SINK\n" +
-                "\n" +
-                "  2:EXCHANGE\n" +
-                "\n" +
-                "PLAN FRAGMENT 1\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: RANDOM\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    UNPARTITIONED\n" +
-                "\n" +
-                "  1:Project\n" +
-                "  |  <slot 1> : 1: LO_ORDERDATE\n" +
-                "  |  <slot 2> : 2: LO_ORDERKEY\n" +
-                "  |  <slot 41> : 13: LO_REVENUE\n" +
-                "  |  <slot 42> : ",
+                        " OUTPUT EXPRS:1: LO_ORDERDATE | 2: LO_ORDERKEY | 41: sum | 42: count\n" +
+                        "  PARTITION: UNPARTITIONED\n" +
+                        "\n" +
+                        "  RESULT SINK\n" +
+                        "\n" +
+                        "  2:EXCHANGE\n" +
+                        "\n" +
+                        "PLAN FRAGMENT 1\n" +
+                        " OUTPUT EXPRS:\n" +
+                        "  PARTITION: RANDOM\n" +
+                        "\n" +
+                        "  STREAM DATA SINK\n" +
+                        "    EXCHANGE ID: 02\n" +
+                        "    UNPARTITIONED\n" +
+                        "\n" +
+                        "  1:Project\n" +
+                        "  |  <slot 1> : 1: LO_ORDERDATE\n" +
+                        "  |  <slot 2> : 2: LO_ORDERKEY\n" +
+                        "  |  <slot 41> : 13: LO_REVENUE\n" +
+                        "  |  <slot 42> : ",
                 ": mv_count_c_name\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: lineorder_flat_for_mv\n" +
-                "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
-                "     partitions=7/7\n" +
-                "     rollup: agg_mv\n" +
-                "     tabletRatio=1050/1050");
+                        "  |  \n" +
+                        "  0:OlapScanNode\n" +
+                        "     TABLE: lineorder_flat_for_mv\n" +
+                        "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
+                        "     partitions=7/7\n" +
+                        "     rollup: agg_mv\n" +
+                        "     tabletRatio=1050/1050");
 
         String sql4 = "select LO_ORDERDATE, LO_ORDERKEY, sum(LO_REVENUE) + 1, count(C_NAME) * 3" +
                 " from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
         String plan4 = getFragmentPlan(sql4);
         assertContains(plan4, "1:Project\n" +
-                "  |  <slot 1> : 1: LO_ORDERDATE\n" +
-                "  |  <slot 2> : 2: LO_ORDERKEY\n" +
-                "  |  <slot 43> : 13: LO_REVENUE + 1\n" +
-                "  |  <slot 44> :",
+                        "  |  <slot 1> : 1: LO_ORDERDATE\n" +
+                        "  |  <slot 2> : 2: LO_ORDERKEY\n" +
+                        "  |  <slot 43> : 13: LO_REVENUE + 1\n" +
+                        "  |  <slot 44> :",
                 ": mv_count_c_name * 3\n" +
-                "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: lineorder_flat_for_mv\n" +
-                "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
-                "     partitions=7/7\n" +
-                "     rollup: agg_mv\n" +
-                "     tabletRatio=1050/1050");
+                        "  |  \n" +
+                        "  0:OlapScanNode\n" +
+                        "     TABLE: lineorder_flat_for_mv\n" +
+                        "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
+                        "     partitions=7/7\n" +
+                        "     rollup: agg_mv\n" +
+                        "     tabletRatio=1050/1050");
     }
 
     @Test
@@ -1429,6 +1432,142 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  equal join conjunct: 1: v1 = 4: v7\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE");
-    
+    }
+
+    @Test
+    public void testGroupingSetWithSameDistributeAgg() throws Exception {
+        String sql = "select v2, v3, max(x1) " +
+                " from (select v3, v2, sum(v1) as x1 from t0 group by v3, v2 ) x " +
+                " group by grouping sets((v3, v2), (v2));";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  7:AGGREGATE (merge finalize)\n" +
+                "  |  output: max(5: max)\n" +
+                "  |  group by: 3: v3, 2: v2, 6: GROUPING_ID\n" +
+                "  |  \n" +
+                "  6:EXCHANGE");
+    }
+
+    @Test
+    public void testGroupingSetWithSameDistributeJoin() throws Exception {
+        String sql = "select v2, v3, max(x1) " +
+                " from (select v3, v2, v1 as x1 from t0 right outer join[shuffle] t1 on v3 = v6 and v2 = v5) x " +
+                " group by grouping sets((v3, v2), (v2));";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  9:AGGREGATE (merge finalize)\n" +
+                "  |  output: max(7: max)\n" +
+                "  |  group by: 3: v3, 2: v2, 8: GROUPING_ID\n" +
+                "  |  \n" +
+                "  8:EXCHANGE");
+    }
+
+    @Test
+    public void testGroupingSetWithSameDistributeWindow() throws Exception {
+        String sql = "select v2, v3, max(x1) " +
+                " from (select v3, v2, sum(v1) over (partition by v3, v2 order by v3) as x1 from t0) x " +
+                " group by grouping sets((v3, v2), (v2));";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  8:AGGREGATE (merge finalize)\n" +
+                "  |  output: max(5: max)\n" +
+                "  |  group by: 3: v3, 2: v2, 6: GROUPING_ID\n" +
+                "  |  \n" +
+                "  7:EXCHANGE");
+    }
+
+
+    @Test
+    public void testOnePhaseAggWithLocalShuffle(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+                returns(true, true, true, false, true);
+            }
+
+            final List<ColumnStatistic> avgHighCardinality = ImmutableList.of(
+                    new ColumnStatistic(0.0, NUM_TABLE0_ROWS, 0.0, 10, NUM_TABLE0_ROWS));
+            final List<ColumnStatistic> avgLowCardinality = ImmutableList.of(
+                    new ColumnStatistic(0.0, NUM_TABLE0_ROWS, 0.0, 10, 100));
+            {
+                mockedStatisticStorage.getColumnStatistics((Table) any, Lists.newArrayList("v2"));
+                returns(avgHighCardinality, avgHighCardinality, avgHighCardinality, avgHighCardinality, avgLowCardinality);
+            }
+
+            {
+                mockedStatisticStorage.getColumnStatistics((Table) any, Lists.newArrayList("v1"));
+                result = avgLowCardinality;
+            }
+        };
+
+        boolean prevEnableLocalShuffleAgg = connectContext.getSessionVariable().isEnableLocalShuffleAgg();
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+
+        try {
+            // case 1: use one-phase local aggregation with local shuffle for high-cardinality agg and single BE.
+            String sql = "select sum(v2) from t0 group by v2";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  withLocalShuffle: true\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // case 2: use one-phase local aggregation without local shuffle for high-cardinality agg and single BE.
+            sql = "select sum(v1) from t0 group by v1";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(1: v1)\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // case 3: use two-phase aggregation for non-grouping agg.
+            sql = "select sum(v2) from t0";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  2:EXCHANGE");
+
+            // case 4: use two-phase aggregation for multiple BEs.
+            sql = "select sum(v2) from t0 group by v2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  2:EXCHANGE");
+
+            // case 5: use two-phase aggregation for low-cardinality agg.
+            sql = "select sum(v2) from t0 group by v2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  2:EXCHANGE");
+        } finally {
+            connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
+        }
     }
 }

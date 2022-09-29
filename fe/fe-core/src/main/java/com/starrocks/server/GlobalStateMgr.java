@@ -36,13 +36,12 @@ import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelBackupStmt;
-import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.InstallPluginStmt;
-import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UninstallPluginStmt;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
@@ -80,7 +79,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
-import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -104,13 +102,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.Daemon;
-import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.SmallFileMgr;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
@@ -178,6 +174,7 @@ import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
@@ -193,28 +190,30 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
 import com.starrocks.sql.ast.AlterDatabaseRename;
-import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.RecoverDbStmt;
+import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -226,6 +225,7 @@ import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.LeaderTaskExecutor;
+import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshTableRequest;
@@ -358,6 +358,15 @@ public class GlobalStateMgr {
 
     private Auth auth;
 
+    // We're developing a new privilege & authentication framework
+    // This is used to turned on in hard code.
+    public static final boolean USING_NEW_PRIVILEGE = false;
+    // change to true in UT
+    private boolean usingNewPrivilege = USING_NEW_PRIVILEGE;
+
+    private AuthenticationManager authenticationManager;
+    private PrivilegeManager privilegeManager;
+
     private DomainResolver domainResolver;
 
     private TabletSchedulerStat stat;
@@ -368,7 +377,7 @@ public class GlobalStateMgr {
 
     // Thread pools for pending and loading task, separately
     private LeaderTaskExecutor pendingLoadTaskScheduler;
-    private LeaderTaskExecutor loadingLoadTaskScheduler;
+    private PriorityLeaderTaskExecutor loadingLoadTaskScheduler;
 
     private LoadJobScheduler loadJobScheduler;
 
@@ -527,8 +536,12 @@ public class GlobalStateMgr {
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
 
-        this.auth = new Auth();
-        this.domainResolver = new DomainResolver(auth);
+        if (!usingNewPrivilege) {
+            this.auth = new Auth();
+            this.domainResolver = new DomainResolver(auth);
+            this.authenticationManager = null;
+            this.privilegeManager = null;
+        }
 
         this.resourceGroupMgr = new ResourceGroupMgr(this);
 
@@ -549,10 +562,11 @@ public class GlobalStateMgr {
         this.pendingLoadTaskScheduler =
                 new LeaderTaskExecutor("pending_load_task_scheduler", Config.async_load_task_pool_size,
                         Config.desired_max_waiting_jobs, !isCheckpointCatalog);
-        // One load job will be split into multiple loading tasks, the queue size is not determined, so set Integer.MAX_VALUE.
-        this.loadingLoadTaskScheduler =
-                new LeaderTaskExecutor("loading_load_task_scheduler", Config.async_load_task_pool_size,
-                        Integer.MAX_VALUE, !isCheckpointCatalog);
+        // One load job will be split into multiple loading tasks, the queue size is not
+        // determined, so set desired_max_waiting_jobs * 10
+        this.loadingLoadTaskScheduler = new PriorityLeaderTaskExecutor("loading_load_task_scheduler",
+                Config.async_load_task_pool_size,
+                Config.desired_max_waiting_jobs * 10, !isCheckpointCatalog);
         this.loadJobScheduler = new LoadJobScheduler();
         this.loadManager = new LoadManager(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadManager);
@@ -655,6 +669,14 @@ public class GlobalStateMgr {
 
     public Auth getAuth() {
         return auth;
+    }
+
+    public AuthenticationManager getAuthenticationManager() {
+        return authenticationManager;
+    }
+
+    public PrivilegeManager getPrivilegeManager() {
+        return privilegeManager;
     }
 
     public ResourceGroupMgr getResourceGroupMgr() {
@@ -848,6 +870,7 @@ public class GlobalStateMgr {
 
         // 2. get cluster id and role (Observer or Follower)
         nodeMgr.getClusterIdAndRoleOnStartup();
+        initAuth(usingNewPrivilege);
 
         // 3. Load image first and replay edits
         initJournal();
@@ -867,6 +890,23 @@ public class GlobalStateMgr {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
+    }
+
+    // set usingNewPrivilege = true in UT
+    public void initAuth(boolean usingNewPrivilege) throws AuthenticationException {
+        if (usingNewPrivilege) {
+            this.usingNewPrivilege = true;
+            this.authenticationManager = new AuthenticationManager();
+            this.authenticationManager.init();
+            this.privilegeManager = new PrivilegeManager(this, null);
+            this.auth = null;
+            this.domainResolver = null;
+            LOG.info("using new privilege framework..");
+        }
+    }
+
+    public boolean isUsingNewPrivilege() {
+        return usingNewPrivilege;
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -982,7 +1022,7 @@ public class GlobalStateMgr {
 
             isReady.set(true);
 
-            String msg = "leaer finished to replay journal, can write now.";
+            String msg = "leader finished to replay journal, can write now.";
             Util.stdoutWithTime(msg);
             LOG.info(msg);
             // for leader, there are some new thread pools need to register metric
@@ -1051,7 +1091,7 @@ public class GlobalStateMgr {
         routineLoadTaskScheduler.start();
         // start dynamic partition task
         dynamicPartitionScheduler.start();
-        // start daemon thread to update db used data quota for db txn manager periodly
+        // start daemon thread to update db used data quota for db txn manager periodically
         updateDbUsedDataQuotaDaemon.start();
         statisticsMetaManager.start();
         statisticAutoCollector.start();
@@ -1077,8 +1117,10 @@ public class GlobalStateMgr {
             metastoreEventsProcessor.init();
             metastoreEventsProcessor.start();
         }
-        // domain resolver
-        domainResolver.start();
+        if (! usingNewPrivilege) {
+            // domain resolver
+            domainResolver.start();
+        }
         if (Config.use_staros) {
             compactionManager.start();
         }
@@ -1136,6 +1178,9 @@ public class GlobalStateMgr {
                 GlobalStateMgr.isCheckpointThread());
         long loadImageStartTime = System.currentTimeMillis();
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
+        if (usingNewPrivilege) {
+            auth = new Auth();
+        }
 
         long checksum = 0;
         long remoteChecksum = -1;  // in case of empty image file checksum match
@@ -1186,6 +1231,7 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadCompactionManager(dis, checksum);
             remoteChecksum = dis.readLong();
+            loadRBACPrivilege(dis);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1193,6 +1239,10 @@ public class GlobalStateMgr {
         }
 
         Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
+
+        if (usingNewPrivilege) {
+            auth = null;
+        }
 
         long loadImageEndTime = System.currentTimeMillis();
         this.imageJournalId = storage.getImageJournalId();
@@ -1264,6 +1314,13 @@ public class GlobalStateMgr {
         }
         LOG.info("finished replay alterJob from image");
         return newChecksum;
+    }
+
+    // TODO put this at the end of the image before 3.0 release
+    public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
+        if (usingNewPrivilege) {
+            this.authenticationManager = AuthenticationManager.load(dis);
+        }
     }
 
     public long loadAlterJob(DataInputStream dis, long checksum, AlterJobV2.JobType type) throws IOException {
@@ -1380,6 +1437,10 @@ public class GlobalStateMgr {
         // save image does not need any lock. because only checkpoint thread will call this method.
         LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), GlobalStateMgr.isCheckpointThread());
 
+        if (usingNewPrivilege) {
+            auth = new Auth();
+        }
+
         long checksum = 0;
         long saveImageStartTime = System.currentTimeMillis();
         try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(curFile))) {
@@ -1422,6 +1483,11 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = compactionManager.saveCompactionManager(dos, checksum);
             dos.writeLong(checksum);
+            saveRBACPrivilege(dos);
+        }
+
+        if (usingNewPrivilege) {
+            auth = null;
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -1458,6 +1524,13 @@ public class GlobalStateMgr {
             checksum = saveAlterJob(dos, checksum, type);
         }
         return checksum;
+    }
+
+    // TODO put this at the end of the image before 3.0 release
+    public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
+        if (usingNewPrivilege) {
+            this.authenticationManager.save(dos);
+        }
     }
 
     public long saveAlterJob(DataOutputStream dos, long checksum, AlterJobV2.JobType type) throws IOException {
@@ -1622,7 +1695,7 @@ public class GlobalStateMgr {
     /**
      * Replay journal from replayedJournalId + 1 to toJournalId
      * used by checkpointer/replay after state change
-     * toJournalId is a definite number and cannot set to -1/JournalCursor.CUROSR_END_KEY
+     * toJournalId is a definite number and cannot set to -1/JournalCursor.CURSOR_END_KEY
      */
     public void replayJournal(long toJournalId) throws JournalException {
         if (toJournalId <= replayedJournalId.get()) {
@@ -1737,7 +1810,7 @@ public class GlobalStateMgr {
         try {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
                 if (!StringUtils.isEmpty(idStr) && Long.valueOf(idStr) == replayedJournalId.get() + 1) {
-                    LOG.info("skip bad replayed journal id {} because configed {}",
+                    LOG.info("skip bad replayed journal id {} because configured {}",
                             idStr, Config.metadata_journal_skip_bad_journal_ids);
                     return true;
                 }
@@ -1861,74 +1934,6 @@ public class GlobalStateMgr {
         localMetastore.replayRecoverPartition(info);
     }
 
-    public static String getMaterializedViewDdlStmt(MaterializedView mv) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("CREATE MATERIALIZED VIEW `").append(mv.getName()).append("`");
-        if (!Strings.isNullOrEmpty(mv.getComment())) {
-            sb.append("\nCOMMENT \"").append(mv.getComment()).append("\"");
-        }
-
-        // partition
-        PartitionInfo partitionInfo = mv.getPartitionInfo();
-        if (!(partitionInfo instanceof SinglePartitionInfo)) {
-            sb.append("\n").append(partitionInfo.toSql(mv, null));
-        }
-
-        // distribution
-        DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
-        sb.append("\n").append(distributionInfo.toSql());
-
-        // refresh scheme
-        MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
-        if (refreshScheme == null) {
-            sb.append("\nREFRESH ").append("UNKNOWN");
-        } else {
-            sb.append("\nREFRESH ").append(refreshScheme.getType());
-        }
-        if (refreshScheme != null && refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
-            MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-            if (asyncRefreshContext.isDefineStartTime()) {
-                sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
-                                .format(DateUtils.DATE_TIME_FORMATTER))
-                        .append("\")");
-            }
-            if (asyncRefreshContext.getTimeUnit() != null) {
-                sb.append(" EVERY(INTERVAL ").append(asyncRefreshContext.getStep()).append(" ")
-                        .append(asyncRefreshContext.getTimeUnit()).append(")");
-            }
-        }
-
-        // properties
-        sb.append("\nPROPERTIES (\n");
-
-        // replicationNum
-        Short replicationNum = mv.getDefaultReplicationNum();
-        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
-        sb.append(replicationNum).append("\"");
-
-        // storageMedium
-        String storageMedium = mv.getStorageMedium();
-        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
-                .append("\" = \"");
-        sb.append(storageMedium).append("\"");
-
-        // storageCooldownTime
-        Map<String, String> properties = mv.getTableProperty().getProperties();
-        if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
-            sb.append("\n");
-        } else {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
-                    .append("\" = \"");
-            sb.append(TimeUtils.longToTimeString(
-                    Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)))).append("\"");
-            sb.append("\n");
-        }
-        sb.append(")");
-        sb.append("\nAS ").append(mv.getViewDefineSql());
-        sb.append(";");
-        return sb.toString();
-    }
-
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
                                   List<String> createRollupStmt, boolean separatePartition,
                                   boolean hidePassword) {
@@ -1942,7 +1947,7 @@ public class GlobalStateMgr {
         // 1.1 materialized view
         if (table.getType() == TableType.MATERIALIZED_VIEW) {
             MaterializedView mv = (MaterializedView) table;
-            createTableStmt.add(getMaterializedViewDdlStmt(mv));
+            createTableStmt.add(mv.getMaterializedViewDdlStmt(true));
             return;
         }
 
@@ -1989,7 +1994,7 @@ public class GlobalStateMgr {
                 sb.append(",\n");
             }
             // There MUST BE 2 space in front of each column description line
-            // sqlalchemy requires this to parse SHOW CREATE TAEBL stmt.
+            // sqlalchemy requires this to parse SHOW CREATE TABLE stmt.
             if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
@@ -2099,19 +2104,19 @@ public class GlobalStateMgr {
 
             // enable storage cache && cache ttl
             if (table.isLakeTable()) {
-                Map<String, String> storageProperities = ((LakeTable) olapTable).getProperties();
+                Map<String, String> storageProperties = ((LakeTable) olapTable).getProperties();
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)
                         .append("\" = \"");
-                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)
                         .append("\" = \"");
-                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
                         .append("\" = \"");
-                sb.append(storageProperities.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
             }
 
             // storage type
@@ -2515,7 +2520,7 @@ public class GlobalStateMgr {
         return pendingLoadTaskScheduler;
     }
 
-    public LeaderTaskExecutor getLoadingLoadTaskScheduler() {
+    public PriorityLeaderTaskExecutor getLoadingLoadTaskScheduler() {
         return loadingLoadTaskScheduler;
     }
 
@@ -2757,7 +2762,7 @@ public class GlobalStateMgr {
         localMetastore.dropMaterializedView(stmt);
     }
 
-    public void alterMaterializedView(AlterMaterializedViewStatement stmt) throws DdlException, MetaNotFoundException {
+    public void alterMaterializedView(AlterMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
         localMetastore.alterMaterializedView(stmt);
     }
 
@@ -2770,7 +2775,7 @@ public class GlobalStateMgr {
     }
 
     /*
-     * used for handling CacnelAlterStmt (for client is the CANCEL ALTER
+     * used for handling CancelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler
      */
     public void cancelAlter(CancelAlterTableStmt stmt) throws DdlException {
@@ -3101,7 +3106,7 @@ public class GlobalStateMgr {
             unlock();
         }
 
-        LOG.info("finished dumpping image to {}", dumpFilePath);
+        LOG.info("finished dumping image to {}", dumpFilePath);
         return dumpFilePath;
     }
 

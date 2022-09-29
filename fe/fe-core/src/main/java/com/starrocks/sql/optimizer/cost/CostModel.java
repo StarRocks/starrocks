@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer.cost;
 import com.google.common.base.Preconditions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -61,6 +62,13 @@ public class CostModel {
         return costEstimate.getCpuCost() * cpuCostWeight +
                 costEstimate.getMemoryCost() * memoryCostWeight +
                 costEstimate.getNetworkCost() * networkCostWeight;
+    }
+
+    public static int getParallelExecInstanceNum(int leftMostScanTabletsNum) {
+        if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+            return 1;
+        }
+        return Math.min(ConnectContext.get().getSessionVariable().getDegreeOfParallelism(), leftMostScanTabletsNum);
     }
 
     private static class CostEstimator extends OperatorVisitor<CostEstimate, ExpressionContext> {
@@ -194,7 +202,8 @@ public class CostModel {
                     result = CostEstimate.ofCpu(statistics.getOutputSize(outputColumns));
                     break;
                 case BROADCAST:
-                    int parallelExecInstanceNum = Math.max(1, getParallelExecInstanceNum(context));
+                    int parallelExecInstanceNum = getParallelExecInstanceNum(
+                            context.getRootProperty().getLeftMostScanTabletsNum());
                     // beNum is the number of right table should broadcast, now use alive backends
                     int aliveBackendNumber = ctx.getAliveBackendNumber();
                     int beNum = Math.max(1, aliveBackendNumber);
@@ -208,6 +217,17 @@ public class CostModel {
                     }
                     break;
                 case SHUFFLE:
+                    // This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
+                    // which contains two steps:
+                    // 1. Ignore the network cost for ExchangeNode when estimating cost model.
+                    // 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
+                    boolean ignoreNetworkCost = sessionVariable.isEnableLocalShuffleAgg()
+                            && sessionVariable.isEnablePipelineEngine()
+                            && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+                    double networkCost = ignoreNetworkCost ? 0 : Math.max(statistics.getOutputSize(outputColumns), 1);
+
+                    result = CostEstimate.of(statistics.getOutputSize(outputColumns), 0, networkCost);
+                    break;
                 case GATHER:
                     result = CostEstimate.of(statistics.getOutputSize(outputColumns), 0,
                             Math.max(statistics.getOutputSize(outputColumns), 1));
@@ -218,11 +238,6 @@ public class CostModel {
                             ErrorType.UNSUPPORTED);
             }
             return result;
-        }
-
-        private int getParallelExecInstanceNum(ExpressionContext context) {
-            return Math.min(ConnectContext.get().getSessionVariable().getDegreeOfParallelism(),
-                    context.getRootProperty().getLeftMostScanTabletsNum());
         }
 
         @Override

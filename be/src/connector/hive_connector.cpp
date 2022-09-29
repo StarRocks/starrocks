@@ -161,7 +161,7 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
     }
 
     std::vector<ExprContext*> cloned_conjunct_ctxs;
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(_conjunct_ctxs, state, &cloned_conjunct_ctxs));
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
 
     for (ExprContext* ctx : cloned_conjunct_ctxs) {
         const Expr* root_expr = ctx->root();
@@ -212,6 +212,15 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 
+    if (config::block_cache_enable) {
+        _profile.block_cache_read_counter = ADD_COUNTER(_runtime_profile, "BlockCacheReadCounter", TUnit::UNIT);
+        _profile.block_cache_read_bytes = ADD_COUNTER(_runtime_profile, "BlockCacheReadBytes", TUnit::BYTES);
+        _profile.block_cache_read_timer = ADD_TIMER(_runtime_profile, "BlockCacheReadTimer");
+        _profile.block_cache_write_counter = ADD_COUNTER(_runtime_profile, "BlockCacheWriteCounter", TUnit::UNIT);
+        _profile.block_cache_write_bytes = ADD_COUNTER(_runtime_profile, "BlockCacheWriteBytes", TUnit::BYTES);
+        _profile.block_cache_write_timer = ADD_TIMER(_runtime_profile, "BlockCacheWriteTimer");
+    }
+
     if (hdfs_scan_node.__isset.table_name) {
         _runtime_profile->add_info_string("Table", hdfs_scan_node.table_name);
     }
@@ -252,6 +261,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.scan_ranges = {&scan_range};
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
+    scanner_params.file_size = _scan_range.file_length;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;

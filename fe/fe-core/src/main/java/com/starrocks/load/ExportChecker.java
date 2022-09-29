@@ -30,8 +30,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.task.ExportExportingTask;
 import com.starrocks.task.ExportPendingTask;
-import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
+import com.starrocks.task.PriorityLeaderTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -125,7 +125,7 @@ public final class ExportChecker extends LeaderDaemon {
 
         for (ExportJob job : pendingJobs) {
             try {
-                LeaderTask task = new ExportPendingTask(job);
+                PriorityLeaderTask task = new ExportPendingTask(job);
                 if (executors.get(JobState.PENDING).submit(task)) {
                     LOG.info("run pending export job. job: {}", job);
                 }
@@ -144,7 +144,7 @@ public final class ExportChecker extends LeaderDaemon {
                 continue;
             }
             try {
-                LeaderTask task = new ExportExportingTask(job);
+                PriorityLeaderTask task = new ExportExportingTask(job);
                 if (executors.get(JobState.EXPORTING).submit(task)) {
                     LOG.info("run exporting export job. job: {}", job);
                 }

@@ -109,6 +109,24 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
         }
     }
 
+    public static LiteralExpr createMaxValue(Type type) throws AnalysisException {
+        Preconditions.checkArgument(type.isValid());
+        switch (type.getPrimitiveType()) {
+            case TINYINT:
+            case SMALLINT:
+            case INT:
+            case BIGINT:
+                return IntLiteral.createMaxValue(type);
+            case LARGEINT:
+                return LargeIntLiteral.createMaxValue();
+            case DATE:
+            case DATETIME:
+                return DateLiteral.createMaxValue(type);
+            default:
+                throw new AnalysisException("Invalid data type for creating infinity: " + type);
+        }
+    }
+
     @Override
     protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
         // Literals require no analysis.

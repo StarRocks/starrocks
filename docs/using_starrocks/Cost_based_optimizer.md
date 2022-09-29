@@ -87,12 +87,14 @@ You can rely on automatic jobs for a majority of statistics collection, but if y
 
 ### Manual collection
 
-You can use ANALYZE TABLE to create a manual collection task. **Manual collection is an asynchronous operation. The result for running this command is returned immediately after you run this command. However, the collection task will be running in the background. You can check the status of the task by running SHOW ANALYZE STATUS. Manual collection tasks are run only once after creation. You do not need to delete manual collection tasks.**
+You can use ANALYZE TABLE to create a manual collection task. By default, manual collection is a synchronous operation. You can also set it to an asynchronous operation. In asynchronous mode, the result for running ANALYZE TABLE is returned immediately after you run this command. However, the collection task will be running in the background and you do not have to wait for the result. Asynchronous collection is suitable for tables with large data volume, whereas synchronous collection is suitable for tables with small data volume. **Manual collection tasks are run only once after creation. You do not need to delete manual collection tasks.** You can check the status of the task by running SHOW ANALYZE STATUS.
 
 #### Manually collect basic statistics
 
 ```SQL
-ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) PROPERTIES (property [,property]);
+ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
+[WITH SYNC | ASYNC MODE]
+PROPERTIES (property [,property]);
 ```
 
 Parameter description:
@@ -103,6 +105,8 @@ Parameter description:
   - If no collection type is specified, full collection is used by default.
 
 - `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected.
+
+- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
 
 - `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in the `fe.conf` file are used.
 
@@ -140,13 +144,17 @@ ANALYZE SAMPLE TABLE tbl_name (v1, v2, v3) PROPERTIES(
 #### Manually collect histograms
 
 ```SQL
-ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name] [WITH N BUCKETS]
+ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
+[WITH SYNC | ASYNC MODE]
+[WITH N BUCKETS]
 PROPERTIES (property [,property]);
 ```
 
 Parameter description:
 
 - `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected. This parameter is required for histograms.
+
+- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
 
 - `WITH N BUCKETS`: `N` is the number of buckets for histogram collection. If not specified, the default value in `fe.conf` is used.
 
@@ -184,7 +192,7 @@ PROPERTIES(
 
 You can use the CREATE ANALYZE statement to customize an automatic collection task.
 
-Before creating a custom automatic collection task, you need to disable automatic full collection (`enable_collect_full_statistic = false`). Otherwise, custom tasks cannot take effect.
+Before creating a custom automatic collection task, you must disable automatic full collection (`enable_collect_full_statistic = false`). Otherwise, custom tasks cannot take effect.
 
 ```SQL
 -- Automatically collect stats of all databases.
@@ -278,7 +286,7 @@ SHOW ANALYZE JOB
 SHOW ANALYZE JOB where `database` = 'test';
 ```
 
-#### Delete custom collection tasks
+#### Delete a custom collection task
 
 ```SQL
 DROP ANALYZE <ID>;
@@ -323,7 +331,7 @@ This statement returns the following columns.
 ### View metadata of basic statistics
 
 ```SQL
-SHOW STATS META [WHERE predicate];
+SHOW STATS META [WHERE];
 ```
 
 This statement returns the following columns.
@@ -341,7 +349,7 @@ This statement returns the following columns.
 ### View metadata of histograms
 
 ```SQL
-SHOW HISTOGRAM META [WHERE predicate];
+SHOW HISTOGRAM META [WHERE];
 ```
 
 This statement returns the following columns.
@@ -373,13 +381,13 @@ ANALYZE TABLE tbl_name DROP HISTOGRAM ON col_name [, col_name];
 
 ## Cancel a collection task
 
-You can use the KILL ANALYZE statement to cancel a **running** collection task.
-
-The task ID can be obtained from SHOW ANALYZE STATUS.
+You can use the KILL ANALYZE statement to cancel a **running** collection task, including manual and custom tasks.
 
 ```SQL
 KILL ANALYZE <ID>;
 ```
+
+The task ID for a manual collection task can be obtained from SHOW ANALYZE STATUS. The task ID for a custom collection task can be obtained from SHOW ANALYZE SHOW ANALYZE JOB.
 
 ## FE configuration items
 
@@ -391,7 +399,7 @@ KILL ANALYZE <ID>;
 | statistic_max_full_collect_data_size | LONG     | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_collect_interval_sec       | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_sample_collect_rows        | LONG     | 200000            | The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
-| statistic_collect_concurrency        | INT      | 3                 | The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. If you modify the value of this parameter, you must restart the FE for the modification to take effect. |
+| statistic_collect_concurrency        | INT      | 3                 | The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. This parameter is a static parameter. You can only modify this parameter in the **fe.conf** file. You must restart the FE for the modification to take effect. |
 | histogram_buckets_size               | LONG     | 64                | The default bucket number for a histogram.                   |
 | histogram_mcv_size                   | LONG     | 100               | The number of most common values (MVC) for a histogram.      |
 | histogram_sample_ratio               | FLOAT    | 0.1               | The sampling ratio for a histogram.                          |

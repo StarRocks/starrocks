@@ -132,7 +132,16 @@ public class RuntimeFilterDescription {
         return nodeIdToProbeExpr;
     }
 
-    public void addPartitionByExprs(int nodeId, List<Expr> partitionByExprs) {
+    public void addPartitionByExprsIfNeeded(int nodeId, Expr probeExpr, List<Expr> partitionByExprs) {
+        if (partitionByExprs.size() == 0) {
+            return;
+        }
+        // If partition_by_exprs only have one and equals to probeExpr, not set partition_by_exprs:
+        //  - to keep compatible with old policies;
+        //  - to decrease expr evals for the same expr;
+        if (partitionByExprs.size() == 1 && partitionByExprs.get(0).equals(probeExpr)) {
+            return;
+        }
         nodeIdToParitionByExprs.put(nodeId, partitionByExprs);
     }
 

@@ -19,8 +19,10 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class HDFSBackendSelectorTest {
     @Mocked
@@ -96,10 +98,11 @@ public class HDFSBackendSelectorTest {
         List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
         Coordinator.FragmentScanRangeAssignment assignment = new Coordinator.FragmentScanRangeAssignment();
         Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
+        Set<Long> usedBackendIDs = new HashSet<>();
         List<ComputeNode> computeNodes = createComputeNodes(hostNumber);
 
         HDFSBackendSelector selector =
-                new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId,
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
                         ImmutableList.copyOf(computeNodes), false);
         selector.computeScanRangeAssignment();
 
@@ -143,10 +146,11 @@ public class HDFSBackendSelectorTest {
 
         Coordinator.FragmentScanRangeAssignment assignment = new Coordinator.FragmentScanRangeAssignment();
         Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
+        Set<Long> usedBackendIDs = new HashSet<>();
         List<ComputeNode> computeNodes = createComputeNodes(hostNumber);
 
         HDFSBackendSelector selector =
-                new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId,
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
                         ImmutableList.copyOf(computeNodes), true);
         selector.computeScanRangeAssignment();
 

@@ -2,12 +2,7 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.system.BackendCoreStat;
-import com.starrocks.thrift.TExplainLevel;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -83,39 +78,6 @@ public class OrderByTest extends PlanTestBase {
     }
 
     @Test
-    public void testParallelism() throws Exception {
-        int numCores = 8;
-        int expectDop = numCores / 2;
-        new MockUp<BackendCoreStat>() {
-            @Mock
-            public int getAvgNumOfHardwareCoresOfBe() {
-                return 8;
-            }
-        };
-
-        boolean enablePipeline = true;
-        int pipelineDop = 0;
-        try {
-            enablePipeline = connectContext.getSessionVariable().isEnablePipelineEngine();
-            pipelineDop = connectContext.getSessionVariable().getPipelineDop();
-
-            connectContext.getSessionVariable().setEnablePipelineEngine(true);
-            connectContext.getSessionVariable().setPipelineDop(0);
-
-            String sql = "select * from t0 order by v1 limit 100";
-            ExecPlan plan = getExecPlan(sql);
-            PlanFragment fragment1 = plan.getFragments().get(1);
-            assertContains(fragment1.getExplainString(TExplainLevel.NORMAL), "TOP-N");
-            Assert.assertEquals(1, fragment1.getParallelExecNum());
-            Assert.assertEquals(expectDop, fragment1.getPipelineDop());
-        } finally {
-            connectContext.getSessionVariable().setEnablePipelineEngine(enablePipeline);
-            connectContext.getSessionVariable().setPipelineDop(pipelineDop);
-        }
-
-    }
-
-    @Test
     public void testSqlSelectLimit() throws Exception {
         connectContext.getSessionVariable().setSqlSelectLimit(200);
         // test order by with project
@@ -152,10 +114,49 @@ public class OrderByTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 3> : 3: v3\n" +
-                "  |  <slot 4> : 9: sum\n" +
-                "  |  <slot 10> : 14: sum\n" +
+                "  |  <slot 8> : 8: sum\n" +
+                "  |  <slot 13> : 12: sum\n" +
                 "  |  \n" +
                 "  13:NESTLOOP JOIN");
+    }
+
+    @Test
+    public void tstOrderByNullLiteral() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "select * from t0 order by null limit 10;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0\n" +
+                "     limit: 10");
+
+        sql = "select * from (select max(v5) from t1) tmp order by null limit 10;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(2: v5)\n" +
+                "  |  group by: \n" +
+                "  |  limit: 10");
+
+        // TODO opt this case
+        sql = "select * from (select max(v5) from t1) tmp order by \"\" > null limit 10;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:TOP-N\n" +
+                "  |  order by: <slot 5> 5: expr ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 4> : 4: max\n" +
+                "  |  <slot 5> : NULL");
     }
 
     @Test
@@ -171,8 +172,8 @@ public class OrderByTest extends PlanTestBase {
                 "  15:Project\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 4> : 4: sum\n" +
-                "  |  <slot 5> : 10: sum\n" +
-                "  |  <slot 11> : 15: sum\n" +
+                "  |  <slot 9> : 9: sum\n" +
+                "  |  <slot 14> : 13: sum\n" +
                 "  |  \n" +
                 "  14:NESTLOOP JOIN\n");
     }

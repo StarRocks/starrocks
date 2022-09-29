@@ -33,7 +33,6 @@ import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
 import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetVar;
@@ -41,7 +40,6 @@ import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UnsupportedStmt;
-import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
@@ -66,7 +64,6 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobManager;
@@ -104,8 +101,10 @@ import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
+import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.common.DmlException;
@@ -139,6 +138,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -166,6 +166,7 @@ public class StmtExecutor {
     private LeaderOpExecutor leaderOpExecutor = null;
     private RedirectStatus redirectStatus = null;
     private final boolean isProxy;
+    private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
 
@@ -175,6 +176,9 @@ public class StmtExecutor {
         this.originStmt = originStmt;
         this.serializer = context.getSerializer();
         this.isProxy = isProxy;
+        if (isProxy) {
+            proxyResultBuffer = new ArrayList<>();
+        }
     }
 
     // this constructor is only for test now.
@@ -282,6 +286,14 @@ public class StmtExecutor {
             return null;
         } else {
             return leaderOpExecutor.getProxyResultSet();
+        }
+    }
+
+    public boolean sendResultToChannel(MysqlChannel channel) throws IOException {
+        if (leaderOpExecutor == null) {
+            return false;
+        } else {
+            return leaderOpExecutor.sendResultToChannel(channel);
         }
     }
 
@@ -733,7 +745,7 @@ public class StmtExecutor {
                     sendFields(colNames, outputExprs);
                     isSendFields = true;
                 }
-                if (channel.isSendBufferNull()) {
+                if (!isProxy && channel.isSendBufferNull()) {
                     int bufferSize = 0;
                     for (ByteBuffer row : batch.getBatch().getRows()) {
                         bufferSize += (row.position() - row.limit());
@@ -743,7 +755,11 @@ public class StmtExecutor {
                 }
 
                 for (ByteBuffer row : batch.getBatch().getRows()) {
-                    channel.sendOnePacket(row);
+                    if (isProxy) {
+                        proxyResultBuffer.add(row);
+                    } else {
+                        channel.sendOnePacket(row);
+                    }
                 }
                 context.updateReturnRows(batch.getBatch().getRows().size());
             }
@@ -807,33 +823,18 @@ public class StmtExecutor {
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
         GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
-        try {
-            GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool().submit(() -> {
-                StatisticExecutor statisticExecutor = new StatisticExecutor();
-                if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
-                    statisticExecutor.collectStatistics(
-                            new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                                    StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                                    analyzeStmt.getProperties()),
-                            analyzeStatus,
-                            //Sync load cache, auto-populate column statistic cache after Analyze table manually
-                            false);
-                } else {
-                    statisticExecutor.collectStatistics(
-                            StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
-                                    analyzeStmt.getColumnNames(),
-                                    analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
-                                            StatsConstants.AnalyzeType.FULL,
-                                    StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
-                            analyzeStatus,
-                            //Sync load cache, auto-populate column statistic cache after Analyze table manually
-                            false);
-                }
-            });
-        } catch (RejectedExecutionException e) {
-            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
-            analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
-            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        if (analyzeStmt.isAsync()) {
+            try {
+                GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool().submit(() -> {
+                    executeAnalyze(analyzeStmt, analyzeStatus, db, table);
+                });
+            } catch (RejectedExecutionException e) {
+                analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+                analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
+                GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            }
+        } else {
+            executeAnalyze(analyzeStmt, analyzeStatus, db, table);
         }
 
         ShowResultSet resultSet = analyzeStatus.toShowResult();
@@ -844,6 +845,29 @@ public class StmtExecutor {
         }
 
         sendShowResult(resultSet);
+    }
+
+    private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
+            statisticExecutor.collectStatistics(
+                    new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
+                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                            analyzeStmt.getProperties()),
+                    analyzeStatus,
+                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                    false);
+        } else {
+            statisticExecutor.collectStatistics(
+                    StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
+                            analyzeStmt.getColumnNames(),
+                            analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
+                                    StatsConstants.AnalyzeType.FULL,
+                            StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
+                    analyzeStatus,
+                    //Sync load cache, auto-populate column statistic cache after Analyze table manually
+                    false);
+        }
     }
 
     private void handleDropStatsStmt() {
@@ -945,18 +969,30 @@ public class StmtExecutor {
         // sends how many columns
         serializer.reset();
         serializer.writeVInt(colNames.size());
-        context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        if (isProxy) {
+            proxyResultBuffer.add(serializer.toByteBuffer());
+        } else {
+            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        }
         // send field one by one
         for (int i = 0; i < colNames.size(); ++i) {
             serializer.reset();
             serializer.writeField(colNames.get(i), exprs.get(i).getOriginType());
-            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+            if (isProxy) {
+                proxyResultBuffer.add(serializer.toByteBuffer());
+            } else {
+                context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+            }
         }
         // send EOF
         serializer.reset();
         MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
         eofPacket.writeTo(serializer);
-        context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        if (isProxy) {
+            proxyResultBuffer.add(serializer.toByteBuffer());
+        } else {
+            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        }
     }
 
     public void sendShowResult(ShowResultSet resultSet) throws IOException {
@@ -1038,7 +1074,7 @@ public class StmtExecutor {
 
     private void handleDdlStmt() {
         try {
-            ShowResultSet resultSet = DataDefinitionExecutorFactory.execute(parsedStmt, context);
+            ShowResultSet resultSet = DDLStmtExecutor.execute(parsedStmt, context);
             if (resultSet == null) {
                 context.getState().setOk();
             } else {
@@ -1058,7 +1094,7 @@ public class StmtExecutor {
             LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
             // Return message to info client what happened.
             context.getState().setError(e.getMessage());
-        } catch (Exception e) {
+        } catch (Throwable e) {
             // Maybe our bug
             LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
             context.getState().setError("Unexpected exception: " + e.getMessage());
@@ -1244,7 +1280,7 @@ public class StmtExecutor {
                     containOlapScanNode = true;
                 }
             }
-            
+
             TLoadJobType type = null;
             if (containOlapScanNode) {
                 coord.setLoadJobType(TLoadJobType.INSERT_QUERY);
@@ -1487,5 +1523,9 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
         return Pair.create(sqlResult, coord.getExecStatus());
+    }
+
+    public List<ByteBuffer> getProxyResultBuffer() {
+        return proxyResultBuffer;
     }
 }

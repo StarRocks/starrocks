@@ -22,8 +22,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -35,7 +35,9 @@ import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,8 +48,13 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
+
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 
 /**
  * Resource manager is responsible for managing external resources used by StarRocks.
@@ -61,13 +68,16 @@ public class ResourceMgr implements Writable {
             .add("Name").add("ResourceType").add("Key").add("Value")
             .build();
 
+    public static final ImmutableList<String> NEED_MAPPING_CATALOG_RESOURCES = new ImmutableList.Builder<String>()
+            .add("hive").add("hudi")
+            .build();
+
     @SerializedName(value = "nameToResource")
     private final HashMap<String, Resource> nameToResource = new HashMap<>();
     private final ResourceProcNode procNode = new ResourceProcNode();
     private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public ResourceMgr() {
-
     }
 
     private void readLock() {
@@ -91,9 +101,24 @@ public class ResourceMgr implements Writable {
         try {
             Resource resource = Resource.fromStmt(stmt);
             String resourceName = stmt.getResourceName();
+
+            String typeName = resource.getType().name().toLowerCase(Locale.ROOT);
+            if (resource.needMappingCatalog()) {
+                try {
+                    String catalogName = getResourceMappingCatalogName(resourceName, typeName);
+                    GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(
+                            typeName, catalogName, "mapping " + typeName + " catalog", stmt.getProperties());
+                } catch (Exception e) {
+                    LOG.error("Failed to create mapping {} catalog {} failed", typeName, resource, e);
+                    throw new DdlException("Failed to create mapping catalog " + resourceName + " failed, msg: " +
+                            e.getMessage());
+                }
+            }
+
             if (nameToResource.putIfAbsent(resourceName, resource) != null) {
                 throw new DdlException("Resource(" + resourceName + ") already exist");
             }
+
             // log add
             GlobalStateMgr.getCurrentState().getEditLog().logCreateResource(resource);
             LOG.info("create resource success. resource: {}", resource);
@@ -108,7 +133,20 @@ public class ResourceMgr implements Writable {
      * <p>1. Overwrite the resource </p>
      * <p>2. Clear cache in memory </p>
      */
-    public void replayCreateResource(Resource resource) {
+    public void replayCreateResource(Resource resource) throws DdlException {
+        if (resource instanceof HiveResource || resource instanceof HudiResource) {
+            GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
+        }
+
+        if (resource.needMappingCatalog()) {
+            String type = resource.getType().name().toLowerCase(Locale.ROOT);
+            String catalogName = getResourceMappingCatalogName(resource.getName(), type);
+            Map<String, String> properties = Maps.newHashMap(resource.getProperties());
+            properties.put("type", type);
+            properties.put(HIVE_METASTORE_URIS, resource.getHiveMetastoreURIs());
+            GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(type, catalogName, "mapping catalog", properties);
+        }
+
         this.writeLock();
         try {
             nameToResource.put(resource.getName(), resource);
@@ -135,6 +173,11 @@ public class ResourceMgr implements Writable {
 
             droppedResource = resource;
 
+            if (resource.needMappingCatalog()) {
+                String catalogName = getResourceMappingCatalogName(resource.name, resource.type.name().toLowerCase(Locale.ROOT));
+                DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
+                GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
+            }
             // log drop
             GlobalStateMgr.getCurrentState().getEditLog().logDropResource(new DropResourceOperationLog(name));
             LOG.info("drop resource success. resource name: {}", name);
@@ -149,6 +192,11 @@ public class ResourceMgr implements Writable {
 
     public void replayDropResource(DropResourceOperationLog operationLog) {
         Resource resource = nameToResource.remove(operationLog.getName());
+        if (resource.needMappingCatalog()) {
+            String catalogName = getResourceMappingCatalogName(resource.name, resource.type.name().toLowerCase(Locale.ROOT));
+            DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
+            GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
+        }
         onDropResource(resource);
     }
 
@@ -174,6 +222,12 @@ public class ResourceMgr implements Writable {
         } finally {
             this.readUnlock();
         }
+    }
+
+    public List<Resource> getNeedMappingCatalogResources() {
+        return nameToResource.values().stream()
+                .filter(Resource::needMappingCatalog)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -210,6 +264,7 @@ public class ResourceMgr implements Writable {
         // Do not invoke HiveRepository::clearCache inside `Resource.rwLock`. Otherwise, it might cause deadlock.
         // Because HiveRepository::getClient will hold `Resource.rwLock` inside `HiveRepository::xxxLock`
         GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(stmt.getResourceName());
+        // TODO(stephen): recreate resource mapping catalog
     }
 
     public int getResourceNum() {

@@ -52,6 +52,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
+import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
@@ -63,6 +64,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
+import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropComputeNodeLog;
@@ -95,6 +97,7 @@ import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
@@ -598,6 +601,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_ALTER_LOAD_JOB: {
+                data = AlterLoadJobOperationLog.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_GLOBAL_VARIABLE_V2: {
                 data = GlobalVarPersistInfo.read(in);
                 isRead = true;
@@ -695,6 +703,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_STARMGR: {
                 data = StarMgrJournal.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_USER_V2: {
+                data = CreateUserInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_UPDATE_USER_PRIVILEGE_V2: {
+                data = UserPrivilegeCollectionInfo.read(in);
                 isRead = true;
                 break;
             }

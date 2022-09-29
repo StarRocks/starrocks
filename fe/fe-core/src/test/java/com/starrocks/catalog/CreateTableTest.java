@@ -62,11 +62,6 @@ public class CreateTableTest {
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
     }
 
-    private static void alterTable(String sql) throws Exception {
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
-    }
-
     private static void alterTableWithNewParser(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
@@ -390,5 +385,138 @@ public class CreateTableTest {
         Assert.assertEquals(1, table.getColumns().size());
         Assert.assertNotNull(
                 table.getColumn("oh_my_gosh_this_is_a_long_column_name_look_at_it_it_has_more_than_64_chars"));
+    }
+
+    @Test
+    public void testCreateTableDefaultCurrentTimestamp() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql = "CREATE TABLE `test_create_default_current_timestamp` (\n" +
+                "    k1 int,\n" +
+                "    ts datetime NOT NULL DEFAULT CURRENT_TIMESTAMP\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ");";
+        starRocksAssert.withTable(sql);
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                .getTable("test_create_default_current_timestamp");
+        Assert.assertEquals(2, table.getColumns().size());
+    }
+    @Test
+    public void testCreateTableDefaultUUID() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql = "CREATE TABLE `test_create_default_uuid` (\n" +
+                "    k1 int,\n" +
+                "    uuid VARCHAR(36) NOT NULL DEFAULT (uuid())\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ");";
+        starRocksAssert.withTable(sql);
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                .getTable("test_create_default_uuid");
+        Assert.assertEquals(2, table.getColumns().size());
+
+        String sql2 = "CREATE TABLE `test_create_default_uuid_numeric` (\n" +
+                "    k1 int,\n" +
+                "    uuid LARGEINT NOT NULL DEFAULT (uuid_numeric())\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\",\n" +
+                "    \"storage_format\" = \"DEFAULT\"\n" +
+                ");";
+        starRocksAssert.withTable(sql2);
+
+        final Table table2 = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                .getTable("test_create_default_uuid_numeric");
+        Assert.assertEquals(2, table2.getColumns().size());
+    }
+
+    @Test
+    public void testCreateTableDefaultUUIDFailed() {
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Varchar type length must be greater than 36 for uuid function",
+                () -> createTable("CREATE TABLE test.`test_default_uuid_size_not_enough` (\n" +
+                        "    k1 int,\n" +
+                        "    uuid VARCHAR(35) NOT NULL DEFAULT (uuid())\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`k1`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                        "PROPERTIES (\n" +
+                        "    \"replication_num\" = \"1\",\n" +
+                        "    \"in_memory\" = \"false\",\n" +
+                        "    \"storage_format\" = \"DEFAULT\"\n" +
+                        ");"));
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Default function uuid() for type INT is not supported",
+                () -> createTable("CREATE TABLE test.`test_default_uuid_type_not_match` (\n" +
+                        "    k1 int,\n" +
+                        "    uuid INT NOT NULL DEFAULT (uuid())\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`k1`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                        "PROPERTIES (\n" +
+                        "    \"replication_num\" = \"1\",\n" +
+                        "    \"in_memory\" = \"false\",\n" +
+                        "    \"storage_format\" = \"DEFAULT\"\n" +
+                        ");"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Default function uuid_numeric() for type VARCHAR(1) is not supported",
+                () -> createTable("CREATE TABLE test.`test_default_uuid_type_not_match` (\n" +
+                        "    k1 int,\n" +
+                        "    uuid VARCHAR NOT NULL DEFAULT (uuid_numeric())\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`k1`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                        "PROPERTIES (\n" +
+                        "    \"replication_num\" = \"1\",\n" +
+                        "    \"in_memory\" = \"false\",\n" +
+                        "    \"storage_format\" = \"DEFAULT\"\n" +
+                        ");"));
+    }
+
+    @Test
+    public void testNameWithUnderscore() throws Exception {
+        // table name with one underscore is fine
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql = "CREATE TABLE test._txx(_k1 VARCHAR(100)) DISTRIBUTED BY HASH(_k1) "
+                + "BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
+        starRocksAssert.withTable(sql);
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                .getTable("_txx");
+        Assert.assertEquals(1, table.getColumns().size());
+        Assert.assertNotNull(
+                table.getColumn("_k1"));
+
+        // table name with two underscore is not allowed
+        sql = "CREATE TABLE test.__txx(_k1 VARCHAR(100)) DISTRIBUTED BY HASH(_k1) "
+                + "BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
+        try {
+            starRocksAssert.withTable(sql);
+            Assert.fail();
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("Incorrect table name"));
+        }
     }
 }

@@ -315,6 +315,15 @@ jobject JVMFunctionHelper::batch_call(BatchEvaluateStub* stub, jobject* input, i
     return stub->batch_evaluate(rows, input, cols);
 }
 
+jobject JVMFunctionHelper::batch_call(FunctionContext* ctx, jobject caller, jobject method, jobject* input, int cols,
+                                      int rows) {
+    jobjectArray input_arr = _build_object_array(_object_array_class, input, cols);
+    LOCAL_REF_GUARD(input_arr);
+    auto res = _env->CallStaticObjectMethod(_udf_helper_class, _batch_call, caller, method, rows, input_arr);
+    CHECK_UDF_CALL_EXCEPTION(_env, ctx);
+    return res;
+}
+
 jobject JVMFunctionHelper::batch_call(FunctionContext* ctx, jobject caller, jobject method, int rows) {
     auto res = _env->CallStaticObjectMethod(_udf_helper_class, _batch_call_no_args, caller, method, rows);
     CHECK_UDF_CALL_EXCEPTION(_env, ctx);
@@ -355,6 +364,11 @@ int JVMFunctionHelper::list_size(jobject obj) {
 jobject JVMFunctionHelper::convert_handle_to_jobject(FunctionContext* ctx, int state) {
     auto* states = ctx->impl()->udaf_ctxs()->states.get();
     return states->get_state(ctx, _env, state);
+}
+
+jobject JVMFunctionHelper::convert_handles_to_jobjects(FunctionContext* ctx, jobject state_ids) {
+    auto* states = ctx->impl()->udaf_ctxs()->states.get();
+    return states->get_state(ctx, _env, state_ids);
 }
 
 DEFINE_NEW_BOX(boolean, uint8_t, Boolean, Boolean);
@@ -402,7 +416,8 @@ std::string JVMFunctionHelper::to_jni_class_name(const std::string& name) {
 }
 
 void JVMFunctionHelper::clear(DirectByteBuffer* buffer, FunctionContext* ctx) {
-    _env->CallNonvirtualVoidMethod(buffer->handle(), _direct_buffer_class, _direct_buffer_clear);
+    auto res = _env->CallNonvirtualObjectMethod(buffer->handle(), _direct_buffer_class, _direct_buffer_clear);
+    LOCAL_REF_GUARD(res);
     CHECK_UDF_CALL_EXCEPTION(_env, ctx);
 }
 
@@ -456,15 +471,26 @@ StatusOr<JavaGlobalRef> JVMClass::newInstance() const {
     return env->NewGlobalRef(local_ref);
 }
 
-UDAFStateList::UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& add)
-        : _handle(std::move(handle)), _get_method(std::move(get)), _add_method(std::move(add)) {
+UDAFStateList::UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& batch_get,
+                             JavaGlobalRef&& add)
+        : _handle(std::move(handle)),
+          _get_method(std::move(get)),
+          _batch_get_method(std::move(batch_get)),
+          _add_method(std::move(add)) {
     auto* env = JVMFunctionHelper::getInstance().getEnv();
     _get_method_id = env->FromReflectedMethod(_get_method.handle());
+    _batch_get_method_id = env->FromReflectedMethod(_batch_get_method.handle());
     _add_method_id = env->FromReflectedMethod(_add_method.handle());
 }
 
 jobject UDAFStateList::get_state(FunctionContext* ctx, JNIEnv* env, int state_handle) {
     auto obj = env->CallObjectMethod(_handle.handle(), _get_method_id, state_handle);
+    CHECK_UDF_CALL_EXCEPTION(env, ctx);
+    return obj;
+}
+
+jobject UDAFStateList::get_state(FunctionContext* ctx, JNIEnv* env, jobject state_ids) {
+    auto obj = env->CallObjectMethod(_handle.handle(), _batch_get_method_id, state_ids);
     CHECK_UDF_CALL_EXCEPTION(env, ctx);
     return obj;
 }

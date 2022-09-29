@@ -182,18 +182,22 @@ Status HdfsScanner::open_random_access_file() {
     CHECK(_file == nullptr) << "File has already been opened";
     ASSIGN_OR_RETURN(_raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path))
     auto stream = std::make_shared<CountedSeekableInputStream>(_raw_file->stream(), &_stats);
-    if (_compression_type == CompressionTypePB::NO_COMPRESSION) {
-        _file = std::make_unique<RandomAccessFile>(stream, _raw_file->filename());
-    } else {
+    std::shared_ptr<io::SeekableInputStream> input_stream = stream;
+    if (_compression_type != CompressionTypePB::NO_COMPRESSION) {
         using DecompressorPtr = std::shared_ptr<StreamCompression>;
         std::unique_ptr<StreamCompression> dec;
         RETURN_IF_ERROR(StreamCompression::create_decompressor(_compression_type, &dec));
         auto compressed_input_stream =
                 std::make_shared<io::CompressedInputStream>(stream, DecompressorPtr(dec.release()));
-        auto compressed_seekable_input_stream =
-                std::make_shared<io::CompressedSeekableInputStream>(compressed_input_stream);
-        _file = std::make_unique<RandomAccessFile>(compressed_seekable_input_stream, _raw_file->filename());
+        input_stream = std::make_shared<io::CompressedSeekableInputStream>(compressed_input_stream);
     }
+    if (config::block_cache_enable) {
+        _cache_input_stream = std::make_shared<io::CacheInputStream>(_raw_file->filename(), input_stream);
+        _file = std::make_unique<RandomAccessFile>(_cache_input_stream, _raw_file->filename());
+    } else {
+        _file = std::make_unique<RandomAccessFile>(input_stream, _raw_file->filename());
+    }
+    _file->set_size(_scanner_params.file_size);
     return Status::OK();
 }
 
@@ -233,6 +237,15 @@ void HdfsScanner::update_counter() {
     COUNTER_UPDATE(profile->column_read_timer, _stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _stats.column_convert_ns);
 
+    if (config::block_cache_enable) {
+        const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();
+        COUNTER_UPDATE(profile->block_cache_read_counter, stats.read_cache_count);
+        COUNTER_UPDATE(profile->block_cache_read_bytes, stats.read_cache_bytes);
+        COUNTER_UPDATE(profile->block_cache_read_timer, stats.read_cache_ns);
+        COUNTER_UPDATE(profile->block_cache_write_counter, stats.write_cache_count);
+        COUNTER_UPDATE(profile->block_cache_write_bytes, stats.write_cache_bytes);
+        COUNTER_UPDATE(profile->block_cache_write_timer, stats.write_cache_ns);
+    }
     // update scanner private profile.
     do_update_counter(profile);
 }

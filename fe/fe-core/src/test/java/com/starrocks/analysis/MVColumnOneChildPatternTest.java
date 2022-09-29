@@ -24,6 +24,7 @@ package com.starrocks.analysis;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.analyzer.mvpattern.MVColumnOneChildPattern;
 import org.junit.Assert;
 import org.junit.Test;
 

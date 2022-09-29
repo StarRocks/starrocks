@@ -4,6 +4,7 @@ package com.starrocks.external.iceberg;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -11,13 +12,15 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
-import com.starrocks.external.hive.HdfsFileFormat;
+import com.starrocks.external.hive.RemoteFileInputFormat;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -89,14 +92,14 @@ public class IcebergUtil {
      * Get hdfs file format in StarRocks use iceberg file format.
      *
      * @param format
-     * @return HdfsFileFormat
+     * @return RemoteFileInputFormat
      */
-    public static HdfsFileFormat getHdfsFileFormat(FileFormat format) {
+    public static RemoteFileInputFormat getHdfsFileFormat(FileFormat format) {
         switch (format) {
             case ORC:
-                return HdfsFileFormat.ORC;
+                return RemoteFileInputFormat.ORC;
             case PARQUET:
-                return HdfsFileFormat.PARQUET;
+                return RemoteFileInputFormat.PARQUET;
             default:
                 throw new StarRocksIcebergException(
                         "Unexpected file format: " + format.toString());
@@ -188,8 +191,46 @@ public class IcebergUtil {
         return convertToSRTable(icebergTable, properties);
     }
 
+    public static List<String> getIdentityPartitionNames(org.apache.iceberg.Table icebergTable) {
+        List<String> partitionNames = Lists.newArrayList();
+        TableScan tableScan = icebergTable.newScan();
+        List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
+        if (icebergTable.spec().isUnpartitioned()) {
+            return partitionNames;
+        }
+
+        if (icebergTable.spec().fields().stream().anyMatch(partitionField -> !partitionField.transform().isIdentity())) {
+            return partitionNames;
+        }
+
+        for (FileScanTask fileScanTask : tasks) {
+            StructLike partition = fileScanTask.file().partition();
+            partitionNames.add(convertIcebergPartitionToPartitionName(icebergTable.spec(), partition));
+        }
+        return partitionNames;
+    }
+
+    static String convertIcebergPartitionToPartitionName(PartitionSpec partitionSpec, StructLike partition) {
+        int filePartitionFields = partition.size();
+        StringBuilder sb = new StringBuilder();
+        for (int index = 0; index < filePartitionFields; ++index) {
+            PartitionField partitionField = partitionSpec.fields().get(index);
+            sb.append(partitionField.name());
+            sb.append("=");
+            String value = partitionField.transform().toHumanString(getPartitionValue(partition, index,
+                    partitionSpec.javaClasses()[index]));
+            sb.append(value);
+            sb.append("/");
+        }
+        return sb.substring(0, sb.length() - 1);
+    }
+
+    public static <T> T getPartitionValue(StructLike partition, int position, Class<?> javaClass) {
+        return partition.get(position, (Class<T>) javaClass);
+    }
+
     public static IcebergTable convertHiveCatalogToSRTable(org.apache.iceberg.Table icebergTable, String metastoreURI,
-                                                String dbName, String tblName) throws DdlException {
+                                                           String dbName, String tblName) throws DdlException {
         Map<String, String> properties = new HashMap<>();
         properties.put(IcebergTable.ICEBERG_DB, dbName);
         properties.put(IcebergTable.ICEBERG_TABLE, tblName);
@@ -214,7 +255,7 @@ public class IcebergUtil {
                 fullSchema, properties);
     }
 
-    static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {
+    public static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {
         if (icebergType == null) {
             return Type.NULL;
         }
@@ -251,7 +292,12 @@ public class IcebergUtil {
                 int scale = ((Types.DecimalType) icebergType).scale();
                 return ScalarType.createUnifiedDecimalType(precision, scale);
             case LIST:
-                return convertColumnType(icebergType.asListType().elementType());
+                Type type = convertToArrayType(icebergType);
+                if (type.isArrayType()) {
+                    return type;
+                } else {
+                    return Type.UNKNOWN_TYPE;
+                }
             case TIME:
             case FIXED:
             case BINARY:
@@ -265,5 +311,9 @@ public class IcebergUtil {
 
     public static Database convertToSRDatabase(String dbName) {
         return new Database(CONNECTOR_DATABASE_ID_ID_GENERATOR.getNextId().asInt(), dbName);
+    }
+
+    private static ArrayType convertToArrayType(org.apache.iceberg.types.Type icebergType) {
+        return new ArrayType(convertColumnType(icebergType.asNestedType().asListType().elementType()));
     }
 }
