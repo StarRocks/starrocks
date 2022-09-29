@@ -164,15 +164,6 @@ public class InsertOverwriteJobRunner {
         if (state == InsertOverwriteJobState.OVERWRITE_SUCCESS) {
             Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
         }
-        Database db = getAndWriteLockDatabase(dbId);
-        try {
-            InsertOverwriteStateChangeInfo info =
-                    new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(), state,
-                            job.getSourcePartitionIds(), job.getTmpPartitionIds());
-            GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
-        } finally {
-            db.writeUnlock();
-        }
         job.setJobState(state);
         handle();
     }
@@ -185,6 +176,15 @@ public class InsertOverwriteJobRunner {
             tmpPartitionIds.add(GlobalStateMgr.getCurrentState().getNextId());
         }
         job.setTmpPartitionIds(tmpPartitionIds);
+        Database db = getAndWriteLockDatabase(dbId);
+        try {
+            InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
+                    InsertOverwriteJobState.OVERWRITE_RUNNING, job.getSourcePartitionIds(), job.getTmpPartitionIds());
+            GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
+        } finally {
+            db.writeUnlock();
+        }
+
         transferTo(InsertOverwriteJobState.OVERWRITE_RUNNING);
     }
 
@@ -236,6 +236,9 @@ public class InsertOverwriteJobRunner {
                     }
                 }
             }
+            InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
+                    InsertOverwriteJobState.OVERWRITE_FAILED, job.getSourcePartitionIds(), job.getTmpPartitionIds());
+            GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
         } catch (Exception e) {
             LOG.warn("exception when gc insert overwrite job.", e);
         } finally {
@@ -258,9 +261,12 @@ public class InsertOverwriteJobRunner {
             } else {
                 targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             }
+            InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
+                    InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getTmpPartitionIds());
+            GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
         } catch (Exception e) {
-            LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}," +
-                    " sourcePartitionNames:{}, newPartitionNames:{}", job.getTargetDbId(), job.getTargetTableId(), e);
+            LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",
+                    job.getTargetDbId(), job.getTargetTableId(), e);
             throw new DmlException("replace partitions failed", e);
         } finally {
             db.writeUnlock();
@@ -299,7 +305,7 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         if (!db.writeLockAndCheckExist()) {
-            throw new DmlException("insert overwrite commit failed because db:%s lock failed", dbId);
+            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         return db;
     }
@@ -311,7 +317,7 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         if (!db.readLockAndCheckExist()) {
-            throw new DmlException("insert overwrite commit failed because db:%s lock failed", dbId);
+            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         return db;
     }
