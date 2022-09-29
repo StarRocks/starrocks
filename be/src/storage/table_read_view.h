@@ -24,6 +24,9 @@ struct TableReadViewParams {
 
     // Schema for the output
     vectorized::Schema output_schema;
+
+    // Common predicates for all read requests
+    std::vector<const vectorized::ColumnPredicate*> common_predicates;
 };
 
 // Options used to control the behaviour of a read
@@ -31,11 +34,18 @@ struct ReadOption {
     // Whether to return rows in reverse order by the sort key
     bool reverse_order = false;
 
+    // Whether to return the result in the order of sort key
+    bool strict_order = false;
+
+    // Maximum number of rows to return. -1 indicates there is
+    // no limit, and all rows need to return
+    int row_count_limit = -1;
+
     // Chunk size used to read data
     int chunk_size = 1024;
 
-    // Predicates applied to the result
-    std::vector<const vectorized::ColumnPredicate*> output_predicates;
+    // Custom predicates for a read request
+    std::vector<const vectorized::ColumnPredicate*> predicates;
 };
 
 // A view to read data from the underlying table. Given a key, it will return all
@@ -49,38 +59,7 @@ struct ReadOption {
 // but there is no guarantee about the order of rows under the same sort key.
 class TableReadView {
 public:
-    explicit TableReadView(const TableReadViewParams& params) : _params(params) {}
-
-    // Whether the data read on this view is organized in columnar format in the underlying
-    // storage. This flag can be decided according to what data to read, and how they are
-    // indexed. The caller can use this flag to decide whether to iterate the result Row by
-    // Row or Chunk by Chunk. If the storage is columnar, and the caller wants vectorized
-    // processing, it's better to use the method get_chunk to iterate rows by Chunk. Otherwise,
-    // using the method get to iterate rows by Row may be a better choice. Format conversion
-    // between Row and Chunk has extra cost.
-    virtual bool native_columnar_storage() = 0;
-
-    // sync interface =======================
-
-    // Get the rows under the given key, and iterate the result Row by Row. The key should
-    // either be a sort key whose schema is defined by TableReadViewParams#sort_key_schema,
-    // or the prefix of a sort key. For the returned StatusOr<RowIteratorSharedPtr>, you
-    // should check StatusOr.status().ok() first, and the RowIteratorSharedPtr is valid when
-    // status is ok. The schema of the returned Row is defined by TableReadViewParams#output_schema.
-    // You can control the read behaviour via ReadOption.
-    virtual StatusOr<RowIteratorSharedPtr> get(const Row& key, const ReadOption& read_option) = 0;
-
-    // Get the rows for a batch of keys, and iterate the result of each key Row by Row.
-    // This method needs a vector of keys and a corresponding vector of read options, and
-    // each option controls the read behaviour of the key at the same position. A vector of
-    // results with the same size as the key vector will be returned, and the order of the
-    // results corresponds to the order of keys in the key vector.
-    //
-    // This batch method may be used to reduce network cost if the data is on the remote.
-    // The potential implementation may pack multiple keys' read requests into one RPC
-    // rather one RPC for each key, but it's not guaranteed.
-    virtual std::vector<StatusOr<RowIteratorSharedPtr>> batch_get(
-            const std::vector<const Row*>& keys, const std::vector<const ReadOption*>& read_options) = 0;
+    explicit TableReadView(const TableReadViewParams& params) : _view_params(params) {}
 
     // Get the rows under the given key, and iterate rows Chunk by Chunk. The key should
     // either be a sort key whose schema is defined by TableReadViewParams#sort_key_schema,
@@ -102,30 +81,85 @@ public:
     virtual std::vector<StatusOr<ChunkIteratorPtr>> batch_get_chunk(
             const std::vector<const Row*>& keys, const std::vector<const ReadOption*>& read_options) = 0;
 
-    // async interface =======================
+    virtual void close() = 0;
+
+    // TODO below methods are abandoned after discussion, and remove them after PoC
+
+    // Whether the data read on this view is organized in columnar format in the underlying
+    // storage. This flag can be decided according to what data to read, and how they are
+    // indexed. The caller can use this flag to decide whether to iterate the result Row by
+    // Row or Chunk by Chunk. If the storage is columnar, and the caller wants vectorized
+    // processing, it's better to use the method get_chunk to iterate rows by Chunk. Otherwise,
+    // using the method get to iterate rows by Row may be a better choice. Format conversion
+    // between Row and Chunk has extra cost.
+    bool native_columnar_storage() { return true; }
+
+    // Remove this interface
+    // Get the rows under the given key, and iterate the result Row by Row. The key should
+    // either be a sort key whose schema is defined by TableReadViewParams#sort_key_schema,
+    // or the prefix of a sort key. For the returned StatusOr<RowIteratorSharedPtr>, you
+    // should check StatusOr.status().ok() first, and the RowIteratorSharedPtr is valid when
+    // status is ok. The schema of the returned Row is defined by TableReadViewParams#output_schema.
+    // You can control the read behaviour via ReadOption.
+    StatusOr<RowIteratorSharedPtr> get(const Row& key, const ReadOption& read_option) {
+        return Status::NotSupported("Not supported");
+    }
+
+    // Remove this interface
+    // Get the rows for a batch of keys, and iterate the result of each key Row by Row.
+    // This method needs a vector of keys and a corresponding vector of read options, and
+    // each option controls the read behaviour of the key at the same position. A vector of
+    // results with the same size as the key vector will be returned, and the order of the
+    // results corresponds to the order of keys in the key vector.
+    //
+    // This batch method may be used to reduce network cost if the data is on the remote.
+    // The potential implementation may pack multiple keys' read requests into one RPC
+    // rather one RPC for each key, but it's not guaranteed.
+    virtual std::vector<StatusOr<RowIteratorSharedPtr>> batch_get(const std::vector<const Row*>& keys,
+                                                                  const std::vector<const ReadOption*>& read_options) {
+        return std::vector<StatusOr<RowIteratorSharedPtr>>{Status::NotSupported("Not supported")};
+    }
 
     // Get the rows under the given key asynchronously. It's almost same as the method get
     // except that a future will be returned to get the result.
-    virtual std::future<StatusOr<RowIteratorSharedPtr>> async_get(const Row& key, const ReadOption& read_option) = 0;
+    std::future<StatusOr<RowIteratorSharedPtr>> async_get(const Row& key, const ReadOption& read_option) {
+        std::promise<StatusOr<RowIteratorSharedPtr>> promise;
+        promise.set_value(Status::NotSupported("Not supported"));
+        return promise.get_future();
+    }
 
     // Get the rows for a batch of keys asynchronously. It's almost same as the method batch_get
     // except that a vector of future will be returned to get the results.
-    virtual std::vector<std::future<StatusOr<RowIteratorSharedPtr>>> async_batch_get(
-            const std::vector<const Row*>& keys, const std::vector<const ReadOption*>& read_options) = 0;
+    std::vector<std::future<StatusOr<RowIteratorSharedPtr>>> async_batch_get(
+            const std::vector<const Row*>& keys, const std::vector<const ReadOption*>& read_options) {
+        std::vector<std::future<StatusOr<RowIteratorSharedPtr>>> result;
+        std::promise<StatusOr<RowIteratorSharedPtr>> promise;
+        promise.set_value(Status::NotSupported("Not supported"));
+        result.push_back(promise.get_future());
+        return result;
+    }
 
     // Get the rows under the given key asynchronously. It's almost same as the method get_chunk
     // except that a future will be returned to get the result.
-    virtual std::future<StatusOr<ChunkIteratorPtr>> async_get_chunk(const Row& key, const ReadOption& read_option) = 0;
+    std::future<StatusOr<ChunkIteratorPtr>> async_get_chunk(const Row& key, const ReadOption& read_option) {
+        std::promise<StatusOr<ChunkIteratorPtr>> promise;
+        promise.set_value(Status::NotSupported("Not supported"));
+        return promise.get_future();
+    }
 
     // Get the rows for a batch of keys asynchronously. It's almost same as the method batch_get_chunk
     // except that a vector of future will be returned to get the results.
-    virtual std::vector<std::future<StatusOr<ChunkIteratorPtr>>> async_batch_get_chunk(
-            const std::vector<const Row*>& keys, const std::vector<const ReadOption*>& read_options) = 0;
-
-    virtual void close() = 0;
+    std::vector<std::future<StatusOr<ChunkIteratorPtr>>> async_batch_get_chunk(
+            const std::vector<const Row*>& keys, const std::vector<const ReadOption*>& read_options) {
+        std::vector<std::future<StatusOr<ChunkIteratorPtr>>> result;
+        std::promise<StatusOr<ChunkIteratorPtr>> promise;
+        promise.set_value(Status::NotSupported("Not supported"));
+        result.push_back(promise.get_future());
+        return result;
+    }
 
 protected:
-    const TableReadViewParams& _params;
+    const TableReadViewParams& _view_params;
 };
 
 using TableReadViewSharedPtr = std::shared_ptr<TableReadView>;

@@ -4,9 +4,10 @@
 
 #include <utility>
 
-#include "storage/tablet.h"
+#include "exec/stream/imt_olap_table.h"
 #include "storage/table_read_view.h"
 #include "storage/table_write_view.h"
+#include "storage/tablet.h"
 
 namespace starrocks {
 
@@ -16,13 +17,9 @@ namespace starrocks {
 // And we can extend this abstraction to do more things in the future.
 class Table {
 public:
-
-    // TODO for PoC, the table only has the information of the local tablet read
-    // by the operator. And table id and name are useless currently
-    explicit Table(TableId table_id, std::string table_name, TabletSharedPtr tablet)
-            : _table_id(table_id),
-              _table_name(std::move(table_name)),
-              _tablet(std::move(tablet)) {}
+    // TODO construct with OlapTableRouteInfo
+    explicit Table(std::string table_name, int64_t table_id, const std::vector<int64_t>& tablet_ids)
+            : _table_name(table_name), _table_id(table_id), _tablet_ids(tablet_ids) {}
 
     // create a read view according to the parameters
     TableReadViewSharedPtr create_table_read_view(const TableReadViewParams& params);
@@ -30,11 +27,14 @@ public:
     // TODO create write view
     TableWriteViewSharedPtr create_table_write_view() { return nullptr; }
 
-private:
+    static std::shared_ptr<Table> build_table(std::shared_ptr<OlapTableRouteInfo> table_info) {
+        return std::make_shared<Table>(table_info->table_name(), table_info->table_id(), table_info->get_tablets());
+    }
 
-    TableId _table_id;
+private:
     std::string _table_name;
-    TabletSharedPtr _tablet;
+    int64_t _table_id;
+    std::vector<int64_t> _tablet_ids;
 };
 
 using TableSharedPtr = std::shared_ptr<Table>;

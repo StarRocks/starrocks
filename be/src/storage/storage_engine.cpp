@@ -1092,12 +1092,6 @@ bool StorageEngine::check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id)
     return search != _unused_rowsets.end();
 }
 
-std::shared_ptr<Table> StorageEngine::get_table(TTabletId tablet_id) {
-    TabletSharedPtr tablet = tablet_manager()->get_tablet(tablet_id, true);
-    std::unordered_map<TTabletId, TabletSharedPtr> tablet_map = {{tablet_id, tablet}};
-    return std::make_shared<Table>(1, "test", tablet);
-}
-
 DummyStorageEngine::DummyStorageEngine(const EngineOptions& options)
         : StorageEngine(options), _conf_path(options.conf_path) {
     _s_instance = this;

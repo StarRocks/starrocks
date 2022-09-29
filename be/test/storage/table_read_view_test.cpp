@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <iostream>
 #include <memory>
 
 #include "column/datum_convert.h"
@@ -12,6 +13,7 @@
 #include "column/vectorized_fwd.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/descriptor_helper.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_row.h"
 #include "storage/kv_store.h"
@@ -23,6 +25,7 @@
 #include "storage/schema_change.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/table.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/union_iterator.h"
@@ -30,16 +33,12 @@
 #include "storage/wrapper_field.h"
 #include "testutil/assert.h"
 
-#include <iostream>
-
 namespace starrocks {
 
 using DatumRowVector = std::vector<DatumRow>;
-using RowSharedPtrVector = std::vector<RowSharedPtr>;
 
 class TableReadViewTest : public testing::Test {
 public:
-
     static void create_row(vector<DatumRow>& data, int64_t c0, int32_t c1, int32_t c2, int16_t c3, int32_t c4) {
         DatumRow row(5);
         row.set_int64(0, c0);
@@ -50,7 +49,8 @@ public:
         data.push_back(row);
     }
 
-    void create_rowset(const TabletSharedPtr& tablet, const vector<DatumRow>& data, int version) {
+    static void create_rowset(const TabletSharedPtr& tablet, int version, const vector<DatumRow>& data, int start,
+                              int end) {
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.rowset_id = rowset_id;
@@ -68,7 +68,8 @@ public:
         auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, data.size());
         auto& cols = chunk->columns();
-        for (const DatumRow& row : data) {
+        for (int pos = start; pos < end; pos++) {
+            const DatumRow& row = data[pos];
             DatumRow tmp_row(row.size());
             for (size_t i = 0; i < row.size(); i++) {
                 cols[i]->append_datum(row.get_datum(i));
@@ -76,11 +77,11 @@ public:
         }
         CHECK_OK(writer->flush_chunk(*chunk));
         auto row_set = *writer->build();
-        ASSERT_TRUE(_tablet->rowset_commit(version, row_set).ok());
-        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_TRUE(tablet->rowset_commit(version, row_set).ok());
+        ASSERT_EQ(version, tablet->updates()->max_version());
     }
 
-    TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
+    static TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
@@ -121,41 +122,109 @@ public:
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
     }
 
-    void SetUp() override { }
+    TOlapTableSchemaParam build_schema() {
+        TOlapTableSchemaParam schema_param;
+        schema_param.db_id = db_id;
+        schema_param.table_id = table_id;
+        schema_param.version = version;
+
+        TDescriptorTableBuilder dtb;
+        TTupleDescriptorBuilder tuple_builder;
+
+        tuple_builder.add_slot(
+                TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("pk1_bigint").column_pos(1).build());
+        tuple_builder.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).column_name("pk2_int").column_pos(2).build());
+        tuple_builder.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).column_name("pk3_int").column_pos(3).build());
+        tuple_builder.add_slot(TSlotDescriptorBuilder().type(TYPE_SMALLINT).column_name("v1").column_pos(4).build());
+        tuple_builder.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).column_name("v2").column_pos(5).build());
+        tuple_builder.build(&dtb);
+
+        TDescriptorTable desc_tbl = dtb.desc_tbl();
+        schema_param.slot_descs = desc_tbl.slotDescriptors;
+        schema_param.tuple_desc = desc_tbl.tupleDescriptors[0];
+
+        return schema_param;
+    }
+
+    TOlapTablePartitionParam build_partition() {
+        TOlapTablePartitionParam partition_param;
+        partition_param.db_id = db_id;
+        partition_param.table_id = table_id;
+        partition_param.version = version;
+        partition_param.__set_distributed_columns({"pk1_bigint", "pk2_int", "pk3_int"});
+        partition_param.partitions.resize(1);
+        partition_param.partitions[0].id = 10;
+        partition_param.partitions[0].num_buckets = 20;
+        return partition_param;
+    }
+
+    TOlapTableLocationParam build_location() {
+        TOlapTableLocationParam location_param;
+        location_param.db_id = db_id;
+        location_param.table_id = table_id;
+        location_param.version = version;
+        for (TabletSharedPtr& tablet : _tablets) {
+            TTabletLocation location;
+            location.tablet_id = tablet->tablet_id();
+            location.node_ids.push_back(1);
+            location_param.tablets.push_back(location);
+        }
+        return location_param;
+    }
+
+    void build_table_route_info() {
+        TOlapTableSchemaParam schema_param = build_schema();
+        TOlapTablePartitionParam partition_param = build_partition();
+        TOlapTableLocationParam location_param = build_location();
+
+        TOlapTableRouteInfo olap_table;
+        olap_table.__set_db_name("read_view_test_db");
+        olap_table.__set_table_name("read_view_test_table");
+        olap_table.__set_schema(schema_param);
+        olap_table.__set_partition(partition_param);
+        olap_table.__set_location(location_param);
+
+        TIMTDescriptor descriptor;
+        descriptor.__set_imt_type(TIMTType::OLAP_TABLE);
+        descriptor.__set_olap_table(olap_table);
+
+        _table_route_info = std::make_shared<OlapTableRouteInfo>();
+        Status status = _table_route_info->init(descriptor);
+        if (!status.ok()) {
+            std::cout << status.get_error_msg() << std::endl;
+        }
+    }
+
+    void SetUp() override {
+        srand(GetCurrentTimeMicros());
+        db_id = 1;
+        table_id = 2;
+        version = 10;
+        for (int i = 0; i < 3; i++) {
+            TabletSharedPtr tablet = create_tablet(rand(), rand());
+            _tablets.push_back(tablet);
+        }
+        build_table_route_info();
+    }
 
     void TearDown() override {
-        if (_tablet) {
-            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
-            _tablet.reset();
+        for (TabletSharedPtr& tablet : _tablets) {
+            StorageEngine::instance()->tablet_manager()->drop_tablet(tablet->tablet_id());
+            tablet.reset();
         }
     }
 
 protected:
-    TabletSharedPtr _tablet;
+    int64_t db_id;
+    int64_t table_id;
+    int64_t version;
+    std::vector<TabletSharedPtr> _tablets;
+    std::shared_ptr<OlapTableRouteInfo> _table_route_info;
 };
-
-void collect_row_iterator_result(StatusOr<RowIteratorSharedPtr> status_or, DatumRowVector& result) {
-    if (!status_or.status().ok()) {
-        ASSERT_TRUE(status_or.status().is_end_of_file());
-    }
-    RowIteratorSharedPtr iterator = status_or.value();
-    ASSERT_TRUE(iterator != nullptr);
-    StatusOr<RowSharedPtr> row_status = iterator->get_next();
-    while (row_status.status().ok()) {
-        RowSharedPtr row = row_status.value();
-        ASSERT_TRUE(row != nullptr);
-        result.push_back(DatumRow(row->size()));
-        for (size_t i = 0; i < row->size(); i++) {
-            result.back().set_datum(i, row->get_datum(i));
-        }
-        row_status = iterator->get_next();
-    }
-    ASSERT_TRUE(row_status.status().is_end_of_file());
-    iterator->close();
-}
 
 void collect_chunk_iterator_result(StatusOr<ChunkIteratorPtr> status_or, DatumRowVector& result) {
     if (!status_or.status().ok()) {
+        std::cout << status_or.status().get_error_msg() << std::endl;
         ASSERT_TRUE(status_or.status().is_end_of_file());
     }
     ChunkIteratorPtr iterator = status_or.value();
@@ -169,7 +238,7 @@ void collect_chunk_iterator_result(StatusOr<ChunkIteratorPtr> status_or, DatumRo
                 result.back().set_datum(j, chunk->columns().at(j)->get(i));
             }
         }
-        chunk.reset();
+        chunk->reset();
         status = iterator->get_next(chunk.get());
     }
     ASSERT_TRUE(status.is_end_of_file());
@@ -203,31 +272,28 @@ DatumRowVector get_expect_output(DatumRowVector& rows, std::vector<int> output_i
 }
 
 TEST_F(TableReadViewTest, test_basic_read) {
-    srand(GetCurrentTimeMicros());
-    _tablet = create_tablet(rand(), rand());
-
     // 1. generate data, and write to tablet
     // TODO test more types
     DatumRowVector rows;
-    create_row(rows, (int64_t) 1, (int32_t) 1, (int32_t) 1, (int16_t) 1, (int32_t) 1);
-    create_row(rows, (int64_t) 1, (int32_t) 1, (int32_t) 2, (int16_t) 1, (int32_t) 1);
-    create_row(rows, (int64_t) 1, (int32_t) 1, (int32_t) 3, (int16_t) 1, (int32_t) 1);
-    create_rowset(_tablet, rows, 2);
-    create_row(rows, (int64_t) 2, (int32_t) 1, (int32_t) 1, (int16_t) 1, (int32_t) 1);
-    create_row(rows, (int64_t) 2, (int32_t) 1, (int32_t) 2, (int16_t) 2, (int32_t) 1);
-    create_row(rows, (int64_t) 2, (int32_t) 1, (int32_t) 3, (int16_t) 3, (int32_t) 1);
-    create_rowset(_tablet, rows, 3);
-    create_row(rows, (int64_t) 3, (int32_t) 3, (int32_t) 4, (int16_t) 1, (int32_t) 1);
-    create_row(rows, (int64_t) 4, (int32_t) 2, (int32_t) 3, (int16_t) 2, (int32_t) 1);
-    create_row(rows, (int64_t) 5, (int32_t) 1, (int32_t) 5, (int16_t) 3, (int32_t) 1);
-    create_rowset(_tablet, rows, 4);
+    create_row(rows, (int64_t)1, (int32_t)1, (int32_t)1, (int16_t)1, (int32_t)1);
+    create_row(rows, (int64_t)1, (int32_t)1, (int32_t)2, (int16_t)1, (int32_t)1);
+    create_row(rows, (int64_t)1, (int32_t)1, (int32_t)3, (int16_t)1, (int32_t)1);
+    create_rowset(_tablets[0], 2, rows, 0, 3);
+    create_row(rows, (int64_t)2, (int32_t)1, (int32_t)1, (int16_t)1, (int32_t)1);
+    create_row(rows, (int64_t)2, (int32_t)1, (int32_t)2, (int16_t)2, (int32_t)1);
+    create_row(rows, (int64_t)2, (int32_t)1, (int32_t)3, (int16_t)3, (int32_t)1);
+    create_rowset(_tablets[1], 2, rows, 3, 6);
+    create_row(rows, (int64_t)3, (int32_t)3, (int32_t)4, (int16_t)1, (int32_t)1);
+    create_row(rows, (int64_t)4, (int32_t)2, (int32_t)3, (int16_t)2, (int32_t)1);
+    create_row(rows, (int64_t)5, (int32_t)1, (int32_t)5, (int16_t)3, (int32_t)1);
+    create_rowset(_tablets[2], 2, rows, 6, 9);
 
     // 2. build TableReadViewParams, and create TableReadView
     TableReadViewParams params;
     // 2.1 data version to read
-    params.version = Version(0, 4);
+    params.version = Version(0, 2);
 
-    vectorized::Schema tablet_schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    vectorized::Schema tablet_schema = ChunkHelper::convert_schema_to_format_v2(_tablets[0]->tablet_schema());
     // 2.2 sort key schema
     params.sort_key_schema.append(tablet_schema.field(0));
     params.sort_key_schema.append(tablet_schema.field(1));
@@ -238,7 +304,7 @@ TEST_F(TableReadViewTest, test_basic_read) {
     params.output_schema.append(tablet_schema.field(2));
     params.output_schema.append(tablet_schema.field(4));
     // 2.4 create TableReadView
-    TableReadViewSharedPtr table_read_view = StorageEngine::instance()->get_table(_tablet->tablet_id())->create_table_read_view(params);
+    TableReadViewSharedPtr table_read_view = Table::build_table(_table_route_info)->create_table_read_view(params);
 
     DatumRowVector expect_results = get_expect_output(rows, std::vector<int>{0, 2, 4});
     ReadOption read_option;
@@ -250,35 +316,24 @@ TEST_F(TableReadViewTest, test_basic_read) {
             key.set_datum(j, row.get_datum(j));
         }
         DatumRowVector expect{expect_results[i]};
-        DatumRowVector result;
-        // iterate result Row by Row
-        collect_row_iterator_result(table_read_view->get(key, read_option), result);
-        verify_result(params.output_schema, expect, result);
         DatumRowVector chunk_result;
-        // iterate result Chunk by Chunk
         collect_chunk_iterator_result(table_read_view->get_chunk(key, read_option), chunk_result);
         verify_result(params.output_schema, expect, chunk_result);
     }
 
     // 4. test to look up a prefix key
     DatumRow prefix_key1(2);
-    prefix_key1.set_int64(0, (int64_t) 1);
-    prefix_key1.set_int32(1, (int32_t) 1);
+    prefix_key1.set_int64(0, (int64_t)1);
+    prefix_key1.set_int32(1, (int32_t)1);
     DatumRowVector expect1{expect_results[0], expect_results[1], expect_results[2]};
-    DatumRowVector result1;
-    collect_row_iterator_result(table_read_view->get(prefix_key1, read_option), result1);
-    verify_result(params.output_schema, expect1, result1);
     DatumRowVector chunk_result1;
     collect_chunk_iterator_result(table_read_view->get_chunk(prefix_key1, read_option), chunk_result1);
     verify_result(params.output_schema, expect1, chunk_result1);
 
     DatumRow prefix_key2(2);
-    prefix_key2.set_int64(0, (int64_t) 2);
-    prefix_key2.set_int32(1, (int32_t) 1);
+    prefix_key2.set_int64(0, (int64_t)2);
+    prefix_key2.set_int32(1, (int32_t)1);
     DatumRowVector expect2{expect_results[3], expect_results[4], expect_results[5]};
-    DatumRowVector result2;
-    collect_row_iterator_result(table_read_view->get(prefix_key2, read_option), result2);
-    verify_result(params.output_schema, expect2, result2);
     DatumRowVector chunk_result2;
     collect_chunk_iterator_result(table_read_view->get_chunk(prefix_key2, read_option), chunk_result2);
     verify_result(params.output_schema, expect2, chunk_result2);
@@ -288,9 +343,6 @@ TEST_F(TableReadViewTest, test_basic_read) {
         prefix_key.set_datum(0, rows[i].get_datum(0));
         prefix_key.set_datum(1, rows[i].get_datum(1));
         DatumRowVector expect{expect_results[i]};
-        DatumRowVector result;
-        collect_row_iterator_result(table_read_view->get(prefix_key, read_option), result);
-        verify_result(params.output_schema, expect, result);
         DatumRowVector chunk_result;
         collect_chunk_iterator_result(table_read_view->get_chunk(prefix_key, read_option), chunk_result);
         verify_result(params.output_schema, expect, chunk_result);
