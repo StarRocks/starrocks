@@ -130,7 +130,7 @@ public class AuthenticationManagerTest {
         user = followerManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.2", scramble, seed);
         Assert.assertNull(user);
 
-        // pure from image
+        // purely loaded from image
         AuthenticationManager imageManager = AuthenticationManager.load(finalImage.getDataInputStream());
         Assert.assertTrue(imageManager.doesUserExist(testUser));
         Assert.assertTrue(imageManager.doesUserExist(testUserWithIp));
