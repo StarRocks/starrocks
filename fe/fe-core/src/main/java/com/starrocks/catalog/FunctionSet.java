@@ -264,7 +264,7 @@ public class FunctionSet {
     public static final String INTERSECT_COUNT = "intersect_count";
     public static final String BITMAP_DICT = "bitmap_dict";
     public static final String EXCHANGE_BYTES = "exchange_bytes";
-    public static final String EXCHANGE_RATIO = "exchange_speed";
+    public static final String EXCHANGE_SPEED = "exchange_speed";
     // Array functions:
     public static final String ARRAY_AGG = "array_agg";
     public static final String ARRAY_CONCAT = "array_concat";
