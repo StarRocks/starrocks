@@ -1334,6 +1334,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     }
     uint32_t max_src_rssid = max_rowset_id + rowset->num_segments() - 1;
 
+    LOG(INFO) << "max_src_rssid is " << max_src_rssid;
     for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
         auto& pk_col = _compaction_state->pk_cols[i];
         total_rows += pk_col->size();
