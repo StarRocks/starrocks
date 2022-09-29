@@ -65,7 +65,7 @@ public enum PrimitiveType {
     DECIMAL128("DECIMAL128", 16, TPrimitiveType.DECIMAL128),
 
     JSON("JSON", 16, TPrimitiveType.JSON),
-    IPV4("IPV4", 16, TPrimitiveType.IPV4),
+    IPV4("IPV4", 4, TPrimitiveType.IPV4),
     FUNCTION("FUNCTION", 8, TPrimitiveType.FUNCTION),
 
     // Unsupported scalar types.
@@ -379,6 +379,7 @@ public enum PrimitiveType {
             case INT:
             case DECIMAL32:
             case DATE:
+            case IPV4:
                 typeSize = 4;
                 break;
             case BIGINT:
@@ -386,7 +387,6 @@ public enum PrimitiveType {
             case DOUBLE:
             case FLOAT:
             case TIME:
-            case IPV4:
             case DATETIME:
                 typeSize = 8;
                 break;

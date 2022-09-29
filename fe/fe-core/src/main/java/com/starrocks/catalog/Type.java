@@ -1448,7 +1448,7 @@ public abstract class Type implements Cloneable {
             case DATETIME:
                 return 19;
             case IPV4:
-                return 19;
+                return 11;
             case FLOAT:
                 return 12;
             case DOUBLE:
