@@ -44,7 +44,7 @@ public class AnalyzeAlterTableStatementTest {
 
     @Test(expected = SemanticException.class)
     public void testIllegalNewTableName() {
-        TableRenameClause clause = new TableRenameClause("_newName");
+        TableRenameClause clause = new TableRenameClause("__newName");
         clauseAnalyzerVisitor.analyze(clause, connectContext);
     }
 
