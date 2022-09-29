@@ -48,7 +48,3 @@ Timeout：                job timeout, in seconds
 ```sql
 SHOW RESTORE FROM example_db;
 ```
-
-## keyword
-
-SHOW, RESTORE
