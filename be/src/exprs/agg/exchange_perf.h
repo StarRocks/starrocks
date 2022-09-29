@@ -12,6 +12,11 @@ namespace starrocks::vectorized {
 
 enum AggExchangePerfType { BYTES = 0, SPEED = 1 };
 
+/**
+ * exchange_bytes(columns...) shows how many bytes each BE node exchange columns.
+ * exchange_speed(columns...) shows how faster each BE node exchange columns.
+ */
+
 struct AggregateExchangePerfFunctionState : public AggregateFunctionEmptyState {
     int64_t bytes = 0;
     int64_t start_time = MonotonicNanos();
@@ -95,7 +100,9 @@ public:
                 unit = "GB/s";
             }
 
-            string res = fmt::format("{:.4f} ", speed) + unit;
+            string res = "exchange " + std::to_string(this->data(state).bytes) + " bytes in " +
+                         std::to_string(elapsed_time * 1.0 / NANOS_PER_SEC) +
+                         " s, speed = " + fmt::format("{:.4f} ", speed) + unit;
             BinaryColumn* column = down_cast<BinaryColumn*>(to);
             column->append(Slice(res));
         }
