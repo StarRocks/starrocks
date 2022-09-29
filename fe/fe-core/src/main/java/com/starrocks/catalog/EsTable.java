@@ -460,18 +460,12 @@ public class EsTable extends Table {
      *
      * @param client esRestClient
      */
-    public void syncTableMetaData(EsRestClient client) {
+    public void syncTableMetaData(EsRestClient client) throws Exception {
         if (esMetaStateTracker == null) {
             esMetaStateTracker = new EsMetaStateTracker(client, this);
         }
-        try {
-            esMetaStateTracker.run();
-            this.esTablePartitions = esMetaStateTracker.searchContext().tablePartitions();
-        } catch (Throwable e) {
-            LOG.warn("Exception happens when fetch index [{}] meta data from remote es cluster", this.name, e);
-            this.esTablePartitions = null;
-            this.lastMetaDataSyncException = e;
-        }
+        esMetaStateTracker.run();
+        this.esTablePartitions = esMetaStateTracker.searchContext().tablePartitions();
     }
 
     @Override

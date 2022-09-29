@@ -3,7 +3,11 @@
 package com.starrocks.external.iceberg;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.external.hive.HdfsFileFormat;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
@@ -17,6 +21,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.types.Types;
 
 import java.util.List;
 import java.util.Map;
@@ -161,5 +166,63 @@ public class IcebergUtil {
             }
         }
         return columns.build();
+    }
+
+    public static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {
+        if (icebergType == null) {
+            return Type.NULL;
+        }
+
+        PrimitiveType primitiveType;
+
+        switch (icebergType.typeId()) {
+            case BOOLEAN:
+                primitiveType = PrimitiveType.BOOLEAN;
+                break;
+            case INTEGER:
+                primitiveType = PrimitiveType.INT;
+                break;
+            case LONG:
+                primitiveType = PrimitiveType.BIGINT;
+                break;
+            case FLOAT:
+                primitiveType = PrimitiveType.FLOAT;
+                break;
+            case DOUBLE:
+                primitiveType = PrimitiveType.DOUBLE;
+                break;
+            case DATE:
+                primitiveType = PrimitiveType.DATE;
+                break;
+            case TIMESTAMP:
+                primitiveType = PrimitiveType.DATETIME;
+                break;
+            case STRING:
+            case UUID:
+                return ScalarType.createDefaultString();
+            case DECIMAL:
+                int precision = ((Types.DecimalType) icebergType).precision();
+                int scale = ((Types.DecimalType) icebergType).scale();
+                return ScalarType.createUnifiedDecimalType(precision, scale);
+            case LIST:
+                Type type = convertToArrayType(icebergType);
+                if (type.isArrayType()) {
+                    return type;
+                } else {
+                    return Type.UNKNOWN_TYPE;
+                }
+            case TIME:
+            case FIXED:
+            case BINARY:
+            case STRUCT:
+            case MAP:
+            default:
+                primitiveType = PrimitiveType.UNKNOWN_TYPE;
+        }
+        return ScalarType.createType(primitiveType);
+    }
+
+    private static ArrayType convertToArrayType(org.apache.iceberg.types.Type icebergType) {
+        return new ArrayType(convertColumnType(icebergType.asNestedType().asListType().elementType()));
     }
 }
