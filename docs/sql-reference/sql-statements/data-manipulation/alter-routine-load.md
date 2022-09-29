@@ -184,7 +184,3 @@ WHERE a > 0
 
 PARTITION (p1)
 ~~~
-
-## Keywords
-
-ALTER, ROUTINE, LOAD

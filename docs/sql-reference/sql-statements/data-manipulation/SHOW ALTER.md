@@ -45,7 +45,3 @@ CLUSTER: Shows tasks related to cluster operations (only used by administrators!
     ```SQL
     SHOW ALTER CLUSTER;
     ```
-
-## keyword
-
-SHOW,ALTER

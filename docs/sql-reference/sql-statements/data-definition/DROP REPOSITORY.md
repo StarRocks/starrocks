@@ -21,7 +21,3 @@ To drop the repository is just to drop the mapping of the repository in StarRock
     ```sql
     DROP REPOSITORY `bos_repo`;
     ```
-
-## keyword
-
-DROP REPOSITORY
