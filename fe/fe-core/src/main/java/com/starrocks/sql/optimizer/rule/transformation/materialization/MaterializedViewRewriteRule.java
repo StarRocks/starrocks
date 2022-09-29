@@ -84,7 +84,7 @@ public class MaterializedViewRewriteRule extends TransformationRule {
         List<Table> queryRefTables = RewriteUtils.getAllTables(filter);
 
 
-        OptExpression rewrittenExpression = null;
+        List<OptExpression> results = Lists.newArrayList();
         for (MaterializationContext mvContext : context.getCandidateMvs()) {
             List<Table> mvRefTables = RewriteUtils.getAllTables(mvContext.getMvExpression());
             // if the ref table set between query and mv do not intersect, skip
@@ -94,15 +94,15 @@ public class MaterializedViewRewriteRule extends TransformationRule {
 
             MaterializedViewRewriter rewriter = new MaterializedViewRewriter(predicateTriple, queryEc,
                     null, filter, queryRefTables, mvRefTables, mvContext, context);
-            OptExpression rewritten = rewriter.rewriteQuery();
+            List<OptExpression> rewritten = rewriter.rewriteQuery();
             if (rewritten != null) {
                 // TODO(hkp): compare the cost and decide whether to use rewritten
-                rewrittenExpression = rewritten;
+                results.addAll(rewritten);
             }
         }
 
         // sort candidates and return lowest cost candidate
-        return Lists.newArrayList(rewrittenExpression);
+        return results;
     }
 
 
