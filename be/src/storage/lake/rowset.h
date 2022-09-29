@@ -30,7 +30,7 @@ public:
     [[nodiscard]] const RowsetMetadata& metadata() const { return *_rowset_metadata; }
 
 private:
-    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments);
+    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache);
 
     // _tablet is owned by TabletReader
     Tablet* _tablet;
