@@ -971,7 +971,7 @@ Status OlapTableSink::open_wait() {
                 LOG(WARNING) << ch->name() << ", tablet open failed, " << ch->print_load_info()
                              << ", node=" << ch->node_info()->host << ":" << ch->node_info()->brpc_port
                              << ", errmsg=" << st.get_error_msg();
-                err_st = st;
+                err_st = st.clone_and_append(string(" be:") + ch->node_info()->host);
                 this->mark_as_failed(ch);
             }
             // disable colocate mv index load if other BE not supported
@@ -992,7 +992,7 @@ Status OlapTableSink::open_wait() {
                     LOG(WARNING) << ch->name() << ", tablet open failed, " << ch->print_load_info()
                                  << ", node=" << ch->node_info()->host << ":" << ch->node_info()->brpc_port
                                  << ", errmsg=" << st.get_error_msg();
-                    err_st = st;
+                    err_st = st.clone_and_append(string(" be:") + ch->node_info()->host);
                     index_channel->mark_as_failed(ch);
                 }
             });

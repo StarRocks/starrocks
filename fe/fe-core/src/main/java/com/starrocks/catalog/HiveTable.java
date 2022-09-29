@@ -48,7 +48,6 @@ import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.HiveTableStats;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
@@ -72,6 +71,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.common.util.Util.validateMetastoreUris;
 import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 
 /**
  * External hive table
@@ -159,7 +159,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public String getCatalogName() {
-        return catalogName == null ? CatalogMgr.RESOURCE_MAPPING_CATALOG_PREFIX + resourceName : catalogName;
+        return catalogName == null ? getResourceMappingCatalogName(resourceName, "hive") : catalogName;
     }
 
     public String getDbName() {

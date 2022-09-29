@@ -992,13 +992,15 @@ struct TGetTablesConfigResponse {
 struct TTableConfigInfo {
     1: optional string table_schema
     2: optional string table_name
-    3: optional string primary_key
-    4: optional string partition_key
-    5: optional string distribute_key
-    6: optional string distribute_type
-    7: optional i32 distribute_bucket
-    8: optional string sort_key
-    9: optional string properties
+    3: optional string table_engine
+    4: optional string table_model
+    5: optional string primary_key
+    6: optional string partition_key
+    7: optional string distribute_key
+    8: optional string distribute_type
+    9: optional i32 distribute_bucket
+    10: optional string sort_key
+    11: optional string properties
 }
 
 struct TGetTablesInfoRequest {
