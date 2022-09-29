@@ -84,17 +84,9 @@ public:
             int64_t elapsed_time = MonotonicNanos() - this->data(state).start_time;
             double speed = 0;
             if (elapsed_time > 0) {
-                speed = this->data(state).bytes * NANOS_PER_SEC * 1.0 / elapsed_time;
+                speed = this->data(state).bytes * 1.0 / 1048576.0 * 1000000 / (elapsed_time / 1000.0);
             }
-            string unit = "B/s";
-            if (speed >= 1024) {
-                speed /= 1024;
-                unit = "KB/s";
-            }
-            if (speed >= 1024) {
-                speed /= 1024;
-                unit = "MB/s";
-            }
+            string unit = "MB/s";
             if (speed >= 1024) {
                 speed /= 1024;
                 unit = "GB/s";
