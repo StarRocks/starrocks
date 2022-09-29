@@ -57,6 +57,7 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -339,7 +340,7 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void prepareTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-            TxnCommitAttachment txnCommitAttachment)
+                                   TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         if (Config.disable_load_job) {
             throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
@@ -641,6 +642,7 @@ public class GlobalTransactionMgr implements Writable {
     public void readFields(DataInput in) throws IOException {
         long now = System.currentTimeMillis();
         int numTransactions = in.readInt();
+        List<TransactionState> transactionStates = new ArrayList<>(numTransactions);
         for (int i = 0; i < numTransactions; ++i) {
             TransactionState transactionState = new TransactionState();
             transactionState.readFields(in);
@@ -651,12 +653,16 @@ public class GlobalTransactionMgr implements Writable {
                 LOG.info("discard unknown transaction state: {}", transactionState);
                 continue;
             }
+            transactionStates.add(transactionState);
+        }
+        transactionStates.sort(Comparator.comparingLong(TransactionState::getCommitTime));
+        for (TransactionState transactionState : transactionStates) {
             try {
                 DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
                 dbTransactionMgr.unprotectUpsertTransactionState(transactionState, true);
             } catch (AnalysisException e) {
                 LOG.warn("failed to get db transaction manager for {}", transactionState);
-                throw new IOException("Read transaction states failed", e);
+                throw new IOException("failed to get db transaction manager for txn " + transactionState.getTransactionId(), e);
             }
         }
         idGenerator.readFields(in);

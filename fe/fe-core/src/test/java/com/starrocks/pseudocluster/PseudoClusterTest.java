@@ -1,7 +1,6 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
-import com.starrocks.server.GlobalStateMgr;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -9,25 +8,16 @@ import org.junit.Test;
 
 import java.sql.Connection;
 import java.sql.Statement;
-import java.util.Random;
 
 public class PseudoClusterTest {
     @BeforeClass
     public static void setUp() throws Exception {
-        int fePort = new Random().nextInt(10000) + 50000;
-        PseudoCluster.getOrCreate("pseudo_cluster", true, fePort, 3);
+        PseudoCluster.getOrCreateWithRandomPort(true, 3);
     }
 
     @AfterClass
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().shutdown(true);
-    }
-
-    @Test
-    public void testGetBackend() throws Exception {
-        for (int i = 0; i < 3; i++) {
-            System.out.println(GlobalStateMgr.getCurrentSystemInfo().getBackend(10001 + i).getBePort());
-        }
     }
 
     @Test
@@ -37,10 +27,12 @@ public class PseudoClusterTest {
         try {
             stmt.execute("create database test");
             stmt.execute("use test");
-            stmt.execute(
-                    "create table test ( pk bigint NOT NULL, v0 string not null, v1 int not null ) primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 3 PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\");");
-            Assert.assertFalse(stmt.execute("insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3);"));
+            stmt.execute("create table test ( pk bigint NOT NULL, v0 string not null, v1 int not null ) " + 
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 7 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\")");
+            Assert.assertFalse(stmt.execute("insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3)"));
             System.out.printf("updated %d rows\n", stmt.getUpdateCount());
+            stmt.execute("select * from test");
         } finally {
             stmt.close();
             connection.close();
