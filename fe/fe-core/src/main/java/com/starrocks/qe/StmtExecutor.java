@@ -1265,9 +1265,15 @@ public class StmtExecutor {
                                     sourceType,
                                     ConnectContext.get().getSessionVariable().getQueryTimeoutS());
         } else {
+            List<Long> tableIdList = Lists.newArrayList(targetTable.getId());
+            if (view != null && view.getIMTInfo() != null) {
+                for (IMTInfo imt : view.getIMTInfo().values()) {
+                    tableIdList.add(imt.toOlapTable().getId());
+                }
+            }
             transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                     database.getId(),
-                    Lists.newArrayList(targetTable.getId()),
+                    tableIdList,
                     label,
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                             FrontendOptions.getLocalHostAddress()),
