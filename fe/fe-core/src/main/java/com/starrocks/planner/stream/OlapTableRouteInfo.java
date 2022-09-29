@@ -75,6 +75,13 @@ public class OlapTableRouteInfo {
         this.tableName = table.getName();
     }
 
+    public void finalizeTupleDescriptor(DescriptorTable descriptorTable, TupleDescriptor tupleDesc) {
+        tableSchema.tuple_desc = tupleDesc.toThrift();
+        for (SlotDescriptor slotDesc : tupleDesc.getSlots()) {
+            tableSchema.addToSlot_descs(slotDesc.toThrift());
+        }
+    }
+
     /**
      * Create a route info for all partitions
      */
@@ -111,6 +118,7 @@ public class OlapTableRouteInfo {
         schemaParam.setTable_id(table.getId());
         schemaParam.setVersion(0);
 
+        /*
         DescriptorTable descriptorTable = new DescriptorTable();
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
         for (Column column : table.getFullSchema()) {
@@ -124,6 +132,7 @@ public class OlapTableRouteInfo {
         for (SlotDescriptor slotDesc : olapTuple.getSlots()) {
             schemaParam.addToSlot_descs(slotDesc.toThrift());
         }
+         */
 
         for (Map.Entry<Long, MaterializedIndexMeta> pair : table.getIndexIdToMeta().entrySet()) {
             MaterializedIndexMeta indexMeta = pair.getValue();

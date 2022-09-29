@@ -2449,7 +2449,9 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            aggregationNode.setAggImt(node.getAggImt());
+            IMTInfo aggImt = node.getAggImt();
+            aggImt.finalizeTupleDescriptor(context.getDescTbl(), outputTupleDesc);
+            aggregationNode.setAggImt(aggImt);
             aggregationNode.setAggExprImtMap(node.getAggExprImtMap());
             aggregationNode.setGroupExprImtMap(node.getGroupExprImtMap());
 

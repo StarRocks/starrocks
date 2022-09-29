@@ -3,6 +3,8 @@
 package com.starrocks.planner.stream;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TIMTDescriptor;
@@ -45,6 +47,10 @@ public class IMTInfo {
     public void setLoadInfo(TUniqueId loadId, long txnId) {
         this.loadId = loadId;
         this.txnId = txnId;
+    }
+
+    public void finalizeTupleDescriptor(DescriptorTable descTable, TupleDescriptor tupleDesc) {
+        olapTable.finalizeTupleDescriptor(descTable, tupleDesc);
     }
 
     public TIMTDescriptor toThrift() {
