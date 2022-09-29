@@ -58,9 +58,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > StreamAggNode::decompos
     AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
 
     // Create a shared RefCountedRuntimeFilterCollector
-    auto sink_operator = std::make_shared<pipeline::StreamingAggregateSinkOperatorFactory>(context->next_operator_id(),
-                                                                                           id(), aggregator_factory,
-                                                                                           _imt_detail, _imt_agg_result);
+    auto sink_operator = std::make_shared<pipeline::StreamingAggregateSinkOperatorFactory>(
+            context->next_operator_id(), id(), aggregator_factory, _imt_detail, _imt_agg_result);
     // Initialize OperatorFactory's fields involving runtime filters.
     operators_with_sink.emplace_back(sink_operator);
     context->add_pipeline(operators_with_sink);
@@ -68,9 +67,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > StreamAggNode::decompos
     OpFactories operators_with_source;
     FragmentContext* fragment_context = context->fragment_context();
     auto source_operator = std::make_shared<pipeline::StreamingAggregateSourceOperatorFactory>(
-            context->next_operator_id(), id(), aggregator_factory,
-            _imt_detail, _imt_agg_result,
-            fragment_context);
+            context->next_operator_id(), id(), aggregator_factory, _imt_detail, _imt_agg_result, fragment_context);
     // Aggregator must be used by a pair of sink and source operators,
     // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);

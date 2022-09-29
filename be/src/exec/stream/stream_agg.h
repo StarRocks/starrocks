@@ -7,8 +7,8 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/vectorized/aggregator.h"
 #include "exec/stream/imt_state_table.h"
+#include "exec/vectorized/aggregator.h"
 
 namespace starrocks {
 

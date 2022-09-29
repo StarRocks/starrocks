@@ -17,7 +17,7 @@ using IMTStateTablePtr = std::shared_ptr<IMTStateTable>;
 // Route info of an OLAP Table, which could be used to locate a chunk row to tablet
 class IMTStateTable {
 public:
-    IMTStateTable(const TIMTDescriptor& imt):_imt(imt) {}
+    IMTStateTable(const TIMTDescriptor& imt) : _imt(imt) {}
 
     ~IMTStateTable() = default;
 

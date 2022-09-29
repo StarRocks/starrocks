@@ -7,10 +7,10 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/scan_node.h"
+#include "exec/stream/imt_state_table.h"
 #include "exec/stream/lookupjoin/lookup_join_context.h"
 #include "exec/vectorized/join_hash_map.h"
 #include "exprs/vectorized/column_ref.h"
-#include "exec/stream/imt_state_table.h"
 
 namespace starrocks {
 

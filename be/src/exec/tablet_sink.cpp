@@ -729,7 +729,7 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
         }
         _tablet_to_be.emplace(tablet.tablet_id(), std::move(bes));
     }
-    VLOG(1) << "_node_channels size:"<<_node_channels.size();
+    VLOG(1) << "_node_channels size:" << _node_channels.size();
 
     for (auto& it : _node_channels) {
         RETURN_IF_ERROR(it.second->init(state));
@@ -912,7 +912,7 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state) {
             VLOG(1) << "partition:" << i << ", exists:" << part->indexes.size();
             for (auto tablet : part->indexes[i].tablets) {
                 PTabletWithPartition tablet_info;
-                VLOG(1) <<"set tablet_id:"<<tablet<<", part id:"<< part->id;
+                VLOG(1) << "set tablet_id:" << tablet << ", part id:" << part->id;
                 tablet_info.set_tablet_id(tablet);
                 tablet_info.set_partition_id(part->id);
 
