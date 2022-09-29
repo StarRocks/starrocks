@@ -623,34 +623,37 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     });
     ADOPT_TRACE(trace.get());
     TRACE("start to perform cumulative compaction");
-    TabletSharedPtr best_tablet =
-            _tablet_manager->find_best_tablet_to_compaction(CompactionType::CUMULATIVE_COMPACTION, data_dir);
-    if (best_tablet == nullptr) {
+
+    auto best_tablets = _tablet_manager->find_best_tablets_to_compaction(CompactionType::CUMULATIVE_COMPACTION, data_dir);
+    if (best_tablets.empty()) {
         return Status::NotFound("there are no suitable tablets");
     }
-    TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
+    Status st = Status::OK();
+    for (auto& best_tablet : best_tablets) {
+        TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
 
-    StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
+        StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
 
-    std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
-    vectorized::CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
+        std::unique_ptr<MemTracker> mem_tracker =
+                std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
+        vectorized::CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
 
-    Status res = cumulative_compaction.compact();
-    if (!res.ok()) {
-        if (!res.is_mem_limit_exceeded()) {
-            best_tablet->set_last_cumu_compaction_failure_time(UnixMillis());
+        Status res = cumulative_compaction.compact();
+        if (!res.ok()) {
+            if (!res.is_mem_limit_exceeded()) {
+                best_tablet->set_last_cumu_compaction_failure_time(UnixMillis());
+            }
+            if (!res.is_not_found()) {
+                StarRocksMetrics::instance()->cumulative_compaction_request_failed.increment(1);
+                LOG(WARNING) << "Fail to vectorized compact table=" << best_tablet->full_name()
+                             << ", err=" << res.to_string();
+            }
+            st = res;
+        } else {
+            best_tablet->set_last_cumu_compaction_failure_time(0);
         }
-        if (!res.is_not_found()) {
-            StarRocksMetrics::instance()->cumulative_compaction_request_failed.increment(1);
-            LOG(WARNING) << "Fail to vectorized compact table=" << best_tablet->full_name()
-                         << ", err=" << res.to_string();
-        }
-        return res;
     }
-
-    best_tablet->set_last_cumu_compaction_failure_time(0);
-    return Status::OK();
+    return st;
 }
 
 Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
