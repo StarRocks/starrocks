@@ -6,10 +6,14 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.List;
 
 public class PrivilegeStmtAnalyzerV2Test {
     ConnectContext ctx;
@@ -48,5 +52,35 @@ public class PrivilegeStmtAnalyzerV2Test {
         } catch (AnalysisException e) {
             Assert.assertTrue(e.getMessage().contains("invalid user name"));
         }
+    }
+
+    @Test
+    public void testGrantRevokeSelectTablePrivilege() throws Exception {
+        UtFrameUtils.setUpForPersistTest();
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create user test", ctx);
+        ctx.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
+
+        String sql = "grant select on db.tbl to test";
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals("TABLE", grantStmt.getPrivType());
+        List<String> tokens = grantStmt.getPrivilegeObjectNameTokenList();
+        Assert.assertEquals(2, tokens.size());
+        Assert.assertEquals("db", tokens.get(0));
+        Assert.assertEquals("tbl", tokens.get(1));
+        Assert.assertEquals("test", grantStmt.getUserIdentity().getQualifiedUser());
+        Assert.assertNull(grantStmt.getRole());
+
+        sql = "revoke select on db.tbl from test";
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals("TABLE", revokeStmt.getPrivType());
+        tokens = revokeStmt.getPrivilegeObjectNameTokenList();
+        Assert.assertEquals(2, tokens.size());
+        Assert.assertEquals("db", tokens.get(0));
+        Assert.assertEquals("tbl", tokens.get(1));
+        Assert.assertEquals("test", revokeStmt.getUserIdentity().getQualifiedUser());
+        Assert.assertNull(revokeStmt.getRole());
+
+        UtFrameUtils.tearDownForPersisTest();
     }
 }

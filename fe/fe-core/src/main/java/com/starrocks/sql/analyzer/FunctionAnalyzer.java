@@ -179,8 +179,8 @@ public class FunctionAnalyzer {
             if (modeArg instanceof IntLiteral) {
                 IntLiteral modeIntLiteral = (IntLiteral) modeArg;
                 long modeValue = modeIntLiteral.getValue();
-                if (modeValue < 0 || modeValue > 3) {
-                    throw new SemanticException("mode argument's range must be [0-3]");
+                if (modeValue < 0 || modeValue > 7) {
+                    throw new SemanticException("mode argument's range must be [0-7]");
                 }
             } else {
                 throw new SemanticException("mode argument must be numerical type");

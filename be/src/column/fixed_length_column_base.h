@@ -222,6 +222,9 @@ public:
 
 protected:
     Container _data;
+
+private:
+    using Column::append;
 };
 
 } // namespace starrocks::vectorized

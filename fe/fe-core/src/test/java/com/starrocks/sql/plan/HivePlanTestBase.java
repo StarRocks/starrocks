@@ -157,6 +157,30 @@ public class HivePlanTestBase extends PlanTestBase {
                 "    \"table\" = \"t1\",\n" +
                 "    \"database\" = \"partitioned_db\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE EXTERNAL TABLE IF NOT EXISTS lineitem_par ( l_orderkey    INTEGER,\n" +
+                "                             l_partkey     INTEGER,\n" +
+                "                             l_suppkey     INTEGER,\n" +
+                "                             l_linenumber  INTEGER,\n" +
+                "                             l_quantity    decimal(15,2),\n" +
+                "                             l_extendedprice  decimal(15,2),\n" +
+                "                             l_discount    decimal(15,2),\n" +
+                "                             l_tax         decimal(15,2),\n" +
+                "                             l_returnflag  STRING,\n" +
+                "                             l_linestatus  STRING,\n" +
+                "                             l_shipdate    DATE,\n" +
+                "                             l_commitdate  DATE,\n" +
+                "                             l_receiptdate DATE,\n" +
+                "                             l_shipinstruct STRING,\n" +
+                "                             l_shipmode     STRING,\n" +
+                "                             l_comment      STRING)\n" +
+                "\n" +
+                "    ENGINE=hive\n" +
+                "properties (\n" +
+                "    \"resource\" = \"hive0\",\n" +
+                "    \"table\" = \"lineitem_par\",\n" +
+                "    \"database\" = \"partitioned_db\"\n" +
+                ");");
     }
 
     private static void mockHiveResource() throws Exception {
@@ -165,6 +189,7 @@ public class HivePlanTestBase extends PlanTestBase {
 
         Map<String, String> properties = Maps.newHashMap();
         properties.put("type", "hive");
+        properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
         CreateResourceStmt createResourceStmt = new CreateResourceStmt(true, "hive0", properties);
         createResourceStmt.setResourceType(Resource.ResourceType.HIVE);
         connectContext.getGlobalStateMgr().getResourceMgr().createResource(createResourceStmt);
