@@ -92,7 +92,7 @@ public class Optimizer {
         context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
-        logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext);
+        logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext, false);
         return logicOperatorTree;
     }
 
@@ -131,7 +131,7 @@ public class Optimizer {
             }
         }
 
-        logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext);
+        logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext, true);
 
         memo.init(logicOperatorTree);
         OptimizerTraceUtil.log(connectContext, "after logical rewrite, root group:\n%s", memo.getRootGroup());
@@ -173,7 +173,7 @@ public class Optimizer {
         return finalPlan;
     }
 
-    private OptExpression logicalRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
+    private OptExpression logicalRuleRewrite(OptExpression tree, TaskContext rootTaskContext, boolean needMvRewrite) {
         tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
         deriveLogicalProperty(tree);
 
@@ -269,6 +269,11 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new ReorderIntersectRule());
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
+        // single table materialized view rewrite rule
+        if (needMvRewrite) {
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        }
+
         return tree.getInputs().get(0);
     }
 
@@ -311,6 +316,7 @@ public class Optimizer {
         } else {
             context.getRuleSet().addAutoJoinImplementationRule();
         }
+        context.getRuleSet().addMultiTableMvRewriteRule();
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(rootTaskContext, memo.getRootGroup()));
         context.getTaskScheduler().executeTasks(rootTaskContext);

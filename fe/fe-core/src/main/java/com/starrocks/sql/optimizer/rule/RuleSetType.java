@@ -19,4 +19,5 @@ public enum RuleSetType {
     PRUNE_PROJECT,
     COLLECT_CTE,
     INLINE_CTE,
+    SINGLE_TABLE_MV_REWRITE,
 }

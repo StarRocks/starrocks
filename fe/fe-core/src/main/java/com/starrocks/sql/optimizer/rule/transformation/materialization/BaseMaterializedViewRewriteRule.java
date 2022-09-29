@@ -34,20 +34,9 @@ import java.util.Set;
  * Put multi table query rewrite in memo phase
  *
  */
-public class MaterializedViewRewriteRule extends TransformationRule {
-    public MaterializedViewRewriteRule() {
-        super(RuleType.TF_MV_PROJECT_FILTER_SCAN_RULE, Pattern.create(OperatorType.LOGICAL_FILTER)
-                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
-    }
-
-    private static class RewrittenCandidate {
-        public MaterializedView mv;
-        public OptExpression rewrittenExpression;
-
-        public RewrittenCandidate(MaterializedView mv, OptExpression expression) {
-            this.mv = mv;
-            this.rewrittenExpression = expression;
-        }
+public class BaseMaterializedViewRewriteRule extends TransformationRule {
+    public BaseMaterializedViewRewriteRule(RuleType type, Pattern pattern) {
+        super(type, pattern);
     }
 
     @Override

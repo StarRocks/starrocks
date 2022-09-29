@@ -130,6 +130,9 @@ public enum RuleType {
     // materialized view rewrite related
     TF_MV_FILTER_SCAN_RULE,
     TF_MV_PROJECT_FILTER_SCAN_RULE,
+    TF_MV_ONLY_JOIN_RULE,
+    TF_MV_FILTER_JOIN_RULE,
+    TF_MV_PROJECT_FILTER_JOIN_RULE,
 
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,

@@ -117,6 +117,11 @@ import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.FilterJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.FilterScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.OnlyJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.ProjectionFilterJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.ProjectionFilterScanRule;
 
 import java.util.List;
 import java.util.Map;
@@ -320,6 +325,11 @@ public class RuleSet {
                 new InlineOneCTEConsumeRule(),
                 new PruneCTEProduceRule()
         ));
+
+        REWRITE_RULES.put(RuleSetType.SINGLE_TABLE_MV_REWRITE, ImmutableList.of(
+                new FilterScanRule(),
+                new ProjectionFilterScanRule()
+        ));
     }
 
     public RuleSet() {
@@ -335,6 +345,12 @@ public class RuleSet {
 
     public void addJoinCommutativityWithOutInnerRule() {
         transformRules.add(JoinCommutativityWithOutInnerRule.getInstance());
+    }
+
+    public void addMultiTableMvRewriteRule() {
+        transformRules.add(OnlyJoinRule.getInstance());
+        transformRules.add(FilterJoinRule.getInstance());
+        transformRules.add(ProjectionFilterJoinRule.getInstance());
     }
 
     public List<Rule> getTransformRules() {
