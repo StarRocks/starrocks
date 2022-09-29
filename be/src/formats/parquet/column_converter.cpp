@@ -180,20 +180,73 @@ private:
     DestPrimitiveType _scale_factor = 1;
 };
 
+// This class is to convert *fixed length* binary to decimal
+// and for fixed length binary in parquet, string data is contiguous,
+// and that's why we can do memcpy 8 bytes without accessing invalid address.
 template <PrimitiveType DestType>
 class BinaryToDecimalConverter : public ColumnConverter {
 public:
     using DecimalType = typename vectorized::RunTimeTypeTraits<DestType>::CppType;
     using ColumnType = typename vectorized::RunTimeTypeTraits<DestType>::ColumnType;
     using DestPrimitiveType = typename vectorized::RunTimeTypeTraits<TYPE_DECIMAL128>::CppType;
-
-    BinaryToDecimalConverter(int32_t src_scale, int32_t dst_scale) {
+    BinaryToDecimalConverter(int32_t src_scale, int32_t dst_scale, int32_t type_length) {
         if (src_scale < dst_scale) {
             _scale_type = DecimalScaleType::kScaleUp;
             _scale_factor = get_scale_factor<DestPrimitiveType>(dst_scale - src_scale);
         } else if (src_scale > dst_scale) {
             _scale_type = DecimalScaleType::kScaleDown;
             _scale_factor = get_scale_factor<DestPrimitiveType>(src_scale - dst_scale);
+        }
+        _type_length = type_length;
+    }
+
+    template <int BINSZ>
+    void t_convert(size_t size, uint8_t* dst_null_data, uint8_t* src_null_data, DecimalType* dst_data, Slice* src_data,
+                   bool* has_null) {
+        for (size_t i = 0; i < size; i++) {
+            dst_null_data[i] = src_null_data[i];
+            if (dst_null_data[i]) {
+                *has_null = true;
+                continue;
+            }
+            // When Decimal in parquet is stored in byte arrays, binary and fixed,
+            // the unscaled number must be encoded as two's complement using big-endian byte order.
+
+            DestPrimitiveType unscale = 0;
+            if constexpr (BINSZ <= 8) {
+                using T = int64_t;
+
+                if ((i + 8) < size) {
+                    T value = 0;
+                    // NOTE(yan): since fixed length binary data is contiguous, with condition check (i+8) < size
+                    // we can assure that there is no illegal memory access
+                    // mempcy 8 bytes to compiler, it's instruction to move 8 bytes from memory to register
+                    // and follow actions are all in-register instructions.
+                    memcpy(reinterpret_cast<char*>(&value), src_data[i].data, 8);
+                    value = BitUtil::big_endian_to_host(value);
+                    value = value >> ((8 - BINSZ) * 8);
+                    unscale = value;
+                } else {
+                    T value = src_data[i].data[0] & 0x80 ? -1 : 0;
+                    memcpy(reinterpret_cast<char*>(&value) + sizeof(T) - BINSZ, src_data[i].data, BINSZ);
+                    value = BitUtil::big_endian_to_host(value);
+                    unscale = value;
+                }
+            } else {
+                using T = int128_t;
+                T value = src_data[i].data[0] & 0x80 ? -1 : 0;
+                memcpy(reinterpret_cast<char*>(&value) + sizeof(T) - BINSZ, src_data[i].data, BINSZ);
+                value = BitUtil::big_endian_to_host(value);
+                unscale = value;
+            }
+
+            // hardware branch predicator works well here.
+            if (_scale_type == DecimalScaleType::kScaleUp) {
+                unscale *= _scale_factor;
+            } else if (_scale_type == DecimalScaleType::kScaleDown) {
+                unscale /= _scale_factor;
+            }
+            dst_data[i] = DecimalType(unscale);
         }
     }
 
@@ -213,30 +266,24 @@ public:
         auto& src_null_data = src_nullable_column->null_column()->get_data();
         auto& dst_null_data = dst_nullable_column->null_column()->get_data();
 
-        size_t size = src_column->size();
+        size_t size = src_data.size();
+        if (_type_length > sizeof(DestPrimitiveType)) {
+            memset(dst_null_data.data(), 0x1, size);
+            dst_nullable_column->set_has_null(true);
+            return Status::OK();
+        }
+
         bool has_null = false;
-        for (size_t i = 0; i < size; i++) {
-            // If src_data[i].size > DestPrimitiveType, this means  we treat as null.
-            dst_null_data[i] = src_null_data[i] | (src_data[i].size > sizeof(DestPrimitiveType));
-            if (dst_null_data[i]) {
-                has_null = true;
-                continue;
-            }
+#define M(SZ)                                                                                                         \
+    case SZ:                                                                                                          \
+        t_convert<SZ>(size, dst_null_data.data(), src_null_data.data(), dst_data.data(), src_data.data(), &has_null); \
+        break;
 
-            // When Decimal in parquet is stored in byte arrays, binary and fixed,
-            // the unscaled number must be encoded as two's complement using big-endian byte order.
-            DestPrimitiveType value = src_data[i].data[0] & 0x80 ? -1 : 0;
-            memcpy(reinterpret_cast<char*>(&value) + sizeof(DestPrimitiveType) - src_data[i].size, src_data[i].data,
-                   src_data[i].size);
-            value = BitUtil::big_endian_to_host(value);
-
-            // scale up/down
-            if (_scale_type == DecimalScaleType::kScaleUp) {
-                value *= _scale_factor;
-            } else if (_scale_type == DecimalScaleType::kScaleDown) {
-                value /= _scale_factor;
-            }
-            dst_data[i] = DecimalType(value);
+        switch (_type_length) {
+            M(1) M(2) M(3) M(4) M(5) M(6) M(7) M(8);
+            M(9) M(10) M(11) M(12) M(13) M(14) M(15) M(16);
+        default:
+            __builtin_unreachable();
         }
         dst_nullable_column->set_has_null(has_null);
         return Status::OK();
@@ -245,6 +292,7 @@ public:
 private:
     DecimalScaleType _scale_type = DecimalScaleType::kNoScale;
     DestPrimitiveType _scale_factor = 1;
+    int32_t _type_length = 0;
 };
 
 Status ColumnConverterFactory::create_converter(const ParquetField& field, const TypeDescriptor& typeDescriptor,
@@ -359,22 +407,26 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         break;
     }
     case tparquet::Type::type::FIXED_LEN_BYTE_ARRAY: {
+        int32_t type_length = field.type_length;
         if (col_type != PrimitiveType::TYPE_VARCHAR && col_type != PrimitiveType::TYPE_CHAR) {
             need_convert = true;
         }
         switch (col_type) {
         case PrimitiveType::TYPE_DECIMALV2:
             // All DecimalV2 use scale 9 as scale
-            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMALV2>>(field.scale, 9);
+            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMALV2>>(field.scale, 9, type_length);
             break;
         case PrimitiveType::TYPE_DECIMAL32:
-            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL32>>(field.scale, typeDescriptor.scale);
+            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL32>>(field.scale, typeDescriptor.scale,
+                                                                                    type_length);
             break;
         case PrimitiveType::TYPE_DECIMAL64:
-            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL64>>(field.scale, typeDescriptor.scale);
+            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL64>>(field.scale, typeDescriptor.scale,
+                                                                                    type_length);
             break;
         case PrimitiveType::TYPE_DECIMAL128:
-            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL128>>(field.scale, typeDescriptor.scale);
+            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL128>>(field.scale, typeDescriptor.scale,
+                                                                                     type_length);
             break;
         default:
             break;
