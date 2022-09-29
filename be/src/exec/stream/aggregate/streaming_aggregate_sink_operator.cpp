@@ -10,11 +10,25 @@ namespace starrocks::pipeline {
 Status StreamingAggregateSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get(), _mem_tracker.get()));
+    if (_imt_detail) {
+        RETURN_IF_ERROR(_imt_detail->prepare(state));
+        RETURN_IF_ERROR(_imt_detail->open(state));
+    }
+//    if (_imt_agg_result) {
+//        RETURN_IF_ERROR(_imt_agg_result->prepare(state));
+//        RETURN_IF_ERROR(_imt_agg_result->open(state));
+//    }
     return _aggregator->open(state);
 }
 
 void StreamingAggregateSinkOperator::close(RuntimeState* state) {
     _aggregator->unref(state);
+    if (_imt_detail) {
+        _imt_detail->close(state);
+    }
+//    if (_imt_agg_result) {
+//        _imt_agg_result->close(state);
+//    }
     Operator::close(state);
 }
 
@@ -39,6 +53,10 @@ Status StreamingAggregateSinkOperator::push_chunk(RuntimeState* state, const vec
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
     RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
+    if (_imt_detail) {
+        VLOG(1) << "write chunk.";
+        _imt_detail->send_chunk(state, chunk.get());
+    }
     // step1: Load state from IMT
     // step2: Refresh IMT
     // step3: Update new input datas

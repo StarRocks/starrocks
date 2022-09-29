@@ -183,8 +183,9 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_slot() const {
 
 std::unique_ptr<Chunk> Chunk::clone_empty_with_slot(size_t size) const {
     DCHECK_EQ(_columns.size(), _slot_id_to_index.size());
-    Columns columns(_slot_id_to_index.size());
-    for (size_t i = 0; i < _slot_id_to_index.size(); i++) {
+    VLOG(1) << "_columns.size(): " << _columns.size() << ", _slot_id_to_index.size()" << _slot_id_to_index.size();
+    Columns columns(_columns.size());
+    for (size_t i = 0; i < _columns.size(); i++) {
         columns[i] = _columns[i]->clone_empty();
         columns[i]->reserve(size);
     }

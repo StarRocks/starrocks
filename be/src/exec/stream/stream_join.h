@@ -10,6 +10,7 @@
 #include "exec/stream/lookupjoin/lookup_join_context.h"
 #include "exec/vectorized/join_hash_map.h"
 #include "exprs/vectorized/column_ref.h"
+#include "exec/stream/imt_state_table.h"
 
 namespace starrocks {
 
@@ -30,11 +31,13 @@ private:
     std::vector<ExprContext*> _other_join_conjunct_ctxs;
 
     std::vector<pipeline::LookupJoinKeyDesc> _join_key_descs;
-    std::vector<pipeline::LookupJoinKeyDesc> _rl_join_key_descs;
     std::shared_ptr<pipeline::LookupJoinContext> _lookup_join_context;
     std::set<SlotId> _output_slots;
     RowDescriptor _left_row_desc;
     RowDescriptor _right_row_desc;
+
+    IMTStateTablePtr _lhs_imt;
+    IMTStateTablePtr _rhs_imt;
 };
 
 } // namespace starrocks

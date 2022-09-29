@@ -2348,22 +2348,9 @@ public class PlanFragmentBuilder {
 
             // TODO current we only support right table as the lookup table, need to bi-stream join later
             // Attach IMT information
-            Operator leftOp = optExpr.inputAt(0).getOp();
             Operator rightOp = optExpr.inputAt(1).getOp();
             if (!(rightOp instanceof PhysicalOlapScanOperator)) {
-                if (leftOp instanceof PhysicalOlapScanOperator) {
-                    Operator tmpOp = leftOp;
-                    leftOp = rightOp;
-                    rightOp = tmpOp;
-                    PlanFragment tmpFragment = leftFragment;
-                    leftFragment = rightFragment;
-                    rightFragment = tmpFragment;
-                    ColumnRefSet tmpColumns = leftChildColumns;
-                    leftChildColumns = rightChildColumns;
-                    rightChildColumns = tmpColumns;
-                } else {
-                    throw new StarRocksPlannerException("Only support right table as lookup-join table", INTERNAL_ERROR);
-                }
+                throw new StarRocksPlannerException("Only support right table as lookup-join table", INTERNAL_ERROR);
             }
 
             List<ScalarOperator> onPredicates = Utils.extractConjuncts(node.getOnPredicate());
