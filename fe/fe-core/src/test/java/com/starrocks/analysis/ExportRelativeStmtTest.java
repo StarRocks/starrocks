@@ -56,18 +56,6 @@ public class ExportRelativeStmtTest {
                 " WITH BROKER 'broker' (\"password\" = \"*XXX\", \"username\" = \"test\")", stmt.toString());
         Assert.assertEquals(stmt.getPath() , "hdfs://hdfs_host:port/a/b/c/");
 
-        // privilege test
-//        ConnectContext connectContext = AnalyzeTestUtil.getConnectContext();
-//        connectContext.setQualifiedUser("test");
-//        Auth auth = connectContext.getGlobalStateMgr().getAuth();
-//        testUser = createUserStmt.getUserIdent();
-//        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
-//        PrivilegeChecker.check(statementBase, connectContext);
-//        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
-//        PrivilegeChecker.check(statementBase, connectContext);
-//        Assert.assertThrows(SemanticException.class,
-//                    () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
-
         // partition data
         originStmt = "EXPORT TABLE tp PARTITION (p1,p2) TO \"hdfs://hdfs_host:port/a/b/c/test_data_\" PROPERTIES " +
                 "(\"column_separator\"=\",\") WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
@@ -140,6 +128,10 @@ public class ExportRelativeStmtTest {
         originStmt = "EXPORT TABLE tp PARTITION (p1,p2) (c5,c6) TO \"hdfs://hdfs_host:port/a/b/c/\" PROPERTIES " +
                 "(\"load_mem_limit\"=\"2147483648\", \"timeout\" = \"7200\", \"include_query_id\" = \"false\") WITH " +
                 "BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
+        analyzeFail(originStmt);
+
+        originStmt = "EXPORT TABLE tall_view TO \"hdfs://hdfs_host:port/a/b/c/\" " +
+                "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         analyzeFail(originStmt);
 
         String path = "hdfs://127.0.0.1:9002/export/";

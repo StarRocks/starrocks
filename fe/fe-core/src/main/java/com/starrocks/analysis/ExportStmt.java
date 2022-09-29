@@ -37,6 +37,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 
 import java.net.URI;
@@ -162,13 +163,13 @@ public class ExportStmt extends StatementBase {
     public void checkTable(GlobalStateMgr globalStateMgr) {
         Database db = globalStateMgr.getDb(tblName.getDb());
         if (db == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+            throw new SemanticException("Db does not exist. name: " + tblName.getDb());
         }
         db.readLock();
         try {
             Table table = db.getTable(tblName.getTbl());
             if (table == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName.getTbl());
+                throw new SemanticException("Table[" + tblName.getTbl() + "] does not exist");
             }
 
             Table.TableType tblType = table.getType();
@@ -182,7 +183,7 @@ public class ExportStmt extends StatementBase {
                 case INLINE_VIEW:
                 case VIEW:
                 default:
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Table[" + tblName.getTbl() + "] is " + tblType.toString() +
+                    throw new SemanticException("Table[" + tblName.getTbl() + "] is " + tblType +
                             " type, do not support EXPORT.");
             }
 
@@ -190,7 +191,7 @@ public class ExportStmt extends StatementBase {
                 for (String partitionName : partitions) {
                     Partition partition = table.getPartition(partitionName);
                     if (partition == null) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_NO_SUCH_PARTITION, partitionName);
+                        throw new SemanticException("Partition [" + partitionName + "] does not exist.");
                     }
                 }
             }
@@ -198,7 +199,7 @@ public class ExportStmt extends StatementBase {
             // check columns
             if (columnNames != null) {
                 if (columnNames.isEmpty()) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Columns is empty.");
+                    throw new SemanticException("Columns is empty.");
                 }
 
                 Set<String> tableColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -208,10 +209,10 @@ public class ExportStmt extends StatementBase {
                 Set<String> uniqColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
                 for (String columnName : columnNames) {
                     if (!uniqColumnNames.add(columnName)) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnName);
+                        throw new SemanticException("Duplicated column [" + columnName + "]");
                     }
                     if (!tableColumns.contains(columnName)) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR,  columnName, tblName.getTbl());
+                        throw new SemanticException("Column [" + columnName + "] does not exist in table.");
                     }
                 }
             }
@@ -222,18 +223,18 @@ public class ExportStmt extends StatementBase {
 
     public void checkPath() {
         if (Strings.isNullOrEmpty(path)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,  "No dest path specified.");
+            throw new SemanticException("No dest path specified.");
         }
 
         try {
             URI uri = new URI(path);
             String scheme = uri.getScheme();
             if (scheme == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,  "Invalid export path. please use valid scheme: " + VALID_SCHEMES);
+                throw new SemanticException("Invalid export path. please use valid scheme: " + VALID_SCHEMES);
             }
             path = uri.normalize().toString();
         } catch (URISyntaxException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,  "Invalid path format. " + e.getMessage());
+            throw new SemanticException("Invalid path format. " + e.getMessage());
         }
 
         if (path.endsWith("/")) {
