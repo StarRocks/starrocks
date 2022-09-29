@@ -1389,7 +1389,7 @@ tabletList
 backupStatement
     : BACKUP SNAPSHOT qualifiedName
     TO identifier
-    ON '(' tableDesc (',' tableDesc) * ')'
+    (ON '(' tableDesc (',' tableDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
@@ -1400,7 +1400,7 @@ showBackupStatement
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
     FROM identifier
-    ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
+    (ON '(' restoreTableDesc (',' restoreTableDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 

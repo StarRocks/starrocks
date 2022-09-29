@@ -2,23 +2,36 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CreateUserStmt;
+import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
-
 public class PrivilegeStmtAnalyzerV2Test {
-    ConnectContext ctx;
-    @Before
-    public void init() throws Exception {
+    static ConnectContext ctx;
+    @BeforeClass
+    public static void setUp() throws Exception {
+        UtFrameUtils.setUpForPersistTest();
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create user test_user", ctx);
+        ctx.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
+    }
+
+    @AfterClass
+    public static void cleanup() throws Exception {
+        DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "drop user test_user", ctx);
+        ctx.getGlobalStateMgr().getAuthenticationManager().dropUser(dropUserStmt);
     }
 
     @Test
@@ -55,7 +68,6 @@ public class PrivilegeStmtAnalyzerV2Test {
 
     @Test
     public void testGrantRevokeSelectTableDbPrivilege() throws Exception {
-        UtFrameUtils.setUpForPersistTest();
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
@@ -77,7 +89,7 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "grant select,insert,delete on db1.tbl1 to test";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "grant select,insert,delete on table db1.tbl1 to test";
+        sql = "grant select,insert_priv,delete on table db1.tbl1 to test";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
         sql = "revoke create_table on database db1 from test";
@@ -133,7 +145,38 @@ public class PrivilegeStmtAnalyzerV2Test {
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("cannot find db: dbx"));
         }
+    }
 
-        UtFrameUtils.tearDownForPersisTest();
+    @Test
+    public void testAlterDropUser() throws Exception {
+        String sql = "alter user test_user identified by 'abc'";
+        AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals("test_user", alterUserStmt.getUserIdent().getQualifiedUser());
+        Assert.assertEquals("%", alterUserStmt.getUserIdent().getHost());
+        Assert.assertEquals("abc", alterUserStmt.getOriginalPassword());
+        Assert.assertEquals(PlainPasswordAuthenticationProvider.PLUGIN_NAME, alterUserStmt.getAuthPlugin());
+
+        sql = "alter user 'test'@'10.1.1.1' identified by 'abc'";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("user 'test'@'10.1.1.1' not exist!"));
+        }
+
+        sql = "drop user test";
+        DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals("test", dropUserStmt.getUserIdent().getQualifiedUser());
+
+        sql = "drop user test_user";
+        dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals("test_user", dropUserStmt.getUserIdent().getQualifiedUser());
+
+        sql = "drop user root";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("cannot drop root!"));
+        }
     }
 }

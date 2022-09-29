@@ -15,6 +15,7 @@ import com.starrocks.sql.ast.DropCatalogStmt;
 
 import java.util.Map;
 
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.sql.ast.CreateCatalogStmt.TYPE;
 
 public class CatalogAnalyzer {
@@ -64,6 +65,11 @@ public class CatalogAnalyzer {
             if (name.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
                 throw new SemanticException("Can't drop the default internal catalog");
             }
+
+            if (isResourceMappingCatalog(name)) {
+                throw new SemanticException("Can't drop the resource mapping catalog");
+            }
+
             return null;
         }
     }
