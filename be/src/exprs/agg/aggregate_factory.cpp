@@ -731,8 +731,8 @@ public:
             return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
         } else if (name == "exchange_bytes") {
             return AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::BYTES>();
-        } else if (name == "exchange_ratio") {
-            return AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::RATIO>();
+        } else if (name == "exchange_speed") {
+            return AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::SPEED>();
         }
         return nullptr;
     }
@@ -936,7 +936,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_aggregate_mapping<TYPE_JSON, TYPE_JSON>("any_value");
     // just hack the arguments' types, because they are various.
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("exchange_bytes");
-    add_aggregate_mapping<TYPE_BIGINT, TYPE_VARCHAR>("exchange_ratio");
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_VARCHAR>("exchange_speed");
 
     add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BIGINT>("multi_distinct_count");
     add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT>("multi_distinct_count");

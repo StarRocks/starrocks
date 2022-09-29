@@ -357,10 +357,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         }
 
         PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) groupExpression.getOp();
-        // Must do one stage aggregate If there are exchange_bytes/_ratio()
+        // Must do one stage aggregate If there are exchange_bytes/_speed()
         if (aggregate.getAggregations().values().stream().anyMatch(aggFunc ->
                 aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES) ||
-                        aggFunc.getFnName().equals(FunctionSet.EXCHANGE_RATIO))) {
+                        aggFunc.getFnName().equals(FunctionSet.EXCHANGE_SPEED))) {
             return true;
         }
         List<CallOperator> distinctAggCallOperator = aggregate.getAggregations().values().stream()

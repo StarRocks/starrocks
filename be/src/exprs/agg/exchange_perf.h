@@ -10,7 +10,7 @@
 
 namespace starrocks::vectorized {
 
-enum AggExchangePerfType { BYTES = 0, RATIO = 1 };
+enum AggExchangePerfType { BYTES = 0, SPEED = 1 };
 
 struct AggregateExchangePerfFunctionState : public AggregateFunctionEmptyState {
     int64_t bytes = 0;
@@ -74,14 +74,28 @@ public:
         if (PerfType == BYTES) {
             DCHECK(to->is_numeric());
             down_cast<Int64Column*>(to)->append(this->data(state).bytes);
-        } else if (PerfType == RATIO) {
+        } else if (PerfType == SPEED) {
             DCHECK(to->is_binary());
             int64_t elapsed_time = MonotonicNanos() - this->data(state).start_time;
-            double ratio = 0;
+            double speed = 0;
             if (elapsed_time > 0) {
-                ratio = this->data(state).bytes * 1000000000.0 / elapsed_time;
+                speed = this->data(state).bytes * NANOS_PER_SEC * 1.0 / elapsed_time;
             }
-            string res = fmt::format("{:.2f} KB/s", ratio);
+            string unit = "B/s";
+            if (speed >= 1024) {
+                speed /= 1024;
+                unit = "KB/s";
+            }
+            if (speed >= 1024) {
+                speed /= 1024;
+                unit = "MB/s";
+            }
+            if (speed >= 1024) {
+                speed /= 1024;
+                unit = "GB/s";
+            }
+
+            string res = fmt::format("{:.4f} ", speed) + unit;
             BinaryColumn* column = down_cast<BinaryColumn*>(to);
             column->append(Slice(res));
         }
@@ -93,7 +107,7 @@ public:
         column->get_data().assign(chunk_size, 1);
     }
 
-    std::string get_name() const override { return PerfType == BYTES ? "exchange_bytes" : "exchange_ratio"; }
+    std::string get_name() const override { return PerfType == BYTES ? "exchange_bytes" : "exchange_speed"; }
 };
 
 } // namespace starrocks::vectorized
