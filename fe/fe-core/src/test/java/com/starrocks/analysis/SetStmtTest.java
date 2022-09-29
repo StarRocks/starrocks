@@ -29,6 +29,7 @@ import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetVar;
@@ -57,30 +58,14 @@ public class SetStmtTest {
     @Test
     public void testNormal() throws UserException {
         List<SetVar> vars = Lists.newArrayList(new SetVar("times", new IntLiteral(100L)),
-                new SetVar(SetType.GLOBAL, "names", new StringLiteral("utf-8")));
+                new SetNamesVar("utf8"));
         SetStmt stmt = new SetStmt(vars);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
-        Assert.assertEquals("SET DEFAULT times = 100, GLOBAL names = 'utf-8'", stmt.toString());
-        Assert.assertEquals(vars, stmt.getSetVars());
-    }
-
-    @Test
-    public void testNormal2() throws UserException {
-        SetVar var = new SetVar(SetType.DEFAULT, "names", new StringLiteral("utf-8"));
-        var.analyze();
-
-        Assert.assertEquals(SetType.DEFAULT, var.getType());
-        var.setType(SetType.GLOBAL);
-        Assert.assertEquals(SetType.GLOBAL, var.getType());
-        Assert.assertEquals("names", var.getVariable());
-        Assert.assertEquals("utf-8", var.getResolvedExpression().getStringValue());
-
-        Assert.assertEquals("GLOBAL names = 'utf-8'", var.toString());
-
-        var = new SetVar("times", new IntLiteral(100L));
-        var.analyze();
-        Assert.assertEquals("DEFAULT times = 100", var.toString());
+        Assert.assertEquals("times", stmt.getSetVars().get(0).getVariable());
+        Assert.assertEquals("100", stmt.getSetVars().get(0).getResolvedExpression().getStringValue());
+        Assert.assertTrue(stmt.getSetVars().get(1) instanceof SetNamesVar);
+        Assert.assertEquals("utf8", ((SetNamesVar) stmt.getSetVars().get(1)).getCharset());
     }
 
     @Test(expected = SemanticException.class)
@@ -141,19 +126,23 @@ public class SetStmtTest {
 
             SetVar var = new SetVar(SetType.DEFAULT, field, new StringLiteral("0"));
             var.analyze();
-            Assert.assertEquals(String.format("DEFAULT %s = '0'", field), var.toString());
+            Assert.assertEquals(field, var.getVariable());
+            Assert.assertEquals("0", var.getResolvedExpression().getStringValue());
 
             var = new SetVar(SetType.DEFAULT, field, new StringLiteral("10"));
             var.analyze();
-            Assert.assertEquals(String.format("DEFAULT %s = '10'", field), var.toString());
+            Assert.assertEquals(field, var.getVariable());
+            Assert.assertEquals("10", var.getResolvedExpression().getStringValue());
 
             var = new SetVar(SetType.DEFAULT, field, new IntLiteral(0));
             var.analyze();
-            Assert.assertEquals(String.format("DEFAULT %s = 0", field), var.toString());
+            Assert.assertEquals(field, var.getVariable());
+            Assert.assertEquals("0", var.getResolvedExpression().getStringValue());
 
             var = new SetVar(SetType.DEFAULT, field, new IntLiteral(10));
             var.analyze();
-            Assert.assertEquals(String.format("DEFAULT %s = 10", field), var.toString());
+            Assert.assertEquals(field, var.getVariable());
+            Assert.assertEquals("10", var.getResolvedExpression().getStringValue());
         }
     }
 

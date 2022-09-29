@@ -31,7 +31,6 @@ public class SetUserPropertyVarTest {
         var.analyze(true);
         Assert.assertEquals("quota.normal", var.getPropertyKey());
         Assert.assertEquals("1000", var.getPropertyValue());
-        Assert.assertEquals("'quota.normal' = '1000'", var.toString());
     }
 
     @Test(expected = AnalysisException.class)

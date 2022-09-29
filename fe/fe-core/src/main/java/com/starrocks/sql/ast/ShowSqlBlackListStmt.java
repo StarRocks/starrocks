@@ -26,10 +26,6 @@ public class ShowSqlBlackListStmt extends ShowStmt {
                     .addColumn(new Column("Forbidden SQL", ScalarType.createVarchar(100)))
                     .build();
 
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowSqlBlackListStatement(this, context);

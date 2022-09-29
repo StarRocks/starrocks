@@ -19,10 +19,6 @@ public class ShowWhiteListStmt extends ShowStmt {
         return visitor.visitShowWhiteListStatement(this, context);
     }
 
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;

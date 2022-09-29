@@ -27,6 +27,14 @@ public class SetNamesVar extends SetVar {
         return charset;
     }
 
+    public String getCollate() {
+        if (collate == null) {
+            return "DEFAULT";
+        } else {
+            return collate;
+        }
+    }
+
     @Override
     public void analyze() {
         if (Strings.isNullOrEmpty(charset)) {

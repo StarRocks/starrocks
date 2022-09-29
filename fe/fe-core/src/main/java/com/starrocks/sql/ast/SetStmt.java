@@ -41,10 +41,6 @@ public class SetStmt extends StatementBase {
         return RedirectStatus.NO_FORWARD;
     }
 
-    private boolean isSupportNewPlanner() {
-        return setVars.stream().noneMatch(var -> var instanceof SetTransaction);
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitSetStatement(this, context);

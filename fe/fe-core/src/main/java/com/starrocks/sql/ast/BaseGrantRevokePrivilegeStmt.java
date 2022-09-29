@@ -21,6 +21,7 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     private UserIdentity userPrivilegeObject = null;
     // the following fields is set by analyzer
     private PrivBitSet privBitSet = null;
+    private boolean withGrantOption = false;
 
     public BaseGrantRevokePrivilegeStmt(List<String> privList, String privType, UserIdentity userIdentity) {
         this.privList = privList;
@@ -98,6 +99,9 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return privBitSet;
     }
 
+    public boolean isWithGrantOption() {
+        return withGrantOption;
+    }
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitGrantRevokePrivilegeStatement(this, context);

@@ -44,8 +44,4 @@ public class AdminCancelRepairTableStmt extends DdlStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAdminCancelRepairTableStatement(this, context);
     }
-
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
 }

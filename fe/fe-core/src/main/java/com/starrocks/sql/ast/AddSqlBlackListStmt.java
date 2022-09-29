@@ -42,10 +42,6 @@ public class AddSqlBlackListStmt extends StatementBase {
         return visitor.visitAddSqlBlackListStatement(this, context);
     }
 
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;

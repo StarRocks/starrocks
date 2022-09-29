@@ -21,10 +21,6 @@ public class AlterResourceStmt extends DdlStmt {
         return properties;
     }
 
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAlterResourceStatement(this, context);

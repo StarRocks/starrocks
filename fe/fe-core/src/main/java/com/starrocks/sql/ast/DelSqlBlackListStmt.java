@@ -25,10 +25,6 @@ public class DelSqlBlackListStmt extends StatementBase {
         return visitor.visitDelSqlBlackListStatement(this, context);
     }
 
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;

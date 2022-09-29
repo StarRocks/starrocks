@@ -39,10 +39,6 @@ public class ShowWarningStmt extends ShowStmt {
         return visitor.visitShowWarningStatement(this, context);
     }
 
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;

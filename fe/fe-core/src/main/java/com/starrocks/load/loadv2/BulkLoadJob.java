@@ -238,7 +238,7 @@ public abstract class BulkLoadJob extends LoadJob {
                     if (loadTask.getTaskType() == LoadTask.TaskType.PENDING) {
                         submitTask(GlobalStateMgr.getCurrentState().getPendingLoadTaskScheduler(), loadTask);
                     } else if (loadTask.getTaskType() == LoadTask.TaskType.LOADING) {
-                        GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler().submit(loadTask);
+                        submitTask(GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler(), loadTask);
                     } else {
                         throw new LoadException(String.format("Unknown load task type: %s. task id: %d, job id, %d",
                                 loadTask.getTaskType(), loadTask.getSignature(), id));

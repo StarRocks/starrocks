@@ -7,12 +7,6 @@ sqlStatements
     : singleStatement+ EOF
     ;
 
-
-/*
-sqlStatements
-    : (singleStatement (SEMICOLON | SEMICOLON EOF? | EOF))+
-    ;
-*/
 singleStatement
     : statement (MINUS_SYMBOL MINUS_SYMBOL)? SEMICOLON? | emptyStatement
     ;
@@ -1275,8 +1269,7 @@ showWhiteListStatement
 // ------------------------------------------- Export Statement --------------------------------------------------------
 
 exportStatement
-    : EXPORT TABLE qualifiedName partitionNames? columnAliases?
-        TO string properties? brokerDesc?
+    : EXPORT TABLE tableDesc columnAliases? TO string properties? brokerDesc?
     ;
 
 cancelExportStatement

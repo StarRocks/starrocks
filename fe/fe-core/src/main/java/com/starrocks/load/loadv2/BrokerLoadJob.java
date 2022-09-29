@@ -257,7 +257,7 @@ public class BrokerLoadJob extends BulkLoadJob {
 
         // Submit task outside the database lock, cause it may take a while if task queue is full.
         for (LoadTask loadTask : newLoadingTasks) {
-            GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler().submit(loadTask);
+            submitTask(GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler(), loadTask);
         }
     }
 

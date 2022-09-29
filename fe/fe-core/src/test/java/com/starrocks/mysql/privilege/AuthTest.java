@@ -1276,7 +1276,7 @@ public class AuthTest {
         createRoleSql = String.format("CREATE ROLE %s", role);
         try {
             roleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
-            roleStmt.analyze(analyzer);
+            com.starrocks.sql.analyzer.Analyzer.analyze(createUserStmt, new ConnectContext());
             auth.createRole(roleStmt);
         } catch (Exception e1) {
             e1.printStackTrace();
@@ -1744,7 +1744,8 @@ public class AuthTest {
         userIdentity.analyze();
         UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
         CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
-        createUserStmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(createUserStmt, new ConnectContext());
+
         auth.createUser(createUserStmt);
 
         Assert.assertNull(auth.getUserPrivTable().getPasswordByApproximate(
@@ -1993,7 +1994,7 @@ public class AuthTest {
             userIdentity.analyze();
             UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
             CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
-            createUserStmt.analyze(analyzer);
+            com.starrocks.sql.analyzer.Analyzer.analyze(createUserStmt, new ConnectContext());
             auth.createUser(createUserStmt);
             userToBeCreated.add(userIdentity);
         }
@@ -2106,7 +2107,7 @@ public class AuthTest {
         for (UserIdentity userIdentity : userToBeCreated) {
             UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
             CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
-            createUserStmt.analyze(analyzer);
+            com.starrocks.sql.analyzer.Analyzer.analyze(createUserStmt, new ConnectContext());
             auth.createUser(createUserStmt);
         }
 

@@ -39,14 +39,13 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
                     .add("Message")
                     .build();
 
-    private final String dbName;
     private final Expr jobNameExpr;
 
     private String jobName;
     private String dbFullName;
 
     public ShowRoutineLoadTaskStmt(String dbName, Expr jobNameExpr) {
-        this.dbName = dbName;
+        this.dbFullName = dbName;
         this.jobNameExpr = jobNameExpr;
     }
 

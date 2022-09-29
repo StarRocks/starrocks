@@ -29,10 +29,6 @@ public class ShowResourcesStmt extends ShowStmt {
         }
     }
 
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowResourceStatement(this, context);

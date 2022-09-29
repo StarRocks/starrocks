@@ -12,7 +12,4 @@ public abstract class DmlStmt extends StatementBase {
 
     public abstract TableName getTableName();
 
-    private boolean isSupportNewPlanner() {
-        return true;
-    }
 }
