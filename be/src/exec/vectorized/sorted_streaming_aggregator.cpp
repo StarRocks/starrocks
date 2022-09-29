@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "column/column_visitor_adapter.h"
 #include "column/nullable_column.h"
@@ -39,7 +40,7 @@ public:
         if (!_first_column->empty()) {
             _cmp_vector[0] = _first_column->compare_at(0, 0, *data_column, 1);
         } else {
-            _cmp_vector[0] = 1;
+            _cmp_vector[0] = 0;
         }
         return Status::OK();
     }
@@ -257,13 +258,15 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
 
     // compare stage
     // _cmp_vector[i] = group[i - 1].equals(group[i])
+    // _cmp_vector[i] == 0 means group[i - 1].equals(group[i])
     _cmp_vector.assign(chunk_size, 0);
     {
+        const std::vector<uint8_t> dummy;
         SCOPED_TIMER(_agg_compute_timer);
         std::vector<uint8_t> cmp_vector(chunk_size);
         for (size_t i = 0; i < _group_by_columns.size(); ++i) {
             cmp_vector.assign(chunk_size, 0);
-            ColumnWiseComparator cmp(_last_columns[i], cmp_vector, std::vector<uint8_t>());
+            ColumnWiseComparator cmp(_last_columns[i], cmp_vector, dummy);
             RETURN_IF_ERROR(_group_by_columns[i]->accept(&cmp));
             for (size_t i = 0; i < chunk_size; ++i) {
                 _cmp_vector[i] |= cmp_vector[i];
