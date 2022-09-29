@@ -210,4 +210,21 @@ public class AlterRoutineLoadStmtTest {
         }
     }
 
+<<<<<<< HEAD
 }
+=======
+    @Test
+    public void testBackquote() throws SecurityException, IllegalArgumentException {
+        String sql = "ALTER ROUTINE LOAD FOR `db_test`.`rl_test` PROPERTIES (\"desired_concurrent_number\" = \"10\")" +
+                            "FROM kafka ( \"kafka_partitions\" = \"0, 1, 2\", \"kafka_offsets\" = \"100, 200, 100\"," +  
+                            "\"property.group.id\" = \"new_group\" )";
+
+         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) stmts.get(0);
+
+        Assert.assertEquals("db_test", stmt.getDbName());
+        Assert.assertEquals("rl_test", stmt.getLabelName().getLabelName());
+    }
+
+}
+>>>>>>> 9f4a558ed ([BugFix] Routine load name with backquotes (#11552))

@@ -55,14 +55,13 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
                     .add("Message")
                     .build();
 
-    private final String dbName;
     private final Expr jobNameExpr;
 
     private String jobName;
     private String dbFullName;
 
     public ShowRoutineLoadTaskStmt(String dbName, Expr jobNameExpr) {
-        this.dbName = dbName;
+        this.dbFullName = dbName;
         this.jobNameExpr = jobNameExpr;
     }
 
@@ -82,7 +81,7 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
     }
 
     private void checkDB(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(dbName)) {
+        if (Strings.isNullOrEmpty(dbFullName)) {
             if (Strings.isNullOrEmpty(analyzer.getDefaultDb())) {
                 throw new AnalysisException("please designate a database in show stmt");
             }
