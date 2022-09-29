@@ -1,32 +1,39 @@
 # date_add
 
-## description
+## Description
 
-### Syntax
+Adds a specified time interval to a date.
+
+## Syntax
 
 ```Haskell
-INT DATE_ADD(DATETIME date,INTERVAL expr type)
+DATETIME DATE_ADD(DATETIME date,INTERVAL expr type)
 ```
 
-Add a specified time interval to the date.
+## Parameters
 
-The date parameter is a valid data expression. .
+- `date`: It must be a valid date expression.
+- `expr`: the time interval you want to add.
+- `type`: It can only be set to any of the following values: YEAR, MONTH, DAY, HOUR, MINUTE, SECOND.
 
-The expr parameter is the time interval you want to add.
+## Return value
 
-The type parameter could be the following values: YEAR, MONTH, DAY, HOUR, MINUTE, SECOND.
+Returns a DATETIME value. If the date does not exist, for example, 2020-02-30, NULL is returned. If the date is a DATE value, it will be converted into a DATETIME value.
 
-## example
+## Examples
 
 ```Plain Text
-MySQL > select date_add('2010-11-30 23:59:59', INTERVAL 2 DAY);
+select date_add('2010-11-30 23:59:59', INTERVAL 2 DAY);
 +-------------------------------------------------+
 | date_add('2010-11-30 23:59:59', INTERVAL 2 DAY) |
 +-------------------------------------------------+
 | 2010-12-02 23:59:59                             |
 +-------------------------------------------------+
+
+select date_add('2010-12-03', INTERVAL 2 DAY);
++----------------------------------------+
+| date_add('2010-12-03', INTERVAL 2 DAY) |
++----------------------------------------+
+| 2010-12-05 00:00:00                    |
++----------------------------------------+
 ```
-
-## keyword
-
-DATE_ADD,DATE,ADD

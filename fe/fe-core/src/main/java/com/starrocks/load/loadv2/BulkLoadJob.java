@@ -84,6 +84,8 @@ public abstract class BulkLoadJob extends LoadJob {
     // we persist these sessionVariables due to the session is not available when replaying the job.
     protected Map<String, String> sessionVariables = Maps.newHashMap();
 
+    protected static final String PRIORITY_SESSION_VARIABLE_KEY = "priority.session.variable.key";
+
     // only for log replay
     public BulkLoadJob() {
         super();
@@ -132,6 +134,10 @@ public abstract class BulkLoadJob extends LoadJob {
                     throw new DdlException("Unknown load job type.");
             }
             bulkLoadJob.setJobProperties(stmt.getProperties());
+            if (bulkLoadJob.priority != 0) {
+                bulkLoadJob.sessionVariables.put(BulkLoadJob.PRIORITY_SESSION_VARIABLE_KEY,
+                        Integer.toString(bulkLoadJob.priority));
+            }
             bulkLoadJob.checkAndSetDataSourceInfo(db, stmt.getDataDescriptions());
             return bulkLoadJob;
         } catch (MetaNotFoundException e) {
@@ -335,6 +341,9 @@ public abstract class BulkLoadJob extends LoadJob {
                 String key = Text.readString(in);
                 String value = Text.readString(in);
                 sessionVariables.put(key, value);
+            }
+            if (sessionVariables.containsKey(PRIORITY_SESSION_VARIABLE_KEY)) {
+                priority = Integer.parseInt(sessionVariables.get(PRIORITY_SESSION_VARIABLE_KEY));
             }
         } else {
             // old version of load does not have sqlmode, set it to default

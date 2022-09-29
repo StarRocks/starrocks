@@ -32,6 +32,7 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.FailMsg;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -73,8 +74,9 @@ public class LoadLoadingTask extends LoadTask {
     public LoadLoadingTask(Database db, OlapTable table, BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
             long jobDeadlineMs, long execMemLimit, boolean strictMode,
             long txnId, LoadTaskCallback callback, String timezone,
-            long timeoutS, long createTimestamp, boolean partialUpdate, Map<String, String> sessionVariables) {
-        super(callback, TaskType.LOADING);
+            long timeoutS, long createTimestamp, boolean partialUpdate, Map<String, String> sessionVariables, 
+            ConnectContext context, int priority) {
+        super(callback, TaskType.LOADING, priority);
         this.db = db;
         this.table = table;
         this.brokerDesc = brokerDesc;

@@ -348,4 +348,44 @@ public class CreateTableTest {
                 "DISTRIBUTED BY HASH(id_int) BUCKETS 10\n" +
                 "PROPERTIES(\"replication_num\" = \"1\");");
     }
+
+    @Test
+    public void testLongColumnName() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql = "CREATE TABLE long_column_table (oh_my_gosh_this_is_a_long_column_name_look_at_it_it_has_more_" +
+                "than_64_chars VARCHAR(100)) DISTRIBUTED BY HASH(oh_my_gosh_this_is_a_long_column_name_look_at_it_it_" +
+                "has_more_than_64_chars) BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
+        starRocksAssert.withTable(sql);
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                .getTable("long_column_table");
+        Assert.assertEquals(1, table.getColumns().size());
+        Assert.assertNotNull(
+                table.getColumn("oh_my_gosh_this_is_a_long_column_name_look_at_it_it_has_more_than_64_chars"));
+    }
+
+    @Test
+    public void testNameWithUnderscore() throws Exception {
+        // table name with one underscore is fine
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql = "CREATE TABLE test._txx(_k1 VARCHAR(100)) DISTRIBUTED BY HASH(_k1) "
+                + "BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
+        starRocksAssert.withTable(sql);
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+                .getTable("_txx");
+        Assert.assertEquals(1, table.getColumns().size());
+        Assert.assertNotNull(
+                table.getColumn("_k1"));
+
+        // table name with two underscore is not allowed
+        sql = "CREATE TABLE test.__txx(_k1 VARCHAR(100)) DISTRIBUTED BY HASH(_k1) "
+                + "BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
+        try {
+            starRocksAssert.withTable(sql);
+            Assert.fail();
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("Incorrect table name"));
+        }
+    }
 }

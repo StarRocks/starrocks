@@ -2525,4 +2525,20 @@ public class JoinTest extends PlanTestBase {
                 "  |  equal join conjunct: 1: v1 = 4: v1");
         FeConstants.runningUnitTest = false;
     }
+
+    @Test
+    public void testComplexExpr() throws Exception {
+        String sql = "select count(v1) as c, if(v4 is not null, v4, '未知') as k2 from ( select A.v1, B.v4 from " +
+                "( select v1 from t0 where v2 = 1 ) A left join ( select v4, if( v5 = 0, '未知', if( v5 = 1, '广东', " +
+                "if( v5 = 2, '广西', if( v5 = 3, '北京', if( v5 = 4, '海南', if( v5 = 5, '福建', if( v5 = 6, '天津', " +
+                "if( v5 = 7, '湖南', if( v5 = 8, '湖北', if( v5 = 9, '河南', if( v5 = 10, '河北', if( v5 = 11, '山东', " +
+                "if( v5 = 12, '山西', if( v5 = 13, '黑龙江', if( v5 = 14, '辽宁', if( v5 = 15, '上海', if( v5 = 16, '甘肃', " +
+                "if( v5 = 17, '青海', if( v5 = 18, '新疆', if( v5 = 19, '西藏', if( v5 = 20, '宁夏', if( v5 = 21, '四川', " +
+                "if( v5 = 22, '云南', if( v5 = 23, '吉林', if( v5 = 24, '内蒙古', if( v5 = 25, '陕西', if( v5 = 26, '安徽', " +
+                "if( v5 = 27, '贵州', if( v5 = 28, '江苏', if( v5 = 29, '重庆', if( v5 = 30, '浙江', if( v5 = 31, '江西', " +
+                "if( v5 = 32, '国外', if( v5 = 33, '台湾', if(v5 = 34, '香港', if(v5 = 35, '澳门', 'Default')) ) ) ) ) ) ) " +
+                ") ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) as k from t1 ) B on A.v1 = B.k ) C group by v4;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "if(5: v5 = 0, '未知'");
+    }
 }
