@@ -77,8 +77,13 @@ public class OlapTableRouteInfo {
 
     public void finalizeTupleDescriptor(DescriptorTable descriptorTable, TupleDescriptor tupleDesc) {
         tableSchema.tuple_desc = tupleDesc.toThrift();
-        for (SlotDescriptor slotDesc : tupleDesc.getSlots()) {
-            tableSchema.addToSlot_descs(slotDesc.toThrift());
+        for (int i = 0; i < tupleDesc.getSlots().size(); i++) {
+            SlotDescriptor slot = tupleDesc.getSlot(i);
+            // Inherit column name from table descriptor
+            Column column = tableInfo.getFullSchema().get(i);
+            slot.setColumn(column);
+            slot.setIsNullable(column.isAllowNull());
+            tableSchema.addToSlot_descs(slot.toThrift());
         }
     }
 

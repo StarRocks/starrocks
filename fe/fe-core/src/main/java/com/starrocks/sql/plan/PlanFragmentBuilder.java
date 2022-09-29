@@ -2450,10 +2450,12 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             IMTInfo aggImt = node.getAggImt();
-            aggImt.finalizeTupleDescriptor(context.getDescTbl(), outputTupleDesc);
-            aggregationNode.setAggImt(aggImt);
-            aggregationNode.setAggExprImtMap(node.getAggExprImtMap());
-            aggregationNode.setGroupExprImtMap(node.getGroupExprImtMap());
+            if (aggImt != null) {
+                aggImt.finalizeTupleDescriptor(context.getDescTbl(), outputTupleDesc);
+                aggregationNode.setAggImt(aggImt);
+                aggregationNode.setAggExprImtMap(node.getAggExprImtMap());
+            }
+            // aggregationNode.setGroupExprImtMap(node.getGroupExprImtMap());
 
             inputFragment.setPlanRoot(aggregationNode);
             return inputFragment;
