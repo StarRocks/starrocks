@@ -100,6 +100,7 @@ public abstract class ColumnType {
         schemaChangeMatrix[PrimitiveType.DATETIME.ordinal()][PrimitiveType.DATE.ordinal()] = true;
 
         schemaChangeMatrix[PrimitiveType.DATE.ordinal()][PrimitiveType.DATETIME.ordinal()] = true;
+        schemaChangeMatrix[PrimitiveType.IPV4.ordinal()][PrimitiveType.VARCHAR.ordinal()] = true;
     }
 
     static boolean isSchemaChangeAllowedInvolvingDecimalV3(Type lhs, Type rhs) {

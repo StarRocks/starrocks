@@ -235,6 +235,11 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return (LocalDateTime) Optional.ofNullable(value).orElse(LocalDateTime.MIN);
     }
 
+    public int getIpv4() {
+        // TODO: 2022/9/29 zd
+        return 68;
+    }
+
     public double getTime() {
         return (double) Optional.ofNullable(value).orElse(0);
     }
@@ -333,6 +338,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return Double.compare(getDouble(), o.getDouble());
         } else if (t == PrimitiveType.DATE || t == PrimitiveType.DATETIME) {
             return getDatetime().compareTo(o.getDatetime());
+        } else if (t == PrimitiveType.IPV4) {
+            return Integer.compare(getIpv4(), o.getIpv4());
         } else if (t.isDecimalOfAnyVersion()) {
             return getDecimal().compareTo(o.getDecimal());
         } else if (t == PrimitiveType.CHAR || t == PrimitiveType.VARCHAR) {

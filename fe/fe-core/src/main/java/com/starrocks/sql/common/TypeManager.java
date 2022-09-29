@@ -100,6 +100,9 @@ public class TypeManager {
             if (types.get(0).isDateType()) {
                 return types.get(0);
             }
+            if (types.get(0).isIpType()) {
+                return types.get(0);
+            }
         }
 
         return compatibleType;

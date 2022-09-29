@@ -26,6 +26,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.Ipv4Literal;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
@@ -300,6 +301,9 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                     case DATE:
                     case DATETIME:
                         literal = DateLiteral.read(in);
+                        break;
+                    case IPV4:
+                        literal = Ipv4Literal.read(in);
                         break;
                     default:
                         throw new IOException("type[" + type.name() + "] not supported: ");

@@ -335,6 +335,9 @@ public class ColumnDef {
                 case DATETIME:
                     DateLiteral dateLiteral = new DateLiteral(defaultValue, type);
                     break;
+                case IPV4:
+                    Ipv4Literal ipv4Literal = new Ipv4Literal(defaultValue);
+                    break;
                 case CHAR:
                 case VARCHAR:
                 case HLL:

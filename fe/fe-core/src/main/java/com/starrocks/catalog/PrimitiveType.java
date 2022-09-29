@@ -75,6 +75,7 @@ public enum PrimitiveType {
     UNKNOWN_TYPE("UNKNOWN_TYPE", 0, TPrimitiveType.INVALID_TYPE);
 
     private static final int DATE_INDEX_LEN = 3;
+    private static final int IPV4_INDEX_LEN = 4;
     private static final int DATETIME_INDEX_LEN = 8;
     private static final int VARCHAR_INDEX_LEN = 20;
     private static final int DECIMAL_INDEX_LEN = 12;
@@ -501,6 +502,7 @@ public enum PrimitiveType {
             case DATE:
                 return MysqlColType.MYSQL_TYPE_DATE;
             case IPV4:
+                return MysqlColType.MYSQL_TYPE_VAR_STRING;
             case DATETIME: {
                 if (isTimeType) {
                     return MysqlColType.MYSQL_TYPE_TIME;
@@ -525,8 +527,9 @@ public enum PrimitiveType {
             case DATE:
                 return DATE_INDEX_LEN;
             case DATETIME:
-            case IPV4:
                 return DATETIME_INDEX_LEN;
+            case IPV4:
+                return IPV4_INDEX_LEN;
             case VARCHAR:
                 return VARCHAR_INDEX_LEN;
             case CHAR:
