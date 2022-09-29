@@ -200,7 +200,7 @@ public class IMTCreateInfo {
             List<Column> distributeColumns = new ArrayList<>();
             for (ColumnRefOperator columnRef : groupByKeys) {
                 SlotDescriptor slot = context.getDescTbl().getSlotDesc(new SlotId(columnRef.getId()));
-                Column column = new Column(columnRef.getName(), slot.getType(), slot.getIsNullable());
+                Column column = new Column(columnRef.getName(), slot.getType(), false);
                 column.setIsKey(true);
                 distributeColumns.add(column);
             }
