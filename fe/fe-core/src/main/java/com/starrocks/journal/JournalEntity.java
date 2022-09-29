@@ -54,6 +54,7 @@ import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
+import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
@@ -708,6 +709,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_CREATE_USER_V2: {
                 data = CreateUserInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ALTER_USER_V2: {
+                data = AlterUserInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DROP_USER_V2: {
+                data = UserIdentity.read(in);
                 isRead = true;
                 break;
             }
