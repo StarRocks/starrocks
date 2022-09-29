@@ -39,40 +39,27 @@ public:
 
     void set_returned_rows(int64_t num_rows) { this->returned_rows = num_rows; }
 
-    void add_stats_item(QueryStatisticsItemPB& stats_item) {
-        this->_stats_items.emplace_back(stats_item);
-        this->scan_rows += stats_item.scan_rows();
-        this->scan_bytes += stats_item.scan_bytes();
-    }
-
-    void add_scan_stats(int64_t scan_rows, int64_t scan_bytes) {
-        this->scan_rows += scan_rows;
-        this->scan_bytes += scan_bytes;
-    }
-
+    void add_stats_item(QueryStatisticsItemPB& stats_item);
+    void add_scan_stats(int64_t scan_rows, int64_t scan_bytes);
     void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
-
     void add_mem_costs(int64_t bytes) { mem_cost_bytes += bytes; }
-
-    void merge(const QueryStatistics& other);
-    void aggregate(QueryStatisticsRecvr* recvr);
-
-    void clear() {
-        scan_rows = 0;
-        scan_bytes = 0;
-        returned_rows = 0;
-        _stats_items.clear();
-    }
 
     void to_pb(PQueryStatistics* statistics);
 
+    void merge(int sender_id, QueryStatistics& other);
     void merge_pb(const PQueryStatistics& statistics);
 
+    int64_t get_scan_rows() const { return scan_rows; }
+    int64_t get_mem_bytes() const { return mem_cost_bytes; }
+
+    void clear();
+
 private:
-    int64_t scan_rows{0};
-    int64_t scan_bytes{0};
-    int64_t cpu_ns{0};
-    int64_t mem_cost_bytes = 0;
+    std::atomic_int64_t scan_rows{0};
+    std::atomic_int64_t scan_bytes{0};
+    std::atomic_int64_t cpu_ns{0};
+    std::atomic_int64_t mem_cost_bytes{0};
+
     // number rows returned by query.
     // only set once by result sink when closing.
     int64_t returned_rows{0};
@@ -88,7 +75,6 @@ public:
     void aggregate(QueryStatistics* statistics);
 
 private:
-
     std::map<int, QueryStatistics*> _query_statistics;
     SpinLock _lock;
 };

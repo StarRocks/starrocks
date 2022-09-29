@@ -50,7 +50,7 @@ void ResultSinkOperator::close(RuntimeState* state) {
             _sender->update_num_written_rows(_num_written_rows.load(std::memory_order_relaxed));
 
             QueryContext* query_ctx = state->query_ctx();
-            auto query_statistic = query_ctx->merged_query_statistic();
+            auto query_statistic = query_ctx->final_query_statistic();
             query_statistic->set_returned_rows(_num_written_rows);
             _sender->set_query_statistics(query_statistic);
 

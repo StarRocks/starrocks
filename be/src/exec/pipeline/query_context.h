@@ -101,8 +101,8 @@ public:
     // Some statistic about the query, including cpu, scan_rows, scan_bytes
     int64_t mem_cost_bytes() const { return _mem_tracker->peak_consumption(); }
     void incr_cpu_cost(int64_t cost) {
-        _total_scan_bytes += cost;
-        _delta_scan_bytes += cost;
+        _total_cpu_cost_ns += cost;
+        _delta_cpu_cost_ns += cost;
     }
     void incr_cur_scan_rows_num(int64_t rows_num) {
         _total_scan_rows_num += rows_num;
@@ -129,12 +129,13 @@ public:
 
     std::shared_ptr<starrocks::debug::QueryTrace> shared_query_trace() { return _query_trace; }
 
-    std::shared_ptr<QueryStatistics> total_query_statistic();
     // Delta statistic since last retrieve
-    std::shared_ptr<QueryStatistics> delta_query_statistic();
-    std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv();
+    std::shared_ptr<QueryStatistics> intermediate_query_statistic();
     // Merged statistic from all executor nodes
-    std::shared_ptr<QueryStatistics> merged_query_statistic();
+    std::shared_ptr<QueryStatistics> final_query_statistic();
+    std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv();
+    bool is_result_sink() const { return _is_result_sink; }
+    void set_result_sink(bool value) { _is_result_sink = value; }
 
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
@@ -167,6 +168,7 @@ private:
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;
+    bool _is_result_sink = false;
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive
 
     int64_t _scan_limit = 0;

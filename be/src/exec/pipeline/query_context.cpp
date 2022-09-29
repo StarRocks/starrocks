@@ -108,31 +108,32 @@ Status QueryContext::init_query(workgroup::WorkGroup* wg) {
 void QueryContext::set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace) {
     std::call_once(_query_trace_init_flag, [this, &query_trace]() { _query_trace = std::move(query_trace); });
 }
-std::shared_ptr<QueryStatistics> QueryContext::total_query_statistic() {
-    auto query_statistic = std::make_shared<QueryStatistics>();
-    query_statistic->add_scan_stats(_total_scan_rows_num, _total_scan_bytes);
-    query_statistic->add_cpu_costs(_total_cpu_cost_ns);
-    // TODO: how to accumulate memory cost
-    query_statistic->add_mem_costs(mem_cost_bytes());
-    return query_statistic;
-}
-
-std::shared_ptr<QueryStatistics> QueryContext::delta_query_statistic() {
-    auto query_statistic = std::make_shared<QueryStatistics>();
-    query_statistic->add_scan_stats(_delta_scan_rows_num.exchange(0), _delta_scan_bytes.exchange(0));
-    query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
-    // TODO: how to accumulate memory cost
-    query_statistic->add_mem_costs(mem_cost_bytes());
-    return query_statistic;
-}
 
 std::shared_ptr<QueryStatisticsRecvr> QueryContext::maintained_query_recv() {
     return _sub_plan_query_statistics_recvr;
 }
 
-std::shared_ptr<QueryStatistics> QueryContext::merged_query_statistic() {
-    auto res = delta_query_statistic();
-    res->aggregate(_sub_plan_query_statistics_recvr.get());
+std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
+    auto query_statistic = std::make_shared<QueryStatistics>();
+    // Not transmit delta if it's the result sink node
+    if (_is_result_sink) {
+        return query_statistic;
+    }
+    query_statistic->add_scan_stats(_delta_scan_rows_num.exchange(0), _delta_scan_bytes.exchange(0));
+    query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
+    query_statistic->add_mem_costs(mem_cost_bytes());
+    _sub_plan_query_statistics_recvr->aggregate(query_statistic.get());
+    return query_statistic;
+}
+
+std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
+    DCHECK(_is_result_sink) << "must be the result sink";
+    auto res = std::make_shared<QueryStatistics>();
+    res->add_scan_stats(_total_scan_rows_num, _total_scan_bytes);
+    res->add_cpu_costs(_total_cpu_cost_ns);
+    res->add_mem_costs(mem_cost_bytes());
+
+    _sub_plan_query_statistics_recvr->aggregate(res.get());
     return res;
 }
 

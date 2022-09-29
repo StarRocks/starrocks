@@ -58,8 +58,8 @@ public:
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
     // by all the channels.
-    Status send_chunk_request(PTransmitChunkParamsPtr chunk_request, const butil::IOBuf& attachment,
-                              int64_t attachment_physical_bytes);
+    Status send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
+                              const butil::IOBuf& attachment, int64_t attachment_physical_bytes);
 
     // Used when doing shuffle.
     // This function will copy selective rows in chunks to batch.
@@ -222,8 +222,8 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
     if (_current_request_bytes > config::max_transmit_batched_bytes || eos) {
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);
-        auto* query_statistic = _chunk_request->mutable_query_statistics();
-        state->delta_query_statistic()->to_pb(query_statistic);
+        auto delta_statistic = state->intermediate_query_statistic();
+        delta_statistic->to_pb(_chunk_request->mutable_query_statistics());
         butil::IOBuf attachment;
         int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment,
@@ -237,7 +237,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr chunk_request,
+Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
                                                          const butil::IOBuf& attachment,
                                                          int64_t attachment_physical_bytes) {
     chunk_request->set_node_id(_dest_node_id);
@@ -245,6 +245,9 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr
     chunk_request->set_be_number(_parent->_be_number);
     chunk_request->set_eos(false);
     chunk_request->set_use_pass_through(_use_pass_through);
+
+    auto delta_statistic = state->intermediate_query_statistic();
+    delta_statistic->to_pb(chunk_request->mutable_query_statistics());
 
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment,
                               attachment_physical_bytes};
@@ -467,7 +470,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
                     if (!_channels[idx]->use_pass_through()) {
                         PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
                         RETURN_IF_ERROR(
-                                _channels[idx]->send_chunk_request(copy, attachment, attachment_physical_bytes));
+                                _channels[idx]->send_chunk_request(state, copy, attachment, attachment_physical_bytes));
                     }
                 }
                 _current_request_bytes = 0;
@@ -572,7 +575,7 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
         int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& [_, channel] : _instance_id2channel) {
             PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-            channel->send_chunk_request(copy, attachment, attachment_physical_bytes);
+            channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes);
         }
         _current_request_bytes = 0;
         _chunk_request.reset();
