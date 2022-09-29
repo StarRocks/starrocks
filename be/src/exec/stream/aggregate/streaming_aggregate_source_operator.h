@@ -4,7 +4,6 @@
 
 #include <utility>
 
-#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/vectorized/aggregator.h"
 #include "exec/stream/imt_state_table.h"
@@ -14,12 +13,10 @@ class StreamingAggregateSourceOperator : public SourceOperator {
 public:
     StreamingAggregateSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                      int32_t driver_sequence, AggregatorPtr aggregator,
-                                     IMTStateTablePtr imt_detail, IMTStateTablePtr imt_agg_result,
-                                     FragmentContext* const fragment_context)
+                                     IMTStateTablePtr imt_detail, IMTStateTablePtr imt_agg_result)
             : SourceOperator(factory, id, "streaming_aggregate_source", plan_node_id, driver_sequence),
               _aggregator(std::move(aggregator)),
-              _imt_detail(imt_detail), _imt_agg_result(imt_agg_result),
-              _fragment_ctx(fragment_context){
+              _imt_detail(imt_detail), _imt_agg_result(imt_agg_result) {
         _aggregator->ref();
         if (_imt_agg_result) {
             _imt_agg_result_sink = _imt_agg_result->olap_table_sink();
@@ -50,7 +47,6 @@ private:
     AggregatorPtr _aggregator = nullptr;
     IMTStateTablePtr _imt_detail;
     IMTStateTablePtr _imt_agg_result;
-    FragmentContext* const _fragment_ctx;
     stream_load::OlapTableSink* _imt_agg_result_sink;
 
     // Whether prev operator has no output
@@ -62,20 +58,17 @@ private:
 class StreamingAggregateSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     StreamingAggregateSourceOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorFactoryPtr aggregator_factory,
-                                            IMTStateTablePtr imt_detail, IMTStateTablePtr imt_agg_result,
-                                            FragmentContext* const fragment_context)
+                                            IMTStateTablePtr imt_detail, IMTStateTablePtr imt_agg_result)
             : SourceOperatorFactory(id, "streaming_aggregate_source", plan_node_id),
               _aggregator_factory(std::move(aggregator_factory)),
-              _imt_detail(imt_detail), _imt_agg_result(imt_agg_result),
-              _fragment_context(fragment_context){}
+              _imt_detail(imt_detail), _imt_agg_result(imt_agg_result){}
 
     ~StreamingAggregateSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<StreamingAggregateSourceOperator>(this, _id, _plan_node_id, driver_sequence,
                                                                   _aggregator_factory->get_or_create(driver_sequence),
-                                                                  _imt_detail, _imt_agg_result,
-                                                                  _fragment_context);
+                                                                  _imt_detail, _imt_agg_result);
     }
 
     Status prepare(RuntimeState* state) override {
@@ -90,6 +83,5 @@ private:
     AggregatorFactoryPtr _aggregator_factory = nullptr;
     IMTStateTablePtr _imt_detail;
     IMTStateTablePtr _imt_agg_result;
-    FragmentContext* const _fragment_context;
 };
 } // namespace starrocks::pipeline

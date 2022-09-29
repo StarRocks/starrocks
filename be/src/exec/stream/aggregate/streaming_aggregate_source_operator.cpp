@@ -7,9 +7,6 @@ namespace starrocks::pipeline {
 Status StreamingAggregateSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     if (_imt_agg_result) {
-//        RETURN_IF_ERROR(_imt_agg_result->prepare(state));
-        VLOG(1) << "open imt_agg_result";
-//        RETURN_IF_ERROR(_imt_agg_result_sink->try_open(state));
         RETURN_IF_ERROR(_imt_agg_result->open(state));
         VLOG(1) << "is_open_done:" << _imt_agg_result_sink->is_open_done();
     }
@@ -73,48 +70,7 @@ void StreamingAggregateSourceOperator::close(RuntimeState* state) {
     SourceOperator::close(state);
 }
 
-//bool StreamingAggregateSourceOperator::pending_finish() const {
-//    if (!_imt_agg_result_sink) {
-//        return false;
-//    }
-//
-//    // sink's open not finish, we need check util finish
-//    if (!_is_open_done) {
-//        if (!_imt_agg_result_sink->is_open_done()) {
-//            return true;
-//        }
-//        _is_open_done = true;
-//        // since is_open_done(), open_wait will not block
-//        auto st = _imt_agg_result_sink->open_wait();
-//        if (!st.ok()) {
-//            _fragment_ctx->cancel(st);
-//            return false;
-//        }
-//    }
-//
-//    if (!_imt_agg_result_sink->is_close_done()) {
-//        auto st = _imt_agg_result_sink->try_close(_fragment_ctx->runtime_state());
-//        if (!st.ok()) {
-//            return false;
-//        }
-//        return true;
-//    }
-//
-//    auto st = _imt_agg_result_sink->close(_fragment_ctx->runtime_state(), Status::OK());
-//    if (!st.ok()) {
-//        _fragment_ctx->cancel(st);
-//    }
-//
-//    return false;
-//}
-
 StatusOr<vectorized::ChunkPtr> StreamingAggregateSourceOperator::pull_chunk(RuntimeState* state) {
-//    if (!_is_open_done && _imt_agg_result) {
-//        _is_open_done = true;
-//        // we can be here cause _sink->is_open_done() return true
-//        // so that open_wait() will not block
-//        RETURN_IF_ERROR(_imt_agg_result_sink->open_wait());
-//    }
     // step1: Update result IMT
 
     // step2: Output data

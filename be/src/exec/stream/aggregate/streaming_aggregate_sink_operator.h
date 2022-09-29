@@ -5,17 +5,19 @@
 #include <utility>
 
 #include "exec/pipeline/operator.h"
-#include "exec/vectorized/aggregator.h"
 #include "exec/stream/imt_state_table.h"
+#include "exec/vectorized/aggregator.h"
 
 namespace starrocks::pipeline {
 class StreamingAggregateSinkOperator : public Operator {
 public:
     StreamingAggregateSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                                   AggregatorPtr aggregator, IMTStateTablePtr imt_detail, IMTStateTablePtr imt_agg_result)
+                                   AggregatorPtr aggregator, IMTStateTablePtr imt_detail,
+                                   IMTStateTablePtr imt_agg_result)
             : Operator(factory, id, "streaming_aggregate_sink", plan_node_id, driver_sequence),
               _aggregator(std::move(aggregator)),
-              _imt_detail(imt_detail), _imt_agg_result(imt_agg_result) {
+              _imt_detail(imt_detail),
+              _imt_agg_result(imt_agg_result) {
         _aggregator->set_aggr_phase(AggrPhase1);
         _aggregator->ref();
     }
@@ -54,7 +56,8 @@ public:
                                           IMTStateTablePtr imt_detail, IMTStateTablePtr imt_agg_result)
             : OperatorFactory(id, "streaming_aggregate_sink", plan_node_id),
               _aggregator_factory(std::move(aggregator_factory)),
-              _imt_detail(imt_detail), _imt_agg_result(imt_agg_result) {}
+              _imt_detail(imt_detail),
+              _imt_agg_result(imt_agg_result) {}
 
     ~StreamingAggregateSinkOperatorFactory() override = default;
 

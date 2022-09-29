@@ -771,9 +771,8 @@ void OlapScanNode::_close_pending_scanners() {
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     // Shortcuit: IndexSeek
     if (_is_index_seek) {
-        auto index_seek_op = std::make_shared<pipeline::LookupJoinSeekOperatorFactory>(context->next_operator_id(), id(),
-                                                                                       _olap_scan_node,
-                                                                                       _runtime_filter_collector);
+        auto index_seek_op = std::make_shared<pipeline::LookupJoinSeekOperatorFactory>(
+                context->next_operator_id(), id(), _olap_scan_node, _runtime_filter_collector);
         OpFactories ops;
         ops.emplace_back(std::move(index_seek_op));
         return ops;

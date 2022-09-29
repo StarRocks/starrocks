@@ -76,10 +76,12 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
     UniqueId load_id(request.id());
+    int64_t index_id = request.index_id();
+    auto lc_key = LoadChannelKey{.load_id=load_id, .index_id=index_id};
     std::shared_ptr<LoadChannel> channel;
     {
         std::lock_guard l(_lock);
-        auto it = _load_channels.find(load_id);
+        auto it = _load_channels.find(lc_key);
         if (it != _load_channels.end()) {
             channel = it->second;
         } else if (!_mem_tracker->limit_exceeded() || config::enable_new_load_on_memory_limit_exceeded) {
@@ -92,7 +94,7 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
 
             channel.reset(new LoadChannel(this, load_id, request.txn_trace_parent(), job_timeout_s,
                                           std::move(job_mem_tracker)));
-            _load_channels.insert({load_id, channel});
+            _load_channels.insert({lc_key, channel});
         } else {
             response->mutable_status()->set_status_code(TStatusCode::MEM_LIMIT_EXCEEDED);
             response->mutable_status()->add_error_msgs(
@@ -108,7 +110,7 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
 void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
     VLOG(2) << "Current memory usage=" << _mem_tracker->consumption() << " limit=" << _mem_tracker->limit();
     UniqueId load_id(request.id());
-    auto channel = _find_load_channel(load_id);
+    auto channel = _find_load_channel(load_id, request.index_id());
     if (channel != nullptr) {
         channel->add_chunk(request, response);
     } else {
@@ -120,7 +122,8 @@ void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTab
 void LoadChannelMgr::add_chunks(const PTabletWriterAddChunksRequest& request, PTabletWriterAddBatchResult* response) {
     VLOG(2) << "Current memory usage=" << _mem_tracker->consumption() << " limit=" << _mem_tracker->limit();
     UniqueId load_id(request.id());
-    auto channel = _find_load_channel(load_id);
+    auto& req = request.requests(0);
+    auto channel = _find_load_channel(load_id, req.index_id());
     if (channel != nullptr) {
         channel->add_chunks(request, response);
     } else {
@@ -133,7 +136,7 @@ void LoadChannelMgr::add_segment(brpc::Controller* cntl, const PTabletWriterAddS
                                  PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     UniqueId load_id(request->id());
-    auto channel = _find_load_channel(load_id);
+    auto channel = _find_load_channel(load_id, request->index_id());
     if (channel != nullptr) {
         channel->add_segment(cntl, request, response, done);
         closure_guard.release();
@@ -148,12 +151,12 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
     ClosureGuard done_guard(done);
     UniqueId load_id(request.id());
     if (request.has_tablet_id()) {
-        auto channel = _find_load_channel(load_id);
+        auto channel = _find_load_channel(load_id, request.index_id());
         if (channel != nullptr) {
             channel->cancel(request.index_id(), request.tablet_id());
         }
     } else {
-        if (auto channel = remove_load_channel(load_id); channel != nullptr) {
+        if (auto channel = remove_load_channel(load_id, request.index_id()); channel != nullptr) {
             channel->cancel();
         }
     }
@@ -213,15 +216,18 @@ void LoadChannelMgr::_start_load_channels_clean() {
               << " current=" << _mem_tracker->consumption() << " peak=" << _mem_tracker->peak_consumption();
 }
 
-std::shared_ptr<LoadChannel> LoadChannelMgr::_find_load_channel(const UniqueId& load_id) {
+std::shared_ptr<LoadChannel> LoadChannelMgr::_find_load_channel(const UniqueId& load_id, int64_t index_id) {
     std::lock_guard l(_lock);
-    auto it = _load_channels.find(load_id);
+    auto lc_key = LoadChannelKey{.load_id=load_id, .index_id=index_id};
+    auto it = _load_channels.find(lc_key);
     return (it != _load_channels.end()) ? it->second : nullptr;
 }
 
-std::shared_ptr<LoadChannel> LoadChannelMgr::remove_load_channel(const UniqueId& load_id) {
+std::shared_ptr<LoadChannel> LoadChannelMgr::remove_load_channel(const UniqueId& load_id, int64_t index_id) {
+    VLOG(1) << "remove load channel, load_id:" << load_id;
     std::lock_guard l(_lock);
-    if (auto it = _load_channels.find(load_id); it != _load_channels.end()) {
+    auto lc_key = LoadChannelKey{.load_id=load_id, .index_id=index_id};
+    if (auto it = _load_channels.find(lc_key); it != _load_channels.end()) {
         auto ret = it->second;
         _load_channels.erase(it);
         return ret;

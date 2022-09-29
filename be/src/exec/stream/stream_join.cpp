@@ -52,10 +52,10 @@ Status StreamJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
             return Status::NotSupported("only OLAP_TABLE imt is supported");
         }
 
-//        // TODO: use RouteInfo to lookup table
-//        _lhs_imt = std::make_shared<IMTStateTable>(lhs_imt);
-//        RETURN_IF_ERROR(_lhs_imt->init());
-//        VLOG(2) << "Right side of stream_join: " << _lhs_imt->debug_string();
+        //        // TODO: use RouteInfo to lookup table
+        //        _lhs_imt = std::make_shared<IMTStateTable>(lhs_imt);
+        //        RETURN_IF_ERROR(_lhs_imt->init());
+        //        VLOG(2) << "Right side of stream_join: " << _lhs_imt->debug_string();
     }
     if (tnode.stream_join_node.__isset.rhs_imt) {
         auto& rhs_imt = tnode.stream_join_node.rhs_imt;
@@ -64,10 +64,10 @@ Status StreamJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
             return Status::NotSupported("only OLAP_TABLE imt is supported");
         }
 
-//        // TODO: use RouteInfo to lookup table
-//        _rhs_imt = std::make_shared<IMTStateTable>(rhs_imt);
-//        RETURN_IF_ERROR(_rhs_imt->init());
-//        VLOG(2) << "Right side of stream_join: " << _rhs_imt->debug_string();
+        //        // TODO: use RouteInfo to lookup table
+        //        _rhs_imt = std::make_shared<IMTStateTable>(rhs_imt);
+        //        RETURN_IF_ERROR(_rhs_imt->init());
+        //        VLOG(2) << "Right side of stream_join: " << _rhs_imt->debug_string();
     }
 
     // other conjuncts.

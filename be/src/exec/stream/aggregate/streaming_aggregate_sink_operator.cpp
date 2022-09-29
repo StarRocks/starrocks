@@ -14,10 +14,10 @@ Status StreamingAggregateSinkOperator::prepare(RuntimeState* state) {
         RETURN_IF_ERROR(_imt_detail->prepare(state));
         RETURN_IF_ERROR(_imt_detail->open(state));
     }
-//    if (_imt_agg_result) {
-//        RETURN_IF_ERROR(_imt_agg_result->prepare(state));
-//        RETURN_IF_ERROR(_imt_agg_result->open(state));
-//    }
+    //    if (_imt_agg_result) {
+    //        RETURN_IF_ERROR(_imt_agg_result->prepare(state));
+    //        RETURN_IF_ERROR(_imt_agg_result->open(state));
+    //    }
     return _aggregator->open(state);
 }
 
@@ -26,9 +26,9 @@ void StreamingAggregateSinkOperator::close(RuntimeState* state) {
     if (_imt_detail) {
         _imt_detail->close(state);
     }
-//    if (_imt_agg_result) {
-//        _imt_agg_result->close(state);
-//    }
+    //    if (_imt_agg_result) {
+    //        _imt_agg_result->close(state);
+    //    }
     Operator::close(state);
 }
 

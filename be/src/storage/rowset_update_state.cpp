@@ -84,8 +84,8 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     }
     // TODO(cbl): auto close iterators on failure
     auto& itrs = res.value();
-    CHECK(itrs.size() == rowset->num_segments()) <<
-            fmt::format("itrs.size({}) != num_segments({})", itrs.size(), rowset->num_segments());
+    CHECK(itrs.size() == rowset->num_segments())
+            << fmt::format("itrs.size({}) != num_segments({})", itrs.size(), rowset->num_segments());
     _upserts.resize(rowset->num_segments());
     // only hold pkey, so can use larger chunk size
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);

@@ -162,8 +162,8 @@ static std::shared_ptr<AggregatorParams> convert_to_aggregator_params(const TPla
         params->sql_grouping_keys =
                 tnode.stream_agg_node.__isset.sql_grouping_keys ? tnode.stream_agg_node.sql_grouping_keys : "";
         params->sql_aggregate_functions = tnode.stream_agg_node.__isset.sql_aggregate_functions
-                                          ? tnode.stream_agg_node.sql_aggregate_functions
-                                          : "";
+                                                  ? tnode.stream_agg_node.sql_aggregate_functions
+                                                  : "";
         params->has_outer_join_child =
                 tnode.stream_agg_node.__isset.has_outer_join_child && tnode.stream_agg_node.has_outer_join_child;
         params->grouping_exprs = tnode.stream_agg_node.grouping_exprs;
@@ -181,7 +181,7 @@ static std::shared_ptr<AggregatorParams> convert_to_aggregator_params(const TPla
 // it contains common data struct and algorithm of aggregation
 class Aggregator final : public pipeline::ContextWithDependency {
 public:
-//    Aggregator(const TPlanNode& tnode);
+    //    Aggregator(const TPlanNode& tnode);
     Aggregator(std::shared_ptr<AggregatorParams>&& params);
 
     ~Aggregator() {
