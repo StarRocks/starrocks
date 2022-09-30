@@ -61,9 +61,7 @@ Stream Load 需要您在客户端上通过 HTTP 发送导入作业请求给 FE �
     MySQL [test_db]> CREATE TABLE `table1`
     (
         `id` int(11) NOT NULL COMMENT "用户 ID",
-
         `name` varchar(65533) NULL COMMENT "用户姓名",
-
         `score` int(11) NOT NULL COMMENT "用户得分"
     )
     ENGINE=OLAP
@@ -75,11 +73,8 @@ Stream Load 需要您在客户端上通过 HTTP 发送导入作业请求给 FE �
 
     ```Plain%20Text
     1,Lily,23
-
     2,Rose,23
-
     3,Alice,24
-
     4,Julia,25
     ```
 
@@ -105,19 +100,12 @@ curl --location-trusted -u root: -H "label:123" \
 MySQL [test_db]> SELECT * FROM table1;
 
 +------+-------+-------+
-
 | id   | name  | score |
-
 +------+-------+-------+
-
 |    1 | Lily  |    23 |
-
 |    2 | Rose  |    23 |
-
 |    3 | Alice |    24 |
-
 |    4 | Julia |    25 |
-
 +------+-------+-------+
 
 4 rows in set (0.00 sec)
@@ -178,17 +166,11 @@ curl -v --location-trusted -u root: -H "strict_mode: true" \
 
 ```SQL
 MySQL [test_db]> SELECT * FROM table2;
-
 +------+--------+
-
 | id   | city   |
-
 +------+--------+
-
 | 200  | 北京    |
-
 +------+--------+
-
 4 rows in set (0.01 sec)
 ```
 
@@ -220,7 +202,7 @@ Stream Load 支持通过程序导入数据流，具体操作方法，请参见�
 
   需要注意的是，如果您调大该参数的取值，需要重启 BE 才能生效，并且系统性能有可能会受影响，并且也会增加失败重试时的代价。
 
-> 说明：
+> 说明
 >
 > 导入 JSON 格式的数据时，需要注意以下两点：
 >
