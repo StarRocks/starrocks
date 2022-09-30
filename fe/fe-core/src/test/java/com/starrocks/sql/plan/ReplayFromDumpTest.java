@@ -568,7 +568,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_cross_join"), null, TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 38:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 37:Project\n" +
                 "  |  <slot 1> : 1: c_0_0"));
     }
 
@@ -671,12 +671,11 @@ public class ReplayFromDumpTest {
     public void testParHiveTPCH08UsingCatalog() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch08_catalog"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("18:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  18:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  equal join conjunct: [18: l_partkey, INT, true] = [1: p_partkey, INT, true]\n" +
+                "  |  equal join conjunct: [33: o_orderkey, INT, true] = [17: l_orderkey, INT, true]\n" +
                 "  |  build runtime filters:\n" +
-                "  |  - filter_id = 3, build_expr = (1: p_partkey), remote = false\n" +
-                "  |  output columns: 17, 19, 22, 23\n" +
-                "  |  cardinality: 2174338"));
+                "  |  - filter_id = 2, build_expr = (17: l_orderkey), remote = false\n" +
+                "  |  output columns: 13, 22, 23, 34, 37, 58\n"));
     }
 }
