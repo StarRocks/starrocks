@@ -295,7 +295,7 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
             last_state = _tmp_agg_states[i];
         }
 
-        //
+        // only create the state when selector == 0
         std::vector<uint8_t> create_selector(chunk_size);
         for (size_t i = 0; i < _cmp_vector.size(); ++i) {
             create_selector[i] = _cmp_vector[i] == 0;

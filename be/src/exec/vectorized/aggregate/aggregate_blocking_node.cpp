@@ -216,7 +216,9 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
+    bool streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
+
     if (_tnode.agg_node.need_finalize) {
         auto& agg_node = _tnode.agg_node;
         // If finalize aggregate with group by clause, then it can be parallelized
@@ -227,13 +229,12 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
                 ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink,
                                                                                   group_by_expr_ctxs);
             }
-        } else {
+        } else if (!streaming_aggregate) {
             ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
         }
     }
 
     OpFactories ops_with_source;
-    bool streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
 
     if (streaming_aggregate) {
         ops_with_source =
