@@ -50,6 +50,14 @@ public:
         this->data(state).sum += column.get_data()[row_num];
     }
 
+    void restore(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
+                 size_t row_num) const override {
+        DCHECK(column->is_numeric() || column->is_decimal());
+        const auto* agg_column = down_cast<const InputColumnType*>(column);
+        VLOG(1) << " sum restore:" << row_num;
+        this->data(state).sum = agg_column->get_data()[row_num];
+    }
+
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         const auto* column = down_cast<const InputColumnType*>(columns[0]);

@@ -9,7 +9,6 @@
 #include "storage/datum_row_iterator.h"
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
-#include "storage/table_read_view_impl.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
 #include "storage/union_iterator.h"
@@ -49,15 +48,8 @@ StatusOr<ChunkIteratorPtr> TableReadViewImpl::get_chunk(const Row& key, const Re
     for (const TabletSharedPtr& tablet : _local_tablets) {
         std::shared_ptr<vectorized::TabletReader> reader =
                 std::make_shared<vectorized::TabletReader>(tablet, _view_params.version, _schema);
-        Status status = reader->prepare();
-        if (!status.ok()) {
-            return status;
-        }
-
-        status = reader->open(tablet_reader_params);
-        if (!status.ok()) {
-            return status;
-        }
+        RETURN_IF_ERROR(reader->prepare());
+        RETURN_IF_ERROR(reader->open(tablet_reader_params));
         tablet_readers.push_back(reader);
     }
 
@@ -80,9 +72,13 @@ std::vector<StatusOr<ChunkIteratorPtr>> TableReadViewImpl::batch_get_chunk(
 std::vector<const ColumnPredicate*> TableReadViewImpl::build_column_predicates(
         const Row& key, const std::vector<const vectorized::ColumnPredicate*>& predicates) {
     const vectorized::Schema& sort_key_schema = _view_params.sort_key_schema;
-    std::vector<const ColumnPredicate*> column_predicates(predicates);
+
+    std::vector<const ColumnPredicate*> column_predicates;
     for (auto common_predicate : _view_params.common_predicates) {
         column_predicates.push_back(common_predicate);
+    }
+    for (auto predicate: predicates) {
+        column_predicates.push_back(predicate);
     }
 
     // TODO currently use predicates to look up key
@@ -92,6 +88,7 @@ std::vector<const ColumnPredicate*> TableReadViewImpl::build_column_predicates(
         ColumnPredicate* predicate = vectorized::new_column_eq_predicate(
                 sort_key_schema.field(i)->type(), field->id(),
                 vectorized::datum_to_string(sort_key_schema.field(i)->type().get(), datum));
+        VLOG(1) << "predicate:" << predicate->debug_string();
         column_predicates.push_back(predicate);
         // TODO free predicates friendly
         _free_predicates.push_back(std::shared_ptr<ColumnPredicate>(predicate));

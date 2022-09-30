@@ -121,8 +121,9 @@ public class OlapTableRouteInfo {
         TOlapTableSchemaParam schemaParam = new TOlapTableSchemaParam();
         schemaParam.setDb_id(dbId);
         schemaParam.setTable_id(table.getId());
-        schemaParam.setVersion(0);
-
+        // TODO: Optimize it later, how to get IMT's version.
+        long version = table.getAllPartitions().stream().findFirst().get().getVisibleVersion();
+        schemaParam.setVersion(version);
         /*
         DescriptorTable descriptorTable = new DescriptorTable();
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
@@ -158,7 +159,9 @@ public class OlapTableRouteInfo {
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         partitionParam.setDb_id(dbId);
         partitionParam.setTable_id(table.getId());
-        partitionParam.setVersion(0);
+        // TODO: Optimize it later, how to get IMT's version.
+        long version = table.getAllPartitions().stream().findFirst().get().getVisibleVersion();
+        partitionParam.setVersion(version);
 
         PartitionType partType = table.getPartitionInfo().getType();
         switch (partType) {

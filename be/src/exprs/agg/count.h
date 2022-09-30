@@ -36,6 +36,14 @@ public:
         ++this->data(state).count;
     }
 
+    void restore(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
+                size_t row_num) const override {
+        DCHECK(column->is_numeric() || column->is_decimal());
+        const auto* agg_column = down_cast<const Int64Column*>(column);
+        VLOG(1) << " count restore:" << row_num;
+        this->data(state).count = agg_column->get_data()[row_num];
+    }
+
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         this->data(state).count += chunk_size;
