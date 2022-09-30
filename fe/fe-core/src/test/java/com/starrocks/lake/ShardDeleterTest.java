@@ -104,9 +104,7 @@ public class ShardDeleterTest {
                 result = null;
             }};
 
-        shardDeleter.addUnusedShardId(ids);
         shardDeleter.runAfterCatalogReady();
-
         Assert.assertEquals(Deencapsulation.getField(shardDeleter, "shardIds"), new HashSet<>());
     }
 }

@@ -448,11 +448,6 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
                 LOG.info("erase partition[{}-{}] finished, because partition with the same name is recycled",
                         partition.getId(), partitionName);
-
-                if (!partitionToShardIds.isEmpty()) {
-                    GlobalStateMgr.getCurrentState().getShardManager().getShardDeleter().
-                            addUnusedShardGroupId(partitionToShardIds);
-                }
             }
         }
     }

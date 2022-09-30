@@ -29,7 +29,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -58,7 +57,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -447,13 +445,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             }
             // Below this point, all query and load jobs will use the new schema.
             droppedIndexes = visualiseShadowIndex(table);
-        }
-
-        // Delete shards from StarOS
-        ShardDeleter shardDeleter = GlobalStateMgr.getCurrentState().getShardManager().getShardDeleter();
-        for (MaterializedIndex droppedIndex : droppedIndexes) {
-            Set<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toSet());
-            shardDeleter.addUnusedShardId(shards);
         }
 
         if (span != null) {

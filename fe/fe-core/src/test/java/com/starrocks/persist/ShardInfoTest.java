@@ -55,7 +55,6 @@ public class ShardInfoTest {
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
         JournalEntity je = new JournalEntity();
         je.setData(info);
-        je.setOpCode(OperationType.OP_ADD_UNUSED_SHARD);
         je.write(dos);
 
         // load from file
@@ -70,7 +69,6 @@ public class ShardInfoTest {
         shardIds.add(3L);
         shardIds.add(4L);
         je.setData(new ShardInfo(shardIds2));
-        je.setOpCode(OperationType.OP_DELETE_UNUSED_SHARD);
         je.write(dos);
         dos.close();
 

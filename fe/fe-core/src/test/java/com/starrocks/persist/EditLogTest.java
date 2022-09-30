@@ -3,12 +3,9 @@
 package com.starrocks.persist;
 
 import com.starrocks.common.io.Text;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
-import com.starrocks.lake.ShardDeleter;
-import com.starrocks.lake.ShardManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
@@ -19,9 +16,7 @@ import org.junit.Test;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -138,11 +133,6 @@ public class EditLogTest {
         field2.setAccessible(true);
         field2.set(globalStateMgr, nodeMgr);
 
-        ShardManager shardManager = new ShardManager();
-        Field field3 = globalStateMgr.getClass().getDeclaredField("shardManager");
-        field3.setAccessible(true);
-        field3.set(globalStateMgr, shardManager);
-
         return globalStateMgr;
     }
 
@@ -159,28 +149,5 @@ public class EditLogTest {
         List<Frontend> updatedFrontends = mgr.getFrontends(null);
         Frontend updatedfFe = updatedFrontends.get(0);
         Assert.assertEquals("testHost", updatedfFe.getHost());
-        Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
     }
-
-    @Test
-    public void testUpdateUnusedShardId() throws Exception {
-        GlobalStateMgr mgr = mockGlobalStateMgr();
-        JournalEntity journal = new JournalEntity();
-        Set<Long> shardIds = new HashSet<>();
-        shardIds.add(1L);
-        shardIds.add(2L);
-        ShardInfo info = new ShardInfo(shardIds);
-        journal.setData(info);
-        journal.setOpCode(OperationType.OP_ADD_UNUSED_SHARD);
-        EditLog.loadJournal(mgr, journal);
-
-        ShardDeleter shardDeleter = mgr.getShardManager().getShardDeleter();
-        Assert.assertEquals(Deencapsulation.getField(shardDeleter, "shardIds"), shardIds);
-
-        journal.setData(info);
-        journal.setOpCode(OperationType.OP_DELETE_UNUSED_SHARD);
-        EditLog.loadJournal(mgr, journal);
-        Assert.assertEquals(Deencapsulation.getField(shardDeleter, "shardIds"), new HashSet<>());
-    }
-
 }

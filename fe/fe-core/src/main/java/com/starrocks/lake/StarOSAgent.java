@@ -20,7 +20,6 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.ShardStorageInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerInfo;
-import com.staros.util.Constant;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -30,6 +29,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -258,7 +258,16 @@ public class StarOSAgent {
         }
     }
 
-    private void createShardGroup(long groupId) throws DdlException {
+    public void deleteShardGroup(List<Long> groupIds) {
+        prepare();
+        try {
+            client.deleteShardGroup(serviceId, groupIds);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to delete shard group. error: {}", e.getMessage());
+        }
+    }
+
+    public void createShardGroup(long groupId) throws DdlException {
         List<ShardGroupInfo> shardGroupInfos = null;
         try {
             List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
@@ -267,9 +276,7 @@ public class StarOSAgent {
             LOG.debug("Create shard group success. shard group infos: {}", shardGroupInfos);
             Preconditions.checkState(shardGroupInfos.size() == 1);
         } catch (StarClientException e) {
-            if (e.getCode() != StatusCode.ALREADY_EXIST) {
-                throw new DdlException("Failed to create shard group. error: " + e.getMessage());
-            }
+            throw new DdlException("Failed to create shard group. error: " + e.getMessage());
         }
     }
 
@@ -277,11 +284,6 @@ public class StarOSAgent {
         prepare();
         List<ShardInfo> shardInfos = null;
         try {
-            if (groupId != Constant.DEFAULT_ID) {
-                // create shardGroup
-                createShardGroup(groupId);
-            }
-
             List<CreateShardInfo> createShardInfos = new ArrayList<>(numShards);
             for (int i = 0; i < numShards; ++i) {
                 CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
@@ -301,6 +303,15 @@ public class StarOSAgent {
 
         Preconditions.checkState(shardInfos.size() == numShards);
         return shardInfos.stream().map(ShardInfo::getShardId).collect(Collectors.toList());
+    }
+
+    // mocked
+    public Set<Long> listShardGroup() {
+        return new HashSet<>();
+    }
+
+    public Set<Long> listShard(long groupId) {
+        return new HashSet<>();
     }
 
     private List<ReplicaInfo> getShardReplicas(long shardId) throws UserException {

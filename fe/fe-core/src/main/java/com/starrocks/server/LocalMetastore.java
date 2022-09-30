@@ -1273,10 +1273,6 @@ public class LocalMetastore implements ConnectorMetadata {
         for (Long tabletId : tabletIdSetForAll) {
             GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
         }
-        // lake table need to delete shards
-        if (isLakeTable) {
-            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSetForAll);
-        }
     }
 
     private void addPartitions(Database db, String tableName, List<PartitionDesc> partitionDescs,
@@ -1533,10 +1529,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 clause.isForceDrop());
         editLog.logDropPartition(info);
 
-        if (!partitionToShardIds.isEmpty()) {
-            stateMgr.getShardManager().getShardDeleter().addUnusedShardGroupId(partitionToShardIds);
-        }
-
         LOG.info("succeed in droping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
                 clause.isForceDrop());
     }
@@ -1551,9 +1543,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 olapTable.dropTempPartition(info.getPartitionName(), true);
             } else {
                 partitionToShardIds = olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
-            }
-            if (!partitionToShardIds.isEmpty()) {
-                stateMgr.getShardManager().getShardDeleter().addUnusedShardGroupId(partitionToShardIds);
             }
         } finally {
             db.writeUnlock();
@@ -1593,10 +1582,14 @@ public class LocalMetastore implements ConnectorMetadata {
         DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
         Partition partition =
                 new Partition(partitionId, partitionName, indexMap.get(table.getBaseIndexId()), distributionInfo);
-
         // version
         if (version != null) {
             partition.updateVisibleVersion(version);
+        }
+
+        // create shard group
+        if (table.isLakeTable()) {
+            GlobalStateMgr.getCurrentState().getStarOSAgent().createShardGroup(partitionId);
         }
 
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
@@ -2333,11 +2326,6 @@ public class LocalMetastore implements ConnectorMetadata {
             if (!createTblSuccess) {
                 for (Long tabletId : tabletIdSet) {
                     GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-                }
-                // lakeTable need to delete tablet and shard
-                if (olapTable.isLakeTable()) {
-                    stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
-                    editLog.logAddUnusedShard(tabletIdSet);
                 }
             }
             // only remove from memory, because we have not persist it
@@ -4301,11 +4289,6 @@ public class LocalMetastore implements ConnectorMetadata {
         for (Long tabletId : tabletIdSet) {
             GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
         }
-        // lake table need to delete shard
-        if (olapTable.isLakeTable() && !tabletIdSet.isEmpty()) {
-            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
-            editLog.logAddUnusedShard(tabletIdSet);
-        }
     }
 
     private void truncateTableInternal(OlapTable olapTable, List<Partition> newPartitions,
@@ -4330,12 +4313,6 @@ public class LocalMetastore implements ConnectorMetadata {
         // remove the tablets in old partitions
         for (Long tabletId : oldTabletIds) {
             GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-        }
-
-        // if it is lake table, need to delete shard and drop tablet
-        if (olapTable.isLakeTable() && !isReplay) {
-            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(oldTabletIds);
-            editLog.logAddUnusedShard(oldTabletIds);
         }
     }
 

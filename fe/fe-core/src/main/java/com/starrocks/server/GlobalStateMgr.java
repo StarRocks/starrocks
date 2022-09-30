@@ -125,7 +125,7 @@ import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.ShardManager;
+import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionManager;
 import com.starrocks.leader.Checkpoint;
@@ -422,7 +422,7 @@ public class GlobalStateMgr {
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
 
-    private ShardManager shardManager;
+    private ShardDeleter shardDeleter;
 
     private StateChangeExecution execution;
 
@@ -588,7 +588,7 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
-        this.shardManager = new ShardManager();
+        this.shardDeleter = new ShardDeleter();
         this.compactionManager = new CompactionManager();
 
         GlobalStateMgr gsm = this;
@@ -772,8 +772,8 @@ public class GlobalStateMgr {
         return localMetastore;
     }
 
-    public ShardManager getShardManager() {
-        return shardManager;
+    public ShardDeleter getShardDeleter() {
+        return shardDeleter;
     }
 
     @VisibleForTesting
@@ -1094,7 +1094,7 @@ public class GlobalStateMgr {
         taskCleaner.start();
 
         if (Config.use_staros) {
-            shardManager.getShardDeleter().start();
+            shardDeleter.start();
         }
     }
 
@@ -1222,8 +1222,6 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadInsertOverwriteJobs(dis, checksum);
             checksum = nodeMgr.loadComputeNodes(dis, checksum);
-            remoteChecksum = dis.readLong();
-            checksum = loadShardManager(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = loadCompactionManager(dis, checksum);
             remoteChecksum = dis.readLong();
@@ -1398,12 +1396,6 @@ public class GlobalStateMgr {
         return checksum;
     }
 
-    public long loadShardManager(DataInputStream in, long checksum) throws IOException {
-        shardManager = ShardManager.read(in);
-        LOG.info("finished replay shardManager from image");
-        return checksum;
-    }
-
     public long loadCompactionManager(DataInputStream in, long checksum) throws IOException {
         compactionManager = CompactionManager.loadCompactionManager(in);
         checksum ^= compactionManager.getChecksum();
@@ -1475,8 +1467,6 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = saveInsertOverwriteJobs(dos, checksum);
             checksum = nodeMgr.saveComputeNodes(dos, checksum);
-            dos.writeLong(checksum);
-            checksum = shardManager.saveShardManager(dos, checksum);
             dos.writeLong(checksum);
             checksum = compactionManager.saveCompactionManager(dos, checksum);
             dos.writeLong(checksum);
