@@ -90,6 +90,9 @@ public class ExportRelativeStmtTest {
         originStmt = "EXPORT TABLE tp TEMPORARY PARTITION (p1,p2) TO \"hdfs://hdfs_host:port/a/b/c/\" " +
                 "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         analyzeFail(originStmt);
+        originStmt = "EXPORT TABLE tp PARTITION (p6,p7) TO \"hdfs://hdfs_host:port/a/b/c/\" " +
+                "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
+        analyzeFail(originStmt);
         // bad broker desc
         originStmt = "EXPORT TABLE tp TO \"hdfs://hdfs_host:port/a/b/c/\" WITH " +
                 "BROKER \"broker1\" (\"username\"=\"test\")";
@@ -116,6 +119,10 @@ public class ExportRelativeStmtTest {
                 "(\"load_mem_limit\"=\"2147483648\", \"timeout\" = \"7200\", \"include_query_id\" = \"false\") WITH " +
                 "BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         analyzeFail(originStmt);
+        originStmt = "EXPORT TABLE tp TO \"port/a/b/c/\" PROPERTIES " +
+                "(\"load_mem_limit\"=\"2147483648\", \"timeout\" = \"7200\", \"include_query_id\" = \"false\") WITH " +
+                "BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
+        analyzeFail(originStmt);
         originStmt = "EXPORT TABLE tp PARTITION (p1,p2) (c1,c2) TO \"\" PROPERTIES " +
                 "(\"load_mem_limit\"=\"2147483648\", \"timeout\" = \"7200\", \"include_query_id\" = \"false\") WITH " +
                 "BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
@@ -126,6 +133,14 @@ public class ExportRelativeStmtTest {
         analyzeFail(originStmt);
         // bad columns
         originStmt = "EXPORT TABLE tp PARTITION (p1,p2) (c5,c6) TO \"hdfs://hdfs_host:port/a/b/c/\" PROPERTIES " +
+                "(\"load_mem_limit\"=\"2147483648\", \"timeout\" = \"7200\", \"include_query_id\" = \"false\") WITH " +
+                "BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
+        analyzeFail(originStmt);
+        originStmt = "EXPORT TABLE tp PARTITION (p1,p2) (c1,c1) TO \"hdfs://hdfs_host:port/a/b/c/\" PROPERTIES " +
+                "(\"load_mem_limit\"=\"2147483648\", \"timeout\" = \"7200\", \"include_query_id\" = \"false\") WITH " +
+                "BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
+        analyzeFail(originStmt);
+        originStmt = "EXPORT TABLE tp (,) TO \"hdfs://hdfs_host:port/a/b/c/\" PROPERTIES " +
                 "(\"load_mem_limit\"=\"2147483648\", \"timeout\" = \"7200\", \"include_query_id\" = \"false\") WITH " +
                 "BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         analyzeFail(originStmt);

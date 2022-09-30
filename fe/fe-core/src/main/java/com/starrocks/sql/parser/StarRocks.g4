@@ -1167,13 +1167,15 @@ showWhiteListStatement
 
 // ------------------------------------------- Export Statement --------------------------------------------------------
 exportStatement
-    : EXPORT TABLE tableDesc colList=columnAliases? TO path=string properties? broker=brokerDesc
+    : EXPORT TABLE tableDesc colList=columnAliases? TO path=string properties? broker=brokerDesc?
     ;
 cancelExportStatement
-    : CANCEL EXPORT (FROM db=identifier)? WHERE expression
+    : CANCEL EXPORT ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 showExportStatement
-    : SHOW EXPORT (FROM db=identifier)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    : SHOW EXPORT ((FROM | IN) db=qualifiedName)?
+        ((LIKE pattern=string) | (WHERE expression))?
+        (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------

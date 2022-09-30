@@ -486,8 +486,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCancelExportStatement(StarRocksParser.CancelExportStatementContext context) {
         String db = null;
-        if (context.identifier() != null) {
-            db = ((Identifier) visit(context.identifier())).getValue();
+        if (context.qualifiedName() != null) {
+            db = ((Identifier) visit(context.qualifiedName())).getValue();
         }
         Expr where = null;
         if (context.expression() != null) {
@@ -499,8 +499,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowExportStatement(StarRocksParser.ShowExportStatementContext context) {
         String db = null;
-        if (context.identifier() != null) {
-            db = ((Identifier) visit(context.identifier())).getValue();
+        if (context.qualifiedName() != null) {
+            db = ((Identifier) visit(context.qualifiedName())).getValue();
         }
         LimitElement le = null;
         if (context.limitElement() != null) {
