@@ -551,9 +551,9 @@ Status parquet::Int32ToDateConverter::convert(const vectorized::ColumnPtr& src, 
     size_t size = src_column->size();
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
-        if (!src_null_data[i]) {
-            dst_data[i]._julian = src_data[i] + vectorized::date::UNIX_EPOCH_JULIAN;
-        }
+    }
+    for (size_t i = 0; i < size; i++) {
+        dst_data[i]._julian = src_data[i] + vectorized::date::UNIX_EPOCH_JULIAN;
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();

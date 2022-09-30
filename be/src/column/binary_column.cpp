@@ -168,7 +168,9 @@ void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, typename Binar
 
 template <typename T>
 bool BinaryColumnBase<T>::append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
-    if (max_length <= 16) {
+    if (max_length <= 8) {
+        append_fixed_length<T, 8>(strs, &_bytes, &_offsets);
+    } else if (max_length <= 16) {
         append_fixed_length<T, 16>(strs, &_bytes, &_offsets);
     } else if (max_length <= 32) {
         append_fixed_length<T, 32>(strs, &_bytes, &_offsets);
