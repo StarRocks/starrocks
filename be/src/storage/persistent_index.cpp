@@ -2829,8 +2829,8 @@ Status PersistentIndex::_check_and_flush_l0() {
         }
     } else {
         // l1 is not empty
-        // perform l0 l1 merge compaction if l0_memory * config::kL0L1MergeRatio > l1_file_size
-        if (l0_mem_size * config::kL0L1MergeRatio <= l1_file_size) {
+        // perform l0 l1 merge compaction if l0_memory * config::l0_l1_merge_ratio > l1_file_size
+        if (l0_mem_size * config::l0_l1_merge_ratio <= l1_file_size) {
             return Status::OK();
         }
     }
