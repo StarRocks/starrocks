@@ -30,11 +30,18 @@ namespace starrocks {
 template <class DeferFunction>
 class DeferOp {
 public:
-    explicit DeferOp(DeferFunction func) : _func(std::move(func)) {}
+    explicit DeferOp(DeferFunction func) : cancelled(false), _func(std::move(func)) {}
 
-    ~DeferOp() { _func(); };
+    ~DeferOp() {
+        if (LIKELY(!cancelled)) {
+            _func();
+        }
+    };
+
+    void cancel() { cancelled = true; }
 
 private:
+    bool cancelled;
     DeferFunction _func;
 };
 

@@ -219,6 +219,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
     // create data consumer group
     std::shared_ptr<DataConsumerGroup> consumer_grp;
     HANDLE_ERROR(consumer_pool->get_consumer_grp(ctx, &consumer_grp), "failed to get consumers");
+    DeferOp return_consumers([&consumer_pool, &consumer_grp] { consumer_pool->return_consumers(consumer_grp.get()); });
 
     // create and set pipe
     std::shared_ptr<StreamLoadPipe> pipe;
@@ -264,6 +265,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
 
     // return the consumer back to pool
     // call this before commit txn, in case the next task can come very fast
+    return_consumers.cancel();
     consumer_pool->return_consumers(consumer_grp.get());
 
     // commit txn
@@ -273,13 +275,14 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
     switch (ctx->load_src_type) {
     case TLoadSourceType::KAFKA: {
         std::shared_ptr<DataConsumer> consumer;
-        Status st = _data_consumer_pool.get_consumer(ctx, &consumer);
+        Status st = consumer_pool->get_consumer(ctx, &consumer);
         if (!st.ok()) {
             // Kafka Offset Commit is idempotent, Failure should not block the normal process
             // So just print a warning
             LOG(WARNING) << st.get_error_msg();
             break;
         }
+        DeferOp return_consumer([&consumer_pool, &consumer] { consumer_pool->return_consumer(consumer); });
 
         std::vector<RdKafka::TopicPartition*> topic_partitions;
         for (auto& kv : ctx->kafka_info->cmt_offset) {
@@ -293,14 +296,8 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
             // So just print a warning
             LOG(WARNING) << st.get_error_msg();
         }
-        _data_consumer_pool.return_consumer(consumer);
-
-        // delete TopicPartition finally
-        auto tp_deleter = [&topic_partitions]() {
-            std::for_each(topic_partitions.begin(), topic_partitions.end(),
-                          [](RdKafka::TopicPartition* tp1) { delete tp1; });
-        };
-        DeferOp delete_tp([tp_deleter] { return tp_deleter(); });
+        std::for_each(topic_partitions.begin(), topic_partitions.end(),
+                      [](RdKafka::TopicPartition* tp1) { delete tp1; });
     } break;
     default:
         return;
