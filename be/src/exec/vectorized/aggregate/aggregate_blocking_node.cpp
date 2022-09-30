@@ -217,9 +217,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
     using namespace pipeline;
 
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
-
-    bool streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
-    if (!streaming_aggregate && _tnode.agg_node.need_finalize) {
+    if (_tnode.agg_node.need_finalize) {
         auto& agg_node = _tnode.agg_node;
         // If finalize aggregate with group by clause, then it can be parallelized
         if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
@@ -235,6 +233,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
     }
 
     OpFactories ops_with_source;
+    bool streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
+
     if (streaming_aggregate) {
         ops_with_source =
                 _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
