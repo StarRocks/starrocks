@@ -201,8 +201,8 @@ public:
     }
 
     template <int BINSZ, DecimalScaleType scale_type>
-    void t_convert(size_t size, uint8_t* dst_null_data, uint8_t* src_null_data, DecimalType* dst_data, Slice* src_data,
-                   bool* has_null) {
+    void t_convert(size_t size, uint8_t* dst_null_data, uint8_t* src_null_data, DecimalType* dst_data,
+                   const uint8* src_data, bool* has_null) {
         for (size_t i = 0; i < size; i++) {
             dst_null_data[i] = src_null_data[i];
             if (dst_null_data[i]) {
@@ -216,19 +216,18 @@ public:
             if constexpr (BINSZ <= 8) {
                 using T = int64_t;
                 T value = 0;
-                if ((i + 8) < size) {
-                    // NOTE(yan): since fixed length binary data is contiguous, with condition check (i+8) < size
-                    // we can assure that there is no illegal memory access
-                    // mempcy 8 bytes to compiler, it's instruction to move 8 bytes from memory to register
-                    // and follow actions are all in-register instructions.
-                    memcpy(reinterpret_cast<char*>(&value), src_data[i].data, 8);
-                    value = BitUtil::big_endian_to_host(value);
-                    value = value >> ((8 - BINSZ) * 8);
-                } else {
-                    value = src_data[i].data[0] & 0x80 ? -1 : 0;
-                    memcpy(reinterpret_cast<char*>(&value) + sizeof(T) - BINSZ, src_data[i].data, BINSZ);
-                    value = BitUtil::big_endian_to_host(value);
-                }
+
+                // NOTE(yan): since fixed length binary data is contiguous, with condition check (i+8) < size
+                // we can assure that there is no illegal memory access
+                // UPDATE: bytes are allocated by `RawVectorPad16`, so there will be extra bytes at tail.
+
+                // mempcy 8 bytes to compiler, it's instruction to move 8 bytes from memory to register
+                // and follow actions are all in-register instructions.
+                memcpy(reinterpret_cast<char*>(&value), src_data, 8);
+                value = BitUtil::big_endian_to_host(value);
+                value = value >> ((8 - BINSZ) * 8);
+
+                src_data += BINSZ;
 
                 // NOTE(yan): if no scale, we can assign with int64_t
                 // otherwise we have to extend this value to int128_t to scale.
@@ -239,10 +238,12 @@ public:
                 unscale = value;
             } else {
                 using T = int128_t;
-                T value = src_data[i].data[0] & 0x80 ? -1 : 0;
-                memcpy(reinterpret_cast<char*>(&value) + sizeof(T) - BINSZ, src_data[i].data, BINSZ);
+                T value = src_data[0] & 0x80 ? -1 : 0;
+                memcpy(reinterpret_cast<char*>(&value) + sizeof(T) - BINSZ, src_data, BINSZ);
                 value = BitUtil::big_endian_to_host(value);
                 unscale = value;
+
+                src_data += BINSZ;
             }
 
             // hardware branch predicator works well here.
@@ -267,12 +268,12 @@ public:
                 vectorized::ColumnHelper::as_raw_column<vectorized::BinaryColumn>(src_nullable_column->data_column());
         auto* dst_column = vectorized::ColumnHelper::as_raw_column<ColumnType>(dst_nullable_column->data_column());
 
-        auto& src_data = src_column->get_data();
+        const vectorized::BinaryColumn::Bytes& src_data = src_column->get_bytes();
         auto& dst_data = dst_column->get_data();
         auto& src_null_data = src_nullable_column->null_column()->get_data();
         auto& dst_null_data = dst_nullable_column->null_column()->get_data();
 
-        size_t size = src_data.size();
+        size_t size = src_column->size();
         if (_type_length > sizeof(DestPrimitiveType)) {
             memset(dst_null_data.data(), 0x1, size);
             dst_nullable_column->set_has_null(true);
@@ -281,6 +282,8 @@ public:
 
         bool has_null = false;
 
+        // For calling `src_data.get_bytes().data()` , we don't need to call `build_slices` underneath.
+        // And notice bytes are allocated by `RawVectorPad16`, there will be extra 16 bytes.
 #define M(SZ, T)                                                                                             \
     case SZ:                                                                                                 \
         t_convert<SZ, T>(size, dst_null_data.data(), src_null_data.data(), dst_data.data(), src_data.data(), \
