@@ -38,11 +38,7 @@ constexpr size_t kPackSize = 16;
 constexpr size_t kPagePackLimit = (kPageSize - kPageHeaderSize) / kPackSize;
 constexpr size_t kBucketSizeMax = 256;
 // if l0_mem_size exceeds this value, l0 need snapshot
-constexpr size_t kL0SnapshotSizeMax = 4 * 1024 * 1024;
-// if l0_mem_size exceeds this value and l1 is null, need flush to l1
-constexpr size_t kL0FlushSizeMin = 8 * 1024 * 1024;
-// if l0_mem_size / l1_file_size >= this value and l0_mem_size > kL0SnapshotSizeMax, l0 l1 need merge compaction
-constexpr double kL0L1MergeRatio = 0.1;
+constexpr size_t kL0SnapshotSizeMax = 16 * 1024 * 1024;
 constexpr size_t kLongKeySize = 64;
 
 const char* const kIndexFileMagic = "IDX1";
@@ -2825,12 +2821,20 @@ Status PersistentIndex::_check_and_flush_l0() {
     if (_l1 != nullptr) {
         _l1->file_size(&l1_file_size);
     }
-    const bool need_flush_l0 = l0_mem_size > kL0FlushSizeMin;
-    const bool need_flush_l1 = l0_mem_size > kL0SnapshotSizeMax &&
-                               l0_mem_size >= static_cast<size_t>(static_cast<double>(l1_file_size) * kL0L1MergeRatio);
-    if (!(need_flush_l0 || need_flush_l1)) {
-        return Status::OK();
+
+    // l1 is empty, if l0 memory usage is bigger than kL0SnapshotSizeMax, flush to l1
+    if (l1_file_size == 0) {
+        if (l0_mem_size <= kL0SnapshotSizeMax) {
+            return Status::OK();
+        }
+    } else {
+        // l1 is not empty
+        // perform l0 l1 merge compaction if l0_memory * config::kL0L1MergeRatio > l1_file_size
+        if (l0_mem_size * config::kL0L1MergeRatio <= l1_file_size) {
+            return Status::OK();
+        }
     }
+
     _flushed = true;
     if (_l1 == nullptr) {
         RETURN_IF_ERROR(_flush_l0());
