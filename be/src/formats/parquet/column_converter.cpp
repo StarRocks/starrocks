@@ -200,7 +200,7 @@ public:
         _type_length = type_length;
     }
 
-    template <int BINSZ>
+    template <int BINSZ, DecimalScaleType scale_type>
     void t_convert(size_t size, uint8_t* dst_null_data, uint8_t* src_null_data, DecimalType* dst_data, Slice* src_data,
                    bool* has_null) {
         for (size_t i = 0; i < size; i++) {
@@ -215,9 +215,8 @@ public:
             DestPrimitiveType unscale = 0;
             if constexpr (BINSZ <= 8) {
                 using T = int64_t;
-
+                T value = 0;
                 if ((i + 8) < size) {
-                    T value = 0;
                     // NOTE(yan): since fixed length binary data is contiguous, with condition check (i+8) < size
                     // we can assure that there is no illegal memory access
                     // mempcy 8 bytes to compiler, it's instruction to move 8 bytes from memory to register
@@ -225,13 +224,19 @@ public:
                     memcpy(reinterpret_cast<char*>(&value), src_data[i].data, 8);
                     value = BitUtil::big_endian_to_host(value);
                     value = value >> ((8 - BINSZ) * 8);
-                    unscale = value;
                 } else {
-                    T value = src_data[i].data[0] & 0x80 ? -1 : 0;
+                    value = src_data[i].data[0] & 0x80 ? -1 : 0;
                     memcpy(reinterpret_cast<char*>(&value) + sizeof(T) - BINSZ, src_data[i].data, BINSZ);
                     value = BitUtil::big_endian_to_host(value);
-                    unscale = value;
                 }
+
+                // NOTE(yan): if no scale, we can assign with int64_t
+                // otherwise we have to extend this value to int128_t to scale.
+                if constexpr (scale_type == DecimalScaleType::kNoScale) {
+                    dst_data[i] = DecimalType(value);
+                    continue;
+                }
+                unscale = value;
             } else {
                 using T = int128_t;
                 T value = src_data[i].data[0] & 0x80 ? -1 : 0;
@@ -241,9 +246,10 @@ public:
             }
 
             // hardware branch predicator works well here.
-            if (_scale_type == DecimalScaleType::kScaleUp) {
+            if constexpr (scale_type == DecimalScaleType::kScaleUp) {
                 unscale *= _scale_factor;
-            } else if (_scale_type == DecimalScaleType::kScaleDown) {
+            }
+            if constexpr (scale_type == DecimalScaleType::kScaleDown) {
                 unscale /= _scale_factor;
             }
             dst_data[i] = DecimalType(unscale);
@@ -274,16 +280,37 @@ public:
         }
 
         bool has_null = false;
-#define M(SZ)                                                                                                         \
-    case SZ:                                                                                                          \
-        t_convert<SZ>(size, dst_null_data.data(), src_null_data.data(), dst_data.data(), src_data.data(), &has_null); \
+
+#define M(SZ, T)                                                                                             \
+    case SZ:                                                                                                 \
+        t_convert<SZ, T>(size, dst_null_data.data(), src_null_data.data(), dst_data.data(), src_data.data(), \
+                         &has_null);                                                                         \
         break;
 
-        switch (_type_length) {
-            M(1) M(2) M(3) M(4) M(5) M(6) M(7) M(8);
-            M(9) M(10) M(11) M(12) M(13) M(14) M(15) M(16);
-        default:
-            __builtin_unreachable();
+#define MX(T) \
+    M(1, T)   \
+    M(2, T)   \
+    M(3, T)   \
+    M(4, T) M(5, T) M(6, T) M(7, T) M(8, T) M(9, T) M(10, T) M(11, T) M(12, T) M(13, T) M(14, T) M(15, T) M(16, T)
+
+        if (_scale_type == DecimalScaleType::kScaleUp) {
+            switch (_type_length) {
+                MX(DecimalScaleType::kScaleUp);
+            default:
+                __builtin_unreachable();
+            }
+        } else if (_scale_type == DecimalScaleType::kScaleDown) {
+            switch (_type_length) {
+                MX(DecimalScaleType::kScaleDown);
+            default:
+                __builtin_unreachable();
+            }
+        } else {
+            switch (_type_length) {
+                MX(DecimalScaleType::kNoScale);
+            default:
+                __builtin_unreachable();
+            }
         }
         dst_nullable_column->set_has_null(has_null);
         return Status::OK();
