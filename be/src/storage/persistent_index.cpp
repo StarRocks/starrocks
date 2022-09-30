@@ -1086,7 +1086,7 @@ public:
             return true;
         }
         for (const auto& composite_key : _set) {
-            if (!ar.dump(composite_key.size())) {
+            if (!ar.dump(static_cast<size_t>(composite_key.size()))) {
                 LOG(ERROR) << "Failed to dump compose_key_size";
                 return false;
             }
@@ -1130,7 +1130,13 @@ public:
                 LOG(ERROR) << "Failed to load composite_key";
                 return false;
             }
-            _set.emplace(composite_key);
+            auto [it, inserted] = _set.emplace(composite_key);
+            if (inserted) {
+                _total_kv_pairs_usage += composite_key.size();
+            } else {
+                _set.erase(it);
+                _set.emplace(composite_key);
+            }
         }
         return true;
 
