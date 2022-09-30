@@ -56,6 +56,11 @@ Status HiveDataSource::open(RuntimeState* state) {
         return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi table are supported");
     }
 
+    _use_block_cache = config::block_cache_enable;
+    if (state->query_options().__isset.use_scan_block_cache) {
+        _use_block_cache &= state->query_options().use_scan_block_cache;
+    }
+
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);
     _init_counter(state);
@@ -212,7 +217,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 
-    if (config::block_cache_enable) {
+    if (_use_block_cache) {
         _profile.block_cache_read_counter = ADD_COUNTER(_runtime_profile, "BlockCacheReadCounter", TUnit::UNIT);
         _profile.block_cache_read_bytes = ADD_COUNTER(_runtime_profile, "BlockCacheReadBytes", TUnit::BYTES);
         _profile.block_cache_read_timer = ADD_TIMER(_runtime_profile, "BlockCacheReadTimer");
@@ -277,6 +282,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.open_limit = nullptr;
+    scanner_params.use_block_cache = _use_block_cache;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;

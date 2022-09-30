@@ -128,6 +128,8 @@ struct HdfsScannerParams {
     HdfsScanProfile* profile = nullptr;
 
     std::atomic<int32_t>* open_limit;
+
+    bool use_block_cache = false;
 };
 
 struct HdfsScannerContext {
