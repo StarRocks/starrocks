@@ -7,7 +7,7 @@
 ## 语法
 
 ```Haskell
-quarter(expr);
+INT quarter(DATETIME expr);
 ```
 
 ## 参数说明

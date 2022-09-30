@@ -4,12 +4,12 @@
 
 返回指定日期对应的星期名称。
 
-参数为Date或者Datetime类型。
+参数为 DATE 或者 DATETIME 类型。
 
 ## 语法
 
 ```Haskell
-VARCHAR DAYNAME(DATE)
+VARCHAR DAYNAME(DATETIME|DATE date)
 ```
 
 ## 示例
