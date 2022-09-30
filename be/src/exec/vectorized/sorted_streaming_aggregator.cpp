@@ -12,6 +12,7 @@
 #include "common/object_pool.h"
 #include "exec/vectorized/aggregate/agg_hash_map.h"
 #include "exprs/expr_context.h"
+#include "glog/logging.h"
 #include "runtime/mem_pool.h"
 
 namespace starrocks {
@@ -65,14 +66,14 @@ public:
             DCHECK_EQ(_null_masks.size(), num_rows);
             for (size_t i = 1; i < num_rows; ++i) {
                 if (_null_masks[i - 1] == 0 && _null_masks[i] == 0) {
-                    _cmp_vector[i] = column.get_slice(i - 1).compare(column.get_slice(i));
+                    _cmp_vector[i] = column.get_slice(i - 1).compare(column.get_slice(i)) != 0;
                 } else {
                     _cmp_vector[i] = !(_null_masks[i - 1] == _null_masks[i]);
                 }
             }
         } else {
             for (size_t i = 1; i < num_rows; ++i) {
-                _cmp_vector[i] = column.get_slice(i - 1).compare(column.get_slice(i));
+                _cmp_vector[i] = column.get_slice(i - 1).compare(column.get_slice(i)) != 0;
             }
         }
         return Status::OK();
@@ -379,7 +380,7 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
 
         for (size_t i = 0; i < res_group_by_columns.size(); ++i) {
             AppendWithMask appender(_group_by_columns[i].get(), selector, selected_size);
-            res_group_by_columns[i]->accept_mutable(&appender);
+            RETURN_IF_ERROR(res_group_by_columns[i]->accept_mutable(&appender));
         }
     }
     auto result_chunk = _build_output_chunk(res_group_by_columns, agg_result_columns);
@@ -389,6 +390,8 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
 
     // prepare for next
     for (size_t i = 0; i < _last_columns.size(); ++i) {
+        // last column should never be the same column with new input column
+        DCHECK_NE(_last_columns[i].get(), _group_by_columns[i].get());
         _last_columns[i]->reset_column();
         _last_columns[i]->append(*_group_by_columns[i], chunk_size - 1, 1);
     }

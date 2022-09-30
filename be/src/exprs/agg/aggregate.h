@@ -194,6 +194,15 @@ public:
 template <typename State, typename Derived>
 class AggregateFunctionBatchHelper : public AggregateFunctionStateHelper<State> {
 public:
+    void batch_create_with_selection(FunctionContext* ctx, size_t chunk_size, Buffer<AggDataPtr>& states,
+                                     size_t state_offset, const std::vector<uint8_t>& selection) const override {
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (selection[i] == 0) {
+                static_cast<const Derived*>(this)->create(ctx, states[i] + state_offset);
+            }
+        }
+    }
+
     void batch_destroy_with_selection(FunctionContext* ctx, size_t chunk_size, Buffer<AggDataPtr>& states,
                                       size_t state_offset, const std::vector<uint8_t>& selection) const override {
         if constexpr (AggregateFunctionStateHelper<State>::pod_state()) {
