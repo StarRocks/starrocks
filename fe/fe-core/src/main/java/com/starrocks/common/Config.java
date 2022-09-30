@@ -501,7 +501,7 @@ public class Config extends ConfigBase {
      * some hang up problems in java.net.SocketInputStream.socketRead0
      */
     @ConfField
-    public static int thrift_client_timeout_ms = 0;
+    public static int thrift_client_timeout_ms = 28800000;
 
     /**
      * The backlog_num for thrift server
@@ -528,6 +528,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int thrift_rpc_retry_times = 3;
+
+    /**
+     * The thrift server max worker threads
+     */
+    @ConfField
+    public static int thrift_server_max_worker_threads = 4096;
+
+    /**
+     * The thrift server executor pending queue size
+     */
+    @ConfField
+    public static int thrift_server_queue_size = 4096;
 
     // May be necessary to modify the following BRPC configurations in high concurrency scenarios.
 
@@ -618,12 +630,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int publish_version_interval_ms = 10;
-
-    /**
-     * The thrift server max worker threads
-     */
-    @ConfField
-    public static int thrift_server_max_worker_threads = 4096;
 
     /**
      * Maximal wait seconds for straggler node in load

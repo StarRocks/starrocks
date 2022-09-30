@@ -99,7 +99,8 @@ public class ThriftServer {
                         .protocolFactory(
                                 new TBinaryProtocol.Factory()).processor(processor);
         ThreadPoolExecutor threadPoolExecutor = ThreadPoolManager
-                .newDaemonCacheThreadPool(Config.thrift_server_max_worker_threads, "thrift-server-pool", true);
+                .newDaemonCacheThreadPool(Config.thrift_server_max_worker_threads, Config.thrift_server_queue_size,
+                        "thrift-server-pool", true);
         args.executorService(threadPoolExecutor);
         server = new TThreadedSelectorServer(args);
     }
@@ -114,7 +115,8 @@ public class ThriftServer {
                 new SRTThreadPoolServer.Args(new TServerSocket(socketTransportArgs)).protocolFactory(
                         new TBinaryProtocol.Factory()).processor(processor);
         ThreadPoolExecutor threadPoolExecutor = ThreadPoolManager
-                .newDaemonCacheThreadPool(Config.thrift_server_max_worker_threads, "thrift-server-pool", true);
+                .newDaemonCacheThreadPool(Config.thrift_server_max_worker_threads, Config.thrift_server_queue_size,
+                        "thrift-server-pool", true);
         serverArgs.executorService(threadPoolExecutor);
         server = new SRTThreadPoolServer(serverArgs);
     }
