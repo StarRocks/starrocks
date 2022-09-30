@@ -60,7 +60,6 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
                     .put(FunctionSet.MAX, Pair.create(FunctionSet.MAX, FunctionSet.MAX))
                     .put(FunctionSet.MIN, Pair.create(FunctionSet.MIN, FunctionSet.MIN))
                     .put(FunctionSet.SUM, Pair.create(FunctionSet.SUM, FunctionSet.SUM))
-                    .put(FunctionSet.AVG, Pair.create(FunctionSet.AVG, FunctionSet.AVG))
                     .put(FunctionSet.HLL_UNION, Pair.create(FunctionSet.HLL_UNION, FunctionSet.HLL_UNION))
                     .put(FunctionSet.NDV, Pair.create(FunctionSet.HLL_UNION, FunctionSet.NDV))
                     .put(FunctionSet.BITMAP_UNION, Pair.create(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_UNION))

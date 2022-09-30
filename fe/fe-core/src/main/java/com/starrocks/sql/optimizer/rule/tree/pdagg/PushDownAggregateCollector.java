@@ -53,8 +53,7 @@ import java.util.stream.Collectors;
  */
 class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregateContext> {
     private static final List<String> WHITE_FNS = ImmutableList.of(FunctionSet.MAX, FunctionSet.MIN,
-            FunctionSet.SUM, FunctionSet.AVG, FunctionSet.HLL_UNION, FunctionSet.BITMAP_UNION,
-            FunctionSet.PERCENTILE_UNION);
+            FunctionSet.SUM, FunctionSet.HLL_UNION, FunctionSet.BITMAP_UNION, FunctionSet.PERCENTILE_UNION);
 
     private final TaskContext taskContext;
     private final OptimizerContext optimizerContext;
@@ -62,7 +61,6 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregateCon
     private final SessionVariable sessionVariable;
 
     private final Map<LogicalAggregationOperator, List<AggregateContext>> allRewriteContext = Maps.newHashMap();
-    // private final Map<Integer, List<AggregateContext>> cteRewriteContexts = Maps.newHashMap();
 
     public PushDownAggregateCollector(TaskContext taskContext) {
         this.taskContext = taskContext;
@@ -359,57 +357,6 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregateCon
         process(optExpression.inputAt(0), AggregateContext.EMPTY);
         return null;
     }
-
-    /* @Todo: CTE push down need right column prune
-    @Override
-    public Void visitLogicalCTEProduce(OptExpression optExpression, AggregateContext context) {
-        LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) optExpression.getOp();
-
-        List<AggregateContext> contexts = cteRewriteContexts.getOrDefault(produce.getCteId(), Collections.emptyList());
-        int consumeNum = optimizerContext.getCteContext().getCTEConsumeNum(produce.getCteId());
-
-        if (contexts.size() != consumeNum || contexts.stream().anyMatch(AggregateContext::isEmpty)) {
-            return visit(optExpression, context);
-        }
-
-        for (AggregateContext childContext : contexts) {
-            visitChild(optExpression, childContext);
-        }
-
-        // must all push down
-        if (!contexts.stream().allMatch(c -> allRewriteContext.containsKey(c.origAggregator))) {
-            contexts.forEach(c -> allRewriteContext.remove(c.origAggregator));
-        }
-        return null;
-    }
-
-    @Override
-    public Void visitLogicalCTEConsume(OptExpression optExpression, AggregateContext context) {
-        if (isInvalid(optExpression, context)) {
-            return visit(optExpression, context);
-        }
-
-        // derive children's aggregation
-        visit(optExpression, AggregateContext.EMPTY);
-
-        // add cte produce aggregate context
-        LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) optExpression.getOp();
-        consume.getPredicate().getUsedColumns().getStream().mapToObj(factory::getColumnRef)
-                .forEach(v -> context.groupBys.put(v, v));
-
-        ReplaceColumnRefRewriter rewriter =
-                new ReplaceColumnRefRewriter(Maps.newHashMap(consume.getCteOutputColumnRefMap()));
-
-        context.aggregations.replaceAll((k, v) -> (CallOperator) rewriter.rewrite(v));
-        context.groupBys.replaceAll((k, v) -> rewriter.rewrite(v));
-        context.pushPaths.add(0);
-
-        List<AggregateContext> list = cteRewriteContexts.getOrDefault(consume.getCteId(), Lists.newArrayList());
-        list.add(context);
-        cteRewriteContexts.put(consume.getCteId(), list);
-        return null;
-    }
-    */
 
     @Override
     public Void visitLogicalTableScan(OptExpression optExpression, AggregateContext context) {
