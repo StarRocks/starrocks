@@ -1,12 +1,14 @@
 # curtime,current_time
 
-## Syntax
-
-`TIME CURTIME()`
-
 ## Description
 
-Obtain the current time and return in TIME type.
+Obtains the current time and returns a vlue of the TIME type.
+
+## Syntax
+
+```sql
+TIME CURTIME()`
+```
 
 ## Examples
 
