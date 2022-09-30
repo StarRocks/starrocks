@@ -978,20 +978,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     // PrivPredicate.LOAD on the given tables. The implementation is similar with that
     // of stream load, and you can refer to RestBaseAction#execute and LoadAction#executeWithoutPassword
     // to know more about the related part.
-    static TStatus checkPasswordAndPrivilege(TAuthenticateParams authParams) {
+    static TStatus checkPasswordAndLoadPrivilege(TAuthenticateParams authParams) {
         if (authParams == null) {
             LOG.debug("received null TAuthenticateParams");
             return new TStatus(TStatusCode.OK);
         }
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Receive parameter {}", authParams);
-        }
+        LOG.debug("Receive parameter {}", authParams);
         if (!Config.enable_starrocks_external_table_auth_check) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("enable_starrocks_external_table_auth_check is disabled, " +
-                        "and skip to check authorization and privilege for {}", authParams);
-            }
+            LOG.debug("enable_starrocks_external_table_auth_check is disabled, " +
+                    "and skip to check authorization and privilege for {}", authParams);
             return new TStatus(TStatusCode.OK);
         }
 
@@ -1019,7 +1015,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     authParams.getUser(), authParams.getHost(), authParams.getDb_name(), authParams.getTable_names(), e);
 
             TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
-            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            status.setError_msgs(Lists.newArrayList(e.getMessage(),
+                    "Set the configuration 'enable_starrocks_external_table_auth_check' to 'false' on the target cluster" +
+                            " if you don't want to check the authorization and LOAD privilege."));
             return status;
         }
     }
@@ -1031,7 +1029,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {
-        TStatus status = checkPasswordAndPrivilege(request.getAuth_info());
+        TStatus status = checkPasswordAndLoadPrivilege(request.getAuth_info());
         if (status.getStatus_code() != TStatusCode.OK) {
             TBeginRemoteTxnResponse response = new TBeginRemoteTxnResponse();
             response.setStatus(status);
