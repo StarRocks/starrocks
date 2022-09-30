@@ -699,6 +699,8 @@ public:
             uint64_t hash = FixedKeyHash<KeySize>()(key);
             if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); !inserted) {
                 it->second = value;
+            } else {
+                _overlap_size += 1;
             }
         }
         return Status::OK();
@@ -1014,6 +1016,8 @@ public:
             uint64_t hash = StringHash()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 _total_kv_pairs_usage += composite_key.size();
+                _overlap_kv_pairs_usage += composite_key.size();
+                _overlap_size += 1;
             } else {
                 // TODO: find a way to modify iterator directly, currently just erase then re-insert
                 _set.erase(it);
@@ -1917,7 +1921,7 @@ size_t ShardByLengthMutableIndex::capacity() {
 }
 
 size_t ShardByLengthMutableIndex::memory_usage() {
-    return std::accumulate(_shards.begin(), _shards.end(), (size_t)0,
+    return std::accumulate(_shards.begin(), _shards.end(), 0UL,
                            [](size_t s, const auto& e) { return s + e->memory_usage(); });
 }
 
