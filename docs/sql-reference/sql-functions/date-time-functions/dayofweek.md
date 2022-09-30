@@ -1,18 +1,18 @@
 # dayofweek
 
-## description
+## Description
 
-### Syntax
+Returns the weekday index for a given date. For example, the index for Monday is 1, for Tuesday is 2, for Saturday is 7.
+
+The `date` parameter must be of the DATE or DATETIME type, or a valid expression that can be cast into a DATE or DATETIME value.
+
+## Syntax
 
 ```Haskell
 INT dayofweek(DATETIME date)
 ```
 
-DAYOFWEEK function returns the weekday index for a given date. (e.g. Monday: 1, Tuesday: 2, Saturday: 7)
-
-The parameter is Date or Datetime type. It can also be casted as numbers in Date or Datetime type.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select dayofweek('2019-06-25');
