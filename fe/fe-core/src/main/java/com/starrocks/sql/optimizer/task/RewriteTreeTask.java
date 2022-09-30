@@ -74,6 +74,7 @@ public class RewriteTreeTask extends OptimizerTask {
             deriveLogicalProperty(root);
         }
 
+        // prune cte column depend on prune right child first
         for (int i = root.getInputs().size() - 1; i >= 0; i--) {
             rewrite(root, i, root.getInputs().get(i));
         }
