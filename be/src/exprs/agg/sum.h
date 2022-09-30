@@ -146,7 +146,9 @@ public:
             values[cnt] = this->data(agg_states[i] + state_offset).sum;
             cnt += !selection[i];
         }
-        CHECK(to->append_numbers(values, cnt * sizeof(ResultType)));
+        if (cnt) {
+            CHECK(to->append_numbers(values, cnt * sizeof(ResultType)));
+        }
     }
 
     std::string get_name() const override { return "sum"; }

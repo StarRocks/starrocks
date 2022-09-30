@@ -119,7 +119,9 @@ public:
             values[cnt] = this->data(agg_states[i] + state_offset).count;
             cnt += !selection[i];
         }
-        CHECK(to->append_numbers(values, cnt * sizeof(int64_t)));
+        if (cnt) {
+            CHECK(to->append_numbers(values, cnt * sizeof(int64_t)));
+        }
     }
 
     std::string get_name() const override { return "count"; }
