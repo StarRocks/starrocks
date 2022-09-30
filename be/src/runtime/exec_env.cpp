@@ -404,7 +404,6 @@ int64_t ExecEnv::get_storage_page_cache_size() {
 }
 
 int64_t ExecEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
-    int64_t new_cache_limit = 0;
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
                      << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
@@ -412,11 +411,11 @@ int64_t ExecEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
     if (!config::disable_storage_page_cache) {
         if (storage_cache_limit < kcacheMinSize) {
             LOG(WARNING) << "Storage cache limit is too small, use default size.";
-            new_cache_limit = kcacheMinSize;
+            storage_cache_limit = kcacheMinSize;
         }
-        LOG(INFO) << "Set storage page cache size " << new_cache_limit;
+        LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
     }
-    return new_cache_limit;
+    return storage_cache_limit;
 }
 
 Status ExecEnv::_init_storage_page_cache() {

@@ -210,10 +210,14 @@ Status StorageEngine::start_bg_threads() {
     return Status::OK();
 }
 
-void evict_pagecache(StoragePageCache* cache, int64_t bytes_to_dec) {
+void evict_pagecache(StoragePageCache* cache, int64_t bytes_to_dec, std::atomic<bool>& stoped) {
     if (bytes_to_dec > 0) {
         int64_t bytes = bytes_to_dec;
         while (bytes >= GCBYTES_ONE_STEP) {
+            // Evicting 1GB of data takes about 1 second, check if process have been canceled.
+            if (UNLIKELY(stoped)) {
+                return;
+            }
             cache->adjust_capacity(-GCBYTES_ONE_STEP, kcacheMinSize);
             bytes -= GCBYTES_ONE_STEP;
         }
@@ -250,10 +254,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
                        memory_urgent_level <= 100))) {
             LOG(WARNING) << "memory water level config is illegal: memory_urgent_level=" << memory_urgent_level
                          << " memory_high_level=" << memory_high_level;
-            memory_urgent_level = 85;
-            memory_high_level = 75;
-            LOG(INFO) << "force reset memory water level. "
-                      << "memory_urgent_level=" << memory_urgent_level << ", memory_high_level=" << memory_high_level;
+            continue;
         }
 
         int64_t memory_urgent = memtracker->limit() * memory_urgent_level / 100;
@@ -263,21 +264,21 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
             // Memory usage exceeds memory_urgent_level, reduce size immediately.
             cache->adjust_capacity(-delta_urgent, kcacheMinSize);
             size_t bytes_to_dec = dec_advisor.bytes_should_gc(MonoTime::Now(), memory_urgent - memory_high);
-            evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec));
+            evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec), _bg_worker_stopped);
             continue;
         }
 
         int64_t delta_high = memtracker->consumption() - memory_high;
         if (delta_high > 0) {
             size_t bytes_to_dec = dec_advisor.bytes_should_gc(MonoTime::Now(), delta_high);
-            evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec));
+            evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec), _bg_worker_stopped);
         } else {
             int64_t max_cache_size = std::max(ExecEnv::GetInstance()->get_storage_page_cache_size(), kcacheMinSize);
             int64_t cur_cache_size = cache->get_capacity();
             if (cur_cache_size >= max_cache_size) {
                 continue;
             }
-            int64_t delta_cache = max_cache_size - cur_cache_size;
+            int64_t delta_cache = std::min(max_cache_size - cur_cache_size, std::abs(delta_high));
             size_t bytes_to_inc = inc_advisor.bytes_should_gc(MonoTime::Now(), delta_cache);
             if (bytes_to_inc > 0) {
                 cache->adjust_capacity(bytes_to_inc);
