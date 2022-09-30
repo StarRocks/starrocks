@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "librdkafka/rdkafka.h"
+#include "pulsar/Client.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "simdjson.h"
@@ -59,5 +60,7 @@ public:
         return append(std::move(buf));
     }
 };
+
+using PulsaConsumerPipe = KafkaConsumerPipe;
 
 } // end namespace starrocks

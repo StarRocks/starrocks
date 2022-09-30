@@ -95,7 +95,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * This function is suitable for streaming load job which loading data continuously
  * The properties include stream load properties and job properties.
  * The desireTaskConcurrentNum means that user expect the number of concurrent stream load
- * The routine load job support different streaming medium such as KAFKA
+ * The routine load job support different streaming medium such as KAFKA and Pulsar
  */
 public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback implements Writable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadJob.class);
@@ -160,7 +160,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected LoadDataSourceType dataSourceType;
     // max number of error data in max batch rows * 10
     // maxErrorNum / (maxBatchRows * 10) = max error rate of routine load job
-    // if current error rate is more then max error rate, the job will be paused
+    // if current error rate is more than max error rate, the job will be paused
     protected long maxErrorNum = DEFAULT_MAX_ERROR_NUM; // optional
     // include strict mode
     protected Map<String, String> jobProperties = Maps.newHashMap();
@@ -877,8 +877,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             long timeToExecuteMs;
             RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment =
                     (RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment();
-            // isProgressKeepUp returns false means there is too much data in kafka stream,
-            // we set timeToExecuteMs to now, so that data not accumulated in kafka
+            // isProgressKeepUp returns false means there is too much data in kafka/pulsar stream,
+            // we set timeToExecuteMs to now, so that data not accumulated in kafka/pulsar
             if (!routineLoadTaskInfo.isProgressKeepUp(rlTaskTxnCommitAttachment.getProgress())) {
                 timeToExecuteMs = System.currentTimeMillis();
             } else {
@@ -1374,6 +1374,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         LoadDataSourceType type = LoadDataSourceType.valueOf(Text.readString(in));
         if (type == LoadDataSourceType.KAFKA) {
             job = new KafkaRoutineLoadJob();
+        } else if (type == LoadDataSourceType.PULSAR) {
+            job = new PulsarRoutineLoadJob();
         } else {
             throw new IOException("Unknown load data source type: " + type.name());
         }
@@ -1453,6 +1455,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         switch (dataSourceType) {
             case KAFKA: {
                 progress = new KafkaProgress();
+                progress.readFields(in);
+                break;
+            }
+            case PULSAR: {
+                progress = new PulsarProgress();
                 progress.readFields(in);
                 break;
             }
