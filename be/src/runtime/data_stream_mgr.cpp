@@ -24,8 +24,12 @@
 #include <iostream>
 #include <utility>
 
+<<<<<<< HEAD
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/types.pb.h" // PUniqueId
+=======
+#include "runtime/current_thread.h"
+>>>>>>> 0c81be87a ([Enhancement] dump fragment instance id when be crash in DataStreamRecvr (#11866))
 #include "runtime/data_stream_recvr.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
@@ -138,6 +142,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     TUniqueId t_finst_id;
     t_finst_id.hi = finst_id.hi();
     t_finst_id.lo = finst_id.lo();
+    SCOPED_SET_TRACE_INFO({}, {}, t_finst_id);
     std::shared_ptr<DataStreamRecvr> recvr = find_recvr(t_finst_id, request.node_id());
     if (recvr == nullptr) {
         // The receiver may remove itself from the receiver map via deregister_recvr()
