@@ -282,7 +282,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
     }
 
     /*
-     * The balance logic is as follow:
+     * The balance logic is as follows:
      *
      * All backends: A,B,C,D,E,F,G,H,I,J
      *
@@ -342,8 +342,8 @@ public class ColocateTableBalancer extends LeaderDaemon {
             // update backends and hosts at each round
             backendsPerBucketSeq = Lists.partition(flatBackendsPerBucketSeq, replicationNum);
             List<List<String>> hostsPerBucketSeq = getHostsPerBucketSeq(backendsPerBucketSeq, infoService);
-            Preconditions
-                    .checkState(hostsPerBucketSeq != null && backendsPerBucketSeq.size() == hostsPerBucketSeq.size());
+            Preconditions.checkState(hostsPerBucketSeq != null &&
+                    backendsPerBucketSeq.size() == hostsPerBucketSeq.size());
 
             long srcBeId = -1;
             List<Integer> srcBeSeqIndexes = null;
@@ -357,30 +357,38 @@ public class ColocateTableBalancer extends LeaderDaemon {
                     break;
                 }
             }
-            // sort backends with replica num in desc order
+
+            // Sort backends with replica num in desc order, the list contains only all the *available* backends.
             List<Map.Entry<Long, Long>> backendWithReplicaNum =
                     getSortedBackendReplicaNumPairs(availableBeIds, unavailableBeIds, statistic,
                             flatBackendsPerBucketSeq);
-            if (srcBeSeqIndexes == null || srcBeSeqIndexes.size() <= 0) {
-                // there is only one available backend and no unavailable bucketId to relocate, end the outer loop
-                if (backendWithReplicaNum.size() <= 1) {
-                    break;
-                }
-
-                // there is no unavailable bucketId to relocate, choose max bucketId num be as src be
-                srcBeId = backendWithReplicaNum.get(0).getKey();
-                srcBeSeqIndexes = getBeSeqIndexes(flatBackendsPerBucketSeq, srcBeId);
-            } else if (backendWithReplicaNum.size() <= 0) {
-                // there is unavailable bucketId to relocate, but no available backend, end the outer loop
+            Set<Long> decommissionedBackends = getDecommissionedBackends(infoService, colocateIndex, groupId);
+            if (backendWithReplicaNum.isEmpty() ||
+                    (backendWithReplicaNum.size() == 1 && decommissionedBackends.isEmpty())) {
+                // There is not enough replicas for us to do relocation or balance, because in this case we
+                // can not choose a valid backend to migrate replica to, end the outer loop.
                 break;
             }
 
             int leftBound;
-            if (hasUnavailableBe) {
-                leftBound = -1;
-            } else {
+            if (!hasUnavailableBe || (replicationNum == 1 && decommissionedBackends.isEmpty())) {
+                // There are two cases:
+                // 1. there is no unavailable bucketId to relocate
+                // 2. there is unavailable(only dead) bucketId to relocate, but the number of replica is one, we can do
+                //    nothing but wait for the dead BEs to come alive ( for decommissioned backends, they are alive,
+                //    and we intend to migrate replicas from them, so in this case we
+                //    should do relocation ), in this case we shouldn't change the bucket
+                //    sequence which will cause a lot of wasted colocate balancing work and further more make the
+                //    colocate group unstable for longer time, but we can still do the balance work.
+                //
+                // In both cases, we change the src be to which that have the most replicas.
+                srcBeId = backendWithReplicaNum.get(0).getKey();
+                srcBeSeqIndexes = getBeSeqIndexes(flatBackendsPerBucketSeq, srcBeId);
                 leftBound = 0;
+            } else {
+                leftBound = -1;
             }
+
             int j = backendWithReplicaNum.size() - 1;
             boolean isThisRoundChanged = false;
             INNER:
@@ -388,7 +396,9 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 // we try to use a low backend to replace the src backend.
                 // if replace failed(eg: both backends are on same host), select next low backend and try(j--)
                 Map.Entry<Long, Long> lowBackend = backendWithReplicaNum.get(j);
-                if ((!hasUnavailableBe) && (srcBeSeqIndexes.size() - lowBackend.getValue()) <= 1) {
+                // leftBound == 0 indicates that we don't need to consider the unavailable backends and only do
+                // balance work.
+                if (leftBound == 0 && (srcBeSeqIndexes.size() - lowBackend.getValue()) <= 1) {
                     // balanced
                     break OUT;
                 }
@@ -410,7 +420,9 @@ public class ColocateTableBalancer extends LeaderDaemon {
                     if (!backendsSet.contains(destBeId) && !hostsSet.contains(destBe.getHost())) {
                         Preconditions.checkState(backendsSet.contains(srcBeId), srcBeId);
                         flatBackendsPerBucketSeq.set(seqIndex, destBeId);
-                        LOG.info("replace backend {} with backend {} in colocate group {}", srcBeId, destBeId, groupId);
+                        LOG.info("replace backend {} with backend {} in colocate group {}, src be seq index: {}" +
+                                        ", bucket index: {}, original backend list: {}",
+                                srcBeId, destBeId, groupId, seqIndex, bucketIndex, backendsSet);
                         // just replace one backend at a time, src and dest BE id should be recalculated because
                         // flatBackendsPerBucketSeq is changed.
                         isChanged = true;
@@ -528,6 +540,19 @@ public class ColocateTableBalancer extends LeaderDaemon {
             }
         }
         return unavailableBeIds;
+    }
+
+    private Set<Long> getDecommissionedBackends(SystemInfoService infoService, ColocateTableIndex colocateIndex,
+                                                GroupId groupId) {
+        Set<Long> backends = colocateIndex.getBackendsByGroup(groupId);
+        Set<Long> decommissionedBackends = Sets.newHashSet();
+        for (Long backendId : backends) {
+            Backend be = infoService.getBackend(backendId);
+            if (be != null && be.isDecommissioned() && be.isAlive()) {
+                decommissionedBackends.add(backendId);
+            }
+        }
+        return decommissionedBackends;
     }
 
     private List<Long> getAvailableBeIds(SystemInfoService infoService) {
