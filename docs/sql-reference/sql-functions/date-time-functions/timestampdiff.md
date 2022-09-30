@@ -1,21 +1,22 @@
 # timestampdiff
 
-## description
+## Description
 
-### Syntax
-
-`INT TIMESTAMPDIFF(unit,DATETIME datetime_expr1, DATETIME datetime_expr2)`
-
-Timestampdiff returns the interval from datetime_expr2 to datetime_expr1. Here, datetime_expr1 and datetime_expr2 should be date or datetime expressions.
+Returns the interval from `datetime_expr2` to `datetime_expr1`. `datetime_expr1` and `datetime_expr2` must be of the DATE or DATETIME type.
 
 The unit for the integer result and the interval should be one of the following:
 
 SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR.
 
-## example
+## Syntax
+
+```sql
+INT TIMESTAMPDIFF(unit,DATETIME datetime_expr1, DATETIME datetime_expr2)`
+```
+
+## Examples
 
 ```plain text
-
 MySQL> SELECT TIMESTAMPDIFF(MONTH,'2003-02-01','2003-05-01');
 +--------------------------------------------------------------------+
 | timestampdiff(MONTH, '2003-02-01 00:00:00', '2003-05-01 00:00:00') |
