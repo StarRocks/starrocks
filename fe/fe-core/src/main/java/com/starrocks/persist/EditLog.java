@@ -62,6 +62,7 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.plugin.PluginInfo;
+import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
@@ -921,6 +922,18 @@ public class EditLog {
                     globalStateMgr.getAuthenticationManager().replayDropUser(userIdentity);
                     break;
                 }
+                case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
+                    RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
+                    globalStateMgr.getPrivilegeManager().replayUpdateRolePrivilegeCollection(
+                            info.getRoleId(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
+                    break;
+                }
+                case OperationType.OP_DROP_ROLE_V2: {
+                    String idString = journal.getData().toString();
+                    long roleId = Long.parseLong(idString);
+                    globalStateMgr.getPrivilegeManager().replayDropRole(roleId);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1576,5 +1589,19 @@ public class EditLog {
         UserPrivilegeCollectionInfo info = new UserPrivilegeCollectionInfo(
                 userIdentity, privilegeCollection, pluginId, pluginVersion);
         logEdit(OperationType.OP_UPDATE_USER_PRIVILEGE_V2, info);
+    }
+
+    public void logUpdateRolePrivilege(
+            long roleId,
+            RolePrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
+                roleId, privilegeCollection, pluginId, pluginVersion);
+        logEdit(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2, info);
+    }
+
+    public void logDropRole(long roleId) {
+        logEdit(OperationType.OP_DROP_ROLE_V2, new Text(Long.toString(roleId)));
     }
 }

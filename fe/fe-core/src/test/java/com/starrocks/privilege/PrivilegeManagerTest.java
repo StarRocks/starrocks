@@ -4,6 +4,7 @@ package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CreateUserStmt;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.Database;
@@ -12,6 +13,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
@@ -259,5 +261,38 @@ public class PrivilegeManagerTest {
         Assert.assertFalse(privilegeManager.hasType(rootCtx, "xxx"));
 
         UtFrameUtils.tearDownForPersisTest();
+    }
+
+    @Test
+    public void testRole() throws Exception {
+        String sql = "create role test_role";
+        ConnectContext ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        Assert.assertFalse(manager.checkRoleExists("test_role"));
+
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+        Assert.assertTrue(manager.checkRoleExists("test_role"));
+
+        // can't create twice
+        try {
+            DDLStmtExecutor.execute(stmt, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
+
+        sql = "drop role test_role";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+        Assert.assertFalse(manager.checkRoleExists("test_role"));
+
+        // can't drop twice
+        try {
+            DDLStmtExecutor.execute(stmt, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
     }
 }

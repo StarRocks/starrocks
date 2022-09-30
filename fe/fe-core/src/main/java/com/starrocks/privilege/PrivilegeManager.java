@@ -4,6 +4,8 @@ package com.starrocks.privilege;
 
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.CreateRoleStmt;
+import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
@@ -16,6 +18,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -40,6 +43,10 @@ public class PrivilegeManager {
     @Expose(serialize = false)
     private final ReentrantReadWriteLock userLock = new ReentrantReadWriteLock();
 
+    private Map<Long, RolePrivilegeCollection> roleIdToPrivilegeCollection = new HashMap<>();
+    @SerializedName(value = "r")
+    private long nextRoleId = 0;
+    private final ReentrantReadWriteLock roleLock = new ReentrantReadWriteLock();
     public PrivilegeManager(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
         this.globalStateMgr = globalStateMgr;
         if (provider == null) {
@@ -78,6 +85,22 @@ public class PrivilegeManager {
 
     private void userWriteUnlock() {
         userLock.writeLock().unlock();
+    }
+
+    private void roleReadLock() {
+        roleLock.readLock().lock();
+    }
+
+    private void roleReadUnlock() {
+        roleLock.readLock().unlock();
+    }
+
+    private void roleWriteLock() {
+        roleLock.writeLock().lock();
+    }
+
+    private void roleWriteUnlock() {
+        roleLock.writeLock().unlock();
     }
 
     public void grant(GrantPrivilegeStmt stmt) throws DdlException {
@@ -278,5 +301,81 @@ public class PrivilegeManager {
             throw new PrivilegeException("cannot find type " + typeName + " in " + typeStringToId.keySet());
         }
         return typeStringToId.get(typeName);
+    }
+
+    public void createRole(CreateRoleStmt stmt) throws DdlException {
+        roleWriteLock();
+        try {
+            String roleName = stmt.getQualifiedRole();
+            Long roleId = getRoleIdByNameNoLock(roleName);
+            if (roleId != null) {
+                throw new DdlException(String.format("Role %s already exists! id = %d", roleName, roleId));
+            }
+            RolePrivilegeCollection collection = new RolePrivilegeCollection(roleName);
+            roleIdToPrivilegeCollection.put(nextRoleId, collection);
+            globalStateMgr.getEditLog().logUpdateRolePrivilege(
+                    nextRoleId, collection, provider.getPluginId(), provider.getPluginVersion());
+            nextRoleId ++;
+        } finally {
+            roleWriteUnlock();
+        }
+    }
+
+    public void replayUpdateRolePrivilegeCollection(
+            long roleId,
+            RolePrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) throws PrivilegeException {
+        roleWriteLock();
+        try {
+            provider.upgradePrivilegeCollection(privilegeCollection, pluginId, pluginVersion);
+            roleIdToPrivilegeCollection.put(roleId, privilegeCollection);
+        } finally {
+            roleWriteUnlock();
+        }
+    }
+
+    public void dropRole(DropRoleStmt stmt) throws DdlException {
+        roleWriteLock();
+        try {
+            String roleName = stmt.getQualifiedRole();
+            Long roleId = getRoleIdByNameNoLock(roleName);
+            if (roleId == null) {
+                throw new DdlException(String.format("Role %s doesn't exists! id = %d", roleName, roleId));
+            }
+            roleIdToPrivilegeCollection.remove(roleId);
+            globalStateMgr.getEditLog().logDropRole(roleId);
+        } finally {
+            roleWriteUnlock();
+        }
+    }
+
+    public void replayDropRole(long roleId) {
+        roleWriteLock();
+        try {
+            roleIdToPrivilegeCollection.remove(roleId);
+        } finally {
+            roleWriteUnlock();
+        }
+    }
+
+    public boolean checkRoleExists(String name) {
+        roleReadLock();
+        try {
+            return getRoleIdByNameNoLock(name) != null;
+        } finally {
+            roleReadUnlock();
+        }
+    }
+
+    protected Long getRoleIdByNameNoLock(String name) {
+        Iterator<Map.Entry<Long, RolePrivilegeCollection>> iterator = roleIdToPrivilegeCollection.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<Long, RolePrivilegeCollection> entry = iterator.next();
+            if (entry.getValue().getName().equals(name)) {
+                return entry.getKey();
+            }
+        }
+        return null;
     }
 }
