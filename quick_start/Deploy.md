@@ -43,7 +43,7 @@ echo 1 | sudo tee /proc/sys/vm/overcommit_memory
 
 ### 下载并解压安装包
 
-[下载](https://www.starrocks.com/zh-CN/download) StarRocks 并解压二进制安装包。
+[下载](https://www.starrocks.com/zh-CN/download/community) StarRocks 并解压二进制安装包。
 
 ```bash
 tar -xzvf StarRocks-x.x.x.tar.gz
