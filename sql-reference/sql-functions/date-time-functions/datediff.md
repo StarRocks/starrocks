@@ -10,19 +10,21 @@
 
 ## 语法
 
-`DATETIME DATEDIFF(DATETIME expr1,DATETIME expr2)`
+```SQL
+INT DATEDIFF(DATETIME expr1,DATETIME expr2)
+```
 
 ## 示例
 
 ```Plain Text
-MySQL > select datediff(CAST('2007-12-31 23:59:59' AS DATETIME), CAST('2007-12-30' AS DATETIME));
+select datediff(CAST('2007-12-31 23:59:59' AS DATETIME), CAST('2007-12-30' AS DATETIME));
 +-----------------------------------------------------------------------------------+
 | datediff(CAST('2007-12-31 23:59:59' AS DATETIME), CAST('2007-12-30' AS DATETIME)) |
 +-----------------------------------------------------------------------------------+
 |                                                                                 1 |
 +-----------------------------------------------------------------------------------+
 
-MySQL > select datediff(CAST('2010-11-30 23:59:59' AS DATETIME), CAST('2010-12-31' AS DATETIME));
+select datediff(CAST('2010-11-30 23:59:59' AS DATETIME), CAST('2010-12-31' AS DATETIME));
 +-----------------------------------------------------------------------------------+
 | datediff(CAST('2010-11-30 23:59:59' AS DATETIME), CAST('2010-12-31' AS DATETIME)) |
 +-----------------------------------------------------------------------------------+

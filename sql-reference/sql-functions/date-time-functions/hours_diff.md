@@ -7,7 +7,7 @@
 ## 语法
 
 ```Haskell
-hours_diff(expr1,expr2);
+BIGINT hours_diff(DATETIME expr1,DATETIME expr2);
 ```
 
 ## 参数说明
