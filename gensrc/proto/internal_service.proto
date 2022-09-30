@@ -307,11 +307,11 @@ message PKafkaMetaProxyRequest {
 message PKafkaOffsetProxyRequest {
     optional PKafkaLoadInfo kafka_info = 1;
     repeated int32 partition_ids = 2;
-}
+};
 
 message PKafkaOffsetBatchProxyRequest {
     repeated PKafkaOffsetProxyRequest requests = 1;
-}
+};
 
 message PProxyRequest {
     optional PKafkaMetaProxyRequest kafka_meta_request = 1;
@@ -342,6 +342,53 @@ message PProxyResult {
     optional PKafkaOffsetBatchProxyResult kafka_offset_batch_result = 102;
 };
 
+message PPulsarLoadInfo {
+    required string service_url = 1;
+    required string topic = 2;
+    required string subscription = 3;
+    repeated PStringPair properties = 4;
+};
+
+message PPulsarMetaProxyRequest {
+    optional PPulsarLoadInfo pulsar_info = 1;
+};
+
+message PPulsarBacklogProxyRequest {
+    optional PPulsarLoadInfo pulsar_info = 1;
+    repeated string partitions = 2;
+};
+
+message PPulsarBacklogBatchProxyRequest {
+    repeated PPulsarBacklogProxyRequest requests = 1;
+};
+
+message PPulsarProxyRequest {
+    optional PPulsarMetaProxyRequest pulsar_meta_request = 1;
+    optional PPulsarBacklogProxyRequest pulsar_backlog_request = 101;
+    optional PPulsarBacklogBatchProxyRequest pulsar_backlog_batch_request = 102;
+    optional int64 timeout = 103;
+};
+
+message PPulsarMetaProxyResult {
+    repeated string partitions = 1;
+};
+
+message PPulsarBacklogProxyResult {
+    repeated string partitions = 1;
+    repeated int64 backlog_nums = 2;
+}
+
+message PPulsarBacklogBatchProxyResult {
+    repeated PPulsarBacklogProxyResult results = 1;
+}
+
+message PPulsarProxyResult {
+    required StatusPB status = 1;
+    optional PPulsarMetaProxyResult pulsar_meta_result = 2;
+    optional PPulsarBacklogProxyResult pulsar_backlog_result = 101;
+    optional PPulsarBacklogBatchProxyResult pulsar_backlog_batch_result = 102;
+};
+
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
 service PInternalService {
@@ -355,6 +402,7 @@ service PInternalService {
     rpc tablet_writer_cancel(PTabletWriterCancelRequest) returns (PTabletWriterCancelResult);
     rpc trigger_profile_report(PTriggerProfileReportRequest) returns (PTriggerProfileReportResult);
     rpc get_info(PProxyRequest) returns (PProxyResult); 
+    rpc get_pulsar_info(PPulsarProxyRequest) returns (PPulsarProxyResult); 
 
     // Transmit vectorized data between backends.
     rpc transmit_chunk(PTransmitChunkParams) returns (PTransmitChunkResult);
