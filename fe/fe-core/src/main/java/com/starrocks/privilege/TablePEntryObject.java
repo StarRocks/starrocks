@@ -12,7 +12,7 @@ import java.util.Objects;
 
 public class TablePEntryObject extends PEntryObject {
     @SerializedName(value = "d")
-    private long databaseId;
+    protected long databaseId;
 
     public static TablePEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 2) {
@@ -29,7 +29,7 @@ public class TablePEntryObject extends PEntryObject {
         return new TablePEntryObject(database.getId(), table.getId());
     }
 
-    public TablePEntryObject(long databaseId, long tableId) {
+    protected TablePEntryObject(long databaseId, long tableId) {
         super(tableId);
         this.databaseId = databaseId;
     }
@@ -46,5 +46,14 @@ public class TablePEntryObject extends PEntryObject {
         }
         TablePEntryObject other = (TablePEntryObject) obj;
         return other.databaseId == databaseId && other.id == id;
+    }
+
+    @Override
+    public boolean validate(GlobalStateMgr globalStateMgr) {
+        Database db = globalStateMgr.getDbIncludeRecycleBin(this.databaseId);
+        if (db == null) {
+            return false;
+        }
+        return globalStateMgr.getTableIncludeRecycleBin(db, this.id) != null;
     }
 }

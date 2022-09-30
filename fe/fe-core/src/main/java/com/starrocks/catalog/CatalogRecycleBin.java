@@ -760,7 +760,11 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
                 }
             } // end for indices
         }
+    }
 
+    public void removeInvalidateReference() {
+        // privilege object can be invalidated after gc
+        GlobalStateMgr.getCurrentState().getPrivilegeManager().removeInvalidateObject();
     }
 
     @Override

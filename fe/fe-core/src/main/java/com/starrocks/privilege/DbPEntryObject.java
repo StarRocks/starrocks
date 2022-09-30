@@ -20,7 +20,7 @@ public class DbPEntryObject extends PEntryObject {
         return new DbPEntryObject(database.getId());
     }
 
-    public DbPEntryObject(long dbId) {
+    protected DbPEntryObject(long dbId) {
         super(dbId);
     }
 
@@ -36,5 +36,10 @@ public class DbPEntryObject extends PEntryObject {
         }
         DbPEntryObject other = (DbPEntryObject) obj;
         return other.id == id;
+    }
+
+    @Override
+    public boolean validate(GlobalStateMgr globalStateMgr) {
+        return globalStateMgr.getDbIncludeRecycleBin(this.id) != null;
     }
 }

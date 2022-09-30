@@ -3,11 +3,14 @@
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -168,5 +171,23 @@ public class PrivilegeCollection {
             }
         }
         return false;
+    }
+
+    public void removeInvalidateObject(GlobalStateMgr globalStateMgr) {
+        Iterator<Map.Entry<Short, List<PrivilegeEntry>>> listIter = typeToPrivilegeEntryList.entrySet().iterator();
+        while (listIter.hasNext()) {
+            List<PrivilegeEntry> list = listIter.next().getValue();
+            Iterator<PrivilegeEntry> entryIterator = list.iterator();
+            while (entryIterator.hasNext()) {
+                PrivilegeEntry entry = entryIterator.next();
+                if (! entry.object.validate(globalStateMgr)) {
+                    LOG.info("find invalidate object, will remove the entry now: {}", GsonUtils.GSON.toJson(entry));
+                    entryIterator.remove();
+                }
+            }
+            if (list.isEmpty()) {
+                listIter.remove();
+            }
+        }
     }
 }

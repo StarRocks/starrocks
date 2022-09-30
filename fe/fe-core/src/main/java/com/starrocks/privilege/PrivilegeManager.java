@@ -6,6 +6,7 @@ import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -16,6 +17,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -24,9 +26,9 @@ public class PrivilegeManager {
     private static final Logger LOG = LogManager.getLogger(PrivilegeManager.class);
 
     @SerializedName(value = "t")
-    private Map<String, Short> typeStringToId = new HashMap<>();
+    protected Map<String, Short> typeStringToId = new HashMap<>();
     @SerializedName(value = "a")
-    private Map<Short, Map<String, Action>> typeToActionMap = new HashMap<>();
+    protected Map<Short, Map<String, Action>> typeToActionMap = new HashMap<>();
 
     @Expose(serialize = false)
     protected AuthorizationProvider provider;
@@ -35,7 +37,7 @@ public class PrivilegeManager {
     private GlobalStateMgr globalStateMgr;
 
     @Expose(serialize = false)
-    private Map<UserIdentity, UserPrivilegeCollection> userToPrivilegeCollection = new HashMap<>();
+    protected Map<UserIdentity, UserPrivilegeCollection> userToPrivilegeCollection = new HashMap<>();
 
     @Expose(serialize = false)
     private final ReentrantReadWriteLock userLock = new ReentrantReadWriteLock();
@@ -291,5 +293,22 @@ public class PrivilegeManager {
 
     public PEntryObject analyzeObject(String typeName, List<String> objectTokenList) throws PrivilegeException {
         return this.provider.generateObject(typeName, objectTokenList, globalStateMgr);
+    }
+
+    public void removeInvalidateObject() {
+        Iterator<Map.Entry<UserIdentity, UserPrivilegeCollection>> mapIter =
+                userToPrivilegeCollection.entrySet().iterator();
+        while (mapIter.hasNext()) {
+            Map.Entry<UserIdentity, UserPrivilegeCollection> entry = mapIter.next();
+            UserIdentity user = entry.getKey();
+            UserPrivilegeCollection collection = entry.getValue();
+            if (! globalStateMgr.getAuthenticationManager().doesUserExist(user)) {
+                LOG.info("find invalidate user {}, will remove privilegeCollection now {}",
+                        entry, GsonUtils.GSON.toJson(collection));
+                mapIter.remove();
+            } else {
+                collection.removeInvalidateObject(globalStateMgr);
+            }
+        }
     }
 }
