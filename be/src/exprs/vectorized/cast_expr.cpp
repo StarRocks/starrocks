@@ -1031,6 +1031,8 @@ public:
             << ", expr=" << expr_debug_string << ")";
         return out.str();
     }
+
+    bool is_cast_expr() const override { return true; }
 };
 
 DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDate, date, time) {

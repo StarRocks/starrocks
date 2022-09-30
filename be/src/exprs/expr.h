@@ -110,6 +110,7 @@ public:
     bool is_nullable() const { return _is_nullable; }
 
     bool is_monotonic() const { return _is_monotonic; }
+    virtual bool is_cast_expr() const { return false; }
 
     // In most time, this field is passed from FE
     // Sometimes we want to construct expr on BE implicitly and we have knowledge about `monotonicity`
