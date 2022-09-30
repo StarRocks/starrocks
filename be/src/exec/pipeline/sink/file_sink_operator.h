@@ -6,7 +6,6 @@
 #include "exec/pipeline/operator.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/file_result_writer.h"
-#include "util/moodycamel/concurrentqueue.h"
 
 namespace starrocks {
 class BufferControlBlock;
