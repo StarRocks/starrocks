@@ -26,6 +26,13 @@
 // So other files should not include this file except bitmap_value.cpp.
 #include <cstdint>
 #include <optional>
+
+#include "roaring/array_util.h"
+#include "roaring/bitset_util.h"
+#include "roaring/containers/containers.h"
+#include "roaring/roaring.h"
+#include "roaring/roaring_array.h"
+
 namespace starrocks {
 
 // serialized bitmap := TypeCode(1), Payload
@@ -613,6 +620,117 @@ public:
             // forward buffer past the last Roaring Bitmap
             buf += read.getSizeInBytes(usev1);
             result.emplace(key, std::move(read));
+        }
+        return result;
+    }
+
+    static roaring_bitmap_t* roaring_bitmap_portable_deserialize_safe(const char* buf, size_t max_bytes,
+                                                                      bool* is_valid_ptr) {
+        roaring_bitmap_t* ans = (roaring_bitmap_t*)malloc(sizeof(roaring_bitmap_t));
+
+        if (ans == NULL) {
+            *is_valid_ptr = false;
+            fprintf(stderr, "failed alloc while reading.\n");
+            return NULL;
+        }
+
+        size_t bytesread;
+        bool is_ok = ra_portable_deserialize(&ans->high_low_container, buf, max_bytes, &bytesread);
+        if (is_ok) {
+            DCHECK_LE(bytesread, max_bytes);
+        }
+
+        roaring_bitmap_set_copy_on_write(ans, false);
+        if (!is_ok) {
+            free(ans);
+            *is_valid_ptr = false;
+            return NULL;
+        }
+        return ans;
+    }
+
+    static roaring_bitmap_t* roaring_bitmap_deserialize_safe(const char* buf, size_t max_bytes, bool* is_valid_ptr) {
+        if (!max_bytes) {
+            *is_valid_ptr = false;
+            return NULL;
+        }
+        const char* bufaschar = (const char*)buf;
+        if (*(const unsigned char*)buf == SERIALIZATION_ARRAY_UINT32) {
+            if (max_bytes < (1 + sizeof(uint32_t))) {
+                *is_valid_ptr = false;
+                return NULL;
+            }
+            max_bytes -= (1 + sizeof(uint32_t));
+
+            uint32_t card;
+            memcpy(&card, bufaschar + 1, sizeof(uint32_t));
+            const uint32_t* elems = (const uint32_t*)(bufaschar + 1 + sizeof(uint32_t));
+
+            if (max_bytes < (card * sizeof(uint32_t))) {
+                *is_valid_ptr = false;
+                return NULL;
+            }
+
+            return roaring_bitmap_of_ptr(card, elems);
+        } else if (bufaschar[0] == SERIALIZATION_CONTAINER) {
+            return roaring_bitmap_portable_deserialize_safe(bufaschar + 1, max_bytes - 1, is_valid_ptr);
+        } else {
+            *is_valid_ptr = false;
+            return (NULL);
+        }
+    }
+
+    static roaring_bitmap_t* read_roaring_manually(const char* buf, size_t max_bytes, bool* is_valid_ptr,
+                                                   bool portable) {
+        roaring_bitmap_t* r = portable ? roaring_bitmap_portable_deserialize_safe(buf, max_bytes, is_valid_ptr)
+                                       : roaring_bitmap_deserialize_safe(buf, max_bytes, is_valid_ptr);
+
+        return r;
+    }
+
+    static Roaring64Map read_safe(const char* buf, size_t max_bytes, bool* is_valid_ptr) {
+        Roaring64Map result;
+        if (max_bytes < 1) {
+            *is_valid_ptr = false;
+            return result;
+        }
+
+        bool usev1 = BitmapTypeCode::BITMAP32 == *buf || BitmapTypeCode::BITMAP64 == *buf;
+        bool is_bitmap32 = BitmapTypeCode::BITMAP32 == *buf || BitmapTypeCode::BITMAP32_SERIV2 == *buf;
+        if (is_bitmap32) {
+            roaring_bitmap_t* read = read_roaring_manually(buf + 1, max_bytes - 1, is_valid_ptr, usev1);
+            if (!(*is_valid_ptr)) {
+                return result;
+            }
+
+            result.emplace(0, std::move(Roaring(read)));
+            return result;
+        }
+
+        DCHECK(BitmapTypeCode::BITMAP64 == *buf || BitmapTypeCode::BITMAP64_SERIV2 == *buf);
+        buf++;
+        max_bytes--;
+
+        // get map size (varint64 took 1~10 bytes)
+        uint64_t map_size;
+        buf = reinterpret_cast<const char*>(decode_varint64_ptr(reinterpret_cast<const uint8_t*>(buf),
+                                                                reinterpret_cast<const uint8_t*>(buf + 10), &map_size));
+        DCHECK(buf != nullptr);
+        for (uint64_t lcv = 0; lcv < map_size; lcv++) {
+            // get map key
+            uint32_t key = decode_fixed32_le(reinterpret_cast<const uint8_t*>(buf));
+            buf += sizeof(uint32_t);
+            max_bytes -= sizeof(uint32_t);
+            // read map value Roaring
+            roaring_bitmap_t* read = read_roaring_manually(buf, max_bytes, is_valid_ptr, usev1);
+            if (!(*is_valid_ptr)) {
+                return result;
+            }
+            // forward buffer past the last Roaring Bitmap
+            Roaring roaring(read);
+            buf += roaring.getSizeInBytes(usev1);
+            max_bytes -= roaring.getSizeInBytes(usev1);
+            result.emplace(key, std::move(roaring));
         }
         return result;
     }

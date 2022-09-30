@@ -114,6 +114,7 @@ public:
     // Deserialize a bitmap value from `src`.
     // Return false if `src` begins with unknown type code, true otherwise.
     bool deserialize(const char* src);
+    bool deserialize(const char* src, size_t max_bytes);
 
     // TODO limit string size to avoid OOM
     std::string to_string() const;

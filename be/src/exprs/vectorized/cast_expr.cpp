@@ -23,6 +23,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
+#include "types/bitmap_value_detail.h"
 #include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
@@ -347,12 +348,57 @@ static ColumnPtr cast_from_string_to_hll_fn(ColumnPtr& column) {
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_HLL, cast_from_string_to_hll_fn);
 
+static bool check_valid_bimtap(const Slice& slice) {
+    const size_t size = slice.size;
+    if (!size) {
+        return false;
+    }
+
+    const char* src = slice.data;
+    if (*src < BitmapTypeCode::EMPTY || *src > BitmapTypeCode::BITMAP64_SERIV2) {
+        return false;
+        ;
+    } else {
+        switch (*src) {
+        case BitmapTypeCode::SINGLE32:
+            if (size < (1 + sizeof(uint32_t))) {
+                return false;
+            }
+            break;
+        case BitmapTypeCode::SINGLE64:
+            if (size < (1 + sizeof(uint64_t))) {
+                return false;
+            }
+            break;
+        case BitmapTypeCode::BITMAP32:
+        case BitmapTypeCode::BITMAP64:
+        case BitmapTypeCode::BITMAP32_SERIV2:
+        case BitmapTypeCode::BITMAP64_SERIV2:
+            break;
+        case BitmapTypeCode::SET: {
+            if (size < (1 + sizeof(uint32_t))) {
+                return false;
+            }
+
+            uint32_t set_size{};
+            memcpy(&set_size, src + 1, sizeof(uint32_t));
+
+            if (size < (1 + sizeof(uint32_t) + set_size * sizeof(uint64_t))) {
+                return false;
+            }
+            break;
+        }
+        default:
+            return false;
+        }
+        return true;
+    }
+}
+
 template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_bitmap_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<TYPE_OBJECT> builder(viewer.size());
-
-    std::vector<uint64_t> bits;
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
             builder.append_null();
@@ -360,17 +406,17 @@ static ColumnPtr cast_from_string_to_bitmap_fn(ColumnPtr& column) {
         }
 
         auto value = viewer.value(row);
-
-        if (!BitmapValue::split_as_uint64_t(value, &bits)) {
-            if constexpr (AllowThrowException) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_OBJECT, value.to_string());
-            }
+        if (!check_valid_bimtap(value)) {
             builder.append_null();
             continue;
         }
 
-        BitmapValue bitmap(bits);
-        builder.append(&bitmap);
+        BitmapValue bitmap;
+        if (bitmap.deserialize(value.data, value.size)) {
+            builder.append(&bitmap);
+        } else {
+            builder.append_null();
+        }
     }
 
     return builder.build(column->is_constant());
