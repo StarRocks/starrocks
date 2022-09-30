@@ -143,6 +143,10 @@ public class ResourceGroupMgr implements Writable {
     private String getUnqualifiedRole(ConnectContext ctx) {
         Preconditions.checkArgument(ctx != null);
         String roleName = null;
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            // TODO will support RBAC later
+            return null;
+        }
         String qualifiedRoleName = GlobalStateMgr.getCurrentState().getAuth()
                 .getRoleName(ctx.getCurrentUserIdentity());
         if (qualifiedRoleName != null) {
