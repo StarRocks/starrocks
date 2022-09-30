@@ -290,6 +290,7 @@ public class PrivilegeManagerTest {
 
     @Test
     public void testRole() throws Exception {
+        UtFrameUtils.setUpForPersistTest();
         String sql = "create role test_role";
         ConnectContext ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
@@ -304,7 +305,7 @@ public class PrivilegeManagerTest {
             DDLStmtExecutor.execute(stmt, ctx);
             Assert.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("Role test_role already exists! id ="));
         }
 
         sql = "drop role test_role";
@@ -317,7 +318,8 @@ public class PrivilegeManagerTest {
             DDLStmtExecutor.execute(stmt, ctx);
             Assert.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("Role test_role doesn't exist! id ="));
         }
+        UtFrameUtils.tearDownForPersisTest();
     }
 }

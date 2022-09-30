@@ -14,6 +14,7 @@ import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeNameFormat;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitor;
@@ -109,8 +110,9 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
-            String roleName = validRoleName(stmt.getQualifiedRole(), false, "Can not create role");
-            if (!session.getGlobalStateMgr().getPrivilegeManager().checkRoleExists(roleName)) {
+            String roleName = validRoleName(stmt.getQualifiedRole(), false, "Can not drop role");
+            PrivilegeManager privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
+            if (!privilegeManager.checkRoleExists(roleName)) {
                 throw new SemanticException("Can not drop role %s: cannot find role!", roleName);
             }
             stmt.setQualifiedRole(roleName);

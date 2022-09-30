@@ -330,7 +330,7 @@ public class PrivilegeManager {
             roleIdToPrivilegeCollection.put(nextRoleId, collection);
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
                     nextRoleId, collection, provider.getPluginId(), provider.getPluginVersion());
-            nextRoleId ++;
+            nextRoleId++;
         } finally {
             roleWriteUnlock();
         }
@@ -356,7 +356,7 @@ public class PrivilegeManager {
             String roleName = stmt.getQualifiedRole();
             Long roleId = getRoleIdByNameNoLock(roleName);
             if (roleId == null) {
-                throw new DdlException(String.format("Role %s doesn't exists! id = %d", roleName, roleId));
+                throw new DdlException(String.format("Role %s doesn't exist! id = %d", roleName, roleId));
             }
             roleIdToPrivilegeCollection.remove(roleId);
             globalStateMgr.getEditLog().logDropRole(roleId);

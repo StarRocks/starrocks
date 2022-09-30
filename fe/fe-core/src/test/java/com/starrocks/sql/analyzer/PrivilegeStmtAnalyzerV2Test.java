@@ -135,6 +135,8 @@ public class PrivilegeStmtAnalyzerV2Test {
         String sql = "create role test_role";
         CreateRoleStmt createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals("test_role", createStmt.getQualifiedRole());
+        ctx.getGlobalStateMgr().getPrivilegeManager().createRole(createStmt);
+
 
         // bad name
         sql = "create role ___";
@@ -142,19 +144,27 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("invalid role format"));
         }
 
         sql = "drop role test_role";
         DropRoleStmt dropStmt = (DropRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Assert.assertEquals("test_role", createStmt.getQualifiedRole());
+        Assert.assertEquals("test_role", dropStmt.getQualifiedRole());
 
         sql = "drop role ___";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("invalid role format"));
         }
-      }
+
+        sql = "drop role badrole";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Can not drop role bad_role: cannot find role"));
+        }
+    }
 }
