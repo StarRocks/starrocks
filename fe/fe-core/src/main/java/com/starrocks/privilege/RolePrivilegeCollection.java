@@ -2,16 +2,11 @@
 
 package com.starrocks.privilege;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class RolePrivilegeCollection extends PrivilegeCollection {
     // the name of the role
     private String name;
     // see RoleFlags
-    private long flag = 0;
-    // role parents
-    private List<Long> parentRoleIds = new ArrayList<>();
+    private long mask = 0;
 
     enum RoleFlags {
         MUTABLE(1),
@@ -22,7 +17,7 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         RoleFlags(int m) {
             this.mask = 1L << m;
         }
-    };
+    }
 
     public RolePrivilegeCollection(String name) {
         this.name = name;
@@ -31,7 +26,7 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
     public RolePrivilegeCollection(String name, RoleFlags... flags) {
         this.name = name;
         for (RoleFlags flag : flags) {
-            this.flag |= flag.mask;
+            this.mask |= flag.mask;
         }
     }
 
@@ -51,11 +46,6 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         return name;
     }
     private boolean checkFlag(RoleFlags flag) {
-        return (this.flag & flag.mask) != 0;
-    }
-
-    @Override
-    public void revoke(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant) {
-        super.revoke(type, actionSet, objects, isGrant);
+        return (this.mask & flag.mask) != 0;
     }
 }

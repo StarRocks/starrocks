@@ -22,12 +22,6 @@ public class RolePrivilegeCollectionTest {
         Assert.assertTrue(collection.isMutable());
         Assert.assertTrue(collection.isRemovable());
 
-        try {
-            collection.grant((short) 1, null, null, false);
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-        }
-
         collection = new RolePrivilegeCollection(
                 "admin",
                 RolePrivilegeCollection.RoleFlags.REMOVABLE);
