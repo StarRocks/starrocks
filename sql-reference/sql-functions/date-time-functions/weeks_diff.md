@@ -7,7 +7,7 @@
 ## 语法
 
 ```Haskell
-weeks_diff(expr1,expr2);
+BIGINT weeks_diff(DATETIME expr1,DATETIME expr2);
 ```
 
 ## 参数说明

@@ -9,7 +9,7 @@
 ## 语法
 
 ```Haskell
-str2date(str, format);
+DATE str2date(VARCHAR str, VARCHAR format);
 ```
 
 ## 参数说明

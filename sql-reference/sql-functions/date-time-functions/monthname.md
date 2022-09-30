@@ -2,12 +2,14 @@
 
 ## 功能
 
-返回指定日期对应的月份。参数为Date或者Datetime类型。
+返回指定日期对应的月份。参数为 DATE 或 DATETIME类型。
+
+如果日期不存在，返回 NULL。
 
 ## 语法
 
 ```Haskell
-VARCHAR MONTHNAME(DATE)
+VARCHAR MONTHNAME(DATETIME|DATE date)
 ```
 
 ## 示例
@@ -19,4 +21,12 @@ MySQL > select monthname('2008-02-03 00:00:00');
 +----------------------------------+
 | February                         |
 +----------------------------------+
+
+select monthname('2008-02-03');
++-------------------------+
+| monthname('2008-02-03') |
++-------------------------+
+| February                |
++-------------------------+
+
 ```

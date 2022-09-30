@@ -59,21 +59,15 @@ Stream Load 需要您在客户端上通过 HTTP 发送导入作业请求给 FE �
 
     ```SQL
     MySQL [test_db]> CREATE TABLE `table1`
-
     (
-
         `id` int(11) NOT NULL COMMENT "用户 ID",
 
         `name` varchar(65533) NULL COMMENT "用户姓名",
 
         `score` int(11) NOT NULL COMMENT "用户得分"
-
     )
-
     ENGINE=OLAP
-
     PRIMARY KEY(`id`)
-
     DISTRIBUTED BY HASH(`id`) BUCKETS 10;
     ```
 
@@ -95,13 +89,9 @@ Stream Load 需要您在客户端上通过 HTTP 发送导入作业请求给 FE �
 
 ```Bash
 curl --location-trusted -u root: -H "label:123" \
-
     -H "column_separator:," \
-
     -H "columns: id, name, score" \
-
     -T example1.csv -XPUT \
-
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
 
@@ -141,19 +131,12 @@ MySQL [test_db]> SELECT * FROM table1;
 
     ```SQL
     MySQL [test_db]> CREATE TABLE `table2`
-
     (
-
         `id` int(11) NOT NULL COMMENT "城市 ID",
-
         `city` varchar(65533) NULL COMMENT "城市名称"
-
     )
-
     ENGINE=OLAP
-
     PRIMARY KEY(`id`)
-
     DISTRIBUTED BY HASH(`id`) BUCKETS 10;
     ```
 
@@ -169,13 +152,9 @@ MySQL [test_db]> SELECT * FROM table1;
 
 ```Bash
 curl -v --location-trusted -u root: -H "strict_mode: true" \
-
     -H "format: json" -H "jsonpaths: [\"$.name\", \"$.code\"]" \
-
     -H "columns: city,tmp_id, id = tmp_id * 100" \
-
     -T example2.json -XPUT \
-
     http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
 ```
 

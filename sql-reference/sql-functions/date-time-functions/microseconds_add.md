@@ -7,7 +7,7 @@
 ## 语法
 
 ```Haskell
-microseconds_add(expr1,expr2);
+DATETIME microseconds_add(DATETIME expr1,INT expr2);
 ```
 
 ## 参数说明
