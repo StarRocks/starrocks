@@ -49,6 +49,11 @@ public class UseSortAggregateRule extends OptExpressionVisitor<Void, Void> imple
             return null;
         }
 
+        // the same key in multi partition are not in the same tablet
+        if (scan.getSelectedPartitionId().size() > 1) {
+            return null;
+        }
+
         for (ColumnRefOperator groupBy : agg.getGroupBys()) {
             if (!scan.getColRefToColumnMetaMap().containsKey(groupBy)) {
                 return null;
