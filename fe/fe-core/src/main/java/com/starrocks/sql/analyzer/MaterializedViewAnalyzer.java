@@ -145,11 +145,6 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Create materialized view do not support the table type : " +
                             table.getType());
                 }
-                if (table instanceof MaterializedView) {
-                    throw new SemanticException(
-                            "Creating a materialized view from materialized view is not supported now. The type of table: " +
-                                    table.getName() + " is: Materialized View");
-                }
                 Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
                         tableNameInfo.getDb());
                 if (isInternalCatalog(tableNameInfo.getCatalog())) {
@@ -326,8 +321,7 @@ public class MaterializedViewAnalyzer {
             SlotRef slotRef = getSlotRef(statement.getPartitionRefTableExpr());
             Table table = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
 
-
-            if (table.isOlapTable()) {
+            if (table.isLocalTable()) {
                 checkPartitionColumnWithBaseOlapTable(slotRef, (OlapTable) table);
             } else if (table.isHiveTable() || table.isHudiTable()) {
                 checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);

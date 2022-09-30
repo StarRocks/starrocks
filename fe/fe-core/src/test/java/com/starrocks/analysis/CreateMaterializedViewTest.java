@@ -1331,8 +1331,7 @@ public class CreateMaterializedViewTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            Assert.assertEquals("Creating a materialized view from materialized view is not supported now." +
-                    " The type of table: mv1 is: Materialized View", e.getMessage());
+            Assert.fail(e.getMessage());
         }
     }
 
