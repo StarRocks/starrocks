@@ -1,17 +1,20 @@
 # date_format
 
-## description
+## Description
 
-### Syntax
+Converts a date into a string according to the specified format. Currently it supports strings with a maximum of 128 bytes. If the length of the returned value exceeds 128, NULL is returned.
+
+## Syntax
 
 ```Haskell
 VARCHAR DATE_FORMAT(DATETIME date, VARCHAR format)
 ```
 
-Convert the date type into strings according to format type. Currently it supports strings with a maximum 128 bytes. If the length of the returned value exceeds 128, it will return NULL.
+## Parameters
 
-- Date parameter is a valid date
-- Format specifies the output format of date/time.
+- The `date` parameter must be a valid date or date expression.
+
+- `format` specifies the output format of the date or time.
 
 Here are the formats available:
 
@@ -50,7 +53,7 @@ Here are the formats available:
 %% |  Represent %. 
 ```
 
-## example
+## Examples
 
 ```Plain Text
 MySQL > select date_format('2009-10-04 22:23:00', '%W %M %Y');

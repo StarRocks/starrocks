@@ -1,16 +1,18 @@
 # timediff
 
-## description
+## Description
 
-### Syntax
+Returns the difference between two DATETIME expressions.
 
-`TIME TIMEDIFF(DATETIME expr1, DATETIME expr2)`
+ The returned value must be of the TIME type.
 
-TIMEDIFF function returns the difference between two DATETIME expressions.
+## Syntax
 
-It returns the time value between expr1 and expr2.  The returned values are in TIME type.
+```sql
+TIME TIMEDIFF(DATETIME expr1, DATETIME expr2)`
+```
 
-## example
+## Examples
 
 ```Plain Text
 MySQL > SELECT TIMEDIFF(now(),utc_timestamp());
