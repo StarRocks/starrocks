@@ -168,6 +168,7 @@ class HdfsPartitionDescriptor {
 public:
     HdfsPartitionDescriptor(const THdfsTable& thrift_table, const THdfsPartition& thrift_partition);
     HdfsPartitionDescriptor(const THudiTable& thrift_table, const THdfsPartition& thrift_partition);
+    HdfsPartitionDescriptor(const TDeltaLakeTable& thrift_table, const THdfsPartition& thrift_partition);
 
     int64_t id() const { return _id; }
     THdfsFileFormat::type file_format() { return _file_format; }
@@ -223,6 +224,13 @@ public:
     IcebergTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~IcebergTableDescriptor() override = default;
     bool has_partition() const override { return false; }
+};
+
+class DeltaLakeTableDescriptor : public HiveTableDescriptor {
+public:
+    DeltaLakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~DeltaLakeTableDescriptor() override = default;
+    bool has_partition() const override { return true; }
 };
 
 class HudiTableDescriptor : public HiveTableDescriptor {
