@@ -76,7 +76,7 @@ public class FrontendServiceTest {
     }
 
     @Test
-    public void testCheckPasswordAndPrivilege() {
+    public void testCheckPasswordAndLoadPrivilege() {
         createUser("abc", "123", "192.168.92.3");
 
         grantTable("abc", "192.168.92.3", "db1", "t1",
@@ -90,29 +90,35 @@ public class FrontendServiceTest {
         // test check passed
         TAuthenticateParams authParam = createTAuthenticateParams(
                 "abc", "123", "192.168.92.3", "db1", Arrays.asList("t1", "t2", "t3"));
-        verifyCheckResult(true, null, FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
+        verifyCheckResult(true, null, FrontendServiceImpl.checkPasswordAndLoadPrivilege(authParam));
+
+        String hintMsg = "Set the configuration 'enable_starrocks_external_table_auth_check' to 'false' on the target " +
+                "cluster if you don't want to check the authorization and LOAD privilege.";
 
         // test password check failed
         authParam = createTAuthenticateParams(
                 "abc", "12", "192.168.92.3", "db1", Arrays.asList("t1", "t2", "t3"));
-        verifyCheckResult(false, "Access denied for abc@192.168.92.3",
-                FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
+        verifyCheckResult(false, Arrays.asList("Access denied for abc@192.168.92.3", hintMsg),
+                FrontendServiceImpl.checkPasswordAndLoadPrivilege(authParam));
 
         // test privilege check failed on different tables
         String errMsgFormat = "Access denied; user 'abc'@'192.168.92.3' need (at least one of) the Admin_priv Load_priv " +
                         "privilege(s) for table '%s' in db 'db1'";
+
         authParam = createTAuthenticateParams(
                 "abc", "123", "192.168.92.3", "db1", Arrays.asList("t4", "t2", "t3"));
-        verifyCheckResult(false, String.format(errMsgFormat, "t4"), FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
+        verifyCheckResult(false, Arrays.asList(String.format(errMsgFormat, "t4"), hintMsg),
+                FrontendServiceImpl.checkPasswordAndLoadPrivilege(authParam));
 
         authParam = createTAuthenticateParams(
                 "abc", "123", "192.168.92.3", "db1", Arrays.asList("t1", "t5", "t3"));
-        verifyCheckResult(false, String.format(errMsgFormat, "t5"), FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
+        verifyCheckResult(false, Arrays.asList(String.format(errMsgFormat, "t5"), hintMsg),
+                FrontendServiceImpl.checkPasswordAndLoadPrivilege(authParam));
 
         authParam = createTAuthenticateParams(
                 "abc", "123", "192.168.92.3", "db1", Arrays.asList("t1", "t2", "t6"));
-        verifyCheckResult(false, String.format(errMsgFormat, "t6"), FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
-
+        verifyCheckResult(false, Arrays.asList(String.format(errMsgFormat, "t6"), hintMsg),
+                FrontendServiceImpl.checkPasswordAndLoadPrivilege(authParam));
 
         // test disable check configuration
         Config.enable_starrocks_external_table_auth_check = false;
@@ -120,27 +126,27 @@ public class FrontendServiceTest {
         // normal passed
         authParam = createTAuthenticateParams(
                 "abc", "123", "192.168.92.3", "db1", Arrays.asList("t1", "t2", "t3"));
-        verifyCheckResult(true, null, FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
+        verifyCheckResult(true, null, FrontendServiceImpl.checkPasswordAndLoadPrivilege(authParam));
 
         // incorrect password passed
         authParam = createTAuthenticateParams(
                 "abc", "12", "192.168.92.3", "db1", Arrays.asList("t1", "t2", "t3"));
-        verifyCheckResult(true, null, FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
+        verifyCheckResult(true, null, FrontendServiceImpl.checkPasswordAndLoadPrivilege(authParam));
 
         // incorrect privilege passed
         authParam = createTAuthenticateParams(
                 "abc", "123", "192.168.92.3", "db1", Arrays.asList("t4", "t2", "t3"));
-        verifyCheckResult(true, null, FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
-
+        verifyCheckResult(true, null, FrontendServiceImpl.checkPasswordAndLoadPrivilege(authParam));
     }
 
-    private void verifyCheckResult(boolean expectOk, String errMsg, TStatus actualStatus) {
+    private void verifyCheckResult(boolean expectOk, List<String> errMsgs, TStatus actualStatus) {
         assertEquals(expectOk, actualStatus.getStatus_code() == TStatusCode.OK);
-        if (errMsg == null) {
+        if (errMsgs == null) {
             assertNull(actualStatus.getError_msgs());
         } else {
-            assertEquals(1, actualStatus.getError_msgs().size());
-            assertEquals(errMsg, actualStatus.getError_msgs().get(0));
+            for (int i = 0; i < errMsgs.size(); i++) {
+                assertEquals(errMsgs.get(i), actualStatus.getError_msgs().get(i));
+            }
         }
     }
 
