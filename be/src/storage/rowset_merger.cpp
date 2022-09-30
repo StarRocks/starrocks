@@ -258,9 +258,11 @@ private:
                                   OlapReaderStatistics* stats, RowSourceMaskBuffer* mask_buffer = nullptr,
                                   std::vector<std::unique_ptr<RowSourceMaskBuffer>>* rowsets_mask_buffer = nullptr) {
         std::unique_ptr<vectorized::Column> sort_column;
+        std::vector<ColumnId> sort_key_idxes;
         if (schema.sort_key_idxes().size() > 1) {
-            if (!PrimaryKeyEncoder::create_column_with_sort_key(schema, &sort_column).ok()) {
-                LOG(FATAL) << "create sort column for primary key encoder failed";
+            sort_key_idxes = schema.sort_key_idxes();
+            if (!PrimaryKeyEncoder::create_column(schema, &sort_column, sort_key_idxes).ok()) {
+                LOG(FATAL) << "create column for primary key encoder failed";
             }
         } else if (schema.num_key_fields() > 1) {
             if (!PrimaryKeyEncoder::create_column(schema, &sort_column).ok()) {
@@ -523,12 +525,15 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
                                 RowsetWriter* writer, const MergeConfig& cfg) {
     Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema());
     std::unique_ptr<RowsetMerger> merger;
-    auto key_type = OLAP_FIELD_TYPE_UNKNOWN;
-    if (tablet.tablet_schema().sort_key_idxes().empty()) {
-        key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema);
+    std::vector<ColumnId> sort_key_idxes;
+    if (schema.sort_key_idxes().empty()) {
+        for (ColumnId i = 0; i < schema.num_key_fields(); ++i) {
+            sort_key_idxes.push_back(i);
+        }
     } else {
-        key_type = PrimaryKeyEncoder::encoded_primary_key_type_with_sort_key(schema);
+        sort_key_idxes = schema.sort_key_idxes();
     }
+    auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema, sort_key_idxes);
     switch (key_type) {
     case OLAP_FIELD_TYPE_BOOL:
         merger = std::make_unique<RowsetMergerImpl<uint8_t>>();

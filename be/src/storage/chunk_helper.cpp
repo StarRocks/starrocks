@@ -150,7 +150,7 @@ starrocks::vectorized::Schema ChunkHelper::get_short_key_schema_with_format_v2(c
     std::vector<ColumnId> short_key_cids;
     const auto& sort_key_idxes = schema.sort_key_idxes();
     if (!sort_key_idxes.empty()) {
-        for (auto i = 0; i < schema.num_short_key_columns() && i < sort_key_idxes.size(); ++i) {
+        for (auto i = 0; i < schema.num_short_key_columns(); ++i) {
             short_key_cids.push_back(sort_key_idxes[i]);
         }
     } else {

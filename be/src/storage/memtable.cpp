@@ -207,8 +207,16 @@ Status MemTable::finalize() {
                 }
             }
             if (_keys_type == KeysType::PRIMARY_KEYS && !_vectorized_schema->sort_key_idxes().empty()) {
-                _chunk = _result_chunk;
-                _sort(true, true);
+                std::vector<ColumnId> primary_key_idxes;
+                for (ColumnId i = 0; i < _vectorized_schema->num_key_fields(); ++i) {
+                    primary_key_idxes.push_back(i);
+                }
+                const auto& sort_key_idxes = _vectorized_schema->sort_key_idxes();
+                if (!std::includes(primary_key_idxes.begin(), primary_key_idxes.end(), sort_key_idxes.begin(),
+                                   sort_key_idxes.end())) {
+                    _chunk = _result_chunk;
+                    _sort(true, true);
+                }
             }
             _aggregator.reset();
             _aggregator_memory_usage = 0;
@@ -361,23 +369,20 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
 
 void MemTable::_sort_column_inc(bool by_sort_key) {
     Columns columns;
+    std::vector<ColumnId> sort_key_idxes;
     if (!by_sort_key) {
-        int sort_columns = _vectorized_schema->num_key_fields();
-        for (int i = 0; i < sort_columns; i++) {
-            columns.push_back(_chunk->get_column_by_index(i));
+        for (ColumnId i = 0; i < _vectorized_schema->num_key_fields(); ++i) {
+            sort_key_idxes.push_back(i);
         }
-        Status st =
-                stable_sort_and_tie_columns(false, columns, SortDescs::asc_null_first(sort_columns), &_permutations);
-        CHECK(st.ok());
     } else {
-        int sort_columns = _vectorized_schema->sort_key_idxes().size();
-        for (const auto sort_key_idx : _vectorized_schema->sort_key_idxes()) {
-            columns.push_back(_chunk->get_column_by_index(sort_key_idx));
-        }
-        Status st =
-                stable_sort_and_tie_columns(false, columns, SortDescs::asc_null_first(sort_columns), &_permutations);
-        CHECK(st.ok());
+        sort_key_idxes = _vectorized_schema->sort_key_idxes();
     }
+    for (auto sort_key_idx : sort_key_idxes) {
+        columns.push_back(_chunk->get_column_by_index(sort_key_idx));
+    }
+    Status st = stable_sort_and_tie_columns(false, columns, SortDescs::asc_null_first(sort_key_idxes.size()),
+                                            &_permutations);
+    CHECK(st.ok());
 }
 
 } // namespace starrocks::vectorized
