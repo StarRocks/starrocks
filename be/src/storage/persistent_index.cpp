@@ -1780,7 +1780,6 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         // be maybe crash after create index file during last commit
         // so we delete expired index file first to make sure no garbage left
         FileSystem::Default()->delete_file(file_name);
-        size_t snapshot_size = dump_bound();
         phmap::BinaryOutputArchive ar_out(file_name.data());
         std::set<uint32_t> dumped_shard_idxes;
         if (!dump(ar_out, dumped_shard_idxes)) {
@@ -1792,7 +1791,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         WritableFileOptions wblock_opts;
         wblock_opts.mode = FileSystem::MUST_EXIST;
         ASSIGN_OR_RETURN(_index_file, fs->new_writable_file(wblock_opts, file_name));
-        CHECK(_index_file->size() == snapshot_size);
+        size_t snapshot_size = _index_file->size();
         meta->clear_wals();
         IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
         version.to_pb(snapshot->mutable_version());
@@ -2878,11 +2877,6 @@ struct KVRefEq {
 template <>
 struct KVRefEq<0> {
     bool operator()(const KVRef& lhs, const KVRef& rhs) const {
-        if (lhs.hash == rhs.hash && memcmp(lhs.kv_pos, rhs.kv_pos, lhs.size - kIndexValueSize) == 0) {
-            if (lhs.size != rhs.size) {
-                LOG(FATAL) << "different length key with same hash value";
-            }
-        }
         return lhs.hash == rhs.hash && lhs.size == rhs.size &&
                memcmp(lhs.kv_pos, rhs.kv_pos, lhs.size - kIndexValueSize) == 0;
     }
