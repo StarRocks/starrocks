@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.SubqueryUtils;
@@ -45,6 +46,10 @@ public class QuantifiedApply2JoinRule extends TransformationRule {
         InPredicateOperator ipo = (InPredicateOperator) apply.getSubqueryOperator();
         BinaryPredicateOperator bpo =
                 new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, ipo.getChildren());
+
+        if (ipo.getChildren().stream().anyMatch(ScalarOperator::isConstant)) {
+            throw new SemanticException(SubqueryUtils.CONST_QUANTIFIED_COMPARISON);
+        }
 
         // IN to SEMI-JOIN
         // NOT IN to ANTI-JOIN or NULL_AWARE_LEFT_ANTI_JOIN

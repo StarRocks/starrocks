@@ -241,6 +241,11 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
             throw new SemanticException(SubqueryUtils.EXIST_NON_EQ_PREDICATE);
         }
 
+        if (correlationPredicates.stream()
+                .allMatch(c -> c.getChildren().stream().anyMatch(ScalarOperator::isConstant))) {
+            throw new SemanticException(SubqueryUtils.CONST_QUANTIFIED_COMPARISON);
+        }
+
         // extract join-key
         CorrelatedPredicateRewriter rewriter = new CorrelatedPredicateRewriter(
                 correlationColumnRefs, context);

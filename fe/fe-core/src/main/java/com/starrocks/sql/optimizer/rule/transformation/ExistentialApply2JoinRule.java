@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -145,6 +146,10 @@ public class ExistentialApply2JoinRule extends TransformationRule {
     // Not Exists to ANTI-JOIN
     private List<OptExpression> transformCorrelationWithEQ(OptExpression input, LogicalApplyOperator apply,
                                                            ExistsPredicateOperator epo) {
+        if (apply.getCorrelationConjuncts().getChildren().stream().anyMatch(ScalarOperator::isConstant)) {
+            throw new SemanticException(SubqueryUtils.CONST_QUANTIFIED_COMPARISON);
+        }
+
         OptExpression joinExpression;
         if (epo.isNotExists()) {
             joinExpression = new OptExpression(

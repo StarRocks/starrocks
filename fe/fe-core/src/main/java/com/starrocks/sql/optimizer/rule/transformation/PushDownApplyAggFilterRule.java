@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
+/*
  * Push down ApplyNode and AggregationNode as a whole
  * Pattern:
  *      ApplyNode
