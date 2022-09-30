@@ -718,6 +718,11 @@ public:
         DCHECK(buf != nullptr);
         for (uint64_t lcv = 0; lcv < map_size; lcv++) {
             // get map key
+            if (max_bytes < sizeof(uint32_t)) {
+                *is_valid_ptr = false;
+                return result;
+            }
+            
             uint32_t key = decode_fixed32_le(reinterpret_cast<const uint8_t*>(buf));
             buf += sizeof(uint32_t);
             max_bytes -= sizeof(uint32_t);
