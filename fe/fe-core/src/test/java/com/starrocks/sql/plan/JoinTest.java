@@ -2528,6 +2528,8 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  other join predicates: [1: v1, BIGINT, true] < [4: v7, BIGINT, true] + [5: v8, BIGINT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (4: v7), remote = false\n" +
                 "  |  cardinality: 1\n");
 
         // avoid push down CrossJoin RF across ExchangeNode

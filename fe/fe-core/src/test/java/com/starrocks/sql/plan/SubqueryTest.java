@@ -313,6 +313,8 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  join op: LEFT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (CAST('' AS DOUBLE)), remote = false\n" +
                 "  |  \n" +
                 "  |----18:EXCHANGE\n" +
                 "  |    \n" +
@@ -355,6 +357,8 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 5: v5 > 7: v7\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (7: v7), remote = false\n" +
                 "  |  \n" +
                 "  |----5:EXCHANGE\n" +
                 "  |    \n" +
@@ -380,6 +384,8 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 4: v4 < 11: v10\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 1, build_expr = (11: v10), remote = false\n" +
                 "  |  \n" +
                 "  |----11:EXCHANGE\n" +
                 "  |    \n" +
@@ -392,6 +398,8 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 5: v5 > 7: v7\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (7: v7), remote = false\n" +
                 "  |  \n" +
                 "  |----5:EXCHANGE\n" +
                 "  |    \n" +
