@@ -7,7 +7,3 @@
     ```sql
     PAUSE ROUTINE LOAD FOR test1;
     ```
-
-## keyword
-
-PAUSE,ROUTINE,LOAD
