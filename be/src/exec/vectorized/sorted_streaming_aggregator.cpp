@@ -40,7 +40,7 @@ public:
         if (!_first_column->empty()) {
             _cmp_vector[0] = _first_column->compare_at(0, 0, *data_column, 1);
         } else {
-            _cmp_vector[0] = 0;
+            _cmp_vector[0] = 1;
         }
         return Status::OK();
     }
