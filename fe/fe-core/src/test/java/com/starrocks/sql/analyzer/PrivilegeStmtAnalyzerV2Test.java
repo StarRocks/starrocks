@@ -159,7 +159,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.assertTrue(e.getMessage().contains("invalid role format"));
         }
 
-        sql = "drop role badrole";
+        sql = "drop role bad_role";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
