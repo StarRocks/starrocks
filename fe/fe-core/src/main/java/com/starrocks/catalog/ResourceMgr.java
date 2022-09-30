@@ -138,7 +138,7 @@ public class ResourceMgr implements Writable {
             GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
         }
 
-        if (resource.needMappingCatalog()) {
+        if (resource.needMappingCatalog() && !nameToResource.containsKey(resource.getName())) {
             String type = resource.getType().name().toLowerCase(Locale.ROOT);
             String catalogName = getResourceMappingCatalogName(resource.getName(), type);
             Map<String, String> properties = Maps.newHashMap(resource.getProperties());
