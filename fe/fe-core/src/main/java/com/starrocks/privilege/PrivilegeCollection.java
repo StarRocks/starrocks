@@ -181,7 +181,8 @@ public class PrivilegeCollection {
             while (entryIterator.hasNext()) {
                 PrivilegeEntry entry = entryIterator.next();
                 if (! entry.object.validate(globalStateMgr)) {
-                    LOG.info("find invalidate object, will remove the entry now: {}", GsonUtils.GSON.toJson(entry));
+                    String entryStr = GsonUtils.GSON.toJson(entry);
+                    LOG.info("find invalidate object, will remove the entry now: {}", entryStr);
                     entryIterator.remove();
                 }
             }

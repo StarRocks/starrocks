@@ -303,8 +303,9 @@ public class PrivilegeManager {
             UserIdentity user = entry.getKey();
             UserPrivilegeCollection collection = entry.getValue();
             if (! globalStateMgr.getAuthenticationManager().doesUserExist(user)) {
+                String collectionStr = GsonUtils.GSON.toJson(collection);
                 LOG.info("find invalidate user {}, will remove privilegeCollection now {}",
-                        entry, GsonUtils.GSON.toJson(collection));
+                        entry, collectionStr);
                 mapIter.remove();
             } else {
                 collection.removeInvalidateObject(globalStateMgr);
