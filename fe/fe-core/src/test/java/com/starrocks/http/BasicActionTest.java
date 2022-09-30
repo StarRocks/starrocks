@@ -15,9 +15,9 @@ public class BasicActionTest {
         verifyAuthInfo(BaseAction.ActionAuthorizationInfo.of(
                 "abc", "123", "127.0.0.1"), authInfo);
 
-        authInfo = BaseAction.parseAuthInfo("test#cluster_id", "", "192.168.19.10");
+        authInfo = BaseAction.parseAuthInfo("test@cluster_id", "", "192.168.19.10");
         verifyAuthInfo(BaseAction.ActionAuthorizationInfo.of(
-                "test", "", "127.0.0.1"), authInfo);
+                "test", "", "192.168.19.10"), authInfo);
     }
 
     private void verifyAuthInfo(BaseAction.ActionAuthorizationInfo expect, BaseAction.ActionAuthorizationInfo actual) {

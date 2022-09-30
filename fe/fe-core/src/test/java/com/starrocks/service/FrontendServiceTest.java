@@ -88,9 +88,9 @@ public class FrontendServiceTest {
 
         grantTable("abc", "192.168.92.3", "db1", "t1",
                 Collections.singletonList(AccessPrivilege.LOAD_PRIV));
-        grantTable("abc", "192.168.92.3", "db2", "t2",
+        grantTable("abc", "192.168.92.3", "db1", "t2",
                 Collections.singletonList(AccessPrivilege.LOAD_PRIV));
-        grantTable("abc", "192.168.92.3", "db2", "t3",
+        grantTable("abc", "192.168.92.3", "db1", "t3",
                 Collections.singletonList(AccessPrivilege.LOAD_PRIV));
 
         Config.enable_starrocks_external_table_auth_check = true;
@@ -102,23 +102,23 @@ public class FrontendServiceTest {
         // test password check failed
         authParam = createTAuthenticateParams(
                 "abc", "12", "192.168.92.3", "db1", Arrays.asList("t1", "t2", "t3"));
-        verifyCheckResult(false, "Access denied for abc @ 192.168.92.3",
+        verifyCheckResult(false, "Access denied for abc@192.168.92.3",
                 FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
 
         // test privilege check failed on different tables
-        String errMsg = "Access denied; user 'abc'@'192.168.92.3' need (at least one of) the t4 " +
-                        "privilege(s) for table '%s' in db 'default_cluster.db1'";
+        String errMsgFormat = "Access denied; user 'abc'@'192.168.92.3' need (at least one of) the Admin_priv Load_priv " +
+                        "privilege(s) for table '%s' in db 'db1'";
         authParam = createTAuthenticateParams(
                 "abc", "123", "192.168.92.3", "db1", Arrays.asList("t4", "t2", "t3"));
-        verifyCheckResult(false, errMsg, FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
+        verifyCheckResult(false, String.format(errMsgFormat, "t4"), FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
 
         authParam = createTAuthenticateParams(
-                "abc", "123", "192.168.92.3", "db1", Arrays.asList("t1", "t4", "t3"));
-        verifyCheckResult(false, errMsg, FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
+                "abc", "123", "192.168.92.3", "db1", Arrays.asList("t1", "t5", "t3"));
+        verifyCheckResult(false, String.format(errMsgFormat, "t5"), FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
 
         authParam = createTAuthenticateParams(
-                "abc", "123", "192.168.92.3", "db1", Arrays.asList("t1", "t2", "t4"));
-        verifyCheckResult(false, errMsg, FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
+                "abc", "123", "192.168.92.3", "db1", Arrays.asList("t1", "t2", "t6"));
+        verifyCheckResult(false, String.format(errMsgFormat, "t6"), FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
 
 
         // test disable check configuration
@@ -132,12 +132,12 @@ public class FrontendServiceTest {
         // incorrect password passed
         authParam = createTAuthenticateParams(
                 "abc", "12", "192.168.92.3", "db1", Arrays.asList("t1", "t2", "t3"));
-        verifyCheckResult(false, null, FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
+        verifyCheckResult(true, null, FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
 
         // incorrect privilege passed
         authParam = createTAuthenticateParams(
                 "abc", "123", "192.168.92.3", "db1", Arrays.asList("t4", "t2", "t3"));
-        verifyCheckResult(false, null, FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
+        verifyCheckResult(true, null, FrontendServiceImpl.checkPasswordAndPrivilege(authParam));
 
     }
 

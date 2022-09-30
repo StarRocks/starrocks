@@ -1315,9 +1315,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             for (String tableName : authParams.getTable_names()) {
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
                         userIdentity, dbName, tableName, PrivPredicate.LOAD)) {
-                    String errMsg = String.format("Access denied; user '%s'@'%s' need (at least one of) the %s " +
+                    String errMsg = String.format("Access denied; user '%s'@'%s' need (at least one of) the %s" +
                                     "privilege(s) for table '%s' in db '%s'", userIdentity.getQualifiedUser(),
-                            userIdentity.getHost(), PrivPredicate.LOAD, tableName, dbName);
+                            userIdentity.getHost(), PrivPredicate.LOAD.getPrivs().toString(), tableName, dbName);
                     throw new UnauthorizedException(errMsg);
                 }
             }
