@@ -499,6 +499,7 @@ public class Config extends ConfigBase {
      * The connection timeout and socket timeout config for thrift server
      * The value for thrift_client_timeout_ms is set to be larger than zero to prevent
      * some hang up problems in java.net.SocketInputStream.socketRead0
+     * default is 8h
      */
     @ConfField
     public static int thrift_client_timeout_ms = 28800000;
