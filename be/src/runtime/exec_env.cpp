@@ -158,6 +158,9 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     if (num_sink_io_threads <= 0) {
         num_sink_io_threads = std::thread::hardware_concurrency();
     }
+    if (config::pipeline_sink_io_thread_pool_queue_size <= 0) {
+        return Status::InvalidArgument("pipeline_sink_io_thread_pool_queue_size shoule be greater than 0");
+    }
     _pipeline_sink_io_pool =
             new PriorityThreadPool("pip_sink_io", num_sink_io_threads, config::pipeline_sink_io_thread_pool_queue_size);
 
