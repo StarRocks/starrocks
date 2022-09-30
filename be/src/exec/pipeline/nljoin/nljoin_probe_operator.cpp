@@ -190,11 +190,11 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(RuntimeState* state) const {
 }
 
 Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
-    if ((_join_conjuncts.empty())) {
-        return Status::OK();
-    }
+    // If join conjuncts are empty, most join type do not need to filter data
+    // Except left join and the right table is empty, in which it could not permute any chunk
+    // So here we need to permute_left_join for this case
     vectorized::FilterPtr filter;
-    if (chunk && !chunk->is_empty()) {
+    if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {
         size_t rows = chunk->num_rows();
         RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter));
         DCHECK(!!filter);
