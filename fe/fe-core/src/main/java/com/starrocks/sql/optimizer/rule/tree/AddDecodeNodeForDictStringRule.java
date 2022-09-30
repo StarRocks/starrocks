@@ -802,7 +802,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     OptExpression result = OptExpression.create(newAggOper, newChildExpr);
                     result.setStatistics(aggExpr.getStatistics());
                     result.setLogicalProperty(
-                            rewriteLogicProperty(aggExpr.getLogicalProperty(), newChildExpr.getOutputColumns()));
+                            rewriteLogicProperty(aggExpr.getLogicalProperty(), context.stringColumnIdToDictColumnIds));
                     return visitProjectionAfter(result, context);
                 } else {
                     insertDecodeExpr(aggExpr, Collections.singletonList(newChildExpr), 0, context);
