@@ -160,10 +160,13 @@ public class PrivilegeManagerTest {
 
     @Test
     public void testPersist() throws Exception {
-        PrivilegeManager masterManager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
+        PrivilegeManager masterManager = masterGlobalStateMgr.getPrivilegeManager();
         UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        masterManager.save(emptyImage.getDataOutputStream());
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         String sql = "grant select on db.tbl to test_user";
@@ -175,6 +178,8 @@ public class PrivilegeManagerTest {
                 PrivilegeTypes.TABLE.toString(),
                 PrivilegeTypes.TableActions.SELECT.toString(),
                 DB_TBL_TOKENS));
+        UtFrameUtils.PseudoImage grantImage = new UtFrameUtils.PseudoImage();
+        masterManager.save(grantImage.getDataOutputStream());
 
         sql = "revoke select on db.tbl from test_user";
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -186,9 +191,12 @@ public class PrivilegeManagerTest {
                 PrivilegeTypes.TABLE.toString(),
                 PrivilegeTypes.TableActions.SELECT.toString(),
                 DB_TBL_TOKENS));
+        UtFrameUtils.PseudoImage revokeImage = new UtFrameUtils.PseudoImage();
+        masterManager.save(revokeImage.getDataOutputStream());
 
         // start to replay
-        PrivilegeManager followerManager = new PrivilegeManager(ctx.getGlobalStateMgr(), null);
+        PrivilegeManager followerManager = PrivilegeManager.load(
+                emptyImage.getDataInputStream(), masterGlobalStateMgr, null);
 
         UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
         followerManager.replayUpdateUserPrivilegeCollection(
@@ -207,6 +215,26 @@ public class PrivilegeManagerTest {
                 PrivilegeTypes.TABLE.toString(),
                 PrivilegeTypes.TableActions.SELECT.toString(),
                 DB_TBL_TOKENS));
+
+
+        // check image
+        ctx.setCurrentUserIdentity(testUser);
+        PrivilegeManager imageManager = PrivilegeManager.load(
+                grantImage.getDataInputStream(), masterGlobalStateMgr, null);
+        Assert.assertTrue(imageManager.check(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
+        imageManager = PrivilegeManager.load(
+                revokeImage.getDataInputStream(), masterGlobalStateMgr, null);
+        Assert.assertFalse(imageManager.check(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
+
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test

@@ -103,9 +103,16 @@ public:
     void get_info(google::protobuf::RpcController* controller, const PProxyRequest* request, PProxyResult* response,
                   google::protobuf::Closure* done) override;
 
+    void get_pulsar_info(google::protobuf::RpcController* controller, const PPulsarProxyRequest* request,
+                         PPulsarProxyResult* response, google::protobuf::Closure* done) override;
+
 private:
     void _get_info_impl(const PProxyRequest* request, PProxyResult* response,
                         GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms);
+
+    void _get_pulsar_info_impl(const PPulsarProxyRequest* request, PPulsarProxyResult* response,
+                               GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch,
+                               int timeout_ms);
 
     Status _exec_plan_fragment(brpc::Controller* cntl);
     Status _exec_batch_plan_fragments(brpc::Controller* cntl);

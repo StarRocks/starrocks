@@ -88,7 +88,3 @@ EMPTY_HLL(): This generates empty HLL column and is used to fill in default valu
     select dt, HLL_CARDINALITY(uv) from (select dt, HLL_RAW_AGG(set1) as uv from test group by dt) tmp;
     select dt, HLL_UNION_AGG(set1) as uv from test group by dt;
     ```
-
-## keyword
-
-HLL

@@ -761,7 +761,3 @@ select sum(tiny_column) as total_count from big_table;
 
 select one.tiny_column, two.int_column from small_table one, <br/> big_table two where one.tiny_column = two.tiny_column;
 ```
-
-## Keyword
-
-SELECT

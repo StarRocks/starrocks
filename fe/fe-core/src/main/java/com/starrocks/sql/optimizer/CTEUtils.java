@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
@@ -71,13 +70,6 @@ public class CTEUtils {
             // consumer
             LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) root.getOp();
             context.getCteContext().addCTEConsume(consume.getCteId());
-
-            // required columns
-            ColumnRefSet requiredColumnRef =
-                    context.getCteContext().getRequiredColumns().getOrDefault(consume.getCteId(), new ColumnRefSet());
-            consume.getCteOutputColumnRefMap().values().forEach(requiredColumnRef::union);
-            context.getCteContext().getRequiredColumns().put(consume.getCteId(), requiredColumnRef);
-
             // not ask children
             return;
         }
