@@ -262,7 +262,7 @@ public:
         // hive only support null column
         // TODO: support not null
         auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-        dst_nullable_column->resize(src_nullable_column->size());
+        dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
         auto* src_column =
                 vectorized::ColumnHelper::as_raw_column<vectorized::BinaryColumn>(src_nullable_column->data_column());
