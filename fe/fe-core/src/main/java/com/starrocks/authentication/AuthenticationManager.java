@@ -334,7 +334,7 @@ public class AuthenticationManager {
             LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
             return ret;
         } catch (SRMetaBlockException | AuthenticationException e) {
-            throw new DdlException("failed to save AuthenticationManager!", e);
+            throw new DdlException("failed to load AuthenticationManager!", e);
         }
     }
 }

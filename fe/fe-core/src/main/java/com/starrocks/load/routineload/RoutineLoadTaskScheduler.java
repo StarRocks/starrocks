@@ -169,11 +169,11 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
         }
 
         try {
-            // for kafka routine load, readyToExecute means there is new data in kafka stream
+            // for kafka/pulsar routine load, readyToExecute means there is new data in kafka/pulsar stream
             if (!routineLoadTaskInfo.readyToExecute()) {
                 String msg = "";
-                if (routineLoadTaskInfo instanceof KafkaTaskInfo) {
-                    msg = String.format("there is no new data in kafka, wait for %d seconds to schedule again",
+                if (routineLoadTaskInfo instanceof KafkaTaskInfo || routineLoadTaskInfo instanceof PulsarTaskInfo) {
+                    msg = String.format("there is no new data in kafka/pulsar, wait for %d seconds to schedule again",
                             routineLoadTaskInfo.getTaskScheduleIntervalMs() / 1000);
                 }
                 delayPutToQueue(routineLoadTaskInfo, msg);
@@ -252,6 +252,10 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
             if (tRoutineLoadTask.isSetKafka_load_info()) {
                 LOG.debug("send kafka routine load task {} with partition offset: {}, job: {}",
                         tRoutineLoadTask.label, tRoutineLoadTask.kafka_load_info.partition_begin_offset,
+                        tRoutineLoadTask.getJob_id());
+            } else if (tRoutineLoadTask.isSetPulsar_load_info()) {
+                LOG.debug("send pulsar routine load task {} with partitions: {}, job: {}",
+                        tRoutineLoadTask.label, tRoutineLoadTask.pulsar_load_info.partitions,
                         tRoutineLoadTask.getJob_id());
             }
         } catch (LoadException e) {
