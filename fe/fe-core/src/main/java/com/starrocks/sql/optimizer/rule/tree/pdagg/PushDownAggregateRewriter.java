@@ -289,32 +289,29 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         if (isInvalid(optExpression, context)) {
             return visit(optExpression, context);
         }
-        LogicalJoinOperator join = (LogicalJoinOperator) optExpression.getOp();
-        if (join.getPredicate() != null) {
-            join.getPredicate().getUsedColumns().getStream().mapToObj(factory::getColumnRef)
-                    .forEach(v -> context.groupBys.put(v, v));
-        }
-
         // push down aggregate
-        pushDownJoinAggregate(optExpression, context, 0);
-        pushDownJoinAggregate(optExpression, context, 1);
+        optExpression.getInputs().set(0, pushDownJoinAggregate(optExpression, context, 0));
+        optExpression.getInputs().set(1, pushDownJoinAggregate(optExpression, context, 1));
         return optExpression;
     }
 
-    private void pushDownJoinAggregate(OptExpression joinOpt, AggregateContext context, int child) {
+    private OptExpression pushDownJoinAggregate(OptExpression joinOpt, AggregateContext context, int child) {
         LogicalJoinOperator join = (LogicalJoinOperator) joinOpt.getOp();
         ColumnRefSet childOutput = joinOpt.inputAt(child).getOutputColumns();
 
+        ColumnRefSet aggregationsRefs = new ColumnRefSet();
+        context.aggregations.values().stream().map(CallOperator::getUsedColumns).forEach(aggregationsRefs::union);
+
+        if (!childOutput.containsAll(aggregationsRefs)) {
+            return process(joinOpt.inputAt(child), AggregateContext.EMPTY);
+        }
+
         AggregateContext childContext = new AggregateContext();
+        childContext.aggregations.putAll(context.aggregations);
+
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.groupBys.entrySet()) {
             if (childOutput.containsAll(entry.getValue().getUsedColumns())) {
                 childContext.groupBys.put(entry.getKey(), entry.getValue());
-            }
-        }
-
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : context.aggregations.entrySet()) {
-            if (childOutput.containsAll(entry.getValue().getUsedColumns())) {
-                childContext.aggregations.put(entry.getKey(), entry.getValue());
             }
         }
 
@@ -324,7 +321,13 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
             join.getOnPredicate().getUsedColumns().getStream().filter(childOutput::contains)
                     .mapToObj(factory::getColumnRef).forEach(c -> childContext.groupBys.put(c, c));
         }
-        joinOpt.getInputs().set(child, process(joinOpt.inputAt(child), childContext));
+
+        if (join.getPredicate() != null) {
+            join.getPredicate().getUsedColumns().getStream().filter(childOutput::contains)
+                    .mapToObj(factory::getColumnRef).forEach(v -> childContext.groupBys.put(v, v));
+        }
+
+        return process(joinOpt.inputAt(child), childContext);
     }
 
     @Override

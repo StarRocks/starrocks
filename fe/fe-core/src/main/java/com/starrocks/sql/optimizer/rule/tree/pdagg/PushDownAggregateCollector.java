@@ -180,7 +180,8 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregateCon
         }
 
         // check has constant aggregate, forbidden
-        if (context.aggregations.values().stream().anyMatch(ScalarOperator::isConstant)) {
+        if (!context.aggregations.isEmpty() &&
+                context.aggregations.values().stream().allMatch(ScalarOperator::isConstant)) {
             return visit(optExpression, context);
         }
 
@@ -190,9 +191,14 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregateCon
     @Override
     public Void visitLogicalAggregate(OptExpression optExpression, AggregateContext context) {
         LogicalAggregationOperator aggregate = (LogicalAggregationOperator) optExpression.getOp();
-        // distinct/count*/constant aggregate can't push down
-        if (aggregate.getAggregations().values().stream()
-                .anyMatch(c -> c.isDistinct() || c.isCountStar() || c.isConstant())) {
+        // distinct/count* aggregate can't push down
+        if (aggregate.getAggregations().values().stream().anyMatch(c -> c.isDistinct() || c.isCountStar())) {
+            return visit(optExpression, context);
+        }
+
+        // all constant can't push down
+        if (!aggregate.getAggregations().isEmpty() &&
+                aggregate.getAggregations().values().stream().allMatch(ScalarOperator::isConstant)) {
             return visit(optExpression, context);
         }
 
@@ -206,20 +212,10 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregateCon
         if (isInvalid(optExpression, context)) {
             return visit(optExpression, context);
         }
-        LogicalJoinOperator join = (LogicalJoinOperator) optExpression.getOp();
         // constant aggregate can't push down
-        if (context.aggregations.values().stream().anyMatch(ScalarOperator::isConstant)) {
+        if (!context.aggregations.isEmpty() &&
+                context.aggregations.values().stream().allMatch(ScalarOperator::isConstant)) {
             return visit(optExpression, context);
-        }
-
-        if (join.getOnPredicate() != null) {
-            join.getOnPredicate().getUsedColumns().getStream().mapToObj(factory::getColumnRef)
-                    .forEach(c -> context.groupBys.put(c, c));
-        }
-
-        if (join.getPredicate() != null) {
-            join.getPredicate().getUsedColumns().getStream().mapToObj(factory::getColumnRef)
-                    .forEach(v -> context.groupBys.put(v, v));
         }
 
         // split aggregate to left/right child
@@ -231,10 +227,20 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregateCon
     }
 
     private AggregateContext splitJoinAggregate(OptExpression optExpression, AggregateContext context, int child) {
+        LogicalJoinOperator join = (LogicalJoinOperator) optExpression.getOp();
         ColumnRefSet childOutput = optExpression.getChildOutputColumns(child);
-        AggregateContext childContext = new AggregateContext();
 
-        // split group by
+        // check aggregations
+        ColumnRefSet aggregationsRefs = new ColumnRefSet();
+        context.aggregations.values().stream().map(CallOperator::getUsedColumns).forEach(aggregationsRefs::union);
+        if (!childOutput.containsAll(aggregationsRefs)) {
+            return AggregateContext.EMPTY;
+        }
+
+        AggregateContext childContext = new AggregateContext();
+        childContext.aggregations.putAll(context.aggregations);
+
+        // check group by
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.groupBys.entrySet()) {
             ColumnRefSet groupByUseColumns = entry.getValue().getUsedColumns();
             if (childOutput.containsAll(groupByUseColumns)) {
@@ -249,15 +255,16 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregateCon
             }
         }
 
-        // split aggregations
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : context.aggregations.entrySet()) {
-            ColumnRefSet aggUsedColumns = entry.getValue().getUsedColumns();
-            if (childOutput.containsAll(aggUsedColumns)) {
-                childContext.aggregations.put(entry.getKey(), entry.getValue());
-            } else if (childOutput.isIntersect(aggUsedColumns)) {
-                // e.g. MAX(A + B) can't push down
-                return AggregateContext.EMPTY;
-            }
+        if (join.getOnPredicate() != null) {
+            join.getOnPredicate().getUsedColumns().getStream().mapToObj(factory::getColumnRef)
+                    .filter(childOutput::contains)
+                    .forEach(c -> childContext.groupBys.put(c, c));
+        }
+
+        if (join.getPredicate() != null) {
+            join.getPredicate().getUsedColumns().getStream().mapToObj(factory::getColumnRef)
+                    .filter(childOutput::contains)
+                    .forEach(v -> childContext.groupBys.put(v, v));
         }
 
         childContext.origAggregator = context.origAggregator;

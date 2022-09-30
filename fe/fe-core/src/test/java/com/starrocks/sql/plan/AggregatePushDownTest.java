@@ -17,6 +17,6 @@ public class AggregatePushDownTest extends PlanTestBase {
 
     @Test
     public void testPushDown() {
-        runFileUnitTest("optimized-plan/agg-pushdown");
+        runFileUnitTest("optimized-plan/agg-pushdown", false);
     }
 }
