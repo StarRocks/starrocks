@@ -7,7 +7,7 @@
 ## 语法
 
 ```Haskell
-years_diff(expr1,expr2);
+BIGINT years_diff(DATETIME expr1,DATETIME expr2);
 ```
 
 ## 参数说明

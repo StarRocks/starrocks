@@ -2,21 +2,21 @@
 
 ## 功能
 
-返回给定日期值的一年的季度，它返回一个从 1 到 4 的数字
+返回给定日期值的一年的季度，它返回一个从 1 到 4 的数字。
 
 ## 语法
 
 ```Haskell
-quarter(expr);
+INT quarter(DATETIME expr);
 ```
 
 ## 参数说明
 
-`expr`: 支持的数据类型为 DATETIME
+`expr`: 支持的数据类型为 DATETIME。
 
 ## 返回值说明
 
-返回值的数据类型为 INT
+返回值的数据类型为 INT。
 
 ## 示例
 

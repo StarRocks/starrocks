@@ -2,19 +2,19 @@
 
 ## 功能
 
-计算 `expr1` - `expr2`，结果精确到秒
+计算 `expr1` - `expr2`，结果精确到秒。
 
 ## 语法
 
 ```Haskell
-seconds_diff(expr1,expr2);
+BIGINT seconds_diff(DATETIME expr1, DATETIME expr2);
 ```
 
 ## 参数说明
 
-`expr1`: 支持的数据类型为 DATETIME
+`expr1`: 支持的数据类型为 DATETIME。
 
-`expr2`: 支持的数据类型为 DATETIME
+`expr2`: 支持的数据类型为 DATETIME。
 
 ## 返回值说明
 

@@ -2,23 +2,23 @@
 
 ## 功能
 
-向参数 `expr1` 添加指定的时间间隔，单位为微秒
+向参数 `expr1` 添加指定的时间间隔，单位为微秒。
 
 ## 语法
 
 ```Haskell
-microseconds_add(expr1,expr2);
+DATETIME microseconds_add(DATETIME expr1,INT expr2);
 ```
 
 ## 参数说明
 
-`expr1`: 支持的数据类型为 DATETIME
+`expr1`: 支持的数据类型为 DATETIME。
 
-`expr2`: 支持的数据类型为 INT
+`expr2`: 支持的数据类型为 INT。
 
 ## 返回值说明
 
-返回值的数据类型为 DATETIME
+返回值的数据类型为 DATETIME。
 
 ## 示例
 

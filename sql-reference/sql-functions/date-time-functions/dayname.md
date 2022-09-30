@@ -1,18 +1,18 @@
 # dayname
 
-## description
+## 功能
 
-### Syntax
+返回指定日期对应的星期名称。
+
+参数为 DATE 或者 DATETIME 类型。
+
+## 语法
 
 ```Haskell
-VARCHAR DAYNAME(DATE)
+VARCHAR DAYNAME(DATETIME|DATE date)
 ```
 
-返回日期对应的日期名字
-
-参数为Date或者Datetime类型
-
-## example
+## 示例
 
 ```Plain Text
 MySQL > select dayname('2007-02-03 00:00:00');
@@ -25,4 +25,4 @@ MySQL > select dayname('2007-02-03 00:00:00');
 
 ## keyword
 
-DAYNAME
+DAYNAME, dayname
