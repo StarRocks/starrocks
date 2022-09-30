@@ -329,7 +329,7 @@ public class InsertStmt extends DmlStmt {
                 authenticateParams.setPasswd(externalTable.getSourceTablePassword());
                 authenticateParams.setHost(ConnectContext.get().getRemoteIP());
                 authenticateParams.setDb_name(externalTable.getSourceTableDbName());
-                authenticateParams.setTable_names(Lists.newArrayList(externalTable.getSourceTableDbName()));
+                authenticateParams.setTable_names(Lists.newArrayList(externalTable.getSourceTableName()));
                 transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                         .beginRemoteTransaction(externalTable.getSourceTableDbId(),
                                 Lists.newArrayList(externalTable.getSourceTableId()), label,
