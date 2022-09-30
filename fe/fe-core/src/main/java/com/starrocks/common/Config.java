@@ -1203,13 +1203,11 @@ public class Config extends ConfigBase {
     public static boolean enable_auth_check = true;
 
     /**
-     * If set to true, auth check for StarRocks external table will be enabled. The check
-     * only happens on the target cluster. The default is false to ensure users can upgrade
-     * StarRocks smoothly. Otherwise, the upgrade can fail if the existed external table has
-     * wrong user/password, and the authentication is checked in the new version of StarRocks.
+     * If set to false, auth check for StarRocks external table will be disabled. The check
+     * only happens on the target cluster.
      */
     @ConfField(mutable = true)
-    public static boolean enable_starrocks_external_table_auth_check = false;
+    public static boolean enable_starrocks_external_table_auth_check = true;
 
     /**
      * ldap server host for authentication_ldap_simple
