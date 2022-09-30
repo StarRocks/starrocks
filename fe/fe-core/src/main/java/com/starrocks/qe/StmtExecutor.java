@@ -1032,7 +1032,7 @@ public class StmtExecutor {
             authenticateParams.setPasswd(externalTable.getSourceTablePassword());
             authenticateParams.setHost(context.getRemoteIP());
             authenticateParams.setDb_name(externalTable.getSourceTableDbName());
-            authenticateParams.setTable_names(Lists.newArrayList(externalTable.getSourceTableDbName()));
+            authenticateParams.setTable_names(Lists.newArrayList(externalTable.getSourceTableName()));
             transactionId =
                     Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(
                             externalTable.getSourceTableDbId(),
