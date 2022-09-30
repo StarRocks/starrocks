@@ -23,8 +23,8 @@ Status IMTStateTable::init() {
     this->_impl = std::make_unique<vectorized::OlapTablePartitionParam>(_table_schema, _imt.olap_table.partition);
     RETURN_IF_ERROR(this->_impl->init());
     _location = std::make_unique<TOlapTableLocationParam>(_imt.olap_table.location);
-
     RETURN_IF_ERROR(_init_table_sink());
+    _table = std::make_shared<Table>(table_name(), table_id(), get_tablets());
 
     return Status::OK();
 }
