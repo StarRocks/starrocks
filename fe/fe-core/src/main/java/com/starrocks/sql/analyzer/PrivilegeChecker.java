@@ -137,6 +137,7 @@ import java.util.TreeSet;
 public class PrivilegeChecker {
     public static void check(StatementBase statement, ConnectContext session) {
         if (session.getGlobalStateMgr().isUsingNewPrivilege()) {
+            PrivilegeCheckerV2.check(statement, session);
             return;
         }
         new PrivilegeCheckerVisitor().check(statement, session);
@@ -1043,7 +1044,7 @@ public class PrivilegeChecker {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
                     }
 
-                    if (table.getType() != Table.TableType.OLAP) {
+                    if (!table.isLocalTable()) {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
                     }
 

@@ -77,6 +77,7 @@ HELP=0
 WITH_AWS=OFF
 WITH_BENCH=OFF
 USE_STAROS=OFF
+WITH_BLOCK_CACHE=OFF
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
@@ -132,6 +133,7 @@ if [ "${USE_STAROS}" == "ON"  ]; then
               -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH}  \
               -DUSE_STAROS=${USE_STAROS} \
+              -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
               -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
               -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
               -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
@@ -144,6 +146,7 @@ else
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
               -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
               -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+              -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH} ../
 fi
 time ${BUILD_SYSTEM} -j${PARALLEL}
@@ -205,6 +208,10 @@ else
 fi
 
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+if [ "${WITH_BLOCK_CACHE}" == "ON"  ]; then
+    CACHELIB_DIR=${STARROCKS_THIRDPARTY}/installed/cachelib
+    export LD_LIBRARY_PATH=$CACHELIB_DIR/lib:$CACHELIB_DIR/lib64:$CACHELIB_DIR/deps/lib:$CACHELIB_DIR/deps/lib64:$LD_LIBRARY_PATH
+fi
 
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH

@@ -22,7 +22,7 @@
 package com.starrocks.leader;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.LinkedListMultimap;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -313,23 +313,23 @@ public class ReportHandler extends Daemon {
                 GlobalStateMgr.getCurrentState().getPartitionIdToStorageMediumMap();
 
         // db id -> tablet id
-        ListMultimap<Long, Long> tabletSyncMap = LinkedListMultimap.create();
+        ListMultimap<Long, Long> tabletSyncMap = ArrayListMultimap.create();
         // db id -> tablet id
-        ListMultimap<Long, Long> tabletDeleteFromMeta = LinkedListMultimap.create();
+        ListMultimap<Long, Long> tabletDeleteFromMeta = ArrayListMultimap.create();
         // tablet ids which schema hash is valid
         Set<Long> foundTabletsWithValidSchema = new HashSet<Long>();
         // tablet ids which schema hash is invalid
         Map<Long, TTabletInfo> foundTabletsWithInvalidSchema = new HashMap<Long, TTabletInfo>();
         // storage medium -> tablet id
-        ListMultimap<TStorageMedium, Long> tabletMigrationMap = LinkedListMultimap.create();
+        ListMultimap<TStorageMedium, Long> tabletMigrationMap = ArrayListMultimap.create();
 
         // dbid -> txn id -> [partition info]
         Map<Long, ListMultimap<Long, TPartitionVersionInfo>> transactionsToPublish = Maps.newHashMap();
         Map<Long, Long> transactionsToCommitTime = Maps.newHashMap();
-        ListMultimap<Long, Long> transactionsToClear = LinkedListMultimap.create();
+        ListMultimap<Long, Long> transactionsToClear = ArrayListMultimap.create();
 
         // db id -> tablet id
-        ListMultimap<Long, Long> tabletRecoveryMap = LinkedListMultimap.create();
+        ListMultimap<Long, Long> tabletRecoveryMap = ArrayListMultimap.create();
 
         Set<Pair<Long, Integer>> tabletWithoutPartitionId = Sets.newHashSet();
 

@@ -150,11 +150,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
+    /**
+     * Whether to allow the generation of one-phase local aggregation with the local shuffle operator
+     * (ScanNode->LocalShuffleNode->OnePhaseAggNode) regardless of the differences between grouping keys
+     * and scan distribution keys, when there is only one BE.
+     */
+    public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
+
     public static final String ENABLE_DELIVER_BATCH_FRAGMENTS = "enable_deliver_batch_fragments";
 
     // Use resource group. It will influence the CPU schedule, I/O scheduler, and
     // memory limit etc. in BE.
     public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
+    public static final String ENABLE_RESOURCE_GROUP_V2 = "enable_resource_group_v2";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
@@ -290,6 +298,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
 
+    @VariableMgr.VarAttr(name = ENABLE_LOCAL_SHUFFLE_AGG)
+    private boolean enableLocalShuffleAgg = true;
+
     @VariableMgr.VarAttr(name = USE_COMPUTE_NODES)
     private int useComputeNodes = -1;
 
@@ -315,8 +326,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER)
     private boolean enableMultiColumnsOnGlobalRuntimeFilter = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
-    private boolean enableResourceGroup = false;
+    @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP_V2, alias = ENABLE_RESOURCE_GROUP, show = ENABLE_RESOURCE_GROUP)
+    private boolean enableResourceGroup = true;
 
     @VariableMgr.VarAttr(name = ENABLE_TABLET_INTERNAL_PARALLEL_V2,
             alias = ENABLE_TABLET_INTERNAL_PARALLEL, show = ENABLE_TABLET_INTERNAL_PARALLEL)
@@ -1018,6 +1029,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePipelineEngine(boolean enablePipelineEngine) {
         this.enablePipelineEngine = enablePipelineEngine;
+    }
+
+    public void setEnableLocalShuffleAgg(boolean enableLocalShuffleAgg) {
+        this.enableLocalShuffleAgg = enableLocalShuffleAgg;
+    }
+
+    public boolean isEnableLocalShuffleAgg() {
+        return enableLocalShuffleAgg;
     }
 
     public boolean isEnableTabletInternalParallel() {

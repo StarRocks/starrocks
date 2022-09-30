@@ -2,6 +2,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
@@ -58,6 +59,7 @@ import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
 import com.starrocks.planner.RepeatNode;
 import com.starrocks.planner.RuntimeFilterId;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.planner.SelectNode;
 import com.starrocks.planner.SetOperationNode;
@@ -65,6 +67,7 @@ import com.starrocks.planner.SortNode;
 import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
@@ -1083,10 +1086,97 @@ public class PlanFragmentBuilder {
             return true;
         }
 
+        /**
+         * Whether all the nodes of the plan tree only contain the specific node types.
+         *
+         * @param root              The plan tree root.
+         * @param requiredNodeTypes The specific node type.
+         * @return true if all the nodes belong to the node types, otherwise false.
+         */
+        private boolean onlyContainNodeTypes(PlanNode root, List<Class<? extends PlanNode>> requiredNodeTypes) {
+            boolean rootMatched = requiredNodeTypes.stream().anyMatch(type -> type.isInstance(root));
+            if (!rootMatched) {
+                return false;
+            }
+
+            for (PlanNode child : root.getChildren()) {
+                if (!onlyContainNodeTypes(child, requiredNodeTypes)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /**
+         * Remove ExchangeNode between AggNode and ScanNode for the single backend.
+         *
+         * This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
+         * which contains two steps:
+         * 1. Ignore the network cost for ExchangeNode when estimating cost model.
+         * 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
+         *
+         * Specifically, transfer
+         * (AggNode->ExchangeNode)->([ProjectNode->]ScanNode)
+         * -      *inputFragment         sourceFragment
+         * to
+         * (AggNode->[ProjectNode->]ScanNode)
+         * -      *sourceFragment
+         * That is, when matching this fragment pattern, remove inputFragment and return sourceFragment.
+         *
+         * @param inputFragment The input fragment to match the above pattern.
+         * @param context The context of building fragment, which contains all the fragments.
+         * @return SourceFragment if it matches th pattern, otherwise the original inputFragment.
+         */
+        private PlanFragment removeExchangeNodeForLocalShuffleAgg(PlanFragment inputFragment, ExecPlan context) {
+            if (ConnectContext.get() == null) {
+                return inputFragment;
+            }
+            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+            boolean enableLocalShuffleAgg = sessionVariable.isEnableLocalShuffleAgg()
+                    && sessionVariable.isEnablePipelineEngine()
+                    && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+            if (!enableLocalShuffleAgg) {
+                return inputFragment;
+            }
+
+            // InputFragment should match "AggNode->ExchangeNode" pattern, where AggNode is the caller of this method.
+            if (!(inputFragment.getPlanRoot() instanceof ExchangeNode)) {
+                return inputFragment;
+            }
+
+            // SourceFragment should match "[ProjectNode->]ScanNode" pattern.
+            PlanNode sourceFragmentRoot = inputFragment.getPlanRoot().getChild(0);
+            if (!onlyContainNodeTypes(sourceFragmentRoot, ImmutableList.of(ScanNode.class, ProjectNode.class))) {
+                return inputFragment;
+            }
+
+            // If ExchangeSink is CTE MultiCastPlanFragment, we cannot remove this ExchangeNode.
+            PlanFragment sourceFragment = sourceFragmentRoot.getFragment();
+            if (sourceFragment instanceof MultiCastPlanFragment) {
+                return inputFragment;
+            }
+
+            // Traverse fragment in reverse to delete inputFragment,
+            // because the last fragment is inputFragment for the most cases.
+            ArrayList<PlanFragment> fragments = context.getFragments();
+            for (int i = fragments.size() - 1; i >= 0; --i) {
+                if (fragments.get(i).equals(inputFragment)) {
+                    fragments.remove(i);
+                    break;
+                }
+            }
+
+            return sourceFragment;
+        }
+
         @Override
         public PlanFragment visitPhysicalHashAggregate(OptExpression optExpr, ExecPlan context) {
             PhysicalHashAggregateOperator node = (PhysicalHashAggregateOperator) optExpr.getOp();
-            PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
+            PlanFragment originalInputFragment = visit(optExpr.inputAt(0), context);
+
+            PlanFragment inputFragment = removeExchangeNodeForLocalShuffleAgg(originalInputFragment, context);
+            boolean withLocalShuffle = inputFragment != originalInputFragment;
 
             /*
              * Create aggregate TupleDescriptor
@@ -1252,8 +1342,10 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             if ((node.isOnePhaseAgg() || node.getType().isDistinct())) {
-                inputFragment.setEnableSharedScan(false);
-                inputFragment.setAssignScanRangesPerDriverSeq(true);
+                // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
+                inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
+                inputFragment.setEnableSharedScan(withLocalShuffle);
+                aggregationNode.setWithLocalShuffle(withLocalShuffle);
             }
 
             inputFragment.setPlanRoot(aggregationNode);
@@ -1604,7 +1696,8 @@ public class PlanFragmentBuilder {
             return planFragment;
         }
 
-        private List<Expr> getHashDistributionSpecPartitionByExprs(HashDistributionSpec hashDistributionSpec, ExecPlan context) {
+        private List<Expr> getHashDistributionSpecPartitionByExprs(HashDistributionSpec hashDistributionSpec,
+                                                                   ExecPlan context) {
             List<Integer> columnRefSet = hashDistributionSpec.getHashDistributionDesc().getColumns();
             Preconditions.checkState(!columnRefSet.isEmpty());
             List<ColumnRefOperator> partitionColumns = new ArrayList<>();
@@ -1628,7 +1721,8 @@ public class PlanFragmentBuilder {
                     leftChildColumns, rightChildColumns, onPredicates);
 
             Preconditions.checkState(!node.getJoinType().isCrossJoin(), "should not be cross join");
-            Preconditions.checkState(!(node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty()), "should has eq conjuncts");
+            Preconditions.checkState(!(node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty()),
+                    "should has eq conjuncts");
 
             JoinOperator joinOperator = node.getJoinType();
 
@@ -1656,8 +1750,9 @@ public class PlanFragmentBuilder {
                     optExpr.getRequiredProperties().get(1).getDistributionProperty().getSpec();
             if (leftDistributionSpec instanceof HashDistributionSpec &&
                     rightDistributionSpec instanceof HashDistributionSpec) {
-                probePartitionByExprs = getHashDistributionSpecPartitionByExprs((HashDistributionSpec) leftDistributionSpec,
-                        context);
+                probePartitionByExprs =
+                        getHashDistributionSpecPartitionByExprs((HashDistributionSpec) leftDistributionSpec,
+                                context);
             }
 
             JoinNode.DistributionMode distributionMode;

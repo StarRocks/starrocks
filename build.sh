@@ -52,6 +52,12 @@ if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]];
     ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
 fi
 
+WITH_BLOCK_CACHE=OFF
+if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
+    echo "Thirdparty libraries need to be build ..."
+    ${STARROCKS_HOME}/thirdparty/build-thirdparty.sh
+fi
+
 PARALLEL=$[$(nproc)/4+1]
 
 # Check args
@@ -119,7 +125,7 @@ fi
 USE_JEMALLOC=ON
 
 HELP=0
-if [ $# == 1 ] ; then
+if [[ $OPTS =~ "-j" ]] && [ $# == 3 ] || [ $# == 1 ] ; then
     # default
     BUILD_BE=1
     BUILD_FE=1
@@ -222,6 +228,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_JEMALLOC=$USE_JEMALLOC \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                     -DUSE_STAROS=${USE_STAROS} \
+                    -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
                     -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
                     -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
@@ -237,6 +244,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
                     -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
                     -DUSE_JEMALLOC=$USE_JEMALLOC \
+                    -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
     fi
     time ${BUILD_SYSTEM} -j${PARALLEL}
@@ -338,6 +346,15 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
+
+    if [ "${WITH_BLOCK_CACHE}" == "ON"  ]; then
+        mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib/deps
+        cp -r -p ${CACHELIB_DIR}/lib ${STARROCKS_OUTPUT}/be/lib/cachelib/
+        cp -r -p ${CACHELIB_DIR}/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
+        cp -r -p ${CACHELIB_DIR}/deps/lib ${STARROCKS_OUTPUT}/be/lib/cachelib/deps/
+        cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/deps/
+    fi
+
     # note: do not use oracle jdk to avoid commercial dispute
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/open_jdk/jre/lib/aarch64 ${STARROCKS_OUTPUT}/be/lib/jvm/

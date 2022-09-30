@@ -54,6 +54,8 @@ public class AggregationNode extends PlanNode {
     private String streamingPreaggregationMode = "auto";
 
     private boolean useSortAgg = false;
+    
+    private boolean withLocalShuffle = false;
 
     /**
      * Create an agg node that is not an intermediate node.
@@ -93,6 +95,10 @@ public class AggregationNode extends PlanNode {
         Preconditions.checkState(tupleIds.get(0).equals(aggInfo.getOutputTupleId()));
         tupleIds.clear();
         tupleIds.add(aggInfo.getIntermediateTupleId());
+    }
+
+    public void setWithLocalShuffle(boolean withLocalShuffle) {
+        this.withLocalShuffle = withLocalShuffle;
     }
 
     @Override
@@ -219,13 +225,17 @@ public class AggregationNode extends PlanNode {
                     getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
         }
 
-
         if (!conjuncts.isEmpty()) {
             output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel)).append("\n");
         }
         if (useSortAgg) {
             output.append(detailPrefix).append("sorted streaming: true\n");
         }
+
+        if (withLocalShuffle) {
+            output.append(detailPrefix).append("withLocalShuffle: true\n");
+        }
+
         return output.toString();
     }
 

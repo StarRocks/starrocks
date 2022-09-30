@@ -16,6 +16,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -25,8 +26,10 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
@@ -241,12 +244,27 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         Preconditions.checkState(slotRefs.size() == 1);
         SlotRef slotRef = slotRefs.get(0);
         for (Pair<MaterializedView.BaseTableInfo, Table> tableInfo : tables.values()) {
+            MaterializedView.BaseTableInfo baseTableInfo = tableInfo.first;
             Table table = tableInfo.second;
-            if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(table.getName())) {
+            if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(baseTableInfo.getTableName())) {
                 return Pair.create(table, table.getColumn(slotRef.getColumnName()));
             }
         }
         return Pair.create(null, null);
+    }
+
+    private Map<String, Range<PartitionKey>> getPartitionRange(Table table, Column partitionColumn)
+            throws UserException {
+        if (table.isOlapTable()) {
+            return ((OlapTable) table).getRangePartitionMap();
+        } else if (table.isHiveTable() || table.isHudiTable()) {
+            return HiveMetaStoreTableUtils.getPartitionRange((HiveMetaStoreTable) table, partitionColumn);
+        } else if (table.isIcebergTable()) {
+            // todo(ywb) support partition mv for iceberg later
+            return Maps.newHashMap();
+        } else {
+            throw new DmlException("Can not get partition range from table with type : %s", table.getType());
+        }
     }
 
     private void syncPartitionsForExpr() {
@@ -258,14 +276,11 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         Preconditions.checkNotNull(partitionColumn);
 
         PartitionDiff partitionDiff = new PartitionDiff();
-        Map<String, Range<PartitionKey>> basePartitionMap = Maps.newHashMap();
-        Map<String, Range<PartitionKey>> mvPartitionMap;
+        Map<String, Range<PartitionKey>> basePartitionMap;
+        Map<String, Range<PartitionKey>> mvPartitionMap = materializedView.getRangePartitionMap();
         database.readLock();
         try {
-            if (partitionBaseTable.isOlapTable()) {
-                basePartitionMap = ((OlapTable) partitionBaseTable).getRangePartitionMap();
-            }
-            mvPartitionMap = materializedView.getRangePartitionMap();
+            basePartitionMap = getPartitionRange(partitionBaseTable, partitionColumn);
             if (partitionExpr instanceof SlotRef) {
                 partitionDiff = SyncPartitionUtils.calcSyncSamePartition(basePartitionMap, mvPartitionMap);
             } else if (partitionExpr instanceof FunctionCallExpr) {
@@ -274,6 +289,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 partitionDiff = SyncPartitionUtils.calcSyncRollupPartition(basePartitionMap, mvPartitionMap,
                         granularity, partitionColumn.getPrimitiveType());
             }
+        } catch (UserException e) {
+            LOG.warn("Materialized view compute partition difference with base table failed : {}", e);
+            return;
         } finally {
             database.readUnlock();
         }
@@ -454,34 +472,60 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         // check snapshotBaseTables and current tables in catalog
         for (Pair<MaterializedView.BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             MaterializedView.BaseTableInfo baseTableInfo = tablePair.first;
-            Table table = tablePair.second;
-            if (!table.isOlapTable()) {
-                // do not check other type table have changed now.
-                continue;
-            }
-            OlapTable snapshotTable = (OlapTable) table;
+            Table snapshotTable = tablePair.second;
+
             Database db = baseTableInfo.getDb();
             if (db == null) {
                 return true;
             }
             db.readLock();
             try {
-                if (snapshotTable.getPartitionInfo() instanceof SinglePartitionInfo) {
-                    Set<String> partitionNames =
-                            ((OlapTable) db.getTable(snapshotTable.getId())).getPartitionNames();
-                    if (!snapshotTable.getPartitionNames().equals(partitionNames)) {
-                        // there is partition rename
-                        return true;
-                    }
-                } else {
-                    Map<String, Range<PartitionKey>> snapshotPartitionMap = snapshotTable.getRangePartitionMap();
-                    Map<String, Range<PartitionKey>> currentPartitionMap =
-                            ((OlapTable) db.getTable(snapshotTable.getId())).getRangePartitionMap();
-                    boolean changed = SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
-                    if (changed) {
-                        return true;
-                    }
+                Table table = baseTableInfo.getTable();
+                if (table == null) {
+                    return true;
                 }
+                if (snapshotTable.isOlapTable()) {
+                    OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
+                    if (snapShotOlapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
+                        Set<String> partitionNames = ((OlapTable) table).getPartitionNames();
+                        if (!snapShotOlapTable.getPartitionNames().equals(partitionNames)) {
+                            // there is partition rename
+                            return true;
+                        }
+                    } else {
+                        Map<String, Range<PartitionKey>> snapshotPartitionMap = snapShotOlapTable.getRangePartitionMap();
+                        Map<String, Range<PartitionKey>> currentPartitionMap = ((OlapTable) table).getRangePartitionMap();
+                        boolean changed =
+                                SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
+                        if (changed) {
+                            return true;
+                        }
+                    }
+                } else if (snapshotTable.isHiveTable() || snapshotTable.isHudiTable()) {
+                    HiveMetaStoreTable snapShotHMSTable = (HiveMetaStoreTable) snapshotTable;
+                    if (snapShotHMSTable.isUnPartitioned()) {
+                        if (!((HiveMetaStoreTable) table).isUnPartitioned()) {
+                            return true;
+                        }
+                    } else {
+                        HiveMetaStoreTable currentHMSTable = (HiveMetaStoreTable) table;
+                        Map<String, Range<PartitionKey>> snapshotPartitionMap = HiveMetaStoreTableUtils.
+                                getPartitionRange(snapShotHMSTable, snapShotHMSTable.getPartitionColumns().get(0));
+                        Map<String, Range<PartitionKey>> currentPartitionMap = HiveMetaStoreTableUtils.
+                                getPartitionRange(currentHMSTable, currentHMSTable.getPartitionColumns().get(0));
+                        boolean changed =
+                                SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
+                        if (changed) {
+                            return true;
+                        }
+                    }
+                } else if (snapshotTable.isIcebergTable()) {
+                    // todd(ywb) check iceberg table later
+                    continue;
+                }
+            } catch (UserException e) {
+                LOG.warn("Materialized view compute partition change failed : {}", e);
+                return true;
             } finally {
                 db.readUnlock();
             }

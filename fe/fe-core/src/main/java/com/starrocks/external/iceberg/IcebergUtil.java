@@ -16,9 +16,11 @@ import com.starrocks.external.hive.RemoteFileInputFormat;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -189,8 +191,46 @@ public class IcebergUtil {
         return convertToSRTable(icebergTable, properties);
     }
 
+    public static List<String> getIdentityPartitionNames(org.apache.iceberg.Table icebergTable) {
+        List<String> partitionNames = Lists.newArrayList();
+        TableScan tableScan = icebergTable.newScan();
+        List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
+        if (icebergTable.spec().isUnpartitioned()) {
+            return partitionNames;
+        }
+
+        if (icebergTable.spec().fields().stream().anyMatch(partitionField -> !partitionField.transform().isIdentity())) {
+            return partitionNames;
+        }
+
+        for (FileScanTask fileScanTask : tasks) {
+            StructLike partition = fileScanTask.file().partition();
+            partitionNames.add(convertIcebergPartitionToPartitionName(icebergTable.spec(), partition));
+        }
+        return partitionNames;
+    }
+
+    static String convertIcebergPartitionToPartitionName(PartitionSpec partitionSpec, StructLike partition) {
+        int filePartitionFields = partition.size();
+        StringBuilder sb = new StringBuilder();
+        for (int index = 0; index < filePartitionFields; ++index) {
+            PartitionField partitionField = partitionSpec.fields().get(index);
+            sb.append(partitionField.name());
+            sb.append("=");
+            String value = partitionField.transform().toHumanString(getPartitionValue(partition, index,
+                    partitionSpec.javaClasses()[index]));
+            sb.append(value);
+            sb.append("/");
+        }
+        return sb.substring(0, sb.length() - 1);
+    }
+
+    public static <T> T getPartitionValue(StructLike partition, int position, Class<?> javaClass) {
+        return partition.get(position, (Class<T>) javaClass);
+    }
+
     public static IcebergTable convertHiveCatalogToSRTable(org.apache.iceberg.Table icebergTable, String metastoreURI,
-                                                String dbName, String tblName) throws DdlException {
+                                                           String dbName, String tblName) throws DdlException {
         Map<String, String> properties = new HashMap<>();
         properties.put(IcebergTable.ICEBERG_DB, dbName);
         properties.put(IcebergTable.ICEBERG_TABLE, tblName);
@@ -215,7 +255,7 @@ public class IcebergUtil {
                 fullSchema, properties);
     }
 
-    static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {
+    public static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {
         if (icebergType == null) {
             return Type.NULL;
         }
