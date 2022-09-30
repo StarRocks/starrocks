@@ -15,10 +15,12 @@ CacheInputStream::CacheInputStream(const std::string& filename, std::shared_ptr<
 #ifdef WITH_BLOCK_CACHE
     // _cache_key = _filename;
     // use hash(filename) as cache key.
-    _cache_key.resize(8);
+    _cache_key.resize(16);
     char* data = _cache_key.data();
     uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
     memcpy(data, &hash_value, sizeof(hash_value));
+    int64_t file_size = _size;
+    memcpy(data + 8, &file_size, sizeof(file_size));
     _buffer.reserve(BlockCache::instance()->block_size());
 #endif
 }
