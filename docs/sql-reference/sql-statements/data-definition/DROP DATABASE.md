@@ -22,7 +22,3 @@ Note:
     ```sql
     DROP DATABASE db_test;
     ```
-
-## keyword
-
-DROP,DATABASE

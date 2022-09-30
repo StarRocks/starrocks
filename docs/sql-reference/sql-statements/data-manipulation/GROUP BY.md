@@ -139,7 +139,3 @@ GROUP BY clause is a special case of GROUP BY GROUPING SETS containing only one 
   +------+------+---------------+----------------+
   9 rows in set (0.02 sec)
   ```
-
-## keyword
-
-GROUP, GROUPING, GROUPING_ID, GROUPING_SETS, GROUPING SETS, CUBE, ROLLUP
