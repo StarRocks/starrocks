@@ -365,6 +365,10 @@
       + [RAND](./sql-reference/sql-functions/math-functions/rand.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
     + Utility Functions
+      + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
+      + [version](./sql-reference/sql-functions/utility-functions/version.md)
+      + [last_query_id](./sql-reference/sql-functions/utility-functions/last_query_id.md)
+      + [sleep](./sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)
       + [uuid_numeric](./sql-reference/sql-functions/utility-functions/uuid_numeric.md)
   + [System variables](./reference/System_variable.md)
