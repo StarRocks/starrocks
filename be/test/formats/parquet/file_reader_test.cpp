@@ -53,6 +53,7 @@ private:
     HdfsScannerContext* _create_context_for_struct_solumn();
 
     HdfsScannerContext* _create_file5_base_context();
+    HdfsScannerContext* _create_file6_base_context();
 
     void _create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
                                    std::vector<ExprContext*>* conjunct_ctxs);
@@ -61,6 +62,7 @@ private:
 
     static vectorized::ChunkPtr _create_chunk();
     static vectorized::ChunkPtr _create_struct_chunk();
+    static vectorized::ChunkPtr _create_required_array_chunk();
     static vectorized::ChunkPtr _create_chunk_for_partition();
     static vectorized::ChunkPtr _create_chunk_for_not_exist();
     static void _append_column_for_chunk(PrimitiveType column_type, vectorized::ChunkPtr* chunk);
@@ -136,6 +138,9 @@ private:
     // 4    | [[1,2,3],[4],[5]]
     // 5    | [[1,2,3],[4,5]]
     std::string _file5_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet5";
+
+    // Description: A parquet file contains required array columns
+    std::string _file6_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet6";
 
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     ObjectPool _pool;
@@ -408,6 +413,26 @@ HdfsScannerContext* FileReaderTest::_create_context_for_struct_solumn() {
     return ctx;
 }
 
+HdfsScannerContext* FileReaderTest::_create_file6_base_context() {
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor array_column(PrimitiveType::TYPE_ARRAY);
+    array_column.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+    // tuple desc and conjuncts
+    // struct columns are not supported now, so we skip reading them
+    SlotDesc slot_descs[] = {
+            {"col_int", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"col_array", array_column},
+            {""},
+    };
+    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file6_path));
+
+    return ctx;
+}
+
 void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
                                                std::vector<ExprContext*>* conjunct_ctxs) {
     std::vector<TExprNode> nodes;
@@ -532,6 +557,17 @@ vectorized::ChunkPtr FileReaderTest::_create_struct_chunk() {
     _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);
     _append_column_for_chunk(PrimitiveType::TYPE_VARCHAR, &chunk);
     _append_column_for_chunk(PrimitiveType::TYPE_VARCHAR, &chunk);
+    return chunk;
+}
+
+vectorized::ChunkPtr FileReaderTest::_create_required_array_chunk() {
+    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);
+
+    TypeDescriptor array_column(PrimitiveType::TYPE_ARRAY);
+    array_column.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    auto c = vectorized::ColumnHelper::create_column(array_column, true);
+    chunk->append_column(c, chunk->num_columns());
     return chunk;
 }
 
@@ -849,6 +885,26 @@ TEST_F(FileReaderTest, TestReadArray2dColumn) {
     EXPECT_EQ(chunk->debug_row(2), "[3, [[1, 2, 3], [4]]]");
     EXPECT_EQ(chunk->debug_row(3), "[4, [[1, 2, 3], [4], [5]]]");
     EXPECT_EQ(chunk->debug_row(4), "[5, [[1, 2, 3], [4, 5]]]");
+}
+
+TEST_F(FileReaderTest, TestReadRequiredArrayColumns) {
+    auto file = _create_file(_file6_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file6_path));
+
+    // init
+    auto* ctx = _create_file6_base_context();
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    // get next
+    auto chunk = _create_required_array_chunk();
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(1, chunk->num_rows());
+    for (int i = 0; i < chunk->num_rows(); ++i) {
+        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+    }
 }
 
 } // namespace starrocks::parquet
