@@ -36,7 +36,7 @@ public:
 
 private:
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::FORCE_PREAGGREGATION
-    Status _push_chunk_by_force_preaggregation(const size_t chunk_size);
+    Status _push_chunk_by_force_preaggregation(const vectorized::ChunkPtr& chunk, const size_t chunk_size);
 
     // It is used to perform aggregation algorithms shared by
     // StreamingAggregateSourceOperator. It is
@@ -48,6 +48,10 @@ private:
     bool _is_finished = false;
     IMTStateTablePtr _imt_detail;
     IMTStateTablePtr _imt_agg_result;
+    TableReadViewSharedPtr _imt_agg_result_reader;
+    TableReadViewParams _imt_agg_result_reader_params;
+    int32_t _num_groupby_columns;
+    int32_t _num_agg_func_columns;
 };
 
 class StreamingAggregateSinkOperatorFactory final : public OperatorFactory {

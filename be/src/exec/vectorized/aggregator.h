@@ -238,9 +238,12 @@ public:
 
     // For aggregate without group by
     void compute_single_agg_state(size_t chunk_size);
+
     // For aggregate with group by
     void compute_batch_agg_states(size_t chunk_size);
     void compute_batch_agg_states_with_selection(size_t chunk_size);
+    void restore_agg_states_with_selection(size_t chunk_size,
+                                           const std::vector<vectorized::ColumnPtr>& agg_intput_columns);
 
     // Convert one row agg states to chunk
     void convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);

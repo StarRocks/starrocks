@@ -41,6 +41,20 @@ public:
     virtual void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                         size_t row_num) const = 0;
 
+    // Restore agg state from column.
+    // this is only used for incremental compute for MV when old agg state is kept.
+    virtual void restore(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
+                         size_t row_num) const {
+        // do nothing.
+    }
+
+    // Retract agg state from column.
+    // this is only used for incremental compute for MV when old data is deleted.
+    virtual void retract(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                         size_t row_num) const {
+        // do nothing.
+    }
+
     // Update/Merge the aggregation state with null
     virtual void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const {}
 
@@ -95,6 +109,11 @@ public:
     virtual void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset,
                                           const Column** columns, AggDataPtr* states,
                                           const std::vector<uint8_t>& filter) const = 0;
+
+    // filter[i] = 0, will be update
+    virtual void restore_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset,
+                                           const Column* columns, AggDataPtr* states,
+                                           const std::vector<uint8_t>& filter) const {}
 
     // update result to single state
     virtual void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
@@ -177,6 +196,16 @@ public:
             // TODO: optimize with simd ?
             if (filter[i] == 0) {
                 static_cast<const Derived*>(this)->update(ctx, columns, states[i] + state_offset, i);
+            }
+        }
+    }
+
+    void restore_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* columns,
+                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+        // TODO: optimize with simd ?
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (filter[i] == 1) {
+                static_cast<const Derived*>(this)->restore(ctx, columns, states[i] + state_offset, i);
             }
         }
     }

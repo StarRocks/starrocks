@@ -18,12 +18,23 @@ Status IMTStateTable::init() {
     _db_name = _imt.olap_table.db_name;
     _table_name = _imt.olap_table.table_name;
 
+    // init table schema
     _table_schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_table_schema->init(_imt.olap_table.schema));
-    this->_impl = std::make_unique<vectorized::OlapTablePartitionParam>(_table_schema, _imt.olap_table.partition);
-    RETURN_IF_ERROR(this->_impl->init());
+    VLOG(1) << "version: " << _table_schema->version();
+    _version = Version(0, _table_schema->version());
+
+    // init partition
+    _partition = std::make_unique<vectorized::OlapTablePartitionParam>(_table_schema, _imt.olap_table.partition);
+    RETURN_IF_ERROR(this->_partition->init());
+
+    // init location
     _location = std::make_unique<TOlapTableLocationParam>(_imt.olap_table.location);
+
+    // init table sink for write
     RETURN_IF_ERROR(_init_table_sink());
+
+    // init for reader
     _table = std::make_shared<Table>(table_name(), table_id(), get_tablets());
 
     return Status::OK();
