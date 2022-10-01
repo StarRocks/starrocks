@@ -200,7 +200,7 @@ public:
         _type_length = type_length;
     }
 
-    template <int BINSZ, DecimalScaleType scale_type>
+    template <int BINSZ, DecimalScaleType scale_type, typename T>
     void t_convert(size_t size, uint8_t* dst_null_data, uint8_t* src_null_data, DecimalType* dst_data,
                    const uint8* src_data, bool* has_null) {
         for (size_t i = 0; i < size; i++) {
@@ -213,39 +213,21 @@ public:
             // the unscaled number must be encoded as two's complement using big-endian byte order.
 
             DestPrimitiveType unscale = 0;
-            if constexpr (BINSZ <= 8) {
-                using T = int64_t;
-                T value = 0;
+            T value = 0;
+            static_assert(BINSZ <= sizeof(value));
 
-                // NOTE(yan): since fixed length binary data is contiguous, with condition check (i+8) < size
-                // we can assure that there is no illegal memory access
-                // UPDATE: bytes are allocated by `RawVectorPad16`, so there will be extra bytes at tail.
+            // NOTE(yan): since fixed length binary data is contiguous, with condition check (i+8) < size
+            // we can assure that there is no illegal memory access
+            // UPDATE: bytes are allocated by `RawVectorPad16`, so there will be extra bytes at tail.
 
-                // mempcy 8 bytes to compiler, it's instruction to move 8 bytes from memory to register
-                // and follow actions are all in-register instructions.
-                memcpy(reinterpret_cast<char*>(&value), src_data, 8);
-                value = BitUtil::big_endian_to_host(value);
-                value = value >> ((8 - BINSZ) * 8);
+            // mempcy 8 bytes to compiler, it's instruction to move 8 bytes from memory to register
+            // and follow actions are all in-register instructions.
+            memcpy(reinterpret_cast<char*>(&value), src_data, sizeof(value));
+            value = BitUtil::big_endian_to_host(value);
+            value = value >> ((sizeof(value) - BINSZ) * 8);
+            unscale = value;
 
-                src_data += BINSZ;
-
-                // NOTE(yan): if no scale, we can assign with int64_t
-                // otherwise we have to extend this value to int128_t to scale.
-                if constexpr (scale_type == DecimalScaleType::kNoScale) {
-                    dst_data[i] = DecimalType(value);
-                    continue;
-                }
-                unscale = value;
-            } else {
-                using T = int128_t;
-                T value = src_data[0] & 0x80 ? -1 : 0;
-                memcpy(reinterpret_cast<char*>(&value) + sizeof(T) - BINSZ, src_data, BINSZ);
-                value = BitUtil::big_endian_to_host(value);
-                unscale = value;
-
-                src_data += BINSZ;
-            }
-
+            src_data += BINSZ;
             // hardware branch predicator works well here.
             if constexpr (scale_type == DecimalScaleType::kScaleUp) {
                 unscale *= _scale_factor;
@@ -284,17 +266,24 @@ public:
 
         // For calling `src_data.get_bytes().data()` , we don't need to call `build_slices` underneath.
         // And notice bytes are allocated by `RawVectorPad16`, there will be extra 16 bytes.
-#define M(SZ, T)                                                                                             \
-    case SZ:                                                                                                 \
-        t_convert<SZ, T>(size, dst_null_data.data(), src_null_data.data(), dst_data.data(), src_data.data(), \
-                         &has_null);                                                                         \
+#define M(SZ, K, T)                                                                                             \
+    case SZ:                                                                                                    \
+        t_convert<SZ, K, T>(size, dst_null_data.data(), src_null_data.data(), dst_data.data(), src_data.data(), \
+                            &has_null);                                                                         \
         break;
 
-#define MX(T) \
-    M(1, T)   \
-    M(2, T)   \
-    M(3, T)   \
-    M(4, T) M(5, T) M(6, T) M(7, T) M(8, T) M(9, T) M(10, T) M(11, T) M(12, T) M(13, T) M(14, T) M(15, T) M(16, T)
+#define MX(T)          \
+    M(1, T, int64_t)   \
+    M(2, T, int64_t)   \
+    M(3, T, int64_t)   \
+    M(4, T, int64_t)   \
+    M(5, T, int64_t)   \
+    M(6, T, int64_t)   \
+    M(7, T, int64_t)   \
+    M(8, T, int64_t)   \
+    M(9, T, int128_t)  \
+    M(10, T, int128_t) \
+    M(11, T, int128_t) M(12, T, int128_t) M(13, T, int128_t) M(14, T, int128_t) M(15, T, int128_t) M(16, T, int128_t)
 
         if (_scale_type == DecimalScaleType::kScaleUp) {
             switch (_type_length) {
