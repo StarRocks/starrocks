@@ -46,6 +46,7 @@ public:
     virtual void restore(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
                          size_t row_num) const {
         // do nothing.
+        throw std::runtime_error("Agg function not support restore method for now");
     }
 
     // Retract agg state from column.
@@ -53,6 +54,7 @@ public:
     virtual void retract(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                          size_t row_num) const {
         // do nothing.
+        throw std::runtime_error("Agg function not support retract method for now");
     }
 
     // Update/Merge the aggregation state with null

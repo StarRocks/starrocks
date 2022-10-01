@@ -53,9 +53,19 @@ public:
     void restore(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
                  size_t row_num) const override {
         DCHECK(column->is_numeric() || column->is_decimal());
-        const auto* agg_column = down_cast<const InputColumnType*>(column);
-        VLOG(1) << " sum restore:" << row_num;
-        this->data(state).sum = agg_column->get_data()[row_num];
+        const Column* data_column;
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            data_column = nullable_column->data_column().get();
+        } else {
+            data_column = column;
+        }
+        const auto* input_column = down_cast<const ResultColumnType*>(data_column);
+        if constexpr (std::is_same_v<ResultColumnType, Int64Column>) {
+            auto xx_column = down_cast<const Int64Column*>(input_column);
+            VLOG(1) << "sum restore:" << row_num << ", value:" << (int64_t)(xx_column->get_data()[row_num]);
+        }
+        this->data(state).sum = input_column->get_data()[row_num];
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,

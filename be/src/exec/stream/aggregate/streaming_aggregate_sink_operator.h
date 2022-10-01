@@ -52,6 +52,7 @@ private:
     TableReadViewParams _imt_agg_result_reader_params;
     int32_t _num_groupby_columns;
     int32_t _num_agg_func_columns;
+    std::shared_ptr<vectorized::Schema> _imt_agg_result_schema;
 };
 
 class StreamingAggregateSinkOperatorFactory final : public OperatorFactory {
