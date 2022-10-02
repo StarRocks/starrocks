@@ -154,7 +154,7 @@ public class GlobalTransactionMgr implements Writable {
         if (response.status.getStatus_code() != TStatusCode.OK) {
             String errStr;
             if (response.status.getError_msgs() != null) {
-                errStr = String.join(",", response.status.getError_msgs());
+                errStr = String.join(". ", response.status.getError_msgs());
             } else {
                 errStr = "";
             }

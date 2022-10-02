@@ -1302,30 +1302,40 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     "and skip to check authorization and privilege for {}", authParams);
             return new TStatus(TStatusCode.OK);
         }
+        String configHintMsg = "Set the configuration 'enable_starrocks_external_table_auth_check' to 'false' on the" +
+                " target cluster if you don't want to check the authorization and privilege.";
 
+        // 1. check user and password
+        UserIdentity userIdentity;
         try {
             BaseAction.ActionAuthorizationInfo authInfo = BaseAction.parseAuthInfo(
                     authParams.getUser(), authParams.getPasswd(), authParams.getHost());
-            UserIdentity userIdentity = BaseAction.checkPassword(authInfo);
+            userIdentity = BaseAction.checkPassword(authInfo);
+        } catch (Exception e) {
+            LOG.warn("Failed to check parameter {}", authParams, e);
+            TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
+            status.setError_msgs(Lists.newArrayList(e.getMessage(), "Please check that your user or password " +
+                    "is correct", configHintMsg));
+            return status;
+        }
+
+        // 2. check privilege
+        try {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
                         userIdentity, dbName, tableName, PrivPredicate.LOAD)) {
-                    String errMsg = String.format("Access denied; user '%s'@'%s' need (at least one of) the %s" +
-                                    "privilege(s) for table '%s' in db '%s'", userIdentity.getQualifiedUser(),
-                            userIdentity.getHost(), PrivPredicate.LOAD.getPrivs().toString(), tableName, dbName);
+                    String errMsg = String.format("Access denied; user '%s'@'%s' need (at least one of) the " +
+                                    "privilege(s) in [%s] for table '%s' in database '%s'", userIdentity.getQualifiedUser(),
+                            userIdentity.getHost(), PrivPredicate.LOAD.getPrivs().toString().trim(), tableName, dbName);
                     throw new UnauthorizedException(errMsg);
                 }
             }
             return new TStatus(TStatusCode.OK);
         } catch (Exception e) {
-            LOG.warn("Failed to check parameter [user: {}, host: {}, db: {}, tables: {}]",
-                    authParams.getUser(), authParams.getHost(), authParams.getDb_name(), authParams.getTable_names(), e);
-
+            LOG.warn("Failed to check parameter {}", authParams, e);
             TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
-            status.setError_msgs(Lists.newArrayList(e.getMessage(),
-                    "Set the configuration 'enable_starrocks_external_table_auth_check' to 'false' on the target cluster" +
-                            " if you don't want to check the authorization and LOAD privilege."));
+            status.setError_msgs(Lists.newArrayList(e.getMessage(), configHintMsg));
             return status;
         }
     }
