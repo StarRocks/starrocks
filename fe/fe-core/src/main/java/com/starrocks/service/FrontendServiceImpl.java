@@ -1308,7 +1308,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return new TStatus(TStatusCode.OK);
         }
 
-        LOG.debug("Receive parameter {}", authParams);
+        LOG.debug("Receive TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
+                authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names());
         if (!Config.enable_starrocks_external_table_auth_check) {
             LOG.debug("enable_starrocks_external_table_auth_check is disabled, " +
                     "and skip to check authorization and privilege for {}", authParams);
@@ -1324,7 +1325,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     authParams.getUser(), authParams.getPasswd(), authParams.getHost());
             userIdentity = BaseAction.checkPassword(authInfo);
         } catch (Exception e) {
-            LOG.warn("Failed to check parameter {}", authParams, e);
+            LOG.warn("Failed to check TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
+                    authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names(), e);
             TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
             status.setError_msgs(Lists.newArrayList(e.getMessage(), "Please check that your user or password " +
                     "is correct", configHintMsg));
@@ -1345,7 +1347,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             return new TStatus(TStatusCode.OK);
         } catch (Exception e) {
-            LOG.warn("Failed to check parameter {}", authParams, e);
+            LOG.warn("Failed to check TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
+                    authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names(), e);
             TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
             status.setError_msgs(Lists.newArrayList(e.getMessage(), configHintMsg));
             return status;
