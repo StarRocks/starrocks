@@ -612,7 +612,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
                     if (context.needRewriteMultiCountDistinctColumns.contains(columnId)) {
                         // we only need rewrite TFunction
-                        Type[] newTypes = new Type[]{ID_TYPE};
+                        Type[] newTypes = new Type[] {ID_TYPE};
                         AggregateFunction newFunction =
                                 (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
                                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -939,7 +939,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         OptExpression result = OptExpression.create(decodeOperator, childExpr);
         result.setStatistics(childExpr.get(0).getStatistics());
         // TODO
-        result.setLogicalProperty(rewriteLogicProperty(childExpr.get(0).getLogicalProperty(), context.stringColumnIdToDictColumnIds));
+        result.setLogicalProperty(DecodeVisitor.rewriteLogicProperty(childExpr.get(0).getLogicalProperty(),
+                context.stringColumnIdToDictColumnIds));
         return result;
     }
 
