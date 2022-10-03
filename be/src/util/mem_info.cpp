@@ -36,8 +36,8 @@ bool MemInfo::_s_initialized = false;
 int64_t MemInfo::_s_physical_mem = -1;
 
 void MemInfo::init() {
-    // check if application is in docker container or not via /.dockerenv file
 
+    // check if application is in docker container or not via /.dockerenv file
     if (fs::path_exist("/.dockerenv")) {
         // Read from /sys/fs/cgroup/memory/memory.limit_in_bytes
         std::ifstream memoryLimit("/sys/fs/cgroup/memory/memory.limit_in_bytes");
@@ -55,39 +55,41 @@ void MemInfo::init() {
             memoryLimit.close();
         }
 
-    } else {
-        // Read from /proc/meminfo
-        std::ifstream meminfo("/proc/meminfo", std::ios::in);
-        std::string line;
+    }
+    // Read from /proc/meminfo
+    std::ifstream meminfo("/proc/meminfo", std::ios::in);
+    std::string line;
 
-        while (meminfo.good() && !meminfo.eof()) {
-            getline(meminfo, line);
-            std::vector<std::string> fields = strings::Split(line, " ", strings::SkipWhitespace());
+    while (meminfo.good() && !meminfo.eof()) {
+        getline(meminfo, line);
+        std::vector<std::string> fields = strings::Split(line, " ", strings::SkipWhitespace());
 
-            // We expect lines such as, e.g., 'MemTotal: 16129508 kB'
-            if (fields.size() < 3) {
-                continue;
-            }
+        // We expect lines such as, e.g., 'MemTotal: 16129508 kB'
+        if (fields.size() < 3) {
+            continue;
+        }
 
-            if (fields[0].compare("MemTotal:") != 0) {
-                continue;
-            }
+        if (fields[0].compare("MemTotal:") != 0) {
+            continue;
+        }
 
-            StringParser::ParseResult result;
-            int64_t mem_total_kb = StringParser::string_to_int<int64_t>(fields[1].data(), fields[1].size(), &result);
+        StringParser::ParseResult result;
+        int64_t mem_total_kb = StringParser::string_to_int<int64_t>(fields[1].data(), fields[1].size(), &result);
 
-            if (result == StringParser::PARSE_SUCCESS) {
-                // Entries in /proc/meminfo are in KB.
+        if (result == StringParser::PARSE_SUCCESS) {
+            // Entries in /proc/meminfo are in KB.
+            if (_s_physical_mem == -1 || _s_physical_mem > mem_total_kb * 1024L) {
                 _s_physical_mem = mem_total_kb * 1024L;
             }
-
-            break;
         }
 
-        if (meminfo.is_open()) {
-            meminfo.close();
-        }
+        break;
     }
+
+    if (meminfo.is_open()) {
+        meminfo.close();
+    }
+
 
     if (_s_physical_mem == -1) {
         LOG(WARNING) << "Could not determine amount of physical memory on this machine.";
