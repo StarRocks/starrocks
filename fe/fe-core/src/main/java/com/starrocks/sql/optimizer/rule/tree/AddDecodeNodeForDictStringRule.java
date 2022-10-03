@@ -445,8 +445,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             return visitProjectionAfter(optExpression, context);
         }
 
-        private LogicalProperty rewriteLogicProperty(LogicalProperty logicalProperty,
-                                                     Map<Integer, Integer> stringColumnIdToDictColumnIds) {
+        private static LogicalProperty rewriteLogicProperty(LogicalProperty logicalProperty,
+                                                            Map<Integer, Integer> stringColumnIdToDictColumnIds) {
             ColumnRefSet outputColumns = logicalProperty.getOutputColumns();
             int[] columnIds = outputColumns.getColumnIds();
             outputColumns.clear();
@@ -456,7 +456,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             return logicalProperty;
         }
 
-        private LogicalProperty rewriteLogicProperty(LogicalProperty logicalProperty, ColumnRefSet outputColumns) {
+        private static LogicalProperty rewriteLogicProperty(LogicalProperty logicalProperty, ColumnRefSet outputColumns) {
             logicalProperty.setOutputColumns(outputColumns);
             return logicalProperty;
         }
@@ -612,7 +612,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
                     if (context.needRewriteMultiCountDistinctColumns.contains(columnId)) {
                         // we only need rewrite TFunction
-                        Type[] newTypes = new Type[] {ID_TYPE};
+                        Type[] newTypes = new Type[]{ID_TYPE};
                         AggregateFunction newFunction =
                                 (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
                                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -939,7 +939,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         OptExpression result = OptExpression.create(decodeOperator, childExpr);
         result.setStatistics(childExpr.get(0).getStatistics());
         // TODO
-        result.setLogicalProperty(childExpr.get(0).getLogicalProperty());
+        result.setLogicalProperty(rewriteLogicProperty(childExpr.get(0).getLogicalProperty(), context.stringColumnIdToDictColumnIds));
         return result;
     }
 
