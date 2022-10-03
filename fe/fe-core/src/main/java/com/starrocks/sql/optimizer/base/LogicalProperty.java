@@ -34,6 +34,10 @@ public class LogicalProperty implements Property {
         return outputColumns;
     }
 
+    public void setOutputColumns(ColumnRefSet outputColumns) {
+        this.outputColumns = outputColumns;
+    }
+
     public int getLeftMostScanTabletsNum() {
         return leftMostScanTabletsNum;
     }
@@ -52,6 +56,12 @@ public class LogicalProperty implements Property {
 
     public LogicalProperty(ColumnRefSet outputColumns) {
         this.outputColumns = outputColumns;
+    }
+
+    public LogicalProperty(LogicalProperty other) {
+        outputColumns = other.outputColumns.clone();
+        leftMostScanTabletsNum = other.leftMostScanTabletsNum;
+        isExecuteInOneTablet = other.isExecuteInOneTablet;
     }
 
     public void derive(ExpressionContext expressionContext) {

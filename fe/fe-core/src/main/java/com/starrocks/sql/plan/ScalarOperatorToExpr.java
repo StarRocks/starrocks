@@ -481,8 +481,14 @@ public class ScalarOperatorToExpr {
             context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(), Type.VARCHAR));
             final Expr callExpr = buildExecExpression(call, context);
             // 3. recover the previous column
+<<<<<<< HEAD
             context.colRefToExpr.put(key, old);
 
+=======
+            if (old != null) {
+                context.colRefToExpr.put(key, old);
+            }
+>>>>>>> 2ac5807eb ([BugFix] fix uncorrect logical properties when apply LowCardinality optimize (#11793))
             Expr result = new DictMappingExpr(dictExpr, callExpr);
             result.setType(operator.getType());
             return result;
