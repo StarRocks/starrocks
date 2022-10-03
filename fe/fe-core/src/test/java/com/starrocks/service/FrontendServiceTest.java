@@ -102,17 +102,18 @@ public class FrontendServiceTest {
         verifyCheckResult(true, null, FrontendServiceImpl.checkPasswordAndLoadPrivilege(authParam));
 
         String hintMsg = "Set the configuration 'enable_starrocks_external_table_auth_check' to 'false' on the target " +
-                "cluster if you don't want to check the authorization and LOAD privilege.";
+                "cluster if you don't want to check the authorization and privilege.";
 
         // test password check failed
         authParam = createTAuthenticateParams(
                 "abc", "12", "192.168.92.3", "db1", Arrays.asList("t1", "t2", "t3"));
-        verifyCheckResult(false, Arrays.asList("Access denied for default_cluster:abc@192.168.92.3", hintMsg),
-                FrontendServiceImpl.checkPasswordAndLoadPrivilege(authParam));
+        verifyCheckResult(false, Arrays.asList("Access denied for default_cluster:abc@192.168.92.3", "Please " +
+                        "check that your user or password is correct", hintMsg),
+                        FrontendServiceImpl.checkPasswordAndLoadPrivilege(authParam));
 
         // test privilege check failed on different tables
-        String errMsgFormat = "Access denied; user 'default_cluster:abc'@'192.168.92.3' need (at least one of) the Admin_priv Load_priv " +
-                "privilege(s) for table '%s' in db 'default_cluster:db1'";
+        String errMsgFormat = "Access denied; user 'default_cluster:abc'@'192.168.92.3' need (at least one of) the " +
+                "privilege(s) in [Admin_priv Load_priv] for table '%s' in database 'default_cluster:db1'";
         authParam = createTAuthenticateParams(
                 "abc", "123", "192.168.92.3", "db1", Arrays.asList("t4", "t2", "t3"));
         verifyCheckResult(false, Arrays.asList(String.format(errMsgFormat, "t4"), hintMsg),
