@@ -205,6 +205,15 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             return false;
         }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rewrite/AddDecodeNodeForDictStringRule.java
+=======
+        // create a new dictionary column and assign the same property except for the type and column id
+        // the input column maybe a dictionary column or a string column
+        private ColumnRefOperator createNewDictColumn(DecodeContext context, ColumnRefOperator inputColumn) {
+            return context.columnRefFactory.create(inputColumn.getName(), ID_TYPE, inputColumn.isNullable());
+        }
+
+>>>>>>> 2ac5807eb ([BugFix] fix uncorrect logical properties when apply LowCardinality optimize (#11793)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/AddDecodeNodeForDictStringRule.java
         public OptExpression visitProjectionAfter(OptExpression optExpression, DecodeContext context) {
             if (context.hasEncoded && optExpression.getOp().getProjection() != null) {
                 Projection projection = optExpression.getOp().getProjection();
@@ -220,6 +229,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 } else if (projection.couldApplyStringDict(stringColumnIds)) {
                     Projection newProjection = rewriteProjectOperator(projection, context);
                     optExpression.getOp().setProjection(newProjection);
+                    optExpression.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
+                            new ColumnRefSet(newProjection.getOutputColumns())));
                     return optExpression;
                 } else {
                     context.clear();
@@ -270,8 +281,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpression.getOp();
             context.needEncode = topN.couldApplyStringDict(context.allStringColumnIds);
             if (context.needEncode) {
-                topN.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns,
-                        context.allStringColumnIds);
+                topN.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns, context.allStringColumnIds);
             }
 
             context.hasEncoded = false;
@@ -279,19 +289,17 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
 
             Set<Integer> stringColumns = context.stringColumnIdToDictColumnIds.keySet();
-            boolean needRewrite = !stringColumns.isEmpty() &&
-                    topN.couldApplyStringDict(stringColumns);
+            boolean needRewrite = !stringColumns.isEmpty() && topN.couldApplyStringDict(stringColumns);
 
             if (context.hasEncoded || needRewrite) {
                 if (needRewrite) {
-                    PhysicalTopNOperator newTopN = rewriteTopNOperator(topN,
-                            context);
+                    PhysicalTopNOperator newTopN = rewriteTopNOperator(topN, context);
                     newTopN.getUsedColumns();
                     LogicalProperty logicalProperty = optExpression.getLogicalProperty();
-                    rewriteLogicProperty(logicalProperty, context.stringColumnIdToDictColumnIds);
                     OptExpression result = OptExpression.create(newTopN, newChildExpr);
                     result.setStatistics(optExpression.getStatistics());
-                    result.setLogicalProperty(optExpression.getLogicalProperty());
+                    result.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
+                            context.stringColumnIdToDictColumnIds));
                     return visitProjectionAfter(result, context);
                 } else {
                     insertDecodeExpr(optExpression, Collections.singletonList(newChildExpr), 0, context);
@@ -315,8 +323,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             if (context.tableIdToStringColumnIds.containsKey(scanOperator.getTable().getId())) {
                 Map<ColumnRefOperator, Column> newColRefToColumnMetaMap =
                         Maps.newHashMap(scanOperator.getColRefToColumnMetaMap());
-                List<ColumnRefOperator> newOutputColumns =
-                        Lists.newArrayList(scanOperator.getOutputColumns());
+                List<ColumnRefOperator> newOutputColumns = Lists.newArrayList(scanOperator.getOutputColumns());
 
                 List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
                 List<ColumnRefOperator> globalDictStringColumns = Lists.newArrayList();
@@ -334,6 +341,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         continue;
                     }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rewrite/AddDecodeNodeForDictStringRule.java
                     ColumnRefOperator newDictColumn = null;
                     boolean couldEncoded = true;
                     if (scanOperator.getPredicate() != null &&
@@ -367,6 +375,20 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                     predicates.set(i, newCallOperator);
                                 }
                             }
+=======
+                    BooleanSupplier checkColumnCouldApply = () -> {
+                        if (context.disableDictOptimizeColumns.contains(columnId)) {
+                            return false;
+                        }
+
+                        if (scanOperator.getPredicate() != null &&
+                                scanOperator.getPredicate().getUsedColumns().contains(columnId)) {
+                            // If there is an unsupported expression in any of the low cardinality columns,
+                            // we disable low cardinality optimization.
+                            return predicates.stream().allMatch(
+                                    predicate -> !predicate.getUsedColumns().contains(columnId) ||
+                                            couldApplyDictOptimize(predicate, context.allStringColumnIds));
+>>>>>>> 2ac5807eb ([BugFix] fix uncorrect logical properties when apply LowCardinality optimize (#11793)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/AddDecodeNodeForDictStringRule.java
                         }
                     }
 
@@ -399,18 +421,36 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     context.hasEncoded = true;
                 }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rewrite/AddDecodeNodeForDictStringRule.java
+=======
+                // rewrite predicate
+                // get all string columns for this table
+                List<Integer> stringColumns = context.tableIdToStringColumnIds.get(tableId);
+                // get all could apply this optimization string columns
+                ColumnRefSet applyOptCols = new ColumnRefSet();
+                stringColumns.stream().filter(cid -> context.stringColumnIdToDictColumnIds.containsKey(cid))
+                        .forEach(applyOptCols::union);
+
+                // if predicate used any apply to optimize column, it should be rewritten
+                if (scanOperator.getPredicate() != null) {
+                    for (int i = 0; i < predicates.size(); i++) {
+                        ScalarOperator predicate = predicates.get(i);
+                        if (predicate.getUsedColumns().isIntersect(applyOptCols)) {
+                            final DictMappingRewriter rewriter = new DictMappingRewriter(context);
+                            final ScalarOperator newCallOperator = rewriter.rewrite(predicate.clone());
+                            predicates.set(i, newCallOperator);
+                        }
+                    }
+                }
+
+>>>>>>> 2ac5807eb ([BugFix] fix uncorrect logical properties when apply LowCardinality optimize (#11793)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/AddDecodeNodeForDictStringRule.java
                 newPredicate = Utils.compoundAnd(predicates);
                 if (context.hasEncoded) {
-                    PhysicalOlapScanOperator newOlapScan = new PhysicalOlapScanOperator(
-                            scanOperator.getTable(),
-                            newColRefToColumnMetaMap,
-                            scanOperator.getDistributionSpec(),
-                            scanOperator.getLimit(),
-                            newPredicate,
-                            scanOperator.getSelectedIndexId(),
-                            scanOperator.getSelectedPartitionId(),
-                            scanOperator.getSelectedTabletId(),
-                            scanOperator.getProjection());
+                    PhysicalOlapScanOperator newOlapScan =
+                            new PhysicalOlapScanOperator(scanOperator.getTable(), newColRefToColumnMetaMap,
+                                    scanOperator.getDistributionSpec(), scanOperator.getLimit(), newPredicate,
+                                    scanOperator.getSelectedIndexId(), scanOperator.getSelectedPartitionId(),
+                                    scanOperator.getSelectedTabletId(), scanOperator.getProjection());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);
                     newOlapScan.setGlobalDictStringColumns(globalDictStringColumns);
@@ -421,7 +461,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     context.globalDicts = globalDicts;
 
                     OptExpression result = new OptExpression(newOlapScan);
-                    result.setLogicalProperty(optExpression.getLogicalProperty());
+                    result.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
+                            context.stringColumnIdToDictColumnIds));
                     result.setStatistics(optExpression.getStatistics());
                     return visitProjectionAfter(result, context);
                 }
@@ -429,8 +470,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             return visitProjectionAfter(optExpression, context);
         }
 
-        private LogicalProperty rewriteLogicProperty(LogicalProperty logicalProperty,
-                                                     Map<Integer, Integer> stringColumnIdToDictColumnIds) {
+        private static LogicalProperty rewriteLogicProperty(LogicalProperty logicalProperty,
+                                                            Map<Integer, Integer> stringColumnIdToDictColumnIds) {
             ColumnRefSet outputColumns = logicalProperty.getOutputColumns();
             int[] columnIds = outputColumns.getColumnIds();
             outputColumns.clear();
@@ -440,16 +481,21 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             return logicalProperty;
         }
 
-        private Projection rewriteProjectOperator(Projection projectOperator,
-                                                  DecodeContext context) {
+        private static LogicalProperty rewriteLogicProperty(LogicalProperty logicalProperty,
+                                                            ColumnRefSet outputColumns) {
+            logicalProperty.setOutputColumns(outputColumns);
+            return logicalProperty;
+        }
+
+        private Projection rewriteProjectOperator(Projection projectOperator, DecodeContext context) {
             Map<Integer, Integer> newStringToDicts = Maps.newHashMap();
 
             context.stringColumnIdToDictColumnIds.putAll(newStringToDicts);
 
             Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap(projectOperator.getColumnRefMap());
             for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : projectOperator.getColumnRefMap().entrySet()) {
-                rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context,
-                        newProjectMap, newStringToDicts);
+                rewriteOneScalarOperatorForProjection(kv.getKey(), kv.getValue(), context, newProjectMap,
+                        newStringToDicts);
             }
 
             context.stringColumnIdToDictColumnIds = newStringToDicts;
@@ -472,6 +518,16 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     orderingList.add(orderDesc);
                 }
             }
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rewrite/AddDecodeNodeForDictStringRule.java
+=======
+
+            List<ColumnRefOperator> partitionByColumns = null;
+            if (operator.getPartitionByColumns() != null) {
+                partitionByColumns = operator.getPartitionByColumns().stream().map(context::getMappedOperator)
+                        .collect(Collectors.toList());
+            }
+
+>>>>>>> 2ac5807eb ([BugFix] fix uncorrect logical properties when apply LowCardinality optimize (#11793)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/AddDecodeNodeForDictStringRule.java
             OrderSpec newOrderSpec = new OrderSpec(orderingList);
 
             ScalarOperator predicate = operator.getPredicate();
@@ -484,6 +540,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 }
             }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rewrite/AddDecodeNodeForDictStringRule.java
             return new PhysicalTopNOperator(newOrderSpec, operator.getLimit(),
                     operator.getOffset(),
                     null,
@@ -495,10 +552,14 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     predicate,
                     operator.getProjection()
             );
+=======
+            return new PhysicalTopNOperator(newOrderSpec, operator.getLimit(), operator.getOffset(), partitionByColumns,
+                    Operator.DEFAULT_LIMIT, operator.getSortPhase(), operator.getTopNType(), operator.isSplit(),
+                    operator.isEnforced(), predicate, operator.getProjection());
+>>>>>>> 2ac5807eb ([BugFix] fix uncorrect logical properties when apply LowCardinality optimize (#11793)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/AddDecodeNodeForDictStringRule.java
         }
 
-        private void rewriteOneScalarOperatorForProjection(ColumnRefOperator keyColumn,
-                                                           ScalarOperator valueOperator,
+        private void rewriteOneScalarOperatorForProjection(ColumnRefOperator keyColumn, ScalarOperator valueOperator,
                                                            DecodeContext context,
                                                            Map<ColumnRefOperator, ScalarOperator> newProjectMap,
                                                            Map<Integer, Integer> newStringToDicts) {
@@ -567,9 +628,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     shuffledColumns.add(columnId);
                 }
             }
-            exchangeOperator.setDistributionSpec(
-                    new HashDistributionSpec(new HashDistributionDesc(shuffledColumns,
-                            hashDistributionSpec.getHashDistributionDesc().getSourceType())));
+            exchangeOperator.setDistributionSpec(new HashDistributionSpec(new HashDistributionDesc(shuffledColumns,
+                    hashDistributionSpec.getHashDistributionDesc().getSourceType())));
             exchangeOperator.setGlobalDicts(context.globalDicts);
             return exchangeOperator;
         }
@@ -595,8 +655,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                         ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
                         CallOperator newCall = new CallOperator(oldCall.getFnName(), newFunction.getReturnType(),
-                                Collections.singletonList(dictColumn), newFunction,
-                                oldCall.isDistinct());
+                                Collections.singletonList(dictColumn), newFunction, oldCall.isDistinct());
                         ColumnRefOperator outputColumn = kv.getKey();
                         newAggMapEntry.add(Maps.immutableEntry(outputColumn, newCall));
                     } else if (context.stringColumnIdToDictColumnIds.containsKey(columnId)) {
@@ -620,8 +679,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         if (aggOperator.getType().isGlobal()) {
                             newReturnType = newFunction.getReturnType();
                         } else {
-                            newReturnType = newFunction.getIntermediateType() == null ?
-                                    newFunction.getReturnType() : newFunction.getIntermediateType();
+                            newReturnType = newFunction.getIntermediateType() == null ? newFunction.getReturnType() :
+                                    newFunction.getIntermediateType();
                         }
 
                         // Add decode node to aggregate function that returns a string
@@ -646,9 +705,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                             context.needRewriteMultiCountDistinctColumns.add(outputColumn.getId());
                         }
 
-                        CallOperator newCall = new CallOperator(oldCall.getFnName(), newReturnType,
-                                newArguments, newFunction,
-                                oldCall.isDistinct());
+                        CallOperator newCall =
+                                new CallOperator(oldCall.getFnName(), newReturnType, newArguments, newFunction,
+                                        oldCall.isDistinct());
 
                         newAggMapEntry.add(Maps.immutableEntry(outputColumn, newCall));
                     } else {
@@ -696,14 +755,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             if (newStringToDicts.isEmpty()) {
                 context.hasEncoded = false;
             }
-            return new PhysicalHashAggregateOperator(aggOperator.getType(),
-                    newGroupBys,
-                    newPartitionsBy, newAggMap,
-                    aggOperator.getSingleDistinctFunctionPos(),
-                    aggOperator.isSplit(),
-                    aggOperator.getLimit(),
-                    aggOperator.getPredicate(),
-                    aggOperator.getProjection());
+            return new PhysicalHashAggregateOperator(aggOperator.getType(), newGroupBys, newPartitionsBy, newAggMap,
+                    aggOperator.getSingleDistinctFunctionPos(), aggOperator.isSplit(), aggOperator.getLimit(),
+                    aggOperator.getPredicate(), aggOperator.getProjection());
         }
 
         @Override
@@ -723,8 +777,13 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) optExpression.getOp();
             joinOperator.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns);
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rewrite/AddDecodeNodeForDictStringRule.java
             DecodeContext mergeContext = new DecodeContext(
                     context.tableIdToStringColumnIds, context.columnRefFactory);
+=======
+            DecodeContext mergeContext = new DecodeContext(context.globalDictCache, context.tableIdToStringColumnIds,
+                    context.columnRefFactory);
+>>>>>>> 2ac5807eb ([BugFix] fix uncorrect logical properties when apply LowCardinality optimize (#11793)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/AddDecodeNodeForDictStringRule.java
             for (int i = 0; i < optExpression.arity(); ++i) {
                 context.clear();
                 OptExpression childExpr = optExpression.inputAt(i);
@@ -759,18 +818,21 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             context.hasEncoded = false;
 
             OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
-            boolean needRewrite =
-                    !context.needRewriteMultiCountDistinctColumns.isEmpty() &&
-                            aggOperator.couldApplyStringDict(context.needRewriteMultiCountDistinctColumns);
+            boolean needRewrite = !context.needRewriteMultiCountDistinctColumns.isEmpty() &&
+                    aggOperator.couldApplyStringDict(context.needRewriteMultiCountDistinctColumns);
             needRewrite = needRewrite || (!context.stringColumnIdToDictColumnIds.keySet().isEmpty() &&
                     aggOperator.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet()));
+
+            ColumnRefSet unsupportedAggs = new ColumnRefSet();
+            aggOperator.fillDisableDictOptimizeColumns(unsupportedAggs, context.stringColumnIdToDictColumnIds.keySet());
+
             if (context.hasEncoded || needRewrite) {
-                if (needRewrite) {
-                    PhysicalHashAggregateOperator newAggOper = rewriteAggOperator(aggOperator,
-                            context);
+                if (needRewrite && unsupportedAggs.isEmpty()) {
+                    PhysicalHashAggregateOperator newAggOper = rewriteAggOperator(aggOperator, context);
                     OptExpression result = OptExpression.create(newAggOper, newChildExpr);
                     result.setStatistics(aggExpr.getStatistics());
-                    result.setLogicalProperty(aggExpr.getLogicalProperty());
+                    result.setLogicalProperty(
+                            rewriteLogicProperty(aggExpr.getLogicalProperty(), context.stringColumnIdToDictColumnIds));
                     return visitProjectionAfter(result, context);
                 } else {
                     insertDecodeExpr(aggExpr, Collections.singletonList(newChildExpr), 0, context);
@@ -797,12 +859,12 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     return visitProjectionAfter(exchangeExpr, context);
                 }
                 if (exchangeOperator.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet())) {
-                    PhysicalDistributionOperator newExchangeOper = rewriteDistribution(exchangeOperator,
-                            context);
+                    PhysicalDistributionOperator newExchangeOper = rewriteDistribution(exchangeOperator, context);
 
                     OptExpression result = OptExpression.create(newExchangeOper, newChildExpr);
                     result.setStatistics(exchangeExpr.getStatistics());
-                    result.setLogicalProperty(exchangeExpr.getLogicalProperty());
+                    result.setLogicalProperty(rewriteLogicProperty(exchangeExpr.getLogicalProperty(),
+                            context.stringColumnIdToDictColumnIds));
                     return visitProjectionAfter(result, context);
                 } else {
                     insertDecodeExpr(exchangeExpr, Collections.singletonList(newChildExpr), 0, context);
@@ -824,8 +886,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         for (LogicalOlapScanOperator scanOperator : scanOperators) {
             OlapTable table = (OlapTable) scanOperator.getTable();
-            long version = table.getPartitions().stream().map(Partition::getVisibleVersionTime)
-                    .max(Long::compareTo).orElse(0L);
+            long version = table.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo)
+                    .orElse(0L);
 
             if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
                 continue;
@@ -839,8 +901,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     continue;
                 }
 
-                ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentStatisticStorage().
-                        getColumnStatistic(table, column.getName());
+                ColumnStatistic columnStatistic =
+                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(table, column.getName());
                 // Condition 2: the varchar column is low cardinality string column
                 if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
                         columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
@@ -867,8 +929,13 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             return root;
         }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rewrite/AddDecodeNodeForDictStringRule.java
         DecodeContext context = new DecodeContext(tableIdToStringColumnIds, taskContext.getOptimizerContext().
                 getColumnRefFactory());
+=======
+        DecodeContext context = new DecodeContext(globalDictCache, tableIdToStringColumnIds,
+                taskContext.getOptimizerContext().getColumnRefFactory());
+>>>>>>> 2ac5807eb ([BugFix] fix uncorrect logical properties when apply LowCardinality optimize (#11793)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/AddDecodeNodeForDictStringRule.java
 
         OptExpression rewriteExpr = root.getOp().accept(new DecodeVisitor(), root, context);
         if (context.hasEncoded) {
@@ -877,8 +944,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         return rewriteExpr;
     }
 
-    public static void insertDecodeExpr(OptExpression parentExpr, List<OptExpression> childExpr,
-                                        int index,
+    public static void insertDecodeExpr(OptExpression parentExpr, List<OptExpression> childExpr, int index,
                                         DecodeContext context) {
         OptExpression decodeExp = generateDecodeOExpr(context, childExpr);
         parentExpr.setChild(index, decodeExp);
@@ -894,10 +960,11 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         }
         PhysicalDecodeOperator decodeOperator = new PhysicalDecodeOperator(ImmutableMap.copyOf(dictToStrings),
                 Maps.newHashMap(context.stringFunctions));
-        decodeOperator.setLimit(childExpr.get(0).getOp().getLimit());
         OptExpression result = OptExpression.create(decodeOperator, childExpr);
         result.setStatistics(childExpr.get(0).getStatistics());
-        result.setLogicalProperty(childExpr.get(0).getLogicalProperty());
+
+        LogicalProperty decodeProperty = new LogicalProperty(childExpr.get(0).getLogicalProperty());
+        result.setLogicalProperty(DecodeVisitor.rewriteLogicProperty(decodeProperty, dictToStrings));
         return result;
     }
 
@@ -907,8 +974,52 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         }
 
         @Override
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rewrite/AddDecodeNodeForDictStringRule.java
         public Boolean visit(ScalarOperator scalarOperator, Void context) {
             return false;
+=======
+        public Void visit(ScalarOperator scalarOperator, CouldApplyDictOptimizeContext context) {
+            context.stopOptPropagateUpward = true;
+            return null;
+        }
+
+        private void couldApply(ScalarOperator operator, CouldApplyDictOptimizeContext context) {
+            boolean stopOptPropagateUpward = false;
+            boolean canDictOptBeApplied = false;
+            // For any expression, if his child supports low cardinality optimization.
+            // Then it must support low cardinality optimization.
+            // Because we can let child do a low cardinality optimization,
+            // the expression itself does not do any optimization
+            // eg:
+            // Expression(child1, child2)
+            // if only child1 support, but child2 has unsupported function such as rand().
+            // we can rewrite to
+            // Expression(DictExpr(child1), child2)
+            for (ScalarOperator child : operator.getChildren()) {
+                context.reset();
+                child.accept(this, context);
+                stopOptPropagateUpward = stopOptPropagateUpward || context.stopOptPropagateUpward;
+                canDictOptBeApplied = canDictOptBeApplied || context.canDictOptBeApplied;
+            }
+
+            // DictExpr only support one input columnRefs
+            // concat(dict, dict) -> DictExpr(dict)
+            // concat(dict1, dict2) -> nothing to do
+            stopOptPropagateUpward |= operator.getUsedColumns().cardinality() > 1;
+
+            // If there exist expressions that cannot be optimized using low cardinality.
+            // We need to avoid unused optimizations
+            // eg:
+            // if (a=1, dict, c) -> nothing to do
+            // if (a=1, upper(dict), c) -> if (a = 1, DictExpr(dict), c)
+            if (stopOptPropagateUpward) {
+                context.canDictOptBeApplied = context.worthApplied && canDictOptBeApplied;
+            } else {
+                context.canDictOptBeApplied = canDictOptBeApplied;
+            }
+            context.stopOptPropagateUpward = stopOptPropagateUpward;
+
+>>>>>>> 2ac5807eb ([BugFix] fix uncorrect logical properties when apply LowCardinality optimize (#11793)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/AddDecodeNodeForDictStringRule.java
         }
 
         @Override
@@ -1003,8 +1114,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 return false;
             }
 
-            return predicate.getChild(0).isColumnRef() &&
-                    predicate.allValuesMatch(ScalarOperator::isConstantRef);
+            return predicate.getChild(0).isColumnRef() && predicate.allValuesMatch(ScalarOperator::isConstantRef);
         }
 
         @Override
