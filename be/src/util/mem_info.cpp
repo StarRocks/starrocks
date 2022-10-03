@@ -36,7 +36,6 @@ bool MemInfo::_s_initialized = false;
 int64_t MemInfo::_s_physical_mem = -1;
 
 void MemInfo::init() {
-
     // check if application is in docker container or not via /.dockerenv file
     if (fs::path_exist("/.dockerenv")) {
         // Read from /sys/fs/cgroup/memory/memory.limit_in_bytes
@@ -54,7 +53,6 @@ void MemInfo::init() {
         if (memoryLimit.is_open()) {
             memoryLimit.close();
         }
-
     }
     // Read from /proc/meminfo
     std::ifstream meminfo("/proc/meminfo", std::ios::in);
@@ -89,7 +87,6 @@ void MemInfo::init() {
     if (meminfo.is_open()) {
         meminfo.close();
     }
-
 
     if (_s_physical_mem == -1) {
         LOG(WARNING) << "Could not determine amount of physical memory on this machine.";
