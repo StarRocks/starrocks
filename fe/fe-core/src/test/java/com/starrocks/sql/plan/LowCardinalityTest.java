@@ -812,6 +812,19 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  5:SORT\n" +
                 "  |  order by: [11, INT, true] ASC"));
 
+        sql = "select approx_count_distinct(S_ADDRESS), upper(S_ADDRESS) from supplier " +
+                " group by upper(S_ADDRESS)" +
+                "order by 2";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, " 3:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  aggregate: approx_count_distinct[([3, VARCHAR, false]);");
+        assertContains(plan, "2:Decode\n" +
+                "  |  <dict id 11> : <string id 3>\n" +
+                "  |  <dict id 12> : <string id 9>");
+
+        // TODO add a case: Decode node before Sort Node
+
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -964,9 +977,7 @@ public class LowCardinalityTest extends PlanTestBase {
         String sql = "select count(*), S_ADDRESS from supplier group by S_ADDRESS limit 10";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  3:Decode\n" +
-                "  |  <dict id 10> : <string id 3>\n" +
-                "  |  limit: 10");
-        ;
+                "  |  <dict id 10> : <string id 3>\n");
     }
 
     @Test
