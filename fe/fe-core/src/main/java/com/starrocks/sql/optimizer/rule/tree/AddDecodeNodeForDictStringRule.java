@@ -58,13 +58,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
 
@@ -612,7 +606,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
                     if (context.needRewriteMultiCountDistinctColumns.contains(columnId)) {
                         // we only need rewrite TFunction
-                        Type[] newTypes = new Type[] {ID_TYPE};
+                        Type[] newTypes = new Type[]{ID_TYPE};
                         AggregateFunction newFunction =
                                 (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
                                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -938,9 +932,10 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 Maps.newHashMap(context.stringFunctions));
         OptExpression result = OptExpression.create(decodeOperator, childExpr);
         result.setStatistics(childExpr.get(0).getStatistics());
-        // TODO
-        result.setLogicalProperty(DecodeVisitor.rewriteLogicProperty(childExpr.get(0).getLogicalProperty(),
-                context.stringColumnIdToDictColumnIds));
+        
+        LogicalProperty decodeProperty = new LogicalProperty(childExpr.get(0).getLogicalProperty());
+        result.setLogicalProperty(DecodeVisitor.rewriteLogicProperty(decodeProperty,
+                dictToStrings));
         return result;
     }
 

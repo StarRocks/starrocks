@@ -58,6 +58,12 @@ public class LogicalProperty implements Property {
         this.outputColumns = outputColumns;
     }
 
+    public LogicalProperty(LogicalProperty other) {
+        outputColumns = other.outputColumns.clone();
+        leftMostScanTabletsNum = other.leftMostScanTabletsNum;
+        isExecuteInOneTablet = other.isExecuteInOneTablet;
+    }
+
     public void derive(ExpressionContext expressionContext) {
         LogicalOperator op = (LogicalOperator) expressionContext.getOp();
         outputColumns = op.getOutputColumns(expressionContext);
