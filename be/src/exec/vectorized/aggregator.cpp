@@ -419,8 +419,7 @@ void Aggregator::restore_agg_states_with_selection(size_t chunk_size,
     // TODO: support multi agg contexts.
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->restore_batch_selectively(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
-                                                     agg_intput_columns[i].get(), _tmp_agg_states.data(),
-                                                     not_found);
+                                                     agg_intput_columns[i].get(), _tmp_agg_states.data(), not_found);
     }
 }
 

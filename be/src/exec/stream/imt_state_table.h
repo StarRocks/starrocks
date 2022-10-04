@@ -8,10 +8,10 @@
 #include "exec/vectorized/tablet_info.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "storage/chunk_helper.h"
+#include "storage/storage_engine.h"
 #include "storage/table.h"
 #include "storage/table_read_view.h"
 #include "storage/table_write_view.h"
-#include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 
 namespace starrocks {
@@ -41,7 +41,8 @@ public:
             DCHECK_LT(0, tablets.size());
             auto tablet_id = tablets[0];
             TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true);
-            _schema = std::make_shared<vectorized::Schema>(ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema()));
+            _schema = std::make_shared<vectorized::Schema>(
+                    ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema()));
         }
         return _schema;
     }

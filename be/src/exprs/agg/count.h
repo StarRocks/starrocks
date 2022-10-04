@@ -37,7 +37,7 @@ public:
     }
 
     void restore(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
-                size_t row_num) const override {
+                 size_t row_num) const override {
         DCHECK(column->is_numeric() || column->is_decimal());
         const auto* agg_column = down_cast<const Int64Column*>(column);
         VLOG(1) << " count restore:" << row_num << ", value:" << (int64_t)(agg_column->get_data()[row_num]);

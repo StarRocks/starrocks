@@ -203,7 +203,7 @@ public:
     }
 
     void restore_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* columns,
-                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+                                   AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
         // TODO: optimize with simd ?
         for (size_t i = 0; i < chunk_size; i++) {
             if (filter[i] == 1) {

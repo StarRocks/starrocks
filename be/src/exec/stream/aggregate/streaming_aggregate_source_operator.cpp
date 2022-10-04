@@ -91,7 +91,7 @@ StatusOr<vectorized::ChunkPtr> StreamingAggregateSourceOperator::pull_chunk(Runt
             VLOG(2) << "output_chunk output: " << chunk->debug_row(i);
         }
         for (auto [k, v] : chunk->get_slot_id_to_index_map()) {
-           VLOG(1) << "slot_id:" << k << ", index:" << v;
+            VLOG(1) << "slot_id:" << k << ", index:" << v;
         }
         RETURN_IF_ERROR(_imt_agg_result->send_chunk(state, chunk.get()));
     }

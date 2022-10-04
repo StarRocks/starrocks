@@ -5,18 +5,19 @@
 #include <utility>
 
 #include "exec/pipeline/source_operator.h"
-#include "exec/vectorized/aggregator.h"
 #include "exec/stream/imt_state_table.h"
+#include "exec/vectorized/aggregator.h"
 
 namespace starrocks::pipeline {
 class StreamingAggregateSourceOperator : public SourceOperator {
 public:
     StreamingAggregateSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                                     int32_t driver_sequence, AggregatorPtr aggregator,
-                                     IMTStateTablePtr imt_detail, IMTStateTablePtr imt_agg_result)
+                                     int32_t driver_sequence, AggregatorPtr aggregator, IMTStateTablePtr imt_detail,
+                                     IMTStateTablePtr imt_agg_result)
             : SourceOperator(factory, id, "streaming_aggregate_source", plan_node_id, driver_sequence),
               _aggregator(std::move(aggregator)),
-              _imt_detail(imt_detail), _imt_agg_result(imt_agg_result) {
+              _imt_detail(imt_detail),
+              _imt_agg_result(imt_agg_result) {
         _aggregator->ref();
         if (_imt_agg_result) {
             _imt_agg_result_sink = _imt_agg_result->olap_table_sink();
@@ -51,7 +52,6 @@ private:
     // Whether prev operator has no output
     mutable bool _is_finished = false;
     mutable bool _is_open_done = false;
-
 };
 
 class StreamingAggregateSourceOperatorFactory final : public SourceOperatorFactory {
@@ -60,7 +60,8 @@ public:
                                             IMTStateTablePtr imt_detail, IMTStateTablePtr imt_agg_result)
             : SourceOperatorFactory(id, "streaming_aggregate_source", plan_node_id),
               _aggregator_factory(std::move(aggregator_factory)),
-              _imt_detail(imt_detail), _imt_agg_result(imt_agg_result){}
+              _imt_detail(imt_detail),
+              _imt_agg_result(imt_agg_result) {}
 
     ~StreamingAggregateSourceOperatorFactory() override = default;
 

@@ -423,16 +423,16 @@ struct AggHashMapWithOneStringKey {
     }
 
     void compute_existence(size_t chunk_size, const Columns& key_columns, std::vector<uint8_t>* not_founds) {
-//        DCHECK(!key_columns[0]->is_nullable());
-//        (*not_founds).assign(chunk_size, 0);
-//        auto column = down_cast<ColumnType*>(key_columns[0].get());
-//
-//        for (size_t i = 0; i < chunk_size; i++) {
-//            FieldType key = column->get_data()[i];
-//            if (auto iter = hash_map.find(key); iter == hash_map.end()) {
-//                (*not_founds)[i] = 1;
-//            }
-//        }
+        //        DCHECK(!key_columns[0]->is_nullable());
+        //        (*not_founds).assign(chunk_size, 0);
+        //        auto column = down_cast<ColumnType*>(key_columns[0].get());
+        //
+        //        for (size_t i = 0; i < chunk_size; i++) {
+        //            FieldType key = column->get_data()[i];
+        //            if (auto iter = hash_map.find(key); iter == hash_map.end()) {
+        //                (*not_founds)[i] = 1;
+        //            }
+        //        }
     }
 
     static constexpr bool has_single_null_key = false;
