@@ -176,6 +176,19 @@ struct AggHashMapWithOneNumberKey {
         column->get_data().insert(column->get_data().end(), keys.begin(), keys.begin() + chunk_size);
     }
 
+    void compute_existence(size_t chunk_size, const Columns& key_columns, std::vector<uint8_t>* not_founds) {
+        DCHECK(!key_columns[0]->is_nullable());
+        (*not_founds).assign(chunk_size, 0);
+        auto column = down_cast<ColumnType*>(key_columns[0].get());
+
+        for (size_t i = 0; i < chunk_size; i++) {
+            FieldType key = column->get_data()[i];
+            if (auto iter = hash_map.find(key); iter == hash_map.end()) {
+                (*not_founds)[i] = 1;
+            }
+        }
+    }
+
     static constexpr bool has_single_null_key = false;
 
     ResultVector results;
@@ -306,6 +319,19 @@ struct AggHashMapWithOneNullableNumberKey {
         nullable_column->null_column_data().resize(chunk_size);
     }
 
+    void compute_existence(size_t chunk_size, const Columns& key_columns, std::vector<uint8_t>* not_founds) {
+        DCHECK(!key_columns[0]->is_nullable());
+        (*not_founds).assign(chunk_size, 0);
+        auto column = down_cast<ColumnType*>(key_columns[0].get());
+
+        for (size_t i = 0; i < chunk_size; i++) {
+            FieldType key = column->get_data()[i];
+            if (auto iter = hash_map.find(key); iter == hash_map.end()) {
+                (*not_founds)[i] = 1;
+            }
+        }
+    }
+
     static constexpr bool has_single_null_key = true;
     AggDataPtr null_key_data = nullptr;
     ResultVector results;
@@ -394,6 +420,19 @@ struct AggHashMapWithOneStringKey {
         auto* column = down_cast<BinaryColumn*>(key_columns[0].get());
         keys.resize(chunk_size);
         column->append_strings(keys);
+    }
+
+    void compute_existence(size_t chunk_size, const Columns& key_columns, std::vector<uint8_t>* not_founds) {
+        //        DCHECK(!key_columns[0]->is_nullable());
+        //        (*not_founds).assign(chunk_size, 0);
+        //        auto column = down_cast<ColumnType*>(key_columns[0].get());
+        //
+        //        for (size_t i = 0; i < chunk_size; i++) {
+        //            FieldType key = column->get_data()[i];
+        //            if (auto iter = hash_map.find(key); iter == hash_map.end()) {
+        //                (*not_founds)[i] = 1;
+        //            }
+        //        }
     }
 
     static constexpr bool has_single_null_key = false;
@@ -523,6 +562,19 @@ struct AggHashMapWithOneNullableStringKey {
         nullable_column->null_column_data().resize(chunk_size);
     }
 
+    void compute_existence(size_t chunk_size, const Columns& key_columns, std::vector<uint8_t>* not_founds) {
+        //        DCHECK(!key_columns[0]->is_nullable());
+        //        (*not_founds).assign(chunk_size, 0);
+        //        auto column = down_cast<ColumnType*>(key_columns[0].get());
+        //
+        //        for (size_t i = 0; i < chunk_size; i++) {
+        //            FieldType key = column->get_data()[i];
+        //            if (auto iter = hash_map.find(key); iter == hash_map.end()) {
+        //                (*not_founds)[i] = 1;
+        //            }
+        //        }
+    }
+
     static constexpr bool has_single_null_key = true;
     AggDataPtr null_key_data = nullptr;
     ResultVector results;
@@ -631,6 +683,19 @@ struct AggHashMapWithSerializedKey {
                 key_column->deserialize_and_append_batch(keys, chunk_size);
             }
         }
+    }
+
+    void compute_existence(size_t chunk_size, const Columns& key_columns, std::vector<uint8_t>* not_founds) {
+        //        DCHECK(!key_columns[0]->is_nullable());
+        //        (*not_founds).assign(chunk_size, 0);
+        //        auto column = down_cast<ColumnType*>(key_columns[0].get());
+        //
+        //        for (size_t i = 0; i < chunk_size; i++) {
+        //            FieldType key = column->get_data()[i];
+        //            if (auto iter = hash_map.find(key); iter == hash_map.end()) {
+        //                (*not_founds)[i] = 1;
+        //            }
+        //        }
     }
 
     static constexpr bool has_single_null_key = false;
@@ -809,6 +874,19 @@ struct AggHashMapWithSerializedKeyFixedSize {
         for (const auto& key_column : key_columns) {
             key_column->deserialize_and_append_batch(tmp_slices, chunk_size);
         }
+    }
+
+    void compute_existence(size_t chunk_size, const Columns& key_columns, std::vector<uint8_t>* not_founds) {
+        //        DCHECK(!key_columns[0]->is_nullable());
+        //        (*not_founds).assign(chunk_size, 0);
+        //        auto column = down_cast<ColumnType*>(key_columns[0].get());
+        //
+        //        for (size_t i = 0; i < chunk_size; i++) {
+        //            FieldType key = column->get_data()[i];
+        //            if (auto iter = hash_map.find(key); iter == hash_map.end()) {
+        //                (*not_founds)[i] = 1;
+        //            }
+        //        }
     }
 
     static constexpr bool has_single_null_key = false;

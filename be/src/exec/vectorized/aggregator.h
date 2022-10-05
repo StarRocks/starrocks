@@ -243,7 +243,8 @@ public:
     void compute_batch_agg_states(size_t chunk_size);
     void compute_batch_agg_states_with_selection(size_t chunk_size);
     void restore_agg_states_with_selection(size_t chunk_size,
-                                           const std::vector<vectorized::ColumnPtr>& agg_intput_columns);
+                                           const std::vector<vectorized::ColumnPtr>& agg_intput_columns,
+                                           const std::vector<uint8_t>& not_found);
 
     // Convert one row agg states to chunk
     void convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);
@@ -401,6 +402,11 @@ public:
     void build_hash_map_with_selection(HashMapWithKey& hash_map_with_key, size_t chunk_size) {
         hash_map_with_key.compute_agg_states(chunk_size, _group_by_columns, AllocateState<HashMapWithKey>(this),
                                              &_tmp_agg_states, &_streaming_selection);
+    }
+
+    template <typename HashMapWithKey>
+    void compute_existence(HashMapWithKey& hash_map_with_key, size_t chunk_size, std::vector<uint8_t>& not_found) {
+        hash_map_with_key.compute_existence(chunk_size, _group_by_columns, &not_found);
     }
 
     template <typename HashSetWithKey>

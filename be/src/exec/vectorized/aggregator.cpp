@@ -413,12 +413,13 @@ void Aggregator::compute_batch_agg_states(size_t chunk_size) {
     }
 }
 
-void Aggregator::restore_agg_states_with_selection(size_t chunk_size, const std::vector<vectorized::ColumnPtr>& agg_intput_columns) {
+void Aggregator::restore_agg_states_with_selection(size_t chunk_size,
+                                                   const std::vector<vectorized::ColumnPtr>& agg_intput_columns,
+                                                   const std::vector<uint8_t>& not_found) {
     // TODO: support multi agg contexts.
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->restore_batch_selectively(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
-                                                     agg_intput_columns[i].get(), _tmp_agg_states.data(),
-                                                     _streaming_selection);
+                                                     agg_intput_columns[i].get(), _tmp_agg_states.data(), not_found);
     }
 }
 

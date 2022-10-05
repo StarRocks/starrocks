@@ -56,9 +56,9 @@ public class StreamJoinNode extends JoinNode {
             String sqlJoinPredicate = otherJoinConjuncts.stream().map(Expr::toSql).collect(Collectors.joining(","));
             msg.stream_join_node.setSql_join_predicates(sqlJoinPredicate);
         }
-//        if (this.rightIMT != null) {
-//            msg.stream_join_node.rhs_imt = rightIMT.toThrift();
-//        }
+        //        if (this.rightIMT != null) {
+        //            msg.stream_join_node.rhs_imt = rightIMT.toThrift();
+        //        }
     }
 
     // TODO support bi-stream join

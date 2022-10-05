@@ -77,7 +77,7 @@ std::vector<const ColumnPredicate*> TableReadViewImpl::build_column_predicates(
     for (auto common_predicate : _view_params.common_predicates) {
         column_predicates.push_back(common_predicate);
     }
-    for (auto predicate: predicates) {
+    for (auto predicate : predicates) {
         column_predicates.push_back(predicate);
     }
 
