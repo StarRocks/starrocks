@@ -364,6 +364,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         if (scan_ranges_per_driver_seq.empty()) {
             _fragment_ctx->set_enable_cache(false);
         }
+        // TODO (by satanson): intra-tablet parallelism will emit multiple EOS, this situation hard to handled in
+        //  current version. shared_scan mechanism conflicts with per-tablet computation that is required for query
+        //  cache, so it is turned off at present. in the future, these two issues will be handled.
         if (_fragment_ctx->enable_cache()) {
             enable_tablet_internal_parallel = false;
             enable_shared_scan = false;

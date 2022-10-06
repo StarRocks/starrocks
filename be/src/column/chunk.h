@@ -12,7 +12,6 @@
 #include "column/schema.h"
 #include "common/global_types.h"
 #include "exec/cache/owner_info.h"
-#include "gutil/strings/substitute.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {

@@ -13,7 +13,18 @@ using ConjugateOperatorPtr = std::shared_ptr<ConjugateOperator>;
 class ConjugateOperatorFactory;
 using ConjugateOperatorFactoryRawPtr = ConjugateOperatorFactory*;
 using ConjugateOperatorFactoryPtr = std::shared_ptr<ConjugateOperatorFactory>;
-
+// ConjugateOperator is used to join the pair of AggregateSinkOperator and AggregateSourceOperator together into
+// a compound pre-cache per-tablet operator. for examples:
+// 1. AggregateBlockingNode:  ConjugateOperator(AggregateBlockingSinkOperator, AggregateBlockingSourceOperator);
+// 2. AggregateStreamingNode:  ConjugateOperator(AggregateStreamingSinkOperator, AggregateStreamingSourceOperator);
+// 3. DistinctBlockingNode:  ConjugateOperator(DistinctBlockingSinkOperator, DistinctBlockingSourceOperator);
+// 4. DistinctStreamingNode:  ConjugateOperator(DistinctStreamingSinkOperator, DistinctStreamingSourceOperator);
+//
+// When cache enabled, pipeline OlapScanOperator->ProjectOperator->AggregateBlockingSinkOperator will be transformed
+// into the pipeline as follows.
+// OlapScanOperator->MultilaneOperator(ProjectOperator)->MultilaneOperator(
+//  ConjugateOperator(AggregateBlockingSinkOperator, AggregateBlockingSourceOperator))->CacheOperator->
+//  AggregateBlockSinkOperator.
 class ConjugateOperator : public pipeline::Operator {
 public:
     ConjugateOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, const pipeline::OperatorPtr& sink_op,

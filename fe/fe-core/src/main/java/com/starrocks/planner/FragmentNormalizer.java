@@ -44,6 +44,17 @@ import java.util.Optional;
 import java.util.function.BinaryOperator;
 import java.util.stream.Collectors;
 
+// FragmentNormalizer is used to normalize a cacheable Fragment. After a cacheable Fragment
+// is normalized, FragmentNormalizer draws out required information as follows from the fragment.
+// 1. MD5 digest: semantically-equivalent Fragments always produce the same MD5 digest.
+// 2. cache interpolation point: it is a PlanNodeId designated a PlanNode above which the CacheOperator
+//    shall be interpolated, the CacheOperator is used to populate/probe the per-tablet result of this
+//    PlanNode in the query cache.
+// 3. output SlotId remapping: the output result of cache interpolation point of semantically-equivalent
+//    Fragments may have different real SlotIds and the same remapped SlotIds. so before the result is
+//    populated into the cache, we must translate the real SlotIds in result to remapped SlotIds; after the
+//    result is probed and read out from the cache, we must translate the remapped SlotIds to real SlotIds.
+// 4. RangeMap: it records mapping from partition id to decomposed region of the simple range partition predicate.
 public class FragmentNormalizer {
     private ExecPlan execPlan;
     private PlanFragment fragment;

@@ -5,6 +5,7 @@
 
 #include <vector>
 
+#include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "storage/rowset/rowset.h"
@@ -108,8 +109,7 @@ CacheOperator::CacheOperator(pipeline::OperatorFactory* factory, int32_t driver_
     }
 }
 
-using Chunks = std::vector<vectorized::ChunkPtr>;
-static inline Chunks remap_chunks(const Chunks& chunks, const SlotRemapping& slot_remapping) {
+static inline vectorized::Chunks remap_chunks(const vectorized::Chunks& chunks, const SlotRemapping& slot_remapping) {
     std::vector<vectorized::ChunkPtr> new_chunks;
     new_chunks.reserve(chunks.size());
     for (auto i = 0; i < chunks.size(); ++i) {

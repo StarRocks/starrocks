@@ -145,7 +145,8 @@ static inline bool is_multilane(pipeline::OperatorPtr& op) {
     if (dynamic_cast<cache::MultilaneOperator*>(op.get()) != nullptr) {
         return true;
     }
-
+    // In essence, CacheOperator is also special MultilaneOperator semantically, it also needs handle EOS chunk.
+    // it shall populate cache on receiving EOS chunk of a tablet.
     if (dynamic_cast<cache::CacheOperator*>(op.get()) != nullptr) {
         return true;
     }

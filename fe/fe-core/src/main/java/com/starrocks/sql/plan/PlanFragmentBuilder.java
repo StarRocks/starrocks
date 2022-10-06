@@ -208,20 +208,15 @@ public class PlanFragmentBuilder {
         execPlan.getFragments().add(exchangeFragment);
     }
 
-    void useQueryCache(ExecPlan execPlan) {
+    boolean useQueryCache(ExecPlan execPlan) {
         if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnableQueryCache()) {
-            return;
+            return false;
         }
         boolean hasJoinNode = execPlan.getFragments().stream().anyMatch(PlanFragment::hasJoinNode);
         if (hasJoinNode) {
-            return;
+            return false;
         }
-        List<PlanFragment> fragments = execPlan.getFragments().stream()
-                .filter(PlanFragment::hasOlapScanNode).collect(Collectors.toList());
-        for (PlanFragment fragment : fragments) {
-            FragmentNormalizer normalizer = new FragmentNormalizer(execPlan, fragment);
-            normalizer.normalize();
-        }
+        return true;
     }
 
     private ExecPlan finalizeFragments(ExecPlan execPlan, TResultSinkType resultSinkType) {
@@ -240,7 +235,15 @@ public class PlanFragmentBuilder {
             fragment.computeLocalRfWaitingSet(fragment.getPlanRoot(), shouldClearRuntimeFilters);
         }
 
-        useQueryCache(execPlan);
+
+        if (useQueryCache(execPlan)) {
+            List<PlanFragment> fragmentsWithLeftmostOlapScanNode = execPlan.getFragments().stream()
+                    .filter(PlanFragment::hasOlapScanNode).collect(Collectors.toList());
+            for (PlanFragment fragment : fragmentsWithLeftmostOlapScanNode) {
+                FragmentNormalizer normalizer = new FragmentNormalizer(execPlan, fragment);
+                normalizer.normalize();
+            }
+        }
         return execPlan;
     }
 

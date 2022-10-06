@@ -20,7 +20,10 @@ using MultilaneOperatorPtr = std::shared_ptr<MultilaneOperator>;
 class MultilaneOperatorFactory;
 using MultilaneOperatorFactoryRawPtr = MultilaneOperatorFactory*;
 using MultilaneOperatorFactoryPtr = std::shared_ptr<MultilaneOperatorFactory>;
-
+// MultilaneOperator is decorator introduced to support per-tablet computation, MultilaneOperator has several
+// lanes the number of which is designated by _lane_arbiter->num_lanes(), each lane is a operator instance that
+// MultilaneOperator decorates. The lane is acquired/released to/from the underlying tablet of morsels picked from
+// MorselQueue dynamically.
 class MultilaneOperator final : public pipeline::Operator {
 public:
     struct Lane {
