@@ -15,9 +15,9 @@ import java.io.IOException;
 public class RolePrivilegeCollectionInfo implements Writable {
 
     @SerializedName(value = "i")
-    public short pluginId;
+    private short pluginId;
     @SerializedName(value = "v")
-    public short pluginVersion;
+    private short pluginVersion;
     @SerializedName(value = "ri")
     private long roleId;
     @SerializedName(value = "p")

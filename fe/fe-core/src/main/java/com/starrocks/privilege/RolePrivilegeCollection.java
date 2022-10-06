@@ -2,11 +2,15 @@
 
 package com.starrocks.privilege;
 
+import com.google.gson.annotations.SerializedName;
+
 public class RolePrivilegeCollection extends PrivilegeCollection {
     // the name of the role
+    @SerializedName(value = "n")
     private String name;
     // see RoleFlags
-    private long mask = 0;
+    @SerializedName(value = "ma")
+    private long mask;
 
     enum RoleFlags {
         MUTABLE(1),
@@ -17,6 +21,12 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         RoleFlags(int m) {
             this.mask = 1L << m;
         }
+    }
+
+    // only when deserialized
+    protected RolePrivilegeCollection() {
+        this.name = "";
+        this.mask = 0;
     }
 
     public RolePrivilegeCollection(String name) {
