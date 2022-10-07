@@ -216,30 +216,5 @@ private:
     int32_t _distributed_bucket{0};
 };
 
-// which tablet this batch belong to
-// TODO(zc): remove rollup
-struct TabletDesc {
-    int64_t partition_id;
-    uint32_t bucket_id;
-
-    bool operator==(const TabletDesc& other) const {
-        return (bucket_id == other.bucket_id) && (partition_id == other.partition_id);
-    }
-};
-
-} // namespace starrocks
-
-namespace std {
-
-// TODO(zc)
-template <>
-struct hash<starrocks::TabletDesc> {
-    std::size_t operator()(const starrocks::TabletDesc& desc) const {
-        uint32_t seed = 0;
-        seed = starrocks::HashUtil::crc_hash(&desc.partition_id, sizeof(desc.partition_id), seed);
-        seed = starrocks::HashUtil::crc_hash(&desc.bucket_id, sizeof(desc.bucket_id), seed);
-        return seed;
-    }
-};
 
 } // namespace std
