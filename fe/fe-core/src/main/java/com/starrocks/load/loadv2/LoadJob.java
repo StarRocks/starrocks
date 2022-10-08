@@ -221,6 +221,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     public void initLoadProgress(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedBackendIds) {
         loadingStatus.getLoadStatistic().initLoad(loadId, fragmentIds, relatedBackendIds);
+<<<<<<< HEAD
+=======
+        startLoad = true;
+        loadStartTimestamp = System.currentTimeMillis();
+>>>>>>> 58f7979b3 ([BugFix] Fix broker load start time (#11883))
     }
 
     public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId, long scannedRows, boolean isDone) {
@@ -440,7 +445,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     private void executeLoad() {
-        loadStartTimestamp = System.currentTimeMillis();
         state = JobState.LOADING;
     }
 
