@@ -454,23 +454,23 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         }
         // TODO: reload is lazy, because OlapTable may be not ready when reload the MV
         // TODO: cannot cache imt info for imt table's version is always changing!
-        // if (groupIdToIMTId != null) {
-        for (Map.Entry<Integer, Long> entry : groupIdToIMTId.entrySet()) {
-            // if (imtInfo.containsKey(entry.getKey())) {
-            //     continue;
-            // }
-            long tableId = entry.getValue();
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            Table table = db.getTable(tableId);
-            Preconditions.checkState(table.isOlapTable(), "must be a olap");
-            try {
-                IMTInfo imt = IMTInfo.fromOlapTable(dbId, (OlapTable) table, false);
-                imtInfo.put(entry.getKey(), imt);
-            } catch (UserException e) {
-                throw new RuntimeException(e);
+        if (groupIdToIMTId != null) {
+            for (Map.Entry<Integer, Long> entry : groupIdToIMTId.entrySet()) {
+                if (imtInfo.containsKey(entry.getKey())) {
+                    continue;
+                }
+                long tableId = entry.getValue();
+                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                Table table = db.getTable(tableId);
+                Preconditions.checkState(table.isOlapTable(), "must be a olap");
+                try {
+                    IMTInfo imt = IMTInfo.fromOlapTable(dbId, (OlapTable) table, false);
+                    imtInfo.put(entry.getKey(), imt);
+                } catch (UserException e) {
+                    throw new RuntimeException(e);
+                }
+                LOG.info(String.format("recover IMT for MV: tableId=%d mv=%s", tableId, getName()));
             }
-            LOG.info(String.format("recover IMT for MV: tableId=%d mv=%s", tableId, getName()));
-            //}
         }
     }
 

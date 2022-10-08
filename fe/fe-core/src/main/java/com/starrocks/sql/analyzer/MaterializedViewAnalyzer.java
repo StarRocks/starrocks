@@ -399,11 +399,14 @@ public class MaterializedViewAnalyzer {
             if (distributionDesc == null) {
                 if (statement.getRefreshSchemeDesc().getType().equals(MaterializedView.RefreshType.REALTIME)) {
                     statement.setKeysType(KeysType.PRIMARY_KEYS);
-                    distributionDesc = KeyPropertyBuilder.buildDistribution(statement.getQueryStatement());
-                    statement.setDistributionDesc(distributionDesc);
+                    HashDistributionDesc hashDesc = KeyPropertyBuilder.buildDistribution(statement.getQueryStatement());
+                    distributionDesc = hashDesc;
+                    statement.setDistributionDesc(hashDesc);
                     // Set all key column to nonnull
                     // TODO: support nullable key
                     for (Column column : mvColumnItems) {
+                        boolean isDistribute = hashDesc.getDistributionColumnNames().contains(column.getName());
+                        column.setIsKey(isDistribute);
                         if (column.isKey()) {
                             column.setIsAllowNull(false);
                         }
