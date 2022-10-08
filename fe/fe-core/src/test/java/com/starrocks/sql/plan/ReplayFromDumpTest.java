@@ -183,7 +183,7 @@ public class ReplayFromDumpTest {
         SessionVariable replaySessionVariable = replayPair.first.getSessionVariable();
         Assert.assertEquals(replaySessionVariable.getParallelExecInstanceNum(), 4);
         Assert.assertTrue(replayPair.second.contains("  |----24:EXCHANGE\n" +
-                "  |       cardinality: 65744\n" +
+                "  |       cardinality: 59170\n" +
                 "  |    \n" +
                 "  18:UNION\n" +
                 "  |  child exprs:\n" +
@@ -311,7 +311,7 @@ public class ReplayFromDumpTest {
                 "  |  other predicates: 280: sr_ticket_number IS NULL\n" +
                 "  |  output columns: 256, 258, 260, 266, 267, 269\n" +
                 "  |  cardinality: 37372757"));
-        Assert.assertTrue(replayPair.second.contains("15:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("17:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [331: ws_order_number, INT, false] = [365: wr_order_number, INT, true]\n" +
                 "  |  equal join conjunct: [330: ws_item_sk, INT, false] = [364: wr_item_sk, INT, true]\n" +

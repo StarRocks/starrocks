@@ -148,8 +148,8 @@ OutPut Exchange Id: 07
 |
 5:HdfsScanNode
 TABLE: part
-NON-PARTITION PREDICATES: 20: p_brand = 'Brand#35', 23: p_container = 'JUMBO CASE'
-MIN/MAX PREDICATES: 47: p_brand <= 'Brand#35', 48: p_brand >= 'Brand#35', 49: p_container <= 'JUMBO CASE', 50: p_container >= 'JUMBO CASE'
+NON-PARTITION PREDICATES: 23: p_container = 'JUMBO CASE', 20: p_brand = 'Brand#35'
+MIN/MAX PREDICATES: 47: p_container <= 'JUMBO CASE', 48: p_container >= 'JUMBO CASE', 49: p_brand <= 'Brand#35', 50: p_brand >= 'Brand#35'
 partitions=1/1
 avgRowSize=28.0
 numNodes=0

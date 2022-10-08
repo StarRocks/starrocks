@@ -24,6 +24,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+// At present, the user's SQL Query will not generate the predicate above sort.
+// This Rule is mainly used with PullUpPredicateRule to rewrite the constant column in the sort column
+// eg. (where a = 1 order by a, b) ==> (where a = 1 order by b)
 public class PushDownPredicateSortRule extends TransformationRule {
     public PushDownPredicateSortRule() {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_SORT, Pattern.create(OperatorType.LOGICAL_FILTER).addChildren(
@@ -38,7 +41,6 @@ public class PushDownPredicateSortRule extends TransformationRule {
         LogicalTopNOperator logicalTopNOperator = (LogicalTopNOperator) sortOpt.getOp();
 
         Map<ColumnRefOperator, ScalarOperator> projection = new HashMap<>();
-
 
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(logicalFilterOperator.getPredicate());
         Map<ColumnRefOperator, ConstantOperator> equalConstant = new HashMap<>();

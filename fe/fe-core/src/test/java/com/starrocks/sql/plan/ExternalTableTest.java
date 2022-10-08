@@ -85,6 +85,7 @@ public class ExternalTableTest extends PlanTestBase {
         sql =
                 "select * from ods_order where (order_dt = '2025-08-07' and length(order_no) > 10) and org_order_no = 'p';";
         plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("  1:SELECT\n" +
                 "  |  predicates: length(order_no) > 10\n" +
                 "  |  \n" +
@@ -92,8 +93,7 @@ public class ExternalTableTest extends PlanTestBase {
                 "     TABLE: `ods_order`\n" +
                 "     Query: SELECT `order_dt`, `order_no`, `org_order_no`, `bank_transaction_id`, " +
                 "`up_trade_no`, `mchnt_no`, `pay_st` FROM `ods_order` " +
-                "WHERE (order_dt = '2025-08-07') AND (org_order_no = 'p')"));
-
+                "WHERE (org_order_no = 'p') AND (order_dt = '2025-08-07')"));
     }
 
     @Test
@@ -190,6 +190,14 @@ public class ExternalTableTest extends PlanTestBase {
                 "    LEFT JOIN ods_order ref_1 ON ref_0.order_dt = ref_1.order_dt\n" +
                 "  WHERE ref_1.order_no IS NOT NULL;";
         String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)"));
+
+        sql = "SELECT ref_0.order_dt AS c0\n" +
+                "  FROM ods_order ref_0\n" +
+                "    LEFT JOIN ods_order ref_1 ON ref_0.order_dt = ref_1.order_dt\n" +
+                "  WHERE ref_1.order_no = 1";
+        plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)"));
     }

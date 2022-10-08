@@ -134,8 +134,8 @@ OutPut Exchange Id: 02
 |
 0:HdfsScanNode
 TABLE: lineitem
-NON-PARTITION PREDICATES: 5: l_quantity >= 5, 5: l_quantity <= 35, 15: l_shipmode IN ('AIR', 'AIR REG'), 14: l_shipinstruct = 'DELIVER IN PERSON'
-MIN/MAX PREDICATES: 34: l_quantity >= 5, 35: l_quantity <= 35, 36: l_shipmode >= 'AIR', 37: l_shipmode <= 'AIR REG', 38: l_shipinstruct <= 'DELIVER IN PERSON', 39: l_shipinstruct >= 'DELIVER IN PERSON'
+NON-PARTITION PREDICATES: 5: l_quantity >= 5, 5: l_quantity <= 35, 14: l_shipinstruct = 'DELIVER IN PERSON', 15: l_shipmode IN ('AIR', 'AIR REG')
+MIN/MAX PREDICATES: 34: l_quantity >= 5, 35: l_quantity <= 35, 36: l_shipinstruct <= 'DELIVER IN PERSON', 37: l_shipinstruct >= 'DELIVER IN PERSON', 38: l_shipmode >= 'AIR', 39: l_shipmode <= 'AIR REG'
 partitions=1/1
 avgRowSize=67.0
 numNodes=0

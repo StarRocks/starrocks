@@ -16,6 +16,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ExternalTablePredicateExtractor;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
@@ -62,6 +63,10 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
             // nothing changed after transform
             return new ArrayList<>();
         }
+
+        ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
+        pushedPredicate = scalarOperatorRewriter.rewrite(pushedPredicate,
+                ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
 
         Operator newOperator = builder.withOperator(operator)
                 .setPredicate(pushedPredicate).build();

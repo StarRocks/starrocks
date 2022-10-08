@@ -100,7 +100,7 @@ OutPut Exchange Id: 06
 0:OlapScanNode
 table: lineitem, rollup: lineitem
 preAggregation: on
-Predicates: [5: L_QUANTITY, DOUBLE, false] >= 5.0, [5: L_QUANTITY, DOUBLE, false] <= 35.0, 15: L_SHIPMODE IN ('AIR', 'AIR REG'), [14: L_SHIPINSTRUCT, CHAR, false] = 'DELIVER IN PERSON'
+Predicates: [5: L_QUANTITY, DOUBLE, false] >= 5.0, [5: L_QUANTITY, DOUBLE, false] <= 35.0, [14: L_SHIPINSTRUCT, CHAR, false] = 'DELIVER IN PERSON', 15: L_SHIPMODE IN ('AIR', 'AIR REG')
 partitionsRatio=1/1, tabletsRatio=20/20
 actualRows=0, avgRowSize=67.0
 cardinality: 26568218

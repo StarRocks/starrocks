@@ -293,7 +293,7 @@ OutPut Exchange Id: 26
 |
 12:HdfsScanNode
 TABLE: partsupp
-NON-PARTITION PREDICATES: 29: ps_partkey IS NOT NULL
+NON-PARTITION PREDICATES: 29: ps_partkey IS NOT NULL, 30: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=24.0
 numNodes=0

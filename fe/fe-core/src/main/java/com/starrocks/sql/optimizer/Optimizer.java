@@ -34,12 +34,12 @@ import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
-import com.starrocks.sql.optimizer.rule.tree.BottomUp;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
+import com.starrocks.sql.optimizer.rule.tree.PullUpPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
@@ -152,7 +152,10 @@ public class Optimizer {
         ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
         rootTaskContext.getRequiredColumns().union(cteContext.getAllRequiredColumns());
 
-        tree = new BottomUp().rewrite(tree, context.getTaskContext());
+        // First, the predicates that meet the conditions are pulled upward,
+        // so that more possibilities are obtained when the predicate is pushed down,
+        // such as predicate equivalence derivation and constant rewriting
+        tree = new PullUpPredicateRule().rewrite(tree, context.getTaskContext());
         deriveLogicalProperty(tree);
 
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
@@ -166,9 +169,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
 
-        //tree = new JoinEquivalentPredicatePushDown().rewrite(tree, context.getTaskContext());
         deriveLogicalProperty(tree);
-        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
@@ -228,9 +229,6 @@ public class Optimizer {
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INLINE_CTE);
             CTEUtils.collectCteOperators(tree, context);
         }
-
-        //tree = new EquivalentConstantExpressionRewrite().rewrite(tree, context.getTaskContext());
-        //deriveLogicalProperty(tree);
 
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());

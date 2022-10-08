@@ -47,7 +47,7 @@ public class AggregateTest extends PlanTestBase {
                     "\tWHERE t1a = 'not exists'\n" +
                     "));";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "  7:AGGREGATE (update finalize)\n" +
+            assertContains(plan, "8:AGGREGATE (update finalize)\n" +
                     "  |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; " +
                     "result nullable: false], any_value[([22: expr, BOOLEAN, true]); args: BOOLEAN; " +
                     "result: BOOLEAN; args nullable: true; result nullable: true]\n" +
@@ -55,7 +55,7 @@ public class AggregateTest extends PlanTestBase {
                     "  |  having: [24: any_value, BOOLEAN, true]\n" +
                     "  |  cardinality: 0\n" +
                     "  |  \n" +
-                    "  6:Project\n" +
+                    "  7:Project\n" +
                     "  |  output columns:\n" +
                     "  |  1 <-> [1: t1a, VARCHAR, false]\n" +
                     "  |  22 <-> [1: t1a, VARCHAR, false] <= [11: t1a, VARCHAR, true]\n" +

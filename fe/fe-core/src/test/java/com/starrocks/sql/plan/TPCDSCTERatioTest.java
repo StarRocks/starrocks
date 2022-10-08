@@ -174,7 +174,7 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
 
     @Test
     public void testRatioQ04() throws Exception {
-        testCTE(Q04);
+        testInline(Q04);
     }
 
     @Test
@@ -219,7 +219,7 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
 
     @Test
     public void testRatioQ31() throws Exception {
-        testCTE(Q31);
+        testInline(Q31);
     }
 
     @Test

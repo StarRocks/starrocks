@@ -399,8 +399,9 @@ LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4 AND 1: v1 = 1 AND add(2: v2, 5: v
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE SHUFFLE[4]
         AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
-            AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
-                SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
+            EXCHANGE SHUFFLE[5, 6]
+                AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
+                    SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
 [end]
 
 [sql]
@@ -410,8 +411,9 @@ LEFT OUTER JOIN (join-predicate [abs(add(1: v1, 4: v4)) = cast(add(1: v1, 5: v5)
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
-            AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
-                SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
+            EXCHANGE SHUFFLE[5, 6]
+                AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
+                    SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
 [end]
 
 [sql]
@@ -468,8 +470,9 @@ LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4 AND 1: v1 = 1 AND add(2: v2, 5: v
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE SHUFFLE[4]
         AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
-            AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
-                SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
+            EXCHANGE SHUFFLE[5, 6]
+                AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
+                    SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
 [end]
 
 [sql]
@@ -479,8 +482,9 @@ LEFT OUTER JOIN (join-predicate [abs(add(1: v1, 4: v4)) = cast(add(1: v1, 5: v5)
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
-            AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
-                SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
+            EXCHANGE SHUFFLE[5, 6]
+                AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5, 6: v6]] having [null]
+                    SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
 [end]
 
 [sql]

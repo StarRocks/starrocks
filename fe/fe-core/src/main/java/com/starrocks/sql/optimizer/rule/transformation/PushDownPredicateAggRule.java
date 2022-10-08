@@ -42,8 +42,7 @@ public class PushDownPredicateAggRule extends TransformationRule {
         List<ColumnRefOperator> groupColumns = logicalAggOperator.getGroupingKeys();
 
         List<ScalarOperator> pushDownPredicates = Lists.newArrayList();
-
-        Map<ColumnRefOperator, ScalarOperator> columnRefToConstant = new HashMap<>();
+        Map<ColumnRefOperator, ScalarOperator> constantEquivalentPredicate = new HashMap<>();
         for (Iterator<ScalarOperator> iter = filters.iterator(); iter.hasNext(); ) {
             ScalarOperator scalar = iter.next();
             List<ColumnRefOperator> columns = Utils.extractColumnRef(scalar);
@@ -59,7 +58,7 @@ public class PushDownPredicateAggRule extends TransformationRule {
                         && ((BinaryPredicateOperator) scalar).getBinaryType().isEqual()
                         && scalar.getChild(0) instanceof ColumnRefOperator
                         && scalar.getChild(1) instanceof ConstantOperator) {
-                    columnRefToConstant.put((ColumnRefOperator) scalar.getChild(0), scalar.getChild(1));
+                    constantEquivalentPredicate.put((ColumnRefOperator) scalar.getChild(0), scalar.getChild(1));
                 }
             }
         }
@@ -73,26 +72,40 @@ public class PushDownPredicateAggRule extends TransformationRule {
             scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
         }
 
-        //常量重写
-        if (!columnRefToConstant.isEmpty()) {
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(columnRefToConstant);
-
+        // If there is a constant equivalent predicate, delete the column ref corresponding to
+        // the constant in the aggregation node
+        // (because the column ref must be a constant, the aggregation of constants has no meaning
+        // unless the constant is the only grouping key)
+        if (!constantEquivalentPredicate.isEmpty()) {
             Map<ColumnRefOperator, ScalarOperator> projection = new HashMap<>();
 
-            List<ColumnRefOperator> groupingKeys = new ArrayList<>();
+            List<ColumnRefOperator> groupingKeys = new ArrayList<>(logicalAggOperator.getGroupingKeys());
             for (ColumnRefOperator columnRefOperator : logicalAggOperator.getGroupingKeys()) {
-                if (columnRefToConstant.containsKey(columnRefOperator)) {
-                    projection.put(columnRefOperator, columnRefToConstant.get(columnRefOperator));
-                    continue;
+                if (constantEquivalentPredicate.containsKey(columnRefOperator)) {
+                    groupingKeys.remove(columnRefOperator);
+                    // Because the constant column in grouping has been deleted,
+                    // this constant map needs to be added to the project for reference by nodes above agg
+                    projection.put(columnRefOperator, constantEquivalentPredicate.get(columnRefOperator));
                 }
-                groupingKeys.add(columnRefOperator);
             }
 
+            //Cannot delete all grouping keys because scalar aggregation and no-scalar aggregation are not equivalent
             if (groupingKeys.isEmpty() && !logicalAggOperator.getGroupingKeys().isEmpty()) {
                 groupingKeys.add(logicalAggOperator.getGroupingKeys().get(0));
             }
 
+            List<ColumnRefOperator> partitionByColumns = new ArrayList<>(logicalAggOperator.getPartitionByColumns());
+            for (ColumnRefOperator columnRefOperator : logicalAggOperator.getPartitionByColumns()) {
+                if (constantEquivalentPredicate.containsKey(columnRefOperator)) {
+                    partitionByColumns.remove(columnRefOperator);
+                }
+            }
+            if (partitionByColumns.isEmpty() && !logicalAggOperator.getPartitionByColumns().isEmpty()) {
+                partitionByColumns.add(logicalAggOperator.getPartitionByColumns().get(0));
+            }
+
             Map<ColumnRefOperator, CallOperator> aggregations = new HashMap<>();
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(constantEquivalentPredicate);
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : logicalAggOperator.getAggregations().entrySet()) {
                 aggregations.put(entry.getKey(), (CallOperator) rewriter.rewrite(entry.getValue()));
             }
@@ -107,12 +120,11 @@ public class PushDownPredicateAggRule extends TransformationRule {
             OptExpression aggOpt = OptExpression.create(new LogicalAggregationOperator.Builder()
                     .withOperator(logicalAggOperator)
                     .setGroupingKeys(groupingKeys)
+                    .setPartitionByColumns(partitionByColumns)
                     .setAggregations(aggregations)
                     .build(), input.getInputs());
 
-            OptExpression projectOpt =
-                    OptExpression.create(new LogicalProjectOperator(projection), Lists.newArrayList(aggOpt));
-
+            OptExpression projectOpt = OptExpression.create(new LogicalProjectOperator(projection), Lists.newArrayList(aggOpt));
             if (pushDownPredicates.size() > 0) {
                 LogicalFilterOperator newFilter = new LogicalFilterOperator(Utils.compoundAnd(pushDownPredicates));
                 OptExpression oe = new OptExpression(newFilter);

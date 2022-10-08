@@ -406,9 +406,9 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select * from test_all_type where t1a = 123 AND t1b = 999999999 AND t1d = 999999999 "
                 + "AND id_datetime = '2020-12-20 20:20:20' AND id_date = '2020-12-11' AND id_datetime = 'asdlfkja';";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("1: t1a = '123', CAST(2: t1b AS INT) = 999999999, 4: t1d = 999999999, "
-                + "8: id_datetime = '2020-12-20 20:20:20', 9: id_date = '2020-12-11', "
-                + "8: id_datetime = CAST('asdlfkja' AS DATETIME)"));
+        Assert.assertTrue(plan.contains("9: id_date = '2020-12-11', 8: id_datetime = '2020-12-20 20:20:20', " +
+                "4: t1d = 999999999, 1: t1a = '123', CAST(2: t1b AS INT) = 999999999, " +
+                "8: id_datetime = CAST('asdlfkja' AS DATETIME)"));
     }
 
     @Test

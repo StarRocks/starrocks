@@ -64,16 +64,13 @@ public class PushDownAggRuleTest {
         PushDownPredicateAggRule rule = new PushDownPredicateAggRule();
 
         List<OptExpression> list = rule.transform(filter, new OptimizerContext(new Memo(), new ColumnRefFactory()));
+        OptExpression aggOpt = list.get(0).inputAt(0);
 
-        assertEquals(OperatorType.LOGICAL_AGGR, list.get(0).getOp().getOpType());
-        assertEquals(OperatorType.COMPOUND,
-                ((LogicalAggregationOperator) list.get(0).getOp()).getPredicate().getOpType());
-        assertEquals(1, ((LogicalAggregationOperator) list.get(0).getOp()).getPredicate().getChildren().size());
-
-        assertEquals(OperatorType.LOGICAL_FILTER, list.get(0).getInputs().get(0).getOp().getOpType());
+        assertEquals(OperatorType.LOGICAL_AGGR, aggOpt.getOp().getOpType());
+        assertEquals(OperatorType.LOGICAL_FILTER, aggOpt.getInputs().get(0).getOp().getOpType());
 
         assertEquals(BinaryPredicateOperator.BinaryType.EQ,
-                ((BinaryPredicateOperator) ((LogicalFilterOperator) list.get(0).getInputs().get(0).getOp())
+                ((BinaryPredicateOperator) ((LogicalFilterOperator) aggOpt.getInputs().get(0).getOp())
                         .getPredicate()).getBinaryType());
     }
 }

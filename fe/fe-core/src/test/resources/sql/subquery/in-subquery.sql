@@ -88,7 +88,7 @@ select t0.v1 from t0 where t0.v2 in (select t3.v11 from t3 where t0.v3 > t3.v12)
 LEFT SEMI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 > 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[5: v11, 6: v12] predicate[5: v11 IS NOT NULL AND 5: v11 = 3])
+        SCAN (columns[5: v11, 6: v12] predicate[5: v11 = 3 AND 5: v11 IS NOT NULL])
 [end]
 
 [sql]
@@ -124,7 +124,7 @@ select t0.v1 from t0 where t0.v2 in (select t3.v11 from t3 where t0.v3 = t3.v12 
 LEFT SEMI JOIN (join-predicate [2: v2 = 5: v11 AND 3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v10, 5: v11, 6: v12] predicate[4: v10 > 2 AND 5: v11 = 3])
+        SCAN (columns[4: v10, 5: v11, 6: v12] predicate[5: v11 = 3 AND 4: v10 > 2])
 [end]
 
 [sql]
@@ -142,7 +142,7 @@ select t0.v1 from t0 where t0.v2 in (select t3.v11 from t3 where t3.v10 > 2) and
 LEFT SEMI JOIN (join-predicate [2: v2 = 5: v11] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v10, 5: v11] predicate[5: v11 IS NOT NULL AND 5: v11 = 3 AND 4: v10 > 2])
+        SCAN (columns[4: v10, 5: v11] predicate[5: v11 = 3 AND 5: v11 IS NOT NULL AND 4: v10 > 2])
 [end]
 
 [sql]
@@ -332,9 +332,9 @@ CTEAnchor(cteid=3)
         LEFT OUTER JOIN (join-predicate [2: v2 = 8: v6 AND 1: v1 = 9: v5] post-join-predicate [null])
             SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 = 4])
             EXCHANGE SHUFFLE[9]
-                AGGREGATE ([GLOBAL] aggregate [{}] group by [[8: v6, 9: v5]] having [null]
-                    EXCHANGE SHUFFLE[8, 9]
-                        AGGREGATE ([LOCAL] aggregate [{}] group by [[8: v6, 9: v5]] having [null]
+                AGGREGATE ([GLOBAL] aggregate [{}] group by [[8: v6]] having [null]
+                    EXCHANGE SHUFFLE[8]
+                        AGGREGATE ([LOCAL] aggregate [{}] group by [[8: v6]] having [null]
                             PREDICATE 9: v5 = 4
                                 CTEConsumer(cteid=3)
         EXCHANGE SHUFFLE[11]
@@ -543,15 +543,15 @@ CTEAnchor(cteid=3)
         LEFT OUTER JOIN (join-predicate [2: v2 = 10: add AND 1: v1 = 11: v4 AND 1: v1 = 1 AND add(2: v2, 12: v5) = 13: v6] post-join-predicate [null])
             SCAN (columns[1: v1, 2: v2] predicate[null])
             EXCHANGE SHUFFLE[11]
-                AGGREGATE ([GLOBAL] aggregate [{}] group by [[10: add, 11: v4, 12: v5, 13: v6]] having [null]
-                    EXCHANGE SHUFFLE[10, 11, 12, 13]
-                        AGGREGATE ([LOCAL] aggregate [{}] group by [[10: add, 11: v4, 12: v5, 13: v6]] having [null]
+                AGGREGATE ([GLOBAL] aggregate [{}] group by [[10: add, 12: v5, 13: v6]] having [null]
+                    EXCHANGE SHUFFLE[10, 12, 13]
+                        AGGREGATE ([LOCAL] aggregate [{}] group by [[10: add, 12: v5, 13: v6]] having [null]
                             PREDICATE 11: v4 = 1
                                 CTEConsumer(cteid=3)
         EXCHANGE SHUFFLE[15]
-            AGGREGATE ([GLOBAL] aggregate [{18: countRows=count(18: countRows), 19: countNotNulls=count(19: countNotNulls)}] group by [[15: v4, 16: v5, 17: v6]] having [null]
-                EXCHANGE SHUFFLE[15, 16, 17]
-                    AGGREGATE ([LOCAL] aggregate [{18: countRows=count(1), 19: countNotNulls=count(14: add)}] group by [[15: v4, 16: v5, 17: v6]] having [null]
+            AGGREGATE ([GLOBAL] aggregate [{18: countRows=count(18: countRows), 19: countNotNulls=count(19: countNotNulls)}] group by [[16: v5, 17: v6]] having [null]
+                EXCHANGE SHUFFLE[16, 17]
+                    AGGREGATE ([LOCAL] aggregate [{18: countRows=count(1), 19: countNotNulls=count(14: add)}] group by [[16: v5, 17: v6]] having [null]
                         PREDICATE 15: v4 = 1
                             CTEConsumer(cteid=3)
 [end]
@@ -661,15 +661,15 @@ CTEAnchor(cteid=3)
         LEFT OUTER JOIN (join-predicate [2: v2 = 10: add AND 1: v1 = 11: v4 AND 1: v1 = 1 AND add(2: v2, 12: v5) = 13: v6] post-join-predicate [null])
             SCAN (columns[1: v1, 2: v2] predicate[null])
             EXCHANGE SHUFFLE[11]
-                AGGREGATE ([GLOBAL] aggregate [{}] group by [[10: add, 11: v4, 12: v5, 13: v6]] having [null]
-                    EXCHANGE SHUFFLE[10, 11, 12, 13]
-                        AGGREGATE ([LOCAL] aggregate [{}] group by [[10: add, 11: v4, 12: v5, 13: v6]] having [null]
+                AGGREGATE ([GLOBAL] aggregate [{}] group by [[10: add, 12: v5, 13: v6]] having [null]
+                    EXCHANGE SHUFFLE[10, 12, 13]
+                        AGGREGATE ([LOCAL] aggregate [{}] group by [[10: add, 12: v5, 13: v6]] having [null]
                             PREDICATE 11: v4 = 1
                                 CTEConsumer(cteid=3)
         EXCHANGE SHUFFLE[15]
-            AGGREGATE ([GLOBAL] aggregate [{18: countRows=count(18: countRows), 19: countNotNulls=count(19: countNotNulls)}] group by [[15: v4, 16: v5, 17: v6]] having [null]
-                EXCHANGE SHUFFLE[15, 16, 17]
-                    AGGREGATE ([LOCAL] aggregate [{18: countRows=count(1), 19: countNotNulls=count(14: add)}] group by [[15: v4, 16: v5, 17: v6]] having [null]
+            AGGREGATE ([GLOBAL] aggregate [{18: countRows=count(18: countRows), 19: countNotNulls=count(19: countNotNulls)}] group by [[16: v5, 17: v6]] having [null]
+                EXCHANGE SHUFFLE[16, 17]
+                    AGGREGATE ([LOCAL] aggregate [{18: countRows=count(1), 19: countNotNulls=count(14: add)}] group by [[16: v5, 17: v6]] having [null]
                         PREDICATE 15: v4 = 1
                             CTEConsumer(cteid=3)
 [end]
