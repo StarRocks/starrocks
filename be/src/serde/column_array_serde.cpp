@@ -59,14 +59,13 @@ const uint8_t* read_raw(const uint8_t* buff, void* target, size_t size) {
     return buff + size;
 }
 
-// encode size_t?
 uint8_t* encode_integers(const void* data, size_t size, uint8_t* buff, int encode_level) {
     if (encode_level == 0) {
         throw std::runtime_error("integer encode level does not work.");
     }
-    uint32_t encode_size = streamvbyte_encode(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0,
-                                              buff + sizeof(uint32_t));
-    buff = write_little_endian_32(encode_size, buff);
+    uint64_t encode_size = streamvbyte_encode(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0,
+                                              buff + sizeof(uint64_t));
+    buff = write_little_endian_64(encode_size, buff);
     if (encode_level < -1) {
         LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, integers compression ratio = {}\n", size,
                                     encode_size, encode_size * 1.0 / size);
@@ -75,9 +74,9 @@ uint8_t* encode_integers(const void* data, size_t size, uint8_t* buff, int encod
 }
 
 const uint8_t* decode_integers(const uint8_t* buff, void* target, size_t size) {
-    uint32_t encode_size = 0;
-    buff = read_little_endian_32(buff, &encode_size);
-    uint32_t encode_size1 = streamvbyte_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0);
+    uint64_t encode_size = 0;
+    buff = read_little_endian_64(buff, &encode_size);
+    uint64_t encode_size1 = streamvbyte_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0);
     if (encode_size != encode_size1) {
         throw std::runtime_error(fmt::format(
                 "encode size does not equal when decoding, encode size = {}, but decode get size = {}, raw size = {}.",
@@ -90,13 +89,13 @@ uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int enc
     if (encode_level == 0) {
         throw std::runtime_error("lz4 encode level does not work.");
     }
-    uint32_t encode_size =
-            LZ4_compress_fast(reinterpret_cast<const char*>(data), reinterpret_cast<char*>(buff + sizeof(uint32_t)),
+    uint64_t encode_size =
+            LZ4_compress_fast(reinterpret_cast<const char*>(data), reinterpret_cast<char*>(buff + sizeof(uint64_t)),
                               size, LZ4_compressBound(size), std::max(1, std::abs(encode_level / 10000) % 100));
     if (encode_size <= 0) {
         throw std::runtime_error("lz4 compress error.");
     }
-    buff = write_little_endian_32(encode_size, buff);
+    buff = write_little_endian_64(encode_size, buff);
     if (encode_level < -1) {
         LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, lz4 compression ratio = {}\n", size, encode_size,
                                     encode_size * 1.0 / size);
@@ -105,9 +104,9 @@ uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int enc
 }
 
 const uint8_t* decode_string_lz4(const uint8_t* buff, void* target, size_t size) {
-    uint32_t encode_size = 0;
-    buff = read_little_endian_32(buff, &encode_size);
-    uint32_t encode_size1 = LZ4_decompress_safe(reinterpret_cast<const char*>(buff), reinterpret_cast<char*>(target),
+    uint64_t encode_size = 0;
+    buff = read_little_endian_64(buff, &encode_size);
+    uint64_t encode_size1 = LZ4_decompress_safe(reinterpret_cast<const char*>(buff), reinterpret_cast<char*>(target),
                                                 encode_size, size);
     if (encode_size1 <= 0) {
         throw std::runtime_error("lz4 decompress error.");
@@ -125,13 +124,13 @@ uint8_t* encode_string_zstd(const void* data, size_t size, uint8_t* buff, int en
     if (encode_level == 0) {
         throw std::runtime_error("zstd encode level does not work.");
     }
-    uint32_t encode_size = ZSTD_compress((void*)(buff + sizeof(uint32_t)), ZSTD_compressBound(size), data, size,
+    uint64_t encode_size = ZSTD_compress((void*)(buff + sizeof(uint64_t)), ZSTD_compressBound(size), data, size,
                                          std::max(1, std::abs(encode_level / 10000) % 100));
 
     if (ZSTD_isError(encode_size)) {
         throw std::runtime_error("zstd compress error.");
     }
-    buff = write_little_endian_32(encode_size, buff);
+    buff = write_little_endian_64(encode_size, buff);
     if (encode_level < -1) {
         LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, zstd compression ratio = {}\n", size,
                                     encode_size, encode_size * 1.0 / size);
@@ -140,9 +139,9 @@ uint8_t* encode_string_zstd(const void* data, size_t size, uint8_t* buff, int en
 }
 
 const uint8_t* decode_string_zstd(const uint8_t* buff, void* target, size_t size) {
-    uint32_t encode_size = 0;
-    buff = read_little_endian_32(buff, &encode_size);
-    uint32_t encode_size1 = ZSTD_decompress(target, size, (void*)buff, encode_size);
+    uint64_t encode_size = 0;
+    buff = read_little_endian_64(buff, &encode_size);
+    uint64_t encode_size1 = ZSTD_decompress(target, size, (void*)buff, encode_size);
     if (ZSTD_isError(encode_size)) {
         throw std::runtime_error("zstd decompress error.");
     }
@@ -161,9 +160,9 @@ public:
     static int64_t max_serialized_size(const vectorized::FixedLengthColumnBase<T>& column, const int encode_level = 0) {
         uint32_t size = sizeof(T) * column.size();
         if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
-            return sizeof(uint32_t) + streamvbyte_max_compressedbytes((size + 3) / 4.0);
+            return sizeof(uint64_t) + streamvbyte_max_compressedbytes((size + 3) / 4.0);
         } else {
-            return sizeof(uint32_t) + size;
+            return sizeof(uint64_t) + size;
         }
     }
 
@@ -203,14 +202,14 @@ public:
         int64_t res = sizeof(T) * 2;
         int64_t offsets_size = offsets.size() * sizeof(typename vectorized::BinaryColumnBase<T>::Offset);
         if ((encode_level & 1) && offsets_size >= ENCODE_SIZE_LIMIT) {
-            res += sizeof(uint32_t) + streamvbyte_max_compressedbytes((offsets_size + 3) / 4.0);
+            res += sizeof(uint64_t) + streamvbyte_max_compressedbytes((offsets_size + 3) / 4.0);
         } else {
             res += offsets_size;
         }
         if ((encode_level & 2) && bytes.size() >= ENCODE_SIZE_LIMIT) {
-            res += sizeof(uint32_t) + LZ4_compressBound(bytes.size());
+            res += sizeof(uint64_t) + LZ4_compressBound(bytes.size());
         } else if ((encode_level & 4) && bytes.size() >= ENCODE_SIZE_LIMIT) {
-            res += sizeof(uint32_t) + ZSTD_compressBound(bytes.size());
+            res += sizeof(uint64_t) + ZSTD_compressBound(bytes.size());
         } else {
             res += bytes.size();
         }
