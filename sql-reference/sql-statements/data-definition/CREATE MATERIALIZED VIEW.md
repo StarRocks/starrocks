@@ -84,7 +84,7 @@ SELECT select_expr[, select_expr ...]
 
 - `ASYNC`：异步的刷新方式。您可以为该方式指定刷新开始时间、刷新间隔或者导入触发刷新方式。刷新间隔仅支持：`DAY`、`HOUR`、`MINUTE` 以及 `SECOND`。
 - `MANUAL`：手动的刷新方式。
-- 如果不指定该参数，则默认使用 SYNC 方式。
+- 如果不指定该参数，则默认使用 MANUAL 方式。
 
 **partition_expression**（选填）
 
