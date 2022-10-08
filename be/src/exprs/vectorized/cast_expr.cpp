@@ -348,53 +348,6 @@ static ColumnPtr cast_from_string_to_hll_fn(ColumnPtr& column) {
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_HLL, cast_from_string_to_hll_fn);
 
-static bool check_valid_bimtap(const Slice& slice) {
-    const size_t size = slice.size;
-    if (!size) {
-        return false;
-    }
-
-    const char* src = slice.data;
-    if (*src < BitmapTypeCode::EMPTY || *src > BitmapTypeCode::BITMAP64_SERIV2) {
-        return false;
-        ;
-    } else {
-        switch (*src) {
-        case BitmapTypeCode::SINGLE32:
-            if (size < (1 + sizeof(uint32_t))) {
-                return false;
-            }
-            break;
-        case BitmapTypeCode::SINGLE64:
-            if (size < (1 + sizeof(uint64_t))) {
-                return false;
-            }
-            break;
-        case BitmapTypeCode::BITMAP32:
-        case BitmapTypeCode::BITMAP64:
-        case BitmapTypeCode::BITMAP32_SERIV2:
-        case BitmapTypeCode::BITMAP64_SERIV2:
-            break;
-        case BitmapTypeCode::SET: {
-            if (size < (1 + sizeof(uint32_t))) {
-                return false;
-            }
-
-            uint32_t set_size{};
-            memcpy(&set_size, src + 1, sizeof(uint32_t));
-
-            if (size < (1 + sizeof(uint32_t) + set_size * sizeof(uint64_t))) {
-                return false;
-            }
-            break;
-        }
-        default:
-            return false;
-        }
-        return true;
-    }
-}
-
 template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_bitmap_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
@@ -406,10 +359,6 @@ static ColumnPtr cast_from_string_to_bitmap_fn(ColumnPtr& column) {
         }
 
         auto value = viewer.value(row);
-        if (!check_valid_bimtap(value)) {
-            builder.append_null();
-            continue;
-        }
 
         BitmapValue bitmap;
         if (bitmap.deserialize(value.data, value.size)) {

@@ -746,56 +746,78 @@ bool BitmapValue::deserialize(const char* src) {
 }
 
 bool BitmapValue::deserialize(const char* src, size_t max_bytes) {
+    if (!max_bytes) {
+        return false;
+    }
+
     if (src == nullptr) {
         _type = EMPTY;
         return true;
     }
 
-    bool valid = true;
-    switch (*src) {
-    case BitmapTypeCode::EMPTY:
-        _type = EMPTY;
-        break;
-    case BitmapTypeCode::SINGLE32:
-        _type = SINGLE;
-        _sv = decode_fixed32_le(reinterpret_cast<const uint8_t*>(src + 1));
-        break;
-    case BitmapTypeCode::SINGLE64:
-        _type = SINGLE;
-        _sv = decode_fixed64_le(reinterpret_cast<const uint8_t*>(src + 1));
-        break;
-    case BitmapTypeCode::BITMAP32:
-    case BitmapTypeCode::BITMAP64:
-    case BitmapTypeCode::BITMAP32_SERIV2:
-    case BitmapTypeCode::BITMAP64_SERIV2:
-        _type = BITMAP;
-        _bitmap = std::make_shared<detail::Roaring64Map>(detail::Roaring64Map::read_safe(src, max_bytes, &valid));
-        if (!valid) {
+    if (*src < BitmapTypeCode::EMPTY || *src > BitmapTypeCode::BITMAP64_SERIV2) {
+        return false;
+    } else {
+        bool valid = true;
+        switch (*src) {
+        case BitmapTypeCode::EMPTY:
+            _type = EMPTY;
+            break;
+        case BitmapTypeCode::SINGLE32:
+            if (max_bytes < (1 + sizeof(uint32_t))) {
+                return false;
+            }
+            _type = SINGLE;
+            _sv = decode_fixed32_le(reinterpret_cast<const uint8_t*>(src + 1));
+            break;
+        case BitmapTypeCode::SINGLE64:
+            if (max_bytes < (1 + sizeof(uint64_t))) {
+                return false;
+            }
+            _type = SINGLE;
+            _sv = decode_fixed64_le(reinterpret_cast<const uint8_t*>(src + 1));
+            break;
+        case BitmapTypeCode::BITMAP32:
+        case BitmapTypeCode::BITMAP64:
+        case BitmapTypeCode::BITMAP32_SERIV2:
+        case BitmapTypeCode::BITMAP64_SERIV2:
+            _bitmap = std::make_shared<detail::Roaring64Map>(detail::Roaring64Map::read_safe(src, max_bytes, &valid));
+            if (!valid) {
+                return false;
+            }
+            _type = BITMAP;
+            break;
+        case BitmapTypeCode::SET: {
+            if (max_bytes < (1 + sizeof(uint32_t))) {
+                return false;
+            }
+
+            uint32_t set_size{};
+            memcpy(&set_size, src + 1, sizeof(uint32_t));
+
+            if (max_bytes < (1 + sizeof(uint32_t) + set_size * sizeof(uint64_t))) {
+                return false;
+            }
+
+            _type = SET;
+            src += sizeof(uint32_t) + 1;
+
+            _set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
+            _set->reserve(set_size);
+
+            for (int i = 0; i < set_size; ++i) {
+                uint64_t key{};
+                memcpy(&key, src, sizeof(uint64_t));
+                _set->insert(key);
+                src += sizeof(uint64_t);
+            }
+            break;
+        }
+        default:
             return false;
         }
-        break;
-    case BitmapTypeCode::SET: {
-        _type = SET;
-
-        uint32_t size{};
-        memcpy(&size, src + 1, sizeof(uint32_t));
-        src += sizeof(uint32_t) + 1;
-
-        _set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
-        _set->reserve(size);
-
-        for (int i = 0; i < size; ++i) {
-            uint64_t key{};
-            memcpy(&key, src, sizeof(uint64_t));
-            _set->insert(key);
-            src += sizeof(uint64_t);
-        }
-        break;
+        return true;
     }
-    default:
-        return false;
-    }
-    return true;
 }
 
 bool BitmapValue::split_as_uint64_t(const Slice& slice, std::vector<uint64_t>* result) {

@@ -654,6 +654,7 @@ public:
             *is_valid_ptr = false;
             return NULL;
         }
+
         const char* bufaschar = (const char*)buf;
         if (*(const unsigned char*)buf == SERIALIZATION_ARRAY_UINT32) {
             if (max_bytes < (1 + sizeof(uint32_t))) {
@@ -681,7 +682,7 @@ public:
     }
 
     static roaring_bitmap_t* read_roaring_manually(const char* buf, size_t max_bytes, bool* is_valid_ptr,
-                                                   bool portable) {
+                                                   bool portable = true) {
         roaring_bitmap_t* r = portable ? roaring_bitmap_portable_deserialize_safe(buf, max_bytes, is_valid_ptr)
                                        : roaring_bitmap_deserialize_safe(buf, max_bytes, is_valid_ptr);
 
@@ -690,11 +691,6 @@ public:
 
     static Roaring64Map read_safe(const char* buf, size_t max_bytes, bool* is_valid_ptr) {
         Roaring64Map result;
-        if (max_bytes < 1) {
-            *is_valid_ptr = false;
-            return result;
-        }
-
         bool usev1 = BitmapTypeCode::BITMAP32 == *buf || BitmapTypeCode::BITMAP64 == *buf;
         bool is_bitmap32 = BitmapTypeCode::BITMAP32 == *buf || BitmapTypeCode::BITMAP32_SERIV2 == *buf;
         if (is_bitmap32) {
@@ -722,7 +718,7 @@ public:
                 *is_valid_ptr = false;
                 return result;
             }
-            
+
             uint32_t key = decode_fixed32_le(reinterpret_cast<const uint8_t*>(buf));
             buf += sizeof(uint32_t);
             max_bytes -= sizeof(uint32_t);
