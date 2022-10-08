@@ -64,6 +64,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -1283,6 +1284,10 @@ public class SchemaChangeHandler extends AlterHandler {
         db.readLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableName);
+            // LakeTable not support update tablet meta
+            if (olapTable instanceof LakeTable) {
+                return;
+            }
             Partition partition = olapTable.getPartition(partitionName);
             if (partition == null) {
                 throw new DdlException(
