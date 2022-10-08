@@ -1269,10 +1269,6 @@ public class PlanFragmentBuilder {
                             new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
                 }
-                // set aggregate node can use local aggregate
-                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
-                    aggregationNode.setColocate(true);
-                }
 
                 // set predicate
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -1331,6 +1327,10 @@ public class PlanFragmentBuilder {
                     inputFragment.setEnableSharedScan(false);
                     inputFragment.setAssignScanRangesPerDriverSeq(true);
                 }
+            }
+            // set aggregate node can use local aggregate
+            if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                aggregationNode.setColocate(true);
             }
 
             inputFragment.setPlanRoot(aggregationNode);
@@ -2073,6 +2073,9 @@ public class PlanFragmentBuilder {
             analyticEvalNode.setLimit(node.getLimit());
             analyticEvalNode.setHasNullableGenerateChild();
             analyticEvalNode.computeStatistics(optExpr.getStatistics());
+            if (hasColocateOlapScanChildInFragment(analyticEvalNode)) {
+                analyticEvalNode.setColocate(true);
+            }
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
