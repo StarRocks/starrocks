@@ -2,7 +2,7 @@
 
 ## Description
 
-Routine Load allows you to submit a permanent import task to import data into StarRocks by constantly reading from a specified data source. Currently only support importing text format (CSV) data from Kafka without authentication or SSL authentication.
+Routine Load allows you to submit a permanent import task to import data into StarRocks by constantly reading from a specified data source. Currently Routine Load supports importing text format (CSV) data from Kafka without authentication，encryption and authentication using SSL, as well as authentication using SASL.
 
 ## Syntax
 
