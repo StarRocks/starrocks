@@ -110,6 +110,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NET_WRITE_TIMEOUT = "net_write_timeout";
     public static final String NET_READ_TIMEOUT = "net_read_timeout";
     public static final String TIME_ZONE = "time_zone";
+    public static final String INNODB_READ_ONLY = "innodb_read_only";
     public static final String SQL_SAFE_UPDATES = "sql_safe_updates";
     public static final String NET_BUFFER_LENGTH = "net_buffer_length";
     public static final String CODEGEN_LEVEL = "codegen_level";
@@ -425,6 +426,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // The current time zone
     @VariableMgr.VarAttr(name = TIME_ZONE)
     private String timeZone = TimeUtils.getSystemTimeZone().getID();
+
+    @VariableMgr.VarAttr(name = INNODB_READ_ONLY)
+    private boolean innodbReadOnly = true;
 
     @VariableMgr.VarAttr(name = PARALLEL_EXCHANGE_INSTANCE_NUM)
     private int exchangeInstanceParallel = -1;
@@ -745,6 +749,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setTimeZone(String timeZone) {
         this.timeZone = timeZone;
+    }
+
+    public boolean isInnodbReadOnly() {
+        return innodbReadOnly;
+    }
+
+    public void setInnodbReadOnly(boolean innodbReadOnly) {
+        this.innodbReadOnly = innodbReadOnly;
     }
 
     public void setMaxExecMemByte(long maxExecMemByte) {
