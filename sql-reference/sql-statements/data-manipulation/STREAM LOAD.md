@@ -93,6 +93,8 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | json_root         | 否           | 用于指定待导入 JSON 数据的根节点。该参数仅用于通过匹配模式导入 JSON 格式的数据。`json_root` 为合法的 JsonPath 字符串。默认值为空，表示会导入整个导入文件的数据。具体请参见本文提供的示例[导入数据并指定 JSON 根节点](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md#导入数据并指定 JSON 根节点)。 |
 | ignore_json_size | 否   | 用于指定是否检查 HTTP 请求中 JSON Body 的大小。<br/>**说明**<br/>HTTP 请求中 JSON Body 的大小默认不能超过 100 MB。如果 JSON Body 的大小超过 100 MB，会提示 "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." 错误。为避免该报错，可以在 HTTP 请求头中添加 `"ignore_json_size:true"` 设置，忽略对 JSON Body 大小的检查。 |
 
+另外，导入 JSON 格式的数据时，需要注意单个 JSON 对象的大小不能超过 4 GB。如果 JSON 文件中单个 JSON 对象的大小超过 4 GB，会提示 "This parser can't support a document that big." 错误。
+
 ### `opt_properties`
 
 用于指定一些导入相关的可选参数。指定的参数设置作用于整个导入作业。语法如下：
