@@ -2,7 +2,6 @@
 
 #include "serde/column_array_serde.h"
 
-#include <encode/density_api.h>
 #include <encode/streamvbyte.h>
 #include <fmt/format.h>
 #include <lz4/lz4.h>
@@ -156,43 +155,6 @@ const uint8_t* decode_string_zstd(const uint8_t* buff, void* target, size_t size
     return buff + encode_size;
 }
 
-uint8_t* encode_string_density(const void* data, size_t size, uint8_t* buff, int encode_level) {
-    if (encode_level == 0) {
-        throw std::runtime_error("density encode level does not work.");
-    }
-    density_processing_result result = density_compress(
-            (const uint8_t*)data, size, (uint8_t*)(buff + sizeof(uint64_t)), density_compress_safe_size(size),
-            (DENSITY_ALGORITHM)std::max(1, std::abs(encode_level / 1000) % 4));
-    if (result.state) {
-        throw std::runtime_error(fmt::format("density compress error, NO = {}.", result.state));
-    }
-
-    buff = write_little_endian_64(result.bytesWritten, buff);
-    if (encode_level < -1) {
-        LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, density compression ratio = {}\n", size,
-                                    result.bytesWritten, result.bytesWritten * 1.0 / size);
-    }
-    return buff + result.bytesWritten;
-}
-
-const uint8_t* decode_string_density(const uint8_t* buff, void* target, size_t size) {
-    uint64_t encode_size = 0;
-    buff = read_little_endian_64(buff, &encode_size);
-    density_processing_result result =
-            density_decompress((const uint8_t*)buff, encode_size, (uint8_t*)target, density_decompress_safe_size(size));
-
-    if (result.state) {
-        throw std::runtime_error(fmt::format("density decompress error, NO = {}.", result.state));
-    }
-    if (size != result.bytesWritten) {
-        throw std::runtime_error(
-                fmt::format("density encode size does not equal when decoding, encode size = {}, but decode get size = "
-                            "{}, raw size = {}.",
-                            encode_size, result.bytesWritten, size));
-    }
-    return buff + encode_size;
-}
-
 template <typename T>
 class FixedLengthColumnSerde {
 public:
@@ -249,8 +211,6 @@ public:
             res += sizeof(uint32_t) + LZ4_compressBound(bytes.size());
         } else if ((encode_level & 4) && bytes.size() >= ENCODE_SIZE_LIMIT) {
             res += sizeof(uint32_t) + ZSTD_compressBound(bytes.size());
-        } else if ((encode_level & 8) && bytes.size() >= ENCODE_SIZE_LIMIT) {
-            res += sizeof(uint64_t) + density_compress_safe_size(bytes.size());
         } else {
             res += bytes.size();
         }
@@ -273,8 +233,6 @@ public:
             buff = encode_string_lz4(bytes.data(), bytes_size, buff, encode_level);
         } else if ((encode_level & 4) && bytes_size >= ENCODE_SIZE_LIMIT) {
             buff = encode_string_zstd(bytes.data(), bytes_size, buff, encode_level);
-        } else if ((encode_level & 8) && bytes_size >= ENCODE_SIZE_LIMIT) {
-            buff = encode_string_density(bytes.data(), bytes_size, buff, encode_level);
         } else {
             buff = write_raw(bytes.data(), bytes_size, buff);
         }
@@ -308,8 +266,6 @@ public:
             buff = decode_string_lz4(buff, column->get_bytes().data(), bytes_size);
         } else if ((encode_level & 4) && bytes_size >= ENCODE_SIZE_LIMIT) {
             buff = decode_string_zstd(buff, column->get_bytes().data(), bytes_size);
-        } else if ((encode_level & 8) && bytes_size >= ENCODE_SIZE_LIMIT) {
-            buff = decode_string_density(buff, column->get_bytes().data(), bytes_size);
         } else {
             buff = read_raw(buff, column->get_bytes().data(), bytes_size);
         }
