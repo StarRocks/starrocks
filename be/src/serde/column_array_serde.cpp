@@ -126,7 +126,7 @@ uint8_t* encode_string_zstd(const void* data, size_t size, uint8_t* buff, int en
         throw std::runtime_error("zstd encode level does not work.");
     }
     uint32_t encode_size = ZSTD_compress((void*)(buff + sizeof(uint32_t)), ZSTD_compressBound(size), data, size,
-                                         std::max(1, std::abs(encode_level / 1000000) % 100));
+                                         std::max(1, std::abs(encode_level / 10000) % 100));
 
     if (ZSTD_isError(encode_size)) {
         throw std::runtime_error("zstd compress error.");
