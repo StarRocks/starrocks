@@ -1,18 +1,21 @@
 # from_unixtime
 
-## description
+## Description
 
-### Syntax
+Converts a UNIX timestamp into the required time format. The default format is `yyyy-MM-dd HH:mm:ss`. It also supports the formats in [date_format](./date_format.md).
 
-`DATETIME FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])`
+## Syntax
 
-onvert the unix timestamp to the corresponding time format. The format returned should be specified by string_format.
+```sql
+DATETIME FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])`
+```
 
-The default format is yyyy-MM-dd HH:mm:ss. It also supports the formats in date_format.
+## Parameters
 
-It inputs integers and returns strings.
+- `unix_timestamp`: the UNIX timestamp you want to convert.
+- `string_format`: the required time format.
 
-Currently, string_format supports the following formats:
+Currently, `string_format` supports the following formats:
 
 ```plain text
 %Y：Year  e.g.：2014，1900
@@ -23,11 +26,11 @@ Currently, string_format supports the following formats:
 %s：Second  e.g.：59，01
 ```
 
-Other formats in string_format are invalid and be returned as NULL.
+Other formats are invalid and NULL will be returned.
 
-If the specified timstamp is less than 0 or more than 253402271999, it will be returned as NULL. The range for timestamp is: 1970-01-01 00:00:00 ~ 9999-12-31 23:59:59.
+If the specified timstamp is less than 0 or greater than 253402271999, NULL will be returned. The range for timestamp is `1970-01-01 00:00:00` to `9999-12-31 23:59:59`.
 
-## example
+## Examples
 
 ```plain text
 MySQL > select from_unixtime(1196440219);
