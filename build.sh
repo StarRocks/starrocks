@@ -21,12 +21,12 @@
 # Usage: 
 #    sh build.sh --help
 # Eg:
-#    sh build.sh                            build all
-#    sh build.sh  --be                      build Backend without clean
-#    sh build.sh  --fe --clean              clean and build Frontend and Spark Dpp application
-#    sh build.sh  --fe --be --clean         clean and build Frontend, Spark Dpp application and Backend
-#    sh build.sh  --spark-dpp               build Spark DPP application alone
-#    BUILD_TYPE=Debug ./build.sh --be     build CMAKE_TYPE IS Debug version for be (Default BUILD_TYPE is Release)
+#    sh build.sh                                      build all
+#    sh build.sh  --be                                build Backend without clean
+#    sh build.sh  --fe --clean                        clean and build Frontend and Spark Dpp application
+#    sh build.sh  --fe --be --clean                   clean and build Frontend, Spark Dpp application and Backend
+#    sh build.sh  --spark-dpp                         build Spark DPP application alone
+#    BUILD_TYPE=$CMAKE_BUILD_TYPE ./build.sh --be     build CMAKE_TYPE IS Debug version for be ($CMAKE_BUILD_TYPE support, Release, Debug, and Asan, Default value is Release)
 #
 # You need to make sure all thirdparty libraries have been
 # compiled and installed correctly.
@@ -81,7 +81,7 @@ Usage: $0 <options>
     $0 --fe --clean                         clean and build Frontend and Spark Dpp application
     $0 --fe --be --clean                    clean and build Frontend, Spark Dpp application and Backend
     $0 --spark-dpp                          build Spark DPP application alone
-    BUILD_TYPE=Debug ./build.sh --be      build BE CMAKE_TYPE is Debug Version (Default is Release)
+    BUILD_TYPE=Debug ./build.sh --be        build BE CMAKE_TYPE is Debug Version (Default is Release. And StarRocks also support Asan, eg.BUILD_TYPE=Asam)
   "
   exit 1
 }
