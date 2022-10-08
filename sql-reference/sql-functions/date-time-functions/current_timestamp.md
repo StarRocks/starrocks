@@ -13,7 +13,7 @@ DATETIME CURRENT_TIMESTAMP()
 ## 示例
 
 ```Plain Text
-MySQL > select current_timestamp();
+select current_timestamp();
 +---------------------+
 | current_timestamp() |
 +---------------------+

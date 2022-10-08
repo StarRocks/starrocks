@@ -25,7 +25,7 @@ INT YEAR(DATE|DATETIME date)
 
 ```Plain Text
 
-MySQL > select year('1987-01-01');
+select year('1987-01-01');
 +--------------------+
 | year('1987-01-01') |
 +--------------------+
@@ -37,7 +37,7 @@ MySQL > select year('1987-01-01');
 示例2：返回当前年份。
 
 ```Plain Text
-MySQL > select year(now());
+select year(now());
 +-------------+
 | year(now()) |
 +-------------+

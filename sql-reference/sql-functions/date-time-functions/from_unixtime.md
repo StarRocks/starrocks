@@ -25,7 +25,9 @@
 
 ## 语法
 
-`DATETIME FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])`
+```Haskell
+DATETIME FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])`
+```
 
 ## 示例
 
