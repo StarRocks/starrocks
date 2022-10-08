@@ -364,6 +364,9 @@ static ColumnPtr cast_from_string_to_bitmap_fn(ColumnPtr& column) {
         if (bitmap.deserialize(value.data, value.size)) {
             builder.append(&bitmap);
         } else {
+            if constexpr (AllowThrowException) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_OBJECT, value.to_string());
+            }
             builder.append_null();
         }
     }
