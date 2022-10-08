@@ -68,7 +68,7 @@ export_mem_limit_from_conf() {
         return 1
     fi
 
-    if [[ (-n $mem_limit) && ($mem_limit -le $mem_total) ]]; then
+    if [[ (-v mem_limit) && ($mem_limit -le $mem_total) ]]; then
       mem_total=$mem_limit
     fi
 
