@@ -24,6 +24,7 @@
 #include <iostream>
 #include <utility>
 
+#include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
@@ -37,8 +38,8 @@ DataStreamMgr::DataStreamMgr() {
 }
 
 inline uint32_t DataStreamMgr::get_bucket(const TUniqueId& fragment_instance_id) {
-    uint32_t value = RawValue::get_hash_value(&fragment_instance_id.lo, TYPE_BIGINT, 0);
-    value = RawValue::get_hash_value(&fragment_instance_id.hi, TYPE_BIGINT, value);
+    uint32_t value = HashUtil::hash(&fragment_instance_id.lo, 8, 0);
+    value = HashUtil::hash(&fragment_instance_id.hi, 8, value);
     return value % BUCKET_NUM;
 }
 
@@ -129,6 +130,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     TUniqueId t_finst_id;
     t_finst_id.hi = finst_id.hi();
     t_finst_id.lo = finst_id.lo();
+    SCOPED_SET_TRACE_INFO({}, {}, t_finst_id);
     std::shared_ptr<DataStreamRecvr> recvr = find_recvr(t_finst_id, request.node_id());
     if (recvr == nullptr) {
         // The receiver may remove itself from the receiver map via deregister_recvr()

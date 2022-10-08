@@ -25,7 +25,3 @@ High-precision fixed-point, P stands for the total number of significant numbers
   ​     1. At present, fast decimal does not support array type. If users want to use array (decimal) type, please use array (double) type, or use array (decimal) type after closing decimal v3.
   
   ​     2. In hive direct connection, orc and parquet data formats do not support decimal yet.
-
-## keyword
-
-DECIMAL

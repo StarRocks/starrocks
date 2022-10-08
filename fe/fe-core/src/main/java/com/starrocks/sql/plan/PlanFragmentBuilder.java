@@ -1286,10 +1286,6 @@ public class PlanFragmentBuilder {
                             new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
                 }
-                // set aggregate node can use local aggregate
-                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
-                    aggregationNode.setColocate(true);
-                }
 
                 // set predicate
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -1346,6 +1342,10 @@ public class PlanFragmentBuilder {
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 inputFragment.setEnableSharedScan(withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
+            }
+            // set aggregate node can use local aggregate
+            if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                aggregationNode.setColocate(true);
             }
 
             inputFragment.setPlanRoot(aggregationNode);
@@ -1540,7 +1540,7 @@ public class PlanFragmentBuilder {
                 sortExprs.add(new SlotRef(slotDesc));
             }
 
-            ColumnRefSet columnRefSet = optExpr.getLogicalProperty().getOutputColumns();
+            ColumnRefSet columnRefSet = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
             for (int i = 0; i < columnRefSet.getColumnIds().length; ++i) {
                 /*
                  * Add column not be used in ordering
@@ -2121,6 +2121,9 @@ public class PlanFragmentBuilder {
             analyticEvalNode.setLimit(node.getLimit());
             analyticEvalNode.setHasNullableGenerateChild();
             analyticEvalNode.computeStatistics(optExpr.getStatistics());
+            if (hasColocateOlapScanChildInFragment(analyticEvalNode)) {
+                analyticEvalNode.setColocate(true);
+            }
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());

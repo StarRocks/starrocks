@@ -498,12 +498,18 @@ CONF_Bool(enable_metric_calculator, "true");
 // Max consumer num in one data consumer group, for routine load.
 CONF_mInt32(max_consumer_num_per_group, "3");
 
+// Max pulsar consumer num in one data consumer group, for routine load.
+CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
+
 // The size of thread pool for routine load task.
 // this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
 CONF_Int32(routine_load_thread_pool_size, "10");
 
 // kafka reqeust timeout
 CONF_Int32(routine_load_kafka_timeout_second, "10");
+
+// pulsar reqeust timeout
+CONF_Int32(routine_load_pulsar_timeout_second, "10");
 
 // Is set to true, index loading failure will not causing BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.
@@ -834,5 +840,7 @@ CONF_Int64(block_cache_disk_size, "21474836480"); // 20GB
 //CONF_Int64(block_cache_block_size, "4194304");    // 4MB
 CONF_Int64(block_cache_block_size, "1048576");
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
+
+CONF_mInt64(l0_l1_merge_ratio, "10");
 
 } // namespace starrocks::config

@@ -23,7 +23,3 @@ Note:
 10. UsedPct represents the percentage of space used in the disk.
 11. ErrMsg is used to display errors when a heartbeat fails.
 12. Status is used to display BE status in JSON format. It currently displays when it is that BE reports its tablet last time.
-
-## keyword
-
-SHOW, BACKENDS

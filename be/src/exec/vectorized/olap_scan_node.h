@@ -67,9 +67,6 @@ public:
 
     Status set_scan_range(const TInternalScanRange& range);
 
-    // TODO: support more share_scan strategy
-    void enable_shared_scan(bool enable);
-
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
 
@@ -187,8 +184,6 @@ private:
     // of the left table are compacted at building the right hash table. Therefore, reference
     // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
-
-    bool _enable_shared_scan = false;
 
     bool _sorted_by_keys_per_tablet = false;
 

@@ -61,6 +61,15 @@ public class BackupRestoreAnalyzer {
             analyzeLabelAndRepo(backupStmt.getLabel(), backupStmt.getRepoName());
             Map<String, TableRef> tblPartsMap = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
             List<TableRef> tableRefs = backupStmt.getTableRefs();
+            // If TableRefs is empty, it means that we do not specify any table in Backup stmt.
+            // We should backup all table in current database.
+            if (tableRefs.size() == 0) {
+                for (Table tbl : database.getTables()) {
+                    TableName tableName = new TableName(dbName, tbl.getName());
+                    TableRef tableRef = new TableRef(tableName, null, null);
+                    tableRefs.add(tableRef);
+                }
+            }
             for (TableRef tableRef : tableRefs) {
                 analyzeTableRef(tableRef, dbName, database, tblPartsMap, context.getCurrentCatalog());
                 if (tableRef.hasExplicitAlias()) {

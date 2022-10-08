@@ -358,6 +358,15 @@ fi
 cd -
 echo "Finished patching $LIBRDKAFKA_SOURCE"
 
+# patch pulsar
+cd $TP_SOURCE_DIR/$PULSAR_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $PULSAR_SOURCE = "pulsar-2.10.1" ]; then
+    patch -p1 < $TP_PATCH_DIR/pulsar.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $PULSAR_SOURCE"
+
 # patch mariadb-connector-c-3.2.5
 cd $TP_SOURCE_DIR/$MARIADB_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; then

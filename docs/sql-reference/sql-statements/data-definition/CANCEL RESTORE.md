@@ -21,7 +21,3 @@ When the restore is abolished around the COMMIT or later stage, the restored tab
     ```sql
     CANCEL RESTORE FROM example_db;
     ```
-
-## keyword
-
-CANCEL, RESTORE

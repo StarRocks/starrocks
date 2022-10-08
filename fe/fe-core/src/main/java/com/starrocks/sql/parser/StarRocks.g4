@@ -180,13 +180,13 @@ statement
     | dropRoleStatement
 
 
-    // Backup Restore Satement
+    // Backup Restore Statement
     | backupStatement
     | showBackupStatement
     | restoreStatement
     | showRestoreStatement
 
-    // Snapshot Satement
+    // Snapshot Statement
     | showSnapshotStatement
 
     //  Repository Satement
@@ -198,6 +198,11 @@ statement
     | delSqlBlackListStatement
     | showSqlBlackListStatement
     | showWhiteListStatement
+
+    // Export Statement
+    | exportStatement
+    | cancelExportStatement
+    | showExportStatement
 
     // Other statement
     | killStatement
@@ -1159,6 +1164,20 @@ showSqlBlackListStatement
 showWhiteListStatement
     : SHOW WHITELIST
     ;
+
+// ------------------------------------------- Export Statement --------------------------------------------------------
+exportStatement
+    : EXPORT TABLE tableDesc colList=columnAliases? TO path=string properties? broker=brokerDesc?
+    ;
+cancelExportStatement
+    : CANCEL EXPORT ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+showExportStatement
+    : SHOW EXPORT ((FROM | IN) db=qualifiedName)?
+        ((LIKE pattern=string) | (WHERE expression))?
+        (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    ;
+
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showProcesslistStatement
@@ -1375,7 +1394,7 @@ tabletList
 backupStatement
     : BACKUP SNAPSHOT qualifiedName
     TO identifier
-    ON '(' tableDesc (',' tableDesc) * ')'
+    (ON '(' tableDesc (',' tableDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
@@ -1386,7 +1405,7 @@ showBackupStatement
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
     FROM identifier
-    ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
+    (ON '(' restoreTableDesc (',' restoreTableDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
