@@ -15,7 +15,7 @@ INT WEEKOFYEAR(DATETIME date)
 ## example
 
 ```Plain Text
-MySQL > select weekofyear('2008-02-20 00:00:00');
+select weekofyear('2008-02-20 00:00:00');
 +-----------------------------------+
 | weekofyear('2008-02-20 00:00:00') |
 +-----------------------------------+

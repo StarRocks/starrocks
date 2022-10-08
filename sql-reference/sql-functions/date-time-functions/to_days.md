@@ -15,7 +15,7 @@ INT TO_DAYS(DATETIME date)
 ## example
 
 ```Plain Text
-MySQL > select to_days('2007-10-07');
+select to_days('2007-10-07');
 +-----------------------+
 | to_days('2007-10-07') |
 +-----------------------+

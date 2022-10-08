@@ -15,7 +15,7 @@ VARCHAR MONTHNAME(DATETIME|DATE date)
 ## 示例
 
 ```Plain Text
-MySQL > select monthname('2008-02-03 00:00:00');
+select monthname('2008-02-03 00:00:00');
 +----------------------------------+
 | monthname('2008-02-03 00:00:00') |
 +----------------------------------+

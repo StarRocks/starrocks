@@ -13,7 +13,7 @@ DATE FROM_DAYS(INT N)
 ## example
 
 ```Plain Text
-MySQL > select from_days(730669);
+select from_days(730669);
 +-------------------+
 | from_days(730669) |
 +-------------------+

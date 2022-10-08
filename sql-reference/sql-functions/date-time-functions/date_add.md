@@ -19,7 +19,7 @@ type 参数可以是下列值：YEAR, MONTH, DAY, HOUR, MINUTE, SECOND
 ## example
 
 ```Plain Text
-MySQL > select date_add('2010-11-30 23:59:59', INTERVAL 2 DAY);
+select date_add('2010-11-30 23:59:59', INTERVAL 2 DAY);
 +-------------------------------------------------+
 | date_add('2010-11-30 23:59:59', INTERVAL 2 DAY) |
 +-------------------------------------------------+

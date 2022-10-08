@@ -13,14 +13,14 @@ DATE CURDATE()
 ## Examples
 
 ```Plain Text
-MySQL > SELECT CURDATE();
+SELECT CURDATE();
 +------------+
 | CURDATE()  |
 +------------+
 | 2019-12-20 |
 +------------+
 
-MySQL > SELECT CURDATE() + 0;
+SELECT CURDATE() + 0;
 +---------------+
 | CURDATE() + 0 |
 +---------------+

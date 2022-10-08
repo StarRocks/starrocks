@@ -23,7 +23,7 @@ INT MONTH(DATE|DATETIME date)
 示例1：返回'1987-01-01'中的月份`1`。
 
 ```Plain Text
-MMySQL > select month('1987-01-01');
+select month('1987-01-01');
 +---------------------+
 | month('1987-01-01') |
 +---------------------+
@@ -35,7 +35,7 @@ MMySQL > select month('1987-01-01');
 示例2：返回当前月份。
 
 ```Plain Text
-MySQL > select month(now());
+select month(now());
 +--------------+
 | month(now()) |
 +--------------+

@@ -29,7 +29,13 @@
 
 1970-01-01 00:00:00 ~ 9999-12-31 23:59:59
 
-## example
+## 语法
+
+```Haskell
+DATETIME FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])`
+```
+
+## 示例
 
 ```plain text
 MySQL > select from_unixtime(1196440219);

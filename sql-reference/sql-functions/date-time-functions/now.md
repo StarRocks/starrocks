@@ -13,7 +13,7 @@ DATETIME NOW()
 ## example
 
 ```Plain Text
-MySQL > select now();
+select now();
 +---------------------+
 | now()               |
 +---------------------+

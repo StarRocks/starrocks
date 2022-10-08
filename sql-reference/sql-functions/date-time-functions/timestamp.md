@@ -21,7 +21,7 @@ DATETIME timestamp(DATETIME expr);
 ## 示例
 
 ```Plain Text
-mysql> select timestamp("2019-05-27");
+select timestamp("2019-05-27");
 +-------------------------+
 | timestamp('2019-05-27') |
 +-------------------------+

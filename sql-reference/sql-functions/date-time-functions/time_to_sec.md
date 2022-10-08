@@ -13,7 +13,7 @@ INT time_to_sec(DATETIME date)
 ## Example
 
 ```plain text
-mysql> select time_to_sec('12:13:14');
+select time_to_sec('12:13:14');
 +-----------------------------+
 | time_to_sec('12:13:14')     |
 +-----------------------------+

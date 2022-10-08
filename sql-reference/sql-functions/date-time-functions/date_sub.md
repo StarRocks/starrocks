@@ -17,7 +17,7 @@ INT DATE_SUB(DATETIME date,INTERVAL expr type)
 ## example
 
 ```Plain Text
-MySQL > select date_sub('2010-11-30 23:59:59', INTERVAL 2 DAY);
+select date_sub('2010-11-30 23:59:59', INTERVAL 2 DAY);
 +-------------------------------------------------+
 | date_sub('2010-11-30 23:59:59', INTERVAL 2 DAY) |
 +-------------------------------------------------+
