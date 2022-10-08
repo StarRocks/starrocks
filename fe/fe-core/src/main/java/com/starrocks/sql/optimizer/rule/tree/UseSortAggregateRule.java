@@ -45,7 +45,7 @@ public class UseSortAggregateRule extends OptExpressionVisitor<Void, Void> imple
 
         PhysicalHashAggregateOperator agg = (PhysicalHashAggregateOperator) optExpression.getOp();
 
-        if (!agg.getType().isGlobal()) {
+        if (!agg.getType().isGlobal() || groupBys.isEmpty()) {
             return null;
         }
 
