@@ -50,6 +50,10 @@ public:
 
     static Schema convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs);
 
+    bool is_support_aggregator() const {
+        return _keys_type != KeysType::DUP_KEYS && _keys_type != KeysType::PRIMARY_KEYS;
+    }
+
 private:
     void _merge();
 

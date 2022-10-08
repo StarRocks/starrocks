@@ -36,7 +36,7 @@ Schema MemTable::convert_schema(const TabletSchema* tablet_schema, const std::ve
 }
 
 void MemTable::_init_aggregator_if_needed() {
-    if (_keys_type != KeysType::DUP_KEYS) {
+    if (is_support_aggregator()) {
         // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
         // which is not suitable for obtaining Chunk from ColumnPool,
         // otherwise it will take up a lot of memory and may not be released.
@@ -164,7 +164,7 @@ Status MemTable::finalize() {
     {
         SCOPED_RAW_TIMER(&duration_ns);
 
-        if (_keys_type != KeysType::DUP_KEYS) {
+        if (is_support_aggregator()) {
             if (_chunk->num_rows() > 0) {
                 // merge last undo merge
                 _merge();
@@ -243,7 +243,7 @@ Status MemTable::flush(SegmentPB* seg_info) {
 }
 
 void MemTable::_merge() {
-    if (_chunk == nullptr || _keys_type == KeysType::DUP_KEYS) {
+    if (_chunk == nullptr || !is_support_aggregator()) {
         return;
     }
 
