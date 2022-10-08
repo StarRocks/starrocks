@@ -67,10 +67,10 @@ Status StreamingAggregateSinkOperator::push_chunk(RuntimeState* state, const vec
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
     RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
-    //    if (_imt_detail) {
-    //        VLOG(1) << "write chunk.";
-    //        _imt_detail->send_chunk(state, chunk.get());
-    //    }
+    if (_imt_detail) {
+        VLOG(1) << "write chunk.";
+        _imt_detail->send_chunk(state, chunk.get());
+    }
 
     RETURN_IF_ERROR(_push_chunk_by_force_preaggregation(chunk, chunk->num_rows()));
     return Status::OK();
@@ -84,32 +84,31 @@ Status StreamingAggregateSinkOperator::_push_chunk_by_force_preaggregation(const
     std::vector<vectorized::ColumnPtr> restore_agg_columns;
     if (_imt_agg_result) {
         // TODO: use `build_hash_map_with_selectivity` is better?
-        //        auto& not_found = _aggregator->streaming_selection();
+//        auto& not_found = _aggregator->streaming_selection();
         if (false) {
         }
-#define HASH_MAP_METHOD_COMPUTE_EXISTENCE(NAME)                                                               \
-    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME) {             \
-        TRY_CATCH_BAD_ALLOC(                                                                                  \
-                _aggregator->compute_existence<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                        *_aggregator->hash_map_variant().NAME, chunk_size, not_found));                       \
+#define HASH_MAP_METHOD_COMPUTE_EXISTENCE(NAME)                                                                                          \
+    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME) {                      \
+        TRY_CATCH_BAD_ALLOC(_aggregator->compute_existence<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
+                *_aggregator->hash_map_variant().NAME, chunk_size, not_found));                                                   \
     }
         APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD_COMPUTE_EXISTENCE)
 #undef HASH_MAP_METHOD_COMPUTE_EXISTENCE
         else {
             DCHECK(false);
         }
-        VLOG(1) << "not_found size:" << not_found.size();
+        VLOG(1) << "not_found size:"<<not_found.size();
 
         // TODO: Maybe push down to the aggregator?
-        //        not_found.assign(chunk_size, 1);
+//        not_found.assign(chunk_size, 1);
         restore_agg_columns.reserve(_num_agg_func_columns);
         for (int i = 0; i < _num_agg_func_columns; i++) {
             const vectorized::FieldPtr& f = _imt_agg_result_schema->field(i + _num_groupby_columns);
             restore_agg_columns.emplace_back(ChunkHelper::column_from_field(*f));
         }
         for (int i = 0; i < chunk_size; i++) {
-            VLOG(1) << "check key exists:" << i << ", t_chunk output: " << chunk->debug_row(i)
-                    << ", not_found?:" << ((not_found[i] == 1) ? "not found" : "found");
+            VLOG(1) << "check key exists:" << i << ", t_chunk output: " << chunk->debug_row(i) << ", not_found?:"
+                    << ((not_found[i] == 1) ? "not found" : "found");
             if (not_found[i] == 1) {
                 DatumRow row(_num_groupby_columns);
                 ReadOption read_option;
@@ -128,7 +127,7 @@ Status StreamingAggregateSinkOperator::_push_chunk_by_force_preaggregation(const
                 if (t_chunk->num_rows() > 0) {
                     // Because group by is pk, the result must only one chunk.
                     DCHECK_EQ(1, t_chunk->num_rows());
-                    for (size_t j = 0; j < t_chunk->num_rows(); j++) {
+                    for (size_t j  = 0; j < t_chunk->num_rows(); j++) {
                         VLOG(2) << "t_chunk output: " << t_chunk->debug_row(j);
                     }
                     DCHECK(status.is_end_of_file());
