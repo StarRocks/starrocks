@@ -406,7 +406,7 @@ struct StatusInstance {
         auto&& st__ = (stmt);                                        \
         if (UNLIKELY(!st__.ok())) {                                  \
             LOG(WARNING) << (warning_prefix) << ", error: " << st__; \
-            return st__;                                             \
+            return std::move(st__);                                  \
         }                                                            \
     } while (0);
 
