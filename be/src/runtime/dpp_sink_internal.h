@@ -216,5 +216,4 @@ private:
     int32_t _distributed_bucket{0};
 };
 
-
-} // namespace std
+} // namespace starrocks

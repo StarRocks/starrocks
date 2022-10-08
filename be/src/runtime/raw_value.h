@@ -29,11 +29,9 @@ namespace starrocks {
 // TODO(murphy) remove it
 class RawValue {
 public:
-
     // Compares both values.
     // Return value is < 0  if v1 < v2, 0 if v1 == v2, > 0 if v1 > v2.
     static int compare(const void* v1, const void* v2, const TypeDescriptor& type);
-
 };
 
 } // namespace starrocks
