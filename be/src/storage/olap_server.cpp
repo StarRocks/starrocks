@@ -78,7 +78,7 @@ Status StorageEngine::start_bg_threads() {
     for (auto& tmp_store : _store_map) {
         data_dirs.push_back(tmp_store.second);
     }
-    auto data_dir_num = static_cast<int32_t>(data_dirs.size());
+    const auto data_dir_num = static_cast<int32_t>(data_dirs.size());
 
     if (!config::enable_event_based_compaction_framework) {
         // base and cumulative compaction threads
@@ -449,7 +449,7 @@ void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {
 }
 
 void* StorageEngine::_cumulative_compaction_thread_callback(void* arg, DataDir* data_dir,
-                                                            std::pair<int32_t, int32_t> tablet_shards_range) {
+                                                            const std::pair<int32_t, int32_t>& tablet_shards_range) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif

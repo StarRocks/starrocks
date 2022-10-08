@@ -233,7 +233,7 @@ private:
     void* _base_compaction_thread_callback(void* arg, DataDir* data_dir,
                                            std::pair<int32_t, int32_t> tablet_shards_range);
     void* _cumulative_compaction_thread_callback(void* arg, DataDir* data_dir,
-                                                 std::pair<int32_t, int32_t> tablet_shards_range);
+                                                 const std::pair<int32_t, int32_t>& tablet_shards_range);
     // update compaction function
     void* _update_compaction_thread_callback(void* arg, DataDir* data_dir);
     // repair compaction function
