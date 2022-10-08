@@ -105,6 +105,10 @@ public:
 
     virtual int io_tasks_per_scan_operator() const { return MAX_IO_TASKS_PER_OP; }
 
+    // TODO: support more share_scan strategy
+    void enable_shared_scan(bool enable);
+    bool is_shared_scan_enabled() const;
+
 protected:
     RuntimeProfile::Counter* _bytes_read_counter; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())
@@ -119,6 +123,7 @@ protected:
     RuntimeProfile::ThreadCounters* _scanner_thread_counters;
     RuntimeProfile::Counter* _num_scanner_threads_started_counter;
     std::string _name;
+    bool _enable_shared_scan = false;
 };
 
 } // namespace starrocks
