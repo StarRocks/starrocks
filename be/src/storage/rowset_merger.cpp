@@ -281,7 +281,7 @@ private:
                 entry.chunk_pk_column = pk_column->clone_shared();
                 entry.chunk_pk_column->reserve(_chunk_size);
             }
-            if (rowsets_mask_buffer) {
+            if (rowsets_mask_buffer && res.value().size() > 1) {
                 std::unique_ptr<vector<RowSourceMask>> rowset_source_masks = std::make_unique<vector<RowSourceMask>>();
                 rowsets_source_masks.emplace_back(std::move(rowset_source_masks));
                 entry.source_masks = rowsets_source_masks[order].get();
