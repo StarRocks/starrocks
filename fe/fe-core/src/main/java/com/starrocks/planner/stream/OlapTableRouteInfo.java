@@ -144,9 +144,10 @@ public class OlapTableRouteInfo {
             MaterializedIndexMeta indexMeta = pair.getValue();
             List<String> columns = Lists.newArrayList();
             columns.addAll(indexMeta.getSchema().stream().map(Column::getName).collect(Collectors.toList()));
-            if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
-                columns.add(Load.LOAD_OP_COLUMN);
-            }
+            // TODO: support __op column?
+//            if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+//                columns.add(Load.LOAD_OP_COLUMN);
+//            }
             TOlapTableIndexSchema indexSchema = new TOlapTableIndexSchema(pair.getKey(), columns,
                     indexMeta.getSchemaHash());
             schemaParam.addToIndexes(indexSchema);
