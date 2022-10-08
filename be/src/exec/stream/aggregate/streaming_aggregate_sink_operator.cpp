@@ -114,7 +114,7 @@ Status StreamingAggregateSinkOperator::_push_chunk_by_force_preaggregation(const
                 DatumRow row(_num_groupby_columns);
                 ReadOption read_option;
                 for (int j = 0; j < _num_groupby_columns; j++) {
-                    auto groupby_column = chunk->get_column_by_id(j);
+                    auto groupby_column = chunk->get_column_by_index(j);
                     row.set_datum(j, groupby_column->get(i));
                     VLOG(1) << " key:" << groupby_column->get(i).get_int32();
                 }
