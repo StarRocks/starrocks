@@ -840,4 +840,6 @@ CONF_Int64(block_cache_disk_size, "21474836480"); // 20GB
 CONF_Int64(block_cache_block_size, "1048576");
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
 
+CONF_mInt64(l0_l1_merge_ratio, "10");
+
 } // namespace starrocks::config
