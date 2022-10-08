@@ -128,6 +128,13 @@ BUILD_SYSTEM=${BUILD_SYSTEM:-make}
 BUILD_DIR=starrocks_build
 MACHINE_TYPE=$(uname -m)
 
+# handle mac m1 platform, change arm64 to aarch64
+if [[ "${MACHINE_TYPE}" == "arm64" ]]; then 
+    MACHINE_TYPE="aarch64"
+fi
+
+echo "machine type : $MACHINE_TYPE"
+
 check_if_source_exist() {
     if [ -z $1 ]; then
         echo "dir should specified to check if exist."

@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <cstring>
+#include <fstream>
+#include <sstream>
 #include <string>
 
 #if defined(__x86_64__)
