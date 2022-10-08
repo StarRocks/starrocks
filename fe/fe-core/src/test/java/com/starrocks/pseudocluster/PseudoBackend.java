@@ -18,6 +18,8 @@ import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
+import com.starrocks.proto.PPulsarProxyRequest;
+import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.PTabletInfo;
 import com.starrocks.proto.PTabletWithPartition;
@@ -921,6 +923,11 @@ public class PseudoBackend {
 
         @Override
         public Future<PProxyResult> getInfo(PProxyRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request) {
             return null;
         }
     }

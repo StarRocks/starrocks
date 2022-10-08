@@ -1476,7 +1476,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  7:EXCHANGE");
     }
 
-
     @Test
     public void testOnePhaseAggWithLocalShuffle(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {

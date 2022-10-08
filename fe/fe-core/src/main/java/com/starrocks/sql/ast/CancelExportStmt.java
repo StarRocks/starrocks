@@ -35,6 +35,7 @@ public class CancelExportStmt extends DdlStmt {
     public UUID getQueryId() {
         return queryId;
     }
+
     public CancelExportStmt(String dbName, Expr whereClause) {
         this.dbName = dbName;
         this.whereClause = whereClause;
@@ -45,3 +46,4 @@ public class CancelExportStmt extends DdlStmt {
         return visitor.visitCancelExportStatement(this, context);
     }
 }
+

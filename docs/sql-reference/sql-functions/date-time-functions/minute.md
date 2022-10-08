@@ -1,18 +1,18 @@
 # minute
 
-## description
+## Description
 
-### Syntax
+Returns the minute for a given date. The return value ranges from 0 to 59.
+
+The `date` parameter must be of the DATE or DATETIME type.
+
+## Syntax
 
 ```Haskell
-INT MINUTE(DATETIME date)
+INT MINUTE(DATETIME|DATE date)
 ```
 
-It returns the minute for a given date. The return values range from 0 to 59.
-
-The parameter is in Date or Datetime type.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select minute('2018-12-31 23:59:59');

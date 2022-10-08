@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
@@ -19,6 +20,7 @@ import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -27,6 +29,7 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -117,6 +120,33 @@ public class PrivilegeCheckerTest {
         StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
+    }
+
+    @Test
+    public void testExportStmt() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setDatabase("db1");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+        FsBroker fsBroker = new FsBroker("127.0.0.1", 8118);
+        long time = System.currentTimeMillis();
+        BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, time);
+        fsBroker.handleHbResponse(hbResponse);
+        GlobalStateMgr.getCurrentState().getBrokerMgr().replayAddBrokers("broker", Lists.newArrayList(fsBroker));
+
+        TablePattern db1TablePattern = new TablePattern("*", "*");
+        db1TablePattern.analyze();
+        String originStmt = "EXPORT TABLE tbl1 TO \"hdfs://hdfs_host:port/a/b/c/\" " +
+                "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
+                starRocksAssert.getCtx().getSessionVariable()).get(0);
+        Analyzer.analyze(statementBase, starRocksAssert.getCtx());
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
     }
 
     @Test
@@ -1573,7 +1603,6 @@ public class PrivilegeCheckerTest {
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(grantSelectOnOneDB, ctx));
         PrivilegeChecker.check(grantSelectOnOneTable, ctx);
-        ;
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(grantUsageOnAllResource, ctx));
         Assert.assertThrows(SemanticException.class,

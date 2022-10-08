@@ -15,6 +15,10 @@ public class DropUserStmt extends DdlStmt {
         return userIdent;
     }
 
+    public UserIdentity getUserIdent() {
+        return userIdent;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropUserStatement(this, context);

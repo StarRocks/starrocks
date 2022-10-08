@@ -1034,7 +1034,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 entity.counterRoutineLoadFinishedTotal.increase(1L);
                 entity.counterRoutineLoadBytesTotal.increase(routineAttachment.getReceivedBytes());
                 entity.counterRoutineLoadRowsTotal.increase(routineAttachment.getLoadedRows());
-
+                entity.counterRoutineLoadErrorRowsTotal.increase(routineAttachment.getFilteredRows());
+                entity.counterRoutineLoadUnselectedRowsTotal.increase(routineAttachment.getUnselectedRows());
                 break;
             case MANUAL_LOAD:
                 if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {

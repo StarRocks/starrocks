@@ -5,13 +5,16 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.StatementBase;
 
 public class PrivilegeStmtAnalyzerV2 {
@@ -58,8 +61,14 @@ public class PrivilegeStmtAnalyzerV2 {
                 stmt.setAuthPlugin(authenticationManager.getDefaultPlugin());
             }
             try {
-                AuthenticationProviderFactory.create(stmt.getAuthPlugin()).validAuthenticationInfo(
-                        stmt.getUserIdent(), stmt.getOriginalPassword(), stmt.getAuthString());
+                String pluginName = stmt.getAuthPlugin();
+                AuthenticationProvider provider = AuthenticationProviderFactory.create(pluginName);
+                UserIdentity userIdentity = stmt.getUserIdent();
+                UserAuthenticationInfo info = provider.validAuthenticationInfo(
+                        userIdentity, stmt.getOriginalPassword(), stmt.getAuthString());
+                info.setAuthPlugin(pluginName);
+                info.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
+                stmt.setAuthenticationInfo(info);
             } catch (AuthenticationException e) {
                 SemanticException exception = new SemanticException("invalidate authentication: " + e.getMessage());
                 exception.initCause(e);
@@ -68,6 +77,15 @@ public class PrivilegeStmtAnalyzerV2 {
 
             if (stmt.hasRole()) {
                 throw new SemanticException("role not supported!");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
+            analyseUser(stmt.getUserIdent(), false);
+            if (stmt.getUserIdent().equals(UserIdentity.ROOT)) {
+                throw new SemanticException("cannot drop root!");
             }
             return null;
         }

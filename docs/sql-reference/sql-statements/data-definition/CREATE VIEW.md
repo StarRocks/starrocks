@@ -44,7 +44,3 @@ Note:
     SELECT c1 as k1, k2, k3, SUM(v1) FROM example_table
     WHERE k1 = 20160112 GROUP BY k1,k2,k3;
     ```
-
-## keyword
-
-CREATE,VIEW

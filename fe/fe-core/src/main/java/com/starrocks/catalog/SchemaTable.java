@@ -461,6 +461,8 @@ public class SchemaTable extends Table {
                                     builder()
                                             .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                            .column("TABLE_ENGINE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                            .column("TABLE_MODEL", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("PRIMARY_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("PARTITION_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("DISTRIBUTE_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))

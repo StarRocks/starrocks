@@ -2,7 +2,6 @@
 
 package com.starrocks.authentication;
 
-
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
@@ -14,7 +13,9 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -25,7 +26,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-
 
 public class AuthenticationManager {
     private static final Logger LOG = LogManager.getLogger(AuthenticationManager.class);
@@ -59,7 +59,7 @@ public class AuthenticationManager {
         lock.writeLock().unlock();
     }
 
-    public void init() throws AuthenticationException {
+    public AuthenticationManager() {
         // default plugin
         AuthenticationProviderFactory.installPlugin(
                 PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
@@ -68,7 +68,11 @@ public class AuthenticationManager {
         UserIdentity rootUser = new UserIdentity(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
         rootUser.setIsAnalyzed();
         UserAuthenticationInfo info = new UserAuthenticationInfo();
-        info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
+        try {
+            info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
+        } catch (AuthenticationException e) {
+            throw new RuntimeException("should not happened!", e);
+        }
         info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
         info.setPassword(new byte[0]);
         userToAuthenticationInfo.put(rootUser, info);
@@ -113,38 +117,90 @@ public class AuthenticationManager {
     }
 
     public void createUser(CreateUserStmt stmt) throws DdlException {
+        UserIdentity userIdentity = stmt.getUserIdent();
+        UserAuthenticationInfo info = stmt.getAuthenticationInfo();
+        writeLock();
         try {
-            // validate authentication info by plugin
-            String pluginName = stmt.getAuthPlugin();
-            AuthenticationProvider provider = AuthenticationProviderFactory.create(pluginName);
-            UserIdentity userIdentity = stmt.getUserIdent();
-            UserAuthenticationInfo info = provider.validAuthenticationInfo(
-                    userIdentity, stmt.getOriginalPassword(), stmt.getAuthString());
-            info.setAuthPlugin(pluginName);
-            info.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
-
-            writeLock();
-            try {
-                updateUserNoLock(userIdentity, info, false);
-                UserProperty userProperty = null;
-                if (!userNameToProperty.containsKey(userIdentity.getQualifiedUser())) {
-                    userProperty = new UserProperty();
-                    userNameToProperty.put(userIdentity.getQualifiedUser(), userProperty);
-                }
-                GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-                PrivilegeManager privilegeManager = globalStateMgr.getPrivilegeManager();
-                // init user privilege
-                UserPrivilegeCollection collection = privilegeManager.onCreateUser(userIdentity);
-                short pluginId = privilegeManager.getProviderPluginId();
-                short pluginVersion = privilegeManager.getProviderPluginVerson();
-                globalStateMgr.getEditLog().logCreateUser(
-                        userIdentity, info, userProperty, collection, pluginId, pluginVersion);
-            } finally {
-                writeUnlock();
+            updateUserNoLock(userIdentity, info, false);
+            UserProperty userProperty = null;
+            if (!userNameToProperty.containsKey(userIdentity.getQualifiedUser())) {
+                userProperty = new UserProperty();
+                userNameToProperty.put(userIdentity.getQualifiedUser(), userProperty);
             }
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            PrivilegeManager privilegeManager = globalStateMgr.getPrivilegeManager();
+            // init user privilege
+            UserPrivilegeCollection collection = privilegeManager.onCreateUser(userIdentity);
+            short pluginId = privilegeManager.getProviderPluginId();
+            short pluginVersion = privilegeManager.getProviderPluginVerson();
+            globalStateMgr.getEditLog().logCreateUser(
+                    userIdentity, info, userProperty, collection, pluginId, pluginVersion);
+
         } catch (AuthenticationException e) {
-            throw new DdlException("failed to create user" + stmt.getUserIdent().toString(), e);
+            throw new DdlException("failed to create user " + userIdentity, e);
+        } finally {
+            writeUnlock();
         }
+    }
+
+    public void alterUser(AlterUserStmt stmt) throws DdlException {
+        UserIdentity userIdentity = stmt.getUserIdent();
+        UserAuthenticationInfo info = stmt.getAuthenticationInfo();
+        writeLock();
+        try {
+            updateUserNoLock(userIdentity, info, true);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(userIdentity, info);
+        } catch (AuthenticationException e) {
+            throw new DdlException("failed to alter user " + userIdentity, e);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void replayAlterUser(UserIdentity userIdentity, UserAuthenticationInfo info) throws AuthenticationException {
+        writeLock();
+        try {
+            updateUserNoLock(userIdentity, info, true);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void dropUser(DropUserStmt stmt) throws DdlException {
+        UserIdentity userIdentity = stmt.getUserIdent();
+        writeLock();
+        try {
+            dropUserNoLock(userIdentity);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropUser(userIdentity);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void replayDropUser(UserIdentity userIdentity) throws DdlException {
+        writeLock();
+        try {
+            dropUserNoLock(userIdentity);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    private void dropUserNoLock(UserIdentity userIdentity) {
+        // 1. remove from userToAuthenticationInfo
+        if (! userToAuthenticationInfo.containsKey(userIdentity)) {
+            LOG.warn("cannot find user {}", userIdentity);
+            return;
+        }
+        userToAuthenticationInfo.remove(userIdentity);
+        LOG.info("user {} is dropped", userIdentity);
+        // 2. remove from userNameToProperty
+        String userName = userIdentity.getQualifiedUser();
+        if (! hasUserNameNoLock(userName)) {
+            LOG.info("user property for {} is dropped: {}", userName, userNameToProperty.get(userName));
+            userNameToProperty.remove(userName);
+        }
+        // 3. TODO remove authentication
     }
 
     public void replayCreateUser(
@@ -183,6 +239,15 @@ public class AuthenticationManager {
             }
         }
         userToAuthenticationInfo.put(userIdentity, info);
+    }
+
+    private boolean hasUserNameNoLock(String userName) {
+        for (UserIdentity userIdentity : userToAuthenticationInfo.keySet()) {
+            if (userIdentity.getQualifiedUser().equals(userName)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -232,6 +297,7 @@ public class AuthenticationManager {
                 writer.writeJson(entry.getKey());
                 writer.writeJson(entry.getValue());
             }
+            LOG.info("saved {} users", userToAuthenticationInfo.size());
             writer.close();
         } catch (SRMetaBlockException e) {
             IOException exception = new IOException("failed to save AuthenticationManager!");
@@ -268,7 +334,7 @@ public class AuthenticationManager {
             LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
             return ret;
         } catch (SRMetaBlockException | AuthenticationException e) {
-            throw new DdlException("failed to save AuthenticationManager!", e);
+            throw new DdlException("failed to load AuthenticationManager!", e);
         }
     }
 }

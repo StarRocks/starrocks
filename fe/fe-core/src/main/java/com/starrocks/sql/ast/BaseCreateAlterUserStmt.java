@@ -4,6 +4,7 @@ package com.starrocks.sql.ast;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.UserAuthenticationInfo;
 
 // CreateUserStmt and AlterUserStmt share the same parameter and check logic
 public class BaseCreateAlterUserStmt extends DdlStmt {
@@ -16,6 +17,8 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
     protected String userForAuthPlugin;
     protected String role;
     private final String operationName;   // CREATE or ALTER
+    // used in new RBAC privilege framework
+    private UserAuthenticationInfo authenticationInfo = null;
 
     public BaseCreateAlterUserStmt(UserDesc userDesc, String prepositionName) {
         this.userIdent = userDesc.getUserIdent();
@@ -82,6 +85,14 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public UserAuthenticationInfo getAuthenticationInfo() {
+        return authenticationInfo;
+    }
+
+    public void setAuthenticationInfo(UserAuthenticationInfo authenticationInfo) {
+        this.authenticationInfo = authenticationInfo;
     }
 
     @Override

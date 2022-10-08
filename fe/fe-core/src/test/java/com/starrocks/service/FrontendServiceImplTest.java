@@ -2,6 +2,7 @@
 
 package com.starrocks.service;
 
+import com.google.gson.Gson;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -156,18 +157,21 @@ public class FrontendServiceImplTest {
                     info.getTable_name().equals("test_table_uni")) {
                 Assert.assertEquals("`key_c1`, `key_c2`", info.getPrimary_key());
                 Assert.assertEquals("NULL", info.getSort_key());
-                Assert.assertEquals("{storage_type=test_type, colocate_with=test_group, replication_num=3}", 
-                        info.getProperties());
                 Assert.assertEquals("`d_c1`, `d_c2`", info.getDistribute_key());
                 Assert.assertEquals("`p_c1`, `p_c2`", info.getPartition_key());
                 Assert.assertTrue(distributionInfo.getBucketNum() == 10);
                 Assert.assertEquals("HASH", info.getDistribute_type());
+                Map<String, String> propsMap = new HashMap<>();
+                propsMap = new Gson().fromJson(info.getProperties(), propsMap.getClass());
+                Assert.assertTrue(propsMap.get("enable_persistent_index").equals("LZ4"));
+                Assert.assertTrue(propsMap.get("storage_format").equals("DEFAULT"));
+                Assert.assertTrue(propsMap.get("colocate_with").equals("test_group"));
+                Assert.assertTrue(propsMap.get("replication_num").equals("3"));
+                Assert.assertTrue(propsMap.get("in_memory").equals("false"));
             } else if (info.getTable_name().equals("test_table_agg") || 
                     info.getTable_name().equals("test_table_dup")) {
                 Assert.assertEquals("`key_c1`, `key_c2`", info.getSort_key());
                 Assert.assertEquals("NULL", info.getPrimary_key());
-                Assert.assertEquals("{storage_type=test_type, colocate_with=test_group, replication_num=3}", 
-                        info.getProperties());
                 Assert.assertEquals("`d_c1`, `d_c2`", info.getDistribute_key());
                 Assert.assertEquals("`p_c1`, `p_c2`", info.getPartition_key());
                 Assert.assertTrue(distributionInfo.getBucketNum() == 10);

@@ -177,10 +177,7 @@ public class ConnectProcessor {
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
 
-        // We put origin query stmt at the end of audit log, for parsing the log more convenient.
-        if (!ctx.getState().isQuery() && (parsedStmt != null && parsedStmt.needAuditEncryption())) {
-            ctx.getAuditEventBuilder().setStmt(parsedStmt.toSql());
-        } else if (ctx.getState().isQuery() && containsComment(origStmt)) {
+        if (ctx.getState().isQuery() && containsComment(origStmt)) {
             // avoid audit log can't replay
             ctx.getAuditEventBuilder().setStmt(origStmt);
         } else {
@@ -234,12 +231,7 @@ public class ConnectProcessor {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
-        String sql;
-        if (parsedStmt.needAuditEncryption()) {
-            sql = parsedStmt.toSql();
-        } else {
-            sql = parsedStmt.getOrigStmt().originStmt;
-        }
+        String sql = parsedStmt.getOrigStmt().originStmt;
         boolean isQuery = parsedStmt instanceof QueryStatement;
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(ctx.getQueryId()),

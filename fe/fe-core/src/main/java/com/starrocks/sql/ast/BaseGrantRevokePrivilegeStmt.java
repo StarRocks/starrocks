@@ -102,6 +102,7 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     public boolean isWithGrantOption() {
         return withGrantOption;
     }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitGrantRevokePrivilegeStatement(this, context);

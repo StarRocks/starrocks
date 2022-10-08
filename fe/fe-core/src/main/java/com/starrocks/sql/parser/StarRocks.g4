@@ -206,16 +206,16 @@ statement
     | showSqlBlackListStatement
     | showWhiteListStatement
 
-    //Export Statement
+    // Export Statement
     | exportStatement
     | cancelExportStatement
     | showExportStatement
 
-    //Plugin Statement
+    // Plugin Statement
     | installPluginStatement
     | uninstallPluginStatement
 
-    //File Statement
+    // File Statement
     | createFileStatement
     | dropFileStatement
     | showSmallFilesStatement
@@ -1205,7 +1205,7 @@ dropRoleStatement
 backupStatement
     : BACKUP SNAPSHOT qualifiedName
     TO identifier
-    ON '(' tableDesc (',' tableDesc) * ')'
+    (ON '(' tableDesc (',' tableDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
@@ -1220,7 +1220,7 @@ showBackupStatement
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
     FROM identifier
-    ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
+    (ON '(' restoreTableDesc (',' restoreTableDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
@@ -1279,8 +1279,7 @@ cancelExportStatement
 showExportStatement
     : SHOW EXPORT ((FROM | IN) catalog=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?
-        (ORDER BY sortItem (',' sortItem)*)?
-        (limitElement)?
+        (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 // ------------------------------------------- Plugin Statement --------------------------------------------------------

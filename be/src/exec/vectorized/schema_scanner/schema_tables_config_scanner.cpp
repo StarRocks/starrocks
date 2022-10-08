@@ -13,6 +13,8 @@ SchemaScanner::ColumnDesc SchemaTablesConfigScanner::_s_table_tables_config_colu
         //   name,       type,          size,     is_null
         {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_ENGINE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_MODEL", TYPE_VARCHAR, sizeof(StringValue), false},
         {"PRIMARY_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
         {"PARTITION_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DISTRIBUTE_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
@@ -99,67 +101,87 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 3: {
-            // primary_key
+            // table_engine
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
-                const std::string* str = &info.primary_key;
+                const std::string* str = &info.table_engine;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 4: {
-            // partition_key
+            // table_model
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
-                const std::string* str = &info.partition_key;
+                const std::string* str = &info.table_model;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 5: {
-            // distribute_key
+            // primary_key
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
-                const std::string* str = &info.distribute_key;
+                const std::string* str = &info.primary_key;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 6: {
-            // distribute_type
+            // partition_key
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
-                const std::string* str = &info.distribute_type;
+                const std::string* str = &info.partition_key;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 7: {
-            // distribute_bucket
+            // distribute_key
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
-                fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.distribute_bucket);
+                const std::string* str = &info.distribute_key;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 8: {
-            // sort_key
+            // distribute_type
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
-                const std::string* str = &info.sort_key;
+                const std::string* str = &info.distribute_type;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 9: {
-            // properties
+            // distribute_bucket
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
+                fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.distribute_bucket);
+            }
+            break;
+        }
+        case 10: {
+            // sort_key
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
+                const std::string* str = &info.sort_key;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 11: {
+            // properties
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
                 const std::string* str = &info.properties;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);

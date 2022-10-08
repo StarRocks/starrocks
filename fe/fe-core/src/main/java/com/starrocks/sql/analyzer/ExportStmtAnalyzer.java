@@ -243,7 +243,6 @@ public class ExportStmtAnalyzer {
                 }
             } else {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, exception.getMessage());
-                ;
             }
         }
     }

@@ -41,6 +41,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.BackupRestoreAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -170,7 +171,7 @@ public class BackupHandlerTest {
 
     @Test
     public void testCreateAndDropRepository(
-            @Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) {
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) throws Exception {
         setUpMocker(globalStateMgr, brokerMgr, editLog);
         new Expectations() {
             {
@@ -384,21 +385,23 @@ public class BackupHandlerTest {
             tmpFile.delete();
         }
 
+        new MockUp<ConnectContext>() {
+            @Mock
+            GlobalStateMgr getGlobalStateMgr() {
+                return globalStateMgr;
+            }
+        };
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            BackupHandler getBackupHandler() {
+                return handler;
+            }
+        };
         // cancel restore
-        try {
-            handler.cancel(new CancelBackupStmt(CatalogMocker.TEST_DB_NAME, true));
-        } catch (DdlException e1) {
-            e1.printStackTrace();
-            Assert.fail();
-        }
+        handler.cancel(new CancelBackupStmt(CatalogMocker.TEST_DB_NAME, true));
 
         // drop repo
-        try {
-            handler.dropRepository(new DropRepositoryStmt("repo"));
-        } catch (DdlException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
+        DDLStmtExecutor.execute(new DropRepositoryStmt("repo"), new ConnectContext());
     }
 
     @Test

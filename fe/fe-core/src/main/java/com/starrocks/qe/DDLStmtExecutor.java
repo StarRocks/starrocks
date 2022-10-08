@@ -62,6 +62,7 @@ import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
@@ -383,7 +384,11 @@ public class DDLStmtExecutor {
                         context.getGlobalStateMgr().getAuth().createUser((CreateUserStmt) stmt);
                     }
                 } else if (stmt instanceof AlterUserStmt) {
-                    context.getGlobalStateMgr().getAuth().alterUser((AlterUserStmt) stmt);
+                    if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                        context.getGlobalStateMgr().getAuthenticationManager().alterUser((AlterUserStmt) stmt);
+                    } else {
+                        context.getGlobalStateMgr().getAuth().alterUser((AlterUserStmt) stmt);
+                    }
                 } else {
                     throw new DdlException("unsupported user stmt: " + stmt.toSql());
                 }
@@ -394,7 +399,12 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropUserStatement(DropUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuth().dropUser(stmt);
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    context.getGlobalStateMgr().getAuthenticationManager().dropUser(stmt);
+                } else {
+                    context.getGlobalStateMgr().getAuth().dropUser(stmt);
+                }
+
             });
             return null;
         }
@@ -547,6 +557,14 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCreateRepositoryStatement(CreateRepositoryStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getBackupHandler().createRepository(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropRepositoryStatement(DropRepositoryStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getBackupHandler().dropRepository(stmt);
             });
             return null;
         }
