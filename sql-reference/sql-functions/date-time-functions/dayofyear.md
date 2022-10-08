@@ -15,7 +15,7 @@ INT DAYOFYEAR(DATETIME date)
 ## 示例
 
 ```Plain Text
-MySQL > select dayofyear('2007-02-03 00:00:00');
+select dayofyear('2007-02-03 00:00:00');
 +----------------------------------+
 | dayofyear('2007-02-03 00:00:00') |
 +----------------------------------+

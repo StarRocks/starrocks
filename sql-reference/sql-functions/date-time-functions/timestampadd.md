@@ -18,14 +18,14 @@ DATETIME TIMESTAMPADD(unit, interval, DATETIME datetime_expr)
 
 ```plain text
 
-MySQL > SELECT TIMESTAMPADD(MINUTE,1,'2019-01-02');
+SELECT TIMESTAMPADD(MINUTE,1,'2019-01-02');
 +------------------------------------------------+
 | timestampadd(MINUTE, 1, '2019-01-02 00:00:00') |
 +------------------------------------------------+
 | 2019-01-02 00:01:00                            |
 +------------------------------------------------+
 
-MySQL > SELECT TIMESTAMPADD(WEEK,1,'2019-01-02');
+SELECT TIMESTAMPADD(WEEK,1,'2019-01-02');
 +----------------------------------------------+
 | timestampadd(WEEK, 1, '2019-01-02 00:00:00') |
 +----------------------------------------------+
