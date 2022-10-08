@@ -1742,5 +1742,17 @@ public class SubqueryTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertNotContains(plan, "ANALYTIC");
         }
+        {
+            // Same tables
+            String sql = "select * from t0, t0 as t1 " +
+                    "where t0.v1 = t1.v1 " +
+                    "and t0.v2 < 5 and t1.v2 > 10 " +
+                    "and t0.v3 < (" +
+                    "    select max(t1.v3) from t0 as t1 " +
+                    "    where t0.v1 = t1.v1 and t1.v2 > 10" +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "ANALYTIC");
+        }
     }
 }

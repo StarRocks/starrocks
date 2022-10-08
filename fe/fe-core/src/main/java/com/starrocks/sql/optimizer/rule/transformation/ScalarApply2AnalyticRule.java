@@ -49,11 +49,9 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /*
@@ -119,6 +117,7 @@ import java.util.stream.Collectors;
  *  3. The subquery can NOT contain limit clause, which will reduces the row set of the subquery.
  *  4. Outer query must contain all the correlated conjuncts of subquery.
  *  5. The relations accessed by the subquery and outer block must be exactly the same.
+ *      * 5.1 Table alias is NOT allowed, for sake of implementation complexity.
  *  6. The predicate of subquery and outer block(except the conjuncts which have nothing to do with subquery) must
  *     be exactly the same.
  *  7. ONLY cross join is allowed in outer block and subquery for sake of implementation complexity, though all types
@@ -290,33 +289,48 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
             return aggregations.stream().noneMatch(CallOperator::isDistinct);
         }
 
-        /**
+        /*
          * Check whether `outerTables = subqueryTables + correlatedOuterTable` satisfied
          * The above requirement must be required, otherwise subquery cannot be eliminated through window function
+         * <p>
+         * Multi-relations pointed to the same table are out of consideration, example as follows
+         *
+         * select * from t0, t0 as t1
+         * where t0.v1 = t1.v1
+         * and t0.v2 < 5 and t1.v2 > 10
+         * and t0.v3 < (
+         *     select max(t1.v3) from t0 as t1
+         *     where t0.v1 = t1.v1 and t1.v2 > 10
+         * )
          */
         private boolean checkReferencedTables() {
             List<Table> outerTables = getAllTables(leftOps);
             List<Table> subqueryTables = getAllTables(rightOps);
-            outerColumnRefOperators = getAllColumnRefOperators(leftOps);
+
+            Set<Long> outerTableIds = outerTables.stream()
+                    .map(Table::getId)
+                    .collect(Collectors.toSet());
+            Set<Long> subqueryTableIds = subqueryTables.stream()
+                    .map(Table::getId)
+                    .collect(Collectors.toSet());
+            if (outerTables.size() != outerTableIds.size()
+                    || subqueryTables.size() != subqueryTableIds.size()) {
+                return false;
+            }
+
+            if (outerTables.size() != subqueryTables.size() + 1) {
+                return false;
+            }
+
             List<Column> correlatedOuterColumns = applyOp.getCorrelationColumnRefs().stream()
                     .map(context.getColumnRefFactory()::getColumn)
                     .collect(Collectors.toList());
+            outerTables.removeAll(subqueryTables);
+            if (outerTables.size() != 1) {
+                return false;
+            }
 
-            Map<Long, Table> outerTableMap = outerTables.stream()
-                    .collect(Collectors.toMap(Table::getId, Function.identity()));
-            if (!subqueryTables.stream()
-                    .map(Table::getId)
-                    .allMatch(outerTableMap::containsKey)) {
-                return false;
-            }
-            subqueryTables.forEach(table -> outerTableMap.remove(table.getId()));
-            if (outerTableMap.size() != 1) {
-                return false;
-            }
-            correlatedOuterTable = outerTableMap.values()
-                    .stream()
-                    .findFirst()
-                    .orElseThrow(NoSuchElementException::new);
+            correlatedOuterTable = outerTables.get(0);
 
             for (Column correlatedOuterColumn : correlatedOuterColumns) {
                 if (!Objects.equals(correlatedOuterColumn,
@@ -461,8 +475,9 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
         }
 
         private void createWindowOp() {
-            Map<ColumnRefOperator, CallOperator> windows = Maps.newHashMap();
+            outerColumnRefOperators = getAllColumnRefOperators(leftOps);
 
+            Map<ColumnRefOperator, CallOperator> windows = Maps.newHashMap();
             Map<ColumnRefOperator, CallOperator> aggregations = subAggOp.getAggregations();
 
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregations.entrySet()) {
@@ -542,7 +557,6 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
 
         private List<Table> getAllTables(List<LogicalOperator> ops) {
             List<Table> tables = Lists.newArrayList();
-            Set<Long> tableIds = Sets.newHashSet();
 
             List<LogicalScanOperator> scanOps = ops.stream()
                     .filter(LogicalScanOperator.class::isInstance)
@@ -550,9 +564,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
                     .collect(Collectors.toList());
 
             for (LogicalScanOperator scanOp : scanOps) {
-                if (tableIds.add(scanOp.getTable().getId())) {
-                    tables.add(scanOp.getTable());
-                }
+                tables.add(scanOp.getTable());
             }
 
             return tables;
