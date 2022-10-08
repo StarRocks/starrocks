@@ -59,7 +59,7 @@ import java.util.stream.Collectors;
 /*
  * Eliminate apply by window function according to 「WinMagic : Subquery Elimination Using Window Aggregation」
  * Before:
- *                Filter
+ *                Filter1
  *                  |
  *                  |
  *                Project
@@ -71,23 +71,62 @@ import java.util.stream.Collectors;
  *             Leaf   Agg
  *
  * After:
- *               Project
+ *               Project (some new mappings added into it)
  *                  |
  *                  |
- *                Filter
+ *                Filter1_1 (only subquery predicate from Filter1)
  *                  |
  *                  |
  *                Window
  *                  |
  *                  |
- *                Filter
+ *                Filter1_2 (other predicates from Filter1)
  *                  |
  *                  |
  *                 Leaf
+ *
+ * For example, Q1 can be rewritten to Q2
+ * -- Q1
+ * SELECT T1.X
+ * FROM T1,T2
+ * WHERE T1.y = T2.y AND
+ * T2.name='ming' AND
+ * T2.z relop (
+ *     SELECT AGG(T2.w)
+ *     FROM  T2
+ *     WHERE T2.y = T1.y and T2.name='ming');
+ *
+ * -- Q2
+ * SELECT V.x
+ * FROM (
+ *     SELECT T1.x, T2.z,
+ *         AGG (T2.w) OVER (PARTITION BY T2.y) AS win_agg
+ *     FROM T1, T2
+ *     WHERE T1.y = T2.y
+ *     AND T2.name='ming'
+ * ) V
+ * WHERE V.z relop win_agg
+ *
+ * In short, only when the predicate of the subquery is identical to the outer block, then the above transformation
+ * can be performed.
+ *
+ * Given that it is difficult to find out the ideal transformation condition for sake of complexity, so I'll only
+ * give a sequence of sufficient but not necessary conditions with the key observation that the row set of subquery
+ * must be identical to the out block's, and any factors that contributing to the change should be excluded.
+ *
+ *  1. The aggregation function must have a window version, like sum/min/max/avg/count and any_value is a count example.
+ *  2. The aggregation expr must NOT contain key word distinct, which will reduces the row set of the subquery.
+ *  3. The subquery can NOT contain limit clause, which will reduces the row set of the subquery.
+ *  4. Outer query must contain all the correlated conjuncts of subquery.
+ *  5. The relations accessed by the subquery and outer block must be exactly the same.
+ *  6. The predicate of subquery and outer block(except the conjuncts which have nothing to do with subquery) must
+ *     be exactly the same.
+ *  7. ONLY cross join is allowed in outer block and subquery for sake of implementation complexity, though all types
+ *     of join can be supported technically.
  */
 public class ScalarApply2AnalyticRule extends TransformationRule {
 
-    private static final Set<String> TRANSFORMABLE_AGGREGATE_FUNCTIONS =
+    private static final Set<String> WHITE_LIST =
             ImmutableSet.of(FunctionSet.COUNT, FunctionSet.SUM, FunctionSet.AVG, FunctionSet.MIN, FunctionSet.MAX);
 
     public ScalarApply2AnalyticRule() {
@@ -188,6 +227,8 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
             collectInLevelOrder(apply.inputAt(0), leftOps);
             collectInLevelOrder(apply.inputAt(1), rightOps);
 
+            // All the operators are collected in level order, so the mapping from upper project node will be
+            // replaced with the lower project node
             rightOps.stream()
                     .filter(LogicalProjectOperator.class::isInstance)
                     .map(Operator::<LogicalProjectOperator>cast)
@@ -242,7 +283,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
 
             List<CallOperator> aggregations = Lists.newArrayList(subAggOp.getAggregations().values());
             if (aggregations.stream()
-                    .anyMatch(callOp -> !TRANSFORMABLE_AGGREGATE_FUNCTIONS.contains(callOp.getFnName()))) {
+                    .anyMatch(callOp -> !WHITE_LIST.contains(callOp.getFnName()))) {
                 return false;
             }
 
@@ -372,11 +413,14 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
                 }
             }
 
-            // Forth, check all the conjuncts from the remaining outerConjuncts and subConjuncts are exactly the same
-            // E.g. t1.v5 >10 in the above case
+            // We assume that the right subtree only contains one FilterOperator, for other complex cases, we may
+            // support later
             if (rightOps.stream().filter(LogicalFilterOperator.class::isInstance).count() > 1) {
                 return false;
             }
+
+            // Forth, check all the conjuncts from the remaining outerConjuncts and subConjuncts are exactly the same
+            // E.g. t1.v5 >10 in the above case
             LogicalFilterOperator subFilterOp = rightOps.stream()
                     .filter(LogicalFilterOperator.class::isInstance)
                     .map(Operator::<LogicalFilterOperator>cast)
@@ -490,12 +534,9 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
             Queue<OptExpression> queue = Lists.newLinkedList();
             queue.offer(root);
             while (!queue.isEmpty()) {
-                List<OptExpression> curLevel = Lists.newArrayList(queue);
-                queue.clear();
-                for (OptExpression opt : curLevel) {
-                    collect.add(opt.getOp().cast());
-                    opt.getInputs().forEach(queue::offer);
-                }
+                OptExpression top = queue.poll();
+                collect.add(top.getOp().cast());
+                top.getInputs().forEach(queue::offer);
             }
         }
 
@@ -545,6 +586,11 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
         }
     }
 
+    /**
+     * This comparator used to determine whether two scalarOperator are identical
+     * For ColumnRefOperator, we need to check whether the Column it points to is the same
+     * For other types of ScalarOperator, just do some normal checks and recursively check its children
+     */
     private static final class PredicateComparator extends ScalarOperatorVisitor<Boolean, ScalarOperator> {
         private final ColumnRefFactory columnRefFactory;
 
@@ -558,7 +604,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
             return expected.accept(visitor, target);
         }
 
-        private boolean isTypeMismatch(ScalarOperator expected, ScalarOperator target) {
+        private boolean isClassMismatch(ScalarOperator expected, ScalarOperator target) {
             return !expected.getClass().equals(target.getClass());
         }
 
@@ -578,14 +624,22 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
             if (!Objects.equals(predicate.getBinaryType(), peer.getBinaryType())) {
                 return false;
             }
-            boolean isIdentical = predicate.getChild(0).accept(this, peer.getChild(0))
-                    && predicate.getChild(1).accept(this, peer.getChild(1));
-            if (!BinaryPredicateOperator.BinaryType.EQ.equals(predicate.getBinaryType())) {
-                return isIdentical;
+            if (compareChildrenOfBinaryOperator(predicate, peer)) {
+                return true;
             }
-            // For equal, we need to compare children in another order
-            return isIdentical || (predicate.getChild(0).accept(this, peer.getChild(1))
-                    && predicate.getChild(1).accept(this, peer.getChild(0)));
+            if (BinaryPredicateOperator.BinaryType.EQ.equals(predicate.getBinaryType())) {
+                // For equal, we need to compare children in another order
+                return compareChildrenOfBinaryOperator(predicate, peer)
+                        || compareChildrenOfBinaryOperator(predicate, peer.commutative());
+            } else {
+                return compareChildrenOfBinaryOperator(predicate, peer);
+            }
+        }
+
+        private boolean compareChildrenOfBinaryOperator(BinaryPredicateOperator predicate,
+                                                        BinaryPredicateOperator peer) {
+            return predicate.getChild(0).accept(this, peer.getChild(0))
+                    && predicate.getChild(1).accept(this, peer.getChild(1));
         }
 
         @Override
@@ -600,7 +654,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
 
         @Override
         public Boolean visitVariableReference(ColumnRefOperator variable, ScalarOperator peer) {
-            if (isTypeMismatch(variable, peer)) {
+            if (isClassMismatch(variable, peer)) {
                 return false;
             }
             Column column1 = columnRefFactory.getColumn(variable);
@@ -610,7 +664,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
 
         @Override
         public Boolean visitCall(CallOperator call, ScalarOperator peer) {
-            if (isTypeMismatch(call, peer)) {
+            if (isClassMismatch(call, peer)) {
                 return false;
             }
             CallOperator peerCall = peer.cast();
@@ -622,7 +676,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
 
         @Override
         public Boolean visitBetweenPredicate(BetweenPredicateOperator predicate, ScalarOperator peer) {
-            if (isTypeMismatch(predicate, peer)) {
+            if (isClassMismatch(predicate, peer)) {
                 return false;
             }
             return compare(predicate, peer);
@@ -630,7 +684,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
 
         @Override
         public Boolean visitBinaryPredicate(BinaryPredicateOperator predicate, ScalarOperator peer) {
-            if (isTypeMismatch(predicate, peer)) {
+            if (isClassMismatch(predicate, peer)) {
                 return false;
             }
 
@@ -640,7 +694,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
 
         @Override
         public Boolean visitCompoundPredicate(CompoundPredicateOperator predicate, ScalarOperator peer) {
-            if (isTypeMismatch(predicate, peer)) {
+            if (isClassMismatch(predicate, peer)) {
                 return false;
             }
             return compare(predicate, peer);
@@ -648,7 +702,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
 
         @Override
         public Boolean visitExistsPredicate(ExistsPredicateOperator predicate, ScalarOperator peer) {
-            if (isTypeMismatch(predicate, peer)) {
+            if (isClassMismatch(predicate, peer)) {
                 return false;
             }
             return compare(predicate, peer);
@@ -656,7 +710,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
 
         @Override
         public Boolean visitInPredicate(InPredicateOperator predicate, ScalarOperator peer) {
-            if (isTypeMismatch(predicate, peer)) {
+            if (isClassMismatch(predicate, peer)) {
                 return false;
             }
             return compare(predicate, peer);
@@ -664,7 +718,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
 
         @Override
         public Boolean visitIsNullPredicate(IsNullPredicateOperator predicate, ScalarOperator peer) {
-            if (isTypeMismatch(predicate, peer)) {
+            if (isClassMismatch(predicate, peer)) {
                 return false;
             }
             return compare(predicate, peer);
@@ -672,7 +726,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
 
         @Override
         public Boolean visitLikePredicateOperator(LikePredicateOperator predicate, ScalarOperator peer) {
-            if (isTypeMismatch(predicate, peer)) {
+            if (isClassMismatch(predicate, peer)) {
                 return false;
             }
             return compare(predicate, peer);
