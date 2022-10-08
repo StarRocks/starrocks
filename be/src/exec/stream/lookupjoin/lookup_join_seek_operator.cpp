@@ -56,9 +56,10 @@ Status LookupJoinSeekOperator::_init_tablet_reader(RuntimeState* state, TabletRe
     if (!_probe_chunk || _row_id == _probe_chunk->num_rows()) {
         _row_id = 0;
         _probe_chunk = std::make_shared<vectorized::Chunk>();
-        if (!_lookup_join_context->blocking_get(&_probe_chunk)) {
-            // Go to next turn.
-            return Status::OK();
+        VLOG(1) << "start to try get." ;
+        if (_lookup_join_context->try_get(&_probe_chunk) != 1) {
+            // TODO: may loop to get again?
+            return Status::RuntimeError("get from probe chunk error!");
         }
         VLOG(1) << "blocking get lookup join context finished 2";
     }

@@ -49,11 +49,14 @@ public:
     void close(RuntimeState* state) override {}
     bool is_ready() { return !_chunks.empty() || is_finished(); }
     bool blocking_put(const vectorized::ChunkPtr& chunk) { return _chunks.blocking_put(chunk); }
-    bool blocking_get(vectorized::ChunkPtr* result) { return _chunks.blocking_get(result); }
+    int try_get(vectorized::ChunkPtr* result) { return _chunks.try_get(result); }
     const std::vector<LookupJoinKeyDesc>& join_key_descs() { return _params.join_key_descs; }
     const LookupJoinContextParams& params() { return _params; }
     bool is_finished() const { return _is_finished.load(std::memory_order_acquire) && _chunks.empty(); }
-    void mark_finished(bool val) { _is_finished.store(val); }
+    void mark_finished(bool val) {
+        _chunks.shutdown();
+        _is_finished.store(val);
+    }
 
 private:
     // Chunks which are sent by left sides and will be consumed by right sides.
