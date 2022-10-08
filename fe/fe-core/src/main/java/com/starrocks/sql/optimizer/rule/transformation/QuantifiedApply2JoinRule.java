@@ -46,6 +46,11 @@ public class QuantifiedApply2JoinRule extends TransformationRule {
         BinaryPredicateOperator bpo =
                 new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, ipo.getChildren());
 
+        // normalize binaryPredicateOperator, e.g. 1 = tbl.v1 to tbl.v1 = 1
+        if (bpo.getChild(0).getUsedColumns().isEmpty()) {
+            bpo.swap();
+        }
+
         // IN to SEMI-JOIN
         // NOT IN to ANTI-JOIN or NULL_AWARE_LEFT_ANTI_JOIN
         OptExpression joinExpression;

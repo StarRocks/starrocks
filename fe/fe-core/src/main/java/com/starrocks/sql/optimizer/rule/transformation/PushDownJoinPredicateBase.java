@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarEquivalenceExtractor;
 import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
 import java.util.Set;
@@ -32,14 +33,14 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
 
     public static OptExpression pushDownPredicate(OptExpression root, List<ScalarOperator> leftPushDown,
                                                   List<ScalarOperator> rightPushDown) {
-        if (leftPushDown != null && !leftPushDown.isEmpty()) {
+        if (CollectionUtils.isNotEmpty(leftPushDown)) {
             Set<ScalarOperator> set = Sets.newLinkedHashSet(leftPushDown);
             OptExpression newLeft = new OptExpression(new LogicalFilterOperator(Utils.compoundAnd(set)));
             newLeft.getInputs().add(root.getInputs().get(0));
             root.getInputs().set(0, newLeft);
         }
 
-        if (rightPushDown != null && !rightPushDown.isEmpty()) {
+        if (CollectionUtils.isNotEmpty(rightPushDown)) {
             Set<ScalarOperator> set = Sets.newLinkedHashSet(rightPushDown);
             OptExpression newRight = new OptExpression(new LogicalFilterOperator(Utils.compoundAnd(set)));
             newRight.getInputs().add(root.getInputs().get(1));
@@ -63,6 +64,7 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
         List<ScalarOperator> rightPushDown = Lists.newArrayList();
         ColumnRefSet leftColumns = input.getInputs().get(0).getOutputColumns();
         ColumnRefSet rightColumns = input.getInputs().get(1).getOutputColumns();
+        boolean canRemoveOnCondition = true;
         if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {
             for (ScalarOperator predicate : conjunctList) {
                 ColumnRefSet usedColumns = predicate.getUsedColumns();
@@ -85,6 +87,7 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
                 }
             }
         } else if (join.getJoinType().isSemiJoin() || join.getJoinType().isAntiJoin()) {
+            canRemoveOnCondition = false;
             for (ScalarOperator predicate : conjunctList) {
                 ColumnRefSet usedColumns = predicate.getUsedColumns();
                 if (leftColumns.containsAll(usedColumns)) {
@@ -100,8 +103,11 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
                 }
             }
         }
-        conjunctList.removeAll(leftPushDown);
-        conjunctList.removeAll(rightPushDown);
+
+        if (canRemoveOnCondition) {
+            conjunctList.removeAll(leftPushDown);
+            conjunctList.removeAll(rightPushDown);
+        }
 
         ScalarOperator joinEqPredicate = Utils.compoundAnd(Lists.newArrayList(eqConjuncts));
         ScalarOperator postJoinPredicate = Utils.compoundAnd(conjunctList);
