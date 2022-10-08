@@ -39,7 +39,7 @@ public:
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
               _enable_exchange_pass_through(enable_exchange_pass_through),
-              _enable_exchange_perf(enable_exchange_perf && is_local()),
+              _enable_exchange_perf(enable_exchange_perf),
               _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id),
               _chunks(num_shuffles) {}
 
@@ -192,6 +192,11 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
 Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const vectorized::Chunk* chunk,
                                                      int32_t driver_sequence, bool eos, bool* is_real_sent) {
     *is_real_sent = false;
+
+    if (_ignore_local_data && !eos) {
+        return Status::OK();
+    }
+
     if (_chunk_request == nullptr) {
         _chunk_request = std::make_shared<PTransmitChunkParams>();
         _chunk_request->set_node_id(_dest_node_id);
@@ -203,7 +208,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
     }
 
     // If chunk is not null, append it to request
-    if (chunk != nullptr && !_ignore_local_data) {
+    if (chunk != nullptr) {
         if (_use_pass_through) {
             size_t chunk_size = serde::ProtobufChunkSerde::max_serialized_size(*chunk);
             // -1 means disable pipeline level shuffle
@@ -246,6 +251,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
 Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
                                                          const butil::IOBuf& attachment,
                                                          int64_t attachment_physical_bytes) {
+    if (_ignore_local_data) {
+        return Status::OK();
+    }
     chunk_request->set_node_id(_dest_node_id);
     chunk_request->set_sender_id(_parent->_sender_id);
     chunk_request->set_be_number(_parent->_be_number);

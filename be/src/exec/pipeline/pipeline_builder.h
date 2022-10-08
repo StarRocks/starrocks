@@ -71,6 +71,8 @@ public:
             OpFactories& upstream_pipeline, OpFactories& downstream_pipeline,
             std::function<std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(bool)> merge_operators_generator);
 
+    bool has_aggregation = false;
+
 private:
     static constexpr int kLocalExchangeBufferChunks = 8;
 
