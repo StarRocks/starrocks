@@ -225,6 +225,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     public void initLoadProgress(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedBackendIds) {
         loadingStatus.getLoadStatistic().initLoad(loadId, fragmentIds, relatedBackendIds);
         startLoad = true;
+        loadStartTimestamp = System.currentTimeMillis();
     }
 
     public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId, long scannedRows, boolean isDone) {
@@ -465,7 +466,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     private void executeLoad() {
-        loadStartTimestamp = System.currentTimeMillis();
         state = JobState.LOADING;
     }
 
