@@ -131,7 +131,7 @@ Status StreamingAggregateSinkOperator::_push_chunk_by_force_preaggregation(const
                     for (size_t j = 0; j < t_chunk->num_rows(); j++) {
                         VLOG(2) << "t_chunk output: " << t_chunk->debug_row(j);
                     }
-                    DCHECK(status.is_end_of_file());
+                    // DCHECK(status.is_end_of_file());
                     DCHECK_EQ(_num_agg_func_columns, t_chunk->num_columns());
 
                     for (int j = 0; j < _num_agg_func_columns; j++) {

@@ -456,9 +456,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // TODO: cannot cache imt info for imt table's version is always changing!
         if (groupIdToIMTId != null) {
             for (Map.Entry<Integer, Long> entry : groupIdToIMTId.entrySet()) {
-                if (imtInfo.containsKey(entry.getKey())) {
-                    continue;
-                }
+                // if (imtInfo.containsKey(entry.getKey())) {
+                //     continue;
+                // }
                 long tableId = entry.getValue();
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
                 Table table = db.getTable(tableId);

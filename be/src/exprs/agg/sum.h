@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
@@ -52,7 +53,6 @@ public:
 
     void restore(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
                  size_t row_num) const override {
-        DCHECK(column->is_numeric() || column->is_decimal());
         const Column* data_column;
         if (column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(column);
@@ -60,6 +60,8 @@ public:
         } else {
             data_column = column;
         }
+        DCHECK(data_column->is_numeric() || data_column->is_decimal());
+
         const auto* input_column = down_cast<const ResultColumnType*>(data_column);
         if constexpr (std::is_same_v<ResultColumnType, Int64Column>) {
             auto xx_column = down_cast<const Int64Column*>(input_column);
