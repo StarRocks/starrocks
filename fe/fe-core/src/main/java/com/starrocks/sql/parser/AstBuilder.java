@@ -21,6 +21,7 @@ import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.CancelExportStmt;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
@@ -41,6 +42,7 @@ import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
+import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -82,6 +84,7 @@ import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
+import com.starrocks.analysis.ShowExportStmt;
 import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowRolesStmt;
@@ -447,6 +450,72 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return new ShowDataStmt(null, null);
         }
+    }
+    // ------------------------------------------- Export Statement ----------------------------------------------------
+
+    @Override
+    public ParseNode visitExportStatement(StarRocksParser.ExportStatementContext context) {
+        StarRocksParser.TableDescContext tbc = context.tableDesc();
+        QualifiedName qualifiedName = getQualifiedName(tbc.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (tbc.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(tbc.partitionNames());
+        }
+        List<String> colList = null;
+        if (context.colList != null) {
+            List<Identifier> identifiers = visit(context.colList.identifier(), Identifier.class);
+            colList = identifiers.stream().map(Identifier::getValue).collect(toList());
+        }
+        StringLiteral stringLiteral = (StringLiteral) visit(context.path);
+        // properties
+        Map<String, String> properties = null;
+        if (context.properties() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        // brokers
+        BrokerDesc brokerDesc = getBrokerDesc(context.broker);
+        return new ExportStmt(new TableRef(targetTableName, null, partitionNames), colList,
+                stringLiteral.getValue(), properties, brokerDesc);
+    }
+
+    @Override
+    public ParseNode visitCancelExportStatement(StarRocksParser.CancelExportStatementContext context) {
+        String db = null;
+        if (context.qualifiedName() != null) {
+            db = ((Identifier) visit(context.qualifiedName())).getValue();
+        }
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        return new CancelExportStmt(db, where);
+    }
+
+    @Override
+    public ParseNode visitShowExportStatement(StarRocksParser.ShowExportStatementContext context) {
+        String db = null;
+        if (context.qualifiedName() != null) {
+            db = ((Identifier) visit(context.qualifiedName())).getValue();
+        }
+        LimitElement le = null;
+        if (context.limitElement() != null) {
+            le = (LimitElement) visit(context.limitElement());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        Expr whereExpr = null;
+        if (context.expression() != null) {
+            whereExpr = (Expr) visit(context.expression());
+        }
+        return new ShowExportStmt(db, whereExpr, orderByElements, le);
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------
