@@ -26,6 +26,7 @@
 #    sh build.sh  --fe --clean              clean and build Frontend and Spark Dpp application
 #    sh build.sh  --fe --be --clean         clean and build Frontend, Spark Dpp application and Backend
 #    sh build.sh  --spark-dpp               build Spark DPP application alone
+#    BUILD_TYPE = Debug ./build.sh --be     build CMAKE_TYPE IS Debug version for be (Default BUILD_TYPE is Release)
 #
 # You need to make sure all thirdparty libraries have been
 # compiled and installed correctly.
@@ -80,6 +81,7 @@ Usage: $0 <options>
     $0 --fe --clean                         clean and build Frontend and Spark Dpp application
     $0 --fe --be --clean                    clean and build Frontend, Spark Dpp application and Backend
     $0 --spark-dpp                          build Spark DPP application alone
+    BUILD_TYPE = Debug ./build.sh --be build BE CMAKE_TYPE is Debug Version (Default is Release)
   "
   exit 1
 }
@@ -169,6 +171,7 @@ fi
 
 echo "Get params:
     BUILD_BE            -- $BUILD_BE
+    BE_CMAKE_TYPE       -- $BUILD_TYPE
     BUILD_FE            -- $BUILD_FE
     BUILD_SPARK_DPP     -- $BUILD_SPARK_DPP
     CLEAN               -- $CLEAN
