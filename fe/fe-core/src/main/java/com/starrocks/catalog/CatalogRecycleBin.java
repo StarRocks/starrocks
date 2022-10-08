@@ -763,8 +763,10 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     }
 
     public void removeInvalidateReference() {
-        // privilege object can be invalidated after gc
-        GlobalStateMgr.getCurrentState().getPrivilegeManager().removeInvalidateObject();
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            // privilege object can be invalidated after gc
+            GlobalStateMgr.getCurrentState().getPrivilegeManager().removeInvalidateObject();
+        }
     }
 
     @Override
@@ -780,6 +782,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             postProcessEraseTable(recycleTableInfos);
             Thread.sleep(100);
             eraseDatabase(currentTimeMs);
+            removeInvalidateReference();
         } catch (InterruptedException e) {
             LOG.warn(e);
         }
