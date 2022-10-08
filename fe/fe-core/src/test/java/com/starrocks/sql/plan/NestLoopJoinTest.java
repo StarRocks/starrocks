@@ -21,10 +21,10 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 3: v3 < 6: v3\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (6: v3), remote = false\n" +
                 "  |  \n" +
-                "  |----2:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:OlapScanNode\n"));
+                "  |----2:EXCHANGE\n"));
     }
 
     @Test
@@ -80,10 +80,10 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  join op: RIGHT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: v1 < 4: v1\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (4: v1), remote = false\n" +
                 "  |  \n" +
-                "  |----3:EXCHANGE\n" +
-                "  |    \n" +
-                "  1:EXCHANGE"));
+                "  |----3:EXCHANGE\n"));
 
         // full join
         planFragment = getFragmentPlan("select * from t0 a full join t0 b on a.v1 < b.v1");
@@ -91,6 +91,8 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  join op: FULL OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: v1 < 4: v1\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (4: v1), remote = false\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
                 "  |    \n" +
