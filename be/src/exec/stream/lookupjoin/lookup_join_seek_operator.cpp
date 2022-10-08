@@ -122,7 +122,7 @@ Expr* LookupJoinSeekOperator::_create_eq_conjunct_expr(ObjectPool* pool, Primiti
 // TODO: how to construct a const column from one row?
 Expr* LookupJoinSeekOperator::_create_literal_expr(ObjectPool* pool, const ColumnPtr& input_column, uint32_t row_id,
                                                    const TypeDescriptor& type_desc) {
-    auto column = vectorized::ColumnHelper::create_column(type_desc, true);
+    auto column = vectorized::ColumnHelper::create_column(type_desc, false);
     column->append_datum(input_column->get(row_id));
     auto const_column = std::make_shared<vectorized::ConstColumn>(std::move(column));
     return pool->add(new vectorized::VectorizedLiteral(std::move(const_column), type_desc));
@@ -132,7 +132,6 @@ Expr* LookupJoinSeekOperator::_create_literal_expr(ObjectPool* pool, const Colum
 Status LookupJoinSeekOperator::_init_conjunct_ctxs(TabletReaderState& reader_state, uint32_t row_id) {
     auto& conjunct_ctxs = reader_state.conjunct_ctxs;
     auto* pool = &(reader_state.pool);
-    DCHECK_EQ(conjunct_ctxs.size(), _join_key_descs.size());
     for (int i = 0; i < _join_key_descs.size(); i++) {
         auto& desc = _join_key_descs[i];
         auto left_join_key_column_ref = desc.left_column_ref;
@@ -145,8 +144,9 @@ Status LookupJoinSeekOperator::_init_conjunct_ctxs(TabletReaderState& reader_sta
         VLOG(1) << "expr:" << expr->debug_string();
 
         conjunct_ctxs.emplace_back(pool->add(new ExprContext(expr)));
-    };
+    }
     VLOG(1) << "conjunct contexts:" << Expr::debug_string(conjunct_ctxs);
+    DCHECK_EQ(conjunct_ctxs.size(), _join_key_descs.size());
     return Status::OK();
 }
 
