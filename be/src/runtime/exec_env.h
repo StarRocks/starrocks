@@ -26,7 +26,7 @@
 #include <unordered_map>
 
 #include "common/status.h"
-#include "exec/cache/cache_manager.h"
+#include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "storage/options.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
@@ -207,7 +207,7 @@ public:
 
     int64_t get_storage_page_cache_size();
 
-    cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
+    query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
@@ -316,7 +316,7 @@ private:
     lake::LocationProvider* _lake_location_provider = nullptr;
 
     AgentServer* _agent_server = nullptr;
-    cache::CacheManagerRawPtr _cache_mgr;
+    query_cache::CacheManagerRawPtr _cache_mgr;
 };
 
 template <>

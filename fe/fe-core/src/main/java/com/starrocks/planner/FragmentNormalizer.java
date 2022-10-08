@@ -192,7 +192,8 @@ public class FragmentNormalizer {
             fragment.setDigest(ByteBuffer.wrap(digest.digest()));
             fragment.setSlotRemapping(outputSlotIdRemapping);
             fragment.setRangeMap(selectedRangeMap);
-        } catch (TException | NoSuchAlgorithmException ignored) {
+        } catch (TException | NoSuchAlgorithmException e) {
+            throw new RuntimeException("Fatal error happens when normalize PlanFragment", e);
         }
     }
 

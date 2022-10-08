@@ -4,18 +4,18 @@
 #include <memory>
 #include <unordered_map>
 
-#include "exec/cache/cache_manager.h"
-#include "exec/cache/cache_param.h"
-#include "exec/cache/lane_arbiter.h"
-#include "exec/cache/multilane_operator.h"
 #include "exec/pipeline/operator.h"
+#include "exec/query_cache/cache_manager.h"
+#include "exec/query_cache/cache_param.h"
+#include "exec/query_cache/lane_arbiter.h"
+#include "exec/query_cache/multilane_operator.h"
 namespace starrocks {
 namespace pipeline {
 class PipelineDriver;
 using DriverRawPtr = PipelineDriver*;
 } // namespace pipeline
 
-namespace cache {
+namespace query_cache {
 class PerLaneBuffer;
 using PerLaneBufferRawPtr = PerLaneBuffer*;
 using PerLaneBufferPtr = std::unique_ptr<PerLaneBuffer>;
@@ -99,5 +99,5 @@ private:
     CacheManagerRawPtr _cache_mgr;
     const CacheParam& _cache_param;
 };
-} // namespace cache
+} // namespace query_cache
 } // namespace starrocks

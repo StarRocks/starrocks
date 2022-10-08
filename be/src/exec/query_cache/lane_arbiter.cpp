@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/cache/lane_arbiter.h"
+#include "exec/query_cache/lane_arbiter.h"
 
 #include <glog/logging.h>
 
@@ -8,7 +8,7 @@
 #include <limits>
 
 namespace starrocks {
-namespace cache {
+namespace query_cache {
 
 LaneArbiter::LaneArbiter(int num_lanes)
         : _passthrough_mode(false), _num_lanes(num_lanes), _assignments(num_lanes, LANE_UNASSIGNED) {}
@@ -95,5 +95,5 @@ void LaneArbiter::mark_processed(LaneOwnerType lane_owner) {
     _processed.insert(lane_owner);
 }
 
-} // namespace cache
+} // namespace query_cache
 } // namespace starrocks

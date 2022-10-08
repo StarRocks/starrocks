@@ -2,9 +2,8 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
 
-namespace starrocks::cache {
+namespace starrocks::query_cache {
 // owner_info is attached to vectorized::Chunk to describe how chunk is generated.
 // 1. owner_id: chunks originated from the same tablet should have the same owner_id
 // 2. is_last_chunk returns true if the chunk is the last chunk.
@@ -37,4 +36,4 @@ public:
 private:
     int64_t _owner_id = 0;
 };
-} // namespace starrocks::cache
+} // namespace starrocks::query_cache

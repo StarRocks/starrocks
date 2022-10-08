@@ -10,7 +10,7 @@
 #include "util/slice.h"
 
 namespace starrocks {
-namespace cache {
+namespace query_cache {
 class CacheManager;
 using CacheManagerRawPtr = CacheManager*;
 using CacheManagerPtr = std::shared_ptr<CacheManager>;
@@ -44,5 +44,5 @@ public:
 private:
     ShardedLRUCache _cache;
 };
-} // namespace cache
+} // namespace query_cache
 } // namespace starrocks

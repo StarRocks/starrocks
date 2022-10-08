@@ -8,54 +8,54 @@
 
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
-#include "exec/cache/cache_manager.h"
-#include "exec/cache/cache_operator.h"
-#include "exec/cache/cache_param.h"
-#include "exec/cache/conjugate_operator.h"
-#include "exec/cache/lane_arbiter.h"
-#include "exec/cache/multilane_operator.h"
-#include "exec/cache/transform_operator.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/query_cache/cache_manager.h"
+#include "exec/query_cache/cache_operator.h"
+#include "exec/query_cache/cache_param.h"
+#include "exec/query_cache/conjugate_operator.h"
+#include "exec/query_cache/lane_arbiter.h"
+#include "exec/query_cache/multilane_operator.h"
+#include "exec/query_cache/transform_operator.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks::vectorized {
 struct CacheTest : public ::testing::Test {
     RuntimeState state;
-    cache::CacheManagerPtr cache_mgr = std::make_shared<cache::CacheManager>(1024);
+    query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(1024);
 };
 
 TEST_F(CacheTest, testLaneArbiter) {
     size_t num_lanes = 4;
-    auto lane_arbiter = std::make_shared<cache::LaneArbiter>(num_lanes);
+    auto lane_arbiter = std::make_shared<query_cache::LaneArbiter>(num_lanes);
     ASSERT_FALSE(lane_arbiter->preferred_lane().has_value());
     for (auto i = 1; i <= num_lanes; ++i) {
-        cache::LaneOwnerType lane_owner = i;
+        query_cache::LaneOwnerType lane_owner = i;
         auto result = lane_arbiter->try_acquire_lane(lane_owner);
-        ASSERT_EQ(result, cache::AcquireResult::AR_PROBE);
+        ASSERT_EQ(result, query_cache::AcquireResult::AR_PROBE);
         result = lane_arbiter->try_acquire_lane(lane_owner);
-        ASSERT_EQ(result, cache::AcquireResult::AR_IO);
+        ASSERT_EQ(result, query_cache::AcquireResult::AR_IO);
         lane_arbiter->must_acquire_lane(lane_owner);
         std::this_thread::sleep_for(std::chrono::microseconds(50));
     }
     auto opt_lane = lane_arbiter->preferred_lane();
     ASSERT_TRUE(opt_lane.has_value());
-    ASSERT_TRUE(lane_arbiter->try_acquire_lane(5) == cache::AcquireResult::AR_BUSY);
+    ASSERT_TRUE(lane_arbiter->try_acquire_lane(5) == query_cache::AcquireResult::AR_BUSY);
     lane_arbiter->mark_processed(2);
-    ASSERT_TRUE(lane_arbiter->try_acquire_lane(2) == cache::AcquireResult::AR_SKIP);
+    ASSERT_TRUE(lane_arbiter->try_acquire_lane(2) == query_cache::AcquireResult::AR_SKIP);
     lane_arbiter->release_lane(2);
 
-    ASSERT_TRUE(lane_arbiter->try_acquire_lane(1) == cache::AcquireResult::AR_IO);
-    ASSERT_TRUE(lane_arbiter->try_acquire_lane(3) == cache::AcquireResult::AR_IO);
-    ASSERT_TRUE(lane_arbiter->try_acquire_lane(3) == cache::AcquireResult::AR_IO);
-    ASSERT_TRUE(lane_arbiter->try_acquire_lane(5) == cache::AcquireResult::AR_PROBE);
+    ASSERT_TRUE(lane_arbiter->try_acquire_lane(1) == query_cache::AcquireResult::AR_IO);
+    ASSERT_TRUE(lane_arbiter->try_acquire_lane(3) == query_cache::AcquireResult::AR_IO);
+    ASSERT_TRUE(lane_arbiter->try_acquire_lane(3) == query_cache::AcquireResult::AR_IO);
+    ASSERT_TRUE(lane_arbiter->try_acquire_lane(5) == query_cache::AcquireResult::AR_PROBE);
 
     lane_arbiter->enable_passthrough_mode();
     ASSERT_TRUE(lane_arbiter->in_passthrough_mode());
-    ASSERT_TRUE(lane_arbiter->try_acquire_lane(6) == cache::AcquireResult::AR_IO);
-    ASSERT_TRUE(lane_arbiter->try_acquire_lane(7) == cache::AcquireResult::AR_IO);
-    ASSERT_TRUE(lane_arbiter->try_acquire_lane(8) == cache::AcquireResult::AR_IO);
-    ASSERT_TRUE(lane_arbiter->try_acquire_lane(9) == cache::AcquireResult::AR_IO);
+    ASSERT_TRUE(lane_arbiter->try_acquire_lane(6) == query_cache::AcquireResult::AR_IO);
+    ASSERT_TRUE(lane_arbiter->try_acquire_lane(7) == query_cache::AcquireResult::AR_IO);
+    ASSERT_TRUE(lane_arbiter->try_acquire_lane(8) == query_cache::AcquireResult::AR_IO);
+    ASSERT_TRUE(lane_arbiter->try_acquire_lane(9) == query_cache::AcquireResult::AR_IO);
 
     opt_lane = lane_arbiter->preferred_lane();
     ASSERT_TRUE(opt_lane.has_value());
@@ -78,14 +78,14 @@ TEST_F(CacheTest, testLaneArbiter) {
 }
 
 TEST_F(CacheTest, testCacheManager) {
-    auto cache_mgr = std::make_shared<cache::CacheManager>(10240);
+    auto cache_mgr = std::make_shared<query_cache::CacheManager>(10240);
 
     auto create_cache_value = [](size_t byte_size) {
         auto chk = std::make_shared<Chunk>();
         auto col = Int8Column::create();
         col->resize(byte_size);
         chk->append_column(col, 0);
-        cache::CacheValue value{.result = {chk}};
+        query_cache::CacheValue value{.result = {chk}};
         return value;
     };
 
@@ -121,7 +121,7 @@ TEST_F(CacheTest, testCacheManager) {
     ASSERT_TRUE(exists);
 }
 
-ChunkPtr create_test_chunk(cache::LaneOwnerType owner, long from, long to, bool is_last_chunk) {
+ChunkPtr create_test_chunk(query_cache::LaneOwnerType owner, long from, long to, bool is_last_chunk) {
     ChunkPtr chunk = std::make_shared<Chunk>();
     chunk->owner_info().set_owner_id(owner, is_last_chunk);
     if (from == to) {
@@ -140,13 +140,13 @@ ChunkPtr create_test_chunk(cache::LaneOwnerType owner, long from, long to, bool 
 struct Task {
     pipeline::Operators upstream;
     pipeline::OperatorPtr downstream;
-    cache::CacheOperatorPtr cache_operator;
-    cache::LaneArbiterPtr lane_arbiter;
+    query_cache::CacheOperatorPtr cache_operator;
+    query_cache::LaneArbiterPtr lane_arbiter;
 };
 
 using Tasks = std::vector<Task>;
-cache::CacheParam create_test_cache_param(bool force_populate, bool force_passthrough, int num_lanes) {
-    cache::CacheParam cache_param;
+query_cache::CacheParam create_test_cache_param(bool force_populate, bool force_passthrough, int num_lanes) {
+    query_cache::CacheParam cache_param;
     cache_param.num_lanes = num_lanes;
     cache_param.force_populate = force_populate;
     cache_param.plan_node_id = 10;
@@ -166,9 +166,9 @@ cache::CacheParam create_test_cache_param(bool force_populate, bool force_passth
 }
 
 using ValidateFunc = std::function<void(double)>;
-Tasks create_test_pipelines(const cache::CacheParam& cache_param, size_t dop, cache::CacheManagerPtr cache_mgr,
-                            RuntimeState* state, MapFunc map_func1, MapFunc map_func2, double init_value,
-                            ReduceFunc reduce_func) {
+Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t dop,
+                            query_cache::CacheManagerPtr cache_mgr, RuntimeState* state, MapFunc map_func1,
+                            MapFunc map_func2, double init_value, ReduceFunc reduce_func) {
     int id = 0;
     auto mul2 = std::make_shared<MapOperatorFactory>(++id, map_func1);
     auto plus1 = std::make_shared<MapOperatorFactory>(++id, map_func2);
@@ -176,7 +176,7 @@ Tasks create_test_pipelines(const cache::CacheParam& cache_param, size_t dop, ca
     auto per_tablet_reduce_sink = std::make_shared<ReduceSinkOperatorFactory>(++id, per_tablet_reducer.get());
     auto per_tablet_reduce_source = std::make_shared<ReduceSourceOperatorFactory>(++id, per_tablet_reducer);
     auto conjugate_op =
-            std::make_shared<cache::ConjugateOperatorFactory>(per_tablet_reduce_sink, per_tablet_reduce_source);
+            std::make_shared<query_cache::ConjugateOperatorFactory>(per_tablet_reduce_sink, per_tablet_reduce_source);
     std::vector<OperatorFactoryPtr> opFactories;
     opFactories.push_back(mul2);
     opFactories.push_back(plus1);
@@ -185,9 +185,10 @@ Tasks create_test_pipelines(const cache::CacheParam& cache_param, size_t dop, ca
     auto cache_id = ++id;
     auto plan_node_id = ++id;
     auto cache_op_factory =
-            std::make_shared<cache::CacheOperatorFactory>(cache_id, plan_node_id, cache_mgr.get(), cache_param);
+            std::make_shared<query_cache::CacheOperatorFactory>(cache_id, plan_node_id, cache_mgr.get(), cache_param);
     for (size_t i = 0, size = opFactories.size(); i < size; ++i) {
-        opFactories[i] = std::make_shared<cache::MultilaneOperatorFactory>(++id, opFactories[i], cache_param.num_lanes);
+        opFactories[i] =
+                std::make_shared<query_cache::MultilaneOperatorFactory>(++id, opFactories[i], cache_param.num_lanes);
     }
     opFactories.push_back(cache_op_factory);
     auto reducer = std::make_shared<ReducerFactory>(init_value, reduce_func, 1);
@@ -206,19 +207,19 @@ Tasks create_test_pipelines(const cache::CacheParam& cache_param, size_t dop, ca
 
     for (auto k = 0; k < dop; ++k) {
         size_t cache_op_idx = 0;
-        cache::CacheOperatorPtr cache_op = nullptr;
+        query_cache::CacheOperatorPtr cache_op = nullptr;
         auto& upstream = tasks[k].upstream;
         for (size_t i = 0, size = upstream.size(); i < size; ++i) {
-            if (cache_op = std::dynamic_pointer_cast<cache::CacheOperator>(upstream[i]); cache_op != nullptr) {
+            if (cache_op = std::dynamic_pointer_cast<query_cache::CacheOperator>(upstream[i]); cache_op != nullptr) {
                 cache_op_idx = i;
                 break;
             }
         }
         tasks[k].cache_operator = cache_op;
         tasks[k].lane_arbiter = cache_op->lane_arbiter();
-        cache::MultilaneOperators multilane_operators;
+        query_cache::MultilaneOperators multilane_operators;
         for (size_t i = 0, size = cache_op_idx; i < size; ++i) {
-            auto* ml_op = dynamic_cast<cache::MultilaneOperator*>(upstream[i].get());
+            auto* ml_op = dynamic_cast<query_cache::MultilaneOperator*>(upstream[i].get());
             ml_op->set_lane_arbiter(cache_op->lane_arbiter());
             multilane_operators.push_back(ml_op);
         }
@@ -304,13 +305,13 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, vectorized::ChunkPtr in
 }
 
 struct Action {
-    cache::LaneOwnerType owner_id;
+    query_cache::LaneOwnerType owner_id;
     long from;
     long to;
     int max_step;
     bool send_eof = false;
     bool set_first_op_finished = false;
-    cache::AcquireResult expect_acquire_result;
+    query_cache::AcquireResult expect_acquire_result;
     bool expect_probe_result = false;
     bool expect_finished = false;
     std::string to_string() const {
@@ -324,13 +325,13 @@ struct Action {
         return Action{.owner_id = 0, .max_step = max_step, .expect_finished = expect_finished};
     }
 
-    static Action emit_eof(cache::LaneOwnerType owner_id) {
+    static Action emit_eof(query_cache::LaneOwnerType owner_id) {
         return Action{.owner_id = owner_id,
                       .from = 0,
                       .to = 0,
                       .max_step = 1,
                       .send_eof = true,
-                      .expect_acquire_result = cache::AR_IO,
+                      .expect_acquire_result = query_cache::AR_IO,
                       .expect_finished = false};
     }
 
@@ -338,37 +339,38 @@ struct Action {
         return Action{.owner_id = 0, .max_step = INT_MAX, .set_first_op_finished = true, .expect_finished = true};
     }
 
-    static Action acquire_lane_busy(cache::LaneOwnerType owner_id) {
-        return Action{.owner_id = owner_id, .expect_acquire_result = cache::AR_BUSY};
+    static Action acquire_lane_busy(query_cache::LaneOwnerType owner_id) {
+        return Action{.owner_id = owner_id, .expect_acquire_result = query_cache::AR_BUSY};
     }
 
-    static Action acquire_lane_skip(cache::LaneOwnerType owner_id) {
-        return Action{.owner_id = owner_id, .expect_acquire_result = cache::AR_SKIP};
+    static Action acquire_lane_skip(query_cache::LaneOwnerType owner_id) {
+        return Action{.owner_id = owner_id, .expect_acquire_result = query_cache::AR_SKIP};
     }
 
-    static Action cache_hit(cache::LaneOwnerType owner_id) {
-        return Action{.owner_id = owner_id, .expect_acquire_result = cache::AR_PROBE, .expect_probe_result = true};
+    static Action cache_hit(query_cache::LaneOwnerType owner_id) {
+        return Action{
+                .owner_id = owner_id, .expect_acquire_result = query_cache::AR_PROBE, .expect_probe_result = true};
     }
 
-    static Action cache_miss_and_emit_first_chunk(cache::LaneOwnerType owner_id, long from, long to, int max_step,
+    static Action cache_miss_and_emit_first_chunk(query_cache::LaneOwnerType owner_id, long from, long to, int max_step,
                                                   bool send_eof, bool expect_finished) {
         return Action{.owner_id = owner_id,
                       .from = from,
                       .to = to,
                       .max_step = max_step,
                       .send_eof = send_eof,
-                      .expect_acquire_result = cache::AR_PROBE,
+                      .expect_acquire_result = query_cache::AR_PROBE,
                       .expect_probe_result = false,
                       .expect_finished = expect_finished};
     }
-    static Action emit_remain_chunk(cache::LaneOwnerType owner_id, long from, long to, int max_step, bool send_eof,
-                                    bool expect_finished) {
+    static Action emit_remain_chunk(query_cache::LaneOwnerType owner_id, long from, long to, int max_step,
+                                    bool send_eof, bool expect_finished) {
         return Action{.owner_id = owner_id,
                       .from = from,
                       .to = to,
                       .max_step = max_step,
                       .send_eof = send_eof,
-                      .expect_acquire_result = cache::AR_IO,
+                      .expect_acquire_result = query_cache::AR_IO,
                       .expect_probe_result = false,
                       .expect_finished = expect_finished};
     }
@@ -390,14 +392,14 @@ void take_action(Task& task, const Action& action, RuntimeState* state) {
 
     auto ac_result = task.lane_arbiter->try_acquire_lane(action.owner_id);
     ASSERT_EQ(ac_result, action.expect_acquire_result);
-    if (ac_result == cache::AcquireResult::AR_PROBE) {
+    if (ac_result == query_cache::AcquireResult::AR_PROBE) {
         auto probe_result = task.cache_operator->probe_cache(action.owner_id, 1);
         ASSERT_EQ(probe_result, action.expect_probe_result);
         if (!probe_result) {
             task.cache_operator->reset_lane(action.owner_id);
             exec_action(task, action, state);
         }
-    } else if (ac_result == cache::AcquireResult::AR_IO) {
+    } else if (ac_result == query_cache::AcquireResult::AR_IO) {
         exec_action(task, action, state);
     } else {
         return;
@@ -430,10 +432,11 @@ static ValidateFuncGenerator approx_validator_gen = [](double expect) {
     };
 };
 
-void test_framework_with_with_options(cache::CacheManagerPtr cache_mgr, bool force_populate, bool force_passthrough,
-                                      int num_lanes, int dop, RuntimeState& state_object, MapFunc map1, MapFunc map2,
-                                      double init_value, ReduceFunc reduce, const Actions& pre_passthrough_actions,
-                                      const Actions& post_passthrough_actions, ValidateFunc validate_func) {
+void test_framework_with_with_options(query_cache::CacheManagerPtr cache_mgr, bool force_populate,
+                                      bool force_passthrough, int num_lanes, int dop, RuntimeState& state_object,
+                                      MapFunc map1, MapFunc map2, double init_value, ReduceFunc reduce,
+                                      const Actions& pre_passthrough_actions, const Actions& post_passthrough_actions,
+                                      ValidateFunc validate_func) {
     auto* state = &state_object;
     auto cache_param = create_test_cache_param(force_populate, force_passthrough, num_lanes);
     auto tasks = create_test_pipelines(cache_param, dop, cache_mgr, state, map1, map2, init_value, reduce);
@@ -460,22 +463,23 @@ void test_framework_with_with_options(cache::CacheManagerPtr cache_mgr, bool for
     validate_func(data[0]);
 }
 
-void test_framework(cache::CacheManagerPtr cache_mgr, int num_lanes, int dop, RuntimeState& state_object, MapFunc map1,
-                    MapFunc map2, double init_value, ReduceFunc reduce, const Actions& pre_passthrough_actions,
-                    const Actions& post_passthrough_actions, ValidateFunc validate_func) {
+void test_framework(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop, RuntimeState& state_object,
+                    MapFunc map1, MapFunc map2, double init_value, ReduceFunc reduce,
+                    const Actions& pre_passthrough_actions, const Actions& post_passthrough_actions,
+                    ValidateFunc validate_func) {
     test_framework_with_with_options(cache_mgr, false, false, num_lanes, dop, state_object, map1, map2, init_value,
                                      reduce, pre_passthrough_actions, post_passthrough_actions, validate_func);
 }
 
-void test_framework_force_populate(cache::CacheManagerPtr cache_mgr, int num_lanes, int dop, RuntimeState& state_object,
-                                   MapFunc map1, MapFunc map2, double init_value, ReduceFunc reduce,
-                                   const Actions& pre_passthrough_actions, const Actions& post_passthrough_actions,
-                                   ValidateFunc validate_func) {
+void test_framework_force_populate(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop,
+                                   RuntimeState& state_object, MapFunc map1, MapFunc map2, double init_value,
+                                   ReduceFunc reduce, const Actions& pre_passthrough_actions,
+                                   const Actions& post_passthrough_actions, ValidateFunc validate_func) {
     test_framework_with_with_options(cache_mgr, true, false, num_lanes, dop, state_object, map1, map2, init_value,
                                      reduce, pre_passthrough_actions, post_passthrough_actions, validate_func);
 }
 
-void test_framework_force_populate_and_passthrough(cache::CacheManagerPtr cache_mgr, int num_lanes, int dop,
+void test_framework_force_populate_and_passthrough(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop,
                                                    RuntimeState& state_object, MapFunc map1, MapFunc map2,
                                                    double init_value, ReduceFunc reduce,
                                                    const Actions& pre_passthrough_actions,

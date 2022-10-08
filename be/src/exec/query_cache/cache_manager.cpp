@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-#include "exec/cache/cache_manager.h"
+#include "exec/query_cache/cache_manager.h"
 
 #include "util/defer_op.h"
 namespace starrocks {
-namespace cache {
+namespace query_cache {
 
 CacheManager::CacheManager(size_t capacity) : _cache(capacity) {}
 static void delete_cache_entry(const CacheKey& key, void* value) {
@@ -41,5 +41,5 @@ size_t CacheManager::capacity() {
     return _cache.get_capacity();
 }
 
-} // namespace cache
+} // namespace query_cache
 } // namespace starrocks

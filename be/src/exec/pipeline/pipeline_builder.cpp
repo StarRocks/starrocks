@@ -2,12 +2,12 @@
 
 #include "exec/pipeline/pipeline_builder.h"
 
-#include "exec/cache/cache_manager.h"
-#include "exec/cache/cache_operator.h"
-#include "exec/cache/conjugate_operator.h"
-#include "exec/cache/lane_arbiter.h"
-#include "exec/cache/multilane_operator.h"
 #include "exec/exec_node.h"
+#include "exec/query_cache/cache_manager.h"
+#include "exec/query_cache/cache_operator.h"
+#include "exec/query_cache/conjugate_operator.h"
+#include "exec/query_cache/lane_arbiter.h"
+#include "exec/query_cache/multilane_operator.h"
 
 namespace starrocks::pipeline {
 
@@ -203,13 +203,14 @@ OpFactories PipelineBuilderContext::interpolate_cache_operator(
     downstream_pipeline.clear();
 
     auto dop = down_cast<SourceOperatorFactory*>(source_op.get())->degree_of_parallelism();
-    auto conjugate_op = std::make_shared<cache::ConjugateOperatorFactory>(sink_op, source_op);
+    auto conjugate_op = std::make_shared<query_cache::ConjugateOperatorFactory>(sink_op, source_op);
     upstream_pipeline.push_back(std::move(conjugate_op));
 
     auto last_ml_op_idx = upstream_pipeline.size() - 1;
     for (auto i = 1; i < upstream_pipeline.size(); ++i) {
         auto& op = upstream_pipeline[i];
-        auto ml_op = std::make_shared<cache::MultilaneOperatorFactory>(next_operator_id(), op, cache_param.num_lanes);
+        auto ml_op =
+                std::make_shared<query_cache::MultilaneOperatorFactory>(next_operator_id(), op, cache_param.num_lanes);
         // only last multilane operator in the pipeline driver can work in passthrough mode
         auto can_passthrough = i == last_ml_op_idx;
         ml_op->set_can_passthrough(can_passthrough);
@@ -217,8 +218,8 @@ OpFactories PipelineBuilderContext::interpolate_cache_operator(
     }
 
     auto cache_mgr = ExecEnv::GetInstance()->cache_mgr();
-    auto cache_op = std::make_shared<cache::CacheOperatorFactory>(next_operator_id(), next_pseudo_plan_node_id(),
-                                                                  cache_mgr, cache_param);
+    auto cache_op = std::make_shared<query_cache::CacheOperatorFactory>(next_operator_id(), next_pseudo_plan_node_id(),
+                                                                        cache_mgr, cache_param);
     upstream_pipeline.push_back(cache_op);
 
     auto merge_operators = merge_operators_generator(true);

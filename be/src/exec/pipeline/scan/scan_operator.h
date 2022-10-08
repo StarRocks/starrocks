@@ -2,9 +2,9 @@
 
 #pragma once
 
-#include "exec/cache/cache_operator.h"
-#include "exec/cache/lane_arbiter.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/query_cache/cache_operator.h"
+#include "exec/query_cache/lane_arbiter.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/spinlock.h"
 
@@ -58,8 +58,8 @@ public:
     int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
     int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
-    void set_lane_arbiter(const cache::LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
-    void set_cache_operator(const cache::CacheOperatorPtr& cache_operator) { _cache_operator = cache_operator; }
+    void set_lane_arbiter(const query_cache::LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
+    void set_cache_operator(const query_cache::CacheOperatorPtr& cache_operator) { _cache_operator = cache_operator; }
 
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
@@ -138,8 +138,8 @@ private:
     std::atomic_int64_t _last_scan_rows_num = 0;
     std::atomic_int64_t _last_scan_bytes = 0;
 
-    cache::LaneArbiterPtr _lane_arbiter = nullptr;
-    cache::CacheOperatorPtr _cache_operator = nullptr;
+    query_cache::LaneArbiterPtr _lane_arbiter = nullptr;
+    query_cache::CacheOperatorPtr _cache_operator = nullptr;
 
     RuntimeProfile::Counter* _default_buffer_capacity_counter = nullptr;
     RuntimeProfile::Counter* _buffer_capacity_counter = nullptr;

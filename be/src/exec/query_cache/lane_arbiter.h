@@ -10,7 +10,7 @@
 #include <unordered_set>
 #include <vector>
 namespace starrocks {
-namespace cache {
+namespace query_cache {
 class LaneArbiter;
 using LaneArbiterRawPtr = LaneArbiter*;
 using LaneArbiterPtr = std::shared_ptr<LaneArbiter>;
@@ -70,5 +70,5 @@ private:
     std::atomic<int64_t> _assign_sequencer{0};
 };
 
-} // namespace cache
+} // namespace query_cache
 } // namespace starrocks

@@ -334,7 +334,7 @@ TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
 
-add_executable(query_cache_test  ./exec/cache/transform_operator.cpp ./exec/cache/test_cache.cpp)
+add_executable(query_cache_test exec/query_cache/transform_operator.cpp exec/query_cache/query_cache_test.cpp)
 
 TARGET_LINK_LIBRARIES(query_cache_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(query_cache_test PROPERTIES COMPILE_FLAGS "-fno-access-control")

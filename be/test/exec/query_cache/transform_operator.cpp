@@ -1,5 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-#include "exec/cache/transform_operator.h"
+#include "exec/query_cache/transform_operator.h"
 namespace starrocks::vectorized {
 MapOperator::MapOperator(pipeline::OperatorFactory* factory, int driver_sequence, MapFunc map_func)
         : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), driver_sequence),

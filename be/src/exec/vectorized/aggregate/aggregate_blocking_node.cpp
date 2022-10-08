@@ -220,7 +220,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
 
-    dynamic_cast<pipeline::SourceOperatorFactory*>(source_operator.get())
+    down_cast<pipeline::SourceOperatorFactory*>(source_operator.get())
             ->set_need_local_shuffle(
                     down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->need_local_shuffle());
 

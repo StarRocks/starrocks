@@ -7,12 +7,12 @@
 #include "column/chunk.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exec/cache/lane_arbiter.h"
 #include "exec/pipeline/operator.h"
+#include "exec/query_cache/lane_arbiter.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
-namespace cache {
+namespace query_cache {
 class MultilaneOperator;
 using MultilaneOperatorRawPtr = MultilaneOperator*;
 using MultilaneOperators = std::vector<MultilaneOperatorRawPtr>;
@@ -20,6 +20,7 @@ using MultilaneOperatorPtr = std::shared_ptr<MultilaneOperator>;
 class MultilaneOperatorFactory;
 using MultilaneOperatorFactoryRawPtr = MultilaneOperatorFactory*;
 using MultilaneOperatorFactoryPtr = std::shared_ptr<MultilaneOperatorFactory>;
+
 // MultilaneOperator is decorator introduced to support per-tablet computation, MultilaneOperator has several
 // lanes the number of which is designated by _lane_arbiter->num_lanes(), each lane is a operator instance that
 // MultilaneOperator decorates. The lane is acquired/released to/from the underlying tablet of morsels picked from
@@ -91,5 +92,5 @@ private:
     const size_t _num_lanes;
     bool _can_passthrough = false;
 };
-} // namespace cache
+} // namespace query_cache
 } // namespace starrocks

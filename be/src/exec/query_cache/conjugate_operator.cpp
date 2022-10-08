@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exec/cache/conjugate_operator.h"
+#include "exec/query_cache/conjugate_operator.h"
 
 namespace starrocks {
-namespace cache {
+namespace query_cache {
 
 static inline std::string base_name_of_conjugate_op(const std::string& s) {
     std::string lc;
@@ -121,5 +121,5 @@ pipeline::OperatorPtr ConjugateOperatorFactory::create(int32_t degree_of_paralle
     return std::make_shared<ConjugateOperator>(this, driver_sequence, sink_op, source_op);
 }
 
-} // namespace cache
+} // namespace query_cache
 } // namespace starrocks

@@ -707,9 +707,10 @@ public class OlapScanNode extends ScanNode {
             normalizer.setUncacheable(true);
             return;
         }
-        //suppress NotImplementationException
+        // suppress NotImplementationException
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
         List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+        // Only support one-column partition key, so it is uncacheable for multi-column partition key.
         if (partitionColumns.size() != 1) {
             normalizer.setUncacheable(true);
             return;

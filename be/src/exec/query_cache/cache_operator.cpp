@@ -1,5 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-#include "exec/cache/cache_operator.h"
+#include "exec/query_cache/cache_operator.h"
 
 #include <glog/logging.h>
 
@@ -13,7 +13,7 @@
 #include "storage/tablet_manager.h"
 #include "util/time.h"
 namespace starrocks {
-namespace cache {
+namespace query_cache {
 enum PerLaneBufferState {
     PLBS_INIT,
     PLBS_MISS,
@@ -119,6 +119,9 @@ static inline vectorized::Chunks remap_chunks(const vectorized::Chunks& chunks, 
             continue;
         }
 
+        // SlotId remapping always happens inside cache operator, this can lead to chunks from passthrough, cache and
+        // ScanOperator with inconsistent maps from SlotIds to column index, however post-cache agg always produces
+        // chunks with consistent maps from SlotIds to column index on which Chunk::append_selectivity relies.
         auto new_chunk = std::make_shared<vectorized::Chunk>();
         for (auto [slot_id, new_slot_id] : slot_remapping) {
             auto column = chunk->get_column_by_slot_id(slot_id);
@@ -451,5 +454,5 @@ pipeline::OperatorPtr CacheOperatorFactory::create(int32_t degree_of_parallelism
     return std::make_shared<CacheOperator>(this, driver_sequence, _cache_mgr, _cache_param);
 }
 
-} // namespace cache
+} // namespace query_cache
 } // namespace starrocks

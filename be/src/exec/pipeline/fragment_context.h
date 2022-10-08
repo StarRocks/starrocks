@@ -4,7 +4,6 @@
 
 #include <unordered_map>
 
-#include "exec/cache/cache_param.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline.h"
@@ -12,6 +11,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/query_cache/cache_param.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/InternalService_types.h"
@@ -120,7 +120,7 @@ public:
 
     void set_driver_token(DriverLimiter::TokenPtr driver_token) { _driver_token = std::move(driver_token); }
 
-    cache::CacheParam& cache_param() { return _cache_param; }
+    query_cache::CacheParam& cache_param() { return _cache_param; }
 
     void set_enable_cache(bool flag) { _enable_cache = flag; }
 
@@ -162,7 +162,7 @@ private:
     bool _enable_resource_group = false;
 
     DriverLimiter::TokenPtr _driver_token = nullptr;
-    cache::CacheParam _cache_param;
+    query_cache::CacheParam _cache_param;
     bool _enable_cache = false;
     PerDriverScanRangesMap _scan_ranges_per_driver_seq;
 };

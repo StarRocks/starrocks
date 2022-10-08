@@ -389,10 +389,10 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         while (morsel != nullptr) {
             auto [lane_owner, version] = morsel->get_lane_owner_and_version();
             auto acquire_result = _lane_arbiter->try_acquire_lane(lane_owner);
-            if (acquire_result == cache::AR_BUSY) {
+            if (acquire_result == query_cache::AR_BUSY) {
                 _morsel_queue->unget(std::move(morsel));
                 return Status::OK();
-            } else if (acquire_result == cache::AR_PROBE) {
+            } else if (acquire_result == query_cache::AR_PROBE) {
                 auto hit = _cache_operator->probe_cache(lane_owner, version);
                 RETURN_IF_ERROR(_cache_operator->reset_lane(lane_owner));
                 if (hit) {
@@ -400,9 +400,9 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                 } else {
                     break;
                 }
-            } else if (acquire_result == cache::AR_SKIP) {
+            } else if (acquire_result == query_cache::AR_SKIP) {
                 ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
-            } else if (acquire_result == cache::AR_IO) {
+            } else if (acquire_result == query_cache::AR_IO) {
                 break;
             }
         }

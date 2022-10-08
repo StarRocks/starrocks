@@ -4,7 +4,7 @@
 #include <string>
 #include <unordered_map>
 namespace starrocks {
-namespace cache {
+namespace query_cache {
 
 using CacheKeySuffixMap = std::unordered_map<int64_t, std::string>;
 using SlotRemapping = std::unordered_map<int32_t, int32_t>;
@@ -19,5 +19,5 @@ struct CacheParam {
     size_t entry_max_bytes;
     size_t entry_max_rows;
 };
-} // namespace cache
+} // namespace query_cache
 } // namespace starrocks

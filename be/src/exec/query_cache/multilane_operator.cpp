@@ -1,11 +1,12 @@
-#include "exec/cache/multilane_operator.h"
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+#include "exec/query_cache/multilane_operator.h"
 
 #include <glog/logging.h>
 
 #include "util/defer_op.h"
 
 namespace starrocks {
-namespace cache {
+namespace query_cache {
 MultilaneOperator::MultilaneOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, size_t num_lanes,
                                      pipeline::Operators&& processors, bool can_passthrough)
         : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), driver_sequence),
@@ -110,7 +111,7 @@ bool MultilaneOperator::is_finished() const {
 }
 
 Status MultilaneOperator::_finish(starrocks::RuntimeState* state,
-                                  starrocks::cache::MultilaneOperator::FinishCallback finish_cb) {
+                                  starrocks::query_cache::MultilaneOperator::FinishCallback finish_cb) {
     _input_finished = true;
     auto status = Status::OK();
     for (auto it : _owner_to_lanes) {
@@ -301,5 +302,5 @@ pipeline::OperatorPtr MultilaneOperatorFactory::create(int32_t degree_of_paralle
     return op;
 }
 
-} // namespace cache
+} // namespace query_cache
 } // namespace starrocks

@@ -7,12 +7,12 @@
 
 #include "column/chunk.h"
 #include "common/statusor.h"
-#include "exec/cache/cache_operator.h"
-#include "exec/cache/lane_arbiter.h"
-#include "exec/cache/multilane_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/query_cache/cache_operator.h"
+#include "exec/query_cache/lane_arbiter.h"
+#include "exec/query_cache/multilane_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -82,20 +82,20 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
 
     ssize_t cache_op_idx = -1;
-    cache::CacheOperatorPtr cache_op = nullptr;
+    query_cache::CacheOperatorPtr cache_op = nullptr;
     for (auto i = 0; i < _operators.size(); ++i) {
-        if (cache_op = std::dynamic_pointer_cast<cache::CacheOperator>(_operators[i]); cache_op != nullptr) {
+        if (cache_op = std::dynamic_pointer_cast<query_cache::CacheOperator>(_operators[i]); cache_op != nullptr) {
             cache_op_idx = i;
             break;
         }
     }
 
     if (cache_op != nullptr) {
-        cache::LaneArbiterPtr lane_arbiter = cache_op->lane_arbiter();
-        cache::MultilaneOperators multilane_operators;
+        query_cache::LaneArbiterPtr lane_arbiter = cache_op->lane_arbiter();
+        query_cache::MultilaneOperators multilane_operators;
         for (auto i = 0; i < cache_op_idx; ++i) {
             auto& op = _operators[i];
-            if (auto* multilane_op = dynamic_cast<cache::MultilaneOperator*>(op.get()); multilane_op != nullptr) {
+            if (auto* multilane_op = dynamic_cast<query_cache::MultilaneOperator*>(op.get()); multilane_op != nullptr) {
                 multilane_op->set_lane_arbiter(lane_arbiter);
                 multilane_operators.push_back(multilane_op);
             } else if (auto* olap_scan_op = dynamic_cast<OlapScanOperator*>(op.get()); olap_scan_op != nullptr) {
@@ -142,12 +142,12 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 }
 
 static inline bool is_multilane(pipeline::OperatorPtr& op) {
-    if (dynamic_cast<cache::MultilaneOperator*>(op.get()) != nullptr) {
+    if (dynamic_cast<query_cache::MultilaneOperator*>(op.get()) != nullptr) {
         return true;
     }
     // In essence, CacheOperator is also special MultilaneOperator semantically, it also needs handle EOS chunk.
     // it shall populate cache on receiving EOS chunk of a tablet.
-    if (dynamic_cast<cache::CacheOperator*>(op.get()) != nullptr) {
+    if (dynamic_cast<query_cache::CacheOperator*>(op.get()) != nullptr) {
         return true;
     }
     return false;

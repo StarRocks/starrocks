@@ -6,13 +6,14 @@
 #include "exec/pipeline/operator.h"
 
 namespace starrocks {
-namespace cache {
+namespace query_cache {
 class ConjugateOperator;
 using ConjugateOperatorRawPtr = ConjugateOperator*;
 using ConjugateOperatorPtr = std::shared_ptr<ConjugateOperator>;
 class ConjugateOperatorFactory;
 using ConjugateOperatorFactoryRawPtr = ConjugateOperatorFactory*;
 using ConjugateOperatorFactoryPtr = std::shared_ptr<ConjugateOperatorFactory>;
+
 // ConjugateOperator is used to join the pair of AggregateSinkOperator and AggregateSourceOperator together into
 // a compound pre-cache per-tablet operator. for examples:
 // 1. AggregateBlockingNode:  ConjugateOperator(AggregateBlockingSinkOperator, AggregateBlockingSourceOperator);
@@ -60,5 +61,5 @@ private:
     pipeline::OpFactoryPtr _sink_op_factory;
     pipeline::OpFactoryPtr _source_op_factory;
 };
-} // namespace cache
+} // namespace query_cache
 } // namespace starrocks
