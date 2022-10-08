@@ -12,27 +12,15 @@ import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.*;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.*;
 import com.starrocks.sql.optimizer.rewrite.CorrelatedPredicateRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class ExistentialApply2OuterJoinRule extends TransformationRule {
     public ExistentialApply2OuterJoinRule() {
@@ -252,10 +240,15 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
         // rootOptExpression
         OptExpression rootOptExpression;
 
-        // aggregate
+        // aggregate, need add a countRows to indicate the further join match process result.
+        Map<ColumnRefOperator, CallOperator> aggregates = Maps.newHashMap();
+        CallOperator countRowsCallOp = SubqueryUtils.createCountRowsOperator();
+        ColumnRefOperator countRowsCol = context.getColumnRefFactory()
+                .create("countRows", countRowsCallOp.getType(), countRowsCallOp.isNullable());
+        aggregates.put(countRowsCol, countRowsCallOp);
         LogicalAggregationOperator aggregate =
                 new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(innerRefMap.keySet()),
-                        Maps.newHashMap());
+                        aggregates);
 
         OptExpression aggregateOptExpression = OptExpression.create(aggregate);
         rootOptExpression = aggregateOptExpression;
@@ -295,9 +288,7 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
         Arrays.stream(input.getInputs().get(1).getOutputColumns().getColumnIds())
                 .mapToObj(context.getColumnRefFactory()::getColumnRef).forEach(d -> projectMap.put(d, d));
 
-        ScalarOperator nullPredicate = Utils.compoundAnd(
-                innerRefMap.keySet().stream().map(d -> new IsNullPredicateOperator(!isNot, d))
-                        .collect(Collectors.toList()));
+        ScalarOperator nullPredicate = new IsNullPredicateOperator(!isNot, countRowsCol);
         projectMap.put(apply.getOutput(), nullPredicate);
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projectMap);
         OptExpression projectOptExpression = OptExpression.create(projectOperator, joinOptExpression);
