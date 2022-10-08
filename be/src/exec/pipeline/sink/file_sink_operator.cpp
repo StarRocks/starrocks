@@ -172,6 +172,7 @@ Status FileSinkBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_profi
     int ret = bthread::execution_queue_start<const vectorized::ChunkPtr>(_exec_queue_id.get(), &options,
                                                                          &FileSinkBuffer::execute_io_task, this);
     if (ret != 0) {
+        _exec_queue_id.reset();
         return Status::InternalError("start execution queue error");
     }
     return Status::OK();
@@ -210,7 +211,9 @@ bool FileSinkBuffer::is_finished() {
 
 void FileSinkBuffer::cancel_one_sinker() {
     _is_cancelled = true;
-    bthread::execution_queue_stop(*_exec_queue_id);
+    if (_exec_queue_id != nullptr) {
+        bthread::execution_queue_stop(*_exec_queue_id);
+    }
 }
 
 void FileSinkBuffer::close(RuntimeState* state) {
@@ -243,7 +246,9 @@ void FileSinkBuffer::close(RuntimeState* state) {
                                                          state->fragment_instance_id());
     }
     _is_finished = true;
-    bthread::execution_queue_stop(*_exec_queue_id);
+    if (_exec_queue_id != nullptr) {
+        bthread::execution_queue_stop(*_exec_queue_id);
+    }
 }
 
 Status FileSinkOperator::prepare(RuntimeState* state) {
