@@ -81,7 +81,7 @@ Usage: $0 <options>
     $0 --fe --clean                         clean and build Frontend and Spark Dpp application
     $0 --fe --be --clean                    clean and build Frontend, Spark Dpp application and Backend
     $0 --spark-dpp                          build Spark DPP application alone
-    BUILD_TYPE = Debug ./build.sh --be build BE CMAKE_TYPE is Debug Version (Default is Release)
+    BUILD_TYPE = Debug ./build.sh --be      build BE CMAKE_TYPE is Debug Version (Default is Release)
   "
   exit 1
 }
