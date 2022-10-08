@@ -1,16 +1,16 @@
 # dayofyear
 
-## description
+## Description
 
-### Syntax
+Returns the day of the year for a given date.
+
+The `date` parameter must be of the DATE or DATETIME type.
+
+## Syntax
 
 ```Haskell
-INT DAYOFYEAR(DATETIME date)
+INT DAYOFYEAR(DATETIME|DATE date)
 ```
-
-DAYOFYEAR function returns the day of the year for a given date.
-
-The parameter is in Date or Datetime type.
 
 ## example
 

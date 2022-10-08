@@ -17,7 +17,3 @@ SHOW DELETE [FROM db_name]
 ```sql
 SHOW DELETE FROM database;
 ```
-
-## keyword
-
-SHOW,DELETE

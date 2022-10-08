@@ -23,11 +23,15 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AddPartitionClause;
+import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateTableStmt;
+import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.GrantStmt;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -40,6 +44,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
@@ -1152,6 +1157,30 @@ public class AlterTest {
         String dropSQL = "drop table test_partition_exists3";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+    }
+
+    @Test
+    public void testRenameDb() throws Exception {
+        Auth auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();;
+        String createUserSql = "CREATE USER 'testuser' IDENTIFIED BY ''";
+        CreateUserStmt createUserStmt =
+                (CreateUserStmt) UtFrameUtils.parseAndAnalyzeStmt(createUserSql, starRocksAssert.getCtx());
+        auth.createUser(createUserStmt);
+
+        String grantUser = "grant ALTER_PRIV on test to testuser";
+        GrantStmt grantUserStmt = (GrantStmt) UtFrameUtils.parseAndAnalyzeStmt(grantUser, starRocksAssert.getCtx());
+        auth.grant(grantUserStmt);
+
+        UserIdentity testUser = new UserIdentity("testuser", "%");
+        testUser.analyze("default_cluster");
+
+        starRocksAssert.getCtx().setQualifiedUser("testuser");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        String renameDb = "alter database test rename test0";
+        AlterDatabaseRename renameDbStmt =
+                (AlterDatabaseRename) UtFrameUtils.parseAndAnalyzeStmt(renameDb, starRocksAssert.getCtx());
     }
 
 }

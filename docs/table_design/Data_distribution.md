@@ -408,5 +408,5 @@ SET("dynamic_partition.enable"="false");
 
 > Note:
 >
-> - To check the properties of dynamic partitioning of a table, execute the SHOW CREATE TABLE statement.
+> - To check the properties of dynamic partitioning of a table, execute the [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md) statement.
 > - You can also use the ALTER TABLE statement to modify other properties of a table.
