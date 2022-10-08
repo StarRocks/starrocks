@@ -274,7 +274,7 @@ public class PrivilegeManagerTest {
         int numDbPentires = manager.userToPrivilegeCollection.get(testUser).
                 typeToPrivilegeEntryList.get(grantDbStmt.getTypeId()).size();
 
-        manager.removeInvalidateObject();
+        manager.removeInvalidObject();
 
         // check after clean up
         System.out.println(GsonUtils.GSON.toJson(manager.userToPrivilegeCollection));

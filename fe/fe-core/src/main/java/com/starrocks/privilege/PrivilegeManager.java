@@ -310,7 +310,7 @@ public class PrivilegeManager {
         return this.provider.generateObject(typeName, objectTokenList, globalStateMgr);
     }
 
-    public void removeInvalidateObject() {
+    public void removeInvalidObject() {
         Iterator<Map.Entry<UserIdentity, UserPrivilegeCollection>> mapIter =
                 userToPrivilegeCollection.entrySet().iterator();
         while (mapIter.hasNext()) {
@@ -319,11 +319,11 @@ public class PrivilegeManager {
             UserPrivilegeCollection collection = entry.getValue();
             if (! globalStateMgr.getAuthenticationManager().doesUserExist(user)) {
                 String collectionStr = GsonUtils.GSON.toJson(collection);
-                LOG.info("find invalidate user {}, will remove privilegeCollection now {}",
+                LOG.info("find invalid user {}, will remove privilegeCollection now {}",
                         entry, collectionStr);
                 mapIter.remove();
             } else {
-                collection.removeInvalidateObject(globalStateMgr);
+                collection.removeInvalidObject(globalStateMgr);
             }
         }
     }

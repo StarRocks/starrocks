@@ -173,7 +173,7 @@ public class PrivilegeCollection {
         return false;
     }
 
-    public void removeInvalidateObject(GlobalStateMgr globalStateMgr) {
+    public void removeInvalidObject(GlobalStateMgr globalStateMgr) {
         Iterator<Map.Entry<Short, List<PrivilegeEntry>>> listIter = typeToPrivilegeEntryList.entrySet().iterator();
         while (listIter.hasNext()) {
             List<PrivilegeEntry> list = listIter.next().getValue();

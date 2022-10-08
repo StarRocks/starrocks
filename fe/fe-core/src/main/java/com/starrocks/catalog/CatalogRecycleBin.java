@@ -765,7 +765,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     public void removeInvalidateReference() {
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             // privilege object can be invalidated after gc
-            GlobalStateMgr.getCurrentState().getPrivilegeManager().removeInvalidateObject();
+            GlobalStateMgr.getCurrentState().getPrivilegeManager().removeInvalidObject();
         }
     }
 
