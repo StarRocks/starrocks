@@ -265,7 +265,3 @@ NULL value: \ N
     )
     WITH RESOURCE 'my_spark';
     ```
-
-## keyword
-
-SPARK,LOAD

@@ -23,6 +23,7 @@ DIAGNOSTIC_POP
 #include "exec/tablet_info.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/ref_counted.h"
+#include "gutil/strings/join.h"
 #include "runtime/descriptors.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/load_channel.h"
@@ -494,9 +495,17 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
 }
 
 void LocalTabletsChannel::cancel() {
+    vector<int64_t> tablet_ids;
+    tablet_ids.reserve(_delta_writers.size());
     for (auto& it : _delta_writers) {
-        (void)it.second->abort();
+        (void)it.second->abort(false);
+        tablet_ids.emplace_back(it.first);
     }
+    string tablet_id_list_str;
+    JoinInts(tablet_ids, ",", &tablet_id_list_str);
+    LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << _key.id
+              << " index_id: " << _key.index_id << " #tablet:" << _delta_writers.size()
+              << " tablet_ids:" << tablet_id_list_str;
 }
 
 Status LocalTabletsChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk,

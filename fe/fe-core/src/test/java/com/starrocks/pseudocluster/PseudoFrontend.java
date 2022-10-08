@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
 import com.google.common.base.Strings;
@@ -18,6 +18,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.utframe.MockJournal;
 import mockit.Mock;
@@ -86,12 +87,10 @@ public class PseudoFrontend {
 
         this.runningDir = runningDir;
         this.fakeJournal = fakeJournal;
-        System.out.println("mocked frontend running in dir: " + this.runningDir);
+        System.out.println("pseudo frontend running in dir: " + new File(this.runningDir).getAbsolutePath());
 
         // root running dir
         createAndClearDir(this.runningDir);
-        // clear and create log dir
-        createAndClearDir(runningDir + "/log/");
         // clear and create meta dir
         createAndClearDir(runningDir + "/starrocks-meta/");
         // clear and create conf dir
@@ -106,10 +105,10 @@ public class PseudoFrontend {
     private void initFeConf(String confDir, Map<String, String> feConf) throws IOException {
         Map<String, String> finalFeConf = Maps.newHashMap(MIN_FE_CONF);
         // these 2 configs depends on running dir, so set them here.
-        finalFeConf.put("LOG_DIR", this.runningDir + "/log");
+        finalFeConf.put("LOG_DIR", this.runningDir);
+        finalFeConf.put("sys_log_dir", this.runningDir);
+        finalFeConf.put("audit_log_dir", this.runningDir);
         finalFeConf.put("meta_dir", this.runningDir + "/starrocks-meta");
-        finalFeConf.put("sys_log_dir", this.runningDir + "/log");
-        finalFeConf.put("audit_log_dir", this.runningDir + "/log");
         finalFeConf.put("tmp_dir", this.runningDir + "/temp_dir");
         // use custom config to add or override default config
         finalFeConf.putAll(feConf);
@@ -189,6 +188,7 @@ public class PseudoFrontend {
                 }
 
                 GlobalStateMgr.getCurrentState().initialize(args);
+                GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
                 StateChangeExecutor.getInstance().setMetaContext(
                         GlobalStateMgr.getCurrentState().getMetaContext());
                 StateChangeExecutor.getInstance().registerStateChangeExecution(

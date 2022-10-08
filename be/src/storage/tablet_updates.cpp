@@ -1452,10 +1452,9 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
               << Substitute("($0/$1/$2)", t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
     VLOG(1) << "update compaction apply " << _debug_string(true, true);
     if (row_before != row_after) {
-        string msg = Substitute("actual row size changed after compaction $0 -> $1 $2", row_before, row_after,
-                                debug_string());
-        LOG(ERROR) << msg;
-        _set_error(msg);
+        string msg = Substitute("actual row size changed after compaction $0 -> $1", row_before, row_after);
+        LOG(ERROR) << msg << debug_string();
+        _set_error(msg + _debug_version_info(true));
     }
 }
 
@@ -1465,7 +1464,8 @@ void TabletUpdates::to_updates_pb(TabletUpdatesPB* updates_pb) const {
 }
 
 void TabletUpdates::_erase_expired_versions(int64_t expire_time,
-                                            std::vector<std::unique_ptr<EditVersionInfo>>* expire_list) {
+                                            std::vector<std::unique_ptr<EditVersionInfo>>* expire_list,
+                                            int64_t* min_readable_version) {
     DCHECK(expire_list->empty());
     std::lock_guard l(_lock);
     if (_edit_version_infos.empty()) {
@@ -1482,6 +1482,7 @@ void TabletUpdates::_erase_expired_versions(int64_t expire_time,
     auto n = expire_list->size();
     _edit_version_infos.erase(_edit_version_infos.begin(), _edit_version_infos.begin() + n);
     _apply_version_idx -= n;
+    *min_readable_version = _edit_version_infos[0]->version.major();
 }
 
 bool TabletUpdates::check_rowset_id(const RowsetId& rowset_id) const {
@@ -1522,7 +1523,8 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
     }
     /// Remove expired versions from memory.
     std::vector<std::unique_ptr<EditVersionInfo>> expired_edit_version_infos;
-    _erase_expired_versions(expire_time, &expired_edit_version_infos);
+    int64_t min_readable_version = 0;
+    _erase_expired_versions(expire_time, &expired_edit_version_infos, &min_readable_version);
 
     if (!expired_edit_version_infos.empty()) {
         int64_t tablet_id = 0;
@@ -1554,29 +1556,21 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
             _rowset_stats.erase(id);
         }
 
-        /// Remove useless delete vectors.
-        auto max_expired_version = expired_edit_version_infos.back()->version.major();
+        // Remove useless delete vectors.
         auto meta_store = _tablet.data_dir()->get_meta();
-
-        size_t n_delvec_range = 0;
-        auto res = TabletMetaManager::list_del_vector(meta_store, tablet_id, max_expired_version + 1);
-        if (res.ok()) {
-            for (const auto& elem : *res) {
-                auto segment_id = elem.first;
-                auto end_version = elem.second;
-                (void)TabletMetaManager::delete_del_vector_range(meta_store, tablet_id, segment_id, 0, end_version);
-                VLOG(1) << "Removed delete vector tablet_id=" << tablet_id << " segment_id=" << segment_id
-                        << " start_version=0 end_version=" << end_version;
-            }
-            n_delvec_range = (*res).size();
+        auto res = TabletMetaManager::delete_del_vector_before_version(meta_store, tablet_id, min_readable_version);
+        size_t delvec_deleted = 0;
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to delete_del_vector_before_version tablet:" << tablet_id
+                         << " min_readable_version:" << min_readable_version << " msg:" << res.status();
         } else {
-            LOG(WARNING) << "Fail to list delete vector: " << res.status();
+            delvec_deleted = res.value();
         }
         LOG(INFO) << Substitute(
-                "remove_expired_versions $0 time:$1 max_expire_version:$2 deletes: #version:$3 #rowset:$4 "
-                "#delvecrange:$5",
-                _debug_version_info(true), expire_time, max_expired_version, expired_edit_version_infos.size(),
-                unused_rid.size(), n_delvec_range);
+                "remove_expired_versions $0 time:$1 min_readable_version:$2 deletes: #version:$3 #rowset:$4 "
+                "#delvec:$5",
+                _debug_version_info(true), expire_time, min_readable_version, expired_edit_version_infos.size(),
+                unused_rid.size(), delvec_deleted);
     }
     _remove_unused_rowsets();
 }
@@ -1980,6 +1974,7 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
 }
 
 void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
+    int64_t min_readable_version = 0;
     int64_t version = 0;
     bool has_pending = false;
     vector<uint32_t> rowsets;
@@ -1988,6 +1983,7 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
         if (_edit_version_infos.empty()) {
             LOG(WARNING) << "tablet delete when get_tablet_info_extra tablet:" << _tablet.tablet_id();
         } else {
+            min_readable_version = _edit_version_infos[0]->version.major();
             auto& last = _edit_version_infos.back();
             version = last->version.major();
             rowsets = last->rowsets;
@@ -2015,6 +2011,7 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
                                  << " rowset=" << err_rowsets;
     }
     info->__set_version(version);
+    info->__set_min_readable_version(min_readable_version);
     info->__set_version_miss(has_pending);
     info->__set_version_count(rowsets.size());
     info->__set_row_count(total_row);

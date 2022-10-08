@@ -209,5 +209,4 @@ public class AlterRoutineLoadStmtTest {
             }
         }
     }
-
 }

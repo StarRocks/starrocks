@@ -1092,7 +1092,10 @@ public class TabletScheduler extends LeaderDaemon {
         String replicaInfos = tabletCtx.getTablet().getReplicaInfos();
         // delete this replica from globalStateMgr.
         // it will also delete replica from tablet inverted index.
-        tabletCtx.deleteReplica(replica);
+        if (!tabletCtx.deleteReplica(replica)) {
+            LOG.warn("delete replica for tablet: {} failed backend {} not found replicas:{}", tabletCtx.getTabletId(),
+                    replica.getBackendId(), replicaInfos);
+        }
 
         if (force) {
             // send the delete replica task.

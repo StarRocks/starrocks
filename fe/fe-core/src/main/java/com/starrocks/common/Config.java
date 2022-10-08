@@ -559,9 +559,9 @@ public class Config extends ConfigBase {
 
     /**
      * modifies the version string returned by following situations:
-     *  select version();
-     *  handshake packet version.
-     *  global variable version.
+     * select version();
+     * handshake packet version.
+     * global variable version.
      */
     @ConfField
     public static String mysql_server_version = "5.1.0";
@@ -1096,6 +1096,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int tablet_sched_max_migration_task_sent_once = 1000;
+
+    /**
+     * tablet checker's check interval in seconds
+     */
+    @ConfField
+    public static int tablet_sched_checker_interval_seconds = 20;
 
     @Deprecated
     @ConfField(mutable = true)
