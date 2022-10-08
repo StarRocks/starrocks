@@ -6,7 +6,7 @@
 
 ## 语法
 
-```Plain Text
+```Haskell
 DATETIME CONVERT_TZ(DATE|DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)
 ```
 
@@ -30,7 +30,7 @@ DATETIME CONVERT_TZ(DATE|DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)
 
 ```Plain Text
 
-MySQL > select convert_tz('2019-08-01 13:21:03', 'Asia/Shanghai', 'America/Los_Angeles');
+select convert_tz('2019-08-01 13:21:03', 'Asia/Shanghai', 'America/Los_Angeles');
 +---------------------------------------------------------------------------+
 | convert_tz('2019-08-01 13:21:03', 'Asia/Shanghai', 'America/Los_Angeles') |
 +---------------------------------------------------------------------------+
@@ -42,7 +42,7 @@ MySQL > select convert_tz('2019-08-01 13:21:03', 'Asia/Shanghai', 'America/Los_A
 示例2：将东八区时间转化为洛杉矶时间。
 
 ```Plain Text
-MySQL > select convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles');
+select convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles');
 +--------------------------------------------------------------------+
 | convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles') |
 +--------------------------------------------------------------------+
@@ -54,7 +54,7 @@ MySQL > select convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles'
 示例3：将DATE类型的日期`2019-08-01`进行转化。
 
 ```Plain Text
-MySQL [(none)]> select convert_tz('2019-08-01', 'Asia/Shanghai', 'America/Los_Angeles');
+select convert_tz('2019-08-01', 'Asia/Shanghai', 'America/Los_Angeles');
 +------------------------------------------------------------------+
 | convert_tz('2019-08-01', 'Asia/Shanghai', 'America/Los_Angeles') |
 +------------------------------------------------------------------+

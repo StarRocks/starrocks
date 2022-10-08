@@ -15,7 +15,7 @@ INT DAYOFMONTH(DATETIME date)
 ## 示例
 
 ```Plain Text
-MySQL > select dayofmonth('1987-01-31');
+select dayofmonth('1987-01-31');
 +-----------------------------------+
 | dayofmonth('1987-01-31 00:00:00') |
 +-----------------------------------+

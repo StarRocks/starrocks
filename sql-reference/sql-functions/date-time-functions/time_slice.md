@@ -29,7 +29,7 @@ DATETIME time_slice(DATETIME dt, INTERVAL N type)
 示例一：将给定时间转化到以5秒为时间粒度周期的起始时刻。
 
 ```Plain Text
-mysql> select time_slice('2022-04-26 19:01:07', interval 5 second);
+select time_slice('2022-04-26 19:01:07', interval 5 second);
 +------------------------------------------------------+
 | time_slice('2022-04-26 19:01:07', INTERVAL 5 SECOND) |
 +------------------------------------------------------+
@@ -40,7 +40,7 @@ mysql> select time_slice('2022-04-26 19:01:07', interval 5 second);
 示例二：将给定时间转化到以5天为时间粒度周期的起始时刻。
 
 ```Plain Text
-mysql> select time_slice('0001-01-07 19:01:07', interval 5 day);
+select time_slice('0001-01-07 19:01:07', interval 5 day);
 +---------------------------------------------------+
 | time_slice('0001-01-07 19:01:07', INTERVAL 5 DAY) |
 +---------------------------------------------------+

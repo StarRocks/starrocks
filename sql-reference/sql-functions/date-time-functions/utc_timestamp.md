@@ -13,7 +13,7 @@ DATETIME UTC_TIMESTAMP()
 ## 示例
 
 ```Plain Text
-MySQL > select utc_timestamp(),utc_timestamp() + 1;
+select utc_timestamp(),utc_timestamp() + 1;
 +---------------------+---------------------+
 | utc_timestamp()     | utc_timestamp() + 1 |
 +---------------------+---------------------+

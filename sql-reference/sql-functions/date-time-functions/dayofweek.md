@@ -15,14 +15,14 @@ INT dayofweek(DATETIME date)
 ## 示例
 
 ```Plain Text
-MySQL > select dayofweek('2019-06-25');
+select dayofweek('2019-06-25');
 +----------------------------------+
 | dayofweek('2019-06-25 00:00:00') |
 +----------------------------------+
 |                                3 |
 +----------------------------------+
 
-MySQL > select dayofweek(cast(20190625 as date));
+select dayofweek(cast(20190625 as date));
 +-----------------------------------+
 | dayofweek(CAST(20190625 AS DATE)) |
 +-----------------------------------+
