@@ -23,7 +23,7 @@ public:
     void close(RuntimeState* state) override;
 
     // Control flow
-    bool is_finished() const override { return _is_finished; }
+    bool is_finished() const override { return _is_finished && _lookup_join_context->is_finished(); }
     bool has_output() const override { return false; }
     bool need_input() const override { return !is_finished(); }
     Status set_finishing(RuntimeState* state) override;
