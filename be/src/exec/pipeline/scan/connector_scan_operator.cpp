@@ -15,7 +15,9 @@ namespace starrocks::pipeline {
 
 ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop,
                                                            ChunkBufferLimiterPtr buffer_limiter)
-        : ScanOperatorFactory(id, scan_node), _chunk_buffer(BalanceStrategy::kDirect, dop, std::move(buffer_limiter)) {}
+        : ScanOperatorFactory(id, scan_node),
+          _chunk_buffer(scan_node->is_shared_scan_enabled() ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect,
+                        dop, std::move(buffer_limiter)) {}
 
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
@@ -41,6 +43,8 @@ ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t i
         : ScanOperator(factory, id, driver_sequence, dop, scan_node) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
+    bool shared_scan = _scan_node->is_shared_scan_enabled();
+    _unique_metrics->add_info_string("SharedScan", shared_scan ? "True" : "False");
     return Status::OK();
 }
 
