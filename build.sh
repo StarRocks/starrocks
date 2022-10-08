@@ -118,6 +118,15 @@ fi
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
+# detect cpuinfo
+if [[ -z $(grep -o 'avx[^ ]*' /proc/cpuinfo) ]]; then
+    USE_AVX2=OFF
+fi
+
+if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
+    USE_SSE4_2=OFF
+fi
+
 if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
 	ENABLE_QUERY_DEBUG_TRACE=OFF
 fi
