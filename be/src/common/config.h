@@ -802,4 +802,17 @@ CONF_Int32(internal_service_async_thread_num, "10");
 CONF_Int64(max_length_for_to_base64, "200000");
 // Used by bitmap functions
 CONF_Int64(max_length_for_bitmap_function, "1000000");
+<<<<<<< HEAD
+=======
+
+CONF_Bool(block_cache_enable, "false");
+CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
+CONF_Int64(block_cache_disk_size, "21474836480"); // 20GB
+//CONF_Int64(block_cache_block_size, "4194304");    // 4MB
+CONF_Int64(block_cache_block_size, "1048576");
+CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
+
+CONF_mInt64(l0_l1_merge_ratio, "10");
+
+>>>>>>> db439ca15 ([BugFix] Fix l1 file size keep growing (#11867))
 } // namespace starrocks::config
