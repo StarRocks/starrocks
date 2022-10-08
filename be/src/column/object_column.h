@@ -188,7 +188,7 @@ public:
     std::string debug_string() const override {
         std::stringstream ss;
         ss << "[";
-        size_t size = this->size();
+        int size = this->size();
         for (int i = 0; i < size - 1; ++i) {
             ss << debug_item(i) << ", ";
         }
