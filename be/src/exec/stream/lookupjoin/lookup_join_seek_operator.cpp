@@ -242,12 +242,11 @@ Status LookupJoinSeekOperator::_init_scanner_columns(std::vector<uint32_t>& scan
 Status LookupJoinSeekOperator::_prepare_tablet_reader(RuntimeState* state) {
     // init tablet
     auto scan_ranges = morsel_queue()->olap_scan_ranges();
-    VLOG(1) << "scan range size:" << scan_ranges.size() << ", _version:" << _version;
 
     TInternalScanRange* scan_range;
     // TODO: Throw exception here.
     if (scan_ranges.size() != 1) {
-        VLOG(1) << "!!!! scan range size:" << scan_ranges.size() << ", _version:" << _version;
+        VLOG(1) << "!!!! scan range size:" << scan_ranges.size();
         return Status::Corruption("scan range's size illegal: " + std::to_string(scan_ranges.size()));
     }
     scan_range = scan_ranges[0];
