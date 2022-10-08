@@ -315,6 +315,9 @@ private:
     // threads to run tablet checkpoint
     std::vector<std::thread> _tablet_checkpoint_threads;
 
+    std::mutex _trash_sweeper_mutex;
+    std::condition_variable _trash_sweeper_cv;
+
     // For tablet and disk-stat report
     std::mutex _report_mtx;
     std::condition_variable _report_cv;

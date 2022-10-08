@@ -1,14 +1,14 @@
 # curdate
 
-## description
+## Description
 
-### Syntax
+Obtains the current date and returns a value of the DATE type.
+
+## Syntax
 
 ```Haskell
 DATE CURDATE()
 ```
-
-Obtain the current date and return in Date type.
 
 ## Examples
 
@@ -27,7 +27,3 @@ MySQL > SELECT CURDATE() + 0;
 |      20191220 |
 +---------------+
 ```
-
-## keyword
-
-CURDATE

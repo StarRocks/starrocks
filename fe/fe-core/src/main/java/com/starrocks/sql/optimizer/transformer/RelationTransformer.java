@@ -16,6 +16,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
@@ -420,6 +421,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             scanOperator = new LogicalHiveScanOperator(node.getTable(), node.getTable().getType(),
                     colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.ICEBERG.equals(node.getTable().getType())) {
+            ((IcebergTable) node.getTable()).refreshTable();
             scanOperator = new LogicalIcebergScanOperator(node.getTable(), node.getTable().getType(),
                     colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.HUDI.equals(node.getTable().getType())) {

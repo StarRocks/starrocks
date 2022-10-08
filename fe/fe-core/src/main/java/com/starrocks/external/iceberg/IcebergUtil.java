@@ -81,10 +81,7 @@ public class IcebergUtil {
      * @param table
      * @return Optional<Snapshot>
      */
-    public static Optional<Snapshot> getCurrentTableSnapshot(Table table, boolean refresh) {
-        if (refresh) {
-            refreshTable(table);
-        }
+    public static Optional<Snapshot> getCurrentTableSnapshot(Table table) {
         return Optional.ofNullable(table.currentSnapshot());
     }
 
@@ -99,12 +96,7 @@ public class IcebergUtil {
      */
     public static TableScan getTableScan(Table table,
                                          Snapshot snapshot,
-                                         List<Expression> icebergPredicates,
-                                         boolean refresh) {
-        if (refresh) {
-            refreshTable(table);
-        }
-
+                                         List<Expression> icebergPredicates) {
         TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId()).includeColumnStats();
         Expression filterExpressions = Expressions.alwaysTrue();
         if (!icebergPredicates.isEmpty()) {
@@ -114,7 +106,7 @@ public class IcebergUtil {
         return tableScan.filter(filterExpressions);
     }
 
-    private static void refreshTable(Table table) {
+    public static void refreshTable(Table table) {
         try {
             if (table instanceof BaseTable) {
                 BaseTable baseTable = (BaseTable) table;

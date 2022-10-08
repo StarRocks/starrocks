@@ -5,9 +5,18 @@
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gutil/strings/substitute.h"
+#include "util/compression_utils.h"
 #include "util/utf8_check.h"
 
 namespace starrocks::vectorized {
+
+static CompressionTypePB return_compression_type_from_filename(const std::string& filename) {
+    ssize_t end = filename.size() - 1;
+    while (end >= 0 && filename[end] != '.' && filename[end] != '/') end--;
+    if (end == -1 || filename[end] == '/') return NO_COMPRESSION;
+    const std::string& ext = filename.substr(end + 1);
+    return CompressionUtils::to_compression_pb(ext);
+}
 
 class HdfsScannerCSVReader : public CSVReader {
 public:
@@ -104,6 +113,11 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
 }
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
+    CompressionTypePB compression_type = return_compression_type_from_filename(_scanner_params.path);
+    if (compression_type != CompressionTypePB::NO_COMPRESSION) {
+        return Status::InternalError(strings::Substitute("Unsupported compress file format $0", _scanner_params.path));
+    }
+
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     for (int i = 0; i < _scanner_params.materialize_slots.size(); i++) {
@@ -236,6 +250,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
 
 Status HdfsTextScanner::_create_or_reinit_reader() {
     const THdfsScanRange* scan_range = _scanner_params.scan_ranges[_current_range_index];
+
     if (_current_range_index == 0) {
         _reader =
                 std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter,
