@@ -2980,6 +2980,7 @@ public class Coordinator {
                     commonParams.setEnable_shared_scan(
                             sessionVariable.isEnableSharedScan() && fragment.isEnableSharedScan());
                     commonParams.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
+                    commonParams.params.setEnable_exchange_perf(sessionVariable.isEnableExchangePerf());
 
                     boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                     commonParams.setEnable_resource_group(enableResourceGroup);
