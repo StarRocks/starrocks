@@ -481,6 +481,12 @@ public class Optimizer {
             if (!mv.isActive()) {
                 continue;
             }
+
+            Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefresh();
+            if (!partitionNamesToRefresh.isEmpty()) {
+                continue;
+            }
+
             MaterializationContext materializationContext = mv.getMaterializationContext();
             if (materializationContext != null) {
                 context.addCandidateMvs(materializationContext);

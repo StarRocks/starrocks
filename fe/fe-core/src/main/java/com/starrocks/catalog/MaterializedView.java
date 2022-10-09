@@ -31,6 +31,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializationContext;
@@ -647,5 +648,27 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         }
 >>>>>>> 2a4e4e530 (fix rewrite bug)
         return this.materializationContext.get();
+    }
+
+    public Set<String> getPartitionNamesToRefresh() {
+        Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
+
+        PartitionInfo partitionInfo = getPartitionInfo();
+        if (partitionInfo instanceof SinglePartitionInfo) {
+            // for non-partitioned materialized view
+            List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
+            for (BaseTableInfo tableInfo : baseTableInfos) {
+                Table table = tableInfo.getTable();
+                Set<String> partitionNames = getNeedRefreshPartitionNames(table);
+                if (!partitionNames.isEmpty()) {
+                    needRefreshMvPartitionNames.addAll(getPartitionNames());
+                }
+            }
+        } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            // TODO: add logic for partitioned mv
+        } else {
+            throw new DmlException("unsupported partition info type:" + partitionInfo.getClass().getName());
+        }
+        return needRefreshMvPartitionNames;
     }
 }
