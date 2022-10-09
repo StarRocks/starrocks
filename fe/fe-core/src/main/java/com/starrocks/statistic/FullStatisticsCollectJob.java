@@ -43,6 +43,13 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
         long totalCollectSQL = collectSQLList.size();
 
+        // First, the collection task is divided into several small tasks according to the column name and partition,
+        // and then the multiple small tasks are aggregated into several tasks
+        // that will actually be run according to the configured parallelism, and are connected by union all
+        // Because each union will run independently, if the number of unions is greater than the degree of parallelism,
+        // dop will be set to 1 to meet the requirements of the degree of parallelism.
+        // If the number of unions is less than the degree of parallelism,
+        // dop should be adjusted appropriately to use enough cpu cores
         for (List<String> sqlUnion : collectSQLList) {
             if (sqlUnion.size() < parallelism) {
                 context.getSessionVariable().setPipelineDop(parallelism / sqlUnion.size());
