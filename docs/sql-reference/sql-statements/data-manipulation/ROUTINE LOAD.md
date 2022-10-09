@@ -4,7 +4,7 @@
 
 Routine Load can stream Apache Kafka® events into StarRocks. It is an asynchronuous loading submitted by using mysql protocol.
 
-Currently Routine Load supports to load CSV and json data from Kafka. As for security measures, routine load support to connect to kafka without authentication，encryption and authentication using SSL, as well as authentication using SASL.
+Currently, Routine Load supports to load CSV and json data from Kafka. As for security measures, Routine Load can connect to Kafka without authentication，encryption and authentication using SSL, as well as authentication using SASL.
 
 This topic introduces CREATE ROUTINE LOAD‘s syntax, parameters and examples.
 
