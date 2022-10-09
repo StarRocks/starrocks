@@ -186,7 +186,6 @@ Status DeltaWriterImpl::finish() {
 
     // TODO: move file type checking to a common place
     auto is_seg_file = [](const std::string& name) -> bool { return HasSuffixString(name, ".dat"); };
-    auto is_del_file = [](const std::string& name) -> bool { return HasSuffixString(name, ".del"); };
 
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(_tablet_writer->finish());
@@ -198,8 +197,6 @@ Status DeltaWriterImpl::finish() {
     for (auto& f : _tablet_writer->files()) {
         if (is_seg_file(f)) {
             op_write->mutable_rowset()->add_segments(std::move(f));
-        } else if (is_del_file(f)) {
-            op_write->add_deletes(std::move(f));
         } else {
             return Status::InternalError(fmt::format("unknown file {}", f));
         }

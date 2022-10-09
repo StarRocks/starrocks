@@ -215,7 +215,6 @@ TEST_F(AsyncDeltaWriterTest, test_write) {
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(2 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
@@ -310,7 +309,6 @@ TEST_F(AsyncDeltaWriterTest, test_write_concurrently) {
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(kNumThreads * kChunksPerThread * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
