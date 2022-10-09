@@ -191,24 +191,7 @@ WITH BROKER broker_name
 
         max_filter_ratio：最大容忍可过滤（数据不规范等原因）的数据比例。默认零容忍。
 
-        exec_mem_limit：  导入内存限制。默认为 2GB。单位为字节。
-
-        strict mode：     是否对数据进行严格限制。默认为 false。
-
-        timezone:         指定某些受时区影响的函数的时区，如 strftime/alignment_timestamp/from_unixtime 等等，具体请查阅 [时区](/using_starrocks/timezone.md) 文档。如果不指定，则使用 "Asia/Shanghai" 时区。
-
-    6. 导入数据格式样例
-
-        整型类（TINYINT/SMALLINT/INT/BIGINT/LARGEINT）：1, 1000, 1234
-
-        浮点类（FLOAT/DOUBLE/DECIMAL）：1.1, 0.23, .356
-
-        日期类（DATE/DATETIME）：2017-10-03, 2017-06-13 12: 34: 03。
-        （注：如果是其他日期格式，可以在导入命令中，使用 strftime 或者 time_format 函数进行转换）
-
-        字符串类（CHAR/VARCHAR）："I am a student", "a"
-
-        NULL 值：\N
+  指定导入作业所使用的时区。默认为 `Asia/Shanghai` 时区。该参数会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](/using_starrocks/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](/using_starrocks/timezone.md)”中所述的会话级时区。
 
 ## 示例
 
