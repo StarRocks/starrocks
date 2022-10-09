@@ -386,7 +386,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitExportStmt(ExportStmt statement, ConnectContext context) {
+        public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
             TableName tblName = statement.getTblName();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
                     tblName.getDb(), tblName.getTbl(),

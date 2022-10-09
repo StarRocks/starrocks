@@ -597,19 +597,19 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitExportStmt(ExportStmt statement, ConnectContext context) {
+        public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
             ExportStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
-        public Void visitShowExportStmt(ShowExportStmt statement, ConnectContext context) {
+        public Void visitShowExportStatement(ShowExportStmt statement, ConnectContext context) {
             ExportStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
-        public Void visitCancelExportStmt(CancelExportStmt statement, ConnectContext context) {
+        public Void visitCancelExportStatement(CancelExportStmt statement, ConnectContext context) {
             ExportStmtAnalyzer.analyze(statement, context);
             return null;
         }
