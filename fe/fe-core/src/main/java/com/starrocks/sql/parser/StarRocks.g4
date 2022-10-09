@@ -399,9 +399,9 @@ showAuthenticationStatement
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
-    : explainDesc? queryBody outfile?;
+    : explainDesc? queryRelation outfile?;
 
-queryBody
+queryRelation
     : withClause? queryNoWith
     ;
 
@@ -410,23 +410,19 @@ withClause
     ;
 
 queryNoWith
-    :queryTerm (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
-    ;
-
-queryTerm
-    : queryPrimary                                                             #queryTermDefault
-    | left=queryTerm operator=INTERSECT setQuantifier? right=queryTerm         #setOperation
-    | left=queryTerm operator=(UNION | EXCEPT | MINUS)
-        setQuantifier? right=queryTerm                                         #setOperation
+    : queryPrimary (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 queryPrimary
-    : querySpecification                           #queryPrimaryDefault
-    | subquery                                     #subqueryPrimary
+    : querySpecification                                                                    #queryPrimaryDefault
+    | subquery                                                                              #queryWithParentheses
+    | left=queryPrimary operator=INTERSECT setQuantifier? right=queryPrimary                #setOperation
+    | left=queryPrimary operator=(UNION | EXCEPT | MINUS)
+        setQuantifier? right=queryPrimary                                                   #setOperation
     ;
 
 subquery
-    : '(' queryBody  ')'
+    : '(' queryRelation ')'
     ;
 
 rowConstructor
@@ -467,7 +463,7 @@ groupingSet
     ;
 
 commonTableExpression
-    : name=identifier (columnAliases)? AS '(' queryBody ')'
+    : name=identifier (columnAliases)? AS '(' queryRelation ')'
     ;
 
 setQuantifier
@@ -495,7 +491,7 @@ relationPrimary
         AS? alias=identifier columnAliases?)? bracketHint?                              #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
-    | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryRelation
+    | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
     | qualifiedName '(' expression (',' expression)* ')'
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
@@ -591,7 +587,7 @@ booleanExpression
     : predicate                                                                           #booleanExpressionDefault
     | booleanExpression IS NOT? NULL                                                      #isNull
     | left = booleanExpression comparisonOperator right = predicate                       #comparison
-    | booleanExpression comparisonOperator '(' queryBody ')'                              #scalarSubquery
+    | booleanExpression comparisonOperator '(' queryRelation ')'                          #scalarSubquery
     ;
 
 predicate
@@ -600,7 +596,7 @@ predicate
 
 predicateOperations [ParserRuleContext value]
     : NOT? IN '(' expression (',' expression)* ')'                                        #inList
-    | NOT? IN '(' queryBody ')'                                                           #inSubquery
+    | NOT? IN '(' queryRelation ')'                                                       #inSubquery
     | NOT? BETWEEN lower = valueExpression AND upper = predicate                          #between
     | NOT? (LIKE | RLIKE | REGEXP) pattern=valueExpression                                #like
     ;
@@ -632,7 +628,7 @@ primaryExpression
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
     | '(' expression ')'                                                                  #parenthesizedExpression
-    | EXISTS '(' queryBody ')'                                                            #exists
+    | EXISTS '(' queryRelation ')'                                                        #exists
     | subquery                                                                            #subqueryExpression
     | CAST '(' expression AS type ')'                                                     #cast
     | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
