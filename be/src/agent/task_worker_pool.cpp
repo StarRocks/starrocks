@@ -21,13 +21,13 @@
 
 #include "agent/task_worker_pool.h"
 
-#include <atomic>
 #include <boost/lexical_cast.hpp>
 #include <chrono>
 #include <condition_variable>
 #include <ctime>
 #include <sstream>
 #include <string>
+#include <atomic>
 
 #include "agent/agent_server.h"
 #include "agent/finish_task.h"
@@ -63,6 +63,8 @@
 namespace starrocks {
 
 const size_t PUBLISH_VERSION_BATCH_SIZE = 10;
+
+std::atomic<int64_t> g_report_version(time(nullptr) * 10000);
 
 using std::swap;
 
