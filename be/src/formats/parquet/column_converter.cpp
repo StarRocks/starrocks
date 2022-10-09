@@ -200,14 +200,18 @@ public:
         _type_length = type_length;
     }
 
-    template <int BINSZ, DecimalScaleType scale_type, typename T>
+    template <int BINSZ, DecimalScaleType scale_type, typename T, bool has_null>
     void t_convert(size_t size, uint8_t* dst_null_data, uint8_t* src_null_data, DecimalType* dst_data,
-                   const uint8* src_data, bool* has_null) {
+                   const uint8* src_data) {
+        if constexpr (!has_null) {
+            memset(dst_null_data, 0x0, size);
+        } else {
+            memcpy(dst_null_data, src_null_data, size);
+        }
+
         for (size_t i = 0; i < size; i++) {
-            dst_null_data[i] = src_null_data[i];
-            if (dst_null_data[i]) {
-                *has_null = true;
-                continue;
+            if constexpr (has_null) {
+                if (dst_null_data[i]) continue;
             }
             // When Decimal in parquet is stored in byte arrays, binary and fixed,
             // the unscaled number must be encoded as two's complement using big-endian byte order.
@@ -262,14 +266,19 @@ public:
             return Status::OK();
         }
 
-        bool has_null = false;
+        bool has_null = src_nullable_column->has_null();
 
         // For calling `src_data.get_bytes().data()` , we don't need to call `build_slices` underneath.
         // And notice bytes are allocated by `RawVectorPad16`, there will be extra 16 bytes.
-#define M(SZ, K, T)                                                                                             \
-    case SZ:                                                                                                    \
-        t_convert<SZ, K, T>(size, dst_null_data.data(), src_null_data.data(), dst_data.data(), src_data.data(), \
-                            &has_null);                                                                         \
+#define M(SZ, K, T)                                                                                       \
+    case SZ:                                                                                              \
+        if (has_null) {                                                                                   \
+            t_convert<SZ, K, T, true>(size, dst_null_data.data(), src_null_data.data(), dst_data.data(),  \
+                                      src_data.data());                                                   \
+        } else {                                                                                          \
+            t_convert<SZ, K, T, false>(size, dst_null_data.data(), src_null_data.data(), dst_data.data(), \
+                                       src_data.data());                                                  \
+        }                                                                                                 \
         break;
 
 #define MX(T)          \
