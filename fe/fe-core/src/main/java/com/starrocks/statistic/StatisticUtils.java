@@ -48,13 +48,13 @@ public class StatisticUtils {
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
         context.getSessionVariable().setReportSuccess(false);
-        int parallel = context.getSessionVariable().getStatisticCollectParallelism();
         if (null != ConnectContext.get()) {
             // from current session, may execute analyze stmt
-            parallel = ConnectContext.get().getSessionVariable().getStatisticCollectParallelism();
+            context.getSessionVariable().setStatisticCollectParallelism(
+                    ConnectContext.get().getSessionVariable().getStatisticCollectParallelism());
         }
+
         context.getSessionVariable().setParallelExecInstanceNum(1);
-        context.getSessionVariable().setPipelineDop(parallel);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
@@ -107,6 +107,12 @@ public class StatisticUtils {
             if (table == null) {
                 return false;
             }
+<<<<<<< HEAD
+=======
+            if (table.isLakeTable()) {
+                continue;
+            }
+>>>>>>> 39946d53d ([Enhancement] Modify Statistics Resource Usage Policy (#11728))
 
             // check replicate miss
             for (Partition partition : table.getPartitions()) {

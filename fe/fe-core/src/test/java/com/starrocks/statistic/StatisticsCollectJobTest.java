@@ -330,18 +330,13 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                 StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap());
 
-        List<String> collectSqlList = collectJob.buildCollectSQLList();
-        Assert.assertEquals(1, collectSqlList.size());
-        assertContains(collectSqlList.get(0), "v1", "v2", "v3", "v4", "v5");
-        assertContains(collectSqlList.get(0), "p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9");
-
-        Config.statistic_collect_max_row_count_per_query = 10;
-        collectSqlList = collectJob.buildCollectSQLList();
+        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
         Assert.assertEquals(50, collectSqlList.size());
 
-        Config.statistic_collect_max_row_count_per_query = 500;
-        collectSqlList = collectJob.buildCollectSQLList();
-        Assert.assertEquals(37, collectSqlList.size());
+        collectSqlList = collectJob.buildCollectSQLList(128);
+        Assert.assertEquals(1, collectSqlList.size());
+        assertContains(collectSqlList.get(0).toString(), "v1", "v2", "v3", "v4", "v5");
+        assertContains(collectSqlList.get(0).toString(), "p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9");
         Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v1`)"));
         Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v3`)"));
         Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v5`)"));
@@ -349,24 +344,15 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition p1"));
         Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition p9"));
 
-        Config.statistic_collect_max_row_count_per_query = 1000;
-        collectSqlList = collectJob.buildCollectSQLList();
-        Assert.assertEquals(21, collectSqlList.size());
-        Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition p0"));
-        Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition p1"));
-        Assert.assertEquals(5, StringUtils.countMatches(collectSqlList.toString(), "partition p9"));
-        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v1`)"));
-        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v3`)"));
-        Assert.assertEquals(10, StringUtils.countMatches(collectSqlList.toString(), "COUNT(`v5`)"));
-
+        collectSqlList = collectJob.buildCollectSQLList(15);
+        Assert.assertEquals(4, collectSqlList.size());
 
         for (Partition p : t0p.getAllPartitions()) {
             p.updateVisibleVersion(2);
             p.getBaseIndex().setRowCount(0);
         }
 
-        Config.statistic_collect_max_row_count_per_query = 1000000000;
-        collectSqlList = collectJob.buildCollectSQLList();
+        collectSqlList = collectJob.buildCollectSQLList(1);
         Assert.assertEquals(50, collectSqlList.size());
     }
 }
