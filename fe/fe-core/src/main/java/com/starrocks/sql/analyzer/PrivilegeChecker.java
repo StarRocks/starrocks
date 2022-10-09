@@ -656,7 +656,7 @@ public class PrivilegeChecker {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
                 }
             } else {
-                if (stmt.getPrivType().equals("TABLE")) {
+                if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
                     TablePattern tblPattern = stmt.getTblPattern();
                     if (tblPattern.getPrivLevel() == Auth.PrivLevel.GLOBAL) {
                         if (!GlobalStateMgr.getCurrentState().getAuth()
