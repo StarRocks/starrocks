@@ -158,6 +158,7 @@ public:
     // for example, LocalExchangeSinkOperator, LocalExchangeSourceOperator
     // 2. (s_pseudo_plan_node_id_upper_bound, -1] is for operator which is in the query's plan
     // for example, ResultSink
+    static const int32_t s_pseudo_plan_node_id_for_export_sink;
     static const int32_t s_pseudo_plan_node_id_for_olap_table_sink;
     static const int32_t s_pseudo_plan_node_id_for_result_sink;
     static const int32_t s_pseudo_plan_node_id_upper_bound;

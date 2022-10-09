@@ -17,6 +17,7 @@
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
@@ -30,6 +31,7 @@
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/export_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/result_sink.h"
 #include "util/debug/query_trace.h"
@@ -710,6 +712,13 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         runtime_state->set_num_per_fragment_instances(request.common().params.num_senders);
         OpFactoryPtr op =
                 std::make_shared<OlapTableSinkOperatorFactory>(context->next_operator_id(), datasink, fragment_ctx);
+        fragment_ctx->pipelines().back()->add_op_factory(op);
+    } else if (typeid(*datasink) == typeid(starrocks::ExportSink)) {
+        ExportSink* export_sink = down_cast<starrocks::ExportSink*>(datasink.get());
+        auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+        auto output_expr = export_sink->get_output_expr();
+        OpFactoryPtr op = std::make_shared<ExportSinkOperatorFactory>(
+                context->next_operator_id(), request.output_sink().export_sink, export_sink->get_output_expr(), dop);
         fragment_ctx->pipelines().back()->add_op_factory(op);
     }
 

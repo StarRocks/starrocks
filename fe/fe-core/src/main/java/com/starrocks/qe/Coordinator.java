@@ -30,6 +30,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
@@ -46,6 +47,7 @@ import com.starrocks.common.util.ListUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
@@ -282,7 +284,12 @@ public class Coordinator {
         this.isBlockQuery = true;
         this.jobId = jobId;
         this.queryId = queryId;
-        this.connectContext = null;
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setQualifiedUser(Auth.ROOT_USER);
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectContext.getSessionVariable().setEnablePipelineEngine(true);
+        connectContext.getSessionVariable().setPipelineDop(0);
+        this.connectContext = connectContext;
         this.descTable = descTable.toThrift();
         this.fragments = fragments;
         this.scanNodes = scanNodes;
@@ -306,7 +313,7 @@ public class Coordinator {
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
 
-        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+        this.usePipeline = this.fragments.stream().allMatch(PlanFragment::canUsePipeline);
     }
 
     // Used for broker load task coordinator
