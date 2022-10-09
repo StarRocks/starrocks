@@ -264,18 +264,18 @@ public class RuleSet {
                 new PushDownApplyLeftRule()
         ));
 
-        REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE_STAGE_1, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE_COMMON, ImmutableList.of(
                 new PushDownApplyProjectRule(),
                 new PushDownApplyFilterRule(),
                 new PushDownApplyAggFilterRule(),
                 new PushDownApplyAggProjectFilterRule()
         ));
 
-        REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE_STAGE_2, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE_TO_WINDOW, ImmutableList.of(
                 new ScalarApply2AnalyticRule()
         ));
 
-        REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE_STAGE_3, ImmutableList.of(
+        REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE_TO_JOIN, ImmutableList.of(
                 new QuantifiedApply2JoinRule(),
                 new ExistentialApply2JoinRule(),
                 new ScalarApply2JoinRule(),

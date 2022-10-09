@@ -142,9 +142,9 @@ public class Optimizer {
 
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.AGGREGATE_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_SUBQUERY);
-        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE_STAGE_1);
-        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE_STAGE_2);
-        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE_STAGE_3);
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE_COMMON);
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE_TO_WINDOW);
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE_TO_JOIN);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new ApplyExceptionRule());
         CTEUtils.collectCteOperators(tree, context);
 
