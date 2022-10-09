@@ -61,6 +61,7 @@ bool BalancedChunkBuffer::try_get(int buffer_index, vectorized::ChunkPtr* output
 }
 
 bool BalancedChunkBuffer::put(int buffer_index, vectorized::ChunkPtr chunk, ChunkBufferTokenPtr chunk_token) {
+    if (chunk->num_rows() == 0) return true;
     if (_strategy == BalanceStrategy::kDirect) {
         return _get_sub_buffer(buffer_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else if (_strategy == BalanceStrategy::kRoundRobin) {
@@ -69,6 +70,8 @@ bool BalancedChunkBuffer::put(int buffer_index, vectorized::ChunkPtr chunk, Chun
         // output operator, which would introduce some extra overhead
         int target_index = _output_index.fetch_add(1);
         target_index %= _output_operators;
+        // VLOG_FILE << "[XXX] output_ops = " << _output_operators << ", target_index = " << target_index
+        //           << ", size = " << chunk->num_rows();
         return _get_sub_buffer(target_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else {
         CHECK(false) << "unreachable";
