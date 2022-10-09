@@ -331,14 +331,8 @@ public:
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, count, _data.size));
         }
-        std::vector<Slice> slices;
-        slices.resize(count);
-        for (int i = 0; i < count; ++i) {
-            slices[i] = Slice(_data.data + _offset, _type_length);
-            _offset += _type_length;
-        }
-
-        dst->append_continuous_strings(slices);
+        dst->append_continuous_fixed_length_strings(_data.data + _offset, count, _type_length);
+        _offset += count * _type_length;
         return Status::OK();
     }
 
