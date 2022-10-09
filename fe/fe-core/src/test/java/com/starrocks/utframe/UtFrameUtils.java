@@ -650,15 +650,27 @@ public class UtFrameUtils {
             followerJournalQueue.clear();
         }
 
-        public static synchronized Writable replayNextJournal() throws InterruptedException, IOException {
+        public static synchronized Writable replayNextJournal(short expectCode) throws Exception {
             assert (followerJournalQueue != null);
-            DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
-            DataInputStream dis = new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
-            JournalEntity je = new JournalEntity();
-            je.readFields(dis);
-            Writable ret = je.getData();
-            dis.close();
-            return ret;
+            while (true) {
+                if (followerJournalQueue.isEmpty()) {
+                    throw new Exception("cannot replay next journal because queue is empty!");
+                }
+                DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
+                DataInputStream dis =
+                        new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
+                try {
+                    JournalEntity je = new JournalEntity();
+                    je.readFields(dis);
+                    if (je.getOpCode() == expectCode) {
+                        return je.getData();
+                    } else {
+                        System.err.println("ignore irrelevant journal id " + je.getOpCode());
+                    }
+                } finally {
+                    dis.close();
+                }
+            }
         }
 
         protected static synchronized void tearDown() {

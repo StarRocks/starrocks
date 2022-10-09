@@ -9,6 +9,8 @@ import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitor;
@@ -98,6 +100,17 @@ public class PrivilegeStmtAnalyzerV2 {
             } else {
                 // TODO
                 throw new SemanticException("not supported");
+            }
+            try {
+                PrivilegeManager privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
+                stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType()));
+                stmt.setActionList(privilegeManager.analyzeActionSet(stmt.getPrivType(), stmt.getTypeId(), stmt.getPrivList()));
+                stmt.setObject(privilegeManager.analyzeObject(stmt.getPrivType(), stmt.getPrivilegeObjectNameTokenList()));
+                privilegeManager.validateGrant(stmt.getTypeId(), stmt.getActionList(), stmt.getObject());
+            } catch (PrivilegeException e) {
+                SemanticException exception = new SemanticException(e.getMessage());
+                exception.initCause(e);
+                throw exception;
             }
             return null;
         }

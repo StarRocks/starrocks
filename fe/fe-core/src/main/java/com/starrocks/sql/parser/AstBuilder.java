@@ -320,6 +320,7 @@ import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UnitBoundary;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
@@ -2931,7 +2932,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitQueryStatement(StarRocksParser.QueryStatementContext context) {
-        QueryRelation queryRelation = (QueryRelation) visit(context.queryBody());
+        QueryRelation queryRelation = (QueryRelation) visit(context.queryRelation());
         QueryStatement queryStatement = new QueryStatement(queryRelation);
         if (context.outfile() != null) {
             queryStatement.setOutFileClause((OutFileClause) visit(context.outfile()));
@@ -2945,7 +2946,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitQueryBody(StarRocksParser.QueryBodyContext context) {
+    public ParseNode visitQueryRelation(StarRocksParser.QueryRelationContext context) {
         QueryRelation queryRelation = (QueryRelation) visit(context.queryNoWith());
 
         List<CTERelation> withQuery = new ArrayList<>();
@@ -2969,7 +2970,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             columnNames = columns.stream().map(Identifier::getValue).collect(toList());
         }
 
-        QueryRelation queryRelation = (QueryRelation) visit(context.queryBody());
+        QueryRelation queryRelation = (QueryRelation) visit(context.queryRelation());
         // Regenerate cteID when generating plan
         return new CTERelation(
                 RelationId.of(queryRelation).hashCode(),
@@ -2980,7 +2981,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitQueryNoWith(StarRocksParser.QueryNoWithContext context) {
-
         List<OrderByElement> orderByElements = new ArrayList<>();
         if (context.ORDER() != null) {
             orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
@@ -2991,10 +2991,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             limitElement = (LimitElement) visit(context.limitElement());
         }
 
-        QueryRelation term = (QueryRelation) visit(context.queryTerm());
-        term.setOrderBy(orderByElements);
-        term.setLimit(limitElement);
-        return term;
+        QueryRelation queryRelation = (QueryRelation) visit(context.queryPrimary());
+        queryRelation.setOrderBy(orderByElements);
+        queryRelation.setLimit(limitElement);
+        return queryRelation;
     }
 
     @Override
@@ -3433,42 +3433,46 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSubquery(StarRocksParser.SubqueryContext context) {
-        return new SubqueryRelation(new QueryStatement((QueryRelation) visit(context.queryBody())));
+        return visit(context.queryRelation());
     }
 
     @Override
-    public ParseNode visitSubqueryPrimary(StarRocksParser.SubqueryPrimaryContext context) {
-        SubqueryRelation subqueryRelation = (SubqueryRelation) visit(context.subquery());
-        return subqueryRelation.getQueryStatement().getQueryRelation();
+    public ParseNode visitQueryWithParentheses(StarRocksParser.QueryWithParenthesesContext context) {
+        QueryRelation relation = (QueryRelation) visit(context.subquery());
+        return new SubqueryRelation(new QueryStatement(relation));
     }
 
     @Override
-    public ParseNode visitSubqueryRelation(StarRocksParser.SubqueryRelationContext context) {
-        SubqueryRelation subqueryRelation = (SubqueryRelation) visit(context.subquery());
+    public ParseNode visitSubqueryWithAlias(StarRocksParser.SubqueryWithAliasContext context) {
+        QueryRelation queryRelation = (QueryRelation) visit(context.subquery());
+        SubqueryRelation subqueryRelation = new SubqueryRelation(new QueryStatement(queryRelation));
+
         if (context.alias != null) {
             Identifier identifier = (Identifier) visit(context.alias);
             subqueryRelation.setAlias(new TableName(null, identifier.getValue()));
+        } else {
+            subqueryRelation.setAlias(new TableName(null, null));
         }
         return subqueryRelation;
     }
 
     @Override
     public ParseNode visitSubqueryExpression(StarRocksParser.SubqueryExpressionContext context) {
-        SubqueryRelation subqueryRelation = (SubqueryRelation) visit(context.subquery());
-        return new Subquery(subqueryRelation.getQueryStatement());
+        QueryRelation queryRelation = (QueryRelation) visit(context.subquery());
+        return new Subquery(new QueryStatement(queryRelation));
     }
 
     @Override
     public ParseNode visitInSubquery(StarRocksParser.InSubqueryContext context) {
         boolean isNotIn = context.NOT() != null;
-        QueryRelation query = (QueryRelation) visit(context.queryBody());
+        QueryRelation query = (QueryRelation) visit(context.queryRelation());
 
         return new InPredicate((Expr) visit(context.value), new Subquery(new QueryStatement(query)), isNotIn);
     }
 
     @Override
     public ParseNode visitExists(StarRocksParser.ExistsContext context) {
-        QueryRelation query = (QueryRelation) visit(context.queryBody());
+        QueryRelation query = (QueryRelation) visit(context.queryRelation());
         return new ExistsPredicate(new Subquery(new QueryStatement(query)), false);
     }
 
@@ -3476,7 +3480,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitScalarSubquery(StarRocksParser.ScalarSubqueryContext context) {
         BinaryPredicate.Operator op = getComparisonOperator(((TerminalNode) context.comparisonOperator().getChild(0))
                 .getSymbol());
-        Subquery subquery = new Subquery(new QueryStatement((QueryRelation) visit(context.queryBody())));
+        Subquery subquery = new Subquery(new QueryStatement((QueryRelation) visit(context.queryRelation())));
         return new BinaryPredicate(op, (Expr) visit(context.booleanExpression()), subquery);
     }
 
@@ -3683,8 +3687,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitGrantTablePrivBrief(StarRocksParser.GrantTablePrivBriefContext context) {
+        int objectTokenSize = context.tablePrivilegeObjectName().identifierOrStringOrStar().size();
         return visitGrantRevokePrivWithType(
-                "TABLE",
+                objectTokenSize == 1 ? "DATABASE" : "TABLE",
                 context.privilegeActionList(),
                 null,
                 context.tablePrivilegeObjectName(),
@@ -3697,8 +3702,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitRevokeTablePrivBrief(StarRocksParser.RevokeTablePrivBriefContext context) {
+        int objectTokenSize = context.tablePrivilegeObjectName().identifierOrStringOrStar().size();
         return visitGrantRevokePrivWithType(
-                "TABLE",
+                objectTokenSize == 1 ? "DATABASE" : "TABLE",
                 context.privilegeActionList(),
                 null,
                 context.tablePrivilegeObjectName(),
@@ -3712,7 +3718,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitGrantPrivWithType(StarRocksParser.GrantPrivWithTypeContext context) {
         return visitGrantRevokePrivWithType(
-                context.identifier().getText(),
+                ((Identifier) visit(context.privilegeType())).getValue().toUpperCase(),
                 context.privilegeActionList(),
                 context.privilegeObjectName().identifierOrString(),
                 context.privilegeObjectName().tablePrivilegeObjectName(),
@@ -3725,7 +3731,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitRevokePrivWithType(StarRocksParser.RevokePrivWithTypeContext context) {
         return visitGrantRevokePrivWithType(
-                context.identifier().getText(),
+                ((Identifier) visit(context.privilegeType())).getValue().toUpperCase(),
                 context.privilegeActionList(),
                 context.privilegeObjectName().identifierOrString(),
                 context.privilegeObjectName().tablePrivilegeObjectName(),
@@ -3786,6 +3792,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
+    @Override
+    public ParseNode visitPrivilegeType(StarRocksParser.PrivilegeTypeContext context) {
+        if (context.privilegeTypeReserved() != null) {
+            return new Identifier(context.privilegeTypeReserved().getText());
+        } else {
+            return visit(context.identifier());
+        }
+    }
 
     @Override
     public ParseNode visitExecuteAsStatement(StarRocksParser.ExecuteAsStatementContext context) {
@@ -4048,13 +4062,61 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     FunctionSet.ADDDATE,
                     FunctionSet.DATE_ADD, FunctionSet.DATE_SUB,
                     FunctionSet.SUBDATE,
-                    FunctionSet.DAYS_SUB,
-                    FunctionSet.TIME_SLICE);
+                    FunctionSet.DAYS_SUB);
+
+    private static List<Expr> getArgumentsForTimeSlice(Expr time, Expr value, String ident, String boundary) {
+        List<Expr> exprs = Lists.newLinkedList();
+        exprs.add(time);
+        exprs.add(value);
+        exprs.add(new StringLiteral(ident));
+        exprs.add(new StringLiteral(boundary));
+
+        return exprs;
+    }
 
     @Override
     public ParseNode visitSimpleFunctionCall(StarRocksParser.SimpleFunctionCallContext context) {
 
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+
+        FunctionName fnName = FunctionName.createFnName(functionName);
+        if (functionName.equals(FunctionSet.TIME_SLICE)) {
+            if (context.expression().size() == 2) {
+                Expr e1 = (Expr) visit(context.expression(0));
+                Expr e2 = (Expr) visit(context.expression(1));
+                if (!(e2 instanceof IntervalLiteral)) {
+                    e2 = new IntervalLiteral(e2, new UnitIdentifier("DAY"));
+                }
+                IntervalLiteral intervalLiteral = (IntervalLiteral) e2;
+                FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName, getArgumentsForTimeSlice(e1,
+                        intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
+                        "floor"));
+
+                return functionCallExpr;
+            } else if (context.expression().size() == 3) {
+                Expr e1 = (Expr) visit(context.expression(0));
+                Expr e2 = (Expr) visit(context.expression(1));
+                if (!(e2 instanceof IntervalLiteral)) {
+                    e2 = new IntervalLiteral(e2, new UnitIdentifier("DAY"));
+                }
+                IntervalLiteral intervalLiteral = (IntervalLiteral) e2;
+
+                ParseNode e3 = (ParseNode) visit(context.expression(2));
+                if (!(e3 instanceof UnitBoundary)) {
+                    e3 = new UnitBoundary("floor");
+                }
+                UnitBoundary unitBoundary = (UnitBoundary) e3;
+                FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName, getArgumentsForTimeSlice(e1,
+                        intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
+                        unitBoundary.getDescription().toLowerCase()));
+
+                return functionCallExpr;
+            } else {
+                throw new ParsingException(
+                        functionName + " must as format " + functionName + "(date,INTERVAL expr unit[, FLOOR"
+                                + " | CEIL])");
+            }
+        }
 
         if (DATE_FUNCTIONS.contains(functionName)) {
             if (context.expression().size() != 2) {
@@ -4082,10 +4144,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new IsNullPredicate(params.get(0), false);
         }
 
-        FunctionName fnName = FunctionName.createFnName(functionName);
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
                 new FunctionParams(false, visit(context.expression(), Expr.class)));
-
         if (context.over() != null) {
             return buildOverClause(functionCallExpr, context.over());
         }
@@ -4221,6 +4281,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.PASSWORD() != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.string());
             return new StringLiteral(new String(MysqlPassword.makeScrambledPassword(stringLiteral.getValue())));
+        } else if (context.FLOOR() != null) {
+            return new FunctionCallExpr("floor", visit(context.expression(), Expr.class));
+        } else if (context.CEIL() != null) {
+            return new FunctionCallExpr("ceil", visit(context.expression(), Expr.class));
         }
 
         if (context.TIMESTAMPADD() != null || context.TIMESTAMPDIFF() != null) {
@@ -4444,6 +4508,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitUnitIdentifier(StarRocksParser.UnitIdentifierContext context) {
         return new UnitIdentifier(context.getText());
+    }
+
+    @Override
+    public ParseNode visitUnitBoundary(StarRocksParser.UnitBoundaryContext context) {
+        return new UnitBoundary(context.getText());
     }
 
     @Override

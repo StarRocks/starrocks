@@ -46,13 +46,20 @@ struct DecimalDecimalCast {
         }
 
         if (to_scale == from_scale) {
-            for (auto i = 0; i < num_rows; ++i) {
-                auto overflow = DecimalV3Cast::to_decimal_trivial<FromCppType, ToCppType, check_overflow>(
-                        data[i], &result_data[i]);
-                if constexpr (check_overflow) {
-                    if (overflow) {
-                        has_null = true;
-                        nulls[i] = DATUM_NULL;
+            if constexpr (sizeof(FromCppType) <= sizeof(ToCppType)) {
+                for (auto i = 0; i < num_rows; ++i) {
+                    (void)DecimalV3Cast::to_decimal_trivial<FromCppType, ToCppType, check_overflow>(data[i],
+                                                                                                    &result_data[i]);
+                }
+            } else {
+                for (auto i = 0; i < num_rows; ++i) {
+                    auto overflow = DecimalV3Cast::to_decimal_trivial<FromCppType, ToCppType, check_overflow>(
+                            data[i], &result_data[i]);
+                    if constexpr (check_overflow) {
+                        if (overflow) {
+                            has_null = true;
+                            nulls[i] = DATUM_NULL;
+                        }
                     }
                 }
             }

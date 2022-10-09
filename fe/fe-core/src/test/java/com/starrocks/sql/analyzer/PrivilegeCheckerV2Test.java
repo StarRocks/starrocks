@@ -7,8 +7,8 @@ import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
-import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -66,32 +66,28 @@ public class PrivilegeCheckerV2Test {
         testUser2 = createUserStmt.getUserIdent();
     }
 
+    private static void verifyGrantRevoke(String sql, String grantSql, String revokeSql, String expectError) throws Exception {
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
 
-    @Test
-    public void testSelect() throws Exception {
-        String sql = "select * from db1.tbl1";
-        QueryStatement statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-
+        // 1. before grant: access denied
         ctxToTestUser();
         try {
             PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (SemanticException e) {
-            Assert.assertTrue(e.getMessage().contains("SELECT command denied to user 'test'"));
+            System.out.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains(expectError));
         }
 
         ctxToRoot();
-        String grantSql = "grant select on db1.tbl1 to test";
         GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 grantSql, starRocksAssert.getCtx());
         privilegeManager.grant(grantPrivilegeStmt);
-
 
         ctxToTestUser();
         PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
 
         ctxToRoot();
-        String revokeSql = "revoke select on db1.tbl1 from test";
         RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 revokeSql, starRocksAssert.getCtx());
         privilegeManager.revoke(revokePrivilegeStmt);
@@ -101,7 +97,42 @@ public class PrivilegeCheckerV2Test {
             PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (SemanticException e) {
-            Assert.assertTrue(e.getMessage().contains("SELECT command denied to user 'test'"));
+            Assert.assertTrue(e.getMessage().contains(expectError));
         }
+    }
+
+    @Test
+    public void testTableSelectDeleteInsert() throws Exception {
+        verifyGrantRevoke(
+                "select * from db1.tbl1",
+                "grant select on db1.tbl1 to test",
+                "revoke select on db1.tbl1 from test",
+                "SELECT command denied to user 'test'");
+        verifyGrantRevoke(
+                "insert into db1.tbl1 values ('petals', 'on', 'a', 99);",
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'");
+        verifyGrantRevoke(
+                "delete from db1.tbl1 where k3 = 1",
+                "grant delete on db1.tbl1 to test",
+                "revoke delete on db1.tbl1 from test",
+                "DELETE command denied to user 'test'");
+    }
+
+    @Test
+    public void testTableCreateDrop() throws Exception {
+        String createTableSql = "create table db1.tbl2(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
+                + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        verifyGrantRevoke(
+                createTableSql,
+                "grant create_table on database db1 to test",
+                "revoke create_table on database db1 from test",
+                "Access denied for user 'test' to database 'db1'");
+        verifyGrantRevoke(
+                "drop table db1.tbl1",
+                "grant drop on database db1 to test",
+                "revoke drop on database db1 from test",
+                "Access denied for user 'test' to database 'db1'");
     }
 }

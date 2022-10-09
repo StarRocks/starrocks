@@ -635,7 +635,8 @@ size_t StorageEngine::_compaction_check_one_round() {
     return tablets_num_checked;
 }
 
-Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
+Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
+                                                     std::pair<int32_t, int32_t> tablet_shards_range) {
     scoped_refptr<Trace> trace(new Trace);
     MonotonicStopWatch watch;
     watch.start();
@@ -646,8 +647,8 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     });
     ADOPT_TRACE(trace.get());
     TRACE("start to perform cumulative compaction");
-    TabletSharedPtr best_tablet =
-            _tablet_manager->find_best_tablet_to_compaction(CompactionType::CUMULATIVE_COMPACTION, data_dir);
+    TabletSharedPtr best_tablet = _tablet_manager->find_best_tablet_to_compaction(CompactionType::CUMULATIVE_COMPACTION,
+                                                                                  data_dir, tablet_shards_range);
     if (best_tablet == nullptr) {
         return Status::NotFound("there are no suitable tablets");
     }
@@ -663,6 +664,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     if (!res.ok()) {
         if (!res.is_mem_limit_exceeded()) {
             best_tablet->set_last_cumu_compaction_failure_time(UnixMillis());
+            best_tablet->set_last_cumu_compaction_failure_status(res.code());
         }
         if (!res.is_not_found()) {
             StarRocksMetrics::instance()->cumulative_compaction_request_failed.increment(1);
@@ -673,10 +675,11 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     }
 
     best_tablet->set_last_cumu_compaction_failure_time(0);
+    best_tablet->set_last_cumu_compaction_failure_status(TStatusCode::OK);
     return Status::OK();
 }
 
-Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
+Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range) {
     scoped_refptr<Trace> trace(new Trace);
     MonotonicStopWatch watch;
     watch.start();
@@ -687,8 +690,8 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
     });
     ADOPT_TRACE(trace.get());
     TRACE("start to perform base compaction");
-    TabletSharedPtr best_tablet =
-            _tablet_manager->find_best_tablet_to_compaction(CompactionType::BASE_COMPACTION, data_dir);
+    TabletSharedPtr best_tablet = _tablet_manager->find_best_tablet_to_compaction(CompactionType::BASE_COMPACTION,
+                                                                                  data_dir, tablet_shards_range);
     if (best_tablet == nullptr) {
         return Status::NotFound("there are no suitable tablets");
     }

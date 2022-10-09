@@ -148,7 +148,7 @@ public class StatementPlanner {
         if (!queryStmt.hasOutFileClause()) {
             return;
         }
-        PlanFragment topFragment = plan.getFragments().get(0);
+        PlanFragment topFragment = plan.getTopFragment();
         if (!(topFragment.getSink() instanceof ResultSink)) {
             return;
         }

@@ -255,21 +255,29 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode:
     size_t degree_of_parallelism =
             down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
 
-    // shared by sink operator factory and source operator factory
-    AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+    auto should_cache = context->should_interpolate_cache_operator(operators_with_sink[0], id());
+    auto operators_generator = [this, should_cache, &context](bool post_cache) {
+        // shared by sink operator factory and source operator factory
+        AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+        auto aggr_mode = should_cache ? (post_cache ? AM_STREAMING_POST_CACHE : AM_STREAMING_PRE_CACHE) : AM_DEFAULT;
+        aggregator_factory->set_aggr_mode(aggr_mode);
+        auto sink_operator = std::make_shared<AggregateStreamingSinkOperatorFactory>(context->next_operator_id(), id(),
+                                                                                     aggregator_factory);
+        auto source_operator = std::make_shared<AggregateStreamingSourceOperatorFactory>(context->next_operator_id(),
+                                                                                         id(), aggregator_factory);
+        return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>{sink_operator, source_operator};
+    };
 
+    auto operators = operators_generator(false);
+    auto sink_operator = std::move(std::get<0>(operators));
+    auto source_operator = std::move(std::get<1>(operators));
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
-    auto sink_operator = std::make_shared<AggregateStreamingSinkOperatorFactory>(context->next_operator_id(), id(),
-                                                                                 aggregator_factory);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
     operators_with_sink.emplace_back(sink_operator);
-    context->add_pipeline(operators_with_sink);
 
     OpFactories operators_with_source;
-    auto source_operator = std::make_shared<AggregateStreamingSourceOperatorFactory>(context->next_operator_id(), id(),
-                                                                                     aggregator_factory);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
@@ -277,6 +285,13 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode:
     // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators_with_source.push_back(std::move(source_operator));
+
+    if (should_cache) {
+        operators_with_source =
+                context->interpolate_cache_operator(operators_with_sink, operators_with_source, operators_generator);
+    }
+    context->add_pipeline(operators_with_sink);
+
     if (limit() != -1) {
         operators_with_source.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));

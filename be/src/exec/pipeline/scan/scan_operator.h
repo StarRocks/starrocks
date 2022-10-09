@@ -3,6 +3,8 @@
 #pragma once
 
 #include "exec/pipeline/source_operator.h"
+#include "exec/query_cache/cache_operator.h"
+#include "exec/query_cache/lane_arbiter.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/spinlock.h"
 
@@ -55,6 +57,9 @@ public:
 
     int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
     int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
+
+    void set_lane_arbiter(const query_cache::LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
+    void set_cache_operator(const query_cache::CacheOperatorPtr& cache_operator) { _cache_operator = cache_operator; }
 
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
@@ -133,6 +138,9 @@ private:
     std::atomic_int64_t _last_scan_rows_num = 0;
     std::atomic_int64_t _last_scan_bytes = 0;
 
+    query_cache::LaneArbiterPtr _lane_arbiter = nullptr;
+    query_cache::CacheOperatorPtr _cache_operator = nullptr;
+
     RuntimeProfile::Counter* _default_buffer_capacity_counter = nullptr;
     RuntimeProfile::Counter* _buffer_capacity_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_size_counter = nullptr;
@@ -159,7 +167,7 @@ public:
     void close(RuntimeState* state) override;
 
     bool need_local_shuffle() const override { return _need_local_shuffle; }
-    void set_need_local_shuffle(bool need_local_shuffle) { _need_local_shuffle = need_local_shuffle; }
+    void set_need_local_shuffle(bool need_local_shuffle) override { _need_local_shuffle = need_local_shuffle; }
 
     // interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;

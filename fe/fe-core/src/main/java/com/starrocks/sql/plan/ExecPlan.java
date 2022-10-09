@@ -62,6 +62,10 @@ public class ExecPlan {
         return fragments;
     }
 
+    public PlanFragment getTopFragment() {
+        return fragments.get(0);
+    }
+
     public DescriptorTable getDescTbl() {
         return descTbl;
     }

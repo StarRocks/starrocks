@@ -73,6 +73,16 @@ public class DecimalV3FunctionAnalyzer {
             return Type.VARCHAR;
         }
 
+        if (FunctionSet.MAX_BY.equals(fnName)) {
+            if (argTypes[0].isDecimalV3()) {
+                return ScalarType.createDecimalV3Type(argTypes[0].getPrimitiveType(),
+                        argTypes[0].getPrecision(),
+                        ((ScalarType) argTypes[0]).getScalarScale());
+            } else {
+                return argTypes[0];
+            }
+        }
+
         if (DECIMAL_UNARY_FUNCTION_SET.contains(fnName)) {
             return FunctionSet.MONEY_FORMAT.equals(fnName) ? Type.VARCHAR : argTypes[0];
         }

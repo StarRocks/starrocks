@@ -51,6 +51,8 @@ import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.http.BaseAction;
+import com.starrocks.http.UnauthorizedException;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -83,6 +85,7 @@ import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
+import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
@@ -1292,8 +1295,74 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return leaderImpl.getTableMeta(request);
     }
 
+    // Authenticate a FrontendServiceImpl#beginRemoteTxn RPC for StarRocks external table.
+    // The beginRemoteTxn is sent by the source cluster, and received by the target cluster.
+    // The target cluster should do authentication using the TAuthenticateParams. This method
+    // will check whether the user has an authorization, and whether the user has a
+    // PrivPredicate.LOAD on the given tables. The implementation is similar with that
+    // of stream load, and you can refer to RestBaseAction#execute and LoadAction#executeWithoutPassword
+    // to know more about the related part.
+    static TStatus checkPasswordAndLoadPrivilege(TAuthenticateParams authParams) {
+        if (authParams == null) {
+            LOG.debug("received null TAuthenticateParams");
+            return new TStatus(TStatusCode.OK);
+        }
+
+        LOG.debug("Receive TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
+                authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names());
+        if (!Config.enable_starrocks_external_table_auth_check) {
+            LOG.debug("enable_starrocks_external_table_auth_check is disabled, " +
+                    "and skip to check authorization and privilege for {}", authParams);
+            return new TStatus(TStatusCode.OK);
+        }
+        String configHintMsg = "Set the configuration 'enable_starrocks_external_table_auth_check' to 'false' on the" +
+                " target cluster if you don't want to check the authorization and privilege.";
+
+        // 1. check user and password
+        UserIdentity userIdentity;
+        try {
+            BaseAction.ActionAuthorizationInfo authInfo = BaseAction.parseAuthInfo(
+                    authParams.getUser(), authParams.getPasswd(), authParams.getHost());
+            userIdentity = BaseAction.checkPassword(authInfo);
+        } catch (Exception e) {
+            LOG.warn("Failed to check TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
+                    authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names(), e);
+            TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
+            status.setError_msgs(Lists.newArrayList(e.getMessage(), "Please check that your user or password " +
+                    "is correct", configHintMsg));
+            return status;
+        }
+
+        // 2. check privilege
+        try {
+            String dbName = authParams.getDb_name();
+            for (String tableName : authParams.getTable_names()) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
+                        userIdentity, dbName, tableName, PrivPredicate.LOAD)) {
+                    String errMsg = String.format("Access denied; user '%s'@'%s' need (at least one of) the " +
+                                    "privilege(s) in [%s] for table '%s' in database '%s'", userIdentity.getQualifiedUser(),
+                            userIdentity.getHost(), PrivPredicate.LOAD.getPrivs().toString().trim(), tableName, dbName);
+                    throw new UnauthorizedException(errMsg);
+                }
+            }
+            return new TStatus(TStatusCode.OK);
+        } catch (Exception e) {
+            LOG.warn("Failed to check TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
+                    authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names(), e);
+            TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
+            status.setError_msgs(Lists.newArrayList(e.getMessage(), configHintMsg));
+            return status;
+        }
+    }
+
     @Override
     public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {
+        TStatus status = checkPasswordAndLoadPrivilege(request.getAuth_info());
+        if (status.getStatus_code() != TStatusCode.OK) {
+            TBeginRemoteTxnResponse response = new TBeginRemoteTxnResponse();
+            response.setStatus(status);
+            return response;
+        }
         return leaderImpl.beginRemoteTxn(request);
     }
 

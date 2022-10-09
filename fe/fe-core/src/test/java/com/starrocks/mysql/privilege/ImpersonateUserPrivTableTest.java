@@ -4,6 +4,7 @@ package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.persist.ImpersonatePrivInfo;
+import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -45,7 +46,8 @@ public class ImpersonateUserPrivTableTest {
         // 3. verify follower replay
         // 3.1 follower load initialized checkpoint
         Auth newAuth = Auth.read(pseudoImage.getDataInputStream());
-        ImpersonatePrivInfo info = (ImpersonatePrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        ImpersonatePrivInfo info = (ImpersonatePrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(
+                OperationType.OP_GRANT_IMPERSONATE);
         // 3.2 follower replay
         newAuth.replayGrantImpersonate(info);
         // 3.3 verify the consistency of metadata between the master & the follower

@@ -7,6 +7,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;
+import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -99,7 +100,8 @@ public class AuthenticationManagerTest {
         Assert.assertFalse(followerManager.doesUserExist(testUserWithIp));
 
         // replay create test@%; no password
-        CreateUserInfo info = (CreateUserInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        CreateUserInfo info = (CreateUserInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_USER_V2);
         followerManager.replayCreateUser(
                 info.getUserIdentity(),
                 info.getAuthenticationInfo(),
@@ -113,7 +115,7 @@ public class AuthenticationManagerTest {
         Assert.assertEquals(user, testUser);
 
         // replay create test@10.1.1.1
-        info = (CreateUserInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        info = (CreateUserInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_USER_V2);
         followerManager.replayCreateUser(
                 info.getUserIdentity(),
                 info.getAuthenticationInfo(),
@@ -247,7 +249,8 @@ public class AuthenticationManagerTest {
         AuthenticationManager followerManager = AuthenticationManager.load(emptyImage.getDataInputStream());
         Assert.assertFalse(followerManager.doesUserExist(testUser));
         // 7.1 replay create user
-        CreateUserInfo createInfo = (CreateUserInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        CreateUserInfo createInfo = (CreateUserInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_USER_V2);
         followerManager.replayCreateUser(
                 createInfo.getUserIdentity(), createInfo.getAuthenticationInfo(), createInfo.getUserProperty(),
                 createInfo.getUserPrivilegeCollection(), createInfo.getPluginId(), createInfo.getPluginVersion());
@@ -255,12 +258,14 @@ public class AuthenticationManagerTest {
         Assert.assertEquals(testUser, followerManager.checkPassword(
                 testUser.getQualifiedUser(), "10.1.1.1", new byte[0], null));
         // 7.2 replay alter user
-        AlterUserInfo alterInfo = (AlterUserInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        AlterUserInfo alterInfo = (AlterUserInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_USER_V2);
         followerManager.replayAlterUser(alterInfo.getUserIdentity(), alterInfo.getAuthenticationInfo());
         Assert.assertEquals(testUser, followerManager.checkPassword(
                 testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
         // 7.3 replay drop user
-        UserIdentity dropInfo = (UserIdentity) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        UserIdentity dropInfo = (UserIdentity)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_DROP_USER_V2);
         followerManager.replayDropUser(dropInfo);
         Assert.assertFalse(followerManager.doesUserExist(testUser));
         Assert.assertTrue(followerManager.doesUserExist(UserIdentity.ROOT));

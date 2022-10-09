@@ -11,6 +11,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/query_cache/cache_param.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/InternalService_types.h"
@@ -26,6 +27,8 @@ namespace starrocks {
 namespace pipeline {
 
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
+using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
+
 class FragmentContext {
     friend FragmentContextManager;
 
@@ -117,6 +120,14 @@ public:
 
     void set_driver_token(DriverLimiter::TokenPtr driver_token) { _driver_token = std::move(driver_token); }
 
+    query_cache::CacheParam& cache_param() { return _cache_param; }
+
+    void set_enable_cache(bool flag) { _enable_cache = flag; }
+
+    bool enable_cache() const { return _enable_cache; }
+
+    PerDriverScanRangesMap& scan_ranges_per_driver() { return _scan_ranges_per_driver_seq; }
+
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -151,6 +162,9 @@ private:
     bool _enable_resource_group = false;
 
     DriverLimiter::TokenPtr _driver_token = nullptr;
+    query_cache::CacheParam _cache_param;
+    bool _enable_cache = false;
+    PerDriverScanRangesMap _scan_ranges_per_driver_seq;
 };
 
 class FragmentContextManager {
