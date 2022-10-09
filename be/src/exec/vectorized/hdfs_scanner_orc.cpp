@@ -316,11 +316,14 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
 
     // create orc reader for further reading.
     int src_slot_index = 0;
-    bool has_conjunct_ctxs_by_slot = (_conjunct_ctxs_by_slot.size() != 0);
+    // we don't need to eval conjunct ctxs at outside any more
+    // we evaluate conjunct ctxs in `do_get_next`.
+    _scanner_params.eval_conjunct_ctxs = false;
     for (const auto& it : _scanner_params.materialize_slots) {
         auto col_name = OrcChunkReader::format_column_name(it->col_name(), _scanner_params.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
-        if (has_conjunct_ctxs_by_slot && _conjunct_ctxs_by_slot.find(it->id()) == _conjunct_ctxs_by_slot.end()) {
+        bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(it->id());
+        if (is_lazy_slot) {
             _lazy_load_ctx.lazy_load_slots.emplace_back(it);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
             // reserve room for later set in `OrcChunkReader`
@@ -345,7 +348,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx.timezone));
     if (_use_orc_sargs) {
         std::vector<Expr*> conjuncts;
-        for (const auto& it : _conjunct_ctxs_by_slot) {
+        for (const auto& it : _scanner_params.conjunct_ctxs_by_slot) {
             for (const auto& it2 : it.second) {
                 conjuncts.push_back(it2->root());
             }
@@ -423,6 +426,10 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                     if (chunk_size == 0) {
                         break;
                     }
+                }
+                if (chunk_size != 0) {
+                    ASSIGN_OR_RETURN(chunk_size, ExecNode::eval_conjuncts_into_filter(_scanner_params.conjunct_ctxs,
+                                                                                      ck.get(), &_chunk_filter));
                 }
             }
             if (chunk_size != 0 && chunk_size != ck->num_rows()) {
