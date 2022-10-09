@@ -614,7 +614,10 @@ const uint32_t Tablet::calc_cumulative_compaction_score() const {
             continue;
         }
 
-        score += rs_meta->get_compaction_score();
+        // non singleton delta means already compacted
+        if (rs_meta->is_singleton_delta()) {
+            score += rs_meta->get_compaction_score();
+        }
     }
 
     // If base doesn't exist, tablet may be altering, skip it, set score to 0
