@@ -64,8 +64,8 @@
 </NavBoxPartItem>
 <NavBoxPartItem title="查询半结构化数据">
 
-- [JSON](/sql-reference/sql-statements/data-types/JSON)
-- [数组](/using_starrocks/Array)
+- [JSON](/sql-reference/sql-statements/data-types/JSON.md)
+- [数组](/sql-reference/sql-statements/data-types/Array.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -73,7 +73,7 @@
 <NavBoxPart>
 <NavBoxPartItem title="查询外部数据源​">
 
-- [Apache Hive™](/using_starrocks/Connector.md)
+- [Apache Hive™](/using_starrocks/Manage_data.md)
 - [Apache Iceberg](/using_starrocks/External_table.md#apache-iceberg-外部表)
 - [Apache Hudi](/using_starrocks/External_table.md#apache-hudi-外表)
 - [MySQL](/using_starrocks/External_table.md#mysql-外部表)
