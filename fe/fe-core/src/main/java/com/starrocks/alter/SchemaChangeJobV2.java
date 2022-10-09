@@ -510,7 +510,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
          */
         EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
         Future<Boolean> future;
-        long start = System.nanoTime();
+        long start;
         db.writeLock();
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
@@ -562,6 +562,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
 
+            start = System.nanoTime();
             future = editLog.logAlterJobNoWait(this);
         } finally {
             db.writeUnlock();
