@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
@@ -94,7 +93,7 @@ public class RewriteUtils {
                     canonizedPredicate = canonizedPredicate.commutative();
                 } else if (!(left instanceof ConstantOperator && right.isConstant())
                         && left.toString().compareTo(right.toString()) > 0) {
-                   canonizedPredicate = canonizedPredicate.commutative();
+                    canonizedPredicate = canonizedPredicate.commutative();
                 }
                 switch (binary.getBinaryType()) {
                     case LT:
@@ -256,7 +255,8 @@ public class RewriteUtils {
                     BinaryPredicateOperator equal = new BinaryPredicateOperator(EQ, first, item);
                     orItems.add(equal);
                 }
-                CompoundPredicateOperator orPredicate = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, orItems);
+                CompoundPredicateOperator orPredicate =
+                        new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, orItems);
                 return orPredicate;
             default:
                 return predicate;

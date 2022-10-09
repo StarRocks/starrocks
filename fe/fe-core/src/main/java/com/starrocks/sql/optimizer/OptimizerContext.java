@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.collect.Sets;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -36,6 +37,7 @@ public class OptimizerContext {
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = VariableMgr.newSessionVariable();
+        this.candidateMvs = Sets.newHashSet();
     }
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
@@ -51,6 +53,7 @@ public class OptimizerContext {
         this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
         this.cteContext.setInlineCTERatio(sessionVariable.getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
+        this.candidateMvs = Sets.newHashSet();
     }
 
     public Memo getMemo() {

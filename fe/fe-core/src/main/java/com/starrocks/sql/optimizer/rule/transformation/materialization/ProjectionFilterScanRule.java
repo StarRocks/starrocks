@@ -9,7 +9,6 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 /*
  *
  * Here is the rule for pattern Projection - Filter - Scan
- * Keep single table rewrite in rule-base phase to reduce the search space
  *
  */
 public class ProjectionFilterScanRule extends BaseMaterializedViewRewriteRule {

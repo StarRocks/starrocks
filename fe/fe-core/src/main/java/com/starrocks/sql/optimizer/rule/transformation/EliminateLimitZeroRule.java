@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 public class EliminateLimitZeroRule extends TransformationRule {
     public EliminateLimitZeroRule() {
         super(RuleType.TF_ELIMINATE_LIMIT_ZERO, Pattern.create(OperatorType.LOGICAL_LIMIT)
+                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF))
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 

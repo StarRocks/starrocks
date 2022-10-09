@@ -120,6 +120,7 @@ import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.FilterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.FilterScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OnlyJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.OnlyScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.ProjectionFilterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.ProjectionFilterScanRule;
 
@@ -327,6 +328,7 @@ public class RuleSet {
         ));
 
         REWRITE_RULES.put(RuleSetType.SINGLE_TABLE_MV_REWRITE, ImmutableList.of(
+                new OnlyScanRule(),
                 new FilterScanRule(),
                 new ProjectionFilterScanRule()
         ));

@@ -17,13 +17,13 @@ import com.starrocks.sql.Explain;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -92,7 +92,7 @@ public class Optimizer {
         context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
-        logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext, false);
+        logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext, connectContext, false);
         return logicOperatorTree;
     }
 
@@ -131,7 +131,7 @@ public class Optimizer {
             }
         }
 
-        logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext, true);
+        logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext, connectContext, true);
 
         memo.init(logicOperatorTree);
         OptimizerTraceUtil.log(connectContext, "after logical rewrite, root group:\n%s", memo.getRootGroup());
@@ -173,8 +173,9 @@ public class Optimizer {
         return finalPlan;
     }
 
-    private OptExpression logicalRuleRewrite(OptExpression tree, TaskContext rootTaskContext, boolean needMvRewrite) {
-        tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
+    private OptExpression logicalRuleRewrite(OptExpression tree, TaskContext rootTaskContext,
+                                             ConnectContext connectContext, boolean needMvRewrite) {
+            tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
         deriveLogicalProperty(tree);
 
         SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
@@ -271,6 +272,51 @@ public class Optimizer {
 
         // single table materialized view rewrite rule
         if (needMvRewrite) {
+            for (MaterializationContext mvContext : context.getCandidateMvs()) {
+                MaterializedView mv = mvContext.getMv();
+                Database db = context.getCatalog().getDb(mvContext.getMv().getDbId());
+                TableName tableName = new TableName(db.getFullName(), mv.getName());
+                // TableRelation tableRelation = new TableRelation(tableName);
+                // new QueryAnalyzer(connectContext).analyze(tableRelation);
+                String selectSql = "select * from " + tableName.toSql();
+                StatementBase selectStmt;
+                try {
+                    selectStmt = com.starrocks.sql.parser.SqlParser.parseSingleSql(selectSql, context.getSessionVariable());
+                } catch (ParsingException parsingException) {
+                    LOG.warn("parse sql failed.", parsingException);
+                    throw new RuntimeException("");
+                }
+                Analyzer.analyze(selectStmt, connectContext);
+                QueryRelation selectRelation = ((QueryStatement) selectStmt).getQueryRelation();
+                LogicalPlan mvQueryPlan = new RelationTransformer(context.getColumnRefFactory(), connectContext)
+                        .transformWithSelectLimit(selectRelation);
+                Optimizer optimizer = new Optimizer();
+                OptExpression optimizedPlan = optimizer.optimizeByRule(
+                        connectContext,
+                        mvQueryPlan.getRoot(),
+                        new PhysicalPropertySet(),
+                        new ColumnRefSet(mvQueryPlan.getOutputColumn()),
+                        context.getColumnRefFactory());
+
+                if (!RewriteUtils.isLogicalSPJG(optimizedPlan)) {
+                    continue;
+                }
+                mvContext.setScanMvOperator(optimizedPlan.getOp());
+
+                List<ColumnRefOperator> outputExpressions = mvQueryPlan.getOutputColumn();
+                mvContext.setScanMvOutputExpressions(outputExpressions);
+                // OptExpression root = mvQueryPlan.getRoot();
+                // the root op of mv must be a LogicalProjectOperator
+                /*
+                LogicalProjectOperator projectOperator = (LogicalProjectOperator) root.getOp();
+                Map<ColumnRefOperator, ScalarOperator> columnRefMap = projectOperator.getColumnRefMap();
+                for (ScalarOperator outputColumnRef : mvQueryPlan.getOutputColumn()) {
+                    outputExpressions.add(columnRefMap.get(outputColumnRef));
+                }
+
+                 */
+            }
+
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
 
@@ -409,7 +455,7 @@ public class Optimizer {
 
     // TODO(hkp): put it in right place
     private void registerMaterializedViews(OptExpression logicOperatorTree, OptimizerContext context)
-            throws AnalysisException {
+                throws AnalysisException {
         List<Table> tables = RewriteUtils.getAllTables(logicOperatorTree);
         Set<Long[]> relatedMvs = Sets.newHashSet();
         for (Table table : tables) {
@@ -468,15 +514,19 @@ public class Optimizer {
                 continue;
             }
 
-            // check up-to-date
+            List<ColumnRefOperator> outputExpressions = logicalPlan.getOutputColumn();
 
-            // 2. create scan mv operator
-            TableName tableName = new TableName(db.getFullName(), mv.getName());
-            TableRelation tableRelation = new TableRelation(tableName);
-            LogicalPlan mvQueryPlan =
-                    new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(tableRelation);
-            materializationContext = new MaterializationContext(
-                    mv, mvQueryPlan.getRoot().getOp(), optimizedPlan, columnRefFactory);
+            /*
+            OptExpression root = logicalPlan.getRoot();
+            // the root op of mv must be a LogicalProjectOperator
+            LogicalProjectOperator projectOperator = (LogicalProjectOperator) root.getOp();
+            Map<ColumnRefOperator, ScalarOperator> columnRefMap = projectOperator.getColumnRefMap();
+            for (ScalarOperator outputColumnRef : logicalPlan.getOutputColumn()) {
+                outputExpressions.add(columnRefMap.get(outputColumnRef));
+            }
+
+             */
+            materializationContext = new MaterializationContext(mv, optimizedPlan, columnRefFactory, outputExpressions);
             // TODO(hkp): it is not a good idea to set back to mv
             mv.setMaterializationContext(materializationContext);
             context.addCandidateMvs(materializationContext);

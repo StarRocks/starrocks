@@ -128,6 +128,7 @@ public enum RuleType {
     TF_COMPUTE_CTE_COSTS,
 
     // materialized view rewrite related
+    TF_MV_ONLY_SCAN_RULE,
     TF_MV_FILTER_SCAN_RULE,
     TF_MV_PROJECT_FILTER_SCAN_RULE,
     TF_MV_ONLY_JOIN_RULE,

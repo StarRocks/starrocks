@@ -8,26 +8,26 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 /*
  *
- * Here is the rule for pattern Filter - Scan
- * Keep single table rewrite in rule-base phase to reduce the search space
+ * Here is the rule for pattern Scan with predicates
  *
  */
-public class FilterScanRule extends BaseMaterializedViewRewriteRule {
-    public FilterScanRule() {
-        super(RuleType.TF_MV_FILTER_SCAN_RULE, Pattern.create(OperatorType.LOGICAL_FILTER)
-                .addChildren(Pattern.create(OperatorType.PATTERN_SCAN)));
+public class OnlyScanRule extends BaseMaterializedViewRewriteRule {
+    public OnlyScanRule() {
+        super(RuleType.TF_MV_ONLY_SCAN_RULE, Pattern.create(OperatorType.PATTERN_SCAN));
     }
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        Operator childOperator = input.getInputs().get(0).getOp();
-        if (!(childOperator instanceof LogicalScanOperator)) {
+        Operator currentOp = input.getOp();
+        if (!(currentOp instanceof LogicalScanOperator)) {
             return false;
         }
-        return super.check(input, context);
+        ScalarOperator predicate = input.getOp().getPredicate();
+        return predicate == null ? false : true;
     }
 }

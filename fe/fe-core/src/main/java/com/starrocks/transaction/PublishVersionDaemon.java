@@ -26,7 +26,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -374,12 +373,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
         try {
             for (long tableId : transactionState.getTableIdList()) {
                 Table table = db.getTable(tableId);
-                Set<Long> relatedMvs = ((OlapTable) table).getRelatedMaterializedViews();
-                for (long mvId : relatedMvs) {
-                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
+                Set<Long[]> relatedMvs = table.getRelatedMaterializedViews();
+                for (Long[] mvId : relatedMvs) {
+                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId[1]);
                     if (materializedView.isLoadTriggeredRefresh()) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                db.getFullName(), db.getTable(mvId).getName(), Constants.TaskRunPriority.NORMAL.value());
+                                db.getFullName(), db.getTable(mvId[1]).getName(), Constants.TaskRunPriority.NORMAL.value());
                     }
                 }
             }

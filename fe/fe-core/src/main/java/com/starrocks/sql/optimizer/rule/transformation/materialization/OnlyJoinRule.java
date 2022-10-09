@@ -15,7 +15,9 @@ public class OnlyJoinRule extends BaseMaterializedViewRewriteRule {
     private static OnlyJoinRule INSTANCE = new OnlyJoinRule();
 
     public OnlyJoinRule() {
-        super(RuleType.TF_MV_ONLY_JOIN_RULE, Pattern.create(OperatorType.LOGICAL_JOIN));
+        super(RuleType.TF_MV_ONLY_JOIN_RULE, Pattern.create(OperatorType.LOGICAL_JOIN)
+                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF))
+                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 
     public static OnlyJoinRule getInstance() {

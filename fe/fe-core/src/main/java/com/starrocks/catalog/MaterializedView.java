@@ -338,6 +338,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.tableProperty = null;
         this.state = OlapTableState.NORMAL;
         this.active = true;
+        this.materializationContext = new AtomicReference<>();
     }
 
     public MaterializedView(long id, long dbId, String mvName, List<Column> baseSchema, KeysType keysType,
@@ -348,6 +349,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.dbId = dbId;
         this.refreshScheme = refreshScheme;
         this.active = true;
+        this.materializationContext = new AtomicReference<>();
     }
 
     public long getDbId() {
@@ -638,6 +640,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public MaterializationContext getMaterializationContext() {
+<<<<<<< HEAD
+=======
+        if (materializationContext == null) {
+            return null;
+        }
+>>>>>>> 2a4e4e530 (fix rewrite bug)
         return this.materializationContext.get();
     }
 }

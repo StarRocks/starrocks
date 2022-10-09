@@ -106,6 +106,10 @@ public class Pattern {
             return true;
         }
 
+        if (isPatternScan() && scanTypes.contains(expression.getOp().getOpType())) {
+            return true;
+        }
+
         return getOpType().equals(expression.getOp().getOpType());
     }
 }

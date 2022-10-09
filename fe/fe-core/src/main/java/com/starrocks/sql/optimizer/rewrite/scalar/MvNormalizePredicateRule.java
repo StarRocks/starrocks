@@ -82,31 +82,26 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
     // (b * c = 200 or b * c = 100) and a like "%hello%"
     public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate,
                                                  ScalarOperatorRewriteContext context) {
+        Set<ScalarOperator> after = Sets.newTreeSet(new Comparator<ScalarOperator>() {
+            @Override
+            public int compare(ScalarOperator o1, ScalarOperator o2) {
+                return o1.toString().compareTo(o2.toString());
+            }
+        });
         if (predicate.isAnd()) {
-            Set<ScalarOperator> after = Sets.newTreeSet(new Comparator<ScalarOperator>() {
-                @Override
-                public int compare(ScalarOperator o1, ScalarOperator o2) {
-                    return o1.toString().compareTo(o2.toString());
-                }
-            });
             List<ScalarOperator> before = Utils.extractConjuncts(predicate);
-
             after.addAll(before);
-            return Utils.compoundAnd(Lists.newArrayList(after));
+            if (Lists.newArrayList(after).equals(before)) {
+                return predicate;
+            }
         } else if (predicate.isOr()) {
-            Set<ScalarOperator> after = Sets.newTreeSet(new Comparator<ScalarOperator>() {
-                @Override
-                public int compare(ScalarOperator o1, ScalarOperator o2) {
-                    return o1.toString().compareTo(o2.toString());
-                }
-            });
             List<ScalarOperator> before = Utils.extractDisjunctive(predicate);
-
             after.addAll(before);
-            return Utils.compoundOr(Lists.newArrayList(after));
+            if (Lists.newArrayList(after).equals(before)) {
+                return predicate;
+            }
         }
-
-        return predicate;
+        return Utils.compoundAnd(Lists.newArrayList(after));
     }
 
 }
