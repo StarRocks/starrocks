@@ -170,7 +170,6 @@ public class JournalEntity implements Writable {
             case OperationType.OP_ERASE_PARTITION:
             case OperationType.OP_META_VERSION:
             case OperationType.OP_DROP_ALL_BROKER:
-            case OperationType.OP_DROP_ROLE_V2:
             case OperationType.OP_DROP_REPOSITORY: {
                 data = new Text();
                 ((Text) data).readFields(in);
@@ -729,6 +728,7 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_DROP_ROLE_V2:
             case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
                 data = RolePrivilegeCollectionInfo.read(in);
                 isRead = true;

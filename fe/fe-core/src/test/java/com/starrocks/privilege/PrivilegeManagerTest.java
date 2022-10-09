@@ -7,7 +7,6 @@ import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.common.io.Text;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.qe.ConnectContext;
@@ -251,8 +250,9 @@ public class PrivilegeManagerTest {
                 info.getRoleId(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
         Assert.assertTrue(followerManager.checkRoleExists("test_role"));
 
-        Text text = (Text) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
-        followerManager.replayDropRole(Long.parseLong(text.toString()));
+        info = (RolePrivilegeCollectionInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        followerManager.replayDropRole(
+                info.getRoleId(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
         Assert.assertFalse(followerManager.checkRoleExists("test_role"));
 
         // check image

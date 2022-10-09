@@ -929,9 +929,9 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_DROP_ROLE_V2: {
-                    String idString = journal.getData().toString();
-                    long roleId = Long.parseLong(idString);
-                    globalStateMgr.getPrivilegeManager().replayDropRole(roleId);
+                    RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
+                    globalStateMgr.getPrivilegeManager().replayDropRole(
+                            info.getRoleId(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
                     break;
                 }
                 default: {
@@ -1601,7 +1601,13 @@ public class EditLog {
         logEdit(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2, info);
     }
 
-    public void logDropRole(long roleId) {
-        logEdit(OperationType.OP_DROP_ROLE_V2, new Text(Long.toString(roleId)));
+    public void logDropRole(
+            long roleId,
+            RolePrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
+                roleId, privilegeCollection, pluginId, pluginVersion);
+        logEdit(OperationType.OP_DROP_ROLE_V2, info);
     }
 }

@@ -53,12 +53,9 @@ public class PrivilegeManager {
         roleIdToPrivilegeCollection = new HashMap<>();
         userLock = new ReentrantReadWriteLock();
         roleLock = new ReentrantReadWriteLock();
-        nextRoleId = 0;
     }
 
     private Map<Long, RolePrivilegeCollection> roleIdToPrivilegeCollection;
-    @SerializedName(value = "r")
-    private long nextRoleId;
     private final ReentrantReadWriteLock roleLock;
     public PrivilegeManager(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
         this.globalStateMgr = globalStateMgr;
@@ -90,7 +87,6 @@ public class PrivilegeManager {
         // TODO init default roles
         userLock = new ReentrantReadWriteLock();
         roleLock = new ReentrantReadWriteLock();
-        nextRoleId = 0;
     }
 
     private void userReadLock() {
@@ -334,11 +330,11 @@ public class PrivilegeManager {
                 throw new DdlException(String.format("Role %s already exists! id = %d", roleName, roleId));
             }
             RolePrivilegeCollection collection = new RolePrivilegeCollection(roleName);
+            long nextRoleId = globalStateMgr.getNextId();
             roleIdToPrivilegeCollection.put(nextRoleId, collection);
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
                     nextRoleId, collection, provider.getPluginId(), provider.getPluginVersion());
             LOG.info("created role {}[{}]", roleName, roleId);
-            nextRoleId++;
         } finally {
             roleWriteUnlock();
         }
@@ -367,17 +363,24 @@ public class PrivilegeManager {
             if (roleId == null) {
                 throw new DdlException(String.format("Role %s doesn't exist! id = %d", roleName, roleId));
             }
+            RolePrivilegeCollection collection = roleIdToPrivilegeCollection.get(roleId);
             roleIdToPrivilegeCollection.remove(roleId);
-            globalStateMgr.getEditLog().logDropRole(roleId);
+            globalStateMgr.getEditLog().logDropRole(roleId, collection, provider.getPluginId(), provider.getPluginVersion());
             LOG.info("dropped role {}[{}]", roleName, roleId);
         } finally {
             roleWriteUnlock();
         }
     }
 
-    public void replayDropRole(long roleId) {
+    public void replayDropRole(
+            long roleId,
+            RolePrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) throws PrivilegeException {
         roleWriteLock();
         try {
+            // Actually privilege collection is useless here, but we still record it for further usage
+            provider.upgradePrivilegeCollection(privilegeCollection, pluginId, pluginVersion);
             roleIdToPrivilegeCollection.remove(roleId);
             LOG.info("replayed dropped role {}",  roleId);
         } finally {
