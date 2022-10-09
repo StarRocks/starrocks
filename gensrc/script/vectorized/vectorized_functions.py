@@ -355,7 +355,10 @@ vectorized_functions = [
     [50340, 'date_trunc', 'DATETIME', ['VARCHAR', 'DATETIME'], 'TimeFunctions::datetime_trunc', 'TimeFunctions::datetime_trunc_prepare', 'TimeFunctions::datetime_trunc_close'],
     [50350, 'date_trunc', 'DATE', ['VARCHAR', 'DATE'], 'TimeFunctions::date_trunc', 'TimeFunctions::date_trunc_prepare', 'TimeFunctions::date_trunc_close'],
     [50360, 'timestamp', 'DATETIME', ['DATETIME'], 'TimeFunctions::timestamp'],
-    [50370, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+    [50370, 'time_slice', 'DATE', ['DATE', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+    [50371, 'time_slice', 'DATE', ['DATE', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+    [50372, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+    [50373, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
