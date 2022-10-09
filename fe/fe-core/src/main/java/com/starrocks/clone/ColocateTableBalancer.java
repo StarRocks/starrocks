@@ -23,6 +23,7 @@ package com.starrocks.clone;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -72,6 +73,63 @@ public class ColocateTableBalancer extends LeaderDaemon {
         }
         return INSTANCE;
     }
+
+    private static class ColocateRelocationInfo {
+        /**
+         * indicate that the change of bucket sequence for a group is caused by
+         * repair(true), i.e. there is unavailable backend, or balance(false).
+         */
+        private boolean relocationForRepair;
+
+        /**
+         * record the value of bucket sequence before changed, used to reset current bucket sequence
+         * when condition is matched, e.g. the backend that caused colocate relocation before has come alive.
+         */
+        private List<List<Long>> lastBackendsPerBucketSeq;
+
+        /**
+         * Count the number of tablets which have been successfully scheduled by TabletScheduler after a relocation
+         * decision has been made.
+         */
+        private Map<Integer, Integer> scheduledTabletNumPerBucket;
+
+        public ColocateRelocationInfo(boolean relocationForRepair,
+                                      List<List<Long>> lastBackendsPerBucketSeq,
+                                      Map<Integer, Integer> scheduledTabletNumPerBucket) {
+            this.relocationForRepair = relocationForRepair;
+            this.lastBackendsPerBucketSeq = lastBackendsPerBucketSeq;
+            this.scheduledTabletNumPerBucket = scheduledTabletNumPerBucket;
+        }
+
+        public boolean getRelocationForRepair() {
+            return relocationForRepair;
+        }
+
+        public List<List<Long>> getLastBackendsPerBucketSeq() {
+            return lastBackendsPerBucketSeq;
+        }
+
+        public Map<Integer, Integer> getScheduledTabletNumPerBucket() {
+            return scheduledTabletNumPerBucket;
+        }
+
+        public Integer getScheduledTabletNumForBucket(int tabletOrderIdx) {
+            synchronized (scheduledTabletNumPerBucket) {
+                return scheduledTabletNumPerBucket.get(tabletOrderIdx);
+            }
+        }
+
+        public void increaseScheduledTabletNumForBucket(int tabletOrderIdx) {
+            synchronized (scheduledTabletNumPerBucket) {
+                scheduledTabletNumPerBucket.merge(tabletOrderIdx, 1, Integer::sum);
+            }
+        }
+    }
+
+    /**
+     * ColocateRelocationInfo per group.
+     */
+    private Map<GroupId, ColocateRelocationInfo> group2ColocateRelocationInfo = Maps.newConcurrentMap();
 
     @Override
     /*
@@ -139,6 +197,8 @@ public class ColocateTableBalancer extends LeaderDaemon {
 
         // get all groups
         Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
+        Map<GroupId, Long> group2InScheduleTabletNum =
+                globalStateMgr.getTabletScheduler().getTabletsNumInScheduleForEachCG();
         for (GroupId groupId : groupIds) {
             Database db = globalStateMgr.getDbIncludeRecycleBin(groupId.dbId);
             if (db == null) {
@@ -153,19 +213,37 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 continue;
             }
 
+            // Won't make new relocation decision if there is still colocate relocation tasks in schedule.
+            // We want the previous relocation decision is handled completely before new decision is made, so
+            // this won't trigger concurrent relocation decision and may mess up the scheduling.
+            Long inScheduleTabletNum = group2InScheduleTabletNum.get(groupId);
+            if (inScheduleTabletNum != null && inScheduleTabletNum >= 1L) {
+                LOG.info("colocate group {} still has {} tablets in schedule, won't make new relocation decision",
+                        groupId, inScheduleTabletNum);
+                continue;
+            }
+
             Set<Long> unavailableBeIdsInGroup = getUnavailableBeIdsInGroup(infoService, colocateIndex, groupId);
             List<Long> availableBeIds = getAvailableBeIds(infoService);
             List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
             if (relocateAndBalance(groupId, unavailableBeIdsInGroup, availableBeIds, colocateIndex, infoService,
                     statistic, balancedBackendsPerBucketSeq)) {
+                group2ColocateRelocationInfo.put(groupId,
+                        new ColocateRelocationInfo(!unavailableBeIdsInGroup.isEmpty() ? true : false,
+                                colocateIndex.getBackendsPerBucketSeq(groupId), Maps.newHashMap()));
                 colocateIndex.addBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
                 ColocatePersistInfo info =
                         ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
                 globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info);
-                LOG.info("balance colocate group {}. now backends per bucket sequence is: {}", groupId,
-                        balancedBackendsPerBucketSeq);
+                LOG.info("balance colocate group {}. now backends per bucket sequence is: {}, " +
+                                "bucket sequence before balance: {}", groupId, balancedBackendsPerBucketSeq,
+                        group2ColocateRelocationInfo.get(groupId).getLastBackendsPerBucketSeq());
+            } else {
+                // clean historical relocation info if nothing changed after trying to do `relocateAndBalance()`
+                group2ColocateRelocationInfo.remove(groupId);
             }
         }
+        cleanRelocationInfoMap(groupIds);
     }
 
     /*
@@ -248,6 +326,14 @@ public class ColocateTableBalancer extends LeaderDaemon {
                                             // as soon as possible
                                             tabletCtx.setOrigPriority(colocateUnhealthyPrio);
                                             tabletCtx.setTabletOrderIdx(idx);
+                                            tabletCtx.setColocateGroupId(groupId);
+                                            ColocateRelocationInfo info = group2ColocateRelocationInfo.get(groupId);
+                                            if (info != null && info.getRelocationForRepair() &&
+                                                    st == TabletStatus.COLOCATE_MISMATCH) {
+                                                tabletCtx.setRelocationForRepair(true);
+                                            } else {
+                                                tabletCtx.setRelocationForRepair(false);
+                                            }
 
                                             AddResult res = tabletScheduler.addTablet(tabletCtx, false /* not force */);
                                             if (res == AddResult.LIMIT_EXCEED) {
@@ -255,6 +341,14 @@ public class ColocateTableBalancer extends LeaderDaemon {
                                                 LOG.info("number of scheduling tablets in tablet scheduler"
                                                         + " exceed to limit. stop colocate table check");
                                                 break OUT;
+                                            }
+                                            if (res == AddResult.ADDED && tabletCtx.getRelocationForRepair()) {
+                                                LOG.info("add tablet relocation task to scheduler, tablet id: {}, " +
+                                                                "bucket sequence before: {}, bucket sequence now: {}",
+                                                        tableId,
+                                                        info != null ? info.getLastBackendsPerBucketSeq().get(idx) :
+                                                                Lists.newArrayList(),
+                                                        bucketsSeq);
                                             }
                                         }
                                     } else {
@@ -358,11 +452,18 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 }
             }
 
+            if (!hasUnavailableBe && !unavailableBeIds.isEmpty() && isChanged) {
+                // repair task should take precedence over balance task.
+                // If there are unavailable backends, and we have made relocation decision to drain all tablets from
+                // those backends, we will stop here and won't do any further balance work.
+                break;
+            }
+
             // Sort backends with replica num in desc order, the list contains only all the *available* backends.
             List<Map.Entry<Long, Long>> backendWithReplicaNum =
                     getSortedBackendReplicaNumPairs(availableBeIds, unavailableBeIds, statistic,
                             flatBackendsPerBucketSeq);
-            Set<Long> decommissionedBackends = getDecommissionedBackends(infoService, colocateIndex, groupId);
+            Set<Long> decommissionedBackends = getDecommissionedBackendsInGroup(infoService, colocateIndex, groupId);
             if (backendWithReplicaNum.isEmpty() ||
                     (backendWithReplicaNum.size() == 1 && decommissionedBackends.isEmpty())) {
                 // There is not enough replicas for us to do relocation or balance, because in this case we
@@ -542,8 +643,8 @@ public class ColocateTableBalancer extends LeaderDaemon {
         return unavailableBeIds;
     }
 
-    private Set<Long> getDecommissionedBackends(SystemInfoService infoService, ColocateTableIndex colocateIndex,
-                                                GroupId groupId) {
+    private Set<Long> getDecommissionedBackendsInGroup(SystemInfoService infoService, ColocateTableIndex colocateIndex,
+                                                       GroupId groupId) {
         Set<Long> backends = colocateIndex.getBackendsByGroup(groupId);
         Set<Long> decommissionedBackends = Sets.newHashSet();
         for (Long backendId : backends) {
@@ -587,5 +688,41 @@ public class ColocateTableBalancer extends LeaderDaemon {
             }
         }
         return true;
+    }
+
+    private void cleanRelocationInfoMap(Set<GroupId> allGroupIds) {
+        group2ColocateRelocationInfo.entrySet().removeIf(e -> !allGroupIds.contains(e.getKey()));
+    }
+
+    public void increaseScheduledTabletNumForBucket(TabletSchedCtx ctx) {
+        if (ctx.getRelocationForRepair()) {
+            ColocateRelocationInfo info = group2ColocateRelocationInfo.get(ctx.getColocateGroupId());
+            if (info != null) {
+                info.increaseScheduledTabletNumForBucket(ctx.getTabletOrderIdx());
+            }
+        }
+    }
+
+    public int getScheduledTabletNumForBucket(TabletSchedCtx ctx) {
+        ColocateRelocationInfo info = group2ColocateRelocationInfo.get(ctx.getColocateGroupId());
+        if (info != null) {
+            Integer num = info.getScheduledTabletNumForBucket(ctx.getTabletOrderIdx());
+            if (num == null) {
+                return 0;
+            } else {
+                return num;
+            }
+        } else {
+            return 1;
+        }
+    }
+
+    public Set<Long> getLastBackendSeqForBucket(TabletSchedCtx ctx) {
+        ColocateRelocationInfo info = group2ColocateRelocationInfo.get(ctx.getColocateGroupId());
+        if (info != null) {
+            return Sets.newHashSet(info.getLastBackendsPerBucketSeq().get(ctx.getTabletOrderIdx()));
+        } else {
+            return Sets.newHashSet();
+        }
     }
 }

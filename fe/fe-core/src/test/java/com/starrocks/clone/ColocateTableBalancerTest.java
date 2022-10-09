@@ -731,7 +731,7 @@ public class ColocateTableBalancerTest {
     }
 
     @Test
-    public void testMatchGroup() throws Exception {
+    public void testMatchGroup() {
         Database database = GlobalStateMgr.getCurrentState().getDb("db1");
         OlapTable table = (OlapTable) database.getTable("tbl");
         // add its tablet to TabletScheduler
