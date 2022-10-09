@@ -22,8 +22,6 @@
 
 namespace starrocks {
 
-static std::atomic<int64_t> g_report_version(time(nullptr) * 10000);
-
 static AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
                                    TTabletInfo* tablet_info) {
     AgentStatus status = STARROCKS_SUCCESS;

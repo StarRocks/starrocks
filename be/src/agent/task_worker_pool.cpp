@@ -64,8 +64,6 @@ namespace starrocks {
 
 const size_t PUBLISH_VERSION_BATCH_SIZE = 10;
 
-std::atomic<int64_t> TaskWorkerPoolBase::_s_report_version(time(nullptr) * 10000);
-
 using std::swap;
 
 template <class AgentTaskRequest>
@@ -302,7 +300,7 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             VLOG(3) << "push ok. signature: " << agent_task_req->signature << ", push_type: " << push_req.push_type;
             error_msgs.emplace_back("push success");
 
-            _s_report_version.fetch_add(1, std::memory_order_relaxed);
+            g_report_version.fetch_add(1, std::memory_order_relaxed);
 
             task_status.__set_status_code(TStatusCode::OK);
             finish_task_request.__set_finish_tablet_infos(tablet_infos);
@@ -318,7 +316,7 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
         task_status.__set_error_msgs(error_msgs);
         finish_task_request.__set_task_status(task_status);
-        finish_task_request.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
+        finish_task_request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
 
         finish_task(finish_task_request);
         remove_task_info(agent_task_req->task_type, agent_task_req->signature);
@@ -421,7 +419,7 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                     << ", push_type: " << push_req.push_type;
             error_msgs.emplace_back("push success");
 
-            _s_report_version.fetch_add(1, std::memory_order_relaxed);
+            g_report_version.fetch_add(1, std::memory_order_relaxed);
 
             task_status.__set_status_code(TStatusCode::OK);
             finish_task_request.__set_finish_tablet_infos(tablet_infos);
@@ -438,7 +436,7 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
         task_status.__set_error_msgs(error_msgs);
         finish_task_request.__set_task_status(task_status);
-        finish_task_request.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
+        finish_task_request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
 
         finish_task(finish_task_request);
         remove_task_info(agent_task_req->task_type, agent_task_req->signature);
@@ -491,7 +489,7 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         StarRocksMetrics::instance()->publish_task_request_total.increment(1);
         auto& finish_task_request = finish_task_requests.emplace_back();
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
-        finish_task_request.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
+        finish_task_request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
         int64_t start_ts = MonotonicMillis();
         run_publish_version_task(token.get(), publish_version_task, finish_task_request, affected_dirs);
         batch_publish_latency += MonotonicMillis() - start_ts;
@@ -625,7 +623,7 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
         request.tablets.clear();
 
-        request.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
+        request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
         Status st_report = StorageEngine::instance()->tablet_manager()->report_all_tablets_info(&request.tablets);
         if (!st_report.ok()) {
             LOG(WARNING) << "Fail to report all tablets info, err=" << st_report.to_string();
@@ -671,7 +669,7 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
 
         StarRocksMetrics::instance()->report_workgroup_requests_total.increment(1);
-        request.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
+        request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
         auto workgroups = workgroup::WorkGroupManager::instance()->list_workgroups();
         request.__set_active_workgroups(std::move(workgroups));
         request.__set_backend(BackendOptions::get_localBackend());

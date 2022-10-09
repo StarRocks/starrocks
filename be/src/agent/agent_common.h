@@ -6,6 +6,8 @@
 
 namespace starrocks {
 
+static std::atomic<int64_t> g_report_version(time(nullptr) * 10000);
+
 enum class TaskWorkerType {
     CREATE_TABLE,
     DROP_TABLE,
