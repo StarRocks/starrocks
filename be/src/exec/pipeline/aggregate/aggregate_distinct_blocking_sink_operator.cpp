@@ -77,4 +77,8 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
 
     return Status::OK();
 }
+Status AggregateDistinctBlockingSinkOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+    _is_finished = false;
+    return _aggregator->reset_state(std::move(chunks));
+}
 } // namespace starrocks::pipeline

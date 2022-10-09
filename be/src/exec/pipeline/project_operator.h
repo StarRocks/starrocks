@@ -42,6 +42,8 @@ public:
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
+    Status reset_state(std::vector<ChunkPtr>&& chunks) override;
+
 private:
     const std::vector<int32_t>& _column_ids;
     const std::vector<ExprContext*>& _expr_ctxs;

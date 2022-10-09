@@ -68,6 +68,8 @@ class QueryContext;
 class RuntimeState {
 public:
     // for ut only
+    RuntimeState() {}
+    // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
 

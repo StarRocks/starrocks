@@ -45,14 +45,14 @@ using WorkGroupPtr = workgroup::WorkGroupPtr;
 
 /// UnifiedExecPlanFragmentParams.
 const std::vector<TScanRangeParams> UnifiedExecPlanFragmentParams::_no_scan_ranges;
-const std::map<int32_t, std::vector<TScanRangeParams>> UnifiedExecPlanFragmentParams::_no_scan_ranges_per_driver_seq;
+const PerDriverScanRangesMap UnifiedExecPlanFragmentParams::_no_scan_ranges_per_driver_seq;
 
 const std::vector<TScanRangeParams>& UnifiedExecPlanFragmentParams::scan_ranges_of_node(TPlanNodeId node_id) const {
     return FindWithDefault(_unique_request.params.per_node_scan_ranges, node_id, _no_scan_ranges);
 }
 
-const std::map<int32_t, std::vector<TScanRangeParams>>&
-UnifiedExecPlanFragmentParams::per_driver_seq_scan_ranges_of_node(TPlanNodeId node_id) const {
+const PerDriverScanRangesMap& UnifiedExecPlanFragmentParams::per_driver_seq_scan_ranges_of_node(
+        TPlanNodeId node_id) const {
     if (!_unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
         return _no_scan_ranges_per_driver_seq;
     }
@@ -306,10 +306,72 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     plan->collect_scan_nodes(&scan_nodes);
 
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
+
+    if (fragment.__isset.cache_param) {
+        auto const& tcache_param = fragment.cache_param;
+        auto& cache_param = _fragment_ctx->cache_param();
+        cache_param.plan_node_id = tcache_param.id;
+        cache_param.digest = tcache_param.digest;
+        cache_param.force_populate = tcache_param.force_populate;
+        cache_param.entry_max_bytes = tcache_param.entry_max_bytes;
+        cache_param.entry_max_rows = tcache_param.entry_max_rows;
+        for (auto& [slot, remapped_slot] : tcache_param.slot_remapping) {
+            cache_param.slot_remapping[slot] = remapped_slot;
+            cache_param.reverse_slot_remapping[remapped_slot] = slot;
+        }
+        _fragment_ctx->set_enable_cache(true);
+    }
+
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(scan_node->id());
-        const auto& scan_ranges_per_driver_seq = request.per_driver_seq_scan_ranges_of_node(scan_node->id());
+
+        PerDriverScanRangesMap& scan_ranges_per_driver = _fragment_ctx->scan_ranges_per_driver();
+        if (scan_ranges.size() >= dop && _fragment_ctx->enable_cache()) {
+            for (auto k = 0; k < scan_ranges.size(); ++k) {
+                scan_ranges_per_driver[k % dop].push_back(scan_ranges[k]);
+            }
+        }
+
+        const auto& scan_ranges_per_driver_seq = !scan_ranges_per_driver.empty()
+                                                         ? scan_ranges_per_driver
+                                                         : request.per_driver_seq_scan_ranges_of_node(scan_node->id());
+
+        _fragment_ctx->cache_param().num_lanes = scan_node->io_tasks_per_scan_operator();
+
+        for (auto& [driver_seq, scan_ranges] : scan_ranges_per_driver_seq) {
+            for (auto& scan_range : scan_ranges) {
+                if (scan_range.scan_range.__isset.internal_scan_range && fragment.__isset.cache_param) {
+                    const auto& tcache_param = fragment.cache_param;
+                    auto& internal_scan_range = scan_range.scan_range.internal_scan_range;
+                    auto tablet_id = internal_scan_range.tablet_id;
+                    auto partition_id = internal_scan_range.partition_id;
+                    if (!tcache_param.region_map.count(partition_id)) {
+                        continue;
+                    }
+                    const auto& region = tcache_param.region_map.at(partition_id);
+                    std::string cache_suffix_key;
+                    cache_suffix_key.reserve(sizeof(partition_id) + region.size() + sizeof(tablet_id));
+                    cache_suffix_key.insert(cache_suffix_key.end(), (uint8_t*)&partition_id,
+                                            ((uint8_t*)&partition_id) + sizeof(partition_id));
+                    cache_suffix_key.insert(cache_suffix_key.end(), region.begin(), region.end());
+                    cache_suffix_key.insert(cache_suffix_key.end(), (uint8_t*)&tablet_id,
+                                            ((uint8_t*)&tablet_id) + sizeof(tablet_id));
+                    _fragment_ctx->cache_param().cache_key_prefixes[tablet_id] = std::move(cache_suffix_key);
+                }
+            }
+        }
+
+        if (scan_ranges_per_driver_seq.empty()) {
+            _fragment_ctx->set_enable_cache(false);
+        }
+        // TODO (by satanson): intra-tablet parallelism will emit multiple EOS, this situation hard to handled in
+        //  current version. shared_scan mechanism conflicts with per-tablet computation that is required for query
+        //  cache, so it is turned off at present. in the future, these two issues will be handled.
+        if (_fragment_ctx->enable_cache()) {
+            enable_tablet_internal_parallel = false;
+            enable_shared_scan = false;
+        }
 
         ASSIGN_OR_RETURN(auto morsel_queue_factory,
                          scan_node->convert_scan_range_to_morsel_queue_factory(

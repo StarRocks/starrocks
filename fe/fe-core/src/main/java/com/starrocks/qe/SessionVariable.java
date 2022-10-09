@@ -275,7 +275,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
 
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
-
+    public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
+    public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
+    public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
+    public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -655,6 +658,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
+
+    @VarAttr(name = ENABLE_QUERY_CACHE)
+    private boolean enableQueryCache = false;
+
+    @VarAttr(name = QUERY_CACHE_FORCE_POPULATE)
+    private boolean queryCacheForcePopulate = false;
+
+    @VarAttr(name = QUERY_CACHE_ENTRY_MAX_BYTES)
+    private long queryCacheEntryMaxBytes = 4194304;
+
+    @VarAttr(name = QUERY_CACHE_ENTRY_MAX_ROWS)
+    private long queryCacheEntryMaxRows = 409600;
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
@@ -1204,6 +1219,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return loadTransmissionCompressionType;
     }
 
+
     public int getParseTokensLimit() {
         return parseTokensLimit;
     }
@@ -1214,6 +1230,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnableReplicatedStorage() {
         return enableReplicatedStorage;
+    }
+
+    public boolean isEnableQueryCache() {
+        return isEnablePipelineEngine() && enableQueryCache;
+    }
+
+    public long getQueryCacheEntryMaxBytes() {
+        return queryCacheEntryMaxBytes;
+    }
+
+    public long getQueryCacheEntryMaxRows() {
+        return queryCacheEntryMaxRows;
+    }
+
+    public void setEnableQueryCache(boolean on) {
+        enableQueryCache = on;
+    }
+
+    public boolean isQueryCacheForcePopulate() {
+        return queryCacheForcePopulate;
     }
 
     // Serialize to thrift object

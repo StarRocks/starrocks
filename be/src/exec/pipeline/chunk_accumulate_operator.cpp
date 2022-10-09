@@ -51,5 +51,13 @@ Status ChunkAccumulateOperator::set_finished(RuntimeState*) {
     return Status::OK();
 }
 
+Status ChunkAccumulateOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+    _is_finished = false;
+    _in_chunk = nullptr;
+    _out_chunk = nullptr;
+
+    return Status::OK();
+}
+
 } // namespace pipeline
 } // namespace starrocks

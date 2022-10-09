@@ -845,4 +845,6 @@ CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 
+// Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
+CONF_Int64(query_cache_capacity, "536870912");
 } // namespace starrocks::config
