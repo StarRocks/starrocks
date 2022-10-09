@@ -191,13 +191,11 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::_
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
     auto operators_generator = [this, should_cache, &context](bool post_cache) {
         // shared by sink operator and source operator
-        auto aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+        auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
-        auto sink_operator = std::make_shared<AggregateBlockingSinkOperatorFactory>(context->next_operator_id(), id(),
-                                                                                    aggregator_factory);
-        auto source_operator = std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(),
-                                                                                        id(), aggregator_factory);
+        auto sink_operator = std::make_shared<SinkFactory>(context->next_operator_id(), id(), aggregator_factory);
+        auto source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), aggregator_factory);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(sink_operator, source_operator);
     };
     auto operators = operators_generator(false);
