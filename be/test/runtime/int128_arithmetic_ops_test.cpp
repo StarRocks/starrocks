@@ -157,7 +157,7 @@ TEST_F(Int128ArithmeticOpsTest, test_i32xi32_produce_i64) {
     };
     for (auto a : values) {
         for (auto b : values) {
-            ASSERT_EQ(i32_x_i32_produce_i64(a, b), (int64_t)a * (int64_t)a);
+            ASSERT_EQ(i32_x_i32_produce_i64(a, b), (int64_t)a * (int64_t)b);
         }
     }
 }
@@ -179,7 +179,7 @@ TEST_F(Int128ArithmeticOpsTest, test_i64xi64_produce_i128) {
     };
     for (auto a : values) {
         for (auto b : values) {
-            ASSERT_EQ(i64_x_i64_produce_i128(a, b), (int128_t)a * (int128_t)a);
+            ASSERT_EQ(i64_x_i64_produce_i128(a, b), (int128_t)a * (int128_t)b);
         }
     }
 }
