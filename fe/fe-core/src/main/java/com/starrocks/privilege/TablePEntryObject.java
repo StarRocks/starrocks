@@ -6,13 +6,15 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
-import java.util.Objects;
 
 public class TablePEntryObject extends PEntryObject {
     @SerializedName(value = "d")
     protected long databaseId;
+    private static final long ALL_DATABASE_ID = -2; // -2 represent all databases
+    private static final long ALL_TABLES_ID = -3; // -3 represent all tables
 
     public static TablePEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 2) {
@@ -28,6 +30,31 @@ public class TablePEntryObject extends PEntryObject {
         }
         return new TablePEntryObject(database.getId(), table.getId());
     }
+    public static TablePEntryObject generate(
+            GlobalStateMgr mgr, List<String> allTypes, String restrictType, String restrictName)
+            throws PrivilegeException {
+        if (allTypes.size() == 1) {
+            if (StringUtils.isEmpty(restrictType)
+                    || !restrictType.equals(PrivilegeTypes.DATABASE.toString())
+                    || StringUtils.isEmpty(restrictName)) {
+                throw new PrivilegeException("ALL TABLES must be restricted with database!");
+            }
+
+            Database database = mgr.getDb(restrictName);
+            if (database == null) {
+                throw new PrivilegeException("cannot find db: " + restrictName);
+            }
+            return new TablePEntryObject(database.getId(), ALL_TABLES_ID);
+        } else if (allTypes.size() == 2) {
+            if (allTypes.get(1).equals(PrivilegeTypes.DATABASE.getPlural())) {
+                throw new PrivilegeException(
+                        "ALL TABLES must be restricted with ALL DATABASES instead of ALL " + allTypes.get(1));
+            }
+            return new TablePEntryObject(ALL_DATABASE_ID, ALL_TABLES_ID);
+        } else {
+            throw new PrivilegeException("invalid ALL statement for tables!");
+        }
+    }
 
     protected TablePEntryObject(long databaseId, long tableId) {
         super(tableId);
@@ -35,16 +62,14 @@ public class TablePEntryObject extends PEntryObject {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), databaseId);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
+    public boolean match(Object obj) {
         if (!(obj instanceof TablePEntryObject)) {
             return false;
         }
         TablePEntryObject other = (TablePEntryObject) obj;
+        if (databaseId == ALL_DATABASE_ID) {
+            return id == ALL_TABLES_ID || other.id == id;
+        }
         return other.databaseId == databaseId && other.id == id;
     }
 

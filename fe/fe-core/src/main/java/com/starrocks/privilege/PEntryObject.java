@@ -5,8 +5,6 @@ package com.starrocks.privilege;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.server.GlobalStateMgr;
 
-import java.util.Objects;
-
 /**
  * interface is hard to serialized/deserialized using GSON
  * to simplify the implementation, the base class PEntryObject contains one data field called `id`.
@@ -19,13 +17,11 @@ public class PEntryObject {
         this.id = id;
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(id);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
+    /**
+     * if the specific object match current object, including fuzzy matching.
+     * the default behavior is simply check if id is identical.
+     */
+    public boolean match(Object obj) {
         if (!(obj instanceof PEntryObject)) {
             return false;
         }

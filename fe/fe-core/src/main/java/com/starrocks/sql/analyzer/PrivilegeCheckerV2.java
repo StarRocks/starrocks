@@ -11,6 +11,7 @@ import com.starrocks.privilege.PrivilegeTypes;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -63,7 +64,6 @@ public class PrivilegeCheckerV2 {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     context.getQualifiedUser(), db);
         }
-
     }
 
     /**
@@ -162,6 +162,12 @@ public class PrivilegeCheckerV2 {
                 checkTableAction(session, node.getName(), PrivilegeTypes.TableActions.SELECT);
                 return null;
             }
+        }
+
+        @Override
+        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+            // will be checked in analyzer after object is analyzed
+            return null;
         }
     }
 }

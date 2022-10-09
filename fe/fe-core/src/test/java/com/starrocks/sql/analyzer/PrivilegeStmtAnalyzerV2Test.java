@@ -91,16 +91,19 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "grant select,insert,delete on db1.tbl1 to test";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
+        sql = "grant select,insert,delete on db1.tbl1 to test with grant option";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
         sql = "grant select,insert_priv,delete on table db1.tbl1 to test";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
         sql = "revoke create_table on database db1 from test";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "revoke create_table,drop on db1 from test";
+        sql = "revoke create_table,drop on database db1 from test";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "revoke select on db1 from test";
+        sql = "revoke select on database db1 from test";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
@@ -140,7 +143,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one"));
         }
 
-        sql = "grant drop on dbx to test";
+        sql = "grant drop on database dbx to test";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();

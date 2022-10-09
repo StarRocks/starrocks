@@ -14,6 +14,7 @@ import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeNameFormat;
+import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
@@ -21,6 +22,9 @@ import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class PrivilegeStmtAnalyzerV2 {
     private PrivilegeStmtAnalyzerV2() {}
@@ -140,10 +144,28 @@ public class PrivilegeStmtAnalyzerV2 {
             }
             try {
                 PrivilegeManager privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
-                stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType()));
+                List<PEntryObject> objectList = new ArrayList<>();
+                if (stmt.getUserPrivilegeObjectList() != null) {
+                    // objects are user
+                    stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType(), false));
+                    for (UserIdentity userIdentity : stmt.getUserPrivilegeObjectList()) {
+                        objectList.add(privilegeManager.analyzeUserObject(stmt.getPrivType(), userIdentity));
+                    }
+                } else if (stmt.getPrivilegeObjectNameTokensList() != null) {
+                    // normal objects
+                    stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType(), false));
+                    for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
+                        objectList.add(privilegeManager.analyzeObject(stmt.getPrivType(), tokens));
+                    }
+                } else {
+                    // all statement
+                    stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType(), true));
+                    objectList.add(privilegeManager.analyzeObject(
+                            stmt.getPrivType(), stmt.getAllTypeList(), stmt.getRestrictType(), stmt.getRestrictName()));
+                }
                 stmt.setActionList(privilegeManager.analyzeActionSet(stmt.getPrivType(), stmt.getTypeId(), stmt.getPrivList()));
-                stmt.setObject(privilegeManager.analyzeObject(stmt.getPrivType(), stmt.getPrivilegeObjectNameTokenList()));
-                privilegeManager.validateGrant(stmt.getTypeId(), stmt.getActionList(), stmt.getObject());
+                stmt.setObjectList(objectList);
+                privilegeManager.validateGrant(stmt.getTypeId(), stmt.getActionList(), stmt.getObjectList(), session);
             } catch (PrivilegeException e) {
                 SemanticException exception = new SemanticException(e.getMessage());
                 exception.initCause(e);
@@ -151,6 +173,5 @@ public class PrivilegeStmtAnalyzerV2 {
             }
             return null;
         }
-
     }
 }

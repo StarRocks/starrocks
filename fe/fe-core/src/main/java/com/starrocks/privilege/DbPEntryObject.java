@@ -8,6 +8,7 @@ import com.starrocks.server.GlobalStateMgr;
 import java.util.List;
 
 public class DbPEntryObject extends PEntryObject {
+    private static final long ALL_DATABASE_ID = -2; // -2 represent all
 
     public static DbPEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 1) {
@@ -20,19 +21,26 @@ public class DbPEntryObject extends PEntryObject {
         return new DbPEntryObject(database.getId());
     }
 
+    public static DbPEntryObject generate(
+            List<String> allTypes, String restrictType, String restrictName) throws PrivilegeException {
+        // only support ON ALL DATABASE
+        if (allTypes.size() != 1 || restrictType != null || restrictName != null) {
+            throw new PrivilegeException("invalid ALL statement for databases! only support ON ALL DATABASES");
+        }
+        return new DbPEntryObject(ALL_DATABASE_ID);
+    }
+
     protected DbPEntryObject(long dbId) {
         super(dbId);
     }
 
     @Override
-    public int hashCode() {
-        return super.hashCode();
-    }
-
-    @Override
-    public boolean equals(Object obj) {
+    public boolean match(Object obj) {
         if (!(obj instanceof DbPEntryObject)) {
             return false;
+        }
+        if (id == ALL_DATABASE_ID) {
+            return true;
         }
         DbPEntryObject other = (DbPEntryObject) obj;
         return other.id == id;

@@ -1058,15 +1058,32 @@ showWarningStatement
 // ------------------------------------------- Privilege Statement -----------------------------------------------------
 
 
-privilegeObjectName
-    : identifierOrString
-    | tablePrivilegeObjectName
-    | user
+identifierOrStringList
+    : identifierOrString (',' identifierOrString)*
+    ;
+
+// [deprecated] grant select on *
+// [deprecated] grant select on *.*
+// grant select on db1.tbl1,db2.tbl2
+// grant select on db1,db2
+tableDbPrivilegeObjectNameList
+    : identifierOrStringOrStar                                  #deprecatedDbPrivilegeObject
+    | identifierOrStringOrStar '.' identifierOrStringOrStar     #deprecatedTablePrivilegeObject
+    | tablePrivilegeObjectNameList                              #tablePrivilegeObjectList
+    | identifierOrStringList                                    #defaultPrivilegeObjectList
+    ;
+
+tablePrivilegeObjectNameList
+    : tablePrivilegeObjectName (',' tablePrivilegeObjectName)*
     ;
 
 tablePrivilegeObjectName
-    : identifierOrStringOrStar
-    | identifierOrStringOrStar '.' identifierOrStringOrStar
+    : identifierOrString '.' identifierOrString
+    ;
+
+privilegeObjectNameList
+    : tablePrivilegeObjectNameList
+    | identifierOrStringList
     ;
 
 identifierOrStringOrStar
@@ -1101,6 +1118,7 @@ privilegeTypeReserved
     | TABLE
     | DATABASE
     | CATALOG
+    | DATABASES
     ;
 
 privilegeType
@@ -1108,16 +1126,22 @@ privilegeType
     | identifier
     ;
 
+grantRevokeClause
+    : (user | ROLE identifierOrString ) (WITH GRANT OPTION)?
+    ;
+
 grantPrivilegeStatement
-    : GRANT IMPERSONATE ON user TO ( user | ROLE identifierOrString )                                       #grantImpersonateBrief
-    | GRANT privilegeActionList ON tablePrivilegeObjectName TO (user | ROLE identifierOrString)        #grantTablePrivBrief
-    | GRANT privilegeActionList ON privilegeType privilegeObjectName TO (user | ROLE identifierOrString)  #grantPrivWithType
+    : GRANT IMPERSONATE ON user TO grantRevokeClause                                               #grantImpersonateBrief
+    | GRANT privilegeActionList ON tableDbPrivilegeObjectNameList TO grantRevokeClause             #grantTablePrivBrief
+    | GRANT privilegeActionList ON privilegeType privilegeObjectNameList TO grantRevokeClause      #grantPrivWithType
+    | GRANT privilegeActionList ON ALL privilegeType (IN ALL privilegeType)* (IN privilegeType identifierOrString)? TO grantRevokeClause   #grantOnAll
     ;
 
 revokePrivilegeStatement
-    : REVOKE IMPERSONATE ON user FROM ( user | ROLE identifierOrString )                                  #revokeImpersonateBrief
-    | REVOKE privilegeActionList ON tablePrivilegeObjectName FROM (user | ROLE identifierOrString)   #revokeTablePrivBrief
-    | REVOKE privilegeActionList ON privilegeType privilegeObjectName FROM (user | ROLE identifierOrString) #revokePrivWithType
+    : REVOKE IMPERSONATE ON user FROM grantRevokeClause                                            #revokeImpersonateBrief
+    | REVOKE privilegeActionList ON tableDbPrivilegeObjectNameList FROM grantRevokeClause          #revokeTablePrivBrief
+    | REVOKE privilegeActionList ON privilegeType privilegeObjectNameList FROM grantRevokeClause   #revokePrivWithType
+    | REVOKE privilegeActionList ON ALL privilegeType (IN ALL privilegeType)* (IN privilegeType identifierOrString)? FROM grantRevokeClause  #revokeOnAll
     ;
 
 grantRoleStatement
@@ -1904,7 +1928,7 @@ nonReserved
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
     | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
-    | OBSERVER | OFFSET | ONLY | OPEN | OVERWRITE
+    | OBSERVER | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA

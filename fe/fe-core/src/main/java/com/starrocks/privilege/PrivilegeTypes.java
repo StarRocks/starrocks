@@ -7,16 +7,25 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public enum PrivilegeTypes {
-    TABLE(TableActions.values()),
-    DATABASE(DbActions.values());
+    TABLE(TableActions.values(), "TABLES"),
+    DATABASE(DbActions.values(), "DATABASES"),
+    SYSTEM(SystemActions.values(), null),
+    USER(UserActions.values(), null);
 
     private final List<String> validActions;
-    PrivilegeTypes(Object[] validObject) {
+    // used in ALL statement, e.g. grant select on all tables in all databases
+    private final String plural;
+    PrivilegeTypes(Object[] validObject, String plural) {
         this.validActions = Stream.of(validObject).map(o -> o.toString()).collect(Collectors.toList());
+        this.plural = plural;
     }
 
     public List<String> getValidActions() {
         return validActions;
+    }
+
+    public String getPlural() {
+        return plural;
     }
 
     /**
@@ -31,5 +40,13 @@ public enum PrivilegeTypes {
     public enum DbActions {
         CREATE_TABLE,
         DROP
+    }
+
+    public enum SystemActions {
+        GRANT  // AND MORE...
+    }
+
+    public enum UserActions {
+        IMPERSONATE
     }
 }
