@@ -208,6 +208,7 @@ public class FunctionSet {
     public static final String COUNT = "count";
     public static final String HLL_UNION_AGG = "hll_union_agg";
     public static final String MAX = "max";
+    public static final String MAX_BY = "max_by";
     public static final String MIN = "min";
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_CONT = "percentile_cont";
@@ -761,7 +762,15 @@ public class FunctionSet {
             // Max
             addBuiltin(AggregateFunction.createBuiltin(MAX,
                     Lists.newArrayList(t), t, t, true, true, false));
-
+                    
+            // max_by        
+            for (Type t1 : Type.getSupportedTypes()) {
+                if (t1.isFunctionType() || t1.isNull() || t1.isChar() || t1.isPseudoType()) {
+                    continue;
+                }
+                addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t1, t), t1, Type.VARCHAR, true, true, false));
+            }    
+            
             // NDV
             // ndv return string
             addBuiltin(AggregateFunction.createBuiltin(NDV,

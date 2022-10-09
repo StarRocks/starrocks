@@ -24,6 +24,7 @@
 #include "exprs/agg/hll_union_count.h"
 #include "exprs/agg/intersect_count.h"
 #include "exprs/agg/maxmin.h"
+#include "exprs/agg/maxmin_by.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/percentile_approx.h"
 #include "exprs/agg/percentile_cont.h"
@@ -77,6 +78,9 @@ public:
 
     template <PrimitiveType PT>
     static auto MakeMaxAggregateFunction();
+
+    template <PrimitiveType PT>
+    static auto MakeMaxByAggregateFunction();
 
     template <PrimitiveType PT>
     static auto MakeMinAggregateFunction();
@@ -223,6 +227,12 @@ AggregateFunctionPtr AggregateFactory::MakeCountNullableAggregateFunction() {
 template <PrimitiveType PT>
 auto AggregateFactory::MakeMaxAggregateFunction() {
     return std::make_shared<MaxMinAggregateFunction<PT, MaxAggregateData<PT>, MaxElement<PT, MaxAggregateData<PT>>>>();
+}
+
+template <PrimitiveType PT>
+auto AggregateFactory::MakeMaxByAggregateFunction() {
+    return std::make_shared<
+            MaxByAggregateFunction<PT, MaxByAggregateData<PT>, MaxByElement<PT, MaxByAggregateData<PT>>>>();
 }
 
 template <PrimitiveType PT>
@@ -707,6 +717,8 @@ public:
             return AggregateFactory::MakeNtileWindowFunction();
         } else if (name == "histogram") {
             return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
+        } else if (name == "max_by") {
+            return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
         }
         return nullptr;
     }
@@ -799,6 +811,8 @@ public:
             return AggregateFactory::MakeLastValueWindowFunction<ArgPT>();
         } else if (name == "histogram") {
             return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
+        } else if (name == "max_by") {
+            return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
         }
         return nullptr;
     }
@@ -826,6 +840,24 @@ private:
     add_aggregate_mapping<TYPE_DECIMAL32, TYPE_DECIMAL32, ADD_WINDOW_VERSION>(FUNCTIONNAME); \
     add_aggregate_mapping<TYPE_DECIMAL64, TYPE_DECIMAL64, ADD_WINDOW_VERSION>(FUNCTIONNAME); \
     add_aggregate_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, ADD_WINDOW_VERSION>(FUNCTIONNAME);
+
+#define ADD_ALL_TYPE1(FUNCTIONNAME, RET_TYPE)                            \
+    add_aggregate_mapping<TYPE_BOOLEAN, RET_TYPE, true>(FUNCTIONNAME);   \
+    add_aggregate_mapping<TYPE_TINYINT, RET_TYPE, true>(FUNCTIONNAME);   \
+    add_aggregate_mapping<TYPE_SMALLINT, RET_TYPE, true>(FUNCTIONNAME);  \
+    add_aggregate_mapping<TYPE_INT, RET_TYPE, true>(FUNCTIONNAME);       \
+    add_aggregate_mapping<TYPE_BIGINT, RET_TYPE, true>(FUNCTIONNAME);    \
+    add_aggregate_mapping<TYPE_LARGEINT, RET_TYPE, true>(FUNCTIONNAME);  \
+    add_aggregate_mapping<TYPE_FLOAT, RET_TYPE, true>(FUNCTIONNAME);     \
+    add_aggregate_mapping<TYPE_DOUBLE, RET_TYPE, true>(FUNCTIONNAME);    \
+    add_aggregate_mapping<TYPE_VARCHAR, RET_TYPE, true>(FUNCTIONNAME);   \
+    add_aggregate_mapping<TYPE_CHAR, RET_TYPE, true>(FUNCTIONNAME);      \
+    add_aggregate_mapping<TYPE_DECIMALV2, RET_TYPE, true>(FUNCTIONNAME); \
+    add_aggregate_mapping<TYPE_DATETIME, RET_TYPE, true>(FUNCTIONNAME);  \
+    add_aggregate_mapping<TYPE_DATE, RET_TYPE, true>(FUNCTIONNAME);      \
+    add_aggregate_mapping<TYPE_DECIMAL32, RET_TYPE, true>(FUNCTIONNAME); \
+    add_aggregate_mapping<TYPE_DECIMAL64, RET_TYPE, true>(FUNCTIONNAME); \
+    add_aggregate_mapping<TYPE_DECIMAL128, RET_TYPE, true>(FUNCTIONNAME);
 
 AggregateFuncResolver::AggregateFuncResolver() {
     // The function should be placed by alphabetical order
@@ -866,6 +898,23 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("bitmap_union_int");
 
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT, true>("count");
+
+    ADD_ALL_TYPE1("max_by", TYPE_BOOLEAN);
+    ADD_ALL_TYPE1("max_by", TYPE_TINYINT);
+    ADD_ALL_TYPE1("max_by", TYPE_SMALLINT);
+    ADD_ALL_TYPE1("max_by", TYPE_INT);
+    ADD_ALL_TYPE1("max_by", TYPE_BIGINT);
+    ADD_ALL_TYPE1("max_by", TYPE_LARGEINT);
+    ADD_ALL_TYPE1("max_by", TYPE_FLOAT);
+    ADD_ALL_TYPE1("max_by", TYPE_DOUBLE);
+    ADD_ALL_TYPE1("max_by", TYPE_VARCHAR);
+    ADD_ALL_TYPE1("max_by", TYPE_CHAR);
+    ADD_ALL_TYPE1("max_by", TYPE_DECIMALV2);
+    ADD_ALL_TYPE1("max_by", TYPE_DATETIME);
+    ADD_ALL_TYPE1("max_by", TYPE_DATE);
+    ADD_ALL_TYPE1("max_by", TYPE_DECIMAL32);
+    ADD_ALL_TYPE1("max_by", TYPE_DECIMAL64);
+    ADD_ALL_TYPE1("max_by", TYPE_DECIMAL128);
 
     ADD_ALL_TYPE("max", true);
     ADD_ALL_TYPE("min", true);
