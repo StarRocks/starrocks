@@ -2194,7 +2194,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitQueryStatement(StarRocksParser.QueryStatementContext context) {
-        QueryRelation queryRelation = (QueryRelation) visit(context.queryBody());
+        QueryRelation queryRelation = (QueryRelation) visit(context.queryRelation());
         QueryStatement queryStatement = new QueryStatement(queryRelation);
         if (context.outfile() != null) {
             queryStatement.setOutFileClause((OutFileClause) visit(context.outfile()));
@@ -2208,7 +2208,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitQueryBody(StarRocksParser.QueryBodyContext context) {
+    public ParseNode visitQueryRelation(StarRocksParser.QueryRelationContext context) {
         QueryRelation queryRelation = (QueryRelation) visit(context.queryNoWith());
 
         List<CTERelation> withQuery = new ArrayList<>();
@@ -2232,7 +2232,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             columnNames = columns.stream().map(Identifier::getValue).collect(toList());
         }
 
-        QueryRelation queryRelation = (QueryRelation) visit(context.queryBody());
+        QueryRelation queryRelation = (QueryRelation) visit(context.queryRelation());
         // Regenerate cteID when generating plan
         return new CTERelation(
                 RelationId.of(queryRelation).hashCode(),
@@ -2243,7 +2243,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitQueryNoWith(StarRocksParser.QueryNoWithContext context) {
-
         List<OrderByElement> orderByElements = new ArrayList<>();
         if (context.ORDER() != null) {
             orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
@@ -2254,10 +2253,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             limitElement = (LimitElement) visit(context.limitElement());
         }
 
-        QueryRelation term = (QueryRelation) visit(context.queryTerm());
-        term.setOrderBy(orderByElements);
-        term.setLimit(limitElement);
-        return term;
+        QueryRelation queryRelation = (QueryRelation) visit(context.queryPrimary());
+        queryRelation.setOrderBy(orderByElements);
+        queryRelation.setLimit(limitElement);
+        return queryRelation;
     }
 
     @Override
@@ -2696,42 +2695,46 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSubquery(StarRocksParser.SubqueryContext context) {
-        return new SubqueryRelation(new QueryStatement((QueryRelation) visit(context.queryBody())));
+        return visit(context.queryRelation());
     }
 
     @Override
-    public ParseNode visitSubqueryPrimary(StarRocksParser.SubqueryPrimaryContext context) {
-        SubqueryRelation subqueryRelation = (SubqueryRelation) visit(context.subquery());
-        return subqueryRelation.getQueryStatement().getQueryRelation();
+    public ParseNode visitQueryWithParentheses(StarRocksParser.QueryWithParenthesesContext context) {
+        QueryRelation relation = (QueryRelation) visit(context.subquery());
+        return new SubqueryRelation(new QueryStatement(relation));
     }
 
     @Override
-    public ParseNode visitSubqueryRelation(StarRocksParser.SubqueryRelationContext context) {
-        SubqueryRelation subqueryRelation = (SubqueryRelation) visit(context.subquery());
+    public ParseNode visitSubqueryWithAlias(StarRocksParser.SubqueryWithAliasContext context) {
+        QueryRelation queryRelation = (QueryRelation) visit(context.subquery());
+        SubqueryRelation subqueryRelation = new SubqueryRelation(new QueryStatement(queryRelation));
+
         if (context.alias != null) {
             Identifier identifier = (Identifier) visit(context.alias);
             subqueryRelation.setAlias(new TableName(null, identifier.getValue()));
+        } else {
+            subqueryRelation.setAlias(new TableName(null, null));
         }
         return subqueryRelation;
     }
 
     @Override
     public ParseNode visitSubqueryExpression(StarRocksParser.SubqueryExpressionContext context) {
-        SubqueryRelation subqueryRelation = (SubqueryRelation) visit(context.subquery());
-        return new Subquery(subqueryRelation.getQueryStatement());
+        QueryRelation queryRelation = (QueryRelation) visit(context.subquery());
+        return new Subquery(new QueryStatement(queryRelation));
     }
 
     @Override
     public ParseNode visitInSubquery(StarRocksParser.InSubqueryContext context) {
         boolean isNotIn = context.NOT() != null;
-        QueryRelation query = (QueryRelation) visit(context.queryBody());
+        QueryRelation query = (QueryRelation) visit(context.queryRelation());
 
         return new InPredicate((Expr) visit(context.value), new Subquery(new QueryStatement(query)), isNotIn);
     }
 
     @Override
     public ParseNode visitExists(StarRocksParser.ExistsContext context) {
-        QueryRelation query = (QueryRelation) visit(context.queryBody());
+        QueryRelation query = (QueryRelation) visit(context.queryRelation());
         return new ExistsPredicate(new Subquery(new QueryStatement(query)), false);
     }
 
@@ -2739,7 +2742,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitScalarSubquery(StarRocksParser.ScalarSubqueryContext context) {
         BinaryPredicate.Operator op = getComparisonOperator(((TerminalNode) context.comparisonOperator().getChild(0))
                 .getSymbol());
-        Subquery subquery = new Subquery(new QueryStatement((QueryRelation) visit(context.queryBody())));
+        Subquery subquery = new Subquery(new QueryStatement((QueryRelation) visit(context.queryRelation())));
         return new BinaryPredicate(op, (Expr) visit(context.booleanExpression()), subquery);
     }
 
