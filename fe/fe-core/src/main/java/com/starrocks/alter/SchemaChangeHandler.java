@@ -1286,7 +1286,7 @@ public class SchemaChangeHandler extends AlterHandler {
             OlapTable olapTable = (OlapTable) db.getTable(tableName);
             // LakeTable not support update tablet meta
             if (olapTable instanceof LakeTable) {
-                return;
+                throw new DdlException("LakeTable does not support this op");
             }
             Partition partition = olapTable.getPartition(partitionName);
             if (partition == null) {
