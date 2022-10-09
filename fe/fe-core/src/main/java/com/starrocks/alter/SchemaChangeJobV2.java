@@ -508,7 +508,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
          * all tasks are finished. check the integrity.
          * we just check whether all new replicas are healthy.
          */
-        EditLog editLog =GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
         Future<Boolean> future;
         long start = System.nanoTime();
         db.writeLock();
@@ -566,6 +566,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         } finally {
             db.writeUnlock();
         }
+
+        LOG.info("start to sleep ======= ");
+        try {
+            Thread.sleep(60000L);
+        } catch (Exception e) {
+        }
+        LOG.info("end to sleep ======= ");
 
         editLog.waitInfinity(start, future);
 
