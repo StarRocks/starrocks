@@ -201,7 +201,7 @@ public class FunctionSet {
     public static final String SLEEP = "sleep";
     public static final String ISNULL = "isnull";
     public static final String ASSERT_TRUE = "assert_true";
-
+    public static final String HOST_NAME = "host_name";
     // Aggregate functions:
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
     public static final String AVG = "avg";
