@@ -567,13 +567,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             db.writeUnlock();
         }
 
-        LOG.info("start to sleep ======= ");
-        try {
-            Thread.sleep(60000L);
-        } catch (Exception e) {
-        }
-        LOG.info("end to sleep ======= ");
-
         editLog.waitInfinity(start, future);
 
         LOG.info("schema change job finished: {}", jobId);
