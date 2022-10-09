@@ -139,6 +139,52 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
         Response response = networkClient.newCall(request).execute();
 
+        Assert.assertEquals(false, response.body().string().contains("OK"));
+
+        request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .addHeader("db", "abc")
+                .url(PATH_URI)
+                .method("POST", new RequestBody() {
+
+                    @Override
+                    public MediaType contentType() {
+                        return null;
+                    }
+
+                    @Override
+                    public void writeTo(BufferedSink arg0) throws IOException {
+                    }
+                    
+                })
+                .build();
+
+        response = networkClient.newCall(request).execute();
+
+        Assert.assertEquals(false, response.body().string().contains("OK"));
+
+        request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .addHeader("db", "abc")
+                .addHeader("label", "abcdbcef")
+                .url(PATH_URI)
+                .method("POST", new RequestBody() {
+
+                    @Override
+                    public MediaType contentType() {
+                        return null;
+                    }
+
+                    @Override
+                    public void writeTo(BufferedSink arg0) throws IOException {
+                    }
+                })
+                .build();
+
+        response = networkClient.newCall(request).execute();
+
         Assert.assertEquals(true, response.body().string().contains("OK"));
     }
 
@@ -159,7 +205,6 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     @Override
                     public void writeTo(BufferedSink arg0) throws IOException {
                     }
-                    
                 })
                 .build();
 
@@ -290,6 +335,6 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         String res = response.body().string();
         System.out.println(res);
 
-        Assert.assertEquals(true, res.contains("OK"));
+        Assert.assertEquals(false, res.contains("OK"));
     }
 }
