@@ -45,6 +45,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -117,7 +118,7 @@ import java.util.stream.Collectors;
  *  3. The subquery can NOT contain limit clause, which will reduces the row set of the subquery.
  *  4. Outer query must contain all the correlated conjuncts of subquery.
  *  5. The relations accessed by the subquery and outer block must be exactly the same.
- *      * 5.1 Table alias is NOT allowed, for sake of implementation complexity.
+ *      * 5.1 Table alias is NOT allowed, for sake of implementation simplicity.
  *  6. The predicate of subquery and outer block(except the conjuncts which have nothing to do with subquery) must
  *     be exactly the same.
  *  7. ONLY cross join is allowed in outer block and subquery for sake of implementation complexity, though all types
@@ -280,7 +281,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
                 return false;
             }
 
-            List<CallOperator> aggregations = Lists.newArrayList(subAggOp.getAggregations().values());
+            Collection<CallOperator> aggregations = subAggOp.getAggregations().values();
             if (aggregations.stream()
                     .anyMatch(callOp -> !WHITE_LIST.contains(callOp.getFnName()))) {
                 return false;
@@ -444,7 +445,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
                 return outerConjuncts.isEmpty();
             }
             List<ScalarOperator> subConjuncts = Utils.extractConjuncts(subFilterOp.getPredicate());
-            if (!Objects.equals(outerConjuncts.size(), subConjuncts.size())) {
+            if (outerConjuncts.size() != subConjuncts.size()) {
                 return false;
             }
             {
@@ -621,7 +622,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
         }
 
         private boolean compare(ScalarOperator scalarOperator, ScalarOperator peer) {
-            if (!Objects.equals(scalarOperator.getChildren().size(), peer.getChildren().size())) {
+            if (scalarOperator.getChildren().size() != peer.getChildren().size()) {
                 return false;
             }
             for (int i = 0; i < scalarOperator.getChildren().size(); i++) {
