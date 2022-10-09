@@ -198,11 +198,32 @@ bool BinaryColumnBase<T>::append_continuous_strings(const Buffer<Slice>& strs) {
     const uint8_t* p = reinterpret_cast<const uint8_t*>(strs.front().data);
     const uint8_t* q = reinterpret_cast<const uint8_t*>(strs.back().data + strs.back().size);
     _bytes.insert(_bytes.end(), p, q);
+
+    _offsets.reserve(_offsets.size() + strs.size());
     for (const Slice& s : strs) {
         new_size += s.size;
         _offsets.emplace_back(new_size);
     }
     DCHECK_EQ(_bytes.size(), new_size);
+    _slices_cache = false;
+    return true;
+}
+
+template <typename T>
+bool BinaryColumnBase<T>::append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) {
+    if (size == 0) return true;
+    size_t bytes_size = _bytes.size();
+    size_t data_size = size * fixed_length;
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
+    const uint8_t* q = reinterpret_cast<const uint8_t*>(data + data_size);
+    _bytes.insert(_bytes.end(), p, q);
+
+    _offsets.reserve(_offsets.size() + size);
+    for (int i = 0; i < size; i++) {
+        bytes_size += fixed_length;
+        _offsets.emplace_back(bytes_size);
+    }
+    DCHECK_EQ(_bytes.size(), bytes_size);
     _slices_cache = false;
     return true;
 }

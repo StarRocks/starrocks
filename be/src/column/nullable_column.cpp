@@ -148,6 +148,15 @@ bool NullableColumn::append_continuous_strings(const Buffer<Slice>& strs) {
     return false;
 }
 
+bool NullableColumn::append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) {
+    if (_data_column->append_continuous_fixed_length_strings(data, size, fixed_length)) {
+        null_column_data().resize(_null_column->size() + size, 0);
+        return true;
+    }
+    DCHECK_EQ(_null_column->size(), _data_column->size());
+    return false;
+}
+
 size_t NullableColumn::append_numbers(const void* buff, size_t length) {
     size_t n;
     if ((n = _data_column->append_numbers(buff, length)) > 0) {
