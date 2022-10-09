@@ -64,7 +64,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -1205,6 +1204,10 @@ public class SchemaChangeHandler extends AlterHandler {
 
         boolean metaValue = false;
         if (metaType == TTabletMetaType.INMEMORY) {
+            // LakeTable not support alter in_memory
+            if (olapTable.isLakeTable()) {
+                throw new DdlException("LakeTable does not support alter in_memory property");
+            }
             metaValue = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_INMEMORY));
             if (metaValue == olapTable.isInMemory()) {
                 return;
@@ -1242,6 +1245,9 @@ public class SchemaChangeHandler extends AlterHandler {
         db.readLock();
         try {
             olapTable = (OlapTable) db.getTable(tableName);
+            if (olapTable.isLakeTable()) {
+                throw new DdlException("Lake table does not support alter in_memory property");
+            }
             for (String partitionName : partitionNames) {
                 Partition partition = olapTable.getPartition(partitionName);
                 if (partition == null) {
@@ -1284,10 +1290,6 @@ public class SchemaChangeHandler extends AlterHandler {
         db.readLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableName);
-            // LakeTable not support update tablet meta
-            if (olapTable.isLakeTable()) {
-                throw new DdlException("LakeTable does not support this op");
-            }
             Partition partition = olapTable.getPartition(partitionName);
             if (partition == null) {
                 throw new DdlException(
