@@ -308,18 +308,19 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
         }
     }
 
+    bool use_intermediate = _use_intermediate_as_input();
     // prepare output column
     // batch_update/merge stage
     {
         SCOPED_TIMER(_agg_compute_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-            if (!_is_merge_funcs[i]) {
+            if (!_is_merge_funcs[i] && !use_intermediate) {
                 _agg_functions[i]->update_batch(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
                                                 _agg_input_raw_columns[i].data(), _tmp_agg_states.data());
             } else {
-                DCHECK_GE(_agg_intput_columns[i].size(), 1);
-                _agg_functions[i]->merge_batch(_agg_fn_ctxs[i], _agg_intput_columns[i][0]->size(),
-                                               _agg_states_offsets[i], _agg_intput_columns[i][0].get(),
+                DCHECK_GE(_agg_input_columns[i].size(), 1);
+                _agg_functions[i]->merge_batch(_agg_fn_ctxs[i], _agg_input_columns[i][0]->size(),
+                                               _agg_states_offsets[i], _agg_input_columns[i][0].get(),
                                                _tmp_agg_states.data());
             }
         }

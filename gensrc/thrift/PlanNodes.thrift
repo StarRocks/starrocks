@@ -104,7 +104,8 @@ struct TInternalScanRange {
   6: required string db_name
   7: optional list<TKeyRange> partition_column_ranges
   8: optional string index_name
-  9: optional string table_name
+  9: optional string table_name 
+  10: optional i64 partition_id
 }
 
 enum TFileFormatType {
@@ -569,8 +570,11 @@ struct TAggregationNode {
   23: optional string sql_aggregate_functions
 
   24: optional i32 agg_func_set_version = 1
+  
+  // used in query cache
+  25: optional list<Exprs.TExpr> intermediate_aggr_exprs
 
-  25: optional bool use_sort_agg
+  26: optional bool use_sort_agg
 }
 
 struct TRepeatNode {

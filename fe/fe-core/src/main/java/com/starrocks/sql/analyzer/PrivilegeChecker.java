@@ -386,7 +386,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitExportStmt(ExportStmt statement, ConnectContext context) {
+        public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
             TableName tblName = statement.getTblName();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
                     tblName.getDb(), tblName.getTbl(),
@@ -656,7 +656,7 @@ public class PrivilegeChecker {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
                 }
             } else {
-                if (stmt.getPrivType().equals("TABLE")) {
+                if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
                     TablePattern tblPattern = stmt.getTblPattern();
                     if (tblPattern.getPrivLevel() == Auth.PrivLevel.GLOBAL) {
                         if (!GlobalStateMgr.getCurrentState().getAuth()

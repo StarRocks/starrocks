@@ -300,6 +300,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     RETURN_IF_ERROR(_load_channel_mgr->init(_load_mem_tracker));
     _heartbeat_flags = new HeartbeatFlags();
+    auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
+    _cache_mgr = new query_cache::CacheManager(capacity);
     return Status::OK();
 }
 
@@ -493,7 +495,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_external_scan_context_mgr);
     SAFE_DELETE(_lake_tablet_manager);
     SAFE_DELETE(_lake_location_provider);
-
+    SAFE_DELETE(_cache_mgr);
     _metrics = nullptr;
 }
 

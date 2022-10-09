@@ -33,6 +33,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.io.Writable;
+import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -702,15 +703,29 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return toSql();
     }
 
+
     // Convert this expr, including all children, to its Thrift representation.
     public TExpr treeToThrift() {
         TExpr result = new TExpr();
-        treeToThriftHelper(result);
+        treeToThriftHelper(result, Expr::toThrift);
         return result;
     }
 
+    public void toNormalForm(TExprNode tExprNode, FragmentNormalizer normalizer) {
+        this.toThrift(tExprNode);
+    }
+
+    public TExpr normalize(FragmentNormalizer normalizer) {
+        TExpr result = new TExpr();
+        treeToThriftHelper(result, (expr, texprNode) -> expr.toNormalForm(texprNode, normalizer));
+        return result;
+    }
+
+    public interface ExprVisitor {
+        void visit(Expr expr, TExprNode texprNode);
+    }
     // Append a flattened version of this expr, including all children, to 'container'.
-    protected void treeToThriftHelper(TExpr container) {
+    final void treeToThriftHelper(TExpr container, ExprVisitor visitor) {
         TExprNode msg = new TExprNode();
 
         if (type.isNull()) {
@@ -718,7 +733,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             // being cast to a non-NULL type, the type doesn't matter and we can cast it
             // arbitrarily.
             NullLiteral l = NullLiteral.create(ScalarType.BOOLEAN);
-            l.treeToThriftHelper(container);
+            l.treeToThriftHelper(container, visitor);
             return;
         }
 
@@ -734,12 +749,11 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
         msg.output_scale = getOutputScale();
         msg.setIs_monotonic(isMonotonic());
-        toThrift(msg);
+        visitor.visit(this, msg);
         container.addToNodes(msg);
         for (Expr child : children) {
-            child.treeToThriftHelper(container);
+            child.treeToThriftHelper(container, visitor);
         }
-
     }
 
     // Convert this expr into msg (excluding children), which requires setting
@@ -1359,4 +1373,5 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             return expr;
         }
     }
+
 }

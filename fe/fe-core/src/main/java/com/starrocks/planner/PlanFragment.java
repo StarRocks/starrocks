@@ -29,7 +29,10 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.system.BackendCoreStat;
+import com.starrocks.thrift.TCacheParam;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TNetworkAddress;
@@ -135,17 +138,25 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     private final Set<Integer> runtimeFilterBuildNodeIds = Sets.newHashSet();
 
+    private boolean hasJoinNode = false;
+    private boolean hasOlapScanNode = false;
+
+    private PlanNodeId cachePlanNodeId = null;
+    private ByteBuffer digest = null;
+    private Map<Integer, Integer> slotRemapping = Maps.newHashMap();
+    private Map<Long, String> rangeMap = Maps.newHashMap();
+
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
     public PlanFragment(PlanFragmentId id, PlanNode root, DataPartition partition) {
         this.fragmentId = id;
-        this.planRoot = root;
         this.dataPartition = partition;
         this.outputPartition = DataPartition.UNPARTITIONED;
         this.transferQueryStatisticsWithEveryBatch = false;
         // when dop adaptation is enabled, parallelExecNum and pipelineDop set to degreeOfParallelism and 1 respectively
         // in default. these values just a hint to help determine numInstances and pipelineDop of a PlanFragment.
+        setPlanRoot(root);
         setParallelExecNumIfExists();
         setFragmentInPlanTree(planRoot);
     }
@@ -253,6 +264,38 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.outputExprs = Expr.cloneList(outputExprs, null);
     }
 
+    public void setCachePlanNodeId(PlanNodeId cachePlanNodeId) {
+        this.cachePlanNodeId = cachePlanNodeId;
+    }
+
+    public PlanNodeId getCachePlanNodeId() {
+        return cachePlanNodeId;
+    }
+
+    public ByteBuffer getDigest() {
+        return digest;
+    }
+
+    public void setDigest(ByteBuffer digest) {
+        this.digest = digest;
+    }
+
+    public Map<Integer, Integer> getSlotRemapping() {
+        return slotRemapping;
+    }
+
+    public void setSlotRemapping(Map<Integer, Integer> slotRemapping) {
+        this.slotRemapping = slotRemapping;
+    }
+
+    public Map<Long, String> getRangeMap() {
+        return rangeMap;
+    }
+
+    public void setRangeMap(Map<Long, String> rangeMap) {
+        this.rangeMap = rangeMap;
+    }
+
     /**
      * Finalize plan tree and create stream sink, if needed.
      */
@@ -309,6 +352,20 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
         if (!loadGlobalDicts.isEmpty()) {
             result.setLoad_global_dicts(dictToThrift(loadGlobalDicts));
+        }
+        if (cachePlanNodeId != null && cachePlanNodeId.isValid()) {
+            TCacheParam cacheParam = new TCacheParam();
+            cacheParam.setId(getCachePlanNodeId().asInt());
+            cacheParam.setDigest(getDigest());
+            cacheParam.setRegion_map(getRangeMap());
+            cacheParam.setSlot_remapping(getSlotRemapping());
+            if (ConnectContext.get() != null) {
+                SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+                cacheParam.setForce_populate(sessionVariable.isQueryCacheForcePopulate());
+                cacheParam.setEntry_max_bytes(sessionVariable.getQueryCacheEntryMaxBytes());
+                cacheParam.setEntry_max_rows(sessionVariable.getQueryCacheEntryMaxRows());
+            }
+            result.setCache_param(cacheParam);
         }
         return result;
     }
@@ -449,6 +506,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setPlanRoot(PlanNode root) {
         planRoot = root;
+        if (root instanceof JoinNode) {
+            hasJoinNode = true;
+        } else if (root instanceof OlapScanNode) {
+            hasOlapScanNode = true;
+        }
         setFragmentInPlanTree(planRoot);
     }
 
@@ -564,4 +626,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return false;
     }
 
+    public boolean hasJoinNode() {
+        return hasJoinNode;
+    }
+
+    public boolean hasOlapScanNode() {
+        return hasOlapScanNode;
+    }
 }

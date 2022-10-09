@@ -167,6 +167,9 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
         const Expr* root_expr = ctx->root();
         std::vector<SlotId> slot_ids;
         root_expr->get_slot_ids(&slot_ids);
+        for (SlotId slot_id : slot_ids) {
+            _conjunct_slots.insert(slot_id);
+        }
 
         // For some conjunct like (a < 1) or (a > 7)
         // slot_ids = (a, a), but actually there is only one slot.
@@ -271,6 +274,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.partition_values = _partition_values;
     scanner_params.conjunct_ctxs = _scanner_conjunct_ctxs;
     scanner_params.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
+    scanner_params.conjunct_slots = _conjunct_slots;
     scanner_params.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;

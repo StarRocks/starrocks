@@ -3440,8 +3440,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitGrantTablePrivBrief(StarRocksParser.GrantTablePrivBriefContext context) {
+        int objectTokenSize = context.tablePrivilegeObjectName().identifierOrStringOrStar().size();
         return visitGrantRevokePrivWithType(
-                "TABLE",
+                objectTokenSize == 1 ? "DATABASE" : "TABLE",
                 context.privilegeActionList(),
                 null,
                 context.tablePrivilegeObjectName(),
@@ -3454,8 +3455,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitRevokeTablePrivBrief(StarRocksParser.RevokeTablePrivBriefContext context) {
+        int objectTokenSize = context.tablePrivilegeObjectName().identifierOrStringOrStar().size();
         return visitGrantRevokePrivWithType(
-                "TABLE",
+                objectTokenSize == 1 ? "DATABASE" : "TABLE",
                 context.privilegeActionList(),
                 null,
                 context.tablePrivilegeObjectName(),
@@ -3469,7 +3471,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitGrantPrivWithType(StarRocksParser.GrantPrivWithTypeContext context) {
         return visitGrantRevokePrivWithType(
-                context.identifier().getText(),
+                ((Identifier) visit(context.privilegeType())).getValue().toUpperCase(),
                 context.privilegeActionList(),
                 context.privilegeObjectName().identifierOrString(),
                 context.privilegeObjectName().tablePrivilegeObjectName(),
@@ -3482,7 +3484,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitRevokePrivWithType(StarRocksParser.RevokePrivWithTypeContext context) {
         return visitGrantRevokePrivWithType(
-                context.identifier().getText(),
+                ((Identifier) visit(context.privilegeType())).getValue().toUpperCase(),
                 context.privilegeActionList(),
                 context.privilegeObjectName().identifierOrString(),
                 context.privilegeObjectName().tablePrivilegeObjectName(),
@@ -3543,6 +3545,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
+    @Override
+    public ParseNode visitPrivilegeType(StarRocksParser.PrivilegeTypeContext context) {
+        if (context.privilegeTypeReserved() != null) {
+            return new Identifier(context.privilegeTypeReserved().getText());
+        } else {
+            return visit(context.identifier());
+        }
+    }
 
     @Override
     public ParseNode visitExecuteAsStatement(StarRocksParser.ExecuteAsStatementContext context) {

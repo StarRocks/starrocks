@@ -167,7 +167,7 @@ public class ShowExportStmt extends ShowStmt {
     }
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowExportStmt(this, context);
+        return visitor.visitShowExportStatement(this, context);
     }
 
     @Override

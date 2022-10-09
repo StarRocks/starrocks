@@ -65,6 +65,8 @@ struct HashTableKeyAllocator {
     }
 
     uint8_t* allocate_null_key_data() { return pool->allocate_aligned(alloc_batch_size * aggregate_key_size, aligned); }
+
+    void reset() { vecs.clear(); }
 };
 
 inline void RawHashTableIterator::next() {
@@ -100,12 +102,25 @@ struct AggFunctionTypes {
     bool is_nullable; // agg function result whether is nullable
 };
 
-struct GroupByColumnTypes {
+struct ColumnType {
     TypeDescriptor result_type;
     bool is_nullable;
 };
 
 enum AggrPhase { AggrPhase1, AggrPhase2 };
+enum AggrMode {
+    AM_DEFAULT, // normal mode(cache feature turn off)
+    // A blocking operator is split into a pair {blocking operator(before cache), blocking operator(after cache)]
+    // process non-passthrough chunks: (pre-cache: input-->intermediate) => (post-cache: intermediate->output)
+    // process passthrough chunks: (pre-cache: input-->input) => (post-cache: input--> output)
+    AM_BLOCKING_PRE_CACHE,
+    AM_BLOCKING_POST_CACHE,
+    // A streaming operator is split into a pair {streaming operator(before cache), streaming operator(after cache)]
+    // process non-passthrough chunks: (pre-cache: input-->intermediate) => (post-cache: intermediate->intermediate)
+    // process passthrough chunks: (pre-cache: input-->input) = > (post-cache: input-->intermediate)
+    AM_STREAMING_PRE_CACHE,
+    AM_STREAMING_POST_CACHE
+};
 
 struct StreamingHtMinReductionEntry {
     int min_ht_mem;
@@ -158,6 +173,7 @@ public:
     int64_t num_pass_through_rows() { return _num_pass_through_rows; }
     void set_aggr_phase(AggrPhase aggr_phase) { _aggr_phase = aggr_phase; }
     AggrPhase get_aggr_phase() { return _aggr_phase; }
+    Status reset_state(std::vector<vectorized::ChunkPtr>&& chunks);
 
     TStreamingPreaggregationMode::type streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
     const vectorized::AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
@@ -210,6 +226,8 @@ public:
     void try_convert_to_two_level_set();
 
     Status check_has_error();
+
+    void set_aggr_mode(AggrMode aggr_mode) { _aggr_mode = aggr_mode; }
 
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
@@ -279,9 +297,12 @@ protected:
     // The expr used to evaluate agg input columns
     // one agg function could have multi input exprs
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    std::vector<std::vector<vectorized::ColumnPtr>> _agg_intput_columns;
+    std::vector<std::vector<vectorized::ColumnPtr>> _agg_input_columns;
     //raw pointers in order to get multi-column values
     std::vector<std::vector<const vectorized::Column*>> _agg_input_raw_columns;
+    // The expr used to evaluate agg intermediate columns.
+    std::vector<std::vector<ExprContext*>> _intermediate_agg_expr_ctxs;
+
     // Indicates we should use update or merge method to process aggregate column data
     std::vector<bool> _is_merge_funcs;
     // In order batch update agg states
@@ -294,7 +315,7 @@ protected:
     // Exprs used to evaluate group by column
     std::vector<ExprContext*> _group_by_expr_ctxs;
     vectorized::Columns _group_by_columns;
-    std::vector<GroupByColumnTypes> _group_by_types;
+    std::vector<ColumnType> _group_by_types;
 
     // Tuple into which Update()/Merge()/Serialize() results are stored.
     TupleId _intermediate_tuple_id;
@@ -307,7 +328,8 @@ protected:
 
     // used for blocking aggregate
     AggrPhase _aggr_phase = AggrPhase1;
-
+    AggrMode _aggr_mode = AM_DEFAULT;
+    bool _is_passthrough = false;
     std::vector<uint8_t> _streaming_selection;
 
     bool _has_udaf = false;
@@ -368,6 +390,7 @@ public:
         vectorized::Columns group_by_columns = _create_group_by_columns();
         vectorized::Columns agg_result_columns = _create_agg_result_columns();
 
+        auto use_intermediate = _use_intermediate_as_output();
         int32_t read_index = 0;
         {
             SCOPED_TIMER(_iter_timer);
@@ -389,7 +412,7 @@ public:
 
         {
             SCOPED_TIMER(_agg_append_timer);
-            if (_needs_finalize) {
+            if (!use_intermediate) {
                 for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
                     _agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
                                                       _agg_states_offsets[i], agg_result_columns[i].get());
@@ -414,7 +437,7 @@ public:
                     DCHECK(group_by_columns[0]->is_nullable());
                     group_by_columns[0]->append_default();
 
-                    if (_needs_finalize) {
+                    if (!use_intermediate) {
                         _finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns);
                     } else {
                         _serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns);
@@ -481,7 +504,8 @@ public:
 
         vectorized::ChunkPtr result_chunk = std::make_shared<vectorized::Chunk>();
         // For different agg phase, we should use different TupleDescriptor
-        if (_needs_finalize) {
+        auto use_intermediate = _use_intermediate_as_output();
+        if (!use_intermediate) {
             for (size_t i = 0; i < group_by_columns.size(); i++) {
                 result_chunk->append_column(group_by_columns[i], _output_tuple_desc->slots()[i]->id());
             }
@@ -496,6 +520,14 @@ public:
 
 protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
+
+    bool _use_intermediate_as_input() {
+        return ((_aggr_mode == AM_BLOCKING_POST_CACHE) || (_aggr_mode == AM_STREAMING_POST_CACHE)) && !_is_passthrough;
+    }
+
+    bool _use_intermediate_as_output() {
+        return _aggr_mode == AM_STREAMING_PRE_CACHE || _aggr_mode == AM_BLOCKING_PRE_CACHE || !_needs_finalize;
+    }
 
     // initial const columns for i'th FunctionContext.
     Status _evaluate_const_columns(int i);
@@ -513,7 +545,10 @@ protected:
     vectorized::ChunkPtr _build_output_chunk(const vectorized::Columns& group_by_columns,
                                              const vectorized::Columns& agg_result_columns);
 
-    void _reset_exprs(vectorized::Chunk* chunk);
+    void _set_passthrough(bool flag) { _is_passthrough = flag; }
+    bool is_passthrough() const { return _is_passthrough; }
+
+    void _reset_exprs();
     Status _evaluate_exprs(vectorized::Chunk* chunk);
 
     // Choose different agg hash map/set by different group by column's count, type, nullable
@@ -582,13 +617,17 @@ public:
             return it->second;
         }
         auto aggregator = std::make_shared<T>(_tnode);
+        aggregator->set_aggr_mode(_aggr_mode);
         _aggregators[id] = aggregator;
         return aggregator;
     }
 
+    void set_aggr_mode(AggrMode aggr_mode) { _aggr_mode = aggr_mode; }
+
 private:
     const TPlanNode& _tnode;
     std::unordered_map<size_t, Ptr> _aggregators;
+    AggrMode _aggr_mode = AggrMode::AM_DEFAULT;
 };
 
 using AggregatorFactory = AggregatorFactoryBase<Aggregator>;

@@ -34,7 +34,6 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingSinkOperator::pull_chunk(Runtim
 
 Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     size_t chunk_size = chunk->num_rows();
-
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
@@ -168,5 +167,9 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
     }
 
     return Status::OK();
+}
+Status AggregateStreamingSinkOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+    _is_finished = false;
+    return _aggregator->reset_state(std::move(chunks));
 }
 } // namespace starrocks::pipeline
