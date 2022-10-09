@@ -237,7 +237,7 @@ ColumnPtr UtilityFunctions::assert_true(FunctionContext* context, const Columns&
 }
 
 ColumnPtr UtilityFunctions::host_name(starrocks_udf::FunctionContext* context, const Columns& columns) {
-    static std::string host_name;
+    std::string host_name;
     auto status = get_hostname(&host_name);
     if (status.ok()) {
         return ColumnHelper::create_const_column<TYPE_VARCHAR>(host_name, 1);
