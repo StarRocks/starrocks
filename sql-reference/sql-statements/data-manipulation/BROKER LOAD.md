@@ -308,7 +308,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 - `timezone`
 
-  指定导入作业所使用的时区。默认为 `Asia/Shanghai` 时区。该参数会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](/using_starrocks/timezone.md)。
+  指定导入作业所使用的时区。默认为 `Asia/Shanghai` 时区。该参数会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](/using_starrocks/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](/using_starrocks/timezone.md)”中所述的会话级时区。
 
 ## 示例
 
