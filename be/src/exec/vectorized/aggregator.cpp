@@ -169,7 +169,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             // Because intersect_count has more two input types.
             // intersect_count's first argument's type is alwasy Bitmap,
             // So we get its second arguments type as input.
-            if (fn.name.function_name == "intersect_count") {
+            if (fn.name.function_name == "intersect_count" || fn.name.function_name == "max_by") {
                 arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
             }
 

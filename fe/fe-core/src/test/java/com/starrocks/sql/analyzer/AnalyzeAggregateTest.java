@@ -50,6 +50,13 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select ta,tc from tall group by ta,tc having ta = user()");
 
         analyzeSuccess("select count() from t0");
+        
+        analyzeSuccess("select max_by(v1,v2) from t0");
+        analyzeFail("select max_by(v1) from t0", "No matching function with signature: max_by(bigint(20)).");
+        analyzeFail("select max_by(v1,v2,v3) from t0", 
+                "No matching function with signature: max_by(bigint(20), bigint(20), bigint(20)).");
+        analyzeFail("select max_by(v1,1) from t0", "max_by function args must be column");
+        analyzeFail("select max_by(1,v1) from t0", "max_by function args must be column");
     }
 
     @Test
