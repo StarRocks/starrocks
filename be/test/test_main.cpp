@@ -89,5 +89,7 @@ int main(int argc, char** argv) {
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     starrocks::ExecEnv::destroy(exec_env);
 
+    starrocks::shutdown_logging();
+
     return r;
 }
