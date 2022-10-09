@@ -1,8 +1,15 @@
-# ROUTINE LOAD
+# CREATE ROUTINE LOAD
 
 ## 功能
 
-例行导入（Routine Load）功能支持用户提交一个常驻的导入任务，通过不断地从指定的数据源读取数据，将数据导入到 StarRocks 中。目前支持通过无安全认证、SSL 加密和认证方式、SASL 认证的方式，从 Apache Kafka 导入文本格式（CSV）或 JSON 格式数据。Routine Load 的使用场景，请参见 [Routine load](/loading/RoutineLoad.md) 章节。
+Routine Load 支持持续消费 Apache Kafka® 的消息并导入至 StarRocks 中，并且是一种基于 MySQL 协议的异步导入方式。
+
+Routine Load 支持消费 Kafka 中 CSV 或 JSON 格式数据。Routine Load 支持通过无安全认证、SSL 加密和认证、SASL 认证机制访问 Kafka。
+
+本文介绍 CREATE ROUTINE LOAD 的语法、参数说明和示例。
+
+> Routine Load 的应用场景、基本原理和基本操作，请参见 [从 Apache Kafka® 持续导入
+](/loading/RoutineLoad.md)。
 
 ## 语法
 
