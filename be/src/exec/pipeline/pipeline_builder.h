@@ -71,6 +71,8 @@ public:
             OpFactories& upstream_pipeline, OpFactories& downstream_pipeline,
             std::function<std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(bool)> merge_operators_generator);
 
+    // help to change some actions after aggregations, for example,
+    // disable to ignore local data after aggregations with profile exchange speed.
     bool has_aggregation = false;
 
 private:

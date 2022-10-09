@@ -99,6 +99,8 @@ private:
     const PlanNodeId _dest_node_id;
 
     const bool _enable_exchange_pass_through;
+    // enable it to profile exchange's performance, which ignores computing local data for exchange_speed/_bytes,
+    // because local data isn't accessed by remote network.
     const bool _enable_exchange_perf;
     PassThroughContext _pass_through_context;
 
