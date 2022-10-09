@@ -21,13 +21,13 @@
 
 #include "agent/task_worker_pool.h"
 
+#include <atomic>
 #include <boost/lexical_cast.hpp>
 #include <chrono>
 #include <condition_variable>
 #include <ctime>
 #include <sstream>
 #include <string>
-#include <atomic>
 
 #include "agent/agent_server.h"
 #include "agent/finish_task.h"
