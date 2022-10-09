@@ -40,6 +40,8 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.math.BigInteger;
+import java.util.Calendar;
 import java.util.List;
 
 public class PartitionKey implements Comparable<PartitionKey>, Writable {
@@ -164,6 +166,71 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             }
         }
         return Integer.compare(thisKeyLen, otherKeyLen);
+    }
+
+    public PartitionKey successor() {
+        Preconditions.checkArgument(keys.size() == 1);
+        if (isMaxValue()) {
+            return this;
+        }
+        LiteralExpr literal = keys.get(0);
+        PrimitiveType type = types.get(0);
+        PartitionKey key = new PartitionKey();
+
+        switch (type) {
+            case TINYINT:
+            case SMALLINT:
+            case INT:
+            case BIGINT: {
+                IntLiteral intLiteral = (IntLiteral) literal;
+                final long maxValue = 1L << ((type.getSlotSize() << 3) - 1) - 1L;
+                long succ = intLiteral.getValue();
+                succ += succ < maxValue ? 1L : 0L;
+                key.pushColumn(new IntLiteral(succ, Type.fromPrimitiveType(type)), type);
+                return key;
+            }
+            case LARGEINT: {
+                LargeIntLiteral largeIntLiteral = (LargeIntLiteral) literal;
+                final BigInteger maxValue = BigInteger.ONE.shiftLeft(127).subtract(BigInteger.ONE);
+                BigInteger succ = largeIntLiteral.getValue();
+                succ = succ.add(succ.compareTo(maxValue) < 0 ? BigInteger.ONE : BigInteger.ZERO);
+                try {
+                    key.pushColumn(new LargeIntLiteral(succ.toString()), type);
+                    return key;
+                } catch (Exception ignored) {
+                    Preconditions.checkArgument(false, "Never reach here");
+                }
+            }
+            case DATE:
+            case DATETIME: {
+                DateLiteral dateLiteral = (DateLiteral) literal;
+                Calendar calendar = Calendar.getInstance();
+                int year = (int) dateLiteral.getYear();
+                int mon = (int) dateLiteral.getMonth() - 1;
+                int day = (int) dateLiteral.getDay();
+                int hour = (int) dateLiteral.getHour();
+                int min = (int) dateLiteral.getMinute();
+                int sec = (int) dateLiteral.getSecond();
+                calendar.set(year, mon, day, hour, min, sec);
+                calendar.add(type == PrimitiveType.DATE ? Calendar.DATE : Calendar.SECOND, 1);
+                year = calendar.get(Calendar.YEAR);
+                mon = calendar.get(Calendar.MONTH) + 1;
+                day = calendar.get(Calendar.DATE);
+                hour = calendar.get(Calendar.HOUR_OF_DAY);
+                min = calendar.get(Calendar.MINUTE);
+                sec = calendar.get(Calendar.SECOND);
+                if (type == PrimitiveType.DATE) {
+                    dateLiteral = new DateLiteral(year, mon, day);
+                } else {
+                    dateLiteral = new DateLiteral(year, mon, day, hour, min, sec);
+                }
+                key.pushColumn(dateLiteral, type);
+                return key;
+            }
+            default:
+                Preconditions.checkArgument(false, "Never reach here");
+                return null;
+        }
     }
 
     // return: ("100", "200", "300")

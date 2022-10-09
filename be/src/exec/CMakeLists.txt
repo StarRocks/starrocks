@@ -201,7 +201,11 @@ set(EXEC_FILES
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
-)
+    query_cache/multilane_operator.cpp
+    query_cache/cache_operator.cpp
+    query_cache/cache_manager.cpp
+    query_cache/lane_arbiter.cpp
+    query_cache/conjugate_operator.cpp)
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.

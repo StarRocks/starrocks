@@ -223,6 +223,7 @@ std::unique_ptr<Chunk> Chunk::clone_unique() const {
         ColumnPtr column = _columns[idx]->clone_shared();
         chunk->_columns[idx] = std::move(column);
     }
+    chunk->_owner_info = _owner_info;
     chunk->check_or_die();
     return chunk;
 }

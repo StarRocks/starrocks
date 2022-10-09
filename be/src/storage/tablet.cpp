@@ -573,6 +573,14 @@ bool Tablet::version_for_delete_predicate(const Version& version) {
     return _tablet_meta->version_for_delete_predicate(version);
 }
 
+bool Tablet::has_delete_predicates(const Version& version) {
+    std::shared_lock rlock(get_header_lock());
+    const auto& preds = _tablet_meta->delete_predicates();
+    return std::any_of(preds.begin(), preds.end(), [&version](const auto& pred) {
+        return version.first <= pred.version() && pred.version() <= version.second;
+    });
+}
+
 bool Tablet::check_migrate(const TabletSharedPtr& tablet) {
     if (tablet->is_migrating()) {
         LOG(WARNING) << "tablet is migrating. tablet_id=" << tablet->tablet_id();

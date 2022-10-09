@@ -20,6 +20,11 @@
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
+namespace query_cache {
+class MultilaneOperator;
+using MultilaneOperatorRawPtr = MultilaneOperator*;
+using MultilaneOperators = std::vector<MultilaneOperatorRawPtr>;
+} // namespace query_cache
 
 namespace pipeline {
 

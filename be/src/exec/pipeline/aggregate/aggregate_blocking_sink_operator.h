@@ -29,6 +29,7 @@ public:
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status reset_state(std::vector<ChunkPtr>&& chunks) override;
 
 private:
     // It is used to perform aggregation algorithms shared by
