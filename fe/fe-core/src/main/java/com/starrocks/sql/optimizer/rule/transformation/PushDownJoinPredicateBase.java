@@ -20,7 +20,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarEquivalenceExtractor;
 import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.Set;
@@ -64,7 +64,6 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
         List<ScalarOperator> rightPushDown = Lists.newArrayList();
         ColumnRefSet leftColumns = input.getInputs().get(0).getOutputColumns();
         ColumnRefSet rightColumns = input.getInputs().get(1).getOutputColumns();
-        boolean canRemoveOnCondition = true;
         if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {
             for (ScalarOperator predicate : conjunctList) {
                 ColumnRefSet usedColumns = predicate.getUsedColumns();
@@ -86,8 +85,7 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
                     rightPushDown.add(predicate);
                 }
             }
-        } else if (join.getJoinType().isSemiJoin() || join.getJoinType().isAntiJoin()) {
-            canRemoveOnCondition = false;
+        } else if (join.getJoinType().isSemiAntiJoin()) {
             for (ScalarOperator predicate : conjunctList) {
                 ColumnRefSet usedColumns = predicate.getUsedColumns();
                 if (leftColumns.containsAll(usedColumns)) {
@@ -104,7 +102,11 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
             }
         }
 
-        if (canRemoveOnCondition) {
+
+        // predicate can be removed from the original on condition should meet at least one rule below:
+        // 1. join type is not semi/anti
+        // 2. eqConjuncts is not empty
+        if (!join.getJoinType().isSemiAntiJoin() || CollectionUtils.isNotEmpty(eqConjuncts)) {
             conjunctList.removeAll(leftPushDown);
             conjunctList.removeAll(rightPushDown);
         }

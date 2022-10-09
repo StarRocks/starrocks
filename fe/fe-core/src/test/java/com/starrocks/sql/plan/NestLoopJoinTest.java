@@ -98,7 +98,7 @@ public class NestLoopJoinTest extends PlanTestBase {
     }
 
     @Test
-    public void testUnsupportedNLJoin() throws Exception {
+    public void testUnsupportedNLJoin() {
         String sql = "select v1 from t0 where 1 IN ((SELECT v4 FROM t1, t2, t3 WHERE CASE WHEN true " +
                 "THEN (CAST(((((-1710265121)%(1583445171)))%(CAST(v1 AS INT ) )) AS STRING ) )  " +
                 "BETWEEN (v4) AND (v5)   " +
@@ -110,5 +110,4 @@ public class NestLoopJoinTest extends PlanTestBase {
 
         Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
     }
-
 }
