@@ -285,7 +285,8 @@ std::string FileScanner::create_tmp_file_path() {
 
     auto stores = StorageEngine::instance()->get_stores();
     std::stringstream ss;
-    ss << stores[cur_sec % stores.size()]->path() << TMP_PREFIX << "/" << buf << "." << generate_uuid_string() << ".tmp";
+    ss << stores[cur_sec % stores.size()]->path() << TMP_PREFIX << "/" << buf << "." << generate_uuid_string()
+       << ".tmp";
     return ss.str();
 }
 
