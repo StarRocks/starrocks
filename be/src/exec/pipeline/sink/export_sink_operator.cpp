@@ -63,6 +63,9 @@ void ExportSinkIOBuffer::close(RuntimeState* state) {
         _file_builder.reset();
     }
     _is_finished = true;
+    if (_exec_queue_id != nullptr) {
+        bthread::execution_queue_stop(*_exec_queue_id);
+    }
 }
 
 void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter) {

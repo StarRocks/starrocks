@@ -7,6 +7,8 @@ DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include "bthread/execution_queue.h"
 DIAGNOSTIC_POP
+#include "column/chunk.h"
+#include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
