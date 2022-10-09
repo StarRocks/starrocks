@@ -310,6 +310,7 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UnitBoundary;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
@@ -3931,13 +3932,61 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     FunctionSet.ADDDATE,
                     FunctionSet.DATE_ADD, FunctionSet.DATE_SUB,
                     FunctionSet.SUBDATE,
-                    FunctionSet.DAYS_SUB,
-                    FunctionSet.TIME_SLICE);
+                    FunctionSet.DAYS_SUB);
+
+    private static List<Expr> getArgumentsForTimeSlice(Expr time, Expr value, String ident, String boundary) {
+        List<Expr> exprs = Lists.newLinkedList();
+        exprs.add(time);
+        exprs.add(value);
+        exprs.add(new StringLiteral(ident));
+        exprs.add(new StringLiteral(boundary));
+
+        return exprs;
+    }
 
     @Override
     public ParseNode visitSimpleFunctionCall(StarRocksParser.SimpleFunctionCallContext context) {
 
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+
+        FunctionName fnName = FunctionName.createFnName(functionName);
+        if (functionName.equals(FunctionSet.TIME_SLICE)) {
+            if (context.expression().size() == 2) {
+                Expr e1 = (Expr) visit(context.expression(0));
+                Expr e2 = (Expr) visit(context.expression(1));
+                if (!(e2 instanceof IntervalLiteral)) {
+                    e2 = new IntervalLiteral(e2, new UnitIdentifier("DAY"));
+                }
+                IntervalLiteral intervalLiteral = (IntervalLiteral) e2;
+                FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName, getArgumentsForTimeSlice(e1, 
+                        intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(), 
+                        "floor"));
+
+                return functionCallExpr;
+            } else if (context.expression().size() == 3) {
+                Expr e1 = (Expr) visit(context.expression(0));
+                Expr e2 = (Expr) visit(context.expression(1));
+                if (!(e2 instanceof IntervalLiteral)) {
+                    e2 = new IntervalLiteral(e2, new UnitIdentifier("DAY"));
+                }
+                IntervalLiteral intervalLiteral = (IntervalLiteral) e2;
+
+                ParseNode e3 = (ParseNode) visit(context.expression(2));
+                if (!(e3 instanceof UnitBoundary)) {
+                    e3 = new UnitBoundary("floor");
+                }
+                UnitBoundary unitBoundary = (UnitBoundary) e3;
+                FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName, getArgumentsForTimeSlice(e1,
+                        intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(), 
+                        unitBoundary.getDescription().toLowerCase()));
+
+                return functionCallExpr;
+            } else {
+                throw new ParsingException(
+                        functionName + " must as format " + functionName + "(date,INTERVAL expr unit[, FLOOR"
+                            + " | CEIL])");
+            }
+        }
 
         if (DATE_FUNCTIONS.contains(functionName)) {
             if (context.expression().size() != 2) {
@@ -3964,11 +4013,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             return new IsNullPredicate(params.get(0), false);
         }
-
-        FunctionName fnName = FunctionName.createFnName(functionName);
+        
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
                 new FunctionParams(false, visit(context.expression(), Expr.class)));
-
         if (context.over() != null) {
             return buildOverClause(functionCallExpr, context.over());
         }
@@ -4104,6 +4151,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.PASSWORD() != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.string());
             return new StringLiteral(new String(MysqlPassword.makeScrambledPassword(stringLiteral.getValue())));
+        } else if (context.FLOOR() != null) {
+            return new FunctionCallExpr("floor", visit(context.expression(), Expr.class));
+        } else if (context.CEIL() != null) {
+            return new FunctionCallExpr("ceil", visit(context.expression(), Expr.class));
         }
 
         if (context.TIMESTAMPADD() != null || context.TIMESTAMPDIFF() != null) {
@@ -4327,6 +4378,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitUnitIdentifier(StarRocksParser.UnitIdentifierContext context) {
         return new UnitIdentifier(context.getText());
+    }
+
+    @Override
+    public ParseNode visitUnitBoundary(StarRocksParser.UnitBoundaryContext context) {
+        return new UnitBoundary(context.getText());
     }
 
     @Override
