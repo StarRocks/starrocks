@@ -2,6 +2,7 @@
 
 #include "exec/pipeline/aggregate/sorted_aggregate_streaming_source_operator.h"
 
+#include "exec/pipeline/sort/sort_context.h"
 #include "exec/vectorized/sorted_streaming_aggregator.h"
 
 namespace starrocks::pipeline {
@@ -53,12 +54,21 @@ void SortedAggregateStreamingSourceOperator::close(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> SortedAggregateStreamingSourceOperator::pull_chunk(RuntimeState* state) {
     DCHECK(has_output());
+    vectorized::ChunkPtr chunk;
     if (!_aggregator->is_chunk_buffer_empty()) {
-        return _aggregator->poll_chunk_buffer();
+        ASSIGN_OR_RETURN(chunk, _aggregator->pull_eos_chunk());
+    } else {
+        ASSIGN_OR_RETURN(chunk, _aggregator->pull_eos_chunk());
+        _aggregator->set_ht_eos();
     }
-    ASSIGN_OR_RETURN(auto chunk, _aggregator->pull_eos_chunk());
-    _aggregator->set_ht_eos();
-    // TODO:
+    size_t old_size = chunk->num_rows();
+    eval_runtime_bloom_filters(chunk.get());
+
+    // For having
+    RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_aggregator->conjunct_ctxs(), chunk.get()));
+    _aggregator->update_num_rows_returned(-(old_size - chunk->num_rows()));
+    DCHECK_CHUNK(chunk);
+
     return chunk;
 }
 
