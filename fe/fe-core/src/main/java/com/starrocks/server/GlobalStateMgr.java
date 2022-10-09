@@ -40,7 +40,6 @@ import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UninstallPluginStmt;
-import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.BrokerMgr;
@@ -174,6 +173,7 @@ import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
@@ -364,6 +364,7 @@ public class GlobalStateMgr {
     private boolean usingNewPrivilege = USING_NEW_PRIVILEGE;
 
     private AuthenticationManager authenticationManager;
+    private PrivilegeManager privilegeManager;
 
     private DomainResolver domainResolver;
 
@@ -533,12 +534,7 @@ public class GlobalStateMgr {
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
-
-        if (!usingNewPrivilege) {
-            this.auth = new Auth();
-            this.domainResolver = new DomainResolver(auth);
-            this.authenticationManager = null;
-        }
+        initAuth(usingNewPrivilege);
 
         this.resourceGroupMgr = new ResourceGroupMgr(this);
 
@@ -560,10 +556,10 @@ public class GlobalStateMgr {
                 new LeaderTaskExecutor("pending_load_task_scheduler", Config.async_load_task_pool_size,
                         Config.desired_max_waiting_jobs, !isCheckpointCatalog);
         // One load job will be split into multiple loading tasks, the queue size is not
-        // determined, so set async_load_task_pool_size * 10
+        // determined, so set desired_max_waiting_jobs * 10
         this.loadingLoadTaskScheduler = new PriorityLeaderTaskExecutor("loading_load_task_scheduler",
                 Config.async_load_task_pool_size,
-                Config.async_load_task_pool_size * 10, !isCheckpointCatalog);
+                Config.desired_max_waiting_jobs * 10, !isCheckpointCatalog);
         this.loadJobScheduler = new LoadJobScheduler();
         this.loadManager = new LoadManager(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadManager);
@@ -670,6 +666,10 @@ public class GlobalStateMgr {
 
     public AuthenticationManager getAuthenticationManager() {
         return authenticationManager;
+    }
+
+    public PrivilegeManager getPrivilegeManager() {
+        return privilegeManager;
     }
 
     public ResourceGroupMgr getResourceGroupMgr() {
@@ -863,7 +863,6 @@ public class GlobalStateMgr {
 
         // 2. get cluster id and role (Observer or Follower)
         nodeMgr.getClusterIdAndRoleOnStartup();
-        initAuth(usingNewPrivilege);
 
         // 3. Load image first and replay edits
         initJournal();
@@ -886,13 +885,19 @@ public class GlobalStateMgr {
     }
 
     // set usingNewPrivilege = true in UT
-    public void initAuth(boolean usingNewPrivilege) throws AuthenticationException {
+    public void initAuth(boolean usingNewPrivilege) {
         if (usingNewPrivilege) {
-            this.usingNewPrivilege = true;
-            this.authenticationManager = new AuthenticationManager();
-            this.authenticationManager.init();
+            this.usingNewPrivilege = usingNewPrivilege;
             this.auth = null;
             this.domainResolver = null;
+            this.authenticationManager = new AuthenticationManager();
+            this.privilegeManager = new PrivilegeManager(this, null);
+            LOG.info("using new privilege framework..");
+        } else {
+            this.auth = new Auth();
+            this.domainResolver = new DomainResolver(auth);
+            this.authenticationManager = null;
+            this.privilegeManager = null;
         }
     }
 
@@ -1311,6 +1316,7 @@ public class GlobalStateMgr {
     public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
         if (usingNewPrivilege) {
             this.authenticationManager = AuthenticationManager.load(dis);
+            this.privilegeManager = PrivilegeManager.load(dis, this, null);
         }
     }
 
@@ -1521,6 +1527,7 @@ public class GlobalStateMgr {
     public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
         if (usingNewPrivilege) {
             this.authenticationManager.save(dos);
+            this.privilegeManager.save(dos);
         }
     }
 

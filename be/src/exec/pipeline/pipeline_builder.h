@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <exec/pipeline/scan/olap_scan_operator.h>
+
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
@@ -63,6 +65,11 @@ public:
     MorselQueueFactory* morsel_queue_factory_of_source_operator(const SourceOperatorFactory* source_op);
     // Whether the building pipeline `ops` need local shuffle for the next operator.
     bool need_local_shuffle(OpFactories ops) const;
+
+    bool should_interpolate_cache_operator(OpFactoryPtr& source_op, int32_t plan_node_id);
+    OpFactories interpolate_cache_operator(
+            OpFactories& upstream_pipeline, OpFactories& downstream_pipeline,
+            std::function<std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(bool)> merge_operators_generator);
 
 private:
     static constexpr int kLocalExchangeBufferChunks = 8;

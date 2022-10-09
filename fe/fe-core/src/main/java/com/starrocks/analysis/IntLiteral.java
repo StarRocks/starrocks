@@ -45,6 +45,7 @@ public class IntLiteral extends LiteralExpr {
     public static final long INT_MIN = Integer.MIN_VALUE; // -2^31 ~ 2^31 - 1
     public static final long INT_MAX = Integer.MAX_VALUE;
     public static final long BIG_INT_MIN = Long.MIN_VALUE; // -2^63 ~ 2^63 - 1
+    public static final long BIG_INT_MAX = Long.MAX_VALUE;
     private long value;
 
     /**
@@ -183,6 +184,30 @@ public class IntLiteral extends LiteralExpr {
 
         return new IntLiteral(value);
     }
+
+    public static IntLiteral createMaxValue(Type type) {
+        long value = 0L;
+        switch (type.getPrimitiveType()) {
+            case TINYINT:
+                value = TINY_INT_MAX;
+                break;
+            case SMALLINT:
+                value = SMALL_INT_MAX;
+                break;
+            case INT:
+                value = INT_MAX;
+                break;
+            case BIGINT:
+                value = BIG_INT_MAX;
+                break;
+            default:
+                Preconditions.checkState(false);
+        }
+
+        return new IntLiteral(value);
+    }
+
+
 
     public static IntLiteral read(DataInput in) throws IOException {
         IntLiteral literal = new IntLiteral();

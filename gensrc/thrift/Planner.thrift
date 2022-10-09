@@ -29,6 +29,16 @@ include "DataSinks.thrift"
 include "PlanNodes.thrift"
 include "Partitions.thrift"
 
+struct TCacheParam {
+1: optional i32 id;
+2: optional binary digest;
+3: optional map<i32,i32> slot_remapping;
+4: optional map<i64,string> region_map;
+5: optional bool force_populate;
+6: optional i64 entry_max_bytes;
+7: optional i64 entry_max_rows;
+}
+
 // TPlanFragment encapsulates info needed to execute a particular
 // plan fragment, including how to produce and how to partition its output.
 // It leaves out node-specific parameters neede for the actual execution.
@@ -69,6 +79,7 @@ struct TPlanFragment {
   20: optional list<Data.TGlobalDict> query_global_dicts
   // For insert into table select * from table, we need to distinguish the global dicts for query and load
   21: optional list<Data.TGlobalDict> load_global_dicts
+  22: optional TCacheParam cache_param
 }
 
 // location information for a single scan range

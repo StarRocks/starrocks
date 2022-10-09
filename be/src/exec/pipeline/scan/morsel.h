@@ -59,6 +59,10 @@ public:
 
     virtual void init_tablet_reader_params(vectorized::TabletReaderParams* params) {}
 
+    virtual std::tuple<int64_t, int64_t> get_lane_owner_and_version() const {
+        return std::tuple<int64_t, int64_t>{0L, 0L};
+    }
+
 private:
     int32_t _plan_node_id;
 };
@@ -74,6 +78,17 @@ public:
     TScanRange* get_scan_range() { return _scan_range.get(); }
 
     TInternalScanRange* get_olap_scan_range() { return &(_scan_range->internal_scan_range); }
+
+    std::tuple<int64_t, int64_t> get_lane_owner_and_version() const override {
+        if (_scan_range->__isset.internal_scan_range) {
+            auto tablet_id = _scan_range->internal_scan_range.tablet_id;
+            auto str_version = _scan_range->internal_scan_range.version;
+            auto version = strtol(str_version.c_str(), nullptr, 10);
+            return std::tuple<int64_t, int64_t>{tablet_id, version};
+        } else {
+            return std::tuple<int64_t, int64_t>{0L, 0L};
+        }
+    }
 
 private:
     std::unique_ptr<TScanRange> _scan_range;
@@ -171,8 +186,11 @@ public:
     virtual size_t max_degree_of_parallelism() const = 0;
     virtual bool empty() const = 0;
     virtual StatusOr<MorselPtr> try_get() = 0;
-
+    void unget(MorselPtr&& morsel);
     virtual std::string name() const = 0;
+
+protected:
+    MorselPtr _unget_morsel = nullptr;
 };
 
 // The morsel queue with a fixed number of morsels, which is determined in the constructor.
@@ -186,7 +204,7 @@ public:
 
     size_t num_original_morsels() const override { return _num_morsels; }
     size_t max_degree_of_parallelism() const override { return _num_morsels; }
-    bool empty() const override { return _pop_index >= _num_morsels; }
+    bool empty() const override { return _unget_morsel == nullptr && _pop_index >= _num_morsels; }
     StatusOr<MorselPtr> try_get() override;
 
     std::string name() const override { return "fixed_morsel_queue"; }
@@ -216,7 +234,7 @@ public:
 
     size_t num_original_morsels() const override { return _morsels.size(); }
     size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
-    bool empty() const override { return _tablet_idx >= _tablets.size(); }
+    bool empty() const override { return _unget_morsel == nullptr && _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get() override;
 
     std::string name() const override { return "physical_split_morsel_queue"; }
@@ -290,7 +308,7 @@ public:
 
     size_t num_original_morsels() const override { return _morsels.size(); }
     size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
-    bool empty() const override { return _tablet_idx >= _tablets.size(); }
+    bool empty() const override { return _unget_morsel == nullptr && _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get() override;
 
     std::string name() const override { return "logical_split_morsel_queue"; }

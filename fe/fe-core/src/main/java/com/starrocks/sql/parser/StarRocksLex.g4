@@ -341,6 +341,9 @@ WORK: 'WORK';
 WRITE: 'WRITE';
 YEAR: 'YEAR';
 
+FLOOR: 'FLOOR';
+CEIL: 'CEIL';
+
 EQ  : '=';
 NEQ : '<>' | '!=';
 LT  : '<';

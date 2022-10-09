@@ -32,6 +32,7 @@ import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
+import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
@@ -51,6 +52,7 @@ import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.ShowExportStmt;
 import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowRolesStmt;
@@ -619,8 +621,18 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(stmt, context);
     }
 
-    public R visitCancelExportStatement(CancelExportStmt stmt, C context) {
-        return visitStatement(stmt, context);
+    // --------------------------------------- Export Statement --------------------------------------------------------
+
+    public R visitExportStatement(ExportStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCancelExportStatement(CancelExportStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowExportStatement(ShowExportStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ----------------- Catalog Clause -------------

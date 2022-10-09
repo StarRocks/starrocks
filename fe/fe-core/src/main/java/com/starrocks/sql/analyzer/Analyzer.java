@@ -5,6 +5,7 @@ import com.starrocks.analysis.AddSqlBlackListStmt;
 import com.starrocks.analysis.AlterLoadStmt;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.BackupStmt;
+import com.starrocks.analysis.CancelExportStmt;
 import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
@@ -12,6 +13,7 @@ import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
+import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
@@ -19,6 +21,7 @@ import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.ShowExportStmt;
 import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowSnapshotStmt;
@@ -590,6 +593,24 @@ public class Analyzer {
         @Override
         public Void visitShowTransactionStmt(ShowTransactionStmt statement, ConnectContext session) {
             ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
+            ExportStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowExportStatement(ShowExportStmt statement, ConnectContext context) {
+            ExportStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCancelExportStatement(CancelExportStmt statement, ConnectContext context) {
+            ExportStmtAnalyzer.analyze(statement, context);
             return null;
         }
 

@@ -90,6 +90,7 @@ public class VariableMgrTest {
         Assert.assertEquals(300, var.getQueryTimeoutS());
         Assert.assertEquals(false, var.isReportSucc());
         Assert.assertEquals(32L, var.getSqlMode());
+        Assert.assertEquals(true, var.isInnodbReadOnly());
 
         List<List<String>> rows = VariableMgr.dump(SetType.SESSION, var, null);
         Assert.assertTrue(rows.size() > 5);

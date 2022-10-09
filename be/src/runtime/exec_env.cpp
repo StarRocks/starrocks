@@ -154,6 +154,16 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _pipeline_prepare_pool =
             new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
 
+    int num_sink_io_threads = config::pipeline_sink_io_thread_pool_thread_num;
+    if (num_sink_io_threads <= 0) {
+        num_sink_io_threads = std::thread::hardware_concurrency();
+    }
+    if (config::pipeline_sink_io_thread_pool_queue_size <= 0) {
+        return Status::InvalidArgument("pipeline_sink_io_thread_pool_queue_size shoule be greater than 0");
+    }
+    _pipeline_sink_io_pool =
+            new PriorityThreadPool("pip_sink_io", num_sink_io_threads, config::pipeline_sink_io_thread_pool_queue_size);
+
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
     _max_executor_threads = std::thread::hardware_concurrency();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
@@ -290,6 +300,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     RETURN_IF_ERROR(_load_channel_mgr->init(_load_mem_tracker));
     _heartbeat_flags = new HeartbeatFlags();
+    auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
+    _cache_mgr = new query_cache::CacheManager(capacity);
     return Status::OK();
 }
 
@@ -429,10 +441,10 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_load_path_mgr);
     SAFE_DELETE(_driver_executor);
     SAFE_DELETE(_wg_driver_executor);
-    SAFE_DELETE(_driver_limiter);
     SAFE_DELETE(_fragment_mgr);
     SAFE_DELETE(_udf_call_pool);
     SAFE_DELETE(_pipeline_prepare_pool);
+    SAFE_DELETE(_pipeline_sink_io_pool);
     SAFE_DELETE(_scan_executor_without_workgroup);
     SAFE_DELETE(_scan_executor_with_workgroup);
     SAFE_DELETE(_connector_scan_executor_without_workgroup);
@@ -470,8 +482,9 @@ void ExecEnv::_destroy() {
 
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate _query_pool_mem_tracker.
     workgroup::WorkGroupManager::instance()->destroy();
-    SAFE_DELETE(_query_pool_mem_tracker);
     SAFE_DELETE(_query_context_mgr);
+    SAFE_DELETE(_driver_limiter);
+    SAFE_DELETE(_query_pool_mem_tracker);
     SAFE_DELETE(_mem_tracker);
     SAFE_DELETE(_broker_client_cache);
     SAFE_DELETE(_frontend_client_cache);
@@ -482,7 +495,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_external_scan_context_mgr);
     SAFE_DELETE(_lake_tablet_manager);
     SAFE_DELETE(_lake_location_provider);
-
+    SAFE_DELETE(_cache_mgr);
     _metrics = nullptr;
 }
 

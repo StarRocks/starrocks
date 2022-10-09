@@ -29,6 +29,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
+import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
@@ -226,6 +227,20 @@ public class SlotRef extends Expr {
             msg.slot_ref = new TSlotRef(0,0);
         }
 
+        msg.setOutput_column(outputColumn);
+    }
+
+    @Override
+    public void toNormalForm(TExprNode msg, FragmentNormalizer normalizer) {
+        msg.node_type = TExprNodeType.SLOT_REF;
+        if (desc != null) {
+            SlotId newSlotId = normalizer.remapSlotId(desc.getId());
+            // tuple id is meaningless here
+            msg.slot_ref = new TSlotRef(newSlotId.asInt(), 0);
+        } else {
+            // slot id and tuple id are meaningless here
+            msg.slot_ref = new TSlotRef(0, 0);
+        }
         msg.setOutput_column(outputColumn);
     }
 

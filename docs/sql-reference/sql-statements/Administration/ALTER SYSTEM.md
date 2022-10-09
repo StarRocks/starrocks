@@ -169,7 +169,3 @@ Note:
    ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES
    ("type"= "null");
    ```
-
-## keyword
-
-ALTER,SYSTEM,BACKEND,BROKER,FREE

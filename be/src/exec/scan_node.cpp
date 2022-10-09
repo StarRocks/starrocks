@@ -130,4 +130,11 @@ StatusOr<pipeline::MorselQueuePtr> ScanNode::convert_scan_range_to_morsel_queue(
     return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
 }
 
+void ScanNode::enable_shared_scan(bool enable) {
+    _enable_shared_scan = enable;
+}
+
+bool ScanNode::is_shared_scan_enabled() const {
+    return _enable_shared_scan;
+}
 } // namespace starrocks

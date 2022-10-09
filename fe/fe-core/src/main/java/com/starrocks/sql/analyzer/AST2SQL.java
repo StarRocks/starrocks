@@ -32,6 +32,7 @@ import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
@@ -109,7 +110,7 @@ public class AST2SQL {
                 String priv = privilege.toString().toUpperCase();
                 sb.append(priv.substring(0, priv.length() - 5));
             }
-            if (stmt.getPrivType().equals("TABLE")) {
+            if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
                 sb.append(" ON " + stmt.getTblPattern());
             } else if (stmt.getPrivType().equals("RESOURCE")) {
                 sb.append(" ON RESOURCE ").append(stmt.getResourcePattern());
@@ -233,7 +234,8 @@ public class AST2SQL {
 
         @Override
         public String visitSubquery(SubqueryRelation subquery, Void context) {
-            return "(" + visit(subquery.getQueryStatement()) + ")" + " " + subquery.getAlias();
+            return "(" + visit(subquery.getQueryStatement()) + ")"
+                    + " " + (subquery.getAlias() == null ? "" : subquery.getAlias());
         }
 
         @Override
@@ -503,7 +505,7 @@ public class AST2SQL {
 
             }
             strBuilder.append("EXISTS ");
-            strBuilder.append(printWithParentheses(node.getChild(0)));
+            strBuilder.append(visit(node.getChild(0)));
             return strBuilder.toString();
         }
 
@@ -515,7 +517,8 @@ public class AST2SQL {
         public String visitFunctionCall(FunctionCallExpr node, Void context) {
             FunctionParams fnParams = node.getParams();
             StringBuilder sb = new StringBuilder();
-            sb.append(node.getFnName().getFunction());
+            String functionName = node.getFnName().getFunction();
+            sb.append(functionName);
 
             sb.append("(");
             if (fnParams.isStar()) {
@@ -524,8 +527,20 @@ public class AST2SQL {
             if (fnParams.isDistinct()) {
                 sb.append("DISTINCT ");
             }
-            List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
-            sb.append(Joiner.on(", ").join(p)).append(")");
+
+            if (functionName.equalsIgnoreCase("TIME_SLICE")) {
+                sb.append(visit(node.getChild(0))).append(", ");
+                sb.append("INTERVAL ");
+                sb.append(visit(node.getChild(1)));
+                StringLiteral ident = (StringLiteral) node.getChild(2);
+                sb.append(" ").append(ident.getValue());
+                StringLiteral boundary = (StringLiteral) node.getChild(3);
+                sb.append(", ").append(boundary.getValue());
+                sb.append(")");
+            } else {
+                List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
+                sb.append(Joiner.on(", ").join(p)).append(")");
+            }
             return sb.toString();
         }
 
@@ -576,6 +591,7 @@ public class AST2SQL {
             return node.getColumnName();
         }
 
+        @Override
         public String visitSubquery(Subquery node, Void context) {
             return "(" + visit(node.getQueryStatement()) + ")";
         }

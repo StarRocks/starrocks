@@ -22,7 +22,3 @@ Note:
     ```sql
     CREATE INDEX index_name ON table1 (siteid) USING BITMAP COMMENT 'balabala';
     ```
-
-## keyword
-
-CREATE,INDEX

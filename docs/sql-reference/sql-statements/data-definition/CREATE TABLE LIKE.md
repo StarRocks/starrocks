@@ -35,7 +35,3 @@ Note:
     ```sql
     CREATE TABLE test1.table2 LIKE test1.table1
     ```
-
-## keyword
-
-CREATE,TABLE,LIKE

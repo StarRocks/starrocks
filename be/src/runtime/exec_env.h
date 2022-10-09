@@ -26,6 +26,7 @@
 #include <unordered_map>
 
 #include "common/status.h"
+#include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "storage/options.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
@@ -161,6 +162,7 @@ public:
 
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
+    PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     starrocks::pipeline::DriverExecutor* driver_executor() { return _driver_executor; }
     starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
@@ -205,6 +207,8 @@ public:
     AgentServer* agent_server() const { return _agent_server; }
 
     int64_t get_storage_page_cache_size();
+
+    query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
@@ -280,6 +284,7 @@ private:
 
     PriorityThreadPool* _udf_call_pool = nullptr;
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
+    PriorityThreadPool* _pipeline_sink_io_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     pipeline::DriverExecutor* _driver_executor = nullptr;
@@ -313,6 +318,7 @@ private:
     lake::LocationProvider* _lake_location_provider = nullptr;
 
     AgentServer* _agent_server = nullptr;
+    query_cache::CacheManagerRawPtr _cache_mgr;
 };
 
 template <>

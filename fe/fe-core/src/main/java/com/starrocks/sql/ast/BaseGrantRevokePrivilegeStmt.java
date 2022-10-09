@@ -7,6 +7,8 @@ import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.mysql.privilege.PrivBitSet;
+import com.starrocks.privilege.ActionSet;
+import com.starrocks.privilege.PEntryObject;
 
 import java.util.List;
 
@@ -22,6 +24,11 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     private UserIdentity userPrivilegeObject = null;
     // the following fields is set by analyzer
     private PrivBitSet privBitSet = null;
+    // the following fields is set by analyzer, for new RBAC privilege framework
+    private boolean withGrantOption = false;
+    private short typeId;
+    private ActionSet actionList;
+    private PEntryObject object;
 
     public BaseGrantRevokePrivilegeStmt(List<String> privList, String privType, UserIdentity userIdentity) {
         this.privList = privList;
@@ -97,6 +104,34 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
 
     public PrivBitSet getPrivBitSet() {
         return privBitSet;
+    }
+
+    public boolean isWithGrantOption() {
+        return withGrantOption;
+    }
+
+    public short getTypeId() {
+        return typeId;
+    }
+
+    public void setTypeId(short typeId) {
+        this.typeId = typeId;
+    }
+
+    public ActionSet getActionList() {
+        return actionList;
+    }
+
+    public void setActionList(ActionSet actionList) {
+        this.actionList = actionList;
+    }
+
+    public PEntryObject getObject() {
+        return object;
+    }
+
+    public void setObject(PEntryObject object) {
+        this.object = object;
     }
 
     @Override

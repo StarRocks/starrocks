@@ -100,7 +100,7 @@ public class ConnectContext {
     // the protocol capability after server and client negotiate
     protected MysqlCapability capability;
     // Indicate if this client is killed.
-    protected boolean isKilled;
+    protected volatile boolean isKilled;
     // catalog
     protected volatile String currentCatalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     // Db
@@ -141,6 +141,8 @@ public class ConnectContext {
 
     protected String remoteIP;
 
+    protected volatile boolean closed;
+
     // set with the randomstring extracted from the handshake data at connecting stage
     // used for authdata(password) salting
     protected byte[] authDataSalt;
@@ -180,6 +182,7 @@ public class ConnectContext {
     }
 
     public ConnectContext(SocketChannel channel) {
+        closed = false;
         state = new QueryState();
         returnRows = 0;
         serverCapability = MysqlCapability.DEFAULT_CAPABILITY;
@@ -414,7 +417,11 @@ public class ConnectContext {
         this.executor = executor;
     }
 
-    public void cleanup() {
+    public synchronized void cleanup() {
+        if (closed) {
+            return;
+        }
+        closed = true;
         mysqlChannel.close();
         threadLocalInfo.remove();
         returnRows = 0;
@@ -517,16 +524,32 @@ public class ConnectContext {
     public void kill(boolean killConnection) {
         LOG.warn("kill timeout query, {}, kill connection: {}",
                 getMysqlChannel().getRemoteHostPortString(), killConnection);
-
-        if (killConnection) {
-            isKilled = true;
-            // Close channel to break connection with client
-            getMysqlChannel().close();
-        }
         // Now, cancel running process.
         StmtExecutor executorRef = executor;
+        if (killConnection) {
+            isKilled = true;
+        }
         if (executorRef != null) {
             executorRef.cancel();
+        }
+        if (killConnection) {
+            int times = 0;
+            while (!closed) {
+                try {
+                    Thread.sleep(10);
+                    times++;
+                    if (times > 100) {
+                        LOG.warn("wait for close fail, break.");
+                        break;
+                    }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                    LOG.warn("sleep exception, ignore.");
+                    break;
+                }
+            }
+            // Close channel to break connection with client
+            getMysqlChannel().close();
         }
     }
 

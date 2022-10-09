@@ -24,22 +24,35 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TupleId;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TAggregationNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TNormalAggregationNode;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStreamingPreaggregationMode;
 import org.apache.commons.collections.CollectionUtils;
 
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class AggregationNode extends PlanNode {
     private final AggregateInfo aggInfo;
@@ -52,6 +65,8 @@ public class AggregationNode extends PlanNode {
     private boolean useStreamingPreagg;
 
     private String streamingPreaggregationMode = "auto";
+
+    private boolean withLocalShuffle = false;
 
     /**
      * Create an agg node that is not an intermediate node.
@@ -82,6 +97,8 @@ public class AggregationNode extends PlanNode {
         useStreamingPreagg = canUseStreamingPreAgg && aggInfo.getGroupingExprs().size() > 0;
     }
 
+    public AggregateInfo getAggInfo() { return aggInfo; }
+
     /**
      * Have this node materialize the aggregation's intermediate tuple instead of
      * the output tuple.
@@ -91,6 +108,10 @@ public class AggregationNode extends PlanNode {
         Preconditions.checkState(tupleIds.get(0).equals(aggInfo.getOutputTupleId()));
         tupleIds.clear();
         tupleIds.add(aggInfo.getIntermediateTupleId());
+    }
+
+    public void setWithLocalShuffle(boolean withLocalShuffle) {
+        this.withLocalShuffle = withLocalShuffle;
     }
 
     @Override
@@ -168,6 +189,12 @@ public class AggregationNode extends PlanNode {
                 msg.agg_node.setSql_grouping_keys(sqlGroupingKeysBuilder.toString());
             }
         }
+
+        List<Expr> intermediateAggrExprs = aggInfo.getIntermediateAggrExprs();
+        if (intermediateAggrExprs != null && !intermediateAggrExprs.isEmpty()) {
+            msg.agg_node.setIntermediate_aggr_exprs(Expr.treesToThrift(intermediateAggrExprs));
+        }
+
         msg.agg_node.setHas_outer_join_child(hasNullableGenerateChild);
         if (streamingPreaggregationMode.equalsIgnoreCase("force_streaming")) {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_STREAMING);
@@ -176,7 +203,7 @@ public class AggregationNode extends PlanNode {
         } else {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }
-        msg.agg_node.setAgg_func_set_version(3);
+        msg.agg_node.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
     }
 
     protected String getDisplayLabelDetail() {
@@ -212,10 +239,14 @@ public class AggregationNode extends PlanNode {
                     getVerboseExplain(aggInfo.getGroupingExprs(), detailLevel)).append("\n");
         }
 
-
         if (!conjuncts.isEmpty()) {
             output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel)).append("\n");
         }
+
+        if (withLocalShuffle) {
+            output.append(detailPrefix).append("withLocalShuffle: true\n");
+        }
+
         return output.toString();
     }
 
@@ -261,5 +292,60 @@ public class AggregationNode extends PlanNode {
     @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalAggregationNode aggrNode = new TNormalAggregationNode();
+        TupleId tupleId = needsFinalize? aggInfo.getOutputTupleId():aggInfo.getIntermediateTupleId();
+        List<SlotId> slotIds = normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleId).getSlots()
+                .stream().map(SlotDescriptor::getId).collect(Collectors.toList());
+
+        List<Expr> groupingExprs = aggInfo.getGroupingExprs();
+        Map<SlotId, Expr> slotIdsAndGroupingExprs = Maps.newHashMap();
+        int numGroupingExprs = (groupingExprs == null || groupingExprs.isEmpty()) ? 0 : groupingExprs.size();
+
+        IntStream.range(0, numGroupingExprs).forEach(i ->
+                slotIdsAndGroupingExprs.put(slotIds.get(i), groupingExprs.get(i)));
+        Pair<List<Integer>, List<ByteBuffer>> remappedGroupExprs =
+                normalizer.normalizeSlotIdsAndExprs(slotIdsAndGroupingExprs);
+        aggrNode.setGrouping_exprs(remappedGroupExprs.second);
+
+        Map<SlotId, Expr> slotIdsAndAggExprs = Maps.newHashMap();
+        List<FunctionCallExpr> aggExprs = aggInfo.getMaterializedAggregateExprs();
+        int numAggExprs = (aggExprs == null || aggExprs.isEmpty()) ? 0 : aggExprs.size();
+        IntStream.range(0, numAggExprs).forEach(i ->
+                slotIdsAndAggExprs.put(slotIds.get(i + numGroupingExprs), aggExprs.get(i)));
+        Pair<List<Integer>, List<ByteBuffer>> remappedAggExprs =
+                normalizer.normalizeSlotIdsAndExprs(slotIdsAndAggExprs);
+        aggrNode.setAggregate_functions(remappedAggExprs.second);
+
+        aggrNode.setIntermediate_tuple_id(normalizer.remapTupleId(aggInfo.getIntermediateTupleId()).asInt());
+        aggrNode.setOutput_tuple_id(normalizer.remapTupleId(aggInfo.getOutputTupleId()).asInt());
+        aggrNode.setNeed_finalize(needsFinalize);
+        aggrNode.setUse_streaming_preaggregation(useStreamingPreagg);
+        aggrNode.setHas_outer_join_child(hasNullableGenerateChild);
+        if (streamingPreaggregationMode.equalsIgnoreCase("force_streaming")) {
+            aggrNode.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_STREAMING);
+        } else if (streamingPreaggregationMode.equalsIgnoreCase("force_preaggregation")) {
+            aggrNode.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.FORCE_PREAGGREGATION);
+        } else {
+            aggrNode.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
+        }
+        aggrNode.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
+        planNode.setNode_type(TPlanNodeType.AGGREGATION_NODE);
+        planNode.setAgg_node(aggrNode);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
+    }
+
+    @Override
+    public List<SlotId> getOutputSlotIds(DescriptorTable descriptorTable) {
+        final List<Expr> groupingExprs = aggInfo.getGroupingExprs();
+        final List<FunctionCallExpr> aggExprs = aggInfo.getMaterializedAggregateExprs();
+        int numGroupingExprs = groupingExprs != null ? groupingExprs.size() : 0;
+        int numAggExprs = aggExprs != null ? aggExprs.size() : 0;
+        TupleId tupleId = needsFinalize ? aggInfo.getOutputTupleId() : aggInfo.getIntermediateTupleId();
+        return descriptorTable.getTupleDesc(tupleId).getSlots().subList(0, numGroupingExprs + numAggExprs)
+                .stream().map(SlotDescriptor::getId).collect(Collectors.toList());
     }
 }

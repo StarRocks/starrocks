@@ -145,4 +145,8 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const size_t 
 
     return Status::OK();
 }
+Status AggregateDistinctStreamingSinkOperator::reset_state(std::vector<vectorized::ChunkPtr>&& chunks) {
+    _is_finished = false;
+    return _aggregator->reset_state(std::move(chunks));
+}
 } // namespace starrocks::pipeline

@@ -1,16 +1,16 @@
 # utc_timestamp
 
-## description
+## Description
 
-### Syntax
+Returns the current UTC date and time as a value in 'YYYY-MM-DD HH:MM:SS' or 'YYYYMMDDHHMMSS' format depending on the usage of the function, for example, in a string or numeric context.
+
+## Syntax
 
 ```Haskell
 DATETIME UTC_TIMESTAMP()
 ```
 
-This function returns the current UTC date and time as a value in 'YYYY-MM-DD HH:MM:SS' or 'YYYYMMDDHHMMSS' format depending on the usage of the function i.e. in a string or numeric context.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select utc_timestamp(),utc_timestamp() + 1;

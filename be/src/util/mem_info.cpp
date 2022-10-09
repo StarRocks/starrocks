@@ -25,6 +25,7 @@
 #include <fstream>
 #include <iostream>
 
+#include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "util/pretty_printer.h"
 #include "util/string_parser.hpp"
@@ -35,6 +36,24 @@ bool MemInfo::_s_initialized = false;
 int64_t MemInfo::_s_physical_mem = -1;
 
 void MemInfo::init() {
+    // check if application is in docker container or not via /.dockerenv file
+    if (fs::path_exist("/.dockerenv")) {
+        // Read from /sys/fs/cgroup/memory/memory.limit_in_bytes
+        std::ifstream memoryLimit("/sys/fs/cgroup/memory/memory.limit_in_bytes");
+        std::string line;
+
+        getline(memoryLimit, line);
+        StringParser::ParseResult result;
+        int64_t memory_limit_bytes = StringParser::string_to_int<int64_t>(line.data(), line.size(), &result);
+
+        if (result == StringParser::PARSE_SUCCESS) {
+            _s_physical_mem = memory_limit_bytes;
+        }
+
+        if (memoryLimit.is_open()) {
+            memoryLimit.close();
+        }
+    }
     // Read from /proc/meminfo
     std::ifstream meminfo("/proc/meminfo", std::ios::in);
     std::string line;
@@ -57,7 +76,9 @@ void MemInfo::init() {
 
         if (result == StringParser::PARSE_SUCCESS) {
             // Entries in /proc/meminfo are in KB.
-            _s_physical_mem = mem_total_kb * 1024L;
+            if (_s_physical_mem == -1 || _s_physical_mem > mem_total_kb * 1024L) {
+                _s_physical_mem = mem_total_kb * 1024L;
+            }
         }
 
         break;

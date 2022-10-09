@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
@@ -35,9 +34,6 @@ public class CTEContext {
     // Num of CTE consume
     private Map<Integer, Integer> consumeNums;
 
-    // Consume required columns
-    private Map<Integer, ColumnRefSet> requiredColumns;
-
     private Map<Integer, List<ScalarOperator>> consumePredicates;
 
     private Map<Integer, List<Long>> consumeLimits;
@@ -57,7 +53,6 @@ public class CTEContext {
     public void reset() {
         produces = Lists.newArrayList();
         consumeNums = Maps.newHashMap();
-        requiredColumns = Maps.newHashMap();
         consumePredicates = Maps.newHashMap();
         consumeLimits = Maps.newHashMap();
 
@@ -105,16 +100,6 @@ public class CTEContext {
             return 0;
         }
         return consumeNums.get(cteId);
-    }
-
-    public Map<Integer, ColumnRefSet> getRequiredColumns() {
-        return requiredColumns;
-    }
-
-    public ColumnRefSet getAllRequiredColumns() {
-        ColumnRefSet all = new ColumnRefSet();
-        requiredColumns.values().forEach(all::union);
-        return all;
     }
 
     public Map<Integer, List<ScalarOperator>> getConsumePredicates() {

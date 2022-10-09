@@ -54,7 +54,3 @@ The database's default data quota and the default replica quota are 2^63-1.
     ```SQL
     ALTER DATABASE example_db SET REPLICA QUOTA 102400;
     ```
-
-## keyword
-
-ALTER,DATABASE,RENAME

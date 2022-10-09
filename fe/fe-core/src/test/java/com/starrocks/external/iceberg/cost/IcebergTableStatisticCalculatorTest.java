@@ -6,6 +6,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -75,5 +76,38 @@ public class IcebergTableStatisticCalculatorTest {
 
         Map<Integer, Object> result = IcebergFileStats.toMap(idToTypeMapping, bounds);
         Assert.assertNotNull(result);
+    }
+
+    @Test
+    public void testMakeTableStatisticsWithArrayField(@Mocked Table iTable) {
+        List<Types.NestedField> fields = new ArrayList<>();
+        fields.add(Types.NestedField.of(1, false, "col1", new Types.LongType()));
+        fields.add(Types.NestedField.of(2, false, "col2", new Types.DateType()));
+        fields.add(Types.NestedField.of(3, false, "colArray",
+                Types.ListType.ofOptional(4, new Types.IntegerType())));
+        Schema schema = new Schema(fields);
+
+        new Expectations() {
+            {
+                iTable.schema();
+                result = schema;
+            }
+            {
+                // empty iceberg's snapshot is null or snapshot is not null but no datafile.
+                // so here mock iceberg table with null snapshot
+                iTable.currentSnapshot();
+                result = null;
+            }
+        };
+
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(1000, Type.BIGINT, "col1", true);
+        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(1001, Type.ARRAY_INT, "colArray", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("col1", Type.BIGINT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("colArray", Type.ARRAY_INT));
+        Statistics statistics = IcebergTableStatisticCalculator.getTableStatistics(null, iTable, colRefToColumnMetaMap);
+        Assert.assertNotNull(statistics);
+        ColumnStatistic arrayStatistic = statistics.getColumnStatistic(columnRefOperator2);
+        Assert.assertNotNull(arrayStatistic);
     }
 }

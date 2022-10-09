@@ -1176,6 +1176,12 @@ public class Config extends ConfigBase {
     public static long routine_load_kafka_timeout_second = 12;
 
     /**
+     * pulsar util request timeout
+     */
+    @ConfField(mutable = true)
+    public static long routine_load_pulsar_timeout_second = 12;
+
+    /**
      * it can't auto-resume routine load job as long as one of the backends is down
      */
     @ConfField(mutable = true)
@@ -1216,6 +1222,13 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean enable_auth_check = true;
+
+    /**
+     * If set to false, auth check for StarRocks external table will be disabled. The check
+     * only happens on the target cluster.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_starrocks_external_table_auth_check = true;
 
     /**
      * ldap server host for authentication_ldap_simple
