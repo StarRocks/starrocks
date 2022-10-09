@@ -42,8 +42,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class OperatorStrings {
-    public String printOperator(OptExpression root) {
+public class LogicalPlanPrinter {
+    private LogicalPlanPrinter() {
+    }
+
+    public static String print(OptExpression root) {
         OperatorStr optStrings = new OperatorPrinter().visit(root);
         return optStrings.toString();
     }
@@ -70,7 +73,7 @@ public class OperatorStrings {
         }
     }
 
-    public static class OperatorPrinter
+    private static class OperatorPrinter
             extends OptExpressionVisitor<OperatorStr, Integer> {
 
         public OperatorStr visit(OptExpression optExpression) {
@@ -83,43 +86,72 @@ public class OperatorStrings {
         }
 
         @Override
+        public OperatorStr visitLogicalTreeAnchor(OptExpression optExpression, Integer step) {
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+
+            return new OperatorStr("logical tree anchor", step, Collections.singletonList(child));
+        }
+
+        @Override
+        public OperatorStr visitLogicalCTEAnchor(OptExpression optExpression, Integer step) {
+            OperatorStr leftChild = visit(optExpression.getInputs().get(0), step + 1);
+            OperatorStr rightChild = visit(optExpression.getInputs().get(1), step + 1);
+
+            return new OperatorStr("logical cte anchor", step, Arrays.asList(leftChild, rightChild));
+        }
+
+        @Override
+        public OperatorStr visitLogicalCTEProduce(OptExpression optExpression, Integer step) {
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+
+            return new OperatorStr("logical cte produce", step, Collections.singletonList(child));
+        }
+
+        @Override
+        public OperatorStr visitLogicalCTEConsume(OptExpression optExpression, Integer step) {
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+
+            return new OperatorStr("logical cte consume", step, Collections.singletonList(child));
+        }
+
+        @Override
         public OperatorStr visitLogicalTableScan(OptExpression optExpression, Integer step) {
             return new OperatorStr("logical scan", step, Collections.emptyList());
         }
 
         @Override
         public OperatorStr visitLogicalProject(OptExpression optExpression, Integer step) {
-            OperatorStr strBuilder = visit(optExpression.getInputs().get(0), step + 1);
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
 
             LogicalProjectOperator project = (LogicalProjectOperator) optExpression.getOp();
 
             return new OperatorStr("logical project (" +
                     project.getColumnRefMap().values().stream().map(ScalarOperator::debugString)
                             .collect(Collectors.joining(",")) + ")",
-                    step, Collections.singletonList(strBuilder));
+                    step, Collections.singletonList(child));
         }
 
         @Override
         public OperatorStr visitLogicalFilter(OptExpression optExpression, Integer step) {
-            OperatorStr strBuilder = visit(optExpression.getInputs().get(0), step + 1);
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
 
             LogicalFilterOperator filter = (LogicalFilterOperator) optExpression.getOp();
             return new OperatorStr("logical filter (" + filter.getPredicate().debugString() + ")",
-                    step, ImmutableList.of(strBuilder));
+                    step, ImmutableList.of(child));
         }
 
         @Override
         public OperatorStr visitLogicalLimit(OptExpression optExpression, Integer step) {
-            OperatorStr strBuilder = visit(optExpression.getInputs().get(0), step + 1);
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
 
             LogicalLimitOperator limit = (LogicalLimitOperator) optExpression.getOp();
             return new OperatorStr("logical limit" + " (" + limit.getLimit() + ")",
-                    step, Collections.singletonList(strBuilder));
+                    step, Collections.singletonList(child));
         }
 
         @Override
         public OperatorStr visitLogicalAggregate(OptExpression optExpression, Integer step) {
-            OperatorStr strBuilder = visit(optExpression.getInputs().get(0), step + 1);
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
 
             LogicalAggregationOperator aggregate = (LogicalAggregationOperator) optExpression.getOp();
             return new OperatorStr("logical aggregate ("
@@ -127,24 +159,24 @@ public class OperatorStrings {
                     .collect(Collectors.joining(",")) + ") ("
                     + aggregate.getAggregations().values().stream().map(CallOperator::debugString).
                     collect(Collectors.joining(",")) + ")",
-                    step, Collections.singletonList(strBuilder));
+                    step, Collections.singletonList(child));
         }
 
         @Override
         public OperatorStr visitLogicalTopN(OptExpression optExpression, Integer step) {
-            OperatorStr strBuilder = visit(optExpression.getInputs().get(0), step + 1);
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
 
             LogicalTopNOperator sort = (LogicalTopNOperator) optExpression.getOp();
             return new OperatorStr("logical sort" + " (" +
                     (sort.getOrderByElements().stream().map(Ordering::getColumnRef).collect(Collectors.toList())
                             .stream().map(ScalarOperator::debugString).collect(Collectors.joining(",")))
-                    + ")", step, Collections.singletonList(strBuilder));
+                    + ")", step, Collections.singletonList(child));
         }
 
         @Override
         public OperatorStr visitLogicalJoin(OptExpression optExpression, Integer step) {
-            OperatorStr left = visit(optExpression.getInputs().get(0), step + 1);
-            OperatorStr right = visit(optExpression.getInputs().get(1), step + 1);
+            OperatorStr leftChild = visit(optExpression.getInputs().get(0), step + 1);
+            OperatorStr rightChild = visit(optExpression.getInputs().get(1), step + 1);
 
             LogicalJoinOperator join = (LogicalJoinOperator) optExpression.getOp();
 
@@ -154,28 +186,28 @@ public class OperatorStrings {
                 sb.append(" (").append(join.getOnPredicate().debugString()).append(")");
             }
 
-            return new OperatorStr(sb.toString(), step, Arrays.asList(left, right));
+            return new OperatorStr(sb.toString(), step, Arrays.asList(leftChild, rightChild));
         }
 
         @Override
         public OperatorStr visitLogicalApply(OptExpression optExpression, Integer step) {
-            OperatorStr left = visit(optExpression.getInputs().get(0), step + 1);
-            OperatorStr right = visit(optExpression.getInputs().get(1), step + 1);
+            OperatorStr leftChild = visit(optExpression.getInputs().get(0), step + 1);
+            OperatorStr rightChild = visit(optExpression.getInputs().get(1), step + 1);
 
             LogicalApplyOperator apply = (LogicalApplyOperator) optExpression.getOp();
             return new OperatorStr("logical apply " +
                     "(" + apply.getSubqueryOperator().debugString() + ")",
-                    step, Arrays.asList(left, right));
+                    step, Arrays.asList(leftChild, rightChild));
         }
 
         @Override
         public OperatorStr visitLogicalAssertOneRow(OptExpression optExpression, Integer step) {
-            OperatorStr left = visit(optExpression.getInputs().get(0), step + 1);
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
 
             LogicalAssertOneRowOperator assertOneRow = (LogicalAssertOneRowOperator) optExpression.getOp();
             return new OperatorStr(
                     "logical assert " + assertOneRow.getAssertion().name() + " " + assertOneRow.getCheckRows(), step,
-                    Collections.singletonList(left));
+                    Collections.singletonList(child));
         }
 
         /**
@@ -258,6 +290,7 @@ public class OperatorStrings {
 
         public OperatorStr visitPhysicalHashAggregate(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+
             PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("AGGREGATE ([").append(aggregate.getType()).append("]");
             sb.append(" aggregate [" + aggregate.getAggregations() + "]");
@@ -268,6 +301,7 @@ public class OperatorStrings {
 
         public OperatorStr visitPhysicalTopN(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+
             PhysicalTopNOperator topn = (PhysicalTopNOperator) optExpression.getOp();
             String sb = "TOP-N (" + "order by [" + topn.getOrderSpec().getOrderDescs() + "]" +
                     ")";
@@ -276,6 +310,7 @@ public class OperatorStrings {
 
         public OperatorStr visitPhysicalDistribution(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+
             PhysicalDistributionOperator exchange = (PhysicalDistributionOperator) optExpression.getOp();
 
             if (exchange.getDistributionSpec() instanceof HashDistributionSpec) {
@@ -302,8 +337,8 @@ public class OperatorStrings {
         }
 
         public OperatorStr visitPhysicalJoin(OptExpression optExpression, Integer step) {
-            OperatorStr left = visit(optExpression.getInputs().get(0), step + 1);
-            OperatorStr right = visit(optExpression.getInputs().get(1), step + 1);
+            OperatorStr leftChild = visit(optExpression.getInputs().get(0), step + 1);
+            OperatorStr rightChild = visit(optExpression.getInputs().get(1), step + 1);
 
             PhysicalJoinOperator join = (PhysicalJoinOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("").append(join.getJoinType()).append(" (");
@@ -311,22 +346,23 @@ public class OperatorStrings {
             sb.append("post-join-predicate [").append(join.getPredicate()).append("]");
             sb.append(")");
 
-            return new OperatorStr(sb.toString(), step, Arrays.asList(left, right));
+            return new OperatorStr(sb.toString(), step, Arrays.asList(leftChild, rightChild));
         }
 
         @Override
         public OperatorStr visitPhysicalAssertOneRow(OptExpression optExpression, Integer step) {
-            OperatorStr left = visit(optExpression.getInputs().get(0), step + 1);
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
 
             PhysicalAssertOneRowOperator assertOneRow = (PhysicalAssertOneRowOperator) optExpression.getOp();
             return new OperatorStr(
                     "ASSERT " + assertOneRow.getAssertion().name() + " " + assertOneRow.getCheckRows(), step,
-                    Collections.singletonList(left));
+                    Collections.singletonList(child));
         }
 
         @Override
         public OperatorStr visitPhysicalAnalytic(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+
             PhysicalWindowOperator analytic = (PhysicalWindowOperator) optExpression.getOp();
             return new OperatorStr("ANALYTIC (" +
                     analytic.getAnalyticCall().toString() + " " +
@@ -338,35 +374,35 @@ public class OperatorStrings {
 
         @Override
         public OperatorStr visitPhysicalUnion(OptExpression optExpression, Integer step) {
-            List<OperatorStr> childString = new ArrayList<>();
+            List<OperatorStr> children = new ArrayList<>();
             for (int childIdx = 0; childIdx < optExpression.getInputs().size(); ++childIdx) {
                 OperatorStr operatorStr = visit(optExpression.inputAt(childIdx), step + 1);
-                childString.add(operatorStr);
+                children.add(operatorStr);
             }
 
-            return new OperatorStr("UNION", step, childString);
+            return new OperatorStr("UNION", step, children);
         }
 
         @Override
         public OperatorStr visitPhysicalExcept(OptExpression optExpression, Integer step) {
-            List<OperatorStr> childString = new ArrayList<>();
+            List<OperatorStr> children = new ArrayList<>();
             for (int childIdx = 0; childIdx < optExpression.getInputs().size(); ++childIdx) {
                 OperatorStr operatorStr = visit(optExpression.inputAt(childIdx), step + 1);
-                childString.add(operatorStr);
+                children.add(operatorStr);
             }
 
-            return new OperatorStr("EXCEPT", step, childString);
+            return new OperatorStr("EXCEPT", step, children);
         }
 
         @Override
         public OperatorStr visitPhysicalIntersect(OptExpression optExpression, Integer step) {
-            List<OperatorStr> childString = new ArrayList<>();
+            List<OperatorStr> children = new ArrayList<>();
             for (int childIdx = 0; childIdx < optExpression.getInputs().size(); ++childIdx) {
                 OperatorStr operatorStr = visit(optExpression.inputAt(childIdx), step + 1);
-                childString.add(operatorStr);
+                children.add(operatorStr);
             }
 
-            return new OperatorStr("INTERSECT", step, childString);
+            return new OperatorStr("INTERSECT", step, children);
         }
 
         @Override
@@ -381,41 +417,41 @@ public class OperatorStrings {
             }
             valuesStr.delete(valuesStr.length() - 1, valuesStr.length());
 
-            return new OperatorStr(valuesStr.toString(), step, new ArrayList<>());
+            return new OperatorStr(valuesStr.toString(), step, Collections.emptyList());
         }
 
         @Override
         public OperatorStr visitPhysicalRepeat(OptExpression optExpression, Integer step) {
-            List<OperatorStr> childString = new ArrayList<>();
+            List<OperatorStr> children = new ArrayList<>();
             for (int childIdx = 0; childIdx < optExpression.getInputs().size(); ++childIdx) {
                 OperatorStr operatorStr = visit(optExpression.inputAt(childIdx), step + 1);
-                childString.add(operatorStr);
+                children.add(operatorStr);
             }
 
             PhysicalRepeatOperator repeat = (PhysicalRepeatOperator) optExpression.getOp();
 
-            return new OperatorStr("REPEAT " + repeat.getRepeatColumnRef(), step, new ArrayList<>(childString));
+            return new OperatorStr("REPEAT " + repeat.getRepeatColumnRef(), step, children);
         }
 
         @Override
         public OperatorStr visitPhysicalFilter(OptExpression optExpression, Integer step) {
-            List<OperatorStr> childString = new ArrayList<>();
+            List<OperatorStr> children = new ArrayList<>();
             for (int childIdx = 0; childIdx < optExpression.getInputs().size(); ++childIdx) {
                 OperatorStr operatorStr = visit(optExpression.inputAt(childIdx), step + 1);
-                childString.add(operatorStr);
+                children.add(operatorStr);
             }
 
             PhysicalFilterOperator filter = (PhysicalFilterOperator) optExpression.getOp();
 
-            return new OperatorStr("PREDICATE " + filter.getPredicate(), step, new ArrayList<>(childString));
+            return new OperatorStr("PREDICATE " + filter.getPredicate(), step, children);
         }
 
         @Override
         public OperatorStr visitPhysicalTableFunction(OptExpression optExpression, Integer step) {
-            List<OperatorStr> childString = new ArrayList<>();
+            List<OperatorStr> children = new ArrayList<>();
             for (int childIdx = 0; childIdx < optExpression.getInputs().size(); ++childIdx) {
                 OperatorStr operatorStr = visit(optExpression.inputAt(childIdx), step + 1);
-                childString.add(operatorStr);
+                children.add(operatorStr);
             }
 
             PhysicalTableFunctionOperator tableFunction = (PhysicalTableFunctionOperator) optExpression.getOp();
@@ -425,14 +461,14 @@ public class OperatorStrings {
                 s += " LIMIT " + tableFunction.getLimit();
             }
 
-            return new OperatorStr(s, step, new ArrayList<>(childString));
+            return new OperatorStr(s, step, children);
         }
 
         @Override
         public OperatorStr visitPhysicalDecode(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
-            String sb = "Decode ";
-            return new OperatorStr(sb, step, Collections.singletonList(child));
+
+            return new OperatorStr("Decode", step, Collections.singletonList(child));
         }
 
         @Override
@@ -442,22 +478,21 @@ public class OperatorStrings {
 
         @Override
         public OperatorStr visitPhysicalCTEAnchor(OptExpression optExpression, Integer step) {
-            OperatorStr producer = visit(optExpression.getInputs().get(0), step + 1);
-            OperatorStr consumer = visit(optExpression.getInputs().get(1), step + 1);
+            OperatorStr leftChild = visit(optExpression.getInputs().get(0), step + 1);
+            OperatorStr rightChild = visit(optExpression.getInputs().get(1), step + 1);
+
             PhysicalCTEAnchorOperator op = (PhysicalCTEAnchorOperator) optExpression.getOp();
             String sb = "CTEAnchor(cteid=" + op.getCteId() + ")";
-            ArrayList<OperatorStr> children = new ArrayList<>();
-            children.add(producer);
-            children.add(consumer);
-            return new OperatorStr(sb, step, children);
+            return new OperatorStr(sb, step, Arrays.asList(leftChild, rightChild));
         }
 
         @Override
         public OperatorStr visitPhysicalCTEProduce(OptExpression optExpression, Integer step) {
-            OperatorStr children = visit(optExpression.getInputs().get(0), step + 1);
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+
             PhysicalCTEProduceOperator op = (PhysicalCTEProduceOperator) optExpression.getOp();
             String sb = "CTEProducer(cteid=" + op.getCteId() + ")";
-            return new OperatorStr(sb, step, Collections.singletonList(children));
+            return new OperatorStr(sb, step, Collections.singletonList(child));
         }
 
         @Override
