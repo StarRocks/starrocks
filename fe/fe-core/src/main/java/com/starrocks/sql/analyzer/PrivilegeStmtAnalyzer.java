@@ -122,7 +122,7 @@ public class PrivilegeStmtAnalyzer {
             // parse privilege actions to PrivBitSet
             PrivBitSet privs = getPrivBitSet(stmt.getPrivList());
             String privType = stmt.getPrivType();
-            if (privType.equals("TABLE")) {
+            if (privType.equals("TABLE") || privType.equals("DATABASE")) {
                 analyseTablePrivs(stmt, privs, stmt.getPrivilegeObjectNameTokenList());
             } else if (privType.equals("RESOURCE")) {
                 analyseResourcePrivs(stmt, privs, stmt.getPrivilegeObjectNameTokenList());

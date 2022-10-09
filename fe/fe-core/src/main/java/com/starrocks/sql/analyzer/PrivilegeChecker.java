@@ -12,6 +12,7 @@ import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
+import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.RestoreStmt;
@@ -385,6 +386,19 @@ public class PrivilegeChecker {
         }
 
         @Override
+        public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
+            TableName tblName = statement.getTblName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                    tblName.getDb(), tblName.getTbl(),
+                    PrivPredicate.SELECT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "EXPORT",
+                        ConnectContext.get().getQualifiedUser(),
+                        ConnectContext.get().getRemoteIP(),
+                        tblName.getTbl());
+            }
+            return null;
+        }
+        @Override
         public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt stmt, ConnectContext context) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
@@ -642,7 +656,7 @@ public class PrivilegeChecker {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
                 }
             } else {
-                if (stmt.getPrivType().equals("TABLE")) {
+                if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
                     TablePattern tblPattern = stmt.getTblPattern();
                     if (tblPattern.getPrivLevel() == Auth.PrivLevel.GLOBAL) {
                         if (!GlobalStateMgr.getCurrentState().getAuth()

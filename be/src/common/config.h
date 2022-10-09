@@ -669,6 +669,9 @@ CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // The number of threads for preparing fragment instances in pipeline engine, vCPUs by default.
 CONF_Int64(pipeline_prepare_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
+// The number of threads for executing sink io task in pipeline engine, vCPUs by default.
+CONF_Int64(pipeline_sink_io_thread_pool_thread_num, "0");
+CONF_Int64(pipeline_sink_io_thread_pool_queue_size, "102400");
 // The buffer size of SinkBuffer.
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
@@ -840,4 +843,8 @@ CONF_Int64(block_cache_disk_size, "21474836480"); // 20GB
 CONF_Int64(block_cache_block_size, "1048576");
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
 
+CONF_mInt64(l0_l1_merge_ratio, "10");
+
+// Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
+CONF_Int64(query_cache_capacity, "536870912");
 } // namespace starrocks::config

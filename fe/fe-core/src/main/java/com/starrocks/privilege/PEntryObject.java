@@ -3,6 +3,9 @@
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.server.GlobalStateMgr;
+
+import java.util.Objects;
 
 /**
  * interface is hard to serialized/deserialized using GSON
@@ -12,8 +15,13 @@ public class PEntryObject {
     @SerializedName(value = "i")
     protected long id;
 
-    public PEntryObject(long id) {
+    protected PEntryObject(long id) {
         this.id = id;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
     }
 
     @Override
@@ -24,4 +32,13 @@ public class PEntryObject {
         PEntryObject other = (PEntryObject) obj;
         return other.id == this.id;
     }
+
+    /**
+     * validate this object to see if still exists
+     * the default behavior is to do nothing
+     */
+    public boolean validate(GlobalStateMgr globalStateMgr) {
+        return true;
+    }
+
 }

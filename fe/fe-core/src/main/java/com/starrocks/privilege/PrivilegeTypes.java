@@ -7,7 +7,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public enum PrivilegeTypes {
-    TABLE(TableActions.values());
+    TABLE(TableActions.values()),
+    DATABASE(DbActions.values());
 
     private final List<String> validActions;
     PrivilegeTypes(Object[] validObject) {
@@ -22,6 +23,13 @@ public enum PrivilegeTypes {
      * Below defines all validate actions of a certain type
      */
     public enum TableActions {
-        SELECT;
+        SELECT,
+        INSERT,
+        DELETE
+    }
+
+    public enum DbActions {
+        CREATE_TABLE,
+        DROP
     }
 }

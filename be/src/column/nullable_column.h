@@ -270,7 +270,7 @@ public:
         DCHECK(_null_column->size() == _data_column->size());
         std::stringstream ss;
         ss << "[";
-        size_t size = _data_column->size();
+        int size = _data_column->size();
         for (int i = 0; i < size - 1; ++i) {
             ss << debug_item(i) << ", ";
         }

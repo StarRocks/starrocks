@@ -29,10 +29,10 @@ public interface AuthorizationProvider {
      * validate if grant is allowed
      * e.g. To forbid `NODE` privilege being granted, we should put some code here.
      */
-    boolean validateGrant(
+    void validateGrant(
             short type,
-            Action want,
-            PEntryObject object);
+            ActionSet wantSet,
+            PEntryObject object) throws PrivilegeException;
 
     /**
      * check if certain action of certain type is allowed on certain object.

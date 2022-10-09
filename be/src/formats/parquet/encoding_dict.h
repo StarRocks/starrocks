@@ -101,9 +101,8 @@ public:
         _index_batch_decoder.GetBatch(&_indexes[0], count);
 
         if (dst->is_nullable()) {
-            auto* nullable_column = reinterpret_cast<vectorized::NullableColumn*>(dst);
-            auto* data_column =
-                    reinterpret_cast<vectorized::FixedLengthColumn<T>*>(nullable_column->data_column().get());
+            auto* nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+            auto* data_column = down_cast<vectorized::FixedLengthColumn<T>*>(nullable_column->data_column().get());
             size_t cur_size = data_column->size();
             data_column->resize_uninitialized(cur_size + count);
 
@@ -114,7 +113,7 @@ public:
             nullable_column->null_column()->append_default(count);
         } else {
             // current can't reach here
-            auto* data_column = reinterpret_cast<vectorized::FixedLengthColumn<T>*>(dst);
+            auto* data_column = down_cast<vectorized::FixedLengthColumn<T>*>(dst);
             size_t cur_size = data_column->size();
             data_column->resize_uninitialized(cur_size + count);
 

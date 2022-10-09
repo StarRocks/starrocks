@@ -16,6 +16,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
@@ -41,6 +42,7 @@ import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.EsScanNode;
 import com.starrocks.planner.ExceptNode;
 import com.starrocks.planner.ExchangeNode;
+import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
@@ -206,6 +208,17 @@ public class PlanFragmentBuilder {
         execPlan.getFragments().add(exchangeFragment);
     }
 
+    boolean useQueryCache(ExecPlan execPlan) {
+        if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnableQueryCache()) {
+            return false;
+        }
+        boolean hasJoinNode = execPlan.getFragments().stream().anyMatch(PlanFragment::hasJoinNode);
+        if (hasJoinNode) {
+            return false;
+        }
+        return true;
+    }
+
     private ExecPlan finalizeFragments(ExecPlan execPlan, TResultSinkType resultSinkType) {
         List<PlanFragment> fragments = execPlan.getFragments();
         for (PlanFragment fragment : fragments) {
@@ -222,6 +235,15 @@ public class PlanFragmentBuilder {
             fragment.computeLocalRfWaitingSet(fragment.getPlanRoot(), shouldClearRuntimeFilters);
         }
 
+
+        if (useQueryCache(execPlan)) {
+            List<PlanFragment> fragmentsWithLeftmostOlapScanNode = execPlan.getFragments().stream()
+                    .filter(PlanFragment::hasOlapScanNode).collect(Collectors.toList());
+            for (PlanFragment fragment : fragmentsWithLeftmostOlapScanNode) {
+                FragmentNormalizer normalizer = new FragmentNormalizer(execPlan, fragment);
+                normalizer.normalize();
+            }
+        }
         return execPlan;
     }
 
@@ -1183,6 +1205,7 @@ public class PlanFragmentBuilder {
             TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
 
             ArrayList<Expr> groupingExpressions = Lists.newArrayList();
+
             for (ColumnRefOperator grouping : node.getGroupBys()) {
                 Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
@@ -1194,10 +1217,10 @@ public class PlanFragmentBuilder {
                 slotDesc.setType(groupingExpr.getType());
                 slotDesc.setIsNullable(groupingExpr.isNullable());
                 slotDesc.setIsMaterialized(true);
-                context.getColRefToExpr().put(grouping, new SlotRef(grouping.toString(), slotDesc));
             }
 
             ArrayList<FunctionCallExpr> aggregateExprList = Lists.newArrayList();
+            List<Expr> intermediateAggrExprs = Lists.newArrayList();
             for (Map.Entry<ColumnRefOperator, CallOperator> aggregation : node.getAggregations().entrySet()) {
                 FunctionCallExpr aggExpr = (FunctionCallExpr) ScalarOperatorToExpr.buildExecExpression(
                         aggregation.getValue(), new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
@@ -1211,6 +1234,16 @@ public class PlanFragmentBuilder {
                 slotDesc.setIsMaterialized(true);
                 context.getColRefToExpr()
                         .put(aggregation.getKey(), new SlotRef(aggregation.getKey().toString(), slotDesc));
+
+                SlotDescriptor intermediateSlotDesc = new SlotDescriptor(slotDesc.getId(), slotDesc.getParent());
+                AggregateFunction aggrFn = (AggregateFunction) aggExpr.getFn();
+                Type intermediateType = aggrFn.getIntermediateType() != null ?
+                        aggrFn.getIntermediateType() : aggrFn.getReturnType();
+                intermediateSlotDesc.setType(intermediateType);
+                intermediateSlotDesc.setIsNullable(aggrFn.isNullable());
+                intermediateSlotDesc.setIsMaterialized(true);
+                SlotRef intermediateSlotRef = new SlotRef(aggregation.getKey().toString(), intermediateSlotDesc);
+                intermediateAggrExprs.add(intermediateSlotRef);
             }
 
             List<Expr> partitionExpressions = Lists.newArrayList();
@@ -1242,7 +1275,6 @@ public class PlanFragmentBuilder {
                 aggregationNode.unsetNeedsFinalize();
                 aggregationNode.setIsPreagg(node.isUseStreamingPreAgg());
                 aggregationNode.setIntermediateTuple();
-
                 if (!partitionExpressions.isEmpty()) {
                     inputFragment.setOutputPartition(DataPartition.hashPartitioned(partitionExpressions));
                 }
@@ -1284,10 +1316,6 @@ public class PlanFragmentBuilder {
                     aggregationNode =
                             new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
-                }
-                // set aggregate node can use local aggregate
-                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
-                    aggregationNode.setColocate(true);
                 }
 
                 // set predicate
@@ -1345,7 +1373,12 @@ public class PlanFragmentBuilder {
                 inputFragment.setEnableSharedScan(withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
             }
+            // set aggregate node can use local aggregate
+            if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                aggregationNode.setColocate(true);
+            }
 
+            aggregationNode.getAggInfo().setIntermediateAggrExprs(intermediateAggrExprs);
             inputFragment.setPlanRoot(aggregationNode);
             return inputFragment;
         }
@@ -1538,7 +1571,7 @@ public class PlanFragmentBuilder {
                 sortExprs.add(new SlotRef(slotDesc));
             }
 
-            ColumnRefSet columnRefSet = optExpr.getLogicalProperty().getOutputColumns();
+            ColumnRefSet columnRefSet = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
             for (int i = 0; i < columnRefSet.getColumnIds().length; ++i) {
                 /*
                  * Add column not be used in ordering
@@ -2119,6 +2152,9 @@ public class PlanFragmentBuilder {
             analyticEvalNode.setLimit(node.getLimit());
             analyticEvalNode.setHasNullableGenerateChild();
             analyticEvalNode.computeStatistics(optExpr.getStatistics());
+            if (hasColocateOlapScanChildInFragment(analyticEvalNode)) {
+                analyticEvalNode.setColocate(true);
+            }
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
