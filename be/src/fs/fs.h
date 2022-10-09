@@ -272,7 +272,7 @@ private:
 // Wrap `RandomAccessFile`
 class TempRandomAccessFile : public RandomAccessFile {
 public:
-    TempRandomAccessFile(std::string filename, std::shared_ptr<RandomAccessFile> file)
+    TempRandomAccessFile(const std::string& filename, std::shared_ptr<RandomAccessFile> file)
             : RandomAccessFile(file->stream(), filename), _filename(filename), _file(std::move(file)) {}
     ~TempRandomAccessFile() { FileSystem::Default()->delete_file(_filename); }
 

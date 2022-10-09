@@ -20,6 +20,7 @@
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "util/compression/stream_compression.h"
+#include "util/uid_util.h"
 
 namespace starrocks::vectorized {
 
@@ -284,8 +285,7 @@ std::string FileScanner::create_tmp_file_path() {
 
     auto stores = StorageEngine::instance()->get_stores();
     std::stringstream ss;
-    gettimeofday(&tv, nullptr); // for ensuring file path random
-    ss << stores[cur_sec % stores.size()]->path() << TMP_PREFIX << "/" << buf << "." << tv.tv_usec << ".tmp";
+    ss << stores[cur_sec % stores.size()]->path() << TMP_PREFIX << "/" << buf << "." << generate_uuid_string() << ".tmp";
     return ss.str();
 }
 
