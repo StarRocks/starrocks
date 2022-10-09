@@ -4,6 +4,7 @@ package com.starrocks.privilege;
 
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -198,7 +199,8 @@ public class PrivilegeManagerTest {
         PrivilegeManager followerManager = PrivilegeManager.load(
                 emptyImage.getDataInputStream(), masterGlobalStateMgr, null);
 
-        UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PRIVILEGE_V2);
         followerManager.replayUpdateUserPrivilegeCollection(
                 info.getUserIdentity(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
         Assert.assertTrue(followerManager.check(
@@ -207,7 +209,8 @@ public class PrivilegeManagerTest {
                 PrivilegeTypes.TableActions.SELECT.toString(),
                 DB_TBL_TOKENS));
 
-        info = (UserPrivilegeCollectionInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        info = (UserPrivilegeCollectionInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PRIVILEGE_V2);
         followerManager.replayUpdateUserPrivilegeCollection(
                 info.getUserIdentity(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
         Assert.assertFalse(followerManager.check(
