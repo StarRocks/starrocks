@@ -75,6 +75,7 @@ public class MysqlChannel {
         this.remoteIp = "";
         this.channel = channel;
 
+
         if (channel != null) {
             try {
                 if (channel.getRemoteAddress() instanceof InetSocketAddress) {

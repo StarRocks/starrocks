@@ -16,13 +16,14 @@ import javax.net.ssl.SSLSession;
 
 public class SSLChannelImp implements SSLChannel {
     protected static final Logger LOG = LogManager.getLogger(SSLChannelImp.class);
-    private SSLEngine sslEngine;
-    private Transport transport;
+    private final SSLEngine sslEngine;
+    private final Transport transport;
     private ByteBuffer myNetData;
     private ByteBuffer peerNetData;
     private ByteBuffer peerAppData;
     private boolean haveCachedPeerAppData = false;
     private boolean haveCachedPeerNetData = false;
+
 
     /**
      * Will be used to execute tasks that may emerge during handshake in parallel with the server's main thread.
@@ -56,19 +57,10 @@ public class SSLChannelImp implements SSLChannel {
     public int readAll(ByteBuffer dstBuf) throws IOException {
         int readLen = 0;
         while (dstBuf.remaining() > 0) {
+            peerAppData.mark();
             if (haveCachedPeerAppData) {
-                readLen += Math.min(peerAppData.remaining(), dstBuf.remaining());
-                if (peerAppData.remaining() > dstBuf.remaining()) {
-                    int remain = dstBuf.remaining();
-                    for (int i = 0; i < remain; i++) {
-                        dstBuf.put(peerAppData.get());
-                    }
-                } else {
-                    dstBuf.put(peerAppData);
-                    haveCachedPeerAppData = false;
-                }
+                readLen += readFromAppData(dstBuf);
             }
-
 
             if (dstBuf.remaining() <= 0) {
                 return readLen;
@@ -83,14 +75,27 @@ public class SSLChannelImp implements SSLChannel {
                     SSLEngineResult result = sslEngine.unwrap(peerNetData, peerAppData);
                     switch (result.getStatus()) {
                         case OK:
-                            // ok do nothing
+                            peerAppData.flip();
+                            readLen += readFromAppData(dstBuf);
+                            if (dstBuf.remaining() <= 0) {
+                                return readLen;
+                            }
+                            peerAppData.clear();
+                            if (peerNetData.hasRemaining()) {
+                                peerNetData.compact();
+                                peerNetData.flip();
+                            }
                             break;
                         case BUFFER_OVERFLOW:
                             peerAppData = handleBufferOverflow(sslEngine, peerAppData);
                             break;
                         case BUFFER_UNDERFLOW:
                             peerNetData = handleBufferUnderflow(sslEngine, peerNetData);
-                            transport.read(peerNetData);
+                            bytesRead = transport.read(peerNetData);
+                            if (bytesRead <= 0) {
+                                LOG.warn("Received end of stream.");
+                                return readLen;
+                            }
                             peerNetData.flip();
                             break;
                         case CLOSED:
@@ -100,18 +105,26 @@ public class SSLChannelImp implements SSLChannel {
                             throw new IllegalStateException("Invalid SSL status: " + result.getStatus());
                     }
                 }
-
-                // flip for read
-                peerAppData.flip();
-                if (peerAppData.remaining() > 0) {
-                    haveCachedPeerAppData = true;
-                }
             } else if (bytesRead < 0) {
-                LOG.warn("Received end of stream. Will try to close connection with client...");
+                LOG.warn("Received end of stream.");
                 return readLen;
             }
         }
 
+        return readLen;
+    }
+
+    private int readFromAppData(ByteBuffer dstBuf) {
+        int readLen = Math.min(peerAppData.remaining(), dstBuf.remaining());
+        if (peerAppData.remaining() > dstBuf.remaining()) {
+            int remain = dstBuf.remaining();
+            for (int i = 0; i < remain; i++) {
+                dstBuf.put(peerAppData.get());
+            }
+            haveCachedPeerAppData = true;
+        } else {
+            dstBuf.put(peerAppData);
+        }
         return readLen;
     }
 
@@ -356,13 +369,9 @@ public class SSLChannelImp implements SSLChannel {
      * @throws Exception
      */
     protected ByteBuffer handleBufferUnderflow(SSLEngine engine, ByteBuffer buffer) {
-        if (engine.getSession().getPacketBufferSize() < buffer.limit()) {
-            return buffer;
-        } else {
-            ByteBuffer replaceBuffer = enlargePacketBuffer(engine, buffer);
-            replaceBuffer.put(buffer);
-            return replaceBuffer;
-        }
+        ByteBuffer replaceBuffer = enlargePacketBuffer(engine, buffer);
+        replaceBuffer.put(buffer);
+        return replaceBuffer;
     }
 
     protected ByteBuffer handleBufferOverflow(SSLEngine engine, ByteBuffer buffer) {
