@@ -287,6 +287,9 @@ CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 // if compaction of a tablet failed, this tablet should not be chosen to
 // compaction until this interval passes.
 CONF_mInt64(min_compaction_failure_interval_sec, "120"); // 2 min
+
+CONF_mInt64(min_cmumulative_compaction_failure_interval_sec, "30"); // 30s
+
 // Too many compaction tasks may run out of memory.
 // This config is to limit the max concurrency of running compaction tasks.
 // -1 means no limit, and the max concurrency will be:
