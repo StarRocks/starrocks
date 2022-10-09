@@ -93,6 +93,9 @@ private:
     // [0-5] [6-10] 11 12
     // minReadableVersion will be updated to 10
     int64_t _min_readable_version{-1};
+
+    // print log rate limit by tablet id
+    int64_t _tablet_id{0};
 };
 
 /// TimestampedVersion class which is implemented to maintain multi-version path of rowsets.
