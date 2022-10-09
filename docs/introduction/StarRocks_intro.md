@@ -74,7 +74,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPart>
 <NavBoxPartItem title="Query external data sources​">
 
-- [Apache Hive™](../using_starrocks/External_table.md#hive-external-table)
+- [Apache Hive™](../using_starrocks/Manage_data.md)
 - [Apache Hudi](../using_starrocks/External_table.md#hudi-external-table)
 - [Apache Iceberg](../using_starrocks/External_table.md#apache-iceberg-external-table)
 - [MySQL](../using_starrocks/External_table.md#mysql-external-table)
