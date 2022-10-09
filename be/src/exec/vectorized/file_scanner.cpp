@@ -289,7 +289,8 @@ std::string FileScanner::create_tmp_file_path() {
     return ss.str();
 }
 
-StatusOr<std::shared_ptr<TempRandomAccessFile>> FileScanner::create_tmp_file(std::unique_ptr<SequentialFile> broker_file) {
+StatusOr<std::shared_ptr<TempRandomAccessFile>> FileScanner::create_tmp_file(
+        std::unique_ptr<SequentialFile> broker_file) {
     std::string tmp_file_path = create_tmp_file_path();
     LOG(INFO) << "broker load cache file: " << tmp_file_path;
 
