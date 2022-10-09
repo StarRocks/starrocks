@@ -48,20 +48,24 @@ private:
     vectorized::HdfsScanStats* _stats;
 };
 
+bool HdfsScannerParams::is_lazy_materialization_slot(SlotId slot_id) const {
+    // if there is no conjuncts, then there is no lazy materialization slot.
+    // we have to read up all fields.
+    if (conjunct_ctxs_by_slot.size() == 0 && conjunct_ctxs.size() == 0) {
+        return false;
+    }
+    if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
+        return false;
+    }
+    if (conjunct_slots.find(slot_id) != conjunct_slots.end()) {
+        return false;
+    }
+    return true;
+}
+
 Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _runtime_state = runtime_state;
     _scanner_params = scanner_params;
-
-    // which columsn do we need to scan.
-    for (const auto& slot : _scanner_params.materialize_slots) {
-        _scanner_columns.emplace_back(slot->col_name());
-    }
-
-    // No need to clone following conjunct ctxs. It's cloned & released from outside.
-    _min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
-    _conjunct_ctxs = _scanner_params.conjunct_ctxs;
-    _conjunct_ctxs_by_slot = _scanner_params.conjunct_ctxs_by_slot;
-
     Status status = do_init(runtime_state, scanner_params);
     return status;
 }
@@ -106,10 +110,10 @@ Status HdfsScanner::_build_scanner_context() {
     }
 
     ctx.tuple_desc = _scanner_params.tuple_desc;
-    ctx.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
+    ctx.conjunct_ctxs_by_slot = _scanner_params.conjunct_ctxs_by_slot;
     ctx.scan_ranges = _scanner_params.scan_ranges;
     ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
-    ctx.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
+    ctx.min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
     ctx.case_sensitive = _scanner_params.case_sensitive;
     ctx.timezone = _runtime_state->timezone();
@@ -122,9 +126,9 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     RETURN_IF_CANCELLED(_runtime_state);
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
-        if (!_conjunct_ctxs.empty()) {
+        if (!_scanner_params.conjunct_ctxs.empty() && _scanner_params.eval_conjunct_ctxs) {
             SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.conjunct_ctxs, (*chunk).get()));
         }
     } else if (status.is_end_of_file()) {
         // do nothing.
