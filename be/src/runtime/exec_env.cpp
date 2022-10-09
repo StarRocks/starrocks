@@ -429,7 +429,6 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_load_path_mgr);
     SAFE_DELETE(_driver_executor);
     SAFE_DELETE(_wg_driver_executor);
-    SAFE_DELETE(_driver_limiter);
     SAFE_DELETE(_fragment_mgr);
     SAFE_DELETE(_udf_call_pool);
     SAFE_DELETE(_pipeline_prepare_pool);
@@ -470,8 +469,9 @@ void ExecEnv::_destroy() {
 
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate _query_pool_mem_tracker.
     workgroup::WorkGroupManager::instance()->destroy();
-    SAFE_DELETE(_query_pool_mem_tracker);
     SAFE_DELETE(_query_context_mgr);
+    SAFE_DELETE(_driver_limiter);
+    SAFE_DELETE(_query_pool_mem_tracker);
     SAFE_DELETE(_mem_tracker);
     SAFE_DELETE(_broker_client_cache);
     SAFE_DELETE(_frontend_client_cache);
