@@ -10,7 +10,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -30,6 +29,10 @@ public class ColumnRefFactory {
     private final List<ColumnRefOperator> columnRefs = Lists.newArrayList();
     private final Map<Integer, Integer> columnToRelationIds = Maps.newHashMap();
     private final Map<ColumnRefOperator, Column> columnRefToColumns = Maps.newHashMap();
+
+    public Map<ColumnRefOperator, Column> getColumnRefToColumns() {
+        return columnRefToColumns;
+    }
 
     public ColumnRefOperator create(Expr expression, Type type, boolean nullable) {
         String nameHint = "expr";
@@ -83,9 +86,7 @@ public class ColumnRefFactory {
         return columnRefOperators;
     }
 
-
-
-    public void updateColumnRefToColumns(ColumnRefOperator columnRef, Column column, Table table) {
+    public void updateColumnRefToColumns(ColumnRefOperator columnRef, Column column) {
         columnRefToColumns.put(columnRef, column);
     }
 
