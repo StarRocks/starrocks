@@ -77,9 +77,9 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Apache Hive™](../using_starrocks/External_table.md#hive-external-table)
 - [Apache Hudi](../using_starrocks/External_table.md#hudi-external-table)
 - [Apache Iceberg](../using_starrocks/External_table.md#apache-iceberg-external-table)
-- [MySQL](../using_starrocks/External_table.md#mysql-external-table.md)
-- [Elasticsearch](../using_starrocks/External_table.md#elasticsearch-external-table.md)
-- [JDBC-compatible database](../using_starrocks/External_table.md#external-table-for-a-jdbc-compatible-database.md)
+- [MySQL](../using_starrocks/External_table.md#mysql-external-table)
+- [Elasticsearch](../using_starrocks/External_table.md#elasticsearch-external-table)
+- [JDBC-compatible database](../using_starrocks/External_table.md#external-table-for-a-jdbc-compatible-database)
 
 </NavBoxPartItem>
 </NavBoxPart>
