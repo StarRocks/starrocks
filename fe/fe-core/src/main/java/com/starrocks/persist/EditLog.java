@@ -1008,7 +1008,7 @@ public class EditLog {
             }
         }
 
-        // for now if journal writer fails, it will exit directly, so this function should always return true.
+        // for now if journal writer fails, it will exit directly, so this property should always be true.
         assert (result);
         if (MetricRepo.isInit) {
             MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTime) / 1000000);
