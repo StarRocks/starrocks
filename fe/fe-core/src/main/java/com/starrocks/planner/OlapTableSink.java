@@ -78,6 +78,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -325,6 +326,7 @@ public class OlapTableSink extends DataSink {
         TOlapTableLocationParam locationParam = new TOlapTableLocationParam();
         // BE id -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
+        Map<Long, Long> bePrimaryMap = new HashMap<>();
         for (Long partitionId : partitionIds) {
             Partition partition = table.getPartition(partitionId);
             int quorum = table.getPartitionInfo().getQuorumNum(partition.getId());
@@ -345,9 +347,22 @@ public class OlapTableSink extends DataSink {
                                             + tablet.getId() + ", backends: " +
                                             Joiner.on(",").join(localTablet.getBackends()));
                         }
-                        // replicas[0] will be the primary replica
+
                         List<Long> replicas = Lists.newArrayList(bePathsMap.keySet());
-                        Collections.shuffle(replicas);
+                        int lowUsageIndex = 0;
+                        for (int i = 0; i < replicas.size(); i++) {
+                            Long backendID = replicas.get(i);
+                            if (!bePrimaryMap.containsKey(backendID)) {
+                                bePrimaryMap.put(backendID, Long.valueOf(0));
+                            }
+                            if (bePrimaryMap.get(backendID) < bePrimaryMap.get(replicas.get(lowUsageIndex))) {
+                                lowUsageIndex = i;
+                            }
+                        }
+                        bePrimaryMap.put(replicas.get(lowUsageIndex), bePrimaryMap.get(replicas.get(lowUsageIndex)) + 1);
+                        // replicas[0] will be the primary replica
+                        Collections.swap(replicas, 0, lowUsageIndex);
+
                         locationParam
                                 .addToTablets(
                                         new TTabletLocation(tablet.getId(), replicas));
