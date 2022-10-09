@@ -226,6 +226,24 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregateCon
         return null;
     }
 
+    /*
+     * When aggregation is pushed down to join, it means that the columns on aggregation is from
+     * multi-tables, maybe aggregate columns from left table and group by columns from right table.
+     * We only push down aggregation to child which one support aggregate columns, because aggregate
+     * columns will ignore 1-N join, so there will check:
+     *
+     * 1. all aggregation must come from one child, if none aggregation, can be push down to all children
+     * 2. re-compute group by columns
+     *  2.1. split the original group by columns
+     *  2.2. add join on-predicate and predicate used columns to group by
+     *
+     * e.g. 1-N case
+     * select t0.v1, t1.v1, sum(t0.v2), sum(t1.v2) from t0 join t1 on t0.v1 = t1.v1;
+     *
+     * t0.v1    t1.v2           t1.v1   t1.v2
+     *   1        1      Join     1        1
+     *   1        1               1        1
+     */
     private AggregateContext splitJoinAggregate(OptExpression optExpression, AggregateContext context, int child) {
         LogicalJoinOperator join = (LogicalJoinOperator) optExpression.getOp();
         ColumnRefSet childOutput = optExpression.getChildOutputColumns(child);
@@ -339,8 +357,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregateCon
             });
 
             // Must all same, like Agg1, Agg2 split by Union, and Scan1 support Agg1/Agg2, and
-            // Scan2 support Agg1, Scan3 support Agg2, we must promise to either push down or
-            // not push down
+            // Scan2 only support Agg1, we must promise to either push down or not push down
             // like:
             //         UNION
             //        /      \
