@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
+import java.math.BigInteger;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
@@ -41,7 +42,10 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
             if (!constantOperator.getType().isIntegerType()) {
                 return tmp;
             }
-            ConstantOperator one = ConstantOperator.create(1, constantOperator.getType());
+            ConstantOperator one = createConstantIntegerOne(constantOperator.getType());
+            if (one == null) {
+                return tmp;
+            }
             Type[] argsType = {constantOperator.getType(), constantOperator.getType()};
             switch (binary.getBinaryType()) {
                 case LT:
@@ -104,4 +108,16 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
         return Utils.compoundAnd(Lists.newArrayList(after));
     }
 
+    private ConstantOperator createConstantIntegerOne(Type type) {
+        if (Type.SMALLINT.equals(type)) {
+            return ConstantOperator.createSmallInt((short) 1);
+        } else if (Type.INT.equals(type)) {
+            return ConstantOperator.createInt(1);
+        } else if (Type.BIGINT.equals(type)) {
+            return ConstantOperator.createBigint(1L);
+        } else if (Type.LARGEINT.equals(type)) {
+            return ConstantOperator.createLargeInt(BigInteger.ONE);
+        }
+        return null;
+    }
 }

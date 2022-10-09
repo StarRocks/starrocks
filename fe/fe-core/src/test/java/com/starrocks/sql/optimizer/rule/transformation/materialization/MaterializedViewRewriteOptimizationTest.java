@@ -2,10 +2,33 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.starrocks.analysis.DmlStmt;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunBuilder;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
 
 public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
     @BeforeClass
@@ -154,6 +177,38 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
 
     @Test
     public void testJoin() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    if (tableName.getTbl().equals("t0")) {
+                        OlapTable tbl1 = ((OlapTable) testDb.getTable("t0"));
+                        for (Partition partition : tbl1.getPartitions()) {
+                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            }
+                        }
+                    } else if (tableName.getTbl().equals("test_all_type")) {
+                        OlapTable tbl1 = ((OlapTable) testDb.getTable("test_all_type"));
+                        for (Partition partition : tbl1.getPartitions()) {
+                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        MaterializedView materializedView = (MaterializedView) db.getTable("join_mv_1");
+        Task task = TaskBuilder.buildMvTask(materializedView, db.getFullName());
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
         String query1 = "SELECT t0.v1, test_all_type.t1d, test_all_type.t1c" +
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1";
         String plan1 = getFragmentPlan(query1);
@@ -174,4 +229,15 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 "     rollup: join_mv_1");
     }
 
+    private void setPartitionVersion(Partition partition, long version) {
+        partition.setVisibleVersion(version, System.currentTimeMillis());
+        MaterializedIndex baseIndex = partition.getBaseIndex();
+        List<Tablet> tablets = baseIndex.getTablets();
+        for (Tablet tablet : tablets) {
+            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+            for (Replica replica : replicas) {
+                replica.updateVersionInfo(version, -1, version);
+            }
+        }
+    }
 }
