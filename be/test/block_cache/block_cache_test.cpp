@@ -2,11 +2,12 @@
 
 #include "block_cache/block_cache.h"
 
-#include <cstring>
 #include <gtest/gtest.h>
 
-#include "common/statusor.h"
+#include <cstring>
+
 #include "common/logging.h"
+#include "common/statusor.h"
 #include "fs/fs_util.h"
 
 namespace starrocks {
@@ -24,7 +25,7 @@ TEST_F(BlockCacheTest, hybrid_cache) {
     CacheOptions options;
     options.mem_space_size = 20 * 1024 * 1024;
     size_t quota = 500 * 1024 * 1024;
-    options.disk_spaces.push_back({ .path = "./ut_dir/block_disk_cache", .size = quota });
+    options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = quota});
     options.block_size = block_size;
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());

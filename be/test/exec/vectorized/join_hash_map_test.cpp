@@ -2422,14 +2422,13 @@ TEST_F(JoinHashMapTest, NullAwareAntiJoinTest) {
     this->prepare_probe_data(&probe_data, probe_row_count);
 
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_probe_from_ht_for_null_aware_anti_join_with_other_conjunct<true>(
-            _runtime_state.get(), build_data,probe_data);
+    join_hash_map->_probe_from_ht_for_null_aware_anti_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
+                                                                                     probe_data);
 
     // null in probe table match all build table rows
     ASSERT_EQ(probe_state.probe_match_index[0], build_row_count);
     // value in probe table not hit hash table match all null value rows in build table
     ASSERT_EQ(probe_state.probe_match_index[1], 1);
-
 }
 
 } // namespace starrocks::vectorized
