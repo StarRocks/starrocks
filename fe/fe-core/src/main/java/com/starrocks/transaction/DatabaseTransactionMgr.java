@@ -468,7 +468,6 @@ public class DatabaseTransactionMgr {
             }
         }
 
-
         Set<Long> errorReplicaIds = Sets.newHashSet();
         Set<Long> totalInvolvedBackends = Sets.newHashSet();
         for (long tableId : tableToPartition.keySet()) {
@@ -504,7 +503,7 @@ public class DatabaseTransactionMgr {
 
                             // save the error replica ids for current tablet
                             // this param is used for log
-                            Set<Long> errorBackendIdsForTablet = Sets.newHashSet();
+                            StringBuilder failedReplicaInfoSB = new StringBuilder();
                             int successReplicaNum = 0;
                             for (long tabletBackend : tabletBackends) {
                                 Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletBackend);
@@ -519,11 +518,21 @@ public class DatabaseTransactionMgr {
                                     // if the backend load success but the backend has some errors previously, then it is not a normal replica
                                     // ignore it but not log it
                                     // for example, a replica is in clone state
-                                    if (replica.getLastFailedVersion() < 0) {
+                                    long lfv = replica.getLastFailedVersion();
+                                    if (lfv < 0) {
                                         ++successReplicaNum;
+                                    } else {
+                                        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
+                                        failedReplicaInfoSB.append(
+                                                String.format("%d:{be:%d %s V:%d LFV:%d},", replica.getId(), tabletBackend,
+                                                        backend == null ? "" : backend.getHost(), replica.getVersion(), lfv));
                                     }
                                 } else {
-                                    errorBackendIdsForTablet.add(tabletBackend);
+                                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
+                                    failedReplicaInfoSB.append(
+                                            String.format("%d:{be:%d %s V:%d LFV:%d},", replica.getId(), tabletBackend,
+                                                    backend == null ? "" : backend.getHost(), replica.getVersion(),
+                                                    replica.getLastSuccessVersion()));
                                     errorReplicaIds.add(replica.getId());
                                     // not remove rollup task here, because the commit maybe failed
                                     // remove rollup task when commit successfully
@@ -531,16 +540,13 @@ public class DatabaseTransactionMgr {
                             }
 
                             if (successReplicaNum < quorumReplicaNum) {
-                                List<String> errorBackends = new ArrayList<String>();
-                                for (long backendId : errorBackendIdsForTablet) {
-                                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-                                    errorBackends.add(backend.getId() + ":" + backend.getHost());
-                                }
-
-                                LOG.warn("Fail to load files. tablet_id: {}, txn_id: {}, backends: {}",
-                                        tablet.getId(), transactionId,
-                                        Joiner.on(",").join(errorBackends));
-                                throw new TabletQuorumFailedException(tablet.getId(), transactionId, errorBackends);
+                                String msg = String.format(
+                                        "Commit failed. txn: %d table: %s tablet: %d quorum: %d<%d errorReplicas: %s",
+                                        transactionState.getTransactionId(), table.getName(), tablet.getId(), successReplicaNum,
+                                        quorumReplicaNum,
+                                        failedReplicaInfoSB.toString());
+                                LOG.warn(msg);
+                                throw new TabletQuorumFailedException(msg);
                             }
                         }
                     }
@@ -702,8 +708,8 @@ public class DatabaseTransactionMgr {
                                             && (unfinishedBackends == null
                                             || !unfinishedBackends.contains(replica.getBackendId()))) {
                                         ++successHealthyReplicaNum;
-                                    // replica report version has greater cur transaction commit version
-                                    // This can happen when the BE publish succeeds but fails to send a response to FE
+                                        // replica report version has greater cur transaction commit version
+                                        // This can happen when the BE publish succeeds but fails to send a response to FE
                                     } else if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
                                         ++successHealthyReplicaNum;
                                     } else if (unfinishedBackends != null
@@ -728,7 +734,7 @@ public class DatabaseTransactionMgr {
                             if (successHealthyReplicaNum != replicaNum
                                     && !unfinishedBackends.isEmpty()
                                     && currentTs
-                                            - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
+                                    - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
                                 return false;
                             }
                         }

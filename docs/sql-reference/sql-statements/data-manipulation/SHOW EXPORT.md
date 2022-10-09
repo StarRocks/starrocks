@@ -52,7 +52,3 @@ Note：
     ```sql
     SHOW EXPORT FROM example_db WHERE STATE = "exporting" ORDER BY StartTime DESC;
     ```
-
-## keyword
-
-SHOW,EXPORT

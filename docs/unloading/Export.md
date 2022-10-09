@@ -1,8 +1,8 @@
 # Export Overview
 
-Data Export is a feature to export and store data to other storage media. It can export data from user-specified tables or partitions in **text** format to remote storage such as HDFS/AliCloud OSS/AWS S3 (or S3 protocol-compatible object storage) via Broker.
+This topic describes how to unload and store the data from your StarRocks cluster to other storage media by using the unloading feature of StarRocks.
 
-This chapter introduces the basic principles, usage, best practices and considerations of StarRocks data export.
+The unloading feature of StarRocks allows you to unload the data from specified tables or partitions by using brokers as CSV files to external cloud storage systems such as HDFS, Alibaba Cloud OSS, AWS S3, and other S3 protocol-compatible object storage services.
 
 ## Explanation of Terms
 
