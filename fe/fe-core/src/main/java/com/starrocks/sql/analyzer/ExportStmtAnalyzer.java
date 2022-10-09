@@ -50,7 +50,7 @@ public class ExportStmtAnalyzer {
         }
 
         @Override
-        public Void visitExportStmt(ExportStmt statement, ConnectContext context) {
+        public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
             GlobalStateMgr mgr = context.getGlobalStateMgr();
             TableName tableName = statement.getTableRef().getName();
             // make sure catalog, db, table
@@ -104,7 +104,7 @@ public class ExportStmtAnalyzer {
         }
 
         @Override
-        public Void visitCancelExportStmt(CancelExportStmt statement, ConnectContext context) {
+        public Void visitCancelExportStatement(CancelExportStmt statement, ConnectContext context) {
             // analyze dbName
             statement.setDbName(analyzeDbName(statement.getDbName(), context));
             SemanticException exception = new SemanticException(
@@ -129,7 +129,7 @@ public class ExportStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowExportStmt(ShowExportStmt statement, ConnectContext context) {
+        public Void visitShowExportStatement(ShowExportStmt statement, ConnectContext context) {
             // analyze dbName
             statement.setDbName(analyzeDbName(statement.getDbName(), context));
             // analyze where clause if not null

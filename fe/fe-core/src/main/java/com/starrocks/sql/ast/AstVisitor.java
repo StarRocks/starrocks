@@ -136,19 +136,6 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    // ---------------------------------------- Export Statement -------------------------------------------------------
-    public R visitExportStmt(ExportStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitCancelExportStmt(CancelExportStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitShowExportStmt(ShowExportStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     // ---------------------------------------- Show Statement ---------------------------------------------------------
 
     public R visitShowStatement(ShowStmt statement, C context) {
@@ -634,8 +621,18 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(stmt, context);
     }
 
-    public R visitCancelExportStatement(CancelExportStmt stmt, C context) {
-        return visitStatement(stmt, context);
+    // --------------------------------------- Export Statement --------------------------------------------------------
+
+    public R visitExportStatement(ExportStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCancelExportStatement(CancelExportStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowExportStatement(ShowExportStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ----------------- Catalog Clause -------------

@@ -2,20 +2,22 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivBitSet;
-import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.load.ExportMgr;
+import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.BrokerHbResponse;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
 
 import java.util.HashMap;
 import java.util.List;
@@ -32,7 +34,7 @@ public class ExportRelativeStmtTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-          AnalyzeTestUtil.init();
+        AnalyzeTestUtil.init();
     }
 
     @Test
@@ -54,7 +56,7 @@ public class ExportRelativeStmtTest {
                 " TO 'hdfs://hdfs_host:port/a/b/c/'\n" +
                 "PROPERTIES (\"load_mem_limit\" = \"2147483648\", \"timeout\" = \"7200\")\n" +
                 " WITH BROKER 'broker' (\"password\" = \"*XXX\", \"username\" = \"test\")", stmt.toString());
-        Assert.assertEquals(stmt.getPath() , "hdfs://hdfs_host:port/a/b/c/");
+        Assert.assertEquals(stmt.getPath(), "hdfs://hdfs_host:port/a/b/c/");
 
         // partition data
         originStmt = "EXPORT TABLE tp PARTITION (p1,p2) TO \"hdfs://hdfs_host:port/a/b/c/test_data_\" PROPERTIES " +
@@ -162,7 +164,7 @@ public class ExportRelativeStmtTest {
 
         try {
             Analyzer.analyze(stmt1, AnalyzeTestUtil.getConnectContext());
-        }catch (SemanticException e) {
+        } catch (SemanticException e) {
             e.printStackTrace();
         }
     }
@@ -234,11 +236,35 @@ public class ExportRelativeStmtTest {
         CancelExportStmt stmt1 = new CancelExportStmt("test", null);
         try {
             Analyzer.analyze(stmt1, AnalyzeTestUtil.getConnectContext());
-        }catch (SemanticException e) {
+        } catch (SemanticException e) {
             e.printStackTrace();
         }
 
     }
 
+    @Test
+    public void testCancelExportHandler(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked ExportMgr exportMgr, @Mocked EditLog editLog) {
+        new MockUp<ConnectContext>() {
+            @Mock
+            GlobalStateMgr getGlobalStateMgr() {
+                return globalStateMgr;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.getExportMgr();
+                minTimes = 0;
+                result = exportMgr;
+            }
+        };
+
+        try {
+            DDLStmtExecutor.execute(new CancelExportStmt("repo", null), new ConnectContext());
+        } catch (Exception ex) {
+            Assert.fail();
+        }
+    }
 
 }
