@@ -19,6 +19,9 @@ import java.util.stream.Collectors;
 public class UseSortAggregateRule extends OptExpressionVisitor<Void, Void> implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
+        if (!ConnectContext.get().getSessionVariable().isEnableQueryCache()) {
+            return root;
+        }
         if (!ConnectContext.get().getSessionVariable().isEnableSortAggregate()) {
             return root;
         }
