@@ -131,7 +131,8 @@ public class RangePartitionDesc extends PartitionDesc {
             for (Column column : schema) {
                 if (column.getName().equalsIgnoreCase(colName)) {
                     if (!column.isKey() && column.getAggregationType() != AggregateType.NONE) {
-                        throw new DdlException("The partition column could not be aggregated column");
+                        throw new DdlException("The partition column could not be aggregated column"
+                                    + " and unique table's partition column must be key column");
                     }
 
                     if (column.getType().isFloatingPointType() || column.getType().isComplexType()) {
