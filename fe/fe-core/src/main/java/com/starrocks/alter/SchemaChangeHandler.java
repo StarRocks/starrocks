@@ -1204,10 +1204,6 @@ public class SchemaChangeHandler extends AlterHandler {
 
         boolean metaValue = false;
         if (metaType == TTabletMetaType.INMEMORY) {
-            // LakeTable not support alter in_memory
-            if (olapTable.isLakeTable()) {
-                throw new DdlException("LakeTable does not support alter in_memory property");
-            }
             metaValue = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_INMEMORY));
             if (metaValue == olapTable.isInMemory()) {
                 return;
@@ -1245,9 +1241,6 @@ public class SchemaChangeHandler extends AlterHandler {
         db.readLock();
         try {
             olapTable = (OlapTable) db.getTable(tableName);
-            if (olapTable.isLakeTable()) {
-                throw new DdlException("Lake table does not support alter in_memory property");
-            }
             for (String partitionName : partitionNames) {
                 Partition partition = olapTable.getPartition(partitionName);
                 if (partition == null) {

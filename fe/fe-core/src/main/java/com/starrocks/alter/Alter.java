@@ -490,12 +490,16 @@ public class Alter {
                 List<String> partitionNames = clause.getPartitionNames();
                 // currently, only in memory property could reach here
                 Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY));
+                OlapTable olapTable = (OlapTable) db.getTable(tableName);
+                if (olapTable.isLakeTable()) {
+                    throw new DdlException("Lake table not support alter in_memory");
+                }
+
                 ((SchemaChangeHandler) schemaChangeHandler).updatePartitionsInMemoryMeta(
                         db, tableName, partitionNames, properties);
 
                 db.writeLock();
                 try {
-                    OlapTable olapTable = (OlapTable) db.getTable(tableName);
                     modifyPartitionsProperty(db, olapTable, partitionNames, properties);
                 } finally {
                     db.writeUnlock();
@@ -505,6 +509,12 @@ public class Alter {
                 // currently, only in memory property and enable persistent index property could reach here
                 Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX));
+
+                OlapTable olapTable = (OlapTable) db.getTable(tableName);
+                if (olapTable.isLakeTable()) {
+                    throw new DdlException("Lake table not support alter in_memory or enable_persistent_index");
+                }
+
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
                     ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName,
                             properties, TTabletMetaType.INMEMORY);
