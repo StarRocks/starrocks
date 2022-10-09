@@ -96,7 +96,7 @@ public:
         // hive only support null column
         // TODO: support not null
         auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-        dst_nullable_column->resize(src_nullable_column->size());
+        dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
         auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<SourceType>>(
                 src_nullable_column->data_column());
@@ -144,7 +144,7 @@ public:
         // hive only support null column
         // TODO: support not null
         auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-        dst_nullable_column->resize(src_nullable_column->size());
+        dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
         auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<SourceType>>(
                 src_nullable_column->data_column());
@@ -454,7 +454,7 @@ Status parquet::Int32ToDateConverter::convert(const vectorized::ColumnPtr& src, 
     // hive only support null column
     // TODO: support not null
     auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-    dst_nullable_column->resize(src_nullable_column->size());
+    dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int32_t>>(
             src_nullable_column->data_column());
@@ -467,11 +467,9 @@ Status parquet::Int32ToDateConverter::convert(const vectorized::ColumnPtr& src, 
     auto& dst_null_data = dst_nullable_column->null_column()->get_data();
 
     size_t size = src_column->size();
+    memcpy(dst_null_data.data(), src_null_data.data(), size);
     for (size_t i = 0; i < size; i++) {
-        dst_null_data[i] = src_null_data[i];
-        if (!src_null_data[i]) {
-            dst_data[i]._julian = src_data[i] + vectorized::date::UNIX_EPOCH_JULIAN;
-        }
+        dst_data[i]._julian = src_data[i] + vectorized::date::UNIX_EPOCH_JULIAN;
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();
@@ -495,7 +493,7 @@ Status Int96ToDateTimeConverter::convert(const vectorized::ColumnPtr& src, vecto
     // hive only support null column
     // TODO: support not null
     auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-    dst_nullable_column->resize(src_nullable_column->size());
+    dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int96_t>>(
             src_nullable_column->data_column());
@@ -586,7 +584,7 @@ Status Int64ToDateTimeConverter::_convert_to_timestamp_column(const vectorized::
     // hive only support null column
     // TODO: support not null
     auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-    dst_nullable_column->resize(src_nullable_column->size());
+    dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int64_t>>(
             src_nullable_column->data_column());

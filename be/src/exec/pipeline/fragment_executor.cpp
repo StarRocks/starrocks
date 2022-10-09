@@ -17,6 +17,7 @@
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/sink/file_sink_operator.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/vectorized/cross_join_node.h"
@@ -574,9 +575,15 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
     if (typeid(*datasink) == typeid(starrocks::ResultSink)) {
         ResultSink* result_sink = down_cast<starrocks::ResultSink*>(datasink.get());
         // Result sink doesn't have plan node id;
-        OpFactoryPtr op =
-                std::make_shared<ResultSinkOperatorFactory>(context->next_operator_id(), result_sink->get_sink_type(),
-                                                            result_sink->get_output_exprs(), fragment_ctx);
+        OpFactoryPtr op = nullptr;
+        if (result_sink->get_sink_type() == TResultSinkType::FILE) {
+            auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+            op = std::make_shared<FileSinkOperatorFactory>(context->next_operator_id(), result_sink->get_output_exprs(),
+                                                           result_sink->get_file_opts(), dop, fragment_ctx);
+        } else {
+            op = std::make_shared<ResultSinkOperatorFactory>(context->next_operator_id(), result_sink->get_sink_type(),
+                                                             result_sink->get_output_exprs(), fragment_ctx);
+        }
         // Add result sink operator to last pipeline
         fragment_ctx->pipelines().back()->add_op_factory(op);
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {

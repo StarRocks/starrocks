@@ -22,7 +22,12 @@
 ############################################################
 
 # --job param for *make*
-PARALLEL=$[$(nproc)/4+1]
+# support macos
+if [[ $(uname) == "Darwin" ]]; then
+    PARALLEL=$[$(sysctl -n hw.physicalcpu)/4+1]
+else
+    PARALLEL=$[$(nproc)/4+1]
+fi
 
 ###################################################
 # DO NOT change variables bellow unless you known
@@ -54,6 +59,11 @@ export TP_JAR_DIR=$TP_INSTALL_DIR/lib/jar
 
 # Definitions for architecture-related thirdparty
 MACHINE_TYPE=$(uname -m)
+# handle mac m1 platform, change arm64 to aarch64
+if [[ "${MACHINE_TYPE}" == "arm64" ]]; then 
+    MACHINE_TYPE="aarch64"
+fi
+
 VARS_TARGET=vars-${MACHINE_TYPE}.sh
 
 if [ ! -f ${TP_DIR}/${VARS_TARGET} ]; then

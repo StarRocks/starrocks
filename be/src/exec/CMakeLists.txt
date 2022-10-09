@@ -153,6 +153,7 @@ set(EXEC_FILES
     pipeline/scan/connector_scan_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
+    pipeline/sink/file_sink_operator.cpp
     pipeline/select_operator.cpp
     pipeline/nljoin/nljoin_context.cpp
     pipeline/nljoin/nljoin_build_operator.cpp
