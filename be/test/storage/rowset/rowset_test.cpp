@@ -103,7 +103,6 @@ protected:
         tablet_schema_pb.set_keys_type(PRIMARY_KEYS);
         tablet_schema_pb.set_num_short_key_columns(2);
         tablet_schema_pb.set_num_rows_per_row_block(1024);
-        tablet_schema_pb.set_compress_kind(COMPRESS_NONE);
         tablet_schema_pb.set_next_column_unique_id(4);
 
         ColumnPB* column_1 = tablet_schema_pb.add_column();
