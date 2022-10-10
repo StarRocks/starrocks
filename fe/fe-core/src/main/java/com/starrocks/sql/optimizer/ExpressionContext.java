@@ -23,7 +23,7 @@ import java.util.List;
  */
 public class ExpressionContext {
     private OptExpression expression;
-    private GroupExpression groupExpression;
+    public GroupExpression groupExpression;
 
     private LogicalProperty rootProperty;
     private final List<LogicalProperty> childrenProperty = Lists.newArrayList();

@@ -60,4 +60,13 @@ public class CostEstimate {
     public static CostEstimate of(double cpuCost, double memoryCost, double networkCost) {
         return new CostEstimate(cpuCost, memoryCost, networkCost);
     }
+
+    @Override
+    public String toString() {
+        return "CostEstimate{" +
+                "cpuCost=" + cpuCost +
+                ", memoryCost=" + memoryCost +
+                ", networkCost=" + networkCost +
+                '}';
+    }
 }

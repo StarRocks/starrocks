@@ -9,6 +9,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.Explain;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.rule.RuleSet;
@@ -46,7 +47,7 @@ public class ReplayFromDumpTest {
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(86400000);
         connectContext.getSessionVariable().setJoinImplementationMode("auto");
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -152,6 +153,19 @@ public class ReplayFromDumpTest {
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));
+    }
+
+    private Pair<QueryDumpInfo, String> getLogicalPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
+                                                               TExplainLevel level)
+            throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
+        if (sessionVariable != null) {
+            queryDumpInfo.setSessionVariable(sessionVariable);
+        }
+        queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        queryDumpInfo.getSessionVariable().setEnableLocalShuffleAgg(false);
+        ExecPlan explain = UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second;
+        return new Pair<>(queryDumpInfo, Explain.toString(explain.getPhysicalPlan(), explain.getOutputColumns()));
     }
 
     @Test
@@ -684,7 +698,9 @@ public class ReplayFromDumpTest {
     public void testQueryDump() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpchq5_memo_limit"), null, TExplainLevel.COSTS);
-
+        System.out.println(replayPair.second);
+        replayPair =
+                getLogicalPlanFragment(getDumpInfoFromFile("query_dump/tpchq5_memo_limit"), null, TExplainLevel.COSTS);
         System.out.println(replayPair.second);
     }
 }

@@ -47,6 +47,10 @@ public class CostModel {
     private static double calculateCost(ExpressionContext expressionContext) {
         CostEstimator costEstimator = new CostEstimator();
         CostEstimate costEstimate = expressionContext.getOp().accept(costEstimator, expressionContext);
+        if (expressionContext.groupExpression.getOp() instanceof PhysicalHashJoinOperator) {
+            PhysicalHashJoinOperator op = expressionContext.groupExpression.getOp().cast();
+            System.out.printf("eqPredicate=%s, cost=%s\n", op.getOnPredicate(), costEstimate);
+        }
         return getRealCost(costEstimate);
     }
 
