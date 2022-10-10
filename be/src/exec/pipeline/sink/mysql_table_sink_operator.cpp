@@ -61,10 +61,7 @@ Status MysqlTableSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* pare
 
 void MysqlTableSinkIOBuffer::close(RuntimeState* state) {
     _writer.reset();
-    _is_finished = true;
-    if (_exec_queue_id != nullptr) {
-        bthread::execution_queue_stop(*_exec_queue_id);
-    }
+    SinkIOBuffer::close(state);
 }
 
 void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter) {
