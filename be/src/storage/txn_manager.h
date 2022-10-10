@@ -49,6 +49,7 @@
 #include "storage/rowset/rowset_meta.h"
 #include "storage/tablet.h"
 #include "util/lru_cache.h"
+#include "util/threadpool.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -67,7 +68,7 @@ struct TabletTxnInfo {
 // txn manager is used to manage mapping between tablet and txns
 class TxnManager {
 public:
-    TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size);
+    TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, int32_t store_num);
 
     ~TxnManager() = default;
 
@@ -180,6 +181,9 @@ private:
     std::unique_ptr<std::shared_mutex[]> _txn_map_locks;
 
     std::unique_ptr<std::mutex[]> _txn_mutex;
+
+    // Dynamic thread pool used to concurrently flush WAL to disk
+    std::unique_ptr<ThreadPool> _flush_thread_pool;
 
     TxnManager(const TxnManager&) = delete;
     const TxnManager& operator=(const TxnManager&) = delete;
