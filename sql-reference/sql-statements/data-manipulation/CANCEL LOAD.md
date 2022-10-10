@@ -2,7 +2,7 @@
 
 ## 功能
 
-取消指定的 Broker Load、Spark Load 或 Insert Into 导入作业，但以下情况的导入作业不能取消：
+取消指定的 Broker Load、Spark Load 或 INSERT 导入作业，但以下情况的导入作业不能取消：
 
 - 状态为 `CANCELLED` 或 `FINISHED` 的导入作业。
 - 事务已提交的导入作业。
