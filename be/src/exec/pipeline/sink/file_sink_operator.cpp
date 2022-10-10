@@ -97,10 +97,7 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
         _state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
                                                          state->fragment_instance_id());
     }
-    _is_finished = true;
-    if (_exec_queue_id != nullptr) {
-        bthread::execution_queue_stop(*_exec_queue_id);
-    }
+    SinkIOBuffer::close(state);
 }
 
 void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::ChunkPtr>& iter) {

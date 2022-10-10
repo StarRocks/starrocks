@@ -73,7 +73,12 @@ public:
         }
     }
 
-    virtual void close(RuntimeState* state) = 0;
+    virtual void close(RuntimeState* state) {
+        _is_finished = true;
+        if (_exec_queue_id != nullptr) {
+            bthread::execution_queue_stop(*_exec_queue_id);
+        }
+    }
 
     inline void set_io_status(const Status& status) {
         std::unique_lock l(_io_status_mutex);

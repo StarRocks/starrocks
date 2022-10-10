@@ -313,7 +313,7 @@ public class Coordinator {
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
 
-        this.usePipeline = this.fragments.stream().allMatch(PlanFragment::canUsePipeline);
+        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
 
     // Used for broker load task coordinator
