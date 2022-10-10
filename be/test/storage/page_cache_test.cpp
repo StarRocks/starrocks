@@ -101,4 +101,42 @@ TEST_F(StoragePageCacheTest, normal) {
     }
 }
 
+TEST_F(StoragePageCacheTest, metrics) {
+    StoragePageCache cache(_mem_tracker.get(), kNumShards * 2048);
+
+    // Insert a piece of data, but the application layer does not release it.
+    StoragePageCache::CacheKey key1("abc", 0);
+    char* buf = new char[1024];
+    PageCacheHandle handle;
+    Slice data(buf, 1024);
+    cache.insert(key1, data, &handle, false);
+
+    StoragePageCache::CacheKey key2("def", 0);
+    {
+        // Insert another piece of data and release it from the application layer.
+        char* buf = new char[1024];
+        PageCacheHandle handle;
+        Slice data(buf, 1024);
+        cache.insert(key2, data, &handle, false);
+    }
+
+    // At this point the cache should have two entries, one for user owner and one for cache Owenr.
+    PageCacheHandle handle1;
+    auto found = cache.lookup(key1, &handle);
+    ASSERT_TRUE(found);
+    PageCacheHandle handle2;
+    found = cache.lookup(key2, &handle2);
+    ASSERT_TRUE(found);
+    ASSERT_EQ(cache.get_lookup_count(), 2);
+    ASSERT_EQ(cache.get_hit_count(), 2);
+    // Test the cache miss
+    for (int i=0; i<1024; i++) {
+        PageCacheHandle handle;
+        StoragePageCache::CacheKey key(std::to_string(i), 0);
+        cache.lookup(key, &handle);
+    }
+    ASSERT_EQ(cache.get_lookup_count(), 2 + 1024);
+    ASSERT_EQ(cache.get_hit_count(), 2);
+}
+
 } // namespace starrocks
