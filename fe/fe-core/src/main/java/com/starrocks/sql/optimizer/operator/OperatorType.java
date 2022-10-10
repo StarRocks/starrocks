@@ -102,4 +102,11 @@ public enum OperatorType {
     PATTERN_MULTI_LEAF,
     // for all type scan
     PATTERN_SCAN,
+    // for extracting pattern like this
+    //     join
+    //    /    \
+    //  join   table
+    //  /  \
+    // table table
+    PATTERN_MULTIJOIN,
 }
