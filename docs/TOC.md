@@ -85,6 +85,7 @@
     + [Profiling](./administration/Profiling.md)
 + Reference
   + SQL Reference
+    + [Keywords](./sql-reference/sql-statements/keywords.md)
     + User Account Management
       + [ALTER USER](./sql-reference/sql-statements/account-management/ALTER%20USER.md)
       + [CREATE ROLE](./sql-reference/sql-statements/account-management/CREATE%20ROLE.md)
