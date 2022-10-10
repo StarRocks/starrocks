@@ -95,7 +95,7 @@ OutPut Exchange Id: 15
 |  join op: RIGHT ANTI JOIN (PARTITIONED)
 |  equal join conjunct: [20: o_custkey, INT, true] = [1: c_custkey, INT, true]
 |  build runtime filters:
-|  - filter_id = 0, build_expr = (1: c_custkey), remote = true
+|  - filter_id = 1, build_expr = (1: c_custkey), remote = true
 |  output columns: 5, 6
 |  cardinality: 1500000
 |  column statistics:

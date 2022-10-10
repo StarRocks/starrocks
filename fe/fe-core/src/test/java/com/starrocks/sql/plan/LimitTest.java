@@ -551,6 +551,8 @@ public class LimitTest extends PlanTestBase {
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 2: v2 != 5: v5\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (5: v5), remote = false\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +
