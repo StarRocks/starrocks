@@ -172,6 +172,10 @@ Status ExportSinkOperator::set_finishing(RuntimeState* state) {
     return _export_sink_buffer->set_finishing();
 }
 
+bool ExportSinkOperator::pending_finish() const {
+    return !_export_sink_buffer->is_finished();
+}
+
 Status ExportSinkOperator::set_cancelled(RuntimeState* state) {
     _export_sink_buffer->cancel_one_sinker();
     return Status::OK();

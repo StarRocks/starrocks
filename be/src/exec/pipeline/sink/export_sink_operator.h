@@ -37,6 +37,8 @@ public:
 
     Status set_finishing(RuntimeState* state) override;
 
+    bool pending_finish() const override;
+
     Status set_cancelled(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
