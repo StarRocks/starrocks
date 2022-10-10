@@ -6,7 +6,7 @@
 
 ### 新增特性
 
-- 支持构建多表物化视图，实现多表 JOIN 查询加速。相关文档，请参见 [物化视图](../using_starrocks/Materialized_view.md)。
+- 支持构建异步多表物化视图，实现多表 JOIN 查询加速。异步物化视图支持所有[数据模型](../table_design/Data_model.md)。相关文档，请参见 [物化视图](../using_starrocks/Materialized_view.md)。
 
 - 支持通过 INSERT OVERWRITE 语句批量写入并覆盖数据。相关文档，请参见 [INSERT 导入](../loading/InsertInto.md)。
 
