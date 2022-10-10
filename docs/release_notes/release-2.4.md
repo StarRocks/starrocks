@@ -6,7 +6,7 @@ Release date: September 17th, 2022
 
 ### New Features
 
-- Supports creating a materialized view based on multiple base tables to accelerate queries with JOIN operations. For more information, see [Materialized View](../using_starrocks/Materialized_view.md).
+- Supports creating asynchronous materialized views based on multiple base tables to accelerate queries with JOIN operations. Asynchronous materialized views support all [Data Models](../table_design/Data_model.md). For more information, see [Materialized View](../using_starrocks/Materialized_view.md).
 
 - Supports overwriting data via the INSERT OVERWRITE statement. For more information, see [Load data using INSERT](../loading/InsertInto.md).
 
