@@ -32,6 +32,13 @@ private:
     ~SinkIOExecutor() = default;
 };
 
+// SinkIOBuffer accepts input from all sink operators, it uses an execution queue to asynchronously process chunks one by one.
+// Because some interfaces of different writer include sync IO, we need to avoid calling the writer in pipeline execution thread.
+// Many sinks have a similar working mode to the above (e.g. FileSink/ExportSink/MysqlTableSink), this abstraction was added to make them easier to use.
+// @TODO: In fact, we need a MPSC queue, the producers in compute thread produce chunk, the consumer in io thread consume and process chunk.
+// but the existing collaborative IO scheduling is diffcult to handle this scenario and can't be integrated into the workgroup mechanism.
+// In order to achieve simplicity, the io task will be put into a dedicated thread pool, the sink io task of different queries is completely scheduled by os,
+// which needs to be solved by a new adaptive io task scheduler.
 class SinkIOBuffer {
 public:
     SinkIOBuffer(int32_t num_sinkers) : _num_result_sinkers(num_sinkers) {}
