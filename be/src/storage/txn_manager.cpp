@@ -36,7 +36,7 @@
 
 namespace starrocks {
 
-TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size)
+TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, int32_t store_num)
         : _txn_map_shard_size(txn_map_shard_size), _txn_shard_size(txn_shard_size) {
     DCHECK_GT(_txn_map_shard_size, 0);
     DCHECK_GT(_txn_shard_size, 0);
@@ -46,6 +46,12 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size)
     _txn_tablet_maps = std::unique_ptr<txn_tablet_map_t[]>(new txn_tablet_map_t[_txn_map_shard_size]);
     _txn_partition_maps = std::unique_ptr<txn_partition_map_t[]>(new txn_partition_map_t[_txn_map_shard_size]);
     _txn_mutex = std::unique_ptr<std::mutex[]>(new std::mutex[_txn_shard_size]);
+    auto st = ThreadPoolBuilder("meta-flush")
+                      .set_min_threads(1)
+                      .set_max_threads(store_num * 2)
+                      .set_idle_timeout(MonoDelta::FromSeconds(30))
+                      .build(&_flush_thread_pool);
+    CHECK(st.ok());
 }
 
 Status TxnManager::prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
@@ -254,6 +260,7 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
     SCOPED_RAW_TIMER(&duration_ns);
 
     std::unordered_set<std::string> persisted;
+    std::vector<TabletSharedPtr> to_flush_tablet;
     for (auto& tablet : tablets) {
         if (tablet == nullptr) {
             continue;
@@ -261,13 +268,27 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
         auto path = tablet->data_dir()->path();
         // skip persisted meta.
         if (persisted.find(path) != persisted.end()) continue;
+        to_flush_tablet.push_back(tablet);
+        persisted.insert(path);
+    }
 
-        auto st = tablet->data_dir()->get_meta()->flush();
+    auto token = _flush_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    std::vector<std::pair<Status, int64_t>> pair_vec(to_flush_tablet.size());
+    int i = 0;
+    for (auto& tablet : to_flush_tablet) {
+        auto dir = tablet->data_dir();
+        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flush(); });
+        pair_vec[i].second = tablet->tablet_id();
+        i++;
+    }
+
+    token->wait();
+    for (const auto& pair : pair_vec) {
+        auto& st = pair.first;
         if (!st.ok()) {
-            LOG(WARNING) << "Failed to persist tablet meta, tablet_id: " << tablet->table_id() << " res: " << st;
+            LOG(WARNING) << "Failed to persist tablet meta, tablet_id: " << pair.second << " res: " << st;
             return st;
         }
-        persisted.insert(path);
     }
 
     StarRocksMetrics::instance()->txn_persist_total.increment(1);
