@@ -181,6 +181,7 @@ uint64_t HdfsScanner::exit_pending_queue() {
 Status HdfsScanner::open_random_access_file() {
     CHECK(_file == nullptr) << "File has already been opened";
     ASSIGN_OR_RETURN(_raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path))
+    _raw_file->set_size(_scanner_params.file_size);
     auto stream = std::make_shared<CountedSeekableInputStream>(_raw_file->stream(), &_stats);
     std::shared_ptr<io::SeekableInputStream> input_stream = stream;
     if (_compression_type != CompressionTypePB::NO_COMPRESSION) {
