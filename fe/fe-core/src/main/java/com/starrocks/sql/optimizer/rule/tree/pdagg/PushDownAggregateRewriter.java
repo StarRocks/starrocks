@@ -48,11 +48,11 @@ import java.util.stream.Collectors;
  * And will insert new AggregateNode on scan node finally
  *
  * */
-public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpression, AggregateContext> {
+public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpression, AggregatePushDownContext> {
     private final ColumnRefFactory factory;
     private final PushDownAggregateCollector collector;
 
-    private Map<LogicalAggregationOperator, List<AggregateContext>> allRewriteContext;
+    private Map<LogicalAggregationOperator, List<AggregatePushDownContext>> allRewriteContext;
     // record all push down column on scan node
     // for check the group bys which is generated in join node(on/where)
     private ColumnRefSet allPushDownGroupBys;
@@ -77,30 +77,30 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                 .flatMap(Collection::stream)
                 .map(ScalarOperator::getUsedColumns).forEach(allPushDownGroupBys::union);
 
-        return root.getOp().accept(this, root, AggregateContext.EMPTY);
+        return root.getOp().accept(this, root, AggregatePushDownContext.EMPTY);
     }
 
     @Override
-    public OptExpression visit(OptExpression optExpression, AggregateContext context) {
+    public OptExpression visit(OptExpression optExpression, AggregatePushDownContext context) {
         for (int i = 0; i < optExpression.getInputs().size(); i++) {
-            optExpression.getInputs().set(i, process(optExpression.inputAt(i), AggregateContext.EMPTY));
+            optExpression.getInputs().set(i, process(optExpression.inputAt(i), AggregatePushDownContext.EMPTY));
         }
         return optExpression;
     }
 
-    private OptExpression processChild(OptExpression optExpression, AggregateContext context) {
+    private OptExpression processChild(OptExpression optExpression, AggregatePushDownContext context) {
         for (int i = 0; i < optExpression.getInputs().size(); i++) {
             optExpression.getInputs().set(i, process(optExpression.inputAt(i), context));
         }
         return optExpression;
     }
 
-    private OptExpression process(OptExpression optExpression, AggregateContext context) {
+    private OptExpression process(OptExpression optExpression, AggregatePushDownContext context) {
         return optExpression.getOp().accept(this, optExpression, context);
     }
 
     @Override
-    public OptExpression visitLogicalFilter(OptExpression optExpression, AggregateContext context) {
+    public OptExpression visitLogicalFilter(OptExpression optExpression, AggregatePushDownContext context) {
         if (isInvalid(optExpression, context)) {
             return visit(optExpression, context);
         }
@@ -112,7 +112,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     }
 
     @Override
-    public OptExpression visitLogicalProject(OptExpression optExpression, AggregateContext context) {
+    public OptExpression visitLogicalProject(OptExpression optExpression, AggregatePushDownContext context) {
         if (isInvalid(optExpression, context)) {
             return visit(optExpression, context);
         }
@@ -133,7 +133,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
     // rewrite groupBys/aggregation by project expression, maybe needs push down
     // expression with aggregation or rewrite project expression
-    private void rewriteProject(AggregateContext context, Map<ColumnRefOperator, ScalarOperator> originProjectMap) {
+    private void rewriteProject(AggregatePushDownContext context, Map<ColumnRefOperator, ScalarOperator> originProjectMap) {
         // rewrite group bys
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(originProjectMap);
         context.groupBys.replaceAll((k, v) -> rewriter.rewrite(v));
@@ -214,7 +214,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     }
 
     private ColumnRefOperator replaceByNewAggregation(CallOperator originAggFn, ScalarOperator input,
-                                                      AggregateContext context) {
+                                                      AggregatePushDownContext context) {
         CallOperator newAgg = genAggregation(originAggFn, input);
         ColumnRefOperator ref;
         if (context.aggregations.containsValue(newAgg)) {
@@ -228,15 +228,15 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     }
 
     @Override
-    public OptExpression visitLogicalAggregate(OptExpression optExpression, AggregateContext context) {
+    public OptExpression visitLogicalAggregate(OptExpression optExpression, AggregatePushDownContext context) {
         LogicalAggregationOperator aggregate = (LogicalAggregationOperator) optExpression.getOp();
         if (!allRewriteContext.containsKey(aggregate)) {
             return visit(optExpression, context);
         }
 
-        List<AggregateContext> allRewrite = allRewriteContext.get(aggregate);
+        List<AggregatePushDownContext> allRewrite = allRewriteContext.get(aggregate);
         // rewrite
-        AggregateContext childContext = new AggregateContext();
+        AggregatePushDownContext childContext = new AggregatePushDownContext();
         childContext.origAggregator = aggregate;
 
         Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap(aggregate.getAggregations());
@@ -285,7 +285,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     }
 
     @Override
-    public OptExpression visitLogicalJoin(OptExpression optExpression, AggregateContext context) {
+    public OptExpression visitLogicalJoin(OptExpression optExpression, AggregatePushDownContext context) {
         if (isInvalid(optExpression, context)) {
             return visit(optExpression, context);
         }
@@ -295,7 +295,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         return optExpression;
     }
 
-    private OptExpression pushDownJoinAggregate(OptExpression joinOpt, AggregateContext context, int child) {
+    private OptExpression pushDownJoinAggregate(OptExpression joinOpt, AggregatePushDownContext context, int child) {
         LogicalJoinOperator join = (LogicalJoinOperator) joinOpt.getOp();
         ColumnRefSet childOutput = joinOpt.inputAt(child).getOutputColumns();
 
@@ -303,10 +303,10 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         context.aggregations.values().stream().map(CallOperator::getUsedColumns).forEach(aggregationsRefs::union);
 
         if (!childOutput.containsAll(aggregationsRefs)) {
-            return process(joinOpt.inputAt(child), AggregateContext.EMPTY);
+            return process(joinOpt.inputAt(child), AggregatePushDownContext.EMPTY);
         }
 
-        AggregateContext childContext = new AggregateContext();
+        AggregatePushDownContext childContext = new AggregatePushDownContext();
         childContext.aggregations.putAll(context.aggregations);
 
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.groupBys.entrySet()) {
@@ -331,14 +331,14 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     }
 
     @Override
-    public OptExpression visitLogicalCTEAnchor(OptExpression optExpression, AggregateContext context) {
-        optExpression.setChild(0, process(optExpression.inputAt(0), AggregateContext.EMPTY));
+    public OptExpression visitLogicalCTEAnchor(OptExpression optExpression, AggregatePushDownContext context) {
+        optExpression.setChild(0, process(optExpression.inputAt(0), AggregatePushDownContext.EMPTY));
         optExpression.setChild(1, process(optExpression.inputAt(1), context));
         return optExpression;
     }
 
     @Override
-    public OptExpression visitLogicalTableScan(OptExpression optExpression, AggregateContext context) {
+    public OptExpression visitLogicalTableScan(OptExpression optExpression, AggregatePushDownContext context) {
         if (isInvalid(optExpression, context)) {
             return visit(optExpression, context);
         }
@@ -381,14 +381,14 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     }
 
     @Override
-    public OptExpression visitLogicalUnion(OptExpression optExpression, AggregateContext context) {
+    public OptExpression visitLogicalUnion(OptExpression optExpression, AggregatePushDownContext context) {
         if (isInvalid(optExpression, context)) {
             return visit(optExpression, context);
         }
 
         // replace (union and children)'s output column
         LogicalUnionOperator union = (LogicalUnionOperator) optExpression.getOp();
-        List<AggregateContext> childContexts = Lists.newArrayList();
+        List<AggregatePushDownContext> childContexts = Lists.newArrayList();
         for (int i = 0; i < optExpression.getInputs().size(); i++) {
             List<ColumnRefOperator> childOutput = union.getChildOutputColumns().get(i);
             Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap();
@@ -398,7 +398,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
             }
 
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
-            AggregateContext childContext = new AggregateContext();
+            AggregatePushDownContext childContext = new AggregatePushDownContext();
             childContext.origAggregator = context.origAggregator;
             childContext.aggregations.putAll(context.aggregations);
             childContext.aggregations.replaceAll((k, v) -> (CallOperator) rewriter.rewrite(v));
@@ -437,7 +437,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                 optExpression.getInputs());
     }
 
-    private boolean isInvalid(OptExpression optExpression, AggregateContext context) {
+    private boolean isInvalid(OptExpression optExpression, AggregatePushDownContext context) {
         return context.isEmpty() || optExpression.getOp().hasLimit();
     }
 }

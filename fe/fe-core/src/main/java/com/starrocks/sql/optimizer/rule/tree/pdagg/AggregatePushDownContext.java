@@ -12,19 +12,18 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.List;
 import java.util.Map;
 
-class AggregateContext {
-    public static final AggregateContext EMPTY = new AggregateContext();
+class AggregatePushDownContext {
+    public static final AggregatePushDownContext EMPTY = new AggregatePushDownContext();
 
     public LogicalAggregationOperator origAggregator;
     public final Map<ColumnRefOperator, CallOperator> aggregations;
     public final Map<ColumnRefOperator, ScalarOperator> groupBys;
 
     // record push down path
-    // key: the tree level of multi-child node
-    // value: the index of children which should push down
+    // the index of children which should push down
     public final List<Integer> pushPaths;
 
-    public AggregateContext() {
+    public AggregatePushDownContext() {
         origAggregator = null;
         aggregations = Maps.newHashMap();
         groupBys = Maps.newHashMap();
