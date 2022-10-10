@@ -69,6 +69,7 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
         if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
     }
     chunk_pb.set_serialized_size(buff - reinterpret_cast<const uint8_t*>(serialized_data->data()));
+    serialized_data->resize(chunk_pb.serialized_size());
     chunk_pb.set_uncompressed_size(serialized_data->size());
     VLOG_ROW << "pb serialize data, memory bytes = " << chunk.bytes_usage()
              << " serialized size = " << chunk_pb.serialized_size()
