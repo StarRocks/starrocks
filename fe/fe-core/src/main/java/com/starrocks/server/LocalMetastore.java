@@ -411,7 +411,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     throw new DdlException("There are still some transactions in the COMMITTED state waiting to be completed. " +
                             "The database [" + dbName +
                             "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                            " please use \"DROP database FORCE\".");
+                            " please use \"DROP DATABASE <database> FORCE\".");
                 }
 
                 // save table names for recycling
@@ -1513,7 +1513,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                 "There are still some transactions in the COMMITTED state waiting to be completed." +
                                         " The partition [" + partitionName +
                                         "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                                        " please use \"DROP partition FORCE\".");
+                                        " please use \"DROP PARTITION <partition> FORCE\".");
                     }
                 }
             }
