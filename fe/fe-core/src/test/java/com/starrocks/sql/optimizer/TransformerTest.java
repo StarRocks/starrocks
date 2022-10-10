@@ -133,10 +133,9 @@ public class TransformerTest {
             LogicalPlan logicalPlan = new RelationTransformer(new ColumnRefFactory(), connectContext)
                     .transform(((QueryStatement) statementBase).getQueryRelation());
 
-            OperatorStrings operatorPrinter = new OperatorStrings();
             try {
                 Assert.assertEquals(operatorString.substring(0, operatorString.length() - 1),
-                        operatorPrinter.printOperator(logicalPlan.getRoot()));
+                        LogicalPlanPrinter.print(logicalPlan.getRoot()));
             } catch (Error error) {
                 collector.addError(new Throwable("\n" + originStmt, error));
             }

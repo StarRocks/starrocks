@@ -104,6 +104,13 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
         vals.insert(col->get_data().begin(), col->get_data().end());
         ASSERT_EQ(vals.size(), chunk_size);
     }
+
+    {
+        Columns columns;
+        ColumnPtr result = UtilityFunctions::host_name(ctx, columns);
+        ColumnViewer<TYPE_VARCHAR> column_viewer(result);
+        ASSERT_EQ(column_viewer.size(), 1);
+    }
 }
 
 } // namespace vectorized

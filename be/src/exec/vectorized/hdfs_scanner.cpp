@@ -195,7 +195,8 @@ Status HdfsScanner::open_random_access_file() {
                 std::make_shared<io::CompressedInputStream>(stream, DecompressorPtr(dec.release()));
         input_stream = std::make_shared<io::CompressedSeekableInputStream>(compressed_input_stream);
     }
-    if (config::block_cache_enable) {
+
+    if (_scanner_params.use_block_cache && _compression_type == CompressionTypePB::NO_COMPRESSION) {
         _cache_input_stream = std::make_shared<io::CacheInputStream>(_raw_file->filename(), input_stream);
         _file = std::make_unique<RandomAccessFile>(_cache_input_stream, _raw_file->filename());
     } else {
@@ -241,7 +242,7 @@ void HdfsScanner::update_counter() {
     COUNTER_UPDATE(profile->column_read_timer, _stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _stats.column_convert_ns);
 
-    if (config::block_cache_enable) {
+    if (_scanner_params.use_block_cache && _cache_input_stream) {
         const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();
         COUNTER_UPDATE(profile->block_cache_read_counter, stats.read_cache_count);
         COUNTER_UPDATE(profile->block_cache_read_bytes, stats.read_cache_bytes);

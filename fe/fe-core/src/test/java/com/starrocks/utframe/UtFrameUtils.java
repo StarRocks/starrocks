@@ -61,7 +61,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.SqlDigestBuilder;
-import com.starrocks.sql.optimizer.OperatorStrings;
+import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -335,8 +335,7 @@ public class UtFrameUtils {
                 }
             }
 
-            OperatorStrings operatorPrinter = new OperatorStrings();
-            return new Pair<>(operatorPrinter.printOperator(execPlan.getPhysicalPlan()), execPlan);
+            return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
         } finally {
             // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
@@ -484,14 +483,12 @@ public class UtFrameUtils {
                         logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
                         TResultSinkType.MYSQL_PROTOCAL, true);
 
-        OperatorStrings operatorPrinter = new OperatorStrings();
-        return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);
+        return new Pair<>(LogicalPlanPrinter.print(optimizedPlan), execPlan);
     }
 
     private static Pair<String, ExecPlan> getInsertExecPlan(InsertStmt statement, ConnectContext connectContext) {
         ExecPlan execPlan = new InsertPlanner().plan(statement, connectContext);
-        OperatorStrings operatorPrinter = new OperatorStrings();
-        return new Pair<>(operatorPrinter.printOperator(execPlan.getPhysicalPlan()), execPlan);
+        return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
     }
 
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
