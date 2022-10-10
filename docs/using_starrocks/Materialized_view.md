@@ -423,7 +423,7 @@ When a query is executed with a materialized view, the original query statement 
 >
 > StarRocks prior to 2.4 does not support the functions demonstrated below.
 
-StarRocks 2.4 supports creating asynchronous materialized views for multiple base tables to allow modeling data warehouse.
+StarRocks 2.4 supports creating asynchronous materialized views for multiple base tables to allow modeling data warehouse. Asynchronous materialized views support all [Data Models](../table_design/Data_model.md).
 
 As for the current version, multi-table materialized views support two refresh strategies:
 
