@@ -10,7 +10,7 @@ expr1 和 expr2 参数是合法的日期或日期/时间表达式。
 
 ### 语法
 
-```SQL
+```Haskell
 INT DATEDIFF(DATETIME expr1,DATETIME expr2)
 ```
 
