@@ -2,12 +2,17 @@
 
 package com.starrocks.privilege;
 
+import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateUserStmt;
+import com.starrocks.analysis.DropRoleStmt;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
@@ -28,8 +33,8 @@ public class PrivilegeManagerTest {
     @Before
     public void setUp() throws Exception {
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
-        UtFrameUtils.setUpForPersistTest();
         UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.setUpForPersistTest();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         String createTblStmtStr = "create table db.tbl(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
@@ -219,7 +224,6 @@ public class PrivilegeManagerTest {
                 PrivilegeTypes.TableActions.SELECT.toString(),
                 DB_TBL_TOKENS));
 
-
         // check image
         ctx.setCurrentUserIdentity(testUser);
         PrivilegeManager imageManager = PrivilegeManager.load(
@@ -237,7 +241,91 @@ public class PrivilegeManagerTest {
                 PrivilegeTypes.TableActions.SELECT.toString(),
                 DB_TBL_TOKENS));
 
-        UtFrameUtils.tearDownForPersisTest();
+    }
+
+    @Test
+    public void testRole() throws Exception {
+        String sql = "create role test_role";
+        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        Assert.assertFalse(manager.checkRoleExists("test_role"));
+
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+        Assert.assertTrue(manager.checkRoleExists("test_role"));
+
+        // can't create twice
+        try {
+            DDLStmtExecutor.execute(stmt, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Role test_role already exists! id ="));
+        }
+
+        sql = "drop role test_role";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+        Assert.assertFalse(manager.checkRoleExists("test_role"));
+
+        // can't drop twice
+        try {
+            DDLStmtExecutor.execute(stmt, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Role test_role doesn't exist! id ="));
+        }
+    }
+
+    @Test
+    public void testPersistRole() throws Exception {
+        GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
+        PrivilegeManager masterManager = masterGlobalStateMgr.getPrivilegeManager();
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        masterManager.save(emptyImage.getDataOutputStream());
+        Assert.assertFalse(masterManager.checkRoleExists("test_role"));
+
+        String sql = "create role test_role";
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        CreateRoleStmt createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        masterManager.createRole(createStmt);
+        Assert.assertTrue(masterManager.checkRoleExists("test_role"));
+
+        UtFrameUtils.PseudoImage createRoleImage = new UtFrameUtils.PseudoImage();
+        masterManager.save(createRoleImage.getDataOutputStream());
+
+        sql = "drop role test_role";
+        DropRoleStmt dropRoleStmt = (DropRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        masterManager.dropRole(dropRoleStmt);
+        Assert.assertFalse(masterManager.checkRoleExists("test_role"));
+
+        UtFrameUtils.PseudoImage dropRoleImage = new UtFrameUtils.PseudoImage();
+        masterManager.save(dropRoleImage.getDataOutputStream());
+
+        // start to replay
+        PrivilegeManager followerManager = PrivilegeManager.load(
+                emptyImage.getDataInputStream(), masterGlobalStateMgr, null);
+        Assert.assertFalse(followerManager.checkRoleExists("test_role"));
+
+        RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2);
+        followerManager.replayUpdateRolePrivilegeCollection(
+                info.getRoleId(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
+        Assert.assertTrue(followerManager.checkRoleExists("test_role"));
+
+        info = (RolePrivilegeCollectionInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(
+                OperationType.OP_DROP_ROLE_V2);
+        followerManager.replayDropRole(
+                info.getRoleId(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
+        Assert.assertFalse(followerManager.checkRoleExists("test_role"));
+
+        // check image
+        PrivilegeManager imageManager = PrivilegeManager.load(
+                createRoleImage.getDataInputStream(), masterGlobalStateMgr, null);
+        Assert.assertTrue(imageManager.checkRoleExists("test_role"));
+        imageManager = PrivilegeManager.load(
+                dropRoleImage.getDataInputStream(), masterGlobalStateMgr, null);
+        Assert.assertFalse(imageManager.checkRoleExists("test_role"));
     }
 
     @Test
