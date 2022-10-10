@@ -26,8 +26,10 @@ Status Aggregator::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_group_by_expr_ctxs, state));
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
-        RETURN_IF_ERROR(Expr::open(_intermediate_agg_expr_ctxs[i], state));
         RETURN_IF_ERROR(_evaluate_const_columns(i));
+    }
+    for (int i = 0; i < _intermediate_agg_expr_ctxs.size(); ++i) {
+        RETURN_IF_ERROR(Expr::open(_intermediate_agg_expr_ctxs[i], state));
     }
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
