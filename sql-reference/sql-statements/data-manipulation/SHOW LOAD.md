@@ -2,7 +2,7 @@
 
 ## 功能
 
-查看数据库中全部的或指定的导入作业的执行情况，包括 Broker Load、Spark Load 和 Insert Into 。您还可以使用`curl`命令通过 HTTP 协议查看这些导入作业的执行情况。详细信息，参见[从 HDFS 或外部云存储系统导入数据](../../../loading/BrokerLoad.md)，[使用 Apache Spark™ 批量导入](../../../loading/SparkLoad.md)和[通过 INSERT INTO 语句导入数据](../../../loading/InsertInto.md)。
+查看数据库中全部的或指定的导入作业的执行情况，包括 Broker Load、Spark Load 和 INSERT。您还可以使用`curl`命令通过 HTTP 协议查看这些导入作业的执行情况。详细信息，参见[从 HDFS 或外部云存储系统导入数据](../../../loading/BrokerLoad.md)，[使用 Apache Spark™ 批量导入](../../../loading/SparkLoad.md)和[通过 INSERT 语句导入数据](../../../loading/InsertInto.md)。
 
 ## 语法
 
@@ -27,8 +27,8 @@ SHOW LOAD [ FROM db_name ]
 | LABEL = "label_name"              | 否       | 查看指定标签的导入作业。                                     |
 | LABEL LIKE "label_matcher"        | 否       | 查看标签中包含 `label_matcher` 的导入作业。                  |
 | AND                               | 否       | <ul><li>如只使用其中一个过滤条件，则不需要指定该关键字。例如 `WHERE STATE = "PENDING"`。</li><li>如使用其中任意两个或三个过滤条件，则需要指定该关键字。例如 `WHERE LABEL = "label_name" AND STATE = "PENDING"`。</li></ul> |
-| STATE                             | 否       | 导入作业的状态，包括`PENDING`、`ETL`、`LOADING`、`FINISHED`和`CANCELLED`。不同的导入方式有不同的导入作业状态，具体如下：<ul><li>Broker Load：<ul><li>`PENDING`：导入作业正在等待执行中。</li><li>`LOADING`：导入作业正在执行中。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul></li><li>Spark Load：<ul><li>`PENDING`：准备 ETL 任务的相关配置并提交 ETL 任务到 Apache Spark™ 集群。</li><li>`ETL`：Spark 集群执行 ETL 任务，并将结果写入 Spark 的 HDFS 中。</li><li>`LOADING`：正在将 HDFS 源数据导入到 StarRocks 的目标表中。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul></li><li>Insert Into：<ul><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。如不指定`STATE`参数，则默认显示所有状态的导入作业；如指定，则显示指定状态的导入作业。例如`STATE = "PENDING"`会显示状态为`PENDING`的导入作业。</li></ul></li></ul> |
-| TYPE                              | 否       | 导入方式，包括：<ul><li>`BROKER`：表示 Broker Load。</li><li>`SPARK`：表示 Spark Load。</li><li>`INSERT`：表示 Insert Into。</li></ul> |
+| STATE                             | 否       | 导入作业的状态，包括`PENDING`、`ETL`、`LOADING`、`FINISHED`和`CANCELLED`。不同的导入方式有不同的导入作业状态，具体如下：<ul><li>Broker Load：<ul><li>`PENDING`：导入作业正在等待执行中。</li><li>`LOADING`：导入作业正在执行中。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul></li><li>Spark Load：<ul><li>`PENDING`：准备 ETL 任务的相关配置并提交 ETL 任务到 Apache Spark™ 集群。</li><li>`ETL`：Spark 集群执行 ETL 任务，并将结果写入 Spark 的 HDFS 中。</li><li>`LOADING`：正在将 HDFS 源数据导入到 StarRocks 的目标表中。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul></li><li>INSERT：<ul><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。如不指定`STATE`参数，则默认显示所有状态的导入作业；如指定，则显示指定状态的导入作业。例如`STATE = "PENDING"`会显示状态为`PENDING`的导入作业。</li></ul></li></ul> |
+| TYPE                              | 否       | 导入方式，包括：<ul><li>`BROKER`：表示 Broker Load。</li><li>`SPARK`：表示 Spark Load。</li><li>`INSERT`：表示 INSERT。</li></ul> |
 | ORDER BY field_name [ASC \| DESC] | 否       | 将返回结果按照指定字段升序或降序排列，当前支持的排序字段（field_name）包括 `JobId`、`Label`、`State`、`Progress`、`Type`、`EtlInfo`、`TaskInfo`、`ErrorMsg`、`CreateTime`、`EtlStartTime`、`EtlFinishTime`、`LoadStartTime`、`LoadFinishTime`、`URL` 和 `JobDetails`。<ul><li>如要升序排列，指定 `ORDER BY field_name ASC`。</li><li>如要降序排列，指定 `ORDER BY field_name DESC`。</li></ul>如既不指定排序字段也不指定排列顺序，则默认按照 `JobId` 升序排列。 |
 | LIMIT limit                       | 否       | 查看指定数量的作业。如不指定该参数，则默认显示所有符合筛选条件的作业；如指定，则显示指定数量的作业。例如 `LIMIT 10` 会显示 10 个符合筛选条件的作业。 |
 | OFFSET offset                     | 否       | 从偏移量开始显示返回结果。默认偏移量为 0。例如`OFFSET 5`表示从偏移量 5 开始显示符合筛选条件的作业。 |
@@ -83,7 +83,7 @@ SHOW LOAD [ FROM db_name ]
 | URL            | 导入作业中质量不合格数据的访问地址。您可以使用 `curl`命令或`wget` 命令打开该地址。如果导入作业不存在质量不合格数据，该参数值为`NULL`。 |
 | JobDetails     | 导入作业的详细信息，包括：<ul><li>`Unfinished backends`：未完成导入的 BE 节点 ID。</li><li>`ScannedRows`：实际处理的行数，包括导入的行数以及过滤掉的行数。</li><li>`TaskNumber`：子作业个数。</li><li>`All backends`：正在运行子作业的 BE 节点的 ID。</li><li>`FileNumber`：源文件的个数。</li><li>`FileSize`：所有源文件的总数据量，单位：字节。</li></ul> |
 
-### Insert Into
+### INSERT
 
 | **参数**       | **说明**                                                     |
 | -------------- | ------------------------------------------------------------ |
@@ -91,13 +91,13 @@ SHOW LOAD [ FROM db_name ]
 | Label          | 导入作业的标签。每个数据库中的导入作业都一个唯一的标签，不同数据库的导入作业标签可以重复。 |
 | State          | 导入作业的状态，包括：<ul><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul> |
 | Type           | 导入方式， 取值为`INSERT`。                                  |
-| Progress       | 导入作业所处的阶段。Insert Into 导入作业只有`LOAD`阶段，没有`ETL`阶段，所以`ETL`对应的取值并无实际意义。`LOAD`进度为 0~100%。<br>**说明**：<ul><li>`LOAD`阶段进度的计算公式为：完成数据导入的目标表的个数/导入作业中要进行数据导入的目标表的个数 * 100%。</li><li>当数据已导入到所有目标表中时，`LOAD`的进度显示为 99%， 此时，导入进入最后的生效阶段。当整个导入流程完成后，`LOAD`进度才会显示为 100%。</li><li>导入进度并不是线性的。如果一段时间内进度没有变化，并不代表导入没有在继续执行。</li></ul> |
-| EtlInfo        | ETL 信息。由于 Insert Into 没有 ETL 阶段，所以该参数值为`NULL`。 |
-| TaskInfo       | 导入作业的信息，指创建导入作业时指定的参数，包括：<ul><li>`resource`：该参数在 Insert Into 导入作业中无实际意义。</li><li>`timeout`：导入作业的超时时间。单位：秒。</li><li>`max-filter-ratio`：该参数在 Insert Into 导入作业中无实际意义。详细信息，参见 [INSERT](../data-manipulation/insert.md)。</li></ul> |
+| Progress       | 导入作业所处的阶段。INSERT 导入作业只有`LOAD`阶段，没有`ETL`阶段，所以`ETL`对应的取值并无实际意义。`LOAD`进度为 0~100%。<br>**说明**：<ul><li>`LOAD`阶段进度的计算公式为：完成数据导入的目标表的个数/导入作业中要进行数据导入的目标表的个数 * 100%。</li><li>当数据已导入到所有目标表中时，`LOAD`的进度显示为 99%， 此时，导入进入最后的生效阶段。当整个导入流程完成后，`LOAD`进度才会显示为 100%。</li><li>导入进度并不是线性的。如果一段时间内进度没有变化，并不代表导入没有在继续执行。</li></ul> |
+| EtlInfo        | ETL 信息。由于 INSERT 没有 ETL 阶段，所以该参数值为`NULL`。 |
+| TaskInfo       | 导入作业的信息，指创建导入作业时指定的参数，包括：<ul><li>`resource`：该参数在 INSERT 导入作业中无实际意义。</li><li>`timeout`：导入作业的超时时间。单位：秒。</li><li>`max-filter-ratio`：该参数在 INSERT 导入作业中无实际意义。详细信息，参见 [INSERT](../data-manipulation/insert.md)。</li></ul> |
 | ErrorMsg       | 导入作业的失败原因。当导入作业的状态为`FINISHED`时，该参数值为`NULL`。当导入作业的状态为`CANCELLED`时，该参数值包括 `type` 和 `msg` 两部分：`type` 包括如下取值：<ul><li>`USER_CANCEL`：导入作业被手动取消。</li><li>`ETL_SUBMIT_FAIL`：导入作业提交失败。</li><li>`ETL_RUN_FAIL`：导入作业执行失败。</li><li>`ETL_QUALITY_UNSATISFIED`：数据质量不合格，导入作业失败。</li><li>`LOAD-RUN-FAIL`：导入作业在 `LOADING` 状态失败。</li><li>`TIMEOUT`：导入作业未在允许的超时时间内完成。</li><li>`UNKNOWN`：未知的导入错误。</li><li>`TXN_UNKNOWN`：事务状态未知，导入作业失败。</li><li>`msg`显示有关失败原因的详细信息。</li></ul> |
 | CreateTime     | 导入作业创建的时间。                                         |
-| EtlStartTime   | 由于 Insert Into 导入没有 ETL 阶段，所以该参数取值和`LoadStartTime`相同。 |
-| EtlFinishTime  | 由于 Insert Into 导入没有 ETL 阶段，所以该参数取值和`LoadStartTime`相同。 |
+| EtlStartTime   | 由于 INSERT 导入没有 ETL 阶段，所以该参数取值和`LoadStartTime`相同。 |
+| EtlFinishTime  | 由于 INSERT 导入没有 ETL 阶段，所以该参数取值和`LoadStartTime`相同。 |
 | LoadStartTime  | `LOAD`阶段开始的时间。                                       |
 | LoadFinishTime | 导入作业完成的时间。                                         |
 | URL            | 导入作业中质量不合格数据的访问地址。您可以使用`curl`命令或`wget`命令打开该地址。如果导入作业不存在质量不合格数据，该参数值为`NULL`。 |
