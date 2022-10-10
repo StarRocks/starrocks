@@ -92,6 +92,7 @@
     + [性能优化](/administration/Profiling.md)
 + 参考手册
   + SQL参考
+    + [关键字](/sql-reference/sql-statements/keywords.md)
     + 用户账户管理
       + [ALTER USER](/sql-reference/sql-statements/account-management/ALTER%20USER.md)
       + [CREATE ROLE](/sql-reference/sql-statements/account-management/CREATE%20ROLE.md)
