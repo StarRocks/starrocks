@@ -10,7 +10,7 @@
 
 ## 语法
 
-```SQL
+```Haskell
 INT DATEDIFF(DATETIME expr1,DATETIME expr2)
 ```
 
