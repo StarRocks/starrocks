@@ -41,7 +41,10 @@ PROPERTIES ("key"="value", ...);
     | type                | 是       | 数据源类型，取值为`hudi`。                                   |
     | hive.metastore.uris | 是       | Hive metastore 的 URI。格式为 `thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
 
-> 注意：查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
+> 注意
+>
+> - 使用该创建语句无权限限制。
+> - 查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
 
 ## 元数据异步更新
 

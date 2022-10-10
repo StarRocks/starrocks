@@ -30,7 +30,10 @@ CREATE EXTERNAL CATALOG catalog_name
 PROPERTIES ("key"="value", ...);
 ```
 
-> 注意：查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
+> 注意
+>
+> - 使用该创建语句无权限限制。
+> - 查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
 
 ### 参数说明
 
