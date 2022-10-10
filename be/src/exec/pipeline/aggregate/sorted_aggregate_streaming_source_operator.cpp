@@ -61,6 +61,9 @@ StatusOr<vectorized::ChunkPtr> SortedAggregateStreamingSourceOperator::pull_chun
         ASSIGN_OR_RETURN(chunk, _aggregator->pull_eos_chunk());
         _aggregator->set_ht_eos();
     }
+    if (chunk == nullptr) {
+        return chunk;
+    }
     size_t old_size = chunk->num_rows();
     eval_runtime_bloom_filters(chunk.get());
 
