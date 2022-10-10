@@ -70,6 +70,10 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
     }
     chunk_pb.set_serialized_size(buff - reinterpret_cast<const uint8_t*>(serialized_data->data()));
     chunk_pb.set_uncompressed_size(serialized_data->size());
+    VLOG_ROW << "pb serialize data, memory bytes = " << chunk.bytes_usage()
+             << " serialized size = " << chunk_pb.serialized_size()
+             << " uncompressed size = " << chunk_pb.uncompressed_size()
+             << " serialize ratio = " << chunk_pb.serialized_size() * 1.0 / chunk.bytes_usage();
     return std::move(chunk_pb);
 }
 
