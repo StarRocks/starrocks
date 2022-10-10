@@ -2150,13 +2150,19 @@ public class GlobalStateMgr {
             if (table.getType() == TableType.OLAP_EXTERNAL) {
                 ExternalOlapTable externalOlapTable = (ExternalOlapTable) table;
                 // properties
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("host\" = \"").append(externalOlapTable.getSourceTableHost()).append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("port\" = \"").append(externalOlapTable.getSourceTablePort()).append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("user\" = \"").append(externalOlapTable.getSourceTableUser()).append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("password\" = \"").append(hidePassword ? "" : externalOlapTable.getSourceTablePassword())
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("host\" = \"")
+                        .append(externalOlapTable.getSourceTableHost()).append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("port\" = \"")
+                        .append(externalOlapTable.getSourceTablePort()).append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("user\" = \"")
+                        .append(externalOlapTable.getSourceTableUser()).append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("password\" = \"")
+                        .append(hidePassword ? "" : externalOlapTable.getSourceTablePassword())
                         .append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("database\" = \"").append(externalOlapTable.getSourceTableDbName()).append("\"");
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("table\" = \"").append(externalOlapTable.getSourceTableName()).append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("database\" = \"")
+                        .append(externalOlapTable.getSourceTableDbName()).append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("table\" = \"")
+                        .append(externalOlapTable.getSourceTableName()).append("\"");
             }
 
             sb.append("\n)");
