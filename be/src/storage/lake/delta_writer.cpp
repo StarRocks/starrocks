@@ -94,7 +94,7 @@ public:
     [[nodiscard]] Status flush_async();
 
 private:
-    void reset_memtable();
+    Status reset_memtable();
 
     const int64_t _tablet_id;
     const int64_t _txn_id;
@@ -116,7 +116,11 @@ private:
     bool _schema_initialized;
 };
 
-inline void DeltaWriterImpl::reset_memtable() {
+inline Status DeltaWriterImpl::reset_memtable() {
+    if (_tablet_schema == nullptr) {
+        ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_tablet_id));
+        ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
+    }
     if (!_schema_initialized) {
         _vectorized_schema = MemTable::convert_schema(_tablet_schema.get(), _slots);
         _schema_initialized = true;
@@ -127,6 +131,7 @@ inline void DeltaWriterImpl::reset_memtable() {
         _mem_table.reset(
                 new MemTable(_tablet_id, &_vectorized_schema, _mem_table_sink.get(), _max_buffer_size, _mem_tracker));
     }
+    return Status::OK();
 }
 
 inline Status DeltaWriterImpl::flush_async() {
@@ -144,13 +149,14 @@ inline Status DeltaWriterImpl::flush() {
     return _flush_token->wait();
 }
 
+// To developers: Do NOT perform any I/O in this method, because this method may be invoked
+// in a bthread.
 Status DeltaWriterImpl::open() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
     DCHECK(_tablet_writer == nullptr);
     // TODO: remove the dependency |ExecEnv::GetInstance()|
     ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_tablet_id));
-    ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
     ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer());
     RETURN_IF_ERROR(_tablet_writer->open());
     _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
@@ -165,7 +171,7 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
     if (_mem_table == nullptr) {
-        reset_memtable();
+        RETURN_IF_ERROR(reset_memtable());
     }
     Status st;
     bool full = _mem_table->insert(chunk, indexes, 0, indexes_size);

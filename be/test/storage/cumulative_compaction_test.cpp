@@ -477,7 +477,6 @@ TEST_F(CumulativeCompactionTest, test_missed_version_after_cumulative_point) {
         ASSERT_EQ(2, versions[1].second);
         ASSERT_EQ(3, versions[2].first);
         ASSERT_EQ(4, versions[2].second);
-
     }
 }
 
