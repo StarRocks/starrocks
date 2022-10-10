@@ -215,6 +215,10 @@ public:
     // memory at once.
     [[nodiscard]] virtual bool append_continuous_strings(const Buffer<Slice>& strs) { return append_strings(strs); }
 
+    [[nodiscard]] virtual bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) {
+        return false;
+    }
+
     // Copy |length| bytes from |buff| into this column and cast them as integers.
     // The count of copied integers depends on |length| and the size of column value:
     //  - `int8_t` column:  |length| integers will be copied.

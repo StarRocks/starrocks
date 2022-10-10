@@ -14,6 +14,7 @@ import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DropFileStmt;
+import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.FunctionName;
@@ -383,7 +384,11 @@ public class DDLStmtExecutor {
                         context.getGlobalStateMgr().getAuth().createUser((CreateUserStmt) stmt);
                     }
                 } else if (stmt instanceof AlterUserStmt) {
-                    context.getGlobalStateMgr().getAuth().alterUser((AlterUserStmt) stmt);
+                    if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                        context.getGlobalStateMgr().getAuthenticationManager().alterUser((AlterUserStmt) stmt);
+                    } else {
+                        context.getGlobalStateMgr().getAuth().alterUser((AlterUserStmt) stmt);
+                    }
                 } else {
                     throw new DdlException("unsupported user stmt: " + stmt.toSql());
                 }
@@ -394,7 +399,12 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropUserStatement(DropUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuth().dropUser(stmt);
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    context.getGlobalStateMgr().getAuthenticationManager().dropUser(stmt);
+                } else {
+                    context.getGlobalStateMgr().getAuth().dropUser(stmt);
+                }
+
             });
             return null;
         }
@@ -415,9 +425,17 @@ public class DDLStmtExecutor {
         public ShowResultSet visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt instanceof GrantPrivilegeStmt) {
-                    context.getGlobalStateMgr().getAuth().grant((GrantPrivilegeStmt) stmt);
+                    if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                        context.getGlobalStateMgr().getPrivilegeManager().grant((GrantPrivilegeStmt) stmt);
+                    } else {
+                        context.getGlobalStateMgr().getAuth().grant((GrantPrivilegeStmt) stmt);
+                    }
                 } else {
-                    context.getGlobalStateMgr().getAuth().revoke((RevokePrivilegeStmt) stmt);
+                    if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                        context.getGlobalStateMgr().getPrivilegeManager().revoke((RevokePrivilegeStmt) stmt);
+                    } else {
+                        context.getGlobalStateMgr().getAuth().revoke((RevokePrivilegeStmt) stmt);
+                    }
                 }
             });
             return null;
@@ -426,7 +444,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuth().createRole(stmt);
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    context.getGlobalStateMgr().getPrivilegeManager().createRole(stmt);
+                } else {
+                    context.getGlobalStateMgr().getAuth().createRole(stmt);
+                }
             });
             return null;
         }
@@ -434,7 +456,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropRoleStatement(DropRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuth().dropRole(stmt);
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    context.getGlobalStateMgr().getPrivilegeManager().dropRole(stmt);
+                } else {
+                    context.getGlobalStateMgr().getAuth().dropRole(stmt);
+                }
             });
             return null;
         }
@@ -539,6 +565,14 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCreateRepositoryStmt(CreateRepositoryStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getBackupHandler().createRepository(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropRepositoryStmt(DropRepositoryStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getBackupHandler().dropRepository(stmt);
             });
             return null;
         }

@@ -287,6 +287,9 @@ CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 // if compaction of a tablet failed, this tablet should not be chosen to
 // compaction until this interval passes.
 CONF_mInt64(min_compaction_failure_interval_sec, "120"); // 2 min
+
+CONF_mInt64(min_cmumulative_compaction_failure_interval_sec, "30"); // 30s
+
 // Too many compaction tasks may run out of memory.
 // This config is to limit the max concurrency of running compaction tasks.
 // -1 means no limit, and the max concurrency will be:
@@ -498,12 +501,18 @@ CONF_Bool(enable_metric_calculator, "true");
 // Max consumer num in one data consumer group, for routine load.
 CONF_mInt32(max_consumer_num_per_group, "3");
 
+// Max pulsar consumer num in one data consumer group, for routine load.
+CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
+
 // The size of thread pool for routine load task.
 // this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
 CONF_Int32(routine_load_thread_pool_size, "10");
 
 // kafka reqeust timeout
 CONF_Int32(routine_load_kafka_timeout_second, "10");
+
+// pulsar reqeust timeout
+CONF_Int32(routine_load_pulsar_timeout_second, "10");
 
 // Is set to true, index loading failure will not causing BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.
@@ -663,6 +672,9 @@ CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // The number of threads for preparing fragment instances in pipeline engine, vCPUs by default.
 CONF_Int64(pipeline_prepare_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
+// The number of threads for executing sink io task in pipeline engine, vCPUs by default.
+CONF_Int64(pipeline_sink_io_thread_pool_thread_num, "0");
+CONF_Int64(pipeline_sink_io_thread_pool_queue_size, "102400");
 // The buffer size of SinkBuffer.
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
@@ -826,4 +838,16 @@ CONF_String(directory_of_inject,
 CONF_Int64(max_length_for_to_base64, "200000");
 // Used by bitmap functions
 CONF_Int64(max_length_for_bitmap_function, "1000000");
+
+CONF_Bool(block_cache_enable, "false");
+CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
+CONF_Int64(block_cache_disk_size, "21474836480"); // 20GB
+//CONF_Int64(block_cache_block_size, "4194304");    // 4MB
+CONF_Int64(block_cache_block_size, "1048576");
+CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
+
+CONF_mInt64(l0_l1_merge_ratio, "10");
+
+// Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
+CONF_Int64(query_cache_capacity, "536870912");
 } // namespace starrocks::config

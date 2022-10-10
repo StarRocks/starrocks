@@ -45,6 +45,9 @@ struct TSetSessionParams {
 struct TAuthenticateParams {
     1: required string user
     2: required string passwd
+    3: required string host
+    4: required string db_name
+    5: required list<string> table_names;
 }
 
 struct TColumnDesc {
@@ -602,6 +605,10 @@ struct TKafkaRLTaskProgress {
     1: required map<i32,i64> partitionCmtOffset
 }
 
+struct TPulsarRLTaskProgress {
+    1: required map<string,i64> partitionBacklogNum
+}
+
 struct TRLTaskTxnCommitAttachment {
     1: required Types.TLoadSourceType loadSourceType
     2: required Types.TUniqueId id
@@ -614,6 +621,7 @@ struct TRLTaskTxnCommitAttachment {
     9: optional i64 loadCostMs
     10: optional TKafkaRLTaskProgress kafkaRLTaskProgress
     11: optional string errorLogUrl
+    12: optional TPulsarRLTaskProgress pulsarRLTaskProgress
 }
 
 struct TMiniLoadTxnCommitAttachment {
@@ -992,13 +1000,15 @@ struct TGetTablesConfigResponse {
 struct TTableConfigInfo {
     1: optional string table_schema
     2: optional string table_name
-    3: optional string primary_key
-    4: optional string partition_key
-    5: optional string distribute_key
-    6: optional string distribute_type
-    7: optional i32 distribute_bucket
-    8: optional string sort_key
-    9: optional string properties
+    3: optional string table_engine
+    4: optional string table_model
+    5: optional string primary_key
+    6: optional string partition_key
+    7: optional string distribute_key
+    8: optional string distribute_type
+    9: optional i32 distribute_bucket
+    10: optional string sort_key
+    11: optional string properties
 }
 
 struct TGetTablesInfoRequest {

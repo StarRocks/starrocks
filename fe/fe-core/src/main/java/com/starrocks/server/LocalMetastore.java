@@ -973,18 +973,19 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
+        bucketNum = calBucketNumAccordingToBackends();
         if (!dataImported) {
-            bucketNum = calBucketNumAccordingToBackends();
             return bucketNum;
         }
 
         // 3. Use the totalSize of recentPartitions to speculate the bucketNum
-        long totalDataSize = 0;
+        long maxDataSize = 0;
         for (Partition partition : partitions) {
-            totalDataSize += partition.getDataSize();
+            maxDataSize = Math.max(maxDataSize, partition.getDataSize());
         }
         // A tablet will be regarded using the 1GB size
-        bucketNum = (int) (totalDataSize / (1024 * 1024 * 1024L));
+        // And also the number will not be larger than the calBucketNumAccordingToBackends()
+        bucketNum = (int) Math.min(bucketNum, maxDataSize / (1024 * 1024 * 1024L));
         if (bucketNum == 0) {
             bucketNum = 1;
         }

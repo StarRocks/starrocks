@@ -395,7 +395,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     column.getKey().getType(),
                     column.getValue().isAllowNull());
             columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
-            columnRefFactory.updateColumnRefToColumns(columnRef, column.getValue(), node.getTable());
+            columnRefFactory.updateColumnRefToColumns(columnRef, column.getValue());
             outputVariablesBuilder.add(columnRef);
             colRefToColumnMetaMapBuilder.put(columnRef, column.getValue());
             columnMetaToColRefMapBuilder.put(column.getValue(), columnRef);
@@ -519,6 +519,30 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 logicalPlan.getRoot().getOp(),
                 logicalPlan.getRootBuilder().getInputs(),
                 new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
+
+
+        if (node.hasOrderByClause()) {
+            List<Ordering> orderings = new ArrayList<>();
+            List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
+            for (OrderByElement item : node.getOrderBy()) {
+                ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(item.getExpr(),
+                        builder.getExpressionMapping(), columnRefFactory);
+                Ordering ordering = new Ordering(column, item.getIsAsc(),
+                        OrderByElement.nullsFirst(item.getNullsFirstParam()));
+                if (!orderByColumns.contains(column)) {
+                    orderByColumns.add(column);
+                    orderings.add(ordering);
+                }
+            }
+            builder = builder.withNewRoot(new LogicalTopNOperator(orderings));
+        }
+
+        LimitElement limit = node.getLimit();
+        if (limit != null) {
+            LogicalLimitOperator limitOperator = LogicalLimitOperator.init(limit.getLimit(), limit.getOffset());
+            builder = builder.withNewRoot(limitOperator);
+        }
+
         return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
     }
 

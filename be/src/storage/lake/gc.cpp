@@ -24,7 +24,6 @@ static std::string format_time(time_t ts) {
     return {buffer, len};
 }
 
-// TODO: txn log GC
 Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, int64_t min_active_txn_id) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
 

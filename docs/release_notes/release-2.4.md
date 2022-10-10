@@ -6,7 +6,7 @@ Release date: September 17th, 2022
 
 ### New Features
 
-- Supports creating a materialized view based on multiple base tables to accelerate queries with JOIN operations. For more information, see [Materialized View](../using_starrocks/Materialized_view.md).
+- Supports creating asynchronous materialized views based on multiple base tables to accelerate queries with JOIN operations. Asynchronous materialized views support all [Data Models](../table_design/Data_model.md). For more information, see [Materialized View](../using_starrocks/Materialized_view.md).
 
 - Supports overwriting data via the INSERT OVERWRITE statement. For more information, see [Load data using INSERT](../loading/InsertInto.md).
 
@@ -21,6 +21,8 @@ Release date: September 17th, 2022
 - Supports viewing the schema of external data via the DESC statement. For more information, see [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md).
 
 - Supports granting a specific role or IMPERSONATE permission to a user via the GRANT statement and revoking them via the REVOKE statement, and supports executing an SQL statement with IMPERSONATE permission via the EXECUTE AS statement. For more information, see [GRANT](../sql-reference/sql-statements/account-management/GRANT.md), [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md), and [EXECUTE AS](../sql-reference/sql-statements/account-management/EXECUTE%20AS.md).
+
+- Supports FDQN access: now you can use domain name or the combination of hostname and port as the unique identification of a BE or an FE node. This prevents access failures caused by changing IP addresses. For more information, see [Enable FQDN Access](../administration/enable_fqdn.md).
 
 - flink-connector-starrocks supports Primary Key model partial update. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
 

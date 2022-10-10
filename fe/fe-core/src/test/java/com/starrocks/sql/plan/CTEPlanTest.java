@@ -634,6 +634,24 @@ public class CTEPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testCTEColumnPruned() throws Exception {
+        String sql = "WITH x1 as (" +
+                " select * from t0" +
+                ") " +
+                "SELECT t1.* from t1, x1 " +
+                "UNION ALL " +
+                "SELECT t2.* from t2, x1 ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 10\n" +
+                "    RANDOM");
+    }
+
+    @Test
     public void testMultiDistinctWithLimit() throws Exception {
         {
             String sql = "select sum(distinct(v1)), avg(distinct(v2)) from t0 limit 1";

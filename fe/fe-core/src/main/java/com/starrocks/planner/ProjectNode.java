@@ -6,6 +6,7 @@ import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -13,10 +14,13 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TNormalPlanNode;
+import com.starrocks.thrift.TNormalProjectNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TProjectNode;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -159,5 +163,37 @@ public class ProjectNode extends PlanNode {
 
         return pushdownRuntimeFilterForChildOrAccept(description, probeExpr, candidatesOfSlotExpr(probeExpr),
                 partitionByExprs, candidatesOfSlotExprs(partitionByExprs), 0, true);
+    }
+
+    // This functions is used by query cache to compute digest of fragments. for examples:
+    // Q1: select count(v1) from t0;
+    // Q2: select count(v1) from t0 where dt between '2022-01-01' and '2022-01-01';
+    // in Q1 PlanFragment is: OlapScanNode(v1)->Aggregation(count(v1))
+    // in Q2 PlanFragment is: OlapScanNode(v1, dt)->ProjectNode(v1)->Aggregation(count(v1))
+    // Explicitly, Q2 can reuse Q1's result, but presence of ProjectNode in Q2 gives a different
+    // digest from Q1, the ProjectNode is trivial, it just extract v1 from outputs of the
+    // OlapScanNode, so we can ignore the trivial project when we compute digest of the fragment.
+    public boolean isTrivial() {
+        return slotMap.values().stream().allMatch(e -> e instanceof SlotRef) && commonSlotMap.isEmpty();
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalProjectNode projectNode = new TNormalProjectNode();
+        Pair<List<Integer>, List<ByteBuffer>> cseSlotIdsAndExprs = normalizer.normalizeSlotIdsAndExprs(commonSlotMap);
+        projectNode.setCse_slot_ids(cseSlotIdsAndExprs.first);
+        projectNode.setCse_exprs(cseSlotIdsAndExprs.second);
+
+        Pair<List<Integer>, List<ByteBuffer>> slotIdAndExprs = normalizer.normalizeSlotIdsAndExprs(slotMap);
+        projectNode.setSlot_ids(slotIdAndExprs.first);
+        projectNode.setExprs(slotIdAndExprs.second);
+        planNode.setNode_type(TPlanNodeType.PROJECT_NODE);
+        planNode.setProject_node(projectNode);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
+    }
+
+    @Override
+    public List<SlotId> getOutputSlotIds(DescriptorTable descriptorTable) {
+        return slotMap.keySet().stream().sorted(Comparator.comparing(SlotId::asInt)).collect(Collectors.toList());
     }
 }

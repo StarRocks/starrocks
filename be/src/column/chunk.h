@@ -11,6 +11,7 @@
 #include "column/column_hash.h"
 #include "column/schema.h"
 #include "common/global_types.h"
+#include "exec/query_cache/owner_info.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -241,6 +242,8 @@ public:
         return false;
     }
 
+    query_cache::owner_info& owner_info() { return _owner_info; }
+
 private:
     void rebuild_cid_index();
 
@@ -251,6 +254,7 @@ private:
     SlotHashMap _slot_id_to_index;
     TupleHashMap _tuple_id_to_index;
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
+    query_cache::owner_info _owner_info;
 };
 
 inline const ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) const {

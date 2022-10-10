@@ -26,8 +26,11 @@ import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
@@ -37,6 +40,7 @@ import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlan;
 import com.starrocks.thrift.TPlanNode;
@@ -479,6 +483,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return result;
     }
 
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer){
+    }
+
     // Append a flattened version of this plan node, including all children, to 'container'.
     private void treeToThriftHelper(TPlan container) {
         TPlanNode msg = new TPlanNode();
@@ -872,5 +879,34 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             canDoReplicatedJoin |= childNode.canDoReplicatedJoin();
         }
         return canDoReplicatedJoin;
+    }
+
+    public void normalizeConjuncts(FragmentNormalizer normalizer, TNormalPlanNode planNode, List<Expr> conjuncts) {
+        final DescriptorTable descriptorTable = normalizer.getExecPlan().getDescTbl();
+        List<SlotId> slotIds = tupleIds.stream().map(descriptorTable::getTupleDesc)
+                .flatMap(tupleDesc -> tupleDesc.getSlots().stream().map(SlotDescriptor::getId))
+                .collect(Collectors.toList());
+        Preconditions.checkState(normalizer.containsAllSlotIds(slotIds), "All slotIds should be remapped");
+        planNode.setConjuncts(normalizer.normalizeExprs(conjuncts));
+    }
+
+    public TNormalPlanNode normalize(FragmentNormalizer normalizer) {
+        TNormalPlanNode planNode = new TNormalPlanNode();
+        planNode.setNode_id(normalizer.remapPlanNodeId(this.id).asInt());
+        planNode.setNum_children(this.getChildren().size());
+        planNode.setLimit(this.getLimit());
+        planNode.setRow_tuples(normalizer.remapTupleIds(tupleIds));
+
+        List<Boolean> nullable_tuples = tupleIds.stream().map(id -> this.nullableTupleIds.contains(id))
+                .collect(Collectors.toList());
+        planNode.setNullable_tuples(nullable_tuples);
+        toNormalForm(planNode, normalizer);
+
+        return planNode;
+    }
+
+    public List<SlotId> getOutputSlotIds(DescriptorTable descriptorTable) {
+        return descriptorTable.getTupleDesc(getTupleIds().get(0)).getSlots()
+                .stream().map(SlotDescriptor::getId).collect(Collectors.toList());
     }
 }

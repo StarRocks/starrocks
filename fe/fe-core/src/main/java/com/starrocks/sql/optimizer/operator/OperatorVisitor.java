@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
@@ -166,6 +167,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalLimit(LogicalLimitOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitLogicalTreeAnchor(LogicalTreeAnchorOperator node, C context) {
         return visitOperator(node, context);
     }
 

@@ -22,7 +22,12 @@
 ############################################################
 
 # --job param for *make*
-PARALLEL=$[$(nproc)/4+1]
+# support macos
+if [[ $(uname) == "Darwin" ]]; then
+    PARALLEL=$[$(sysctl -n hw.physicalcpu)/4+1]
+else
+    PARALLEL=$[$(nproc)/4+1]
+fi
 
 ###################################################
 # DO NOT change variables bellow unless you known
@@ -54,6 +59,11 @@ export TP_JAR_DIR=$TP_INSTALL_DIR/lib/jar
 
 # Definitions for architecture-related thirdparty
 MACHINE_TYPE=$(uname -m)
+# handle mac m1 platform, change arm64 to aarch64
+if [[ "${MACHINE_TYPE}" == "arm64" ]]; then 
+    MACHINE_TYPE="aarch64"
+fi
+
 VARS_TARGET=vars-${MACHINE_TYPE}.sh
 
 if [ ! -f ${TP_DIR}/${VARS_TARGET} ]; then
@@ -190,6 +200,12 @@ LIBRDKAFKA_NAME=librdkafka-1.9.2.tar.gz
 LIBRDKAFKA_SOURCE=librdkafka-1.9.2
 LIBRDKAFKA_MD5SUM="fe9624e905abbf8324b0f6be520d9c24"
 
+# pulsar
+PULSAR_DOWNLOAD="https://github.com/apache/pulsar/archive/refs/tags/v2.10.1.tar.gz"
+PULSAR_NAME=pulsar-2.10.1.tar.gz
+PULSAR_SOURCE=pulsar-2.10.1
+PULSAR_MD5SUM="3c387e7a8be4545a39e00611ed051918"
+
 # zstd
 ZSTD_DOWNLOAD="https://github.com/facebook/zstd/archive/v1.5.0.tar.gz"
 ZSTD_NAME=zstd-1.5.0.tar.gz
@@ -310,8 +326,14 @@ FAST_FLOAT_NAME="fast-float-3.5.1.tar.gz"
 FAST_FLOAT_SOURCE="fast-float-3.5.1"
 FAST_FLOAT_MD5SUM="adb3789b99f47e0cd971b4d90727d4d0"
 
+# cachelib
+CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20220925.tar.gz"
+CACHELIB_NAME="cachelib.tar.gz"
+CACHELIB_SOURCE="cachelib"
+CACHELIB_MD5SUM="ec03040667144771955277fcc18f0da8"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
-            RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP JEMALLOC \
-            CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB ALIYUN_OSS_JARS AWS_SDK_CPP VPACK OPENTELEMETRY \
-            BENCHMARK FAST_FLOAT"
+            RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
+            JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB ALIYUN_OSS_JARS AWS_SDK_CPP VPACK OPENTELEMETRY \
+            BENCHMARK FAST_FLOAT CACHELIB"

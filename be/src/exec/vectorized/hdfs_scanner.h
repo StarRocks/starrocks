@@ -10,6 +10,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "fs/fs_hdfs.h"
+#include "io/cache_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
@@ -70,6 +71,13 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* io_counter = nullptr;
     RuntimeProfile::Counter* column_read_timer = nullptr;
     RuntimeProfile::Counter* column_convert_timer = nullptr;
+
+    RuntimeProfile::Counter* block_cache_read_counter = nullptr;
+    RuntimeProfile::Counter* block_cache_read_bytes = nullptr;
+    RuntimeProfile::Counter* block_cache_read_timer = nullptr;
+    RuntimeProfile::Counter* block_cache_write_counter = nullptr;
+    RuntimeProfile::Counter* block_cache_write_bytes = nullptr;
+    RuntimeProfile::Counter* block_cache_write_timer = nullptr;
 };
 
 struct HdfsScannerParams {
@@ -79,10 +87,12 @@ struct HdfsScannerParams {
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
-    // should clone in scanner
+    // all conjuncts except `conjunct_ctxs_by_slot`
     std::vector<ExprContext*> conjunct_ctxs;
-    // conjunct group by slot
-    // excluded from conjunct_ctxs.
+    std::unordered_set<SlotId> conjunct_slots;
+    bool eval_conjunct_ctxs = true;
+
+    // conjunct ctxs grouped by slot.
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
     // The FileSystem used to open the file to be scanned
@@ -120,6 +130,10 @@ struct HdfsScannerParams {
     HdfsScanProfile* profile = nullptr;
 
     std::atomic<int32_t>* open_limit;
+
+    bool use_block_cache = false;
+
+    bool is_lazy_materialization_slot(SlotId slot_id) const;
 };
 
 struct HdfsScannerContext {
@@ -264,18 +278,11 @@ protected:
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanStats _stats;
-    // predicate collections.
-    std::vector<ExprContext*> _conjunct_ctxs;
-    // columns we want to fetch.
-    std::vector<std::string> _scanner_columns;
-    // predicates group by slot.
-    std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
-    // predicate which havs min/max
-    std::vector<ExprContext*> _min_max_conjunct_ctxs;
     std::unique_ptr<RandomAccessFile> _raw_file;
     std::unique_ptr<RandomAccessFile> _file;
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
+    std::shared_ptr<io::CacheInputStream> _cache_input_stream;
 };
 
 } // namespace starrocks::vectorized

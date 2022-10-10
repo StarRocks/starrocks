@@ -179,8 +179,8 @@ public class FunctionAnalyzer {
             if (modeArg instanceof IntLiteral) {
                 IntLiteral modeIntLiteral = (IntLiteral) modeArg;
                 long modeValue = modeIntLiteral.getValue();
-                if (modeValue < 0 || modeValue > 3) {
-                    throw new SemanticException("mode argument's range must be [0-3]");
+                if (modeValue < 0 || modeValue > 7) {
+                    throw new SemanticException("mode argument's range must be [0-7]");
                 }
             } else {
                 throw new SemanticException("mode argument must be numerical type");
@@ -196,6 +196,26 @@ public class FunctionAnalyzer {
             } else {
                 throw new SemanticException("window argument must be numerical type");
             }
+        }
+        
+        if (fnName.getFunction().equals(FunctionSet.MAX_BY)) {
+            if (functionCallExpr.getChildren().size() != 2 || functionCallExpr.getChildren().isEmpty()) {
+                throw new SemanticException(
+                        "max_by requires two parameters: " + functionCallExpr.toSql());
+            }
+            
+            if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
+                throw new SemanticException("max_by function args must be column");
+            }
+            
+            fnParams.setIsDistinct(false);  // DISTINCT is meaningless here
+
+            Type sortKeyType = functionCallExpr.getChild(1).getType();
+            if (!sortKeyType.canApplyToNumeric()) {
+                throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+            }
+            
+            return;
         }
 
         // SUM and AVG cannot be applied to non-numeric types

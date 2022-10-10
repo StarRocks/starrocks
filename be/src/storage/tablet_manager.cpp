@@ -367,6 +367,19 @@ TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, bool include_dele
     return _get_tablet_unlocked(tablet_id, include_deleted, err);
 }
 
+StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(TTabletId tablet_id, int64_t from_version,
+                                                                     int64_t to_version) {
+    std::string err;
+    auto tablet = get_tablet(tablet_id, true, &err);
+    if (!tablet) {
+        std::string errmsg = strings::Substitute("Failed to get tablet(tablet_id=$0),reason=$1", tablet_id, err);
+        return Status::InternalError(errmsg);
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version{from_version, to_version}, &rowsets));
+    return std::make_tuple(std::move(tablet), std::move(rowsets));
+}
+
 TabletSharedPtr TabletManager::_get_tablet_unlocked(TTabletId tablet_id, bool include_deleted, std::string* err) {
     TabletSharedPtr tablet = _get_tablet_unlocked(tablet_id);
     if (tablet == nullptr && include_deleted) {
@@ -484,15 +497,16 @@ bool TabletManager::get_next_batch_tablets(size_t batch_size, std::vector<Tablet
     }
 }
 
-TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir) {
+TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir,
+                                                              std::pair<int32_t, int32_t> tablet_shards_range) {
     int64_t now_ms = UnixMillis();
     const std::string& compaction_type_str = compaction_type == CompactionType::BASE_COMPACTION ? "base" : "cumulative";
     // only do compaction if compaction #rowset > 1
     uint32_t highest_score = 1;
     TabletSharedPtr best_tablet;
-    for (const auto& tablets_shard : _tablets_shards) {
-        std::shared_lock rlock(tablets_shard.lock);
-        for (auto [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+    for (int32_t i = tablet_shards_range.first; i < tablet_shards_range.second; i++) {
+        std::shared_lock rlock(_tablets_shards[i].lock);
+        for (auto [tablet_id, tablet_ptr] : _tablets_shards[i].tablet_map) {
             if (tablet_ptr->keys_type() == PRIMARY_KEYS) {
                 continue;
             }
@@ -502,21 +516,42 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
             }
 
             if (tablet_ptr->data_dir()->path_hash() != data_dir->path_hash() || !tablet_ptr->is_used() ||
-                !tablet_ptr->init_succeeded() || !tablet_ptr->can_do_compaction()) {
+                !tablet_ptr->init_succeeded()) {
                 continue;
             }
 
-            int64_t last_failure_ts = tablet_ptr->last_cumu_compaction_failure_time();
-            if (compaction_type == CompactionType::BASE_COMPACTION) {
+            int64_t last_failure_ts = 0;
+            if (compaction_type == CompactionType::CUMULATIVE_COMPACTION) {
+                if (tablet_ptr->last_cumu_compaction_failure_status() == TStatusCode::NOT_FOUND) {
+                    if (now_ms - last_failure_ts <= 5 * config::cumulative_compaction_check_interval_seconds * 1000) {
+                        VLOG(1) << "Too often to schedule no suitable compaction, skip it."
+                                << "compaction_type=" << compaction_type_str
+                                << ", last_failure_timestamp=" << last_failure_ts / 1000
+                                << ", tablet_id=" << tablet_ptr->tablet_id();
+                        continue;
+                    }
+                } else {
+                    last_failure_ts = tablet_ptr->last_cumu_compaction_failure_time();
+                    if (now_ms - last_failure_ts <= config::min_cmumulative_compaction_failure_interval_sec * 1000) {
+                        VLOG(1) << "Too often to schedule failure compaction, skip it."
+                                << "compaction_type=" << compaction_type_str
+                                << ", min_cmumulative_compaction_failure_interval_sec="
+                                << config::min_cmumulative_compaction_failure_interval_sec
+                                << ", last_failure_timestamp=" << last_failure_ts / 1000
+                                << ", tablet_id=" << tablet_ptr->tablet_id();
+                        continue;
+                    }
+                }
+            } else if (compaction_type == CompactionType::BASE_COMPACTION) {
                 last_failure_ts = tablet_ptr->last_base_compaction_failure_time();
-            }
-            if (now_ms - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
-                VLOG(1) << "Too often to schedule failure compaction, skip it."
-                        << "compaction_type=" << compaction_type_str
-                        << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
-                        << ", last_failure_timestamp=" << last_failure_ts / 1000
-                        << ", tablet_id=" << tablet_ptr->tablet_id();
-                continue;
+                if (now_ms - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
+                    VLOG(1) << "Too often to schedule failure compaction, skip it."
+                            << "compaction_type=" << compaction_type_str
+                            << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
+                            << ", last_failure_timestamp=" << last_failure_ts / 1000
+                            << ", tablet_id=" << tablet_ptr->tablet_id();
+                    continue;
+                }
             }
 
             if (compaction_type == CompactionType::BASE_COMPACTION) {

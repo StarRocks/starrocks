@@ -1435,4 +1435,324 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: t1a LIKE 11: t1a");
     }
+
+    @Test
+    public void testSubqueryMissLimit() throws Exception {
+        String sql = "select * from t0 limit 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 1");
+
+        sql = "select * from (select * from t0 limit 1) t";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 1");
+
+        sql = "(select * from t0 limit 1)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 1");
+
+        sql = "(select * from t0) limit 1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 1");
+
+        sql = "((select * from t0) limit 2) limit 1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 1");
+
+        sql = "((select * from t0) limit 1) limit 2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 1");
+
+        sql = "((select * from t0) limit 1) order by v1 limit 2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:TOP-N\n" +
+                "  |  order by: <slot 1> 1: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 1\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0\n" +
+                "     limit: 1");
+
+        sql = "((select * from t0) limit 2) order by v1 limit 1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:TOP-N\n" +
+                "  |  order by: <slot 1> 1: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 1\n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 2\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=3.0\n" +
+                "     numNodes=0\n" +
+                "     limit: 2");
+    }
+
+    public void testSubqueryElimination() throws Exception {
+        {
+            // Two tables
+            String sql = "select * from t0, t1 " +
+                    "where t0.v1 = t1.v4 " +
+                    "and t0.v2 < 5 and t1.v5 > 10 " +
+                    "and t0.v3 < (" +
+                    "    select max(v6) from t1 where t0.v1 = t1.v4 and t1.v5 > 10 " +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:SELECT\n" +
+                    "  |  predicates: 3: v3 < 12: max\n" +
+                    "  |  \n" +
+                    "  6:ANALYTIC\n" +
+                    "  |  functions: [, max(6: v6), ]\n" +
+                    "  |  partition by: 1: v1\n" +
+                    "  |  \n" +
+                    "  5:SORT\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC\n" +
+                    "  |  offset: 0");
+        }
+        {
+            // Three tables
+            String sql = "select * from t0, t1, t2 " +
+                    "where t0.v1 = t1.v4 and t1.v4 = t2.v7 " +
+                    "and t0.v2 < 5 and t1.v5 > 10 and t2.v8 < 15 " +
+                    "and t0.v3 < (" +
+                    "    select max(v6) from t1, t2 where t0.v1 = t1.v4 and t1.v4 = t2.v7 and t1.v5 > 10 and t2.v8 < 15" +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  10:SELECT\n" +
+                    "  |  predicates: 3: v3 < 18: max\n" +
+                    "  |  \n" +
+                    "  9:ANALYTIC\n" +
+                    "  |  functions: [, max(6: v6), ]\n" +
+                    "  |  partition by: 1: v1\n" +
+                    "  |  \n" +
+                    "  8:SORT\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC\n" +
+                    "  |  offset: 0");
+        }
+        {
+            // Multi correlated conjuncts
+            String sql = "select * from t0, t1 " +
+                    "where t0.v1 = t1.v4 and t0.v3 = t1.v6 " +
+                    "and t0.v2 < 5 and t1.v5 > 10 " +
+                    "and t0.v3 < (" +
+                    "    select max(v6) from t1 " +
+                    "    where t0.v1 = t1.v4 and t0.v3 = t1.v6 " +
+                    "    and t1.v5 > 10 " +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:SELECT\n" +
+                    "  |  predicates: 3: v3 < 12: max\n" +
+                    "  |  \n" +
+                    "  6:ANALYTIC\n" +
+                    "  |  functions: [, max(6: v6), ]\n" +
+                    "  |  partition by: 1: v1, 3: v3\n" +
+                    "  |  \n" +
+                    "  5:SORT\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC, <slot 3> 3: v3 ASC\n" +
+                    "  |  offset: 0");
+        }
+        {
+            // Argument of aggregate function is complex expr
+            String sql = "select * from t0, t1 " +
+                    "where t0.v1 = t1.v4 " +
+                    "and t0.v2 < 5 and t1.v5 > 10 " +
+                    "and t0.v3 < (" +
+                    "    select max(v5 / v6 % v4) from t1 where t0.v1 = t1.v4 and t1.v5 > 10 " +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:SELECT\n" +
+                    "  |  predicates: CAST(3: v3 AS DOUBLE) < 13: max\n" +
+                    "  |  \n" +
+                    "  6:ANALYTIC\n" +
+                    "  |  functions: [, max(CAST(5: v5 AS DOUBLE) / CAST(6: v6 AS DOUBLE) % CAST(4: v4 AS DOUBLE)), ]\n" +
+                    "  |  partition by: 1: v1\n" +
+                    "  |  \n" +
+                    "  5:SORT\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC\n" +
+                    "  |  offset: 0");
+        }
+        {
+            // Aggregate itself is in another expr
+            String sql = "select *, t0.v1 * t0.v2 " +
+                    "from t0, t1, t2 " +
+                    "where t0.v1 = t1.v4 and t1.v4 = t2.v7 " +
+                    "and t0.v2 < 5 and t1.v5 > 10 and t2.v8 > 20 " +
+                    "and t0.v3 < (" +
+                    "    select max(v9 * 3) /19 from t1, t2 " +
+                    "    where t0.v1 = t1.v4 and t1.v4 = t2.v7 and t1.v5 > 10 and t2.v8 > 20" +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  10:SELECT\n" +
+                    "  |  predicates: CAST(3: v3 AS DOUBLE) < CAST(21: max AS DOUBLE) / 19.0\n" +
+                    "  |  \n" +
+                    "  9:ANALYTIC\n" +
+                    "  |  functions: [, max(9: v9 * 3), ]\n" +
+                    "  |  partition by: 1: v1\n" +
+                    "  |  \n" +
+                    "  8:SORT\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC\n" +
+                    "  |  offset: 0");
+        }
+        {
+            // Multi-aggregate functions
+            String sql = "select * from t0, t1, t2 " +
+                    "where t0.v1 = t1.v4 and t1.v4 = t2.v7 " +
+                    "and t0.v2 < 5 and t1.v5 > 10 and t2.v8 > 20 " +
+                    "and t0.v3 < (" +
+                    "    select max(v9)/min(v9%v8) from t1, t2 where t0.v1 = t1.v4 and t1.v4 = t2.v7" +
+                    "    and t1.v5 > 10 and t2.v8 > 20" +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  10:SELECT\n" +
+                    "  |  predicates: CAST(3: v3 AS DOUBLE) < CAST(21: max AS DOUBLE) / CAST(22: min AS DOUBLE)\n" +
+                    "  |  \n" +
+                    "  9:ANALYTIC\n" +
+                    "  |  functions: [, max(9: v9), ], [, min(9: v9 % 8: v8), ]\n" +
+                    "  |  partition by: 1: v1\n" +
+                    "  |  \n" +
+                    "  8:SORT\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC\n" +
+                    "  |  offset: 0");
+        }
+    }
+
+    @Test
+    public void testSubqueryCannotElimination() throws Exception {
+        {
+            // Non-correlated
+            String sql = "select * from t0, t1 " +
+                    "where t0.v1 = t1.v4 " +
+                    "and t0.v2 < 5 and t1.v5 > 10 " +
+                    "and t0.v3 < (" +
+                    "    select max(v6) from t0, t1 where t0.v1 = t1.v4 " +
+                    "    and t0.v2 < 5 and t1.v5 > 10 " +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "ANALYTIC");
+        }
+        {
+            // Subquery miss predicates
+            String sql = "select * from t0, t1 " +
+                    "where t0.v1 = t1.v4 " +
+                    "and t0.v2 < 5 and t1.v5 > 10 " +
+                    "and t0.v3 < (" +
+                    "    select max(v6) from t1 where t0.v1 = t1.v4" +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "ANALYTIC");
+        }
+        {
+            // Subquery has more predicates
+            String sql = "select * from t0, t1 " +
+                    "where t0.v1 = t1.v4 " +
+                    "and t0.v2 < 5 and t1.v5 > 10 " +
+                    "and t0.v3 < (" +
+                    "    select max(v6) from t1 where t0.v1 = t1.v4 " +
+                    "    and t1.v5 > 10 and t1.v5 < 15" +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "ANALYTIC");
+        }
+        {
+            // Outer block missing correlated conjunct
+            String sql = "select * from t0, t1 " +
+                    "where t0.v2 < 5 and t1.v5 > 10 " +
+                    "and t0.v3 < (" +
+                    "    select max(v6) from t1 where t0.v1 = t1.v4 and t1.v5 > 10 " +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "ANALYTIC");
+        }
+        {
+            // Join types other than cross join
+            String sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 " +
+                    "where t0.v2 < 5 and t1.v5 > 10 " +
+                    "and t0.v3 < (" +
+                    "    select max(v6) from t1 where t0.v1 = t1.v4 and t1.v5 > 10 " +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "ANALYTIC");
+        }
+        {
+            // Aggregate with distinct
+            String sql = "select * from t0, t1 " +
+                    "where t0.v1 = t1.v4 " +
+                    "and t0.v2 < 5 and t1.v5 > 10 " +
+                    "and t0.v3 < (" +
+                    "    select sum(distinct(v6)) from t1 where t0.v1 = t1.v4 and t1.v5 > 10 " +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "ANALYTIC");
+        }
+        {
+            // Aggregate function without window version
+            String sql = "select * from t0, t1 " +
+                    "where t0.v1 = t1.v4 " +
+                    "and t0.v2 < 5 and t1.v5 > 10 " +
+                    "and t0.v3 < (" +
+                    "    select any_value(v6) from t1 where t0.v1 = t1.v4 and t1.v5 > 10 " +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "ANALYTIC");
+        }
+        {
+            // Same tables
+            String sql = "select * from t0, t0 as t1 " +
+                    "where t0.v1 = t1.v1 " +
+                    "and t0.v2 < 5 and t1.v2 > 10 " +
+                    "and t0.v3 < (" +
+                    "    select max(t1.v3) from t0 as t1 " +
+                    "    where t0.v1 = t1.v1 and t1.v2 > 10" +
+                    ")";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "ANALYTIC");
+        }
+    }
 }

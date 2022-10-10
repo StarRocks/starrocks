@@ -92,7 +92,3 @@ properties: It is used to set properties related to aggregate function, which in
     "object_file" = "http://host:port/libmyStrConcat.so"
     );
     ```
-
-## keyword
-
-CREATE,FUNCTION

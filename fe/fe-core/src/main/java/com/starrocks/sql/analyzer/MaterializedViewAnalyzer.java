@@ -19,6 +19,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
@@ -55,6 +56,7 @@ import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.iceberg.PartitionSpec;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -138,19 +140,14 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Can not find base table in query statement");
             }
             tableNameTableMap.forEach((tableNameInfo, table) -> {
-                if (table == null) {
-                    throw new SemanticException("Materialized view do not support table: " + tableNameInfo.getTbl() +
-                            " do not exist in database: " + tableNameInfo.getCatalog() + ":" +
-                            tableNameInfo.getDb());
-                }
+                Preconditions.checkState(table != null, "Materialized view base table is null");
                 if (!isSupportBasedOnTable(table)) {
-                    throw new SemanticException("Create materialized view do not support the table type : " +
+                    throw new SemanticException("Create materialized view do not support the table type: " +
                             table.getType());
                 }
-                if (table instanceof MaterializedView) {
+                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
                     throw new SemanticException(
-                            "Creating a materialized view from materialized view is not supported now. The type of table: " +
-                                    table.getName() + " is: Materialized View");
+                            "Create materialized view from inactive materialized view: " + table.getName());
                 }
                 Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
                         tableNameInfo.getDb());
@@ -327,25 +324,33 @@ public class MaterializedViewAnalyzer {
                                                        Map<TableName, Table> tableNameTableMap) {
             SlotRef slotRef = getSlotRef(statement.getPartitionRefTableExpr());
             Table table = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
-            PartitionInfo partitionInfo = ((OlapTable) table).getPartitionInfo();
+
+            if (table.isLocalTable()) {
+                checkPartitionColumnWithBaseOlapTable(slotRef, (OlapTable) table);
+            } else if (table.isHiveTable() || table.isHudiTable()) {
+                checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);
+            } else if (table.isIcebergTable()) {
+                checkPartitionColumnWithBaseIcebergTable(slotRef, (IcebergTable) table);
+            } else {
+                throw new SemanticException("Materialized view do not support base table type : %s", table.getType());
+            }
+            replaceTableAlias(slotRef, statement, tableNameTableMap);
+        }
+
+        private void checkPartitionColumnWithBaseOlapTable(SlotRef slotRef, OlapTable table) {
+            PartitionInfo partitionInfo = table.getPartitionInfo();
             if (partitionInfo instanceof SinglePartitionInfo) {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
             } else if (partitionInfo instanceof RangePartitionInfo) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-                if (partitionColumns.size() > 1) {
+                if (partitionColumns.size() != 1) {
                     throw new SemanticException("Materialized view related base table partition columns " +
                             "only supports single column");
                 }
-                boolean isInPartitionColumns = false;
-                for (Column basePartitionColumn : partitionColumns) {
-                    if (basePartitionColumn.getName().equalsIgnoreCase(slotRef.getColumnName())) {
-                        isInPartitionColumns = true;
-                        break;
-                    }
-                }
-                if (!isInPartitionColumns) {
+                String partitionColumn = partitionColumns.get(0).getName();
+                if (!partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
                     throw new SemanticException("Materialized view partition column in partition exp " +
                             "must be base table partition column");
                 }
@@ -353,7 +358,43 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Materialized view related base table partition type:" +
                         partitionInfo.getType().name() + "not supports");
             }
-            replaceTableAlias(slotRef, statement, tableNameTableMap);
+        }
+
+        private void checkPartitionColumnWithBaseHMSTable(SlotRef slotRef, HiveMetaStoreTable table) {
+            List<String> partitionColumnNames = table.getPartitionColumnNames();
+            if (table.isUnPartitioned()) {
+                throw new SemanticException("Materialized view partition column in partition exp " +
+                        "must be base table partition column");
+            } else {
+                if (partitionColumnNames.size() != 1) {
+                    throw new SemanticException("Materialized view related base table partition columns " +
+                            "only supports single column");
+                }
+                String partitionColumn = partitionColumnNames.get(0);
+                if (!partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                    throw new SemanticException("Materialized view partition column in partition exp " +
+                            "must be base table partition column");
+                }
+            }
+        }
+
+        private void checkPartitionColumnWithBaseIcebergTable(SlotRef slotRef, IcebergTable table) {
+            org.apache.iceberg.Table icebergTable = table.getIcebergTable();
+            PartitionSpec partitionSpec = icebergTable.spec();
+            if (partitionSpec.isUnpartitioned()) {
+                throw new SemanticException("Materialized view partition column in partition exp " +
+                        "must be base table partition column");
+            } else {
+                if (partitionSpec.fields().size() != 1) {
+                    throw new SemanticException("Materialized view related base table partition columns " +
+                            "only supports single column");
+                }
+                String partitionColumn = partitionSpec.fields().get(0).name();
+                if (!partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                    throw new SemanticException("Materialized view partition column in partition exp " +
+                            "must be base table partition column");
+                }
+            }
         }
 
         private SlotRef getSlotRef(Expr expr) {

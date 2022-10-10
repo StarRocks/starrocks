@@ -136,7 +136,7 @@ TEST_F(DeltaWriterTest, test_open) {
     {
         auto tablet_id = -1;
         auto delta_writer = DeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
-        ASSERT_ERROR(delta_writer->open());
+        ASSERT_OK(delta_writer->open());
         delta_writer->close();
     }
 }
@@ -178,7 +178,6 @@ TEST_F(DeltaWriterTest, test_write) {
     ASSERT_TRUE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(2 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
@@ -280,7 +279,6 @@ TEST_F(DeltaWriterTest, test_memory_limit_unreached) {
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 }
 
 TEST_F(DeltaWriterTest, test_reached_memory_limit) {
@@ -324,7 +322,6 @@ TEST_F(DeltaWriterTest, test_reached_memory_limit) {
     ASSERT_TRUE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 }
 
 TEST_F(DeltaWriterTest, test_reached_parent_memory_limit) {
@@ -368,7 +365,6 @@ TEST_F(DeltaWriterTest, test_reached_parent_memory_limit) {
     ASSERT_TRUE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 }
 
 TEST_F(DeltaWriterTest, test_memtable_full) {
@@ -412,7 +408,6 @@ TEST_F(DeltaWriterTest, test_memtable_full) {
     ASSERT_TRUE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 }
 
 } // namespace starrocks::lake

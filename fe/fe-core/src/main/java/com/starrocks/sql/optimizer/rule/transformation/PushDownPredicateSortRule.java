@@ -12,7 +12,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -44,12 +43,9 @@ public class PushDownPredicateSortRule extends TransformationRule {
 
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(logicalFilterOperator.getPredicate());
         Map<ColumnRefOperator, ConstantOperator> equalConstant = new HashMap<>();
-        for (ScalarOperator ss : conjuncts) {
-            if (ss instanceof BinaryPredicateOperator
-                    && ((BinaryPredicateOperator) ss).getBinaryType().isEqual()
-                    && ss.getChild(0) instanceof ColumnRefOperator
-                    && ss.getChild(1) instanceof ConstantOperator) {
-                equalConstant.put((ColumnRefOperator) ss.getChild(0), (ConstantOperator) ss.getChild(1));
+        for (ScalarOperator scalar : conjuncts) {
+            if (Utils.isConstantEqualPredicate(scalar)) {
+                equalConstant.put((ColumnRefOperator) scalar.getChild(0), (ConstantOperator) scalar.getChild(1));
             }
         }
 

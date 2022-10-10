@@ -121,7 +121,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         }
 
         public String getTableName() {
-            return this.tableName;
+            if (this.tableName != null) {
+                return this.tableName;
+            } else {
+                Table table = getTable();
+                return table == null ? null : table.getName();
+            }
         }
 
         public String getTableIdentifier() {
@@ -488,7 +493,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 active = false;
                 continue;
             }
-
+            if (table instanceof MaterializedView && !((MaterializedView) table).active) {
+                LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
+                        baseTableInfo.tableName, id);
+                active = false;
+                continue;
+            }
             table.addRelatedMaterializedView(id);
         }
         if (partitionInfo instanceof SinglePartitionInfo) {

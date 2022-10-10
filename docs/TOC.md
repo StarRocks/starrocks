@@ -66,6 +66,7 @@
     + [Configuration](./administration/Configuration.md)
     + [Monitor and alert](./administration/Monitor_and_Alert.md)
     + [Manage a cluster](./administration/Cluster_administration.md)
+    + [Enable FQDN access](./administration/enable_fqdn.md)
     + Resource Management
       + [Resource group](./administration/resource_group.md)
       + [Query management](./administration/Query_management.md)
@@ -84,6 +85,7 @@
     + [Profiling](./administration/Profiling.md)
 + Reference
   + SQL Reference
+    + [Keywords](./sql-reference/sql-statements/keywords.md)
     + User Account Management
       + [ALTER USER](./sql-reference/sql-statements/account-management/ALTER%20USER.md)
       + [CREATE ROLE](./sql-reference/sql-statements/account-management/CREATE%20ROLE.md)
@@ -183,6 +185,8 @@
       + [SHOW BACKUP](./sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP.md)
       + [SHOW CATALOGS](./sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md)
       + [SHOW CREATE MATERIALIZED VIEW](/sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20MATERIALIZED%20VIEW.md)
+      + [SHOW CREATE TABLE](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md)
+      + [SHOW CREATE VIEW](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20VIEW.md)
       + [SHOW DATA](./sql-reference/sql-statements/data-manipulation/SHOW%20DATA.md)
       + [SHOW DATABASES](./sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md)
       + [SHOW DELETE](./sql-reference/sql-statements/data-manipulation/SHOW%20DELETE.md)
@@ -393,6 +397,10 @@
       + [rand](./sql-reference/sql-functions/math-functions/rand.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
     + Utility Functions
+      + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
+      + [version](./sql-reference/sql-functions/utility-functions/version.md)
+      + [last_query_id](./sql-reference/sql-functions/utility-functions/last_query_id.md)
+      + [sleep](./sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)
       + [uuid_numeric](./sql-reference/sql-functions/utility-functions/uuid_numeric.md)
   + [System variables](./reference/System_variable.md)

@@ -92,17 +92,18 @@ public class HiveStatisticsProviderTest {
         PartitionKey hivePartitionKey1 = Utils.createPartitionKey(Lists.newArrayList("1"), hiveTable.getPartitionColumns());
         PartitionKey hivePartitionKey2 = Utils.createPartitionKey(Lists.newArrayList("2"), hiveTable.getPartitionColumns());
         Statistics statistics = statisticsProvider.getTableStatistics(
-                hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), optimizerContext);
+                optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
         Assert.assertEquals(1,  statistics.getOutputRowCount(), 0.001);
         Assert.assertEquals(0, statistics.getColumnStatistics().size());
 
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
         statistics = statisticsProvider.getTableStatistics(
-                hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
-                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), optimizerContext);
+                optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
+                Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
         Assert.assertEquals(100, statistics.getOutputRowCount(), 0.001);
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();
+        Assert.assertEquals(2, statistics.getColumnStatistics().size());
         ColumnStatistic partitionColumnStats = columnStatistics.get(partColumnRefOperator);
         Assert.assertEquals(1, partitionColumnStats.getMinValue(), 0.001);
         Assert.assertEquals(2, partitionColumnStats.getMaxValue(), 0.001);

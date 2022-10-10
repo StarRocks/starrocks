@@ -180,13 +180,13 @@ statement
     | dropRoleStatement
 
 
-    // Backup Restore Satement
+    // Backup Restore Statement
     | backupStatement
     | showBackupStatement
     | restoreStatement
     | showRestoreStatement
 
-    // Snapshot Satement
+    // Snapshot Statement
     | showSnapshotStatement
 
     //  Repository Satement
@@ -198,6 +198,11 @@ statement
     | delSqlBlackListStatement
     | showSqlBlackListStatement
     | showWhiteListStatement
+
+    // Export Statement
+    | exportStatement
+    | cancelExportStatement
+    | showExportStatement
 
     // Other statement
     | killStatement
@@ -1078,6 +1083,8 @@ privilegeActionReserved
     | GRANT
     | LOAD
     | SELECT
+    | INSERT
+    | DELETE
     ;
 
 privilegeActionList
@@ -1089,16 +1096,28 @@ privilegeAction
     | identifier
     ;
 
+privilegeTypeReserved
+    : SYSTEM
+    | TABLE
+    | DATABASE
+    | CATALOG
+    ;
+
+privilegeType
+    : privilegeTypeReserved
+    | identifier
+    ;
+
 grantPrivilegeStatement
     : GRANT IMPERSONATE ON user TO ( user | ROLE identifierOrString )                                       #grantImpersonateBrief
     | GRANT privilegeActionList ON tablePrivilegeObjectName TO (user | ROLE identifierOrString)        #grantTablePrivBrief
-    | GRANT privilegeActionList ON identifier privilegeObjectName TO (user | ROLE identifierOrString)  #grantPrivWithType
+    | GRANT privilegeActionList ON privilegeType privilegeObjectName TO (user | ROLE identifierOrString)  #grantPrivWithType
     ;
 
 revokePrivilegeStatement
     : REVOKE IMPERSONATE ON user FROM ( user | ROLE identifierOrString )                                  #revokeImpersonateBrief
     | REVOKE privilegeActionList ON tablePrivilegeObjectName FROM (user | ROLE identifierOrString)   #revokeTablePrivBrief
-    | REVOKE privilegeActionList ON identifier privilegeObjectName FROM (user | ROLE identifierOrString) #revokePrivWithType
+    | REVOKE privilegeActionList ON privilegeType privilegeObjectName FROM (user | ROLE identifierOrString) #revokePrivWithType
     ;
 
 grantRoleStatement
@@ -1159,6 +1178,20 @@ showSqlBlackListStatement
 showWhiteListStatement
     : SHOW WHITELIST
     ;
+
+// ------------------------------------------- Export Statement --------------------------------------------------------
+exportStatement
+    : EXPORT TABLE tableDesc colList=columnAliases? TO path=string properties? broker=brokerDesc?
+    ;
+cancelExportStatement
+    : CANCEL EXPORT ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+showExportStatement
+    : SHOW EXPORT ((FROM | IN) db=qualifiedName)?
+        ((LIKE pattern=string) | (WHERE expression))?
+        (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    ;
+
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showProcesslistStatement
@@ -1219,9 +1252,9 @@ syncStatement
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
-    : explainDesc? queryBody outfile?;
+    : explainDesc? queryRelation outfile?;
 
-queryBody
+queryRelation
     : withClause? queryNoWith
     ;
 
@@ -1230,23 +1263,19 @@ withClause
     ;
 
 queryNoWith
-    :queryTerm (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
-    ;
-
-queryTerm
-    : queryPrimary                                                             #queryTermDefault
-    | left=queryTerm operator=INTERSECT setQuantifier? right=queryTerm         #setOperation
-    | left=queryTerm operator=(UNION | EXCEPT | MINUS)
-        setQuantifier? right=queryTerm                                         #setOperation
+    : queryPrimary (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 queryPrimary
-    : querySpecification                           #queryPrimaryDefault
-    | subquery                                     #subqueryPrimary
+    : querySpecification                                                                    #queryPrimaryDefault
+    | subquery                                                                              #queryWithParentheses
+    | left=queryPrimary operator=INTERSECT setQuantifier? right=queryPrimary                #setOperation
+    | left=queryPrimary operator=(UNION | EXCEPT | MINUS)
+        setQuantifier? right=queryPrimary                                                   #setOperation
     ;
 
 subquery
-    : '(' queryBody  ')'
+    : '(' queryRelation ')'
     ;
 
 rowConstructor
@@ -1287,7 +1316,7 @@ groupingSet
     ;
 
 commonTableExpression
-    : name=identifier (columnAliases)? AS '(' queryBody ')'
+    : name=identifier (columnAliases)? AS '(' queryRelation ')'
     ;
 
 setQuantifier
@@ -1315,7 +1344,7 @@ relationPrimary
         AS? alias=identifier columnAliases?)? bracketHint?                              #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
-    | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryRelation
+    | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
     | qualifiedName '(' expression (',' expression)* ')'
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
@@ -1375,7 +1404,7 @@ tabletList
 backupStatement
     : BACKUP SNAPSHOT qualifiedName
     TO identifier
-    ON '(' tableDesc (',' tableDesc) * ')'
+    (ON '(' tableDesc (',' tableDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
@@ -1386,7 +1415,7 @@ showBackupStatement
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
     FROM identifier
-    ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
+    (ON '(' restoreTableDesc (',' restoreTableDesc) * ')')?
     (PROPERTIES propertyList)?
     ;
 
@@ -1456,7 +1485,7 @@ booleanExpression
     : predicate                                                                           #booleanExpressionDefault
     | booleanExpression IS NOT? NULL                                                      #isNull
     | left = booleanExpression comparisonOperator right = predicate                       #comparison
-    | booleanExpression comparisonOperator '(' queryBody ')'                              #scalarSubquery
+    | booleanExpression comparisonOperator '(' queryRelation ')'                          #scalarSubquery
     ;
 
 predicate
@@ -1465,7 +1494,7 @@ predicate
 
 predicateOperations [ParserRuleContext value]
     : NOT? IN '(' expression (',' expression)* ')'                                        #inList
-    | NOT? IN '(' queryBody ')'                                                           #inSubquery
+    | NOT? IN '(' queryRelation ')'                                                       #inSubquery
     | NOT? BETWEEN lower = valueExpression AND upper = predicate                          #between
     | NOT? (LIKE | RLIKE | REGEXP) pattern=valueExpression                                #like
     ;
@@ -1498,7 +1527,7 @@ primaryExpression
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
     | '(' expression ')'                                                                  #parenthesizedExpression
-    | EXISTS '(' queryBody ')'                                                            #exists
+    | EXISTS '(' queryRelation ')'                                                        #exists
     | subquery                                                                            #subqueryExpression
     | CAST '(' expression AS type ')'                                                     #cast
     | CONVERT '(' expression ',' type ')'                                                 #convert
@@ -1518,6 +1547,7 @@ literalExpression
     | (DATE | DATETIME) string                                                            #dateLiteral
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
+    | unitBoundary                                                                        #unitBoundaryLiteral
     ;
 
 functionCall
@@ -1583,6 +1613,8 @@ specialFunctionExpression
     //| WEEK '(' expression ')' TODO: Support week(expr) function
     | YEAR '(' expression ')'
     | PASSWORD '(' string ')'
+    | FLOOR '(' expression ')'
+    | CEIL '(' expression ')'
     ;
 
 windowFunction
@@ -1764,6 +1796,10 @@ unitIdentifier
     : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER
     ;
 
+unitBoundary
+    : FLOOR | CEIL
+    ;
+
 type
     : baseType
     | decimalType
@@ -1856,11 +1892,11 @@ authOption
 nonReserved
     : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
-    | CAST | CATALOG | CATALOGS | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
+    | CAST | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
     | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
-    | FILE | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
+    | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION

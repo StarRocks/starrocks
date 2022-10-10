@@ -147,6 +147,29 @@ public class DynamicPartitionProperty {
         return replicationNum;
     }
 
+    public String getPropString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("{");
+        sb.append(ENABLE + ":" + enable + ",");
+        sb.append(TIME_UNIT + ":" + timeUnit + ",");
+        sb.append(TIME_ZONE + ":" + tz.getID() + ",");
+        sb.append(START + ":" + start + ",");
+        sb.append(END + ":" + end + ",");
+        sb.append(PREFIX + ":" + prefix + ",");
+        sb.append(BUCKETS + ":" + buckets + ",");
+        if (replicationNum != NOT_SET_REPLICATION_NUM) {
+            sb.append(REPLICATION_NUM + ":" + replicationNum + ",");
+        }
+        if (getTimeUnit().equalsIgnoreCase(TimeUnit.WEEK.toString())) {
+            sb.append(START_DAY_OF_WEEK + ":" + startOfWeek.dayOfWeek + ",");
+        } else if (getTimeUnit().equalsIgnoreCase(TimeUnit.MONTH.toString())) {
+            sb.append(START_DAY_OF_MONTH + ":" + startOfMonth.day + ",");
+        }
+        sb.deleteCharAt(sb.length() - 1);
+        sb.append("}");
+        return sb.toString();
+    }
+
     @Override
     public String toString() {
         String res = ",\n\"" + ENABLE + "\" = \"" + enable + "\""

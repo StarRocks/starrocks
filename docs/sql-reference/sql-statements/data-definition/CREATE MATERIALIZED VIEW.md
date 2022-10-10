@@ -85,6 +85,8 @@ The refresh strategy of the materialized view. This parameter supports the follo
 - `ASYNC`: Asynchronous refresh mode. You can specify the refresh start time, refresh interval, or refresh task trigger mechanism for async refresh mode. The refresh interval supports the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`.
 - `MANUAL`: Manual refresh mode.
 
+If this parameter is not specified, the default value `MANUAL` is used.
+
 **partition_expression** (optional)
 
 The partitioning strategy of the materialized view. As for the current version of StarRocks, only one partition expression is supported when creating a materialized view. This parameter supports the following values:

@@ -544,4 +544,11 @@ public class Utils {
 
         root.getChildren().forEach(child -> collect(child, clazz, output));
     }
+
+    public static boolean isConstantEqualPredicate(ScalarOperator scalar) {
+        return scalar instanceof BinaryPredicateOperator
+                && ((BinaryPredicateOperator) scalar).getBinaryType().isEqual()
+                && scalar.getChild(0) instanceof ColumnRefOperator
+                && scalar.getChild(1) instanceof ConstantOperator;
+    }
 }

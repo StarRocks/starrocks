@@ -526,14 +526,14 @@ public:
     std::size_t memory_usage() const final { return _map.capacity() * (1 + S * 4 + sizeof(RowIdPack4)); }
 };
 
-struct StringHash {
+struct StringHasher1 {
     size_t operator()(const string& v) const { return vectorized::crc_hash_64(v.data(), v.length(), 0x811C9DC5); }
 };
 
 class SliceHashIndex : public HashIndex {
 private:
     using StringMap =
-            phmap::parallel_flat_hash_map<string, tablet_rowid_t, StringHash, phmap::priv::hash_default_eq<string>,
+            phmap::parallel_flat_hash_map<string, tablet_rowid_t, StringHasher1, phmap::priv::hash_default_eq<string>,
                                           TraceAlloc<phmap::priv::Pair<const string, tablet_rowid_t>>, 4,
                                           phmap::NullMutex, false>;
     StringMap _map;

@@ -67,9 +67,6 @@ public:
 
     Status set_scan_range(const TInternalScanRange& range);
 
-    // TODO: support more share_scan strategy
-    void enable_shared_scan(bool enable);
-
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
 
@@ -180,9 +177,6 @@ private:
     // of the left table are compacted at building the right hash table. Therefore, reference
     // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
-
-    bool _enable_shared_scan = false;
-
     // profile
     RuntimeProfile* _scan_profile = nullptr;
 
@@ -202,6 +196,7 @@ private:
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _seg_rt_filtered_counter = nullptr;
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
     RuntimeProfile::Counter* _sk_filtered_counter = nullptr;

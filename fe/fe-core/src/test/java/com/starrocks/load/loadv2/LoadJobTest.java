@@ -187,7 +187,6 @@ public class LoadJobTest {
         LoadJob loadJob = new BrokerLoadJob();
         loadJob.updateState(JobState.LOADING);
         Assert.assertEquals(JobState.LOADING, loadJob.getState());
-        Assert.assertNotEquals(-1, (long) Deencapsulation.getField(loadJob, "loadStartTimestamp"));
     }
 
     @Test

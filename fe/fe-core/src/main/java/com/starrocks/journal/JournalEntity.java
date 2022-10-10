@@ -54,6 +54,7 @@ import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
+import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
@@ -90,6 +91,7 @@ import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.ResourceGroupOpEntry;
+import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.ShardInfo;
@@ -97,6 +99,7 @@ import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
@@ -707,6 +710,27 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_CREATE_USER_V2: {
                 data = CreateUserInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ALTER_USER_V2: {
+                data = AlterUserInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DROP_USER_V2: {
+                data = UserIdentity.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_UPDATE_USER_PRIVILEGE_V2: {
+                data = UserPrivilegeCollectionInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DROP_ROLE_V2:
+            case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
+                data = RolePrivilegeCollectionInfo.read(in);
                 isRead = true;
                 break;
             }

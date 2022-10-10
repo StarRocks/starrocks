@@ -11,7 +11,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchor;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -129,7 +129,7 @@ public class Optimizer {
     }
 
     private OptExpression logicalRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
-        tree = OptExpression.create(new LogicalTreeAnchor(), tree);
+        tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
         deriveLogicalProperty(tree);
 
         SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
@@ -143,14 +143,14 @@ public class Optimizer {
 
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.AGGREGATE_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_SUBQUERY);
-        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE_COMMON);
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE_TO_WINDOW);
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE_TO_JOIN);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new ApplyExceptionRule());
         CTEUtils.collectCteOperators(tree, context);
 
-        // Add full cte required columns, and save orig required columns
-        // If cte was inline, the columns don't effect normal prune
+        // save required columns
         ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
-        rootTaskContext.getRequiredColumns().union(cteContext.getAllRequiredColumns());
 
         // First, the predicates that meet the conditions are pulled upward,
         // so that more possibilities are obtained when the predicate is pushed down,
@@ -192,14 +192,8 @@ public class Optimizer {
         if (cteContext.needOptimizeCTE()) {
             cteContext.reset();
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.COLLECT_CTE);
-
-            // Prune CTE produce plan columns
-            requiredColumns.union(cteContext.getAllRequiredColumns());
-            rootTaskContext.setRequiredColumns(requiredColumns);
+            rootTaskContext.setRequiredColumns(requiredColumns.clone());
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
-            // After prune columns, the output column in the logical property may outdated, because of the following rule
-            // will use the output column, we need to derive the logical property here.
-
             if (cteContext.needPushLimit() || cteContext.needPushPredicate()) {
                 ruleRewriteOnlyOnce(tree, rootTaskContext, new PushLimitAndFilterToCTEProduceRule());
             }

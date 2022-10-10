@@ -179,7 +179,7 @@ public class Function implements Writable {
     public Type getReturnType() {
         return retType;
     }
-
+    
     public Type[] getArgs() {
         return argTypes;
     }

@@ -136,6 +136,8 @@ public:
 
     bool append_continuous_strings(const Buffer<Slice>& strs) override;
 
+    bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) override;
+
     size_t append_numbers(const void* buff, size_t length) override;
 
     void append_value_multiple_times(const void* value, size_t count) override;
@@ -270,7 +272,7 @@ public:
         DCHECK(_null_column->size() == _data_column->size());
         std::stringstream ss;
         ss << "[";
-        size_t size = _data_column->size();
+        int size = _data_column->size();
         for (int i = 0; i < size - 1; ++i) {
             ss << debug_item(i) << ", ";
         }

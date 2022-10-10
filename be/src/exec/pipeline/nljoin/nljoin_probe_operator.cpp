@@ -190,11 +190,8 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(RuntimeState* state) const {
 }
 
 Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
-    if ((_join_conjuncts.empty())) {
-        return Status::OK();
-    }
     vectorized::FilterPtr filter;
-    if (chunk && !chunk->is_empty()) {
+    if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {
         size_t rows = chunk->num_rows();
         RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter));
         DCHECK(!!filter);
@@ -205,6 +202,9 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
     }
 
     if (_is_left_join()) {
+        // If join conjuncts are empty, most join type do not need to filter data
+        // Except left join and the right table is empty, in which it could not permute any chunk
+        // So here we need to permute_left_join for this case
         if (_num_build_chunks() == 0) {
             // Empty right table
             DCHECK_EQ(_probe_row_current, _probe_chunk->num_rows());
@@ -233,22 +233,29 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
         }
     }
 
-    if (_is_right_join() && filter) {
-        bool multi_probe_rows = _num_build_chunks() == 1;
-        if (multi_probe_rows) {
-            size_t num_build_rows = _cross_join_context->num_build_rows();
-            DCHECK_GE(filter->size(), num_build_rows);
-            for (size_t i = 0; i < filter->size(); i += num_build_rows) {
-                vectorized::ColumnHelper::or_two_filters(&_self_build_match_flag, filter->data() + i);
+    if (_is_right_join()) {
+        // If the filter and join_conjuncts are empty, it means join conjunct is always true
+        // So we need to mark the build_match_flag for all rows
+        if (_join_conjuncts.empty()) {
+            DCHECK(!filter);
+            _self_build_match_flag.assign(_self_build_match_flag.size(), 1);
+        } else if (filter) {
+            bool multi_probe_rows = _num_build_chunks() == 1;
+            if (multi_probe_rows) {
+                size_t num_build_rows = _cross_join_context->num_build_rows();
+                DCHECK_GE(filter->size(), num_build_rows);
+                for (size_t i = 0; i < filter->size(); i += num_build_rows) {
+                    vectorized::ColumnHelper::or_two_filters(&_self_build_match_flag, filter->data() + i);
+                }
+            } else {
+                DCHECK_LE(_prev_chunk_size + _prev_chunk_start, _self_build_match_flag.size());
+                DCHECK_EQ(_prev_chunk_size, filter->size());
+                vectorized::ColumnHelper::or_two_filters(
+                        _prev_chunk_size, _self_build_match_flag.data() + _prev_chunk_start, filter->data());
             }
-        } else {
-            DCHECK_LE(_prev_chunk_size + _prev_chunk_start, _self_build_match_flag.size());
-            DCHECK_EQ(_prev_chunk_size, filter->size());
-            vectorized::ColumnHelper::or_two_filters(_prev_chunk_size,
-                                                     _self_build_match_flag.data() + _prev_chunk_start, filter->data());
+            VLOG(3) << fmt::format("NLJoin operator {} set build_flags for right join, filter={}, flags={}",
+                                   _driver_sequence, fmt::join(*filter, ","), fmt::join(_self_build_match_flag, ","));
         }
-        VLOG(3) << fmt::format("NLJoin operator {} set build_flags for right join, filter={}, flags={}",
-                               _driver_sequence, fmt::join(*filter, ","), fmt::join(_self_build_match_flag, ","));
     }
 
     return Status::OK();

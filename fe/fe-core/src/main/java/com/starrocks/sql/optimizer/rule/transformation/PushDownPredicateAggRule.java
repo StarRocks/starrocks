@@ -11,10 +11,8 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -54,10 +52,7 @@ public class PushDownPredicateAggRule extends TransformationRule {
                 // and to predicates
                 pushDownPredicates.add(scalar);
 
-                if (scalar instanceof BinaryPredicateOperator
-                        && ((BinaryPredicateOperator) scalar).getBinaryType().isEqual()
-                        && scalar.getChild(0) instanceof ColumnRefOperator
-                        && scalar.getChild(1) instanceof ConstantOperator) {
+                if (Utils.isConstantEqualPredicate(scalar)) {
                     constantEquivalentPredicate.put((ColumnRefOperator) scalar.getChild(0), scalar.getChild(1));
                 }
             }

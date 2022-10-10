@@ -29,6 +29,7 @@ public:
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status reset_state(std::vector<vectorized::ChunkPtr>&& chunks) override;
 
 private:
     // It is used to perform aggregation algorithms shared by
@@ -66,6 +67,8 @@ public:
         return std::make_shared<AggregateDistinctBlockingSinkOperator>(
                 this, _id, _plan_node_id, driver_sequence, _aggregator_factory->get_or_create(driver_sequence));
     }
+
+    std::vector<ExprContext*>& partition_by_exprs() { return _partition_by_exprs; }
 
 private:
     AggregatorFactoryPtr _aggregator_factory = nullptr;

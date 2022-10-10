@@ -73,7 +73,14 @@ std::vector<TInternalScanRange*> FixedMorselQueue::olap_scan_ranges() const {
     return _convert_morsels_to_olap_scan_ranges(_morsels);
 }
 
+void MorselQueue::unget(MorselPtr&& morsel) {
+    _unget_morsel = std::move(morsel);
+}
+
 StatusOr<MorselPtr> FixedMorselQueue::try_get() {
+    if (_unget_morsel != nullptr) {
+        return std::move(_unget_morsel);
+    }
     auto idx = _pop_index.load();
     // prevent _num_morsels from superfluous addition
     if (idx >= _num_morsels) {
@@ -108,6 +115,9 @@ void PhysicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<
 }
 
 StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
+    if (_unget_morsel != nullptr) {
+        return std::move(_unget_morsel);
+    }
     DCHECK(!_tablets.empty());
     DCHECK(!_tablet_rowsets.empty());
     DCHECK_EQ(_tablets.size(), _tablet_rowsets.size());
@@ -296,6 +306,9 @@ void LogicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<O
 }
 
 StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
+    if (_unget_morsel != nullptr) {
+        return std::move(_unget_morsel);
+    }
     DCHECK(!_tablets.empty());
     DCHECK(!_tablet_rowsets.empty());
     DCHECK_EQ(_tablets.size(), _tablet_rowsets.size());

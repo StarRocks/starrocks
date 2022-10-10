@@ -22,7 +22,7 @@
 
 namespace starrocks {
 
-static std::atomic<int64_t> g_report_version(time(nullptr) * 10000);
+extern std::atomic<int64_t> g_report_version;
 
 static AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
                                    TTabletInfo* tablet_info) {
@@ -164,6 +164,7 @@ void run_drop_tablet_task(std::shared_ptr<DropTabletAgentTaskRequest> agent_task
         if (!st.ok()) {
             LOG(WARNING) << "drop table failed! signature: " << agent_task_req->signature;
             error_msgs.emplace_back("drop table failed!");
+            error_msgs.emplace_back("drop tablet " + st.get_error_msg());
             status_code = TStatusCode::RUNTIME_ERROR;
         }
         // if tablet is dropped by fe, then the related txn should also be removed
@@ -192,6 +193,7 @@ void run_create_tablet_task(std::shared_ptr<CreateTabletAgentTaskRequest> agent_
         LOG(WARNING) << "create table failed. status: " << create_status.to_string()
                      << ", signature: " << agent_task_req->signature;
         status_code = TStatusCode::RUNTIME_ERROR;
+        error_msgs.emplace_back("create tablet " + create_status.get_error_msg());
     } else if (create_tablet_req.tablet_type != TTabletType::TABLET_TYPE_LAKE) {
         g_report_version.fetch_add(1, std::memory_order_relaxed);
         // get path hash of the created tablet
@@ -256,6 +258,7 @@ void run_clear_transaction_task(std::shared_ptr<ClearTransactionAgentTaskRequest
     } else {
         LOG(WARNING) << "invalid txn_id: " << clear_transaction_task_req.transaction_id
                      << ", signature: " << agent_task_req->signature;
+        error_msgs.emplace_back("invalid txn_id: " + std::to_string(clear_transaction_task_req.transaction_id));
     }
 
     unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
@@ -632,6 +635,8 @@ void run_move_dir_task(std::shared_ptr<MoveDirAgentTaskRequest> agent_task_req, 
         status_code = TStatusCode::RUNTIME_ERROR;
         LOG(WARNING) << "Fail to move dir=" << move_dir_req.src << " tablet id=" << move_dir_req.tablet_id
                      << " signature=" << agent_task_req->signature << " job id=" << move_dir_req.job_id;
+        error_msgs.emplace_back("Fail to move dir=" + move_dir_req.src +
+                                " tablet id=" + std::to_string(move_dir_req.tablet_id));
     } else {
         LOG(INFO) << "Moved dir=" << move_dir_req.src << " tablet_id=" << move_dir_req.tablet_id
                   << " signature=" << agent_task_req->signature << " job id=" << move_dir_req.job_id;
