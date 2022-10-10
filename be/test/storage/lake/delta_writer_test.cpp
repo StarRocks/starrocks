@@ -136,7 +136,7 @@ TEST_F(DeltaWriterTest, test_open) {
     {
         auto tablet_id = -1;
         auto delta_writer = DeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
-        ASSERT_ERROR(delta_writer->open());
+        ASSERT_OK(delta_writer->open());
         delta_writer->close();
     }
 }
