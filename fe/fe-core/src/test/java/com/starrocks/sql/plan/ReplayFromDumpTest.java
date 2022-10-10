@@ -679,4 +679,12 @@ public class ReplayFromDumpTest {
                 "  |  output columns: 17, 19, 22, 23\n" +
                 "  |  cardinality: 2174338"));
     }
+
+    @Test
+    public void testQueryDump() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/tpchq5_memo_limit"), null, TExplainLevel.COSTS);
+
+        System.out.println(replayPair.second);
+    }
 }
