@@ -3,7 +3,6 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.SlotRef;
@@ -11,7 +10,6 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNestLoopJoinNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -31,21 +29,9 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
 
     private static final Logger LOG = LogManager.getLogger(NestLoopJoinNode.class);
 
-    private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
-
     public NestLoopJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
                             JoinOperator joinOp, List<Expr> eqJoinConjuncts, List<Expr> joinConjuncts) {
         super("NESTLOOP JOIN", id, outer, inner, joinOp, eqJoinConjuncts, joinConjuncts);
-    }
-
-    @Override
-    public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
-        return buildRuntimeFilters;
-    }
-
-    @Override
-    public void clearBuildRuntimeFilters() {
-        buildRuntimeFilters.removeIf(RuntimeFilterDescription::isHasRemoteTargets);
     }
 
     @Override
@@ -83,19 +69,6 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
                 }
             }
         }
-    }
-
-    @Override
-    protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
-        String explain = super.getNodeExplainString(detailPrefix, detailLevel);
-        StringBuilder output = new StringBuilder(explain);
-        if (!buildRuntimeFilters.isEmpty()) {
-            output.append(detailPrefix).append("build runtime filters:\n");
-            for (RuntimeFilterDescription rf : buildRuntimeFilters) {
-                output.append(detailPrefix).append("- ").append(rf.toExplainString(-1)).append("\n");
-            }
-        }
-        return output.toString();
     }
 
     @Override
