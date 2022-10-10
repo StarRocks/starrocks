@@ -293,6 +293,11 @@ public class CreateFunctionStmt extends DdlStmt {
                     udafStateClass.setClazz(classLoader.loadClass(stateClassName));
                 }
 
+                mainClass.collectMethods();
+                if (isAggregate) {
+                    udafStateClass.collectMethods();
+                }
+
             } catch (IOException e) {
                 throw new AnalysisException("Failed to load object_file: " + objectFile);
             } catch (ClassNotFoundException e) {
@@ -300,11 +305,6 @@ public class CreateFunctionStmt extends DdlStmt {
             }
         } catch (MalformedURLException e) {
             throw new AnalysisException("Object file is invalid: " + objectFile);
-        }
-
-        mainClass.collectMethods();
-        if (isAggregate) {
-            udafStateClass.collectMethods();
         }
     }
 
