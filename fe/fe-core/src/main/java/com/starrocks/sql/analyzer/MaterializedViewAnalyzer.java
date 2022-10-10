@@ -142,13 +142,12 @@ public class MaterializedViewAnalyzer {
             tableNameTableMap.forEach((tableNameInfo, table) -> {
                 Preconditions.checkState(table != null, "Materialized view base table is null");
                 if (!isSupportBasedOnTable(table)) {
-                    throw new SemanticException("Create materialized view do not support the table type : " +
+                    throw new SemanticException("Create materialized view do not support the table type: " +
                             table.getType());
                 }
-                if (table instanceof MaterializedView) {
+                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
                     throw new SemanticException(
-                            "Creating a materialized view from materialized view is not supported now. The type of table: " +
-                                    table.getName() + " is: Materialized View");
+                            "Create materialized view from inactive materialized view: " + table.getName());
                 }
                 Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
                         tableNameInfo.getDb());
@@ -326,8 +325,7 @@ public class MaterializedViewAnalyzer {
             SlotRef slotRef = getSlotRef(statement.getPartitionRefTableExpr());
             Table table = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
 
-
-            if (table.isOlapTable()) {
+            if (table.isLocalTable()) {
                 checkPartitionColumnWithBaseOlapTable(slotRef, (OlapTable) table);
             } else if (table.isHiveTable() || table.isHudiTable()) {
                 checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);
