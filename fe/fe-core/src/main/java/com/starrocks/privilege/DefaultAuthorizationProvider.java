@@ -14,6 +14,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     private static final short PLUGIN_VERSION = 1;
 
     private static final Map<String, List<String>> VALID_MAP = new HashMap<>();
+    public static final String UNEXPECTED_TYPE = "unexpected type ";
 
     static {
         for (PrivilegeTypes types : PrivilegeTypes.values()) {
@@ -47,29 +48,23 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 return DbPEntryObject.generate(mgr, objectTokens);
 
             default:
-                throw new PrivilegeException("unexpected type " + typeStr);
+                throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
         }
     }
 
     @Override
     public PEntryObject generateUserObject(
             String typeStr, UserIdentity user, GlobalStateMgr globalStateMgr) throws PrivilegeException {
-        PrivilegeTypes type = PrivilegeTypes.valueOf(typeStr);
-        switch (type) {
-            case USER:
-                return UserPEntryObject.generate(globalStateMgr, user);
-
-            default:
-                throw new PrivilegeException("unexpected type " + typeStr);
+        if (typeStr.equals("USER")) {
+            return UserPEntryObject.generate(globalStateMgr, user);
         }
+        throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
     }
 
     @Override
     public PEntryObject generateObject(
             String typeStr, List<String> allTypes, String restrictType, String restrictName, GlobalStateMgr mgr)
             throws PrivilegeException {
-        // should be ensured in analyze phrase
-        assert allTypes.size() > 0;
         PrivilegeTypes type = PrivilegeTypes.valueOf(typeStr);
         switch (type) {
             case TABLE:
@@ -79,7 +74,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 return DbPEntryObject.generate(allTypes, restrictType, restrictName);
 
             default:
-                throw new PrivilegeException("unexpected type " + allTypes.get(0));
+                throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
         }
     }
 

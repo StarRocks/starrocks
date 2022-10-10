@@ -1081,9 +1081,11 @@ tablePrivilegeObjectName
     : identifierOrString '.' identifierOrString
     ;
 
+// the last one is deprecated
 privilegeObjectNameList
     : tablePrivilegeObjectNameList
     | identifierOrStringList
+    | ASTERISK_SYMBOL
     ;
 
 identifierOrStringOrStar

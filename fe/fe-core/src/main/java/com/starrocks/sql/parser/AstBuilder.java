@@ -3463,6 +3463,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitPrivilegeObjectNameList(StarRocksParser.PrivilegeObjectNameListContext context) {
+        if (context.ASTERISK_SYMBOL() != null) {
+            GrantRevokePrivilegeObjects ret = new GrantRevokePrivilegeObjects();
+            ret.setPrivilegeObjectNameTokensList(Arrays.asList(Arrays.asList("*")));
+            return ret;
+        } else if (context.identifierOrStringList() != null) {
+            return visit(context.identifierOrStringList());
+        } else {
+            return visit(context.tablePrivilegeObjectNameList());
+        }
+    }
+
+    @Override
     public ParseNode visitGrantImpersonateBrief(StarRocksParser.GrantImpersonateBriefContext context) {
         List<String> privList = Arrays.asList("IMPERSONATE");
         GrantRevokeClause clause = (GrantRevokeClause) visit(context.grantRevokeClause());

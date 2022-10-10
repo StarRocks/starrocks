@@ -11,6 +11,7 @@ public class UserPEntryObject extends PEntryObject {
     private UserIdentity userIdentity;
     protected UserPEntryObject(UserIdentity userIdentity) {
         super(0);
+        this.userIdentity = userIdentity;
     }
 
     public static UserPEntryObject generate(GlobalStateMgr mgr, UserIdentity user) throws PrivilegeException {
