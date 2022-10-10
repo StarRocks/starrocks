@@ -27,7 +27,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -77,6 +76,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.StreamLoadTask;
@@ -157,7 +157,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -315,12 +314,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     if (listingViews) {
                         View view = (View) table;
                         String ddlSql = view.getInlineViewDef();
-                        List<TableRef> tblRefs = new ArrayList<>();
-                        view.getQueryStmt().collectTableRefs(tblRefs);
-                        for (TableRef tblRef : tblRefs) {
-                            if (!GlobalStateMgr.getCurrentState().getAuth()
-                                    .checkTblPriv(currentUser, tblRef.getName().getDb(),
-                                            tblRef.getName().getTbl(), PrivPredicate.SHOW)) {
+                        Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(view.getQueryStatement());
+                        for (TableName tableName : allTables.keySet()) {
+                            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
+                                    currentUser, tableName.getDb(), tableName.getTbl(), PrivPredicate.SHOW)) {
                                 ddlSql = "";
                                 break;
                             }
