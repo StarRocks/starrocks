@@ -116,7 +116,10 @@ The parameter description is as follows:
     | type                | Yes          | The type of the data source. Set the value to `hive`.        |
     | hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
 
-> Note: Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+> Note
+>
+> - The CREATE EXTERNAL CATALOG statement does not require any privileges for execution.
+> - Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
 
 ## Caching strategy of Hive metadata
 
