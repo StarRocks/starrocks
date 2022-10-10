@@ -19,6 +19,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
+#include "exec/pipeline/sink/mysql_table_sink_operator.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/vectorized/cross_join_node.h"
@@ -33,6 +34,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/export_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
+#include "runtime/mysql_table_sink.h"
 #include "runtime/result_sink.h"
 #include "util/debug/query_trace.h"
 #include "util/pretty_printer.h"
@@ -730,6 +732,12 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         OpFactoryPtr op = std::make_shared<ExportSinkOperatorFactory>(
                 context->next_operator_id(), request.output_sink().export_sink, export_sink->get_output_expr(), dop,
                 fragment_ctx);
+        fragment_ctx->pipelines().back()->add_op_factory(op);
+    } else if (typeid(*datasink) == typeid(starrocks::MysqlTableSink)) {
+        MysqlTableSink* mysql_table_sink = down_cast<starrocks::MysqlTableSink*>(datasink.get());
+        auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+        auto output_expr = mysql_table_sink->get_output_expr();
+        OpFactoryPtr op = std::make_shared<MysqlTableSinkOperatorFactory>(context->next_operator_id(), request.output_sink().mysql_table_sink, mysql_table_sink->get_output_expr(), dop);
         fragment_ctx->pipelines().back()->add_op_factory(op);
     }
 
