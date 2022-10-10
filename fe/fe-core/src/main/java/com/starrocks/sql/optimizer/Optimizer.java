@@ -8,6 +8,8 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -483,7 +485,14 @@ public class Optimizer {
             }
 
             Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefresh();
-            if (!partitionNamesToRefresh.isEmpty()) {
+            PartitionInfo partitionInfo = mv.getPartitionInfo();
+            if (partitionInfo instanceof SinglePartitionInfo) {
+                if (!partitionNamesToRefresh.isEmpty()) {
+                    continue;
+                }
+            } else if (partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
+                // if the mv is partitioned, and all partitions need refresh,
+                // then it can not be candidate
                 continue;
             }
 
@@ -521,18 +530,8 @@ public class Optimizer {
             }
 
             List<ColumnRefOperator> outputExpressions = logicalPlan.getOutputColumn();
-
-            /*
-            OptExpression root = logicalPlan.getRoot();
-            // the root op of mv must be a LogicalProjectOperator
-            LogicalProjectOperator projectOperator = (LogicalProjectOperator) root.getOp();
-            Map<ColumnRefOperator, ScalarOperator> columnRefMap = projectOperator.getColumnRefMap();
-            for (ScalarOperator outputColumnRef : logicalPlan.getOutputColumn()) {
-                outputExpressions.add(columnRefMap.get(outputColumnRef));
-            }
-
-             */
-            materializationContext = new MaterializationContext(mv, optimizedPlan, columnRefFactory, outputExpressions);
+            materializationContext = new MaterializationContext(mv, optimizedPlan,
+                    columnRefFactory, outputExpressions, partitionNamesToRefresh);
             // TODO(hkp): it is not a good idea to set back to mv
             mv.setMaterializationContext(materializationContext);
             context.addCandidateMvs(materializationContext);

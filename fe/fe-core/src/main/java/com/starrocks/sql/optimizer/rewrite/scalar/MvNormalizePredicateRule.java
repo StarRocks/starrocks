@@ -29,7 +29,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
     // a < 3 => a <= 2
     // a > 3 => a >= 4
     // a = 3 => a >= 3 and a <= 3
-    // a != 3 => a >3 and a < 3 (which will be normalized further)
+    // a != 3 => a > 3 and a < 3 (which will be normalized further)
     //
     @Override
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,

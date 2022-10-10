@@ -9,6 +9,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.List;
+import java.util.Set;
 
 public class MaterializationContext {
     private MaterializedView mv;
@@ -26,14 +27,19 @@ public class MaterializationContext {
     // output expressions of select * from mv
     List<ColumnRefOperator> scanMvOutputExpressions;
 
+    // for partitioned mv, records the partitions that need to be refreshed
+    Set<String> partitionNamesToRefresh;
+
     public MaterializationContext(MaterializedView mv,
                                   OptExpression mvExpression,
                                   ColumnRefFactory columnRefFactory,
-                                  List<ColumnRefOperator> mvOutputExpressions) {
+                                  List<ColumnRefOperator> mvOutputExpressions,
+                                  Set<String> partitionNamesToRefresh) {
         this.mv = mv;
         this.mvExpression = mvExpression;
         this.mvColumnRefFactory = columnRefFactory;
         this.mvOutputExpressions = mvOutputExpressions;
+        this.partitionNamesToRefresh = partitionNamesToRefresh;
     }
 
     public MaterializedView getMv() {
