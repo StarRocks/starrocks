@@ -95,7 +95,7 @@ OutPut Exchange Id: 15
 |  join op: RIGHT ANTI JOIN (PARTITIONED)
 |  equal join conjunct: [20: o_custkey, INT, true] = [1: c_custkey, INT, true]
 |  build runtime filters:
-|  - filter_id = 1, build_expr = (1: c_custkey), remote = true
+|  - filter_id = 0, build_expr = (1: c_custkey), remote = true
 |  output columns: 5, 6
 |  cardinality: 1500000
 |  column statistics:
@@ -131,8 +131,6 @@ OutPut Exchange Id: 12
 10:NESTLOOP JOIN
 |  join op: CROSS JOIN
 |  other join predicates: cast([6: c_acctbal, DECIMAL64(15,2), true] as DECIMAL128(38,8)) > [17: avg, DECIMAL128(38,8), true]
-|  build runtime filters:
-|  - filter_id = 0, build_expr = (17: avg), remote = false
 |  cardinality: 3750000
 |  column statistics:
 |  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 3750000.0] ESTIMATE
@@ -150,8 +148,6 @@ partitions=1/1
 avgRowSize=31.0
 numNodes=0
 cardinality: 7500000
-probe runtime filters:
-- filter_id = 0, probe_expr = (CAST(6: c_acctbal AS DECIMAL128(38,8)))
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 7500000.0] ESTIMATE
 * c_phone-->[-Infinity, Infinity, 0.0, 15.0, 7500000.0] ESTIMATE
@@ -222,7 +218,7 @@ avgRowSize=8.0
 numNodes=0
 cardinality: 150000000
 probe runtime filters:
-- filter_id = 1, probe_expr = (20: o_custkey)
+- filter_id = 0, probe_expr = (20: o_custkey)
 column statistics:
 * o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
 [end]

@@ -106,8 +106,6 @@ HASH_PARTITIONED: 1: C_CUSTKEY
 |  join op: CROSS JOIN
 |  colocate: false, reason:
 |  other join predicates: 6: C_ACCTBAL > 19: avg
-|  build runtime filters:
-|  - filter_id = 0, build_expr = (19: avg), remote = false
 |
 |----9:EXCHANGE
 |

@@ -67,8 +67,6 @@ OutPut Exchange Id: 31
 28:NESTLOOP JOIN
 |  join op: CROSS JOIN
 |  other join predicates: cast([18: sum, DECIMAL128(38,2), true] as DOUBLE) > cast([37: expr, DECIMAL128(38,12), true] as DOUBLE)
-|  build runtime filters:
-|  - filter_id = 4, build_expr = (CAST(37: expr AS DOUBLE)), remote = false
 |  cardinality: 1600000
 |  column statistics:
 |  * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 1600000.0] ESTIMATE
@@ -82,8 +80,6 @@ OutPut Exchange Id: 31
 |  aggregate: sum[([17: expr, DECIMAL128(24,2), true]); args: DECIMAL128; result: DECIMAL128(38,2); args nullable: true; result nullable: true]
 |  group by: [1: ps_partkey, INT, true]
 |  cardinality: 3200000
-|  probe runtime filters:
-|  - filter_id = 4, probe_expr = (CAST(18: sum AS DOUBLE))
 |  column statistics:
 |  * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 3200000.0] ESTIMATE
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 16.0, 99864.0] ESTIMATE

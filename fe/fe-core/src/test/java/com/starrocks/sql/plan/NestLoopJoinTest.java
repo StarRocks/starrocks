@@ -21,8 +21,6 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 3: v3 < 6: v3\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (6: v3), remote = false\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n"));
     }
@@ -80,8 +78,6 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  join op: RIGHT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: v1 < 4: v1\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (4: v1), remote = false\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n"));
 
@@ -91,8 +87,6 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  join op: FULL OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: v1 < 4: v1\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (4: v1), remote = false\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
                 "  |    \n" +
@@ -116,11 +110,24 @@ public class NestLoopJoinTest extends PlanTestBase {
     @Test
     public void testRuntimeFilter() throws Exception {
         String sql = "select * from t0 where t0.v1 > (select max(v1) from t0 )";
-        assertPlanContains(sql, "  6:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: 1: v1 > 7: max\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (7: max), remote = false\n");
+        assertVerbosePlanContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 > b.v1";
+        assertVerbosePlanContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 < b.v1";
+        assertVerbosePlanContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 < a.v1 + b.v1";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where 1 < a.v1 + b.v1";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 + 1 < b.v1";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 + b.v1 < b.v1";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
     }
 }

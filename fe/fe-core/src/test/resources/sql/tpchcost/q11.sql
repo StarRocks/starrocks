@@ -55,8 +55,6 @@ UNPARTITIONED
 |  join op: CROSS JOIN
 |  colocate: false, reason:
 |  other join predicates: 21: sum > 43: expr
-|  build runtime filters:
-|  - filter_id = 4, build_expr = (43: expr), remote = false
 |
 |----26:EXCHANGE
 |
