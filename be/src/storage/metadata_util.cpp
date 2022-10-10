@@ -236,6 +236,9 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     case TCompressionType::ZSTD:
         schema->set_compression_type(ZSTD);
         break;
+    case TCompressionType::SNAPPY:
+        schema->set_compression_type(SNAPPY);
+        break;
     default:
         LOG(WARNING) << "Unexpected compression type" << compression_type;
         return Status::InternalError("Unexpected compression type");
