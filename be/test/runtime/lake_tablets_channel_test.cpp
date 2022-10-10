@@ -666,9 +666,8 @@ TEST_F(LakeTabletsChannelTest, test_finish_failed) {
     _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
     ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
 
-    // Drop tablet 10087 and 10088 before finish
-    _tablet_manager->delete_tablet(10087);
-    _tablet_manager->delete_tablet(10088);
+    // Remove txn log directory before finish
+    fs::remove_all(_location_provider->txn_log_root_location(10087));
 
     PTabletWriterAddChunkRequest finish_request;
     PTabletWriterAddBatchResult finish_response;
@@ -681,30 +680,6 @@ TEST_F(LakeTabletsChannelTest, test_finish_failed) {
 
     _tablets_channel->add_chunk(nullptr, finish_request, &finish_response);
     ASSERT_NE(TStatusCode::OK, finish_response.status().status_code());
-    ASSERT_EQ(2, finish_response.tablet_vec_size());
-
-    std::vector<int64_t> finished_tablets;
-    for (auto& info : finish_response.tablet_vec()) {
-        ASSERT_TRUE(info.has_schema_hash());
-        finished_tablets.emplace_back(info.tablet_id());
-    }
-    std::sort(finished_tablets.begin(), finished_tablets.end());
-    ASSERT_EQ(10086, finished_tablets[0]);
-    ASSERT_EQ(10089, finished_tablets[1]);
-    // tablet 10086
-    {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(10086));
-        ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(kTxnId));
-        ASSERT_EQ(1, txnlog->op_write().rowset().segments().size());
-        auto chunk = read_segment(10086, txnlog->op_write().rowset().segments(0));
-        ASSERT_EQ(kChunkSize, chunk->num_rows());
-    }
-    // tablet 10089
-    {
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(10089));
-        ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(kTxnId));
-        ASSERT_EQ(0, txnlog->op_write().rowset().segments().size());
-    }
 }
 
 } // namespace starrocks

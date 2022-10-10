@@ -137,8 +137,8 @@ TEST_F(AsyncDeltaWriterTest, test_open) {
     {
         auto tablet_id = -1;
         auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
-        ASSERT_ERROR(delta_writer->open());
-        ASSERT_ERROR(delta_writer->open());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->open());
         delta_writer->close();
     }
     // Call open() multiple times

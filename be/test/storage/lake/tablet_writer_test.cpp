@@ -169,15 +169,6 @@ TEST_F(DuplicateTabletWriterTest, test_write_success) {
     check_segment(seg1);
 }
 
-TEST_F(DuplicateTabletWriterTest, test_open_fail) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer());
-    ASSERT_OK(fs::remove_all(kTestGroupPath));
-    ASSERT_ERROR(writer->open());
-    writer->close();
-}
-
 TEST_F(DuplicateTabletWriterTest, test_write_fail) {
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
