@@ -114,7 +114,8 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     CompressionTypePB compression_type = return_compression_type_from_filename(_scanner_params.path);
-    if (compression_type != CompressionTypePB::NO_COMPRESSION) {
+    if (compression_type != CompressionTypePB::NO_COMPRESSION &&
+        compression_type != CompressionTypePB::UNKNOWN_COMPRESSION) {
         return Status::InternalError(strings::Substitute("Unsupported compress file format $0", _scanner_params.path));
     }
 
