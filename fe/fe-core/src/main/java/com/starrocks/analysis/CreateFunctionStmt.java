@@ -323,6 +323,10 @@ public class CreateFunctionStmt extends DdlStmt {
                 if (isAggregate) {
                     udafStateClass.collectMethods();
                 }
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/analysis/CreateFunctionStmt.java
+=======
+
+>>>>>>> 58634261d ([BugFix] Fix ClassNotFoundException when create UDF (#11984)):fe/fe-core/src/main/java/com/starrocks/sql/ast/CreateFunctionStmt.java
             } catch (IOException e) {
                 throw new AnalysisException("Failed to load object_file: " + objectFile);
             } catch (ClassNotFoundException e) {
