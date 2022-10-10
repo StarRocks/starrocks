@@ -395,7 +395,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     column.getKey().getType(),
                     column.getValue().isAllowNull());
             columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
-            columnRefFactory.updateColumnRefToColumns(columnRef, column.getValue(), node.getTable());
+            columnRefFactory.updateColumnRefToColumns(columnRef, column.getValue());
             outputVariablesBuilder.add(columnRef);
             colRefToColumnMetaMapBuilder.put(columnRef, column.getValue());
             columnMetaToColRefMapBuilder.put(column.getValue(), columnRef);

@@ -790,7 +790,7 @@ public class ExpressionAnalyzer {
                         node.getParams().isStar() ? "*" : Joiner.on(", ")
                                 .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
             }
-
+                    
             if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_FUNCTION.contains(fnName)) {
                 Type argType = node.getChild(0).getType();
                 // stddev/variance always use decimal128(38,9) to computing result.
@@ -803,7 +803,7 @@ public class ExpressionAnalyzer {
                         .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
             } else if (DecimalV3FunctionAnalyzer.DECIMAL_UNARY_FUNCTION_SET.contains(fnName) ||
                     DecimalV3FunctionAnalyzer.DECIMAL_IDENTICAL_TYPE_FUNCTION_SET.contains(fnName) ||
-                    FunctionSet.IF.equals(fnName)) {
+                    FunctionSet.IF.equals(fnName) || FunctionSet.MAX_BY.equals(fnName)) {
                 // DecimalV3 types in resolved fn's argument should be converted into commonType so that right CastExprs
                 // are interpolated into FunctionCallExpr's children whose type does match the corresponding argType of fn.
                 List<Type> argTypes;
@@ -819,6 +819,22 @@ public class ExpressionAnalyzer {
                 if (returnType.isDecimalV3() && commonType.isValid()) {
                     returnType = commonType;
                 }
+                
+                if (FunctionSet.MAX_BY.equals(fnName)) {
+                    AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), 
+                            Arrays.asList(argumentTypes), returnType,
+                            Type.VARCHAR, fn.hasVarArgs());
+                    newFn.setFunctionId(fn.getFunctionId());
+                    newFn.setChecksum(fn.getChecksum());
+                    newFn.setBinaryType(fn.getBinaryType());
+                    newFn.setHasVarArgs(fn.hasVarArgs());
+                    newFn.setId(fn.getId());
+                    newFn.setUserVisible(fn.isUserVisible());
+                    newFn.setisAnalyticFn(true);
+                    fn = newFn;
+                    return fn;
+                }
+                
                 ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), argTypes, returnType,
                         fn.getLocation(), ((ScalarFunction) fn).getSymbolName(),
                         ((ScalarFunction) fn).getPrepareFnSymbol(),

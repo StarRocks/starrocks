@@ -27,6 +27,7 @@
 #include <queue>
 
 #include "common/logging.h"
+#include "util/ratelimit.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -249,6 +250,7 @@ void VersionGraph::construct_version_graph(const std::vector<RowsetMetaSharedPtr
             _min_readable_version = std::max(version.second, _min_readable_version);
         }
     }
+    _tablet_id = rs_metas[0]->tablet_id();
 }
 
 void VersionGraph::add_version_to_graph(const Version& version) {
@@ -388,8 +390,11 @@ Status VersionGraph::capture_consistent_versions(const Version& spec_version,
     auto end_vertex_iter = _version_graph.find(spec_version.second + 1);
 
     if (start_vertex_iter == _version_graph.end() || end_vertex_iter == _version_graph.end()) {
-        LOG(WARNING) << "fail to find path in version_graph. "
-                     << "spec_version: " << spec_version.first << "-" << spec_version.second;
+        RATE_LIMIT_BY_TAG(_tablet_id,
+                          LOG(WARNING) << "fail to find path in version_graph. "
+                                       << "spec_version: " << spec_version.first << "-" << spec_version.second
+                                       << " tablet_id: " << _tablet_id,
+                          1000);
         return Status::NotFound("Version not found");
     }
 

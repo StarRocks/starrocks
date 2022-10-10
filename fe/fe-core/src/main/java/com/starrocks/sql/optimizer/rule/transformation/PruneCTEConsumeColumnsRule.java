@@ -47,6 +47,7 @@ public class PruneCTEConsumeColumnsRule extends TransformationRule {
                     Utils.findSmallestColumnRef(Lists.newArrayList(consume.getCteOutputColumnRefMap().keySet()));
             mapping.put(key, consume.getCteOutputColumnRefMap().get(key));
             requiredConsumeOutput.union(key);
+            requiredConsumeOutput.union(consume.getCteOutputColumnRefMap().get(key));
         }
 
         LogicalCTEConsumeOperator c =
