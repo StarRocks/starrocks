@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.qe.ConnectContext;
@@ -37,10 +38,12 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         super("NESTLOOP JOIN", id, outer, inner, joinOp, eqJoinConjuncts, joinConjuncts);
     }
 
+    @Override
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
     }
 
+    @Override
     public void clearBuildRuntimeFilters() {
         buildRuntimeFilters.removeIf(RuntimeFilterDescription::isHasRemoteTargets);
     }
@@ -59,20 +62,23 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
                 Expr left = expr.getChild(0);
                 Expr right = expr.getChild(1);
 
+                if (!(left instanceof SlotRef)) {
+                    continue;
+                }
+                if (!right.isBoundByTupleIds(getChild(1).getTupleIds())) {
+                    continue;
+                }
+
                 RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
                 rf.setFilterId(generator.getNextId().asInt());
                 rf.setBuildPlanNodeId(getId().asInt());
                 rf.setExprOrder(i);
                 rf.setJoinMode(distributionMode);
                 rf.setBuildCardinality(buildStageNode.getCardinality());
-                rf.setOnlyLocal(false);
-
+                rf.setOnlyLocal(true);
                 rf.setBuildExpr(right);
-                boolean accept = false;
-                for (PlanNode child : this.getChildren()) {
-                    accept = accept || child.pushDownRuntimeFilters(rf, left, probePartitionByExprs);
-                }
-                if (accept) {
+
+                if (getChild(0).pushDownRuntimeFilters(rf, left, probePartitionByExprs)) {
                     this.getBuildRuntimeFilters().add(rf);
                 }
             }
