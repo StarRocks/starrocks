@@ -2,498 +2,710 @@
 
 ## 功能
 
-Broker Load 通过随 StarRocks 集群一同部署的 broker 进行，访问对应数据源的数据，进行数据导入。该导入方式使用的场景详见 [Broker load](/loading/BrokerLoad.md) 章节。
+Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句或者 curl 命令来查看导入作业的结果。有关 Broker Load 的前提条件、基本原理、以及支持的数据文件格式和外部存储系统等，请参见[从 HDFS 或外部云存储系统导入数据](/loading/BrokerLoad.md)。
 
-可以通过 `show broker` 命令查看已经部署的 broker。
-
-目前支持以下 5 种数据源：
-
-1. HDFS：社区版本 hdfs。
-2. Amazon S3：Amazon 对象存储。
-3. 阿里云 OSS：阿里云对象存储。
-4. 腾讯 COS：腾讯云对象存储。
-5. 百度 BOS：百度对象存储。
+在使用 Broker Load 导入数据前，必须确保您的 StarRocks 集群中已部署 Broker。您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。本文档假设您的 StarRocks 集群中已部署一组名为“mybroker”的 Broker。
 
 ## 语法
 
-注：方括号 [] 中内容可省略不写。
-
-```sql
-LOAD LABEL load_label
+```SQL
+LOAD LABEL [<database_name>.]<label_name>
 (
-data_desc1[, data_desc2, ...]
+    data_desc[, data_desc ...]
 )
-WITH BROKER broker_name
+WITH BROKER "<broker_name>"
 [broker_properties]
 [opt_properties];
 ```
 
-1. load_label
+## 参数说明
 
-    当前导入批次的标签。在一个 database 内唯一。
-    语法：
+### `LABEL`
 
-    ```sql
-    [database_name.]your_label
+指定导入作业的标签。
+
+每个导入作业都对应一个在该数据库内唯一的标签。通过标签，可以查看对应导入作业的执行情况，并防止导入相同的数据。导入作业的状态为 **FINISHED** 时，其标签不可再复用给其他导入作业。导入作业的状态为 **CANCELLED** 时，其标签可以复用给其他导入作业，但通常都是用来重试同一个导入作业（即使用同一个标签导入相同的数据）以实现数据“精确一次 (Exactly-Once)”语义。
+
+有关标签的命名规范，请参见[系统限制](/reference/System_limit.md)。
+
+### `data_desc`
+
+用于描述一批次待导入的数据。每个 `data_desc` 声明了本批次待导入数据所属的数据源地址、ETL 函数、StarRocks 表和分区等信息。
+
+Broker Load 支持一次导入多个数据文件。在一个导入作业中，您可以使用多个 `data_desc` 来声明导入多个数据文件，也可以使用一个 `data_desc` 来声明导入一个路径下的所有数据文件。Broker Load 能够保证单次导入的多个数据文件数据原子性成功或失败。
+
+`data_desc` 语法如下：
+
+```SQL
+DATA INFILE ("<file_path>"[, "<file_path>" ...])
+[NEGATIVE]
+INTO TABLE <table_name>
+[PARTITION (<partition_name>[, <partition_name> ...])]
+[FORMAT AS "CSV | Parquet | ORC"]
+[COLUMNS TERMINATED BY "<column_separator>"]
+[(column_list)]
+[COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
+[SET <k1=f1(v1)>[, <k2=f2(v2)> ...]]
+[WHERE predicate]
+```
+
+`data_desc` 中的必选参数如下：
+
+- `file_path`
+
+  用于指定待导入数据文件所在的路径。您可以指定导入一个具体的数据文件，也可以用通配符指定导入某个路径下所有的数据文件。中间的目录也可以使用通配符匹配。Broker Load 支持如下通配符：`?`、`*`、`[]`、`{}` 和 `^`。具体请参见[通配符使用规则参考](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/fs/FileSystem.html#globStatus-org.apache.hadoop.fs.Path-)。
+
+  例如， 通过指定 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` 路径可以匹配 `/user/data/tablename` 目录下所有分区内的数据文件，通过 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` 路径可以匹配 `/user/data/tablename` 目录下所有 `202104` 分区内的数据文件。
+
+  文件路径中的 `<hdfs_host>` 和 `hdfs_port` 参数说明如下：
+
+  - `<hdfs_host>`：HDFS 集群中 NameNode 所在主机的 IP 地址。
+  - `hdfs_port`：HDFS 集群中 NameNode 所在主机的 FS 端口。默认端口号为 `9000`。
+
+- `INTO TABLE`
+
+  用于指定目标 StarRocks 表的名称。
+
+`data_desc` 中的可选参数如下：
+
+- `NEGATIVE`
+
+  用于撤销某一批已经成功导入的数据。如果想要撤销某一批已经成功导入的数据，可以通过指定 `NEGATIVE` 关键字来导入同一批数据。
+
+  > 说明：该参数仅适用于目标 StarRocks 表使用聚合模型、并且所有 Value 列的聚合函数均为 `sum` 的情况。
+
+- `PARTITION`
+
+  指定要把数据导入哪些分区。如果不指定该参数，则默认导入到 StarRocks 表所在的所有分区中。
+
+- `FORMAT AS`
+
+  用于指定待导入数据文件的格式。取值包括 `CSV`、`Parquet` 和 `ORC`。如果不指定该参数，则默认通过 `INTO TABLE` 参数中指定的文件扩展名（**.csv**、**.parquet**、和 **.orc**）来判断文件格式。
+
+- `COLUMNS TERMINATED BY`
+
+  用于指定待导入数据文件中的列分隔符。如果不指定该参数，则默认列分隔符为 `\t`，即 Tab。必须确保这里指定的列分隔符与待导入数据文件中的列分隔符一致；否则，导入作业会因数据质量错误而失败，作业状态 (`State`) 会显示为 `CANCELLED`。
+
+  需要注意的是，Broker Load 通过 MySQL 协议提交导入请求，除了 StarRocks 会做转义处理以外，MySQL 协议也会做转义处理。因此，如果列分隔符是 Tab 等不可见字符，则需要在列分隔字符前面多加一个反斜线 (\\)。例如，如果列分隔符是 `\t`，这里必须输入 `\\t`；如果列分隔符是 `\n`，这里必须输入 `\\n`。Apache Hive™ 文件的列分隔符为 `\x01`，因此，如果待导入数据文件是 Hive 文件，这里必须传入 `\\x01`。
+
+  > 说明：StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
+
+- `column_list`
+
+  用于指定待导入数据文件和 StarRocks 表之间的列对应关系。语法如下：`(<column_name>[, <column_name> ...])`。`column_list` 中声明的列与 StarRocks 表中的列按名称一一对应。
+
+  > 说明：如果待导入数据文件的列和 StarRocks 表中的列按顺序一一对应，则不需要指定 `column_list` 参数。
+
+  如果要跳过待导入数据文件中的某一列，只需要在 `column_list` 参数中将该列命名为 StarRocks 表中不存在的列名即可。具体请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)。
+
+- `COLUMNS FROM PATH AS`
+
+  用于从指定的文件路径中提取一个或多个分区字段的信息。当指定的文件路径中存在分区字段时，允许使用 `COLUMNS FROM PATH AS` 参数指定要提取文件路径中哪些分区字段的信息。
+
+  例如，待导入数据文件所在的路径为 `/path/col_name=col_value/file1`，其中 `col_name` 可以对应到 StarRocks 表中的列，因此导入时会将 `col_value` 落入 `col_name` 对应的列中。
+
+  > 说明：该参数只有在从 HDFS 导入数据时可用。
+
+- `SET`
+
+  用于将待导入数据文件的某一列按照指定的函数进行转化，然后将转化后的结果落入 StarRocks 表中。语法如下：`column_name = expression`。以下为两个示例：
+
+  - StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3`；待导入数据文件中有四列，前两列按顺序依次对应 StarRocks 表中的 `col1`、`col2` 列，后两列之和对应 StarRocks 表中的 `col3` 列。这种情况下，需要通过 `column_list` 参数声明 `(col1,col2,tmp_col3,tmp_col4)`，并使用 SET 子句指定 `SET (col3=tmp_col3+tmp_col4)` 来实现数据转换。
+  - StarRocks 表中有三列，按顺序依次为 `year`、`month` 和 `day`；待导入数据文件中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。这种情况下，需要通过 `column_list` 参数声明 `(tmp_time)`、并使用 SET 子句指定 `SET (year = year(tmp_time), month=month(tmp_time), day=day(tmp_time))` 来实现数据转换。
+
+- `WHERE`
+
+  用于指定过滤条件，对做完转换的数据进行过滤。只有符合 WHERE 子句中指定的过滤条件的数据才会导入到 StarRocks 表中。
+
+### `WITH BROKER`
+
+用于指定 Broker 的名称。
+
+### `broker_properties`
+
+用于提供通过 Broker 访问的数据源的信息。不同的 Broker、以及不同的访问方式，需要提供的数据源信息也不同。
+
+#### HDFS
+
+社区版本的 HDFS，支持简单认证和 Kerberos 认证两种认证方式（Broker Load 默认使用简单认证），并且支持 NameNode 节点的 HA 配置。如果数据源为社区版本的 HDFS，可以提供如下配置信息：
+
+- 认证方式
+
+  - 如果使用简单认证，需要指定如下配置：
+
+    ```Plain
+    "hadoop.security.authentication" = "simple"
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
     ```
 
-2. data_desc
+    上述配置中的参数说明如下表所述。
 
-    用于描述一批导入数据。
+    | **参数名称** | **参数说明**                                 |
+    | ------------ | -------------------------------------------- |
+    | username     | 用于访问 HDFS 集群中 NameNode 节点的用户名。 |
+    | password     | 用于访问 HDFS 集群中 NameNode 节点的密码。   |
 
-    语法：
+  - 如果使用 Kerberos 认证，需要指定如下配置：
 
-    ```sql
-    DATA INFILE
-    (
-        "file_path1"[, file_path2, ...]
-    )
-    [NEGATIVE]
-    INTO TABLE `table_name`
-    [PARTITION (p1, p2)]
-    [COLUMNS TERMINATED BY "column_separator"]
-    [FORMAT AS "file_type"]
-    [(column_list)]
-    [COLUMNS FROM PATH AS (column_list)]
-    [SET (k1 = func(k2))]
-    [WHERE predicate]
+    ```Plain
+    "hadoop.security.authentication" = "kerberos"
+    "kerberos_principal = "nn/zelda1@ZELDA.COM"
+    "kerberos_keytab = "/keytab/hive.keytab"
+    "kerberos_keytab_content = "YWFhYWFh"
     ```
 
-    说明：
+    上述配置中的参数说明如下表所述。
 
-    ```plain text
-    file_path:
+    | **参数名称**            | **参数说明**                                                 |
+    | ----------------------- | ------------------------------------------------------------ |
+    | kerberos_principal      | 用于指定 Kerberos 的用户或服务 (Principal)。每个 Principal 在 HDFS 集群内唯一，由如下三部分组成：<ul><li>`username` 或 `servicename`：HDFS 集群中用户或服务的名称。</li><li>`instance`：HDFS 集群要认证的节点所在服务器的名称，用来保证用户或服务全局唯一。比如，HDFS 集群中有多个 DataNode 节点，各节点需要各自独立认证。</li><li>`realm`：域，必须全大写。</li></ul>举例：`nn/zelda1@ZELDA.COM`。 |
+    | kerberos_keytab         | 用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。该文件必须在 Broker 所在服务器上。 |
+    | kerberos_keytab_content | 用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数跟 `kerberos_keytab` 参数二选一配置。 |
 
-    文件路径，可以指定到一个文件，也可以用 * 通配符指定某个目录下的所有文件。通配符必须匹配到文件，而不能是目录。
+- HA 配置
 
-    PARTITION:
+  可以为 HDFS 集群中的 NameNode 节点配置 HA 机制，从而确保发生 NameNode 节点切换时，StarRocks 能够自动识别新切换到的 NameNode 节点。HA 配置示例如下：
 
-    如果指定此参数，则只会导入指定StarRocks表的分区，导入分区以外的数据会被过滤掉。
-    如果不指定，默认导入table的所有分区。
+  ```Plain
+  "dfs.nameservices" = "my_ha"
+  "dfs.ha.namenodes.my_ha" = "my_nn"
+  "dfs.namenode.rpc-address.my_ha.my_nn" = "<hdfs_host>:<hdfs_port>"
+  "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
+  ```
 
-    NEGATIVE：
-    如果指定此参数，则相当于导入一批"负"数据。用于抵消之前导入的同一批数据。
-    该参数仅适用于存在 value 列，并且 value 列的聚合类型仅为 SUM 的情况。
+  上述配置中的参数说明如下表所述。
 
-    column_separator：
+  | **参数名称**                         | **参数说明**                                                 |
+  | ------------------------------------ | ------------------------------------------------------------ |
+  | dfs.nameservices                   | 自定义 HDFS 集群的名称。                                     |
+  | dfs.ha.namenodes.xxx              | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔。其中 `xxx` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
+  | dfs.namenode.rpc-address.xxx.nn    | 指定 NameNode 的 RPC 地址信息。其中 `nn` 表示 `dfs.ha.namenodes.xxx`  中自定义的 NameNode 的名称。 |
+  | dfs.client.failover.proxy.provider | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
 
-    用于指定导入文件中的列分隔符。默认为 \t
-    如果是不可见字符，则需要加\\x作为前缀，使用十六进制来表示分隔符。
-    如hive文件的分隔符\x01，指定为"\\x01"
+#### Amazon S3
 
-    file_type：
+如果数据源为 Amazon S3，需要提供如下配置信息。
 
-    用于指定导入文件的类型，例如：parquet、orc、csv。默认值通过文件后缀名判断。
+| **参数名称**      | **参数说明**                                            |
+| ----------------- | ------------------------------------------------------- |
+| fs.s3a.access.key | 访问 Amazon S3 存储空间的 Access Key ID。      |
+| fs.s3a.secret.key | 访问 Amazon S3 存储空间的 Secret Access Key。 |
+| fs.s3a.endpoint   | 访问 Amazon S3 存储空间的连接地址。                             |
 
-    column_list：
+请参见 AWS 官方文档[访问密钥](https://docs.aws.amazon.com/zh_cn/IAM/latest/UserGuide/id_credentials_access-keys.html)。
 
-    用于指定导入文件中的列和 table 中的列的对应关系。
-    当需要跳过导入文件中的某一列时，将该列指定为 table 中不存在的列名即可。list中的字段名称与StarRocks表中字段值对应。
-    语法：
-    (col_name1, col_name2, ...)
+#### Google CGS
 
-    COLUMNS FROM PATH AS:
+如果数据源为 Google CGS，需要提供如下配置信息。
 
-    提取文件路径中的分区字段。
-    例: 导入文件为/path/col_name=col_value/file1，col_name为表中的列，则导入时会将col_value导入到col_name对应的列中。
+| **参数名称**      | **参数说明**                                                 |
+| ----------------- | ------------------------------------------------------------ |
+| fs.s3a.access.key | 访问 Google CGS 存储空间的 Access Key。      |
+| fs.s3a.secret.key | 访问 Google CGS 存储空间的 Secret Key。 |
+| fs.s3a.endpoint   | 访问 Google CGS 存储空间的连接地址。                         |
 
-    SET:
+创建访问 Google CGS 存储空间的密钥对的操作步骤如下：
 
-    如果指定此参数，可以将源文件某一列按照函数进行转化，然后将转化后的结果导入到table中。语法为 `column_name` = expression。举几个例子帮助理解。
-    例1: 表中有3个列“c1, c2, c3", 源文件中前两列依次对应(c1,c2)，后两列之和对应c3；那么需要指定 columns (c1,c2,tmp_c3,tmp_c4) SET (c3=tmp_c3+tmp_c4);
-    例2: 表中有3个列“year, month, day"三个列，源文件中只有一个时间列，为”2018-06-01 01:02:03“格式。
-    那么可以指定 columns(tmp_time) set (year = year(tmp_time), month=month(tmp_time), day=day(tmp_time)) 完成导入。
+1. 登录 [Google GCP](https://console.cloud.google.com/storage/settings)。
 
-    WHERE:
+2. 在左侧导航栏，选择 **Google Cloud Storage**，然后选择 **Settings**。
 
-    对做完 transform 的数据进行过滤，符合 where 条件的数据才能被导入。WHERE 语句中只可引用表中列名。
-    ```
+3. 选择 **Interoperability** 页签。
 
-3. broker_name
+   如果还没有启用 Interoperability 特性，请单击 **Interoperable Access**。
 
-    所使用的 broker 名称，可以通过 show broker 命令查看。
+   ![Google GCS - Access Key Pair](/assets/8.2.2-1.png)
 
-4. broker_properties
+4. 单击 **Create new Key** 按钮，按界面提示完成密钥对的创建。
 
-    用于提供通过 broker 访问数据源的信息。不同的 broker，以及不同的访问方式，需要提供的信息不同。
+#### 阿里云 OSS
 
-    1. HDFS
+如果数据源为阿里云 OSS，需要提供如下配置信息。
 
-        社区版本的 hdfs，支持简单认证、kerberos 认证。以及支持 HA 配置。
+| **参数名称**           | **参数说明**                                                 |
+| ---------------------- | ------------------------------------------------------------ |
+| fs.oss.accessKeyId     | 访问阿里云 OSS 存储空间的 AccessKey ID，用于标识用户。           |
+| fs.oss.accessKeySecret | 访问阿里云 OSS 存储空间的 AccessKey Secret，是用于加密签名字符串和 OSS 用来验证签名字符串的密钥。 |
+| fs.oss.endpoint        | 访问阿里云 OSS 存储空间的连接地址。                              |
 
-        简单认证：
+请参见阿里云官方文档[用户签名验证](https://help.aliyun.com/document_detail/31950.html)。
 
-        hadoop.security.authentication = simple (默认)
+#### 腾讯云 COS
 
-        username：hdfs 用户名
+如果数据源为腾讯云 COS，需要提供如下配置信息。
 
-        password：hdfs 密码
+| **参数名称**                   | **参数说明**                                                 |
+| ------------------------------ | ------------------------------------------------------------ |
+| fs.cosn.userinfo.secretId      | 访问腾讯云 COS 存储空间的 SecretId，用于标识 API 调用者的身份。  |
+| fs.cosn.userinfo.secretKey     | 访问腾讯云 COS 存储空间的 SecretKey，是用于加密签名字符串和服务端验证签名字符串的密钥。 |
+| fs.cosn.bucket.endpoint_suffix | 访问腾讯云 COS 存储空间的连接地址。                              |
 
-        kerberos 认证：
+请参见腾讯云官方文档[使用永久密钥访问 COS](https://cloud.tencent.com/document/product/436/68282)。
 
-        hadoop.security.authentication = kerberos
+### `opt_properties`
 
-        kerberos_principal：指定 kerberos 的 principal
+用于指定一些导入相关的可选参数，指定的参数设置作用于整个导入作业。语法如下：
 
-        kerberos_keytab：指定 kerberos 的 keytab 文件路径。该文件必须为 broker 进程所在服务器上的文件。
+```Plain
+PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
+```
 
-        kerberos_keytab_content：指定 kerberos 中 keytab 文件内容经过 base64 编码之后的内容。这个跟 kerberos_keytab 配置二选一就可以。
+参数说明如下：
 
-        namenode HA：
+- `timeout`
 
-        通过配置 namenode HA，可以在 namenode 切换时，自动识别到新的 namenode
+  导入作业的超时时间。单位：秒。默认超时时间为 4 小时。建议超时时间小于 6 小时。如果导入作业在设定的时限内未完成，会自动取消，变成 **CANCELLED** 状态。
 
-        dfs.nameservices: 指定 hdfs 服务的名字，自定义，如："dfs.nameservices" = "my_ha"
+  > 说明：通常情况下，您不需要手动设置导入作业的超时时间。只有当导入作业无法在默认的超时时间内完成时，才推荐您手动设置导入作业的超时时间。
 
-        dfs.ha.namenodes.xxx：自定义 namenode 的名字, 多个名字以逗号分隔。其中 xxx 为 dfs.nameservices 中自定义的名字，如 "dfs.ha.namenodes.my_ha" = "my_nn"
+  推荐超时时间大于下面公式的计算值：
 
-        dfs.namenode.rpc-address.xxx.nn：指定 namenode 的 rpc 地址信息。其中 nn 表示 dfs.ha.namenodes.xxx 中配置的 namenode 的名字，如："dfs.namenode.rpc-address.my_ha.my_nn" = "host: port"
+  **超时时间 > (待导入数据文件的总大小 x 待导入数据文件及相关物化视图的个数)/(平均导入速度 x 导入并发数)**
 
-        dfs.client.failover.proxy.provider：指定 client 连接 namenode 的 provider，默认为：org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider
+    > 说明：
+    >
+    > - “平均导入速度”是指目前 StarRocks 集群的平均导入速度。由于每个 StarRocks 集群的机器环境不同、且集群允许的并发查询任务数也不同，因此，StarRocks 集群的平均导入速度需要根据历史导入速度进行推测。
+    >
+    > - “导入并发数”可以通过 `max_broker_concurrency` 参数设置，具体请参见“从 HDFS 或外部云存储系统导入数据”文档中的“[作业拆分与并行执行](/loading/BrokerLoad.md#作业拆分与并行执行)”章节。
 
-    2. Amazon S3
+   例如，要导入一个 1 GB 的数据文件，该数据文件包含 2 个物化视图，当前 StarRocks 集群的平均导入速度为 10 MB/s，导入并发数为 3。在这种情况下，根据公式计算出来时长为 102 秒：
 
-        需提供：
-        fs.s3a.access.key：AmazonS3 的 access key
+   **(1 x 1024 x 3)/(10 x 3) = 102（秒）**
 
-        fs.s3a.secret.key：AmazonS3 的 secret key
+   因此，导入作业的超时时间应该大于 102 秒。
 
-        fs.s3a.endpoint：AmazonS3 的 endpoint
+- `max_filter_ratio`
 
-    3. 阿里云 OSS
+  导入作业的最大容忍率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：`0`~`1`。默认值：`0` 。
 
-        需提供：
-        fs.oss.accessKeyId：Aliyun OSS 的 access key
+  - 如果设置最大容忍率为 `0`，则 StarRocks 在导入过程中不会忽略错误的数据行。当导入的数据行中有错误时，导入作业会失败，从而保证数据的正确性。
+  - 如果设置最大容忍率大于 `0`，则 StarRocks 在导入过程中会忽略错误的数据行。这样，即使导入的数据行中有错误，导入作业也能成功。
+    > 说明：这里因数据质量不合格而过滤掉的数据行，不包括通过 WHERE 子句过滤掉的数据行。
 
-        fs.oss.accessKeySecret：Aliyun OSS 的 secret key
+  如果因为设置最大容忍率为 `0` 而导致作业失败，可以通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句来查看导入作业的结果信息。然后，判断错误的数据行是否可以被过滤掉。如果可以被过滤掉，则可以根据结果信息中的 `dpp.abnorm.ALL` 和 `dpp.norm.ALL` 来计算导入作业的最大容忍率，然后调整后重新提交导入作业。计算公式如下：
 
-        fs.oss.endpoint：Aliyun OSS 的 endpoint
+  **`max_filter_ratio` = [`dpp.abnorm.ALL`/(`dpp.abnorm.ALL` + `dpp.norm.ALL`)]**
 
-    4. 百度 BOS
+  `dpp.abnorm.ALL` 和 `dpp.norm.ALL` 的总和就等于待导入的总行数。
 
-       需提供：
-       bos_endpoint：BOS 的 endpoint
+- `load_mem_limit`
 
-       bos_accesskey：公有云用户的 accesskey
+  导入作业的内存限制，最大不超过 BE 的内存限制。单位：字节。默认内存限制为 2 GB。
 
-       bos_secret_accesskey：公有云用户的 secret_accesskey
+- `strict_mode`
 
-    5. opt_properties
+  是否开启严格模式。取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。
 
-        用于指定一些特殊参数。
+  严格模式是指在导入过程中对列的数据类型转换进行严格过滤。
 
-        语法：
+  如果开启了严格模式，在转换失败的情况下，会返回错误。如果关闭了严格模式，在转换失败的情况下，会导入 `NULL`。
 
-        [PROPERTIES ("key" = "value", ...)]
+  严格过滤的策略在如下场景不生效：
 
-        可以指定如下参数：
-        timeout：         指定导入操作的超时时间。默认超时为 4 小时，单位秒。
+  - 导入的某列由函数转换生成。
+  - 导入的某列数据类型包含范围限制，原始数据行能正常通过数据类型转换、但无法通过范围限制。例如，某列的数据类型是 DECIMAL(1,0)、原始数据行的列值为 `10`。
 
-        max_filter_ratio：最大容忍可过滤（数据不规范等原因）的数据比例。默认零容忍。
+- `timezone`
+
+  指定导入作业所使用的时区。默认为 `Asia/Shanghai` 时区。该参数会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](/using_starrocks/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](/using_starrocks/timezone.md)”中所述的会话级时区。
 
 ## 示例
 
-### 指定超时时间和过滤比例
+本文以 HDFS 数据源为例，介绍各种导入配置。
 
-从 HDFS 导入一批数据，指定超时时间和过滤比例。使用铭文 my_hdfs_broker 的 broker。简单认证。
+### 导入 CSV 格式的数据
 
-```sql
-LOAD LABEL example_db.label1
+本小节以 CSV 格式的数据为例，重点阐述在创建导入作业的时候，如何运用各种参数配置来满足不同业务场景下的各种导入要求。
+
+#### 设置超时时间和错误容忍率
+
+StarRocks 数据库 `test_db` 里的表 `table1` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example1.csv` 也包含三列，按顺序一一对应 `table1` 中的三列。
+
+如果要把 `example1.csv` 中所有的数据都导入到 `table1` 中，并且要求超时时间最大不超过 3600 秒，可以执行如下语句：
+
+```SQL
+LOAD LABEL test_db.label1
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-INTO TABLE `my_table`
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example1.csv")
+    INTO TABLE table1
 )
-WITH BROKER my_hdfs_broker
+WITH BROKER "mybroker"
 (
-    "username" = "hdfs_user",
-    "password" = "hdfs_passwd"
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
 )
 PROPERTIES
 (
-    "timeout" = "3600",
+    "timeout" = "3600"
+);
+```
+
+#### 设置最大容错率
+
+StarRocks 数据库 `test_db` 里的表 `table2` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example2.csv` 也包含三列，按顺序一一对应 `table2` 中的三列。
+
+如果要把 `example2.csv` 中所有的数据都导入到 `table2` 中，并且要求容错率最大不超过 `0.1`，可以执行如下语句：
+
+```SQL
+LOAD LABEL test_db.label2
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example2.csv")
+    INTO TABLE table2
+)
+WITH BROKER "mybroker"
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+)
+PROPERTIES
+(
     "max_filter_ratio" = "0.1"
 );
 ```
 
-其中 hdfs_host 为 namenode 的 host，hdfs_port 为 fs.defaultFS 端口（默认 9000）
+#### 导入指定路径下所有数据文件
 
-### 设置分隔符及使用通配符目录下所有文件
+StarRocks 数据库 `test_db` 里的表 `table3` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
-从 HDFS 导入一批数据，指定 hive 的默认分隔符\x01，并使用通配符*指定目录下的所有文件。
+HDFS 集群的 `/user/starrocks/data/input/` 路径下所有数据文件也包含三列，按顺序一一对应 `table3` 中的三列，并且列分隔符为 Hive 文件的默认列分隔符 `\x01`。
 
-使用简单认证，同时配置 namenode HA
+如果要把 `hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/` 路径下所有数据文件的数据都导入到 `table3` 中，可以执行如下语句：
 
-```sql
-LOAD LABEL example_db.label3
+```SQL
+LOAD LABEL test_db.label3
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/*")
-INTO TABLE `my_table`
-COLUMNS TERMINATED BY "\\x01"
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/*")
+    INTO TABLE table3
+    COLUMNS TERMINATED BY "\\x01"
 )
-WITH BROKER my_hdfs_broker
+WITH BROKER "mybroker"
 (
-    "username" = "hdfs_user",
-    "password" = "hdfs_passwd",
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
+```
+
+#### 设置 NameNode HA 机制
+
+StarRocks 数据库 `test_db` 里的表 `table4` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example4.csv` 也包含三列，按顺序一一对应 `table4` 中的三列。
+
+如果要把 `example4.csv` 中所有的数据都导入到 `table4` 中，并且要求使用 NameNode HA 机制，可以执行如下语句：
+
+```SQL
+LOAD LABEL test_db.label4
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example4.csv")
+    INTO TABLE table4
+)
+WITH BROKER "mybroker"
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>",
     "dfs.nameservices" = "my_ha",
     "dfs.ha.namenodes.my_ha" = "my_namenode1, my_namenode2",
     "dfs.namenode.rpc-address.my_ha.my_namenode1" = "nn1_host:rpc_port",
     "dfs.namenode.rpc-address.my_ha.my_namenode2" = "nn2_host:rpc_port",
     "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
-)
+);
 ```
 
-### 导入“负”数据并设置 kerberos 认证
+#### 设置 Kerberos 认证方式
 
-从 HDFS 导入一批 "负" 数据，"负" 数据详细含义见上文语法参数介绍部分。同时使用 kerberos 认证方式。提供 keytab 文件路径。
+StarRocks 数据库 `test_db` 里的表 `table5` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
-```sql
-LOAD LABEL example_db.label4
+数据文件 `example5.csv` 也包含三列，按顺序一一对应 `table5` 中的三列。
+
+如果要把 `example5.csv` 中所有的数据都导入到 `table5` 中，并且要求使用 Kerberos 认证方式、提供 keytab 文件的路径，可以执行如下语句：
+
+```SQL
+LOAD LABEL test_db.label5
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/old_file)
-NEGATIVE
-INTO TABLE `my_table`
-COLUMNS TERMINATED BY "\t"
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example5.csv)
+    NEGATIVE
+    INTO TABLE table5
+    COLUMNS TERMINATED BY "\t"
 )
-WITH BROKER my_hdfs_broker
+WITH BROKER "mybroker"
 (
     "hadoop.security.authentication" = "kerberos",
-    "kerberos_principal"="starrocks@YOUR.COM",
-    "kerberos_keytab"="/home/starRocks/starRocks.keytab"
-)
+    "kerberos_principal" = "starrocks@YOUR.COM",
+    "kerberos_keytab" = "/home/starRocks/starRocks.keytab"
+);
 ```
 
-### 导入数据到指定分区
+#### 撤销已导入的数据
 
-从 HDFS 导入一批数据，指定分区。同时使用 kerberos 认证方式。提供 base64 编码后的 keytab 文件内容。
+StarRocks 数据库 `test_db` 里的表 `table6` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
-```sql
-LOAD LABEL example_db.label5
-(
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-INTO TABLE `my_table`
-PARTITION (p1, p2)
-COLUMNS TERMINATED BY ","
-(k1, k3, k2, v1, v2)
-)
-WITH BROKER my_hdfs_broker
-(
-    "hadoop.security.authentication"="kerberos",
-    "kerberos_principal"="starrocks@YOUR.COM",
-    "kerberos_keytab_content"="BQIAAABEAAEACUJBSURVLkNPTQAEcGFsbw"
-)
-```
+数据文件 `example6.csv` 也包含三列，按顺序一一对应 `table6` 中的三列。
 
-### 从 BOS 导入数据并对列进行转化
+并且，您已经通过 Broker Load 把 `example6.csv` 中所有的数据都导入到了 `table6` 中。
 
-从 BOS 导入一批数据，指定分区, 并对导入文件的列做一些转化，如下：
-
-表结构为：
-k1 varchar(20)
-k2 int
-
-假设数据文件只有一行数据：
-
-Adele,1,1
-
-数据文件中各列，对应导入语句中指定的各列：
-k1, tmp_k2, tmp_k3
-
-转换如下：
-
-1. k1: 不变换
-2. k2：是 tmp_k2 和 tmp_k3 数据之和
-
-```sql
-LOAD LABEL example_db.label6
-(
-DATA INFILE("bos://my_bucket/input/file")
-INTO TABLE `my_table`
-PARTITION (p1, p2)
-COLUMNS TERMINATED BY ","
-(k1, tmp_k2, tmp_k3)
-SET (
-k2 = tmp_k2 + tmp_k3
-)
-)
-WITH BROKER my_bos_broker
-(
-    "bos_endpoint" = "http://bj.bcebos.com",
-    "bos_accesskey" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "bos_secret_accesskey"="yyyyyyyyyyyyyyyyyyyy"
-)
-```
-
-### 导入 HLL 列数据
-
-导入数据到含有 HLL 列的表，可以是表中的列或者数据里面的列
-
-如果表中有三列分别是（id, v1, v2, v3）。其中 v1 和 v2 列是 hll 列。导入的源文件有 3 列。则（column_list）中声明第一列为 id，第二三列为一个临时命名的 k1, k2。
-
-在 SET 中必须给表中的 hll 列特殊声明 hll_hash。表中的 v1 列等于原始数据中的 hll_hash(k1)列, 表中的 v3 列在原始数据中并没有对应的值，使用 empty_hll 补充默认值。
+如果您想撤销已导入的数据，可以执行如下语句：
 
 ```SQL
-LOAD LABEL example_db.label7
+LOAD LABEL test_db.label6
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-INTO TABLE `my_table`
-PARTITION (p1, p2)
-COLUMNS TERMINATED BY ","
-(id, k1, k2)
-SET (
-v1 = hll_hash(k1),
-v2 = hll_hash(k2),
-v3 = empty_hll()
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example6.csv)
+    NEGATIVE
+    INTO TABLE table6
+    COLUMNS TERMINATED BY "\t"
 )
-)
-WITH BROKER hdfs ("username"="hdfs_user", "password"="hdfs_password");
-
-LOAD LABEL example_db.label8
+WITH BROKER "mybroker"
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-INTO TABLE `my_table`
-PARTITION (p1, p2)
-COLUMNS TERMINATED BY ","
-(k1, k2, tmp_k3, tmp_k4, v1, v2)
-SET (
-v1 = hll_hash(tmp_k3),
-v2 = hll_hash(tmp_k4)
-)
-)
-WITH BROKER hdfs ("username"="hdfs_user", "password"="hdfs_password");
+    "hadoop.security.authentication" = "kerberos",
+    "kerberos_principal" = "starrocks@YOUR.COM",
+    "kerberos_keytab" = "/home/starRocks/starRocks.keytab"
+);
 ```
 
-### 导入 Parquet 格式数据
+#### 设置目标分区
 
-导入 Parquet 文件中数据指定 FORMAT 为 parquet， 默认是通过文件后缀判断。
+StarRocks 数据库 `test_db` 里的表 `table7` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example7.csv` 也包含三列，按顺序一一对应 `table7` 中的三列。
+
+如果要把 `example7.csv` 中所有的数据都导入到 `table7` 所在的分区 `p1` 和 `p2`，可以执行如下语句：
 
 ```SQL
-LOAD LABEL example_db.label9
+LOAD LABEL test_db.label7
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-INTO TABLE `my_table`
-FORMAT AS "parquet"
-(k1, k2, k3)
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example7.csv")
+    INTO TABLE table7
+    PARTITION (p1, p2)
+    COLUMNS TERMINATED BY ","
 )
-WITH BROKER hdfs ("username"="hdfs_user", "password"="hdfs_password");
+WITH BROKER "mybroker"
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
 ```
 
-### 提取文件路径中的分区字段
+#### 设置列映射关系
 
-如果需要，则会根据表中定义的字段类型解析文件路径中的分区字段（partitioned fields），类似 Spark 中 Partition Discovery 的功能
+StarRocks 数据库 `test_db` 里的表 `table8` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example8.csv` 也包含三列，按顺序依次对应 `table8` 中 `col2`、`col1`、`col3`。
+
+如果要把 `example3.csv` 中所有的数据都导入到 `table3` 中，可以执行如下语句：
 
 ```SQL
-LOAD LABEL example_db.label10
+LOAD LABEL test_db.label8
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/*/*")
-INTO TABLE `my_table`
-FORMAT AS "csv"
-(k1, k2, k3)
-COLUMNS FROM PATH AS (city, utc_date)
-SET (uniq_id = md5sum(k1, city))
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example8.csv")
+    INTO TABLE table8
+    PARTITION (p1, p2)
+    COLUMNS TERMINATED BY ","
+    (col2, col1, col3)
 )
-WITH BROKER hdfs ("username"="hdfs_user", "password"="hdfs_password");
+WITH BROKER "mybroker"
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
 ```
 
-hdfs://hdfs_host: hdfs_port/user/starRocks/data/input/dir/city = beijing 目录下包括如下文件：
+> 说明：上述示例中，因为 `example8.csv` 和 `table8` 所包含的列不能按顺序依次对应，因此需要通过 `columns` 参数来设置 `example8.csv` 和 `table8` 之间的列映射关系。
 
-[hdfs://hdfs_host: hdfs_port/user/starRocks/data/input/dir/city = beijing/utc_date = 2019-06-26/0000.csv, hdfs://hdfs_host: hdfs_port/user/starRocks/data/input/dir/city = beijing/utc_date = 2019-06-26/0001.csv, ...]
+#### 设置筛选条件
 
-则提取文件路径的中的 city 和 utc_date 字段
+StarRocks 数据库 `test_db` 里的表 `table9` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
-### 对导入数据进行过滤
+数据文件 `example9.csv` 也包含三列，按顺序一一对应 `table9` 中的三列。
 
-对待导入数据进行过滤，k1 值大于 k2 值的列才能被导入
+如果只想把 `example9.csv` 中第一列的值大于 `20180601` 的数据行导入到 `table9` 中，可以执行如下语句：
 
-```sql
-LOAD LABEL example_db.label10
+```SQL
+LOAD LABEL test_db.label9
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-INTO TABLE `my_table`
-where k1 > k2
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example9.csv")
+    INTO TABLE table9
+    (col1, col2, col3)
+    where col1 > 20180601
 )
+WITH BROKER "mybroker"
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
 ```
 
-### 提取文件路径中包含%3A 的时间分区字段
+> 说明：上述示例中，虽然 `example9.csv` 和 `table9` 所包含的列数目相同、并且按顺序一一对应，但是因为需要通过 WHERE 子句指定基于列的过滤条件，因此需要通过 `columns` 参数对 `example9.csv` 中的列进行临时命名。
 
-在 hdfs 路径中，不允许有 ':'，所有 ':' 会由 %3A 替换。
+#### 导入数据到含有 HLL 类型列的表
 
-假设有如下文件：
+StarRocks 数据库 `test_db` 里的表 `table10` 包含四列，按顺序依次为 `id`、`col1`、`col2`、`col3`，其中 `col1` 和 `col2` 是 HLL 类型的列。
 
-/user/data/data_time = 2020-02-17 00%3A00%3A00/test.txt
+数据文件 `example10.csv` 包含三列，第一列对应 `table10` 中的 `id` 列；第二列和第三列分别对应 `table10` 中 HLL 类型的列 `col1` 和 `col2`，可以通过函数转换成 HLL 类型的数据并分别落入 `col1`、`col2` 列。
 
-/user/data/data_time = 2020-02-18 00%3A00%3A00/test.txt
+如果要把 `example10.csv` 中所有的数据都导入到 `table10` 中，可以执行如下语句：
 
-```PLAIN TEXT
-表结构为：
+```SQL
+LOAD LABEL test_db.label10
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example10.csv")
+    INTO TABLE table10
+    COLUMNS TERMINATED BY ","
+    (id, temp1, temp2)
+    SET
+    (
+        col1 = hll_hash(temp1),
+        col2 = hll_hash(temp2),
+        col3 = empty_hll()
+    )
+)
+WITH BROKER "mybroker"
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
+```
+
+> 说明：
+>
+> 上述示例中，通过 `column_list` 参数，把 `example10.csv` 中的三列按顺序依次临时命名为 `id`、`temp1`、`temp2`，然后使用函数指定数据转换规则，包括：
+>
+> - 使用 `hll_hash` 函数把 `example10.csv` 中的 `temp1`、`temp2` 列转换成 HLL 类型的数据，并分别落入 `table10`中的 `col1`、`col2` 列。
+>
+> - 使用 `empty_hll` 函数给导入的数据行在 `table10` 中的第四列补充默认值。
+
+有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [HLL](/sql-reference/sql-statements/data-definition/HLL.md)。
+
+#### 提取文件路径中的分区字段
+
+Broker Load 支持根据 StarRocks 表中定义的字段类型来解析待导入文件路径中的分区字段，类似 Apache Spark™ 中的分区发现 (Partition Discovery) 功能。
+
+StarRocks 数据库 `test_db` 里的表 `table11` 包含五列，按顺序依次为 `col1`、`col2`、`col3`、`city`、`utc_date`。
+
+HDFS 集群的 `/user/starrocks/data/input/dir/city=beijing` 路径下包含如下数据文件：
+
+- `/user/starrocks/data/input/dir/city=beijing/utc_date=2019-06-26/0000.csv`
+
+- `/user/starrocks/data/input/dir/city=beijing/utc_date=2019-06-26/0001.csv`
+
+这些数据文件都包含三列，按顺序分别对应 `table11` 中 `col1`、`col2`、`col3` 三列。
+
+如果要把 `/user/starrocks/data/input/dir/city=beijing/utc_date=*/*` 路径下所有数据文件的数据都导入到 `table11` 中，并且要求提取路径中分区字段 `city` 和 `utc_date` 的信息落入 `table11` 中对应的 `city`、`utc_date` 列，可以执行如下语句：
+
+```SQL
+LOAD LABEL test_db.label11
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/dir/city=beijing/*/*")
+    INTO TABLE table11
+    FORMAT AS "csv"
+    (col1, col2, col3)
+    COLUMNS FROM PATH AS (city, utc_date)
+    SET (uniq_id = md5sum(k1, city))
+)
+WITH BROKER "mybroker"
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
+```
+
+#### 提取文件路径中包含 `%3A` 的时间分区字段
+
+在 HDFS 的文件路径中，不允许有冒号 (:)，所有冒号 (:) 都会自动替换成 `%3A`。
+
+StarRocks 数据库 `test_db` 里的表 `table12` 包含三列，按顺序依次为 `data_time`、`col1`、`col2`，表结构如下：
+
+```SQL
 data_time DATETIME,
-k2        INT,
-k3        INT
+col1        INT,
+col2        INT
 ```
+
+HDFS 集群的 `/user/starrocks/data` 路径下有如下数据文件：
+
+- `/user/starrocks/data/data_time=2020-02-17 00%3A00%3A00/example12.csv`
+
+- `/user/starrocks/data/data_time=2020-02-18 00%3A00%3A00/example12.csv`
+
+如果要把 `example12.csv` 中所有的数据都导入到 `table12` 中，并且要求提取指定路径中分区字段 `data_time` 的信息落入到 `table12` 中的 `data_time` 列，可以执行如下语句：
 
 ```SQL
-LOAD LABEL example_db.label11
+LOAD LABEL test_db.label12
 (
-DATA INFILE("hdfs://host:port/user/data/*/test.txt")
-INTO TABLE `tbl12`
-COLUMNS TERMINATED BY ","
-(k2,k3)
-COLUMNS FROM PATH AS (data_time)
-SET (data_time=str_to_date(data_time, '%Y-%m-%d %H%%3A%i%%3A%s'))
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/*/example12.csv")
+    INTO TABLE table12
+    COLUMNS TERMINATED BY ","
+    FORMAT AS "csv"
+    (col1,col2)
+    COLUMNS FROM PATH AS (data_time)
+    SET (data_time = str_to_date(data_time, '%Y-%m-%d %H%%3A%i%%3A%s'))
 )
-WITH BROKER "hdfs" ("username"="user", "password"="pass");
+WITH BROKER "mybroker"
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
 ```
 
-### 从阿里云 OSS 导入 csv 格式的数据
+上述示例中，因为直接提取后的分区字段 `data_time` 是包含 `%3A` 的字符串（如 `2020-02-17 00%3A00%3A00`），因此需要再通过 `str_to_date` 函数把字符串转换为 DATETIME 类型的数据以后才能落入 `table8` 中的 `data_time` 列。
+
+### 导入 Parquet 格式的数据
+
+本小节主要描述导入 Parquet 格式的数据时，需要关注的一些参数配置。
+
+StarRocks 数据库 `test_db` 里的表 `table13` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example13.parquet` 也包含三列，按顺序一一对应 `table13` 中的三列。
+
+如果要把 `example13.parquet` 中所有的数据都导入到 `table13` 中，可以执行如下语句：
 
 ```SQL
-LOAD LABEL example_db.label12
+LOAD LABEL test_db.label13
 (
-DATA INFILE("oss://my_bucket/input/file.csv")
-INTO TABLE `my_table`
-(k1, k2, k3)
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example13.parquet")
+    INTO TABLE table13
+    FORMAT AS "parquet"
+    (col1, col2, col3)
 )
-WITH BROKER my_broker
+WITH BROKER "mybroker"
 (
-    "fs.oss.accessKeyId" = "xxxxxxxxxxxxxxxxxxxxxx",
-    "fs.oss.accessKeySecret" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.oss.endpoint" = "oss-cn-zhangjiakou-internal.aliyuncs.com"
-)
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
 ```
 
-### 从腾讯云 COS 导入 csv 格式的数据
+> 说明：导入 Parquet 格式的数据时，默认通过文件扩展名 (**.parquet**) 判断数据文件的格式。如果文件名称中没有包含扩展名，则必须通过 `FORMAT AS` 参数指定数据文件格式为 Parquet。
+
+### 导入 ORC 格式的数据
+
+本小节主要描述导入 ORC 格式的数据时，需要关注的一些参数配置。
+
+StarRocks 数据库 `test_db` 里的表 `table14` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example14.orc` 也包含三列，按顺序一一对应 `table14` 中的三列。
+
+如果要把 `example14.orc` 中所有的数据都导入到 `table14` 中，可以执行如下语句：
 
 ```SQL
-LOAD LABEL example_db.label13
+LOAD LABEL test_db.label14
 (
-DATA INFILE("cosn://my_bucket/input/file.csv")
-INTO TABLE `my_table`
-(k1, k2, k3)
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example14.orc")
+    INTO TABLE table14
+    FORMAT AS "orc"
+    (col1, col2, col3)
 )
-WITH BROKER my_broker
+WITH BROKER "mybroker"
 (
-    "fs.cosn.userinfo.secretId" = "xxxxxxxxxxxxxxxxx",
-    "fs.cosn.userinfo.secretKey" = "yyyyyyyyyyyyyyyy",
-    "fs.cosn.bucket.endpoint_suffix" = "cos.ap-beijing.myqcloud.com"
-)
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
 ```
 
-### 从 Amazon S3 导入 csv 格式的数据
-
-```SQL
-LOAD LABEL example_db.label14
-(
-DATA INFILE("s3a://my_bucket/input/file.csv")
-INTO TABLE `my_table`
-(k1, k2, k3)
-)
-WITH BROKER my_broker
-(
-    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
-    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.s3a.endpoint" = "s3-ap-northeast-1.amazonaws.com"
-)
-```
-
-## 关键字(keywords)
-
-BROKER, LOAD
+> 说明：
+>
+> - 导入 Parquet 格式的数据时，默认通过文件扩展名 (**.orc**) 判断数据文件的格式。如果文件名称中没有包含扩展名，则必须通过 `FORMAT AS` 参数指定数据文件格式为 Parquet。
+>
+> - StarRocks v2.3 及之前版本，当数据文件中包含 ARRAY 类型的列时，必须确保数据文件和 StarRocks 表中对应的列同名，并且不能写在 SET 子句里。
